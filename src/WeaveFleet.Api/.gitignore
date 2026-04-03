@@ -1,0 +1,2 @@
+# wwwroot/ is populated by MSBuild from client/dist/ — it's a build artifact
+wwwroot/

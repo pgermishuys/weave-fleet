@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WeaveFleet.Api/WeaveFleet.Api.csproj" />
+    <Project Path="src/WeaveFleet.Application/WeaveFleet.Application.csproj" />
+    <Project Path="src/WeaveFleet.Cli/WeaveFleet.Cli.csproj" />
+    <Project Path="src/WeaveFleet.Domain/WeaveFleet.Domain.csproj" />
+    <Project Path="src/WeaveFleet.Infrastructure/WeaveFleet.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WeaveFleet.Api.Tests/WeaveFleet.Api.Tests.csproj" />
+    <Project Path="tests/WeaveFleet.Application.Tests/WeaveFleet.Application.Tests.csproj" />
+    <Project Path="tests/WeaveFleet.Domain.Tests/WeaveFleet.Domain.Tests.csproj" />
+    <Project Path="tests/WeaveFleet.Infrastructure.Tests/WeaveFleet.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>

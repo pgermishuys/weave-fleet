@@ -1,0 +1,7 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\WeaveFleet.Domain\WeaveFleet.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

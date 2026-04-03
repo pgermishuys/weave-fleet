@@ -1,0 +1,10 @@
+<Project>
+  <!-- Import root Directory.Build.props first (MSBuild stops searching at the nearest file) -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!-- Suppress naming rules that conflict with xunit test naming conventions -->
+  <!-- CA1707: Test methods use underscores (ArrangeActAssert_Description style) -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+</Project>

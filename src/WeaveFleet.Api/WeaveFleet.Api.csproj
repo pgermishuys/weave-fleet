@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\WeaveFleet.Application\WeaveFleet.Application.csproj" />
+    <ProjectReference Include="..\WeaveFleet.Infrastructure\WeaveFleet.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <!-- Copy frontend SPA build output to wwwroot/ before building the backend.
+       The Condition means: skip if client/dist/index.html doesn't exist yet
+       (allows backend-only development without a frontend build). -->
+  <Target Name="CopyFrontendDist" BeforeTargets="Build"
+          Condition="Exists('$(MSBuildThisFileDirectory)..\..\client\dist\index.html')">
+    <ItemGroup>
+      <FrontendFiles Include="$(MSBuildThisFileDirectory)..\..\client\dist\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(FrontendFiles)"
+          DestinationFolder="$(MSBuildThisFileDirectory)wwwroot\%(RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>
