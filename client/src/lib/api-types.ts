@@ -329,14 +329,30 @@ export interface FileDiffItem {
 
 // ─── Harness Types ─────────────────────────────────────────────────────────
 
+/** Capabilities declared by a harness — drives adaptive UI. */
+export interface HarnessCapabilities {
+  requiresInitialPrompt: boolean;
+  supportsAgents: boolean;
+  supportsModelSelection: boolean;
+  supportsCommands: boolean;
+  supportsForking: boolean;
+  supportsResume: boolean;
+  supportsImageAttachments: boolean;
+  supportsStreaming: boolean;
+}
+
 /** Information about a registered harness */
 export interface HarnessInfo {
-  /** Harness name/type, e.g. "opencode" or "claude" */
-  name: string;
+  /** Machine-readable harness type, e.g. "opencode" or "claude-code" */
+  type: string;
+  /** Human-readable display name, e.g. "OpenCode" or "Claude Code" */
+  displayName: string;
   /** Whether the harness is currently available (binary found, auth configured, etc.) */
   available: boolean;
   /** Human-readable reason if unavailable */
   reason?: string;
+  /** Capabilities this harness supports */
+  capabilities: HarnessCapabilities;
 }
 
 // ─── Workspace Roots Types ──────────────────────────────────────────────────/** A single workspace root returned by GET /api/workspace-roots */

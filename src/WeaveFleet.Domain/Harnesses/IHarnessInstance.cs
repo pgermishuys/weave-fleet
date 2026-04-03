@@ -1,0 +1,37 @@
+using System.Text.Json;
+
+namespace WeaveFleet.Domain.Harnesses;
+
+/// <summary>
+/// A running bridge to an AI agent, one per session.
+/// Implementations are created by <c>IHarness.SpawnAsync</c>.
+/// </summary>
+public interface IHarnessInstance : IAsyncDisposable
+{
+    /// <summary>Unique identifier for this running instance.</summary>
+    string InstanceId { get; }
+
+    /// <summary>The harness type that created this instance (e.g. "opencode").</summary>
+    string HarnessType { get; }
+
+    /// <summary>Current lifecycle status.</summary>
+    HarnessInstanceStatus Status { get; }
+
+    /// <summary>Gracefully stop the agent process.</summary>
+    Task StopAsync(CancellationToken ct);
+
+    /// <summary>Send a user prompt to the agent.</summary>
+    Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct);
+
+    /// <summary>Abort the current agent operation.</summary>
+    Task AbortAsync(CancellationToken ct);
+
+    /// <summary>Retrieve the message history for this instance.</summary>
+    Task<IReadOnlyList<HarnessMessage>> GetMessagesAsync(CancellationToken ct);
+
+    /// <summary>Subscribe to a real-time stream of harness events.</summary>
+    IAsyncEnumerable<HarnessEvent> SubscribeAsync(CancellationToken ct);
+
+    /// <summary>Check whether this instance is still healthy.</summary>
+    Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct);
+}

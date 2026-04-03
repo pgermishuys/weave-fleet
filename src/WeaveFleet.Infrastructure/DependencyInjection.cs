@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Infrastructure.Harnesses;
 
 namespace WeaveFleet.Infrastructure;
 
@@ -21,6 +23,10 @@ public static class DependencyInjection
         //     opt.UseSqlite($"Data Source={options.DatabasePath}"));
 
         // TODO (Phase 2): Register repository implementations
+
+        // HarnessRegistry is Singleton — any IHarness registrations MUST also be
+        // Singleton to avoid a captive-dependency runtime failure.
+        services.AddSingleton<IHarnessRegistry, HarnessRegistry>();
 
         return services;
     }

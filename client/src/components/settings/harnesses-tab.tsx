@@ -58,8 +58,8 @@ export function HarnessesTab() {
               <SelectContent>
                 {harnesses.map((h) => (
                   <SelectItem
-                    key={h.name}
-                    value={h.name}
+                    key={h.type}
+                    value={h.type}
                     disabled={!h.available}
                   >
                     <span className="flex items-center gap-2">
@@ -68,7 +68,7 @@ export function HarnessesTab() {
                       ) : (
                         <XCircle className="h-3 w-3 text-muted-foreground" />
                       )}
-                      {h.name}
+                      {h.displayName || h.type}
                       {!h.available && h.reason && (
                         <span className="text-muted-foreground text-xs">
                           ({h.reason})
@@ -95,14 +95,14 @@ export function HarnessesTab() {
           </p>
           <div className="space-y-2">
             {harnesses.map((h) => (
-              <div key={h.name} className="flex items-center gap-2 text-sm">
+              <div key={h.type} className="flex items-center gap-2 text-sm">
                 {h.available ? (
                   <CheckCircle2 className="h-4 w-4 text-green-500" />
                 ) : (
                   <XCircle className="h-4 w-4 text-muted-foreground" />
                 )}
                 <span className={h.available ? "" : "text-muted-foreground"}>
-                  {h.name}
+                  {h.displayName || h.type}
                 </span>
                 {!h.available && h.reason && (
                   <span className="text-xs text-muted-foreground">

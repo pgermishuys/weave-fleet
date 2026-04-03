@@ -1,0 +1,25 @@
+using WeaveFleet.Domain.Harnesses;
+
+namespace WeaveFleet.Application.Harnesses;
+
+/// <summary>
+/// Factory and metadata for a harness type.
+/// One instance per harness type is registered in DI.
+/// </summary>
+public interface IHarness
+{
+    /// <summary>Machine-readable type identifier, e.g. "opencode", "claude-code".</summary>
+    string Type { get; }
+
+    /// <summary>Human-readable display name, e.g. "OpenCode", "Claude Code".</summary>
+    string DisplayName { get; }
+
+    /// <summary>Declares what this harness supports.</summary>
+    HarnessCapabilities Capabilities { get; }
+
+    /// <summary>Check whether this harness can be used (binary found, auth configured, etc.).</summary>
+    Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct);
+
+    /// <summary>Spawn a new agent instance for the given session.</summary>
+    Task<IHarnessInstance> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct);
+}
