@@ -150,6 +150,42 @@ export interface SessionListItem {
    * Total cost in USD across all messages (populated when available).
    */
   totalCost?: number;
+  /**
+   * The Fleet project this session belongs to (null = unassigned / scratch project).
+   */
+  projectId?: string | null;
+  /**
+   * The display name of the project (populated when available).
+   */
+  projectName?: string | null;
+}
+
+// ─── Projects ──────────────────────────────────────────────────────────────
+
+export interface ProjectResponse {
+  id: string;
+  name: string;
+  description: string | null;
+  /** "user" | "scratch" */
+  type: string;
+  position: number;
+  sessionCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProjectRequest {
+  name: string;
+  description?: string;
+}
+
+export interface UpdateProjectRequest {
+  name?: string;
+  description?: string;
+}
+
+export interface ReorderProjectRequest {
+  position: number;
 }
 
 // ─── Streamed Event Model ──────────────────────────────────────────────────

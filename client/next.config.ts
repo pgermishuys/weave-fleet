@@ -19,24 +19,20 @@ function getAppVersion(): string {
   return packageJson.version;
 }
 
-// Static export is only used during SPA builds (bun run build / build:spa).
-// During `next dev`, output must NOT be 'export' — it disables middleware,
-// API routes, and other dev-server features.
+// Static export is only used during SPA builds (npm run build).
+// During `next dev`, output must NOT be 'export' — it disables middleware
+// and other dev-server features.
 // The SPA build script sets NEXT_BUILD_SPA=1 to trigger static export mode.
 const isBuild = process.env.NEXT_BUILD_SPA === "1";
 
 const nextConfig: NextConfig = {
-  // Native Node addons (e.g. better-sqlite3) must be excluded from the
-  // bundler — they cannot be compiled into a JS bundle.
-  serverExternalPackages: ["better-sqlite3"],
   // Static export — produces dist/ with index.html + JS/CSS bundles.
   // Served by the .NET backend. No Node.js server required.
   ...(isBuild ? { output: 'export' as const } : {}),
   distDir: 'dist',
   compress: true,
   // Workaround for Next.js 16.1.x bug where generateBuildId crashes when
-  // config.generateBuildId is undefined (it calls `generate()` without a
-  // null check). Providing an explicit function avoids the TypeError.
+  // config.generateBuildId is undefined.
   generateBuildId: () => getGitCommitSha(),
   // Disable image optimization (not supported with static export)
   images: { unoptimized: true },
@@ -59,3 +55,4 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+

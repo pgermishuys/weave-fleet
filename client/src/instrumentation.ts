@@ -1,10 +1,8 @@
 /**
- * Next.js instrumentation hook — runs once when the server starts.
- * https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
+ * Next.js instrumentation hook — runs once when the server initializes.
+ * Since weave-fleet is now a stateless SPA, no server-side initialization
+ * is required here. This file is kept as a placeholder.
  */
 export async function register() {
-  if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { checkForUpdatesOnStartup } = await import("@/lib/server/version-check");
-    checkForUpdatesOnStartup();
-  }
+  // No server-side initialization needed for stateless SPA mode.
 }

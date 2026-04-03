@@ -241,8 +241,8 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
   // Initialize selectedHarness from the persisted default once harnesses load
   useEffect(() => {
     if (harnesses.length > 0 && !selectedHarness) {
-      const defaultAvailable = availableHarnesses.find((h) => h.name === defaultHarness);
-      const next = defaultAvailable?.name ?? availableHarnesses[0]?.name ?? "opencode";
+      const defaultAvailable = availableHarnesses.find((h) => h.type === defaultHarness);
+      const next = defaultAvailable?.type ?? availableHarnesses[0]?.type ?? "opencode";
       queueMicrotask(() => setSelectedHarness(next));
     }
   }, [harnesses, defaultHarness, selectedHarness, availableHarnesses]);
@@ -326,7 +326,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
 
     // Pre-flight check: if picker is shown and selected harness is unavailable, abort early
     if (showHarnessPicker) {
-      const selectedInfo = harnesses.find((h) => h.name === selectedHarness);
+      const selectedInfo = harnesses.find((h) => h.type === selectedHarness);
       if (selectedInfo && !selectedInfo.available) {
         // Let the error surface via the existing error display — just don't proceed
         return;
@@ -581,8 +581,8 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
                 <SelectContent>
                   {harnesses.map((h) => (
                     <SelectItem
-                      key={h.name}
-                      value={h.name}
+                      key={h.type}
+                      value={h.type}
                       disabled={!h.available}
                     >
                       <span className="flex items-center gap-2">
@@ -591,7 +591,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
                         ) : (
                           <XCircle className="h-3 w-3 text-muted-foreground" />
                         )}
-                        {h.name}
+                        {h.displayName}
                       </span>
                     </SelectItem>
                   ))}

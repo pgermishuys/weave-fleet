@@ -1,7 +1,7 @@
 // Dev workflow:
 //
 // Mode A — Integrated (backend serves built SPA):
-//   Terminal 1: cd client && npm run build:spa
+//   Terminal 1: cd client && npm run build
 //   Terminal 2: dotnet run --project src/WeaveFleet.Api
 //   → http://localhost:3000 (API + SPA)
 //
@@ -14,7 +14,9 @@
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Api.Telemetry;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Infrastructure;
+using WeaveFleet.Infrastructure.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -52,17 +54,39 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Run database migrations at startup
+var migrationRunner = app.Services.GetRequiredService<MigrationRunner>();
+await migrationRunner.ApplyMigrationsAsync();
+
+// Ensure scratch project exists
+using (var scope = app.Services.CreateScope())
+{
+    var projectService = scope.ServiceProvider.GetRequiredService<ProjectService>();
+    await projectService.EnsureScratchProjectAsync();
+}
+
+// Recovery: mark all previously-running instances and non-terminal sessions as stopped
+using (var scope = app.Services.CreateScope())
+{
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    var instanceService = scope.ServiceProvider.GetRequiredService<InstanceService>();
+    var instanceCount = await instanceService.MarkAllStoppedAsync();
+    var sessionCount = await instanceService.MarkAllNonTerminalSessionsStoppedAsync();
+    if (instanceCount > 0 || sessionCount > 0)
+        StartupLog.RecoveryComplete(logger, instanceCount, sessionCount);
+}
+
 // Middleware pipeline
 app.UseCors();
 
-// WebSocket support (for /ws stub endpoint)
+// WebSocket support (for /ws real-time events endpoint)
 app.UseWebSockets();
 
 // Health checks (registered before SPA fallback)
 app.MapHealthChecks("/healthz");
 app.MapHealthChecks("/readyz");
 
-// Stub API endpoints (registered before SPA fallback)
+// API endpoints (registered before SPA fallback)
 app.MapFleetEndpoints();
 
 // Static file serving (SPA)
@@ -73,3 +97,11 @@ app.UseStaticFiles();    // Serves files from wwwroot/
 app.MapFallbackToFile("index.html");
 
 await app.RunAsync();
+
+/// <summary>Logger message definitions for startup diagnostics.</summary>
+internal static partial class StartupLog
+{
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Recovery: marked {Instances} instance(s) and {Sessions} session(s) as stopped.")]
+    public static partial void RecoveryComplete(ILogger logger, int instances, int sessions);
+}
