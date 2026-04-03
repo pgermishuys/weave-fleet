@@ -26,6 +26,9 @@ function getAppVersion(): string {
 const isBuild = process.env.NEXT_BUILD_SPA === "1";
 
 const nextConfig: NextConfig = {
+  // Native Node addons (e.g. better-sqlite3) must be excluded from the
+  // bundler — they cannot be compiled into a JS bundle.
+  serverExternalPackages: ["better-sqlite3"],
   // Static export — produces dist/ with index.html + JS/CSS bundles.
   // Served by the .NET backend. No Node.js server required.
   ...(isBuild ? { output: 'export' as const } : {}),
