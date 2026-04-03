@@ -51,7 +51,7 @@ const nextConfig: NextConfig = {
     // NEXT_PUBLIC_API_BASE_URL — set at build time to point the frontend at
     // an external API server (e.g. "http://localhost:3000"). When unset or
     // empty, all fetch calls use relative URLs (same-origin / standalone mode).
-    // See also: .env.development.split for split-mode dev setup.
+    // See also: .env.development.local for split-mode dev setup.
   },
 };
 
