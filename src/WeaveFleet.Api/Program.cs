@@ -12,6 +12,7 @@
 //   → Backend:  http://localhost:3000 (API only)
 
 using WeaveFleet.Api.Endpoints;
+using WeaveFleet.Api.Telemetry;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Infrastructure;
 
@@ -26,6 +27,7 @@ var fleetOptions = builder.Configuration
 builder.Services.Configure<FleetOptions>(
     builder.Configuration.GetSection(FleetOptions.SectionName));
 builder.Services.AddFleetInfrastructure(fleetOptions);
+builder.AddFleetTelemetry();
 builder.Services.AddHealthChecks();
 builder.Services.AddCors(options =>
 {

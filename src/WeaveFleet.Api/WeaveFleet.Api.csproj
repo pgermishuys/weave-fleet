@@ -5,6 +5,16 @@
     <ProjectReference Include="..\WeaveFleet.Infrastructure\WeaveFleet.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Observability -->
+    <PackageReference Include="OpenTelemetry" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+    <PackageReference Include="OpenTelemetry.Exporter.Console" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
+  </ItemGroup>
+
   <!-- Copy frontend SPA build output to wwwroot/ before building the backend.
        The Condition means: skip if client/dist/index.html doesn't exist yet
        (allows backend-only development without a frontend build). -->
