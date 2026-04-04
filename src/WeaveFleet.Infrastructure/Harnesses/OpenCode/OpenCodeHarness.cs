@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Harnesses;
@@ -32,6 +33,7 @@ public sealed class OpenCodeHarness : IHarness
     private readonly FleetOptions _options;
     private readonly ILogger<OpenCodeHarness> _logger;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly IAnalyticsCollector? _analyticsCollector;
 
     /// <summary>Initialises the harness with required dependencies.</summary>
     public OpenCodeHarness(
@@ -39,13 +41,15 @@ public sealed class OpenCodeHarness : IHarness
         PortAllocator portAllocator,
         FleetOptions options,
         ILogger<OpenCodeHarness> logger,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IAnalyticsCollector? analyticsCollector = null)
     {
         _httpClientFactory = httpClientFactory;
         _portAllocator = portAllocator;
         _options = options;
         _logger = logger;
         _loggerFactory = loggerFactory;
+        _analyticsCollector = analyticsCollector;
     }
 
     /// <inheritdoc />
@@ -186,7 +190,10 @@ public sealed class OpenCodeHarness : IHarness
                 allocatedPort: allocatedPort,
                 workingDirectory: options.WorkingDirectory,
                 shutdownTimeout: TimeSpan.FromSeconds(_options.HarnessShutdownTimeoutSeconds),
-                logger: _loggerFactory.CreateLogger<OpenCodeHarnessInstance>());
+                logger: _loggerFactory.CreateLogger<OpenCodeHarnessInstance>(),
+                analyticsCollector: _analyticsCollector,
+                projectId: options.ProjectId,
+                projectName: options.ProjectName);
 
             LogSpawned(_logger, instanceId, null);
             return instance;

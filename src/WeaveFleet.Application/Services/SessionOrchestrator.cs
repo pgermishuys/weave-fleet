@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
@@ -20,6 +21,7 @@ public sealed partial class SessionOrchestrator(
     ISessionCallbackRepository sessionCallbackRepository,
     IProjectRepository projectRepository,
     IEventBroadcaster eventBroadcaster,
+    IAnalyticsCollector analyticsCollector,
     ILogger<SessionOrchestrator> logger)
 {
     private const string DefaultHarnessType = "opencode";
@@ -47,6 +49,14 @@ public sealed partial class SessionOrchestrator(
         // Resolve or default project
         var projectId = request.ProjectId ?? await ResolveScratchProjectIdAsync();
 
+        // Look up project name for analytics context (best-effort)
+        string? projectName = null;
+        if (projectId is not null)
+        {
+            var projects = await projectRepository.ListAsync();
+            projectName = projects.FirstOrDefault(p => p.Id == projectId)?.Name;
+        }
+
         // 1. Create workspace
         var workspaceResult = await workspaceService.CreateWorkspaceAsync(
             request.Directory,
@@ -67,7 +77,9 @@ public sealed partial class SessionOrchestrator(
                 SessionId = sessionId,
                 WorkingDirectory = workspace.Directory,
                 InitialPrompt = request.InitialPrompt,
-                Branch = request.Branch
+                Branch = request.Branch,
+                ProjectId = projectId,
+                ProjectName = projectName
             }, ct);
         }
         catch (Exception ex)
@@ -108,6 +120,24 @@ public sealed partial class SessionOrchestrator(
 
         await sessionRepository.InsertAsync(session);
         LogSessionCreated(session.Id, workspace.Id, harnessInstance.InstanceId);
+
+        // Emit analytics snapshot for the new session
+        analyticsCollector.AcceptSessionSnapshot(new SessionSnapshotData(
+            SessionId: session.Id,
+            ParentSessionId: null,
+            ProjectId: projectId,
+            ProjectName: projectName,
+            WorkspaceDirectory: workspace.Directory,
+            Title: session.Title,
+            Status: "active",
+            TotalTokens: 0,
+            TotalCost: 0,
+            TotalEstimatedCost: 0,
+            MessageCount: 0,
+            ModelIds: [],
+            CreatedAt: DateTimeOffset.UtcNow,
+            EndedAt: null,
+            DurationSeconds: null));
 
         // Broadcast session_created event
         await eventBroadcaster.BroadcastAsync("sessions", "session_created", new
@@ -273,6 +303,24 @@ public sealed partial class SessionOrchestrator(
             session.InstanceId, "stopped", DateTime.UtcNow.ToString("O"));
 
         await sessionRepository.DeleteAsync(id);
+
+        // Emit analytics snapshot marking session as stopped
+        analyticsCollector.AcceptSessionSnapshot(new SessionSnapshotData(
+            SessionId: id,
+            ParentSessionId: null,
+            ProjectId: session.ProjectId,
+            ProjectName: null,
+            WorkspaceDirectory: session.Directory,
+            Title: session.Title,
+            Status: "stopped",
+            TotalTokens: session.TotalTokens,
+            TotalCost: session.TotalCost,
+            TotalEstimatedCost: 0,
+            MessageCount: 0,
+            ModelIds: [],
+            CreatedAt: DateTimeOffset.Parse(session.CreatedAt, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind),
+            EndedAt: DateTimeOffset.UtcNow,
+            DurationSeconds: null));
 
         // Broadcast session_stopped event
         await eventBroadcaster.BroadcastAsync("sessions", "session_stopped", new

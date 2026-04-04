@@ -9,16 +9,23 @@ namespace WeaveFleet.Infrastructure.Data;
 /// <summary>
 /// Applies numbered SQL migration files from embedded resources to a SQLite database.
 /// Tracks applied migrations in a <c>_migrations</c> table.
+/// Only processes resources whose dotted resource name contains <paramref name="folderSegment"/>
+/// as an exact dotted-segment match (not a substring). Default segment is <c>"Migrations"</c>.
 /// </summary>
 public sealed partial class MigrationRunner
 {
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly ILogger<MigrationRunner> _logger;
+    private readonly string _folderSegment;
 
-    public MigrationRunner(IDbConnectionFactory connectionFactory, ILogger<MigrationRunner> logger)
+    public MigrationRunner(
+        IDbConnectionFactory connectionFactory,
+        ILogger<MigrationRunner> logger,
+        string folderSegment = "Migrations")
     {
         _connectionFactory = connectionFactory;
         _logger = logger;
+        _folderSegment = folderSegment;
     }
 
     public async Task ApplyMigrationsAsync()
@@ -38,10 +45,11 @@ public sealed partial class MigrationRunner
             )
             """);
 
-        // Load all embedded SQL migration resources
+        // Load all embedded SQL migration resources filtered by exact dotted-segment match
         var assembly = typeof(MigrationRunner).Assembly;
         var resourceNames = assembly.GetManifestResourceNames()
-            .Where(n => n.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
+            .Where(n => n.EndsWith(".sql", StringComparison.OrdinalIgnoreCase)
+                        && n.Split('.').Contains(_folderSegment, StringComparer.Ordinal))
             .OrderBy(n => n)
             .ToList();
 

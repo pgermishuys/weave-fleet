@@ -9,6 +9,8 @@ public sealed record HarnessSpawnOptions
     public required string WorkingDirectory { get; init; }
     public string? InitialPrompt { get; init; }
     public string? Branch { get; init; }
+    public string? ProjectId { get; init; }
+    public string? ProjectName { get; init; }
     public IReadOnlyDictionary<string, string> Environment { get; init; }
         = new Dictionary<string, string>();
 }

@@ -54,20 +54,20 @@ This is robust, not tied to assembly names, and backward-compatible (default `"M
 Capture every token/cost event from OpenCode SSE into a queryable, deletion-proof SQLite analytics database, while also updating the main DB's session token totals and emitting OTEL metrics.
 
 ### Deliverables
-- [ ] Separate `weave-fleet-analytics.db` with three tables: `token_events`, `session_snapshots`, `daily_rollups`
-- [ ] `Channel<T>`-based fire-and-forget analytics collection from SSE pipeline
-- [ ] `BackgroundService` batched writer to analytics DB
-- [ ] `BackgroundService` periodic rollup computation
-- [ ] SSE intercept in mapper layer extracting token data
-- [ ] `IncrementTokensAsync` wired up to fix main DB token totals
-- [ ] OTEL counter/histogram instruments on `FleetInstrumentation.Meter`
-- [ ] API endpoints for querying analytics (`/api/analytics/*`)
-- [ ] Cost estimation via model pricing lookup
-- [ ] Configuration options in `FleetOptions`
+- [x] Separate `weave-fleet-analytics.db` with three tables: `token_events`, `session_snapshots`, `daily_rollups`
+- [x] `Channel<T>`-based fire-and-forget analytics collection from SSE pipeline
+- [x] `BackgroundService` batched writer to analytics DB
+- [x] `BackgroundService` periodic rollup computation
+- [x] SSE intercept in mapper layer extracting token data
+- [x] `IncrementTokensAsync` wired up to fix main DB token totals
+- [x] OTEL counter/histogram instruments on `FleetInstrumentation.Meter`
+- [x] API endpoints for querying analytics (`/api/analytics/*`)
+- [x] Cost estimation via model pricing lookup
+- [x] Configuration options in `FleetOptions`
 
 ### Definition of Done
-- [ ] `dotnet build` succeeds with no warnings
-- [ ] `dotnet test` passes all existing + new tests
+- [x] `dotnet build` succeeds with no warnings
+- [x] `dotnet test` passes all existing + new tests
 - [ ] Token events are persisted when an AI response arrives via SSE
 - [ ] Session token totals update in the main DB
 - [ ] `GET /api/analytics/summary` returns aggregated data
@@ -85,7 +85,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
 
 ### Phase 1: Foundation (Schema, Config, Connection)
 
-- [ ] 1. **Add Analytics Configuration to FleetOptions**
+- [x] 1. **Add Analytics Configuration to FleetOptions**
   **What**: Add analytics-related configuration properties to `FleetOptions`.
   **Files**:
   - Modify `src/WeaveFleet.Application/Configuration/FleetOptions.cs`
@@ -101,7 +101,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   Add a computed property `ResolvedAnalyticsDatabasePath` that defaults to placing `weave-fleet-analytics.db` in the same directory as `DatabasePath` when `AnalyticsDatabasePath` is empty.
   **Acceptance**: FleetOptions compiles with new properties. Default values are sensible.
 
-- [ ] 2. **Create Analytics SQLite Connection Factory**
+- [x] 2. **Create Analytics SQLite Connection Factory**
   **What**: Create `IAnalyticsDbConnectionFactory` interface and `AnalyticsSqliteConnectionFactory` implementation. The analytics DB does NOT need foreign keys (no FK references), so skip `PRAGMA foreign_keys=ON`.
   **Files**:
   - Create `src/WeaveFleet.Application/Data/IAnalyticsDbConnectionFactory.cs`
@@ -109,7 +109,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   **Patterns to follow**: Mirror `IDbConnectionFactory` / `SqliteConnectionFactory` exactly. Same WAL + busy_timeout pragmas, but skip `foreign_keys=ON`. Constructor takes the resolved analytics DB path (string), not `FleetOptions` directly (the DI layer resolves the path).
   **Acceptance**: Factory creates connections to a separate DB file with WAL mode.
 
-- [ ] 3. **Refactor MigrationRunner for Dotted-Segment Filtering**
+- [x] 3. **Refactor MigrationRunner for Dotted-Segment Filtering**
   **What**: Add a `folderSegment` constructor parameter (string, optional, default `"Migrations"`) to `MigrationRunner` so it only processes embedded SQL resources whose dotted resource name contains the segment as an **exact segment match** (not a substring). This prevents the main runner from accidentally picking up analytics migrations (whose segment is `"AnalyticsMigrations"`).
   **Files**:
   - Modify `src/WeaveFleet.Infrastructure/Data/MigrationRunner.cs`
@@ -124,7 +124,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   - This is backward-compatible — existing DI registration passes no argument, getting the default `"Migrations"`
   **Acceptance**: Existing migration tests still pass. Main runner only picks up `Migrations/*.sql`, not `AnalyticsMigrations/*.sql`.
 
-- [ ] 4. **Create Analytics Migration Runner**
+- [x] 4. **Create Analytics Migration Runner**
   **What**: Create `AnalyticsMigrationRunner` — a thin wrapper that reuses the `MigrationRunner` pattern but uses `IAnalyticsDbConnectionFactory` and filters for the `"AnalyticsMigrations"` dotted segment.
   **Files**:
   - Create `src/WeaveFleet.Infrastructure/Data/AnalyticsMigrationRunner.cs`
@@ -135,7 +135,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   Since `MigrationRunner` takes `IDbConnectionFactory` and the analytics DB uses `IAnalyticsDbConnectionFactory`, the adapter bridges the two interfaces. The `folderSegment` parameter `"AnalyticsMigrations"` ensures this runner only picks up resources with that exact dotted segment, not the main `"Migrations"` segment.
   **Acceptance**: Analytics migrations are applied only to the analytics DB, not the main DB.
 
-- [ ] 5. **Create Analytics Schema Migration SQL**
+- [x] 5. **Create Analytics Schema Migration SQL**
   **What**: Write the SQL migration for the three analytics tables with all indexes.
   **Files**:
   - Create `src/WeaveFleet.Infrastructure/AnalyticsMigrations/001_analytics_initial.sql`
@@ -208,7 +208,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
 
 ### Phase 2: Domain Types & Interfaces
 
-- [ ] 6. **Create Analytics Event DTOs**
+- [x] 6. **Create Analytics Event DTOs**
   **What**: Define the domain types for analytics events that flow through the `Channel<T>` buffer. These are internal value types, not database entities.
   **Files**:
   - Create `src/WeaveFleet.Application/Analytics/AnalyticsEvents.cs`
@@ -234,7 +234,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   ```
   **Acceptance**: Types compile. No dependencies on infrastructure.
 
-- [ ] 7. **Create IAnalyticsCollector Interface**
+- [x] 7. **Create IAnalyticsCollector Interface**
   **What**: Define the interface for accepting analytics events. This lives in the Application layer so the Infrastructure SSE intercept can use it.
   **Files**:
   - Create `src/WeaveFleet.Application/Analytics/IAnalyticsCollector.cs`
@@ -247,7 +247,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   Both methods are fire-and-forget (void). They write to a `Channel<T>` internally — never block, never throw.
   **Acceptance**: Interface compiles.
 
-- [ ] 8. **Create IAnalyticsReader Interface**
+- [x] 8. **Create IAnalyticsReader Interface**
   **What**: Define the read-side interface for analytics queries, used by API endpoints.
   **Files**:
   - Create `src/WeaveFleet.Application/Analytics/IAnalyticsReader.cs`
@@ -271,7 +271,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   - Create `src/WeaveFleet.Application/Analytics/AnalyticsDtos.cs`
   **Acceptance**: Interfaces and DTOs compile.
 
-- [ ] 9. **Create Model Pricing Lookup**
+- [x] 9. **Create Model Pricing Lookup**
   **What**: A static/configurable lookup table mapping model IDs to per-token pricing so we can compute estimated costs. Start with a hardcoded dictionary of well-known model prices (Anthropic Claude, OpenAI GPT-4, etc.). The estimated cost = `(input_tokens * input_price) + (output_tokens * output_price) + (cache_read_tokens * cache_read_price)`.
   **Files**:
   - Create `src/WeaveFleet.Application/Analytics/ModelPricing.cs`
@@ -289,14 +289,14 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
 
 ### Phase 3: Infrastructure — Collector & Writer
 
-- [ ] 10. **Implement AnalyticsCollector**
+- [x] 10. **Implement AnalyticsCollector**
   **What**: Singleton service implementing `IAnalyticsCollector`. Owns a `Channel<AnalyticsEventEnvelope>` (bounded, capacity 10,000, `FullMode.DropOldest`). `AcceptTokenEvent` / `AcceptSessionSnapshot` wrap the data in an envelope and `TryWrite` it to the channel. Exposes `ChannelReader<AnalyticsEventEnvelope>` for the writer service.
   **Files**:
   - Create `src/WeaveFleet.Infrastructure/Analytics/AnalyticsCollector.cs`
   **Pattern**: Similar to `InMemoryEventBroadcaster` (`src/WeaveFleet.Infrastructure/Services/InMemoryEventBroadcaster.cs`) channel usage but simpler — single reader, single writer, bounded.
   **Acceptance**: Can accept events without blocking. Reader can drain them.
 
-- [ ] 11. **Implement AnalyticsWriterService (BackgroundService)**
+- [x] 11. **Implement AnalyticsWriterService (BackgroundService)**
   **What**: Hosted `BackgroundService` that reads from the collector's channel and batch-inserts into the analytics DB. Uses configurable flush interval and max batch size.
   **Files**:
   - Create `src/WeaveFleet.Infrastructure/Analytics/AnalyticsWriterService.cs`
@@ -323,7 +323,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   **Scoped dependency handling**: Follow `HarnessEventRelay.PumpAsync` pattern exactly — inject `IServiceScopeFactory`, create a scope with `_scopeFactory.CreateScope()`, resolve `ISessionRepository` from `scope.ServiceProvider.GetRequiredService<ISessionRepository>()`, dispose scope after use.
   **Acceptance**: Token events accumulate in the analytics DB. Main DB session totals update.
 
-- [ ] 12. **Implement AnalyticsRepository (read side)**
+- [x] 12. **Implement AnalyticsRepository (read side)**
   **What**: Dapper-based repository implementing `IAnalyticsReader`. Queries the analytics DB for summaries, daily breakdowns, session listings, model breakdowns, and raw export.
   **Files**:
   - Create `src/WeaveFleet.Infrastructure/Analytics/AnalyticsRepository.cs`
@@ -336,7 +336,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   - `ExportTokenEventsAsync`: Select all columns from `token_events` with date/project filters.
   **Acceptance**: Queries return correct results against test data.
 
-- [ ] 13. **Implement AnalyticsRollupService (BackgroundService)**
+- [x] 13. **Implement AnalyticsRollupService (BackgroundService)**
   **What**: Periodic `BackgroundService` that recomputes `daily_rollups` from `token_events`. Runs every N minutes (configurable). Computes rollups for the last 2 days (to catch late-arriving events).
   **Files**:
   - Create `src/WeaveFleet.Infrastructure/Analytics/AnalyticsRollupService.cs`
@@ -359,7 +359,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
 
 ### Phase 4: SSE Event Intercept
 
-- [ ] 14. **Add Token Data Extraction to OpenCodeMapper**
+- [x] 14. **Add Token Data Extraction to OpenCodeMapper**
   **What**: Add a new static method `TryExtractTokenEvent` to `OpenCodeMapper` that attempts to parse token/cost data from an `OpenCodeSseEvent`. This is the side-channel extraction point.
   **Files**:
   - Modify `src/WeaveFleet.Infrastructure/Harnesses/OpenCode/OpenCodeMapper.cs`
@@ -441,7 +441,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   **`message.created` status**: No contract fixture, test data, or codebase usage confirms the `Properties` structure for `message.created` events. The codebase has zero references to `message.created` in C# code or JSON fixtures. Until a contract case is added verifying its shape, `message.created` is excluded from extraction to avoid silent deserialization failures against an unknown structure.
   **Acceptance**: Given a `message.updated` SSE event with token data, returns a valid `TokenEventData`. Returns null for non-message events.
 
-- [ ] 15. **Wire Analytics Collection into OpenCodeHarnessInstance.SubscribeAsync**
+- [x] 15. **Wire Analytics Collection into OpenCodeHarnessInstance.SubscribeAsync**
   **What**: Modify `SubscribeAsync` to call `TryExtractTokenEvent` on each SSE event and push results to the analytics collector. The instance needs access to `IAnalyticsCollector` and session context (project ID, project name, directory).
   **Files**:
   - Modify `src/WeaveFleet.Infrastructure/Harnesses/OpenCode/OpenCodeHarnessInstance.cs`
@@ -474,7 +474,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   For project context: `HarnessSpawnOptions` has `SessionId` and `WorkingDirectory`. We can add `ProjectId` and `ProjectName` to `HarnessSpawnOptions` (or a new options type). **Simplest**: Add optional `ProjectId`/`ProjectName` to `HarnessSpawnOptions` in the Application layer. Then `SessionOrchestrator` populates them.
   **Acceptance**: Token events are pushed to the collector when AI messages arrive via SSE.
 
-- [ ] 16. **Emit Session Snapshots on Create and Stop**
+- [x] 16. **Emit Session Snapshots on Create and Stop**
   **What**: Push `SessionSnapshotData` to the analytics collector when sessions are created and stopped/deleted.
   **Files**:
   - Modify `src/WeaveFleet.Application/Services/SessionOrchestrator.cs`
@@ -496,7 +496,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
 
 ### Phase 5: OTEL Metrics
 
-- [ ] 17. **Add OTEL Metric Instruments to FleetInstrumentation**
+- [x] 17. **Add OTEL Metric Instruments to FleetInstrumentation**
   **What**: Define Counter and Histogram instruments on the existing `FleetInstrumentation.Meter`.
   **Files**:
   - Modify `src/WeaveFleet.Application/Diagnostics/FleetInstrumentation.cs`
@@ -529,7 +529,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   ```
   **Acceptance**: Instruments are registered. Console exporter can display them when telemetry is enabled.
 
-- [ ] 18. **Record OTEL Metrics in AnalyticsWriterService**
+- [x] 18. **Record OTEL Metrics in AnalyticsWriterService**
   **What**: In the writer service, after processing each `TokenEventData`, call the OTEL instruments to record the metrics with appropriate tags.
   **Files**:
   - Modify `src/WeaveFleet.Infrastructure/Analytics/AnalyticsWriterService.cs` (from task 11)
@@ -554,7 +554,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
 
 ### Phase 6: API Endpoints
 
-- [ ] 19. **Create Analytics API Endpoints**
+- [x] 19. **Create Analytics API Endpoints**
   **What**: Minimal API endpoints for querying analytics data.
   **Files**:
   - Create `src/WeaveFleet.Api/Endpoints/AnalyticsEndpoints.cs`
@@ -585,7 +585,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
 
 ### Phase 7: DI Wiring & Startup
 
-- [ ] 20. **Register All Analytics Services in DI**
+- [x] 20. **Register All Analytics Services in DI**
   **What**: Wire up all analytics services in the DI container.
   **Files**:
   - Modify `src/WeaveFleet.Infrastructure/DependencyInjection.cs`
@@ -625,7 +625,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   Create a `NullAnalyticsCollector` that implements `IAnalyticsCollector` with empty methods. This avoids nullable DI parameters in primary constructors (which `SessionOrchestrator` uses).
   **Acceptance**: App starts with analytics enabled (default). All services resolve correctly. With analytics disabled, `NullAnalyticsCollector` is injected instead.
 
-- [ ] 21. **Run Analytics Migrations at Startup**
+- [x] 21. **Run Analytics Migrations at Startup**
   **What**: Apply analytics migrations during app startup, after main migrations.
   **Files**:
   - Modify `src/WeaveFleet.Api/Program.cs`
@@ -639,7 +639,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   Use `GetService` (not `GetRequiredService`) so it's null when analytics is disabled.
   **Acceptance**: Analytics DB is created and migrated at startup.
 
-- [ ] 22. **Thread IAnalyticsCollector Through Harness Factory**
+- [x] 22. **Thread IAnalyticsCollector Through Harness Factory**
   **What**: Ensure `IAnalyticsCollector` is available in `OpenCodeHarness` and threaded to each `OpenCodeHarnessInstance`.
   **Files**:
   - Modify `src/WeaveFleet.Infrastructure/Harnesses/OpenCode/OpenCodeHarness.cs`
@@ -654,14 +654,14 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
 
 ### Phase 8: Tests
 
-- [ ] 23. **Analytics DB Test Helper**
+- [x] 23. **Analytics DB Test Helper**
   **What**: Create a test helper similar to `TestDbHelper` but for the analytics DB.
   **Files**:
   - Create `tests/WeaveFleet.Infrastructure.Tests/Analytics/AnalyticsTestDbHelper.cs`
   **Implementation**: Similar to `TestDbHelper.CreateSharedDbAsync()` but uses a `SharedCacheFactory` adapted to `IAnalyticsDbConnectionFactory`, and applies analytics migrations.
   **Acceptance**: In-memory analytics DB can be created in tests.
 
-- [ ] 24. **AnalyticsCollector Tests**
+- [x] 24. **AnalyticsCollector Tests**
   **What**: Test that the collector accepts events and they can be read from the channel.
   **Files**:
   - Create `tests/WeaveFleet.Infrastructure.Tests/Analytics/AnalyticsCollectorTests.cs`
@@ -672,7 +672,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   - Concurrent writes don't throw
   **Acceptance**: All tests pass.
 
-- [ ] 25. **AnalyticsRepository Tests**
+- [x] 25. **AnalyticsRepository Tests**
   **What**: Test all read queries against a pre-populated analytics DB.
   **Files**:
   - Create `tests/WeaveFleet.Infrastructure.Tests/Analytics/AnalyticsRepositoryTests.cs`
@@ -686,7 +686,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   - Project filtering works correctly
   **Acceptance**: All tests pass.
 
-- [ ] 26. **AnalyticsWriterService Tests**
+- [x] 26. **AnalyticsWriterService Tests**
   **What**: Test that the writer service correctly processes events from the channel and writes to DB.
   **Files**:
   - Create `tests/WeaveFleet.Infrastructure.Tests/Analytics/AnalyticsWriterServiceTests.cs`
@@ -697,7 +697,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   - Batch flush: multiple events are written in one transaction
   **Acceptance**: All tests pass.
 
-- [ ] 27. **OpenCodeMapper.TryExtractTokenEvent Tests**
+- [x] 27. **OpenCodeMapper.TryExtractTokenEvent Tests**
   **What**: Test the token data extraction from SSE events.
   **Files**:
   - Modify `tests/WeaveFleet.Infrastructure.Tests/Harnesses/OpenCode/OpenCodeMapperTests.cs`
@@ -712,7 +712,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   - Computes estimated cost correctly
   **Acceptance**: All tests pass.
 
-- [ ] 28. **ModelPricing Tests**
+- [x] 28. **ModelPricing Tests**
   **What**: Test the cost estimation logic.
   **Files**:
   - Create `tests/WeaveFleet.Application.Tests/Analytics/ModelPricingTests.cs`
@@ -723,7 +723,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   - Cache read tokens use reduced pricing
   **Acceptance**: All tests pass.
 
-- [ ] 29. **Migration Runner Segment Filter Tests**
+- [x] 29. **Migration Runner Segment Filter Tests**
   **What**: Test that the refactored MigrationRunner correctly filters by exact dotted-segment matching.
   **Files**:
   - Modify `tests/WeaveFleet.Infrastructure.Tests/Data/MigrationRunnerTests.cs`
@@ -736,9 +736,9 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
 
 ## Verification
 
-- [ ] `dotnet build` succeeds across all projects with no errors or warnings
-- [ ] `dotnet test` passes all existing tests (no regressions from MigrationRunner refactor)
-- [ ] `dotnet test` passes all new analytics tests
+- [x] `dotnet build` succeeds across all projects with no errors or warnings
+- [x] `dotnet test` passes all existing tests (no regressions from MigrationRunner refactor)
+- [x] `dotnet test` passes all new analytics tests
 - [ ] Manual verification: start the app, create a session, send a prompt, observe:
   - `weave-fleet-analytics.db` is created alongside `weave-fleet.db`
   - `token_events` table has rows with token/cost data

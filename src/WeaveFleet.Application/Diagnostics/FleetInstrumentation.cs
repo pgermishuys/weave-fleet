@@ -25,4 +25,37 @@ public static class FleetInstrumentation
 
     /// <summary>Meter for recording custom metrics.</summary>
     public static readonly Meter Meter = new(ServiceName, ServiceVersion);
+
+    // ─── Analytics metrics ────────────────────────────────────────────────────
+
+    /// <summary>Total tokens consumed across all sessions.</summary>
+    public static readonly Counter<long> TokensConsumed =
+        Meter.CreateCounter<long>("weave_fleet.tokens.consumed", "tokens",
+            "Total tokens consumed across all sessions");
+
+    /// <summary>Total actual cost incurred across all sessions.</summary>
+    public static readonly Counter<double> CostIncurred =
+        Meter.CreateCounter<double>("weave_fleet.cost.incurred", "USD",
+            "Total cost incurred across all sessions");
+
+    /// <summary>Total estimated cost across all sessions.</summary>
+    public static readonly Counter<double> EstimatedCostIncurred =
+        Meter.CreateCounter<double>("weave_fleet.cost.estimated", "USD",
+            "Total estimated cost across all sessions");
+
+    /// <summary>Total AI messages processed.</summary>
+    public static readonly Counter<long> MessagesProcessed =
+        Meter.CreateCounter<long>("weave_fleet.messages.processed", "messages",
+            "Total AI messages processed");
+
+    /// <summary>Distribution of per-message costs.</summary>
+    public static readonly Histogram<double> MessageCost =
+        Meter.CreateHistogram<double>("weave_fleet.message.cost", "USD",
+            "Distribution of per-message costs");
+
+    /// <summary>Distribution of per-message token counts.</summary>
+    public static readonly Histogram<long> MessageTokens =
+        Meter.CreateHistogram<long>("weave_fleet.message.tokens", "tokens",
+            "Distribution of per-message token counts");
 }
+

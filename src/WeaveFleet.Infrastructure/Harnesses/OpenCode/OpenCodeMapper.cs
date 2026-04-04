@@ -1,4 +1,5 @@
 using System.Text.Json;
+using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Harnesses;
 
@@ -137,4 +138,88 @@ internal static class OpenCodeMapper
     /// <summary>Converts a Unix millisecond timestamp to <see cref="DateTimeOffset"/>.</summary>
     internal static DateTimeOffset DateTimeOffsetFromUnixMs(long ms)
         => DateTimeOffset.FromUnixTimeMilliseconds(ms);
+
+    /// <summary>
+    /// Attempts to extract token/cost data from an OpenCode SSE event.
+    /// Only processes <c>message.updated</c> events where the Properties contains
+    /// an <c>"info"</c> field wrapping an assistant message with token data.
+    /// Returns <c>null</c> for all other events, or on any parse failure.
+    /// This is a side-channel extraction — it must never throw or block.
+    /// </summary>
+    /// <remarks>
+    /// The <c>message.created</c> event type is intentionally excluded.
+    /// Its Properties structure has not been verified against a contract fixture,
+    /// so it is unsafe to deserialize. See analytics-store.md § Task 14 for details.
+    /// </remarks>
+    internal static TokenEventData? TryExtractTokenEvent(
+        OpenCodeSseEvent evt,
+        string? sessionId,
+        string? projectId,
+        string? projectName,
+        string? workspaceDirectory)
+    {
+        // Only process message.updated events
+        if (evt.Type is not "message.updated")
+            return null;
+
+        try
+        {
+            if (evt.Properties.ValueKind != JsonValueKind.Object)
+                return null;
+
+            // The message.updated Properties wraps the message under "info":
+            //   { "info": { "id": "...", "role": "assistant", ... } }
+            // Confirmed by contract fixture: tests/contracts/opencode-to-fleet-events.json
+            if (!evt.Properties.TryGetProperty("info", out var infoEl))
+                return null;
+
+            // Check "role" directly — avoid polymorphic deserialization of the abstract base type,
+            // which requires the discriminator to be the first property in some STJ configurations.
+            if (!infoEl.TryGetProperty("role", out var roleEl)
+                || roleEl.GetString() is not "assistant")
+                return null;
+
+            var assistant = infoEl.Deserialize<OpenCodeAssistantMessage>(OpenCodeJsonOptions.Default);
+            if (assistant is null)
+                return null;
+
+            // Skip messages with no token data
+            if (assistant.Tokens is null && assistant.Cost is null)
+                return null;
+
+            var tokens = assistant.Tokens;
+            var tokensTotal = tokens?.Total ?? 0;
+            var cost = assistant.Cost ?? 0;
+
+            var estimatedCost = ModelPricing.EstimateCost(
+                assistant.ModelId,
+                tokens?.Input ?? 0,
+                tokens?.Output ?? 0,
+                tokens?.Reasoning ?? 0,
+                tokens?.Cache?.Read ?? 0);
+
+            return new TokenEventData(
+                EventId: $"{sessionId}:{assistant.Id}",
+                SessionId: sessionId ?? "",
+                ProjectId: projectId,
+                ProjectName: projectName,
+                WorkspaceDirectory: workspaceDirectory,
+                ModelId: assistant.ModelId,
+                ProviderId: assistant.ProviderId,
+                TokensInput: tokens?.Input ?? 0,
+                TokensOutput: tokens?.Output ?? 0,
+                TokensReasoning: tokens?.Reasoning ?? 0,
+                TokensCacheRead: tokens?.Cache?.Read ?? 0,
+                TokensCacheWrite: tokens?.Cache?.Write ?? 0,
+                TokensTotal: tokensTotal,
+                Cost: cost,
+                EstimatedCost: estimatedCost,
+                CreatedAt: DateTimeOffset.FromUnixTimeMilliseconds(assistant.Time.Created));
+        }
+        catch
+        {
+            // Silent failure — analytics must never crash sessions
+            return null;
+        }
+    }
 }

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Analytics;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
@@ -37,6 +38,9 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
     private readonly TimeSpan _shutdownTimeout;
     private readonly ILogger<OpenCodeHarnessInstance> _logger;
     private readonly SemaphoreSlim _sessionLock = new(1, 1);
+    private readonly IAnalyticsCollector? _analyticsCollector;
+    private readonly string? _projectId;
+    private readonly string? _projectName;
 
     private string? _openCodeSessionId;
     private HarnessInstanceStatus _status = HarnessInstanceStatus.Starting;
@@ -51,7 +55,10 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
         int allocatedPort,
         string workingDirectory,
         TimeSpan shutdownTimeout,
-        ILogger<OpenCodeHarnessInstance> logger)
+        ILogger<OpenCodeHarnessInstance> logger,
+        IAnalyticsCollector? analyticsCollector = null,
+        string? projectId = null,
+        string? projectName = null)
     {
         InstanceId = instanceId;
         _httpClient = httpClient;
@@ -61,6 +68,9 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
         _workingDirectory = workingDirectory;
         _shutdownTimeout = shutdownTimeout;
         _logger = logger;
+        _analyticsCollector = analyticsCollector;
+        _projectId = projectId;
+        _projectName = projectName;
 
         _status = HarnessInstanceStatus.Idle;
 
@@ -170,6 +180,15 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
             .SubscribeToEventsAsync(_workingDirectory, ct)
             .ConfigureAwait(false))
         {
+            // Fire-and-forget analytics intercept — never blocks or throws
+            if (_analyticsCollector is not null)
+            {
+                var tokenEvent = OpenCodeMapper.TryExtractTokenEvent(
+                    sseEvt, _openCodeSessionId, _projectId, _projectName, _workingDirectory);
+                if (tokenEvent is not null)
+                    _analyticsCollector.AcceptTokenEvent(tokenEvent);
+            }
+
             yield return OpenCodeMapper.ToHarnessEvent(sseEvt, _openCodeSessionId);
         }
     }

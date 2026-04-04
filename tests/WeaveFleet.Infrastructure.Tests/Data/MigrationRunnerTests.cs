@@ -96,6 +96,73 @@ public sealed class MigrationRunnerTests
         Assert.Contains(migrations, m => m.StartsWith("001_", StringComparison.Ordinal));
     }
 
+    // ── Segment filter tests ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task DefaultMigrationsSegment_DoesNotApplyAnalyticsMigrations()
+    {
+        // The main runner with default "Migrations" segment should only apply
+        // resources whose dotted name contains "Migrations" as an exact segment.
+        // "AnalyticsMigrations" is a DIFFERENT segment — not matched.
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+        var runner = CreateRunner(factory); // default "Migrations"
+
+        await runner.ApplyMigrationsAsync(conn);
+
+        var tables = (await conn.QueryAsync<string>(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")).ToList();
+
+        // Analytics tables should NOT be created by the main runner
+        Assert.DoesNotContain("token_events", tables);
+        Assert.DoesNotContain("session_snapshots", tables);
+        Assert.DoesNotContain("daily_rollups", tables);
+    }
+
+    [Fact]
+    public async Task AnalyticsMigrationsSegment_AppliesAnalyticsSchema()
+    {
+        // The analytics runner with "AnalyticsMigrations" segment should create
+        // the three analytics tables and NOT the main app tables.
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+        var runner = new MigrationRunner(factory, NullLogger<MigrationRunner>.Instance, "AnalyticsMigrations");
+
+        await runner.ApplyMigrationsAsync(conn);
+
+        var tables = (await conn.QueryAsync<string>(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")).ToList();
+
+        Assert.Contains("token_events", tables);
+        Assert.Contains("session_snapshots", tables);
+        Assert.Contains("daily_rollups", tables);
+
+        // Main app tables should NOT be created by the analytics runner
+        Assert.DoesNotContain("sessions", tables);
+        Assert.DoesNotContain("projects", tables);
+    }
+
+    [Fact]
+    public async Task SegmentMatchIsExact_NotSubstring()
+    {
+        // "Migrations" should not match "AnalyticsMigrations" — they are different dotted segments.
+        // This test validates the exact-segment semantics of the filter.
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+
+        // Main runner (segment = "Migrations")
+        var mainRunner = CreateRunner(factory);
+        await mainRunner.ApplyMigrationsAsync(conn);
+
+        var mainMigrations = (await conn.QueryAsync<string>(
+            "SELECT name FROM _migrations ORDER BY id")).ToList();
+
+        // All recorded migrations should be from the "Migrations" folder,
+        // not from "AnalyticsMigrations"
+        Assert.All(mainMigrations, name =>
+            Assert.DoesNotContain("analytics", name, StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>
     /// Adapter that always returns the same pre-opened in-memory connection.
     /// </summary>

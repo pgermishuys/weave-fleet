@@ -272,4 +272,152 @@ public sealed class OpenCodeMapperTests
         var oneSecond = OpenCodeMapper.DateTimeOffsetFromUnixMs(1_000L);
         Assert.Equal(DateTimeOffset.UnixEpoch.AddSeconds(1), oneSecond);
     }
+
+    // ---------------------------------------------------------------------------
+    // TryExtractTokenEvent
+    // ---------------------------------------------------------------------------
+
+    private static OpenCodeSseEvent MakeMessageUpdatedEvent(string propertiesJson)
+    {
+        var properties = JsonDocument.Parse(propertiesJson).RootElement;
+        return new OpenCodeSseEvent { Type = "message.updated", Properties = properties };
+    }
+
+    [Fact]
+    public void TryExtractTokenEvent_ValidAssistantMessage_ReturnsTokenEventData()
+    {
+        var evt = MakeMessageUpdatedEvent("""
+            {
+              "info": {
+                "id": "msg-1",
+                "sessionId": "oc-sess-1",
+                "role": "assistant",
+                "time": { "created": 1000000 },
+                "modelId": "claude-sonnet-4",
+                "providerId": "anthropic",
+                "tokens": {
+                  "input": 100,
+                  "output": 200,
+                  "reasoning": 10,
+                  "cache": { "read": 50, "write": 0 },
+                  "total": 360
+                },
+                "cost": 0.005
+              }
+            }
+            """);
+
+        var result = OpenCodeMapper.TryExtractTokenEvent(
+            evt, "fleet-sess-1", "proj-1", "MyProject", "/workspace");
+
+        Assert.NotNull(result);
+        Assert.Equal("fleet-sess-1:msg-1", result.EventId);
+        Assert.Equal("fleet-sess-1", result.SessionId);
+        Assert.Equal("claude-sonnet-4", result.ModelId);
+        Assert.Equal("anthropic", result.ProviderId);
+        Assert.Equal(100, result.TokensInput);
+        Assert.Equal(200, result.TokensOutput);
+        Assert.Equal(10, result.TokensReasoning);
+        Assert.Equal(50, result.TokensCacheRead);
+        Assert.Equal(360, result.TokensTotal);
+        Assert.Equal(0.005, result.Cost);
+        Assert.Equal("proj-1", result.ProjectId);
+        Assert.Equal("MyProject", result.ProjectName);
+    }
+
+    [Fact]
+    public void TryExtractTokenEvent_UserMessage_ReturnsNull()
+    {
+        var evt = MakeMessageUpdatedEvent("""
+            {
+              "info": {
+                "id": "msg-user-1",
+                "sessionId": "oc-sess-1",
+                "role": "user",
+                "time": { "created": 1000000 }
+              }
+            }
+            """);
+
+        var result = OpenCodeMapper.TryExtractTokenEvent(evt, "sess", null, null, null);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void TryExtractTokenEvent_NonMessageUpdatedEvent_ReturnsNull()
+    {
+        var properties = JsonDocument.Parse("""{"status":"idle"}""").RootElement;
+        var evt = new OpenCodeSseEvent { Type = "session.status", Properties = properties };
+
+        var result = OpenCodeMapper.TryExtractTokenEvent(evt, "sess", null, null, null);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void TryExtractTokenEvent_MessageCreatedEvent_ReturnsNull()
+    {
+        // message.created has unverified Properties structure — must be excluded
+        var properties = JsonDocument.Parse("""{"info":{"id":"msg-1","role":"assistant","time":{"created":1000}}}""").RootElement;
+        var evt = new OpenCodeSseEvent { Type = "message.created", Properties = properties };
+
+        var result = OpenCodeMapper.TryExtractTokenEvent(evt, "sess", null, null, null);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void TryExtractTokenEvent_AssistantMessageNoTokenData_ReturnsNull()
+    {
+        var evt = MakeMessageUpdatedEvent("""
+            {
+              "info": {
+                "id": "msg-no-tokens",
+                "sessionId": "oc-sess-1",
+                "role": "assistant",
+                "time": { "created": 1000000 }
+              }
+            }
+            """);
+
+        var result = OpenCodeMapper.TryExtractTokenEvent(evt, "sess", null, null, null);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void TryExtractTokenEvent_PropertiesLacksInfoKey_ReturnsNull()
+    {
+        var properties = JsonDocument.Parse("""{"other":"value"}""").RootElement;
+        var evt = new OpenCodeSseEvent { Type = "message.updated", Properties = properties };
+
+        var result = OpenCodeMapper.TryExtractTokenEvent(evt, "sess", null, null, null);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void TryExtractTokenEvent_EstimatedCost_ComputedForKnownModel()
+    {
+        var evt = MakeMessageUpdatedEvent("""
+            {
+              "info": {
+                "id": "msg-cost",
+                "sessionId": "oc-sess-1",
+                "role": "assistant",
+                "time": { "created": 1000000 },
+                "modelId": "claude-sonnet-4-20250514",
+                "tokens": { "input": 1000, "output": 500, "total": 1500 },
+                "cost": 0.01
+              }
+            }
+            """);
+
+        var result = OpenCodeMapper.TryExtractTokenEvent(evt, "sess", null, null, null);
+
+        Assert.NotNull(result);
+        Assert.NotNull(result.EstimatedCost);
+        Assert.True(result.EstimatedCost > 0);
+    }
 }

@@ -34,4 +34,37 @@ public sealed class FleetOptions
 
     /// <summary>Seconds to wait for a harness process to exit gracefully before force-killing. Default: 10.</summary>
     public int HarnessShutdownTimeoutSeconds { get; set; } = 10;
+
+    // ─── Analytics ────────────────────────────────────────────────────────────
+
+    /// <summary>Path to the analytics SQLite database file. Default: "" (computed alongside DatabasePath).</summary>
+    public string AnalyticsDatabasePath { get; set; } = "";
+
+    /// <summary>Enable analytics collection. Default: true.</summary>
+    public bool AnalyticsEnabled { get; set; } = true;
+
+    /// <summary>Batch flush interval for analytics writes in seconds. Default: 2.</summary>
+    public int AnalyticsFlushIntervalSeconds { get; set; } = 2;
+
+    /// <summary>Maximum batch size for analytics writes. Default: 50.</summary>
+    public int AnalyticsMaxBatchSize { get; set; } = 50;
+
+    /// <summary>Rollup computation interval in minutes. Default: 5.</summary>
+    public int AnalyticsRollupIntervalMinutes { get; set; } = 5;
+
+    /// <summary>
+    /// Resolved analytics database path. When <see cref="AnalyticsDatabasePath"/> is empty,
+    /// defaults to "weave-fleet-analytics.db" in the same directory as <see cref="DatabasePath"/>.
+    /// </summary>
+    public string ResolvedAnalyticsDatabasePath
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(AnalyticsDatabasePath))
+                return AnalyticsDatabasePath;
+
+            var dir = Path.GetDirectoryName(Path.GetFullPath(DatabasePath));
+            return Path.Combine(dir ?? ".", "weave-fleet-analytics.db");
+        }
+    }
 }

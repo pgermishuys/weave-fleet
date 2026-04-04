@@ -1,10 +1,12 @@
 using Dapper;
 using Microsoft.Extensions.DependencyInjection;
+using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Analytics;
 using WeaveFleet.Infrastructure.Data;
 using WeaveFleet.Infrastructure.Data.Repositories;
 using WeaveFleet.Infrastructure.Harnesses;
@@ -81,6 +83,34 @@ public static class DependencyInjection
 
         // HarnessEventRelay bridges harness instance events to the broadcaster
         services.AddHostedService<HarnessEventRelay>();
+
+        // ── Analytics ─────────────────────────────────────────────────────────
+        if (options.AnalyticsEnabled)
+        {
+            // Analytics connection factory (singleton — one pool per process)
+            var analyticsDbPath = options.ResolvedAnalyticsDatabasePath;
+            services.AddSingleton<IAnalyticsDbConnectionFactory>(
+                _ => new AnalyticsSqliteConnectionFactory(analyticsDbPath));
+
+            // Analytics migration runner (singleton — applied once at startup)
+            services.AddSingleton<AnalyticsMigrationRunner>();
+
+            // Analytics collector (singleton — owns the bounded channel)
+            services.AddSingleton<AnalyticsCollector>();
+            services.AddSingleton<IAnalyticsCollector>(sp => sp.GetRequiredService<AnalyticsCollector>());
+
+            // Analytics repository (scoped — follows repository pattern)
+            services.AddScoped<IAnalyticsReader, AnalyticsRepository>();
+
+            // Background services (same pattern as HarnessEventRelay)
+            services.AddHostedService<AnalyticsWriterService>();
+            services.AddHostedService<AnalyticsRollupService>();
+        }
+        else
+        {
+            // When analytics disabled, provide a no-op collector so DI never fails
+            services.AddSingleton<IAnalyticsCollector, NullAnalyticsCollector>();
+        }
 
         // HarnessRegistry is Singleton — any IHarness registrations MUST also be
         // Singleton to avoid a captive-dependency runtime failure.

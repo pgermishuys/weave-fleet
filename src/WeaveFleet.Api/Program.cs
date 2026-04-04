@@ -17,7 +17,6 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Data;
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Bind Fleet options
@@ -57,6 +56,11 @@ var app = builder.Build();
 // Run database migrations at startup
 var migrationRunner = app.Services.GetRequiredService<MigrationRunner>();
 await migrationRunner.ApplyMigrationsAsync();
+
+// Run analytics database migrations (only when analytics is enabled)
+var analyticsMigrationRunner = app.Services.GetService<AnalyticsMigrationRunner>();
+if (analyticsMigrationRunner is not null)
+    await analyticsMigrationRunner.ApplyMigrationsAsync();
 
 // Ensure scratch project exists
 using (var scope = app.Services.CreateScope())

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Common;
@@ -21,6 +22,7 @@ public sealed class SessionOrchestratorTests
     private readonly IWorkspaceRepository _workspaceRepo = Substitute.For<IWorkspaceRepository>();
     private readonly IInstanceRepository _instanceRepo = Substitute.For<IInstanceRepository>();
     private readonly IEventBroadcaster _eventBroadcaster = Substitute.For<IEventBroadcaster>();
+    private readonly IAnalyticsCollector _analyticsCollector = Substitute.For<IAnalyticsCollector>();
     private readonly InstanceTracker _tracker = new();
     private readonly SessionOrchestrator _sut;
 
@@ -41,6 +43,7 @@ public sealed class SessionOrchestratorTests
             _callbackRepo,
             _projectRepo,
             _eventBroadcaster,
+            _analyticsCollector,
             NullLogger<SessionOrchestrator>.Instance);
 
         // Default harness instance id

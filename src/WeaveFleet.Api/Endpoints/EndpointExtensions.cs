@@ -22,6 +22,7 @@ public static class EndpointExtensions
         app.MapWebSocketEndpoints();
         app.MapGitHubAuthEndpoints();
         app.MapGitHubEndpoints();
+        app.MapAnalyticsEndpoints();
 
         return app;
     }
