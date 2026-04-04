@@ -147,3 +147,30 @@ export function getStatusDot(status: string): string {
       return "bg-zinc-500";
   }
 }
+
+// ─── Analytics Format Utilities ───────────────────────────────────────────────
+
+/** Format large numbers with M/K suffix: 1234567 → "1.2M", 45678 → "45.7K" */
+export function formatLargeNumber(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return n.toLocaleString();
+}
+
+/** Format cost with appropriate precision: $0.004 → "$0.004", $1.50 → "$1.50", $1234 → "$1,234" */
+export function formatAnalyticsCost(cost: number): string {
+  if (cost === 0) return "$0.00";
+  if (cost < 0.01) return `$${cost.toFixed(3)}`;
+  if (cost >= 1000)
+    return `$${cost.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  return `$${cost.toFixed(2)}`;
+}
+
+/** Format a date string as short display: "2025-01-15" → "Jan 15" */
+export function formatShortDate(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}

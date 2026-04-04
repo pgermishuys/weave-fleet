@@ -391,6 +391,56 @@ export interface HarnessInfo {
   capabilities: HarnessCapabilities;
 }
 
+// ─── Analytics Types ──────────────────────────────────────────────────────
+
+export interface AnalyticsSummary {
+  totalTokens: number;
+  totalCost: number;
+  totalEstimatedCost: number;
+  sessionCount: number;
+  messageCount: number;
+  topModels: AnalyticsTopItem[];
+  topProjects: AnalyticsTopItem[];
+}
+
+export interface AnalyticsTopItem {
+  name: string;
+  tokens: number;
+  cost: number;
+}
+
+export interface DailyAnalytics {
+  date: string;          // ISO date string "YYYY-MM-DD"
+  tokens: number;
+  cost: number;
+  estimatedCost: number;
+  sessions: number;
+  messages: number;
+}
+
+export interface SessionAnalytics {
+  sessionId: string;
+  title: string | null;
+  projectId: string | null;
+  projectName: string | null;
+  tokens: number;
+  cost: number;
+  estimatedCost: number;
+  models: string[];
+  durationSeconds: number | null;
+  createdAt: string;     // ISO datetime
+}
+
+export interface ModelAnalytics {
+  modelId: string;
+  providerId: string;
+  tokens: number;
+  cost: number;
+  estimatedCost: number;
+  messageCount: number;
+  avgCostPerMessage: number;
+}
+
 // ─── Workspace Roots Types ──────────────────────────────────────────────────/** A single workspace root returned by GET /api/workspace-roots */
 export interface WorkspaceRootItem {
   /** DB id, or null for env-var roots */

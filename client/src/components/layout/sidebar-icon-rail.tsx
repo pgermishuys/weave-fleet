@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { LayoutGrid, Github, Settings, FolderGit2 } from "lucide-react";
+import { LayoutGrid, Github, Settings, FolderGit2, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -318,6 +318,7 @@ export function SidebarIconRail() {
 
       {/* Bottom section: page links + version */}
       <div className="flex flex-col gap-0.5 px-1">
+        <IconRailLink icon={BarChart3} label="Analytics" href="/analytics" />
         <IconRailLink icon={Settings} label="Settings" href="/settings" />
         <ProfileBadge />
         <VersionBadge />

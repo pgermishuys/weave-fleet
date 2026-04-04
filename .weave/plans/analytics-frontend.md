@@ -92,14 +92,14 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
 
 ### Phase 1: Dependencies & Types
 
-- [ ] 1. **Install Recharts**
+- [x] 1. **Install Recharts**
   **What**: Add `recharts` as a dependency. Recharts is ~45kB gzipped, React-native, works well with Tailwind CSS variables for dark mode theming. It's the de facto standard for React dashboards.
   **Files**:
   - Modify `client/package.json` — add `"recharts": "^2.15.3"` to dependencies
   **Commands**: `npm install recharts` in `client/`
   **Acceptance**: `import { LineChart, BarChart } from "recharts"` compiles without errors. `npm run typecheck` passes.
 
-- [ ] 2. **Add Analytics API Types**
+- [x] 2. **Add Analytics API Types**
   **What**: Define TypeScript interfaces matching the backend analytics DTOs. Follow the camelCase convention used throughout `api-types.ts` (the backend serializes as camelCase in JSON).
   **Files**:
   - Modify `client/src/lib/api-types.ts` — add new section at the bottom
@@ -159,7 +159,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
 
 ### Phase 2: Data Fetching Hooks
 
-- [ ] 3. **Create `useAnalyticsSummary` Hook**
+- [x] 3. **Create `useAnalyticsSummary` Hook**
   **What**: Polling hook for `GET /api/analytics/summary`. Follows the exact pattern of `use-fleet-summary.ts` — `useState` for data/loading/error, `useCallback` fetch with `apiFetch`, `useEffect` with `setInterval` + `visibilitychange`. Accepts `from`, `to`, `projectId` as parameters. Poll interval: 30 seconds.
   **Files**:
   - Create `client/src/hooks/use-analytics-summary.ts`
@@ -185,7 +185,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
   **Query string construction**: Build URL params from non-null filter values. E.g. `/api/analytics/summary?from=2025-01-01&to=2025-01-31&projectId=abc`.
   **Acceptance**: Hook compiles. Returns typed data from the API endpoint.
 
-- [ ] 4. **Create `useAnalyticsDaily` Hook**
+- [x] 4. **Create `useAnalyticsDaily` Hook**
   **What**: Polling hook for `GET /api/analytics/daily`. Same pattern. Returns `DailyAnalytics[]`.
   **Files**:
   - Create `client/src/hooks/use-analytics-daily.ts`
@@ -204,7 +204,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
   ```
   **Acceptance**: Hook compiles. Returns typed data.
 
-- [ ] 5. **Create `useAnalyticsSessions` Hook**
+- [x] 5. **Create `useAnalyticsSessions` Hook**
   **What**: Polling hook for `GET /api/analytics/sessions`. Same pattern. Supports `limit` parameter (default 50). Returns `SessionAnalytics[]`.
   **Files**:
   - Create `client/src/hooks/use-analytics-sessions.ts`
@@ -223,7 +223,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
   ```
   **Acceptance**: Hook compiles. Returns typed data.
 
-- [ ] 6. **Create `useAnalyticsModels` Hook**
+- [x] 6. **Create `useAnalyticsModels` Hook**
   **What**: Polling hook for `GET /api/analytics/models`. Same pattern. Returns `ModelAnalytics[]`.
   **Files**:
   - Create `client/src/hooks/use-analytics-models.ts`
@@ -242,7 +242,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
   ```
   **Acceptance**: Hook compiles. Returns typed data.
 
-- [ ] 7. **Create `useAnalyticsFilters` Hook**
+- [x] 7. **Create `useAnalyticsFilters` Hook**
   **What**: A simple state hook that manages the shared date range + project filter state across all analytics tabs. Uses `usePersistedState` (from `client/src/hooks/use-persisted-state.ts`) to persist filter selections in localStorage across page reloads.
   **Files**:
   - Create `client/src/hooks/use-analytics-filters.ts`
@@ -270,7 +270,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
 
 ### Phase 3: Shared Components
 
-- [ ] 8. **Create `AnalyticsDateFilter` Component**
+- [x] 8. **Create `AnalyticsDateFilter` Component**
   **What**: A toolbar-style filter bar with two `<input type="date">` fields (From/To) and a project dropdown. Uses native date inputs for simplicity (no external date picker library). Styled to match the `FleetToolbar` aesthetic — compact, border-bottom separator, horizontal layout on desktop, stacked on mobile.
   **Files**:
   - Create `client/src/components/analytics/analytics-date-filter.tsx`
@@ -295,7 +295,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
   **Styling**: Use the existing `Input` component from `client/src/components/ui/input.tsx` with `type="date"`. Use `Select`/`SelectTrigger`/`SelectContent`/`SelectItem` from `client/src/components/ui/select.tsx` for the project dropdown. Date inputs have native dark mode support via CSS color-scheme.
   **Acceptance**: Filter bar renders. Changing values calls the respective callbacks. "All Projects" option works.
 
-- [ ] 9. **Create `StatCard` Component**
+- [x] 9. **Create `StatCard` Component**
   **What**: A reusable stat card for the analytics overview — similar to the SummaryBar cards but slightly larger with optional secondary value. Uses the Card primitive.
   **Files**:
   - Create `client/src/components/analytics/stat-card.tsx`
@@ -312,7 +312,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
   **Layout**: Rounded border card (matching SummaryBar style) with centered icon, bold value, label below. Optional secondary line in muted text.
   **Acceptance**: Card renders with icon, value, label, and optional secondary value.
 
-- [ ] 10. **Create Recharts Theme Utility**
+- [x] 10. **Create Recharts Theme Utility**
   **What**: A utility that provides Recharts color tokens derived from CSS variables, ensuring charts look correct in dark/light/black themes. Recharts accepts hex/rgb colors, so we need to resolve CSS variable values at render time.
   **Files**:
   - Create `client/src/lib/chart-theme.ts`
@@ -343,7 +343,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
 
 ### Phase 4: Tab Components
 
-- [ ] 11. **Create Overview Tab**
+- [x] 11. **Create Overview Tab**
   **What**: The default tab showing summary stats + daily usage chart + top models + top projects. This is the "executive summary" view.
   **Files**:
   - Create `client/src/components/analytics/overview-tab.tsx`
@@ -377,7 +377,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
   **Empty state**: Show placeholder text "No analytics data yet. Data will appear once sessions generate token usage." when summary is null or all zeros.
   **Acceptance**: Summary stats display correctly. Daily chart renders with proper axes. Top models/projects render as ranked lists.
 
-- [ ] 12. **Create Projects Tab**
+- [x] 12. **Create Projects Tab**
   **What**: Per-project breakdown showing tokens, cost, session count. Presented as a responsive card grid (matching the fleet page's card grid pattern).
   **Files**:
   - Create `client/src/components/analytics/projects-tab.tsx`
@@ -391,7 +391,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
   **Note**: For a more detailed breakdown, we could add a separate `/api/analytics/projects` endpoint in the future. For now, `topProjects` from the summary endpoint provides the key data. If we need more, we can fetch sessions filtered by projectId.
   **Acceptance**: Project cards render. Shows proportional cost bar. Empty state when no projects.
 
-- [ ] 13. **Create Sessions Tab**
+- [x] 13. **Create Sessions Tab**
   **What**: Session-level analytics table with sortable columns. This is the most data-dense tab.
   **Files**:
   - Create `client/src/components/analytics/sessions-tab.tsx`
@@ -413,7 +413,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
   **Props**: `sessions: SessionAnalytics[]`, `isLoading: boolean`
   **Acceptance**: Table renders with all columns. Clicking headers sorts. Responsive on mobile.
 
-- [ ] 14. **Create Models Tab**
+- [x] 14. **Create Models Tab**
   **What**: Per-model breakdown showing token usage, cost, message count, avg cost per message. Uses a combination of a horizontal bar chart and a detail list.
   **Files**:
   - Create `client/src/components/analytics/models-tab.tsx`
@@ -439,7 +439,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
 
 ### Phase 5: Analytics Page & Navigation
 
-- [ ] 15. **Create Analytics Page**
+- [x] 15. **Create Analytics Page**
   **What**: The main `/analytics` route page component. Orchestrates filters, hooks, and tab components.
   **Files**:
   - Create `client/src/app/analytics/page.tsx`
@@ -503,7 +503,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
   **Data fetching strategy**: All 4 hooks are called unconditionally at the page level. This pre-fetches data for all tabs. Since the poll interval is 30s and the data is small, this is efficient. Tabs render immediately when switched — no loading delay.
   **Acceptance**: Page renders at `/analytics`. All 4 tabs work. Filters apply across all tabs.
 
-- [ ] 16. **Add Analytics Link to Sidebar Icon Rail**
+- [x] 16. **Add Analytics Link to Sidebar Icon Rail**
   **What**: Add a `BarChart3` icon link to the sidebar icon rail's bottom section (alongside Settings), using the `IconRailLink` pattern.
   **Files**:
   - Modify `client/src/components/layout/sidebar-icon-rail.tsx`
@@ -524,7 +524,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
 
 ### Phase 6: Analytics Format Utilities
 
-- [ ] 17. **Add Analytics-Specific Format Utilities**
+- [x] 17. **Add Analytics-Specific Format Utilities**
   **What**: Add format helpers specific to analytics display (large numbers, percentage formatting, date range labels).
   **Files**:
   - Modify `client/src/lib/format-utils.ts` — add new functions
@@ -555,7 +555,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
 
 ### Phase 7: Tests
 
-- [ ] 18. **Test Analytics Format Utilities**
+- [x] 18. **Test Analytics Format Utilities**
   **What**: Unit tests for the new format functions.
   **Files**:
   - Modify `client/src/lib/__tests__/format-utils.test.ts` — add new describe blocks
@@ -565,7 +565,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
   - `formatShortDate`: handles ISO date strings, produces "Jan 15" format
   **Acceptance**: All new tests pass. Existing tests unaffected.
 
-- [ ] 19. **Test Analytics Types Contract**
+- [x] 19. **Test Analytics Types Contract**
   **What**: Compile-time type assertions ensuring the analytics types match expected shapes. Similar to existing `api-types.test.ts`.
   **Files**:
   - Create `client/src/lib/__tests__/analytics-types.test.ts`
@@ -575,7 +575,7 @@ Provide a clear, actionable analytics dashboard for token usage and cost trackin
   - Verify JSON fixture parsing (create a small fixture with sample API response, assert it parses to the correct types)
   **Acceptance**: Types are verified at compile time and test time.
 
-- [ ] 20. **Test `useAnalyticsFilters` Hook**
+- [x] 20. **Test `useAnalyticsFilters` Hook**
   **What**: Unit tests for the filter state management hook.
   **Files**:
   - Create `client/src/hooks/__tests__/use-analytics-filters.test.ts`

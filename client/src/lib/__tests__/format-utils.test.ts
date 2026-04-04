@@ -6,6 +6,9 @@ import {
   formatRelativeTime,
   getStatusColor,
   getStatusDot,
+  formatLargeNumber,
+  formatAnalyticsCost,
+  formatShortDate,
 } from "@/lib/format-utils";
 
 // ─── formatTokens ────────────────────────────────────────────────────────────
@@ -374,5 +377,94 @@ describe("formatTimestamp", () => {
 
   it("returns empty string for null", () => {
     expect(formatTimestamp(null)).toBe("");
+  });
+});
+
+// ─── formatLargeNumber ────────────────────────────────────────────────────────
+
+describe("formatLargeNumber", () => {
+  it("returns '0' for 0", () => {
+    expect(formatLargeNumber(0)).toBe("0");
+  });
+
+  it("returns '500' for 500", () => {
+    expect(formatLargeNumber(500)).toBe("500");
+  });
+
+  it("returns '999' for 999", () => {
+    expect(formatLargeNumber(999)).toBe("999");
+  });
+
+  it("returns '1.0K' for 1000", () => {
+    expect(formatLargeNumber(1000)).toBe("1.0K");
+  });
+
+  it("returns '45.7K' for 45700", () => {
+    expect(formatLargeNumber(45700)).toBe("45.7K");
+  });
+
+  it("returns '999.9K' for 999900", () => {
+    expect(formatLargeNumber(999900)).toBe("999.9K");
+  });
+
+  it("returns '1.0M' for 1000000", () => {
+    expect(formatLargeNumber(1_000_000)).toBe("1.0M");
+  });
+
+  it("returns '1.2M' for 1234567", () => {
+    expect(formatLargeNumber(1_234_567)).toBe("1.2M");
+  });
+
+  it("returns '10.0M' for 10000000", () => {
+    expect(formatLargeNumber(10_000_000)).toBe("10.0M");
+  });
+});
+
+// ─── formatAnalyticsCost ──────────────────────────────────────────────────────
+
+describe("formatAnalyticsCost", () => {
+  it("returns '$0.00' for 0", () => {
+    expect(formatAnalyticsCost(0)).toBe("$0.00");
+  });
+
+  it("returns 3 decimal places for sub-cent amounts", () => {
+    expect(formatAnalyticsCost(0.004)).toBe("$0.004");
+    expect(formatAnalyticsCost(0.0001)).toBe("$0.000");
+    expect(formatAnalyticsCost(0.009)).toBe("$0.009");
+  });
+
+  it("returns 2 decimal places for normal amounts", () => {
+    expect(formatAnalyticsCost(0.01)).toBe("$0.01");
+    expect(formatAnalyticsCost(1.5)).toBe("$1.50");
+    expect(formatAnalyticsCost(12.34)).toBe("$12.34");
+    expect(formatAnalyticsCost(999.99)).toBe("$999.99");
+  });
+
+  it("returns comma-separated for thousands", () => {
+    expect(formatAnalyticsCost(1234.56)).toBe("$1,234.56");
+  });
+
+  it("handles exactly 1000", () => {
+    expect(formatAnalyticsCost(1000)).toBe("$1,000.00");
+  });
+});
+
+// ─── formatShortDate ──────────────────────────────────────────────────────────
+
+describe("formatShortDate", () => {
+  it("formats Jan 15 correctly", () => {
+    expect(formatShortDate("2025-01-15")).toBe("Jan 15");
+  });
+
+  it("formats Dec 1 correctly", () => {
+    expect(formatShortDate("2025-12-01")).toBe("Dec 1");
+  });
+
+  it("formats Mar 31 correctly", () => {
+    expect(formatShortDate("2024-03-31")).toBe("Mar 31");
+  });
+
+  it("formats Jul 4 correctly", () => {
+    expect(formatShortDate("2025-07-04")).toBe("Jul 4");
   });
 });
