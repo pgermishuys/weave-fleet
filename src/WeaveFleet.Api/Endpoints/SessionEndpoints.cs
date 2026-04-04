@@ -51,7 +51,8 @@ public static class SessionEndpoints
                 HarnessType = req.HarnessType,
                 InitialPrompt = req.InitialPrompt,
                 OnCompleteTargetSessionId = req.OnComplete?.NotifySessionId,
-                OnCompleteTargetInstanceId = req.OnComplete?.NotifyInstanceId
+                OnCompleteTargetInstanceId = req.OnComplete?.NotifyInstanceId,
+                ProjectId = req.ProjectId
             });
             return result.Match(
                 r => Results.Ok(new
@@ -266,7 +267,8 @@ internal sealed record CreateSessionApiRequest(
     string? Branch,
     string? HarnessType,
     string? InitialPrompt,
-    OnCompleteInfo? OnComplete);
+    OnCompleteInfo? OnComplete,
+    string? ProjectId);
 
 internal sealed record OnCompleteInfo(string NotifySessionId, string NotifyInstanceId);
 

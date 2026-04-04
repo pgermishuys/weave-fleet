@@ -40,6 +40,8 @@ export interface CreateSessionRequest {
   initialPrompt?: string;
   /** Harness type to use for this session (e.g. "opencode", "claude"). Defaults to "opencode" on backend. */
   harnessType?: string;
+  /** Optional project to assign this session to at creation time */
+  projectId?: string;
   onComplete?: {
     /** OpenCode session ID of the conductor session to notify on completion */
     notifySessionId: string;

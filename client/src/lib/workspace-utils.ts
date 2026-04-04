@@ -16,6 +16,14 @@ export interface WorkspaceGroup {
   sessions: SessionListItem[];
 }
 
+export interface ProjectGroup {
+  /** null means "Ungrouped" (scratch / unassigned sessions) */
+  projectId: string | null;
+  projectName: string;
+  position: number;
+  workspaces: WorkspaceGroup[];
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 /** Derive a display name from the session's workspace metadata. */
@@ -79,6 +87,80 @@ export function groupSessionsByWorkspace(
   const groups = Array.from(map.values());
 
   groups.sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+  return groups;
+}
+
+/**
+ * Groups a flat list of sessions into project groups.
+ * Each project group contains the workspace sub-groups belonging to that project.
+ * Sessions without a project (projectId === null) are placed in the "Ungrouped" bucket.
+ *
+ * @param sessions  - flat session list from the API
+ * @param projects  - ordered list of user projects (from /api/projects)
+ */
+export function groupSessionsByProject(
+  sessions: SessionListItem[],
+  projects: Array<{ id: string; name: string; position: number; type: string }>
+): ProjectGroup[] {
+  // Build a lookup of project position/name by id (exclude scratch — those
+  // sessions should fall into the "Ungrouped" bucket, not vanish)
+  const projectMeta = new Map<string, { name: string; position: number }>();
+  for (const p of projects) {
+    if (p.type !== "scratch") {
+      projectMeta.set(p.id, { name: p.name, position: p.position });
+    }
+  }
+
+  // Partition sessions by projectId (null → ungrouped)
+  const byProject = new Map<string | null, SessionListItem[]>();
+  byProject.set(null, []);
+  for (const p of projects) {
+    if (p.type !== "scratch") {
+      byProject.set(p.id, []);
+    }
+  }
+
+  for (const session of sessions) {
+    const pid = session.projectId ?? null;
+    if (!byProject.has(pid)) {
+      byProject.set(pid, []);
+    }
+    byProject.get(pid)!.push(session);
+  }
+
+  const groups: ProjectGroup[] = [];
+
+  // Named projects first, in position order
+  for (const p of projects) {
+    if (p.type === "scratch") continue;
+    const projectSessions = byProject.get(p.id) ?? [];
+    groups.push({
+      projectId: p.id,
+      projectName: p.name,
+      position: p.position,
+      workspaces: groupSessionsByWorkspace(projectSessions),
+    });
+  }
+
+  // Ungrouped bucket last — sessions with null projectId or unknown projectId
+  const ungroupedSessions: SessionListItem[] = [];
+  for (const [pid, pidSessions] of byProject.entries()) {
+    if (pid === null || !projectMeta.has(pid)) {
+      ungroupedSessions.push(...pidSessions);
+    }
+  }
+
+  if (ungroupedSessions.length > 0 || groups.length > 0) {
+    // Always show ungrouped if there are any sessions without a project,
+    // or if there are no named projects yet
+    groups.push({
+      projectId: null,
+      projectName: "Ungrouped",
+      position: Infinity,
+      workspaces: groupSessionsByWorkspace(ungroupedSessions),
+    });
+  }
 
   return groups;
 }

@@ -57,26 +57,26 @@ Build a complete "Project Management" feature in the Fleet Panel sidebar coverin
 Enable users to organize sessions into projects with full lifecycle management (create, rename, delete, assign, reorder) directly from the sidebar UI.
 
 ### Deliverables
-- [ ] "New Project" button in the Fleet Panel header
-- [ ] Create Project dialog with name + optional description
-- [ ] Project context menu on `SidebarProjectItem` (Rename, Delete)
-- [ ] Inline rename for projects using `InlineEdit`
-- [ ] Delete Project confirmation dialog with mode selection
-- [ ] "Move to Project" context menu submenu on session items
-- [ ] Project picker dropdown in New Session dialog
-- [ ] Backend: wire `projectId` through `CreateSessionApiRequest`
-- [ ] Client: add `projectId` to `CreateSessionRequest` type and `useCreateSession` hook
-- [ ] Project reorder support (up/down buttons or drag)
+- [x] "New Project" button in the Fleet Panel header
+- [x] Create Project dialog with name + optional description
+- [x] Project context menu on `SidebarProjectItem` (Rename, Delete)
+- [x] Inline rename for projects using `InlineEdit`
+- [x] Delete Project confirmation dialog with mode selection
+- [x] "Move to Project" context menu submenu on session items
+- [x] Project picker dropdown in New Session dialog
+- [x] Backend: wire `projectId` through `CreateSessionApiRequest`
+- [x] Client: add `projectId` to `CreateSessionRequest` type and `useCreateSession` hook
+- [x] Project reorder support (up/down buttons or drag)
 
 ### Definition of Done
-- [ ] `npx tsc --noEmit` passes with no new errors
-- [ ] All existing tests pass (`npx vitest run`)
-- [ ] Manual: can create a project from sidebar
-- [ ] Manual: can rename a project via context menu → inline edit
-- [ ] Manual: can delete a project (both modes) via context menu
-- [ ] Manual: can move a session to a different project via session context menu
-- [ ] Manual: new sessions can be assigned to a project at creation time
-- [ ] Manual: projects appear in correct order; reordering works
+- [x] `npx tsc --noEmit` passes with no new errors
+- [x] All existing tests pass (`npx vitest run`)
+- [x] Manual: can create a project from sidebar
+- [x] Manual: can rename a project via context menu → inline edit
+- [x] Manual: can delete a project (both modes) via context menu
+- [x] Manual: can move a session to a different project via session context menu
+- [x] Manual: new sessions can be assigned to a project at creation time
+- [x] Manual: projects appear in correct order; reordering works
 
 ### Guardrails (Must NOT)
 - Do NOT introduce drag-and-drop libraries (keep it simple with context menus)
@@ -88,7 +88,7 @@ Enable users to organize sessions into projects with full lifecycle management (
 
 ### A) Backend: Wire `projectId` through session creation
 
-- [ ] 1. **Add `ProjectId` to `CreateSessionApiRequest`**
+- [x] 1. **Add `ProjectId` to `CreateSessionApiRequest`**
   **What**: Add `string? ProjectId` field to the `CreateSessionApiRequest` record and pass it through to `CreateSessionRequest` in the `POST /api/sessions` handler.
   **Files**:
     - `src/WeaveFleet.Api/Endpoints/SessionEndpoints.cs` — line 262: add `string? ProjectId` to the record; line 45-54: add `ProjectId = req.ProjectId` to the `CreateSessionRequest` init
@@ -96,19 +96,19 @@ Enable users to organize sessions into projects with full lifecycle management (
 
 ### B) Client types + hook: Add `projectId` to session creation
 
-- [ ] 2. **Add `projectId` to frontend `CreateSessionRequest`**
+- [x] 2. **Add `projectId` to frontend `CreateSessionRequest`**
   **What**: Add `projectId?: string` to `CreateSessionRequest` in `api-types.ts`.
   **Files**: `client/src/lib/api-types.ts` — add `projectId?: string;` after line 48 (after `harnessType`)
   **Acceptance**: TypeScript compiles without errors.
 
-- [ ] 3. **Add `projectId` to `CreateSessionOptions` and `useCreateSession`**
+- [x] 3. **Add `projectId` to `CreateSessionOptions` and `useCreateSession`**
   **What**: Thread `projectId` through the `CreateSessionOptions` interface and the `useCreateSession` hook's body construction.
   **Files**: `client/src/hooks/use-create-session.ts` — add `projectId?: string` to `CreateSessionOptions` (line 8-15) and include it in the `body` object (line 35-42).
   **Acceptance**: TypeScript compiles; `createSession("dir", { projectId: "p1" })` sends `projectId` in the request body.
 
 ### C) "New Project" button + Create Project dialog
 
-- [ ] 4. **Create `CreateProjectDialog` component**
+- [x] 4. **Create `CreateProjectDialog` component**
   **What**: A dialog with a form containing: project name (required), description (optional), and a submit button. Uses `useCreateProject` hook. On success, calls `refetch` on the projects list. Follow the pattern of `NewSessionDialog` for dialog structure but much simpler (just 2 fields).
   **Files**: Create `client/src/components/fleet/create-project-dialog.tsx`
   **Details**:
@@ -121,7 +121,7 @@ Enable users to organize sessions into projects with full lifecycle management (
     - Shows error from hook if creation fails
   **Acceptance**: Component renders; entering name + clicking Create calls POST /api/projects.
 
-- [ ] 5. **Add "New Project" button to `FleetPanel`**
+- [x] 5. **Add "New Project" button to `FleetPanel`**
   **What**: Place a folder-plus icon button next to the existing "New Session" `+` button in the Fleet header row. Wire it to open the `CreateProjectDialog`. After project creation, refetch both projects and sessions.
   **Files**: `client/src/components/layout/fleet-panel.tsx`
   **Details**:
@@ -133,7 +133,7 @@ Enable users to organize sessions into projects with full lifecycle management (
 
 ### D) Project context menu (Rename + Delete)
 
-- [ ] 6. **Add context menu to `SidebarProjectItem`**
+- [x] 6. **Add context menu to `SidebarProjectItem`**
   **What**: Wrap the project header row in a `ContextMenu` component (same pattern as `SidebarWorkspaceItem`). Add "Rename" and "Delete" menu items. Only show context menu for named projects (not "Ungrouped").
   **Files**: `client/src/components/layout/sidebar-project-item.tsx`
   **Details**:
@@ -153,7 +153,7 @@ Enable users to organize sessions into projects with full lifecycle management (
   **Props change**: Add `refetchProjects?: () => void` to `SidebarProjectItemProps` to refresh the project list after rename/delete.
   **Acceptance**: Right-clicking a project shows Rename/Delete; rename via InlineEdit works; double-click rename works.
 
-- [ ] 7. **Create `ConfirmDeleteProjectDialog` component**
+- [x] 7. **Create `ConfirmDeleteProjectDialog` component**
   **What**: An AlertDialog similar to `ConfirmDeleteSessionDialog` but with a mode selector (radio or two-button approach). Two options: "Move sessions to Ungrouped" (`move_to_scratch`) or "Delete all sessions" (`delete_sessions`).
   **Files**: Create `client/src/components/fleet/confirm-delete-project-dialog.tsx`
   **Details**:
@@ -165,7 +165,7 @@ Enable users to organize sessions into projects with full lifecycle management (
     - Import `DeleteProjectMode` from `@/hooks/use-delete-project`
   **Acceptance**: Dialog renders with mode picker; confirming calls onConfirm with selected mode.
 
-- [ ] 8. **Wire delete into `SidebarProjectItem` context menu**
+- [x] 8. **Wire delete into `SidebarProjectItem` context menu**
   **What**: Add state for `showDeleteConfirm`, wire the "Delete" context menu item to open the dialog, and handle confirmation via `useDeleteProject`.
   **Files**: `client/src/components/layout/sidebar-project-item.tsx`
   **Details**:
@@ -179,7 +179,7 @@ Enable users to organize sessions into projects with full lifecycle management (
 
 ### E) Move session to project (context menu)
 
-- [ ] 9. **Add "Move to Project" submenu to session context menu**
+- [x] 9. **Add "Move to Project" submenu to session context menu**
   **What**: Add a `ContextMenuSub` with a list of projects as submenu items in `SidebarSessionItem`. Selecting a project calls `useMoveSession`.
   **Files**: `client/src/components/layout/sidebar-session-item.tsx`
   **Details**:
@@ -197,7 +197,7 @@ Enable users to organize sessions into projects with full lifecycle management (
 
 ### F) Project picker in New Session dialog
 
-- [ ] 10. **Add project picker to `NewSessionDialog`**
+- [x] 10. **Add project picker to `NewSessionDialog`**
   **What**: Add an optional project dropdown/select to the New Session dialog so users can assign a session to a project at creation time.
   **Files**: `client/src/components/session/new-session-dialog.tsx`
   **Details**:
@@ -215,7 +215,7 @@ Enable users to organize sessions into projects with full lifecycle management (
 
 ### G) Project reordering
 
-- [ ] 11. **Add move up/down to project context menu**
+- [x] 11. **Add move up/down to project context menu**
   **What**: Add "Move Up" and "Move Down" items to the project context menu. Uses `useReorderProject` hook. Disabled at boundaries (first item can't move up, last can't move down).
   **Files**: `client/src/components/layout/sidebar-project-item.tsx`
   **Details**:
@@ -228,7 +228,7 @@ Enable users to organize sessions into projects with full lifecycle management (
     - Note: the exact position values depend on backend behavior. The backend's `ReorderProjectAsync` likely handles gap-free reordering, so passing `position - 1` / `position + 1` should work. Verify by checking `ProjectService.ReorderProjectAsync`.
   **Acceptance**: Right-click project → Move Up/Down → project position changes → sidebar re-renders in new order.
 
-- [ ] 12. **Pass reorder props from `FleetPanel` to `SidebarProjectItem`**
+- [x] 12. **Pass reorder props from `FleetPanel` to `SidebarProjectItem`**
   **What**: `FleetPanel` needs to pass the project's index and total count of user-type projects (excluding ungrouped) so the context menu can enable/disable Move Up/Down correctly.
   **Files**: `client/src/components/layout/fleet-panel.tsx`
   **Details**:
@@ -240,28 +240,28 @@ Enable users to organize sessions into projects with full lifecycle management (
 ## Verification
 
 ### Automated
-- [ ] `npx tsc --noEmit` — no new TypeScript errors
-- [ ] `npx vitest run` — all existing tests pass
-- [ ] `dotnet build` — backend compiles (if backend changes in task 1 are applied)
+- [x] `npx tsc --noEmit` — no new TypeScript errors
+- [x] `npx vitest run` — all existing tests pass
+- [x] `dotnet build` — backend compiles (if backend changes in task 1 are applied)
 
 ### Manual QA
-- [ ] Create a new project via the sidebar "New Project" button
-- [ ] Verify the project appears in the sidebar immediately after creation
-- [ ] Right-click the project → Rename → type new name → Enter → verify name changes
-- [ ] Double-click project name → rename works the same way
-- [ ] Right-click the project → Delete → select "Move sessions to Ungrouped" → confirm → project gone, sessions moved to Ungrouped
-- [ ] Create another project → add sessions → Delete with "Delete all sessions" mode → project and sessions gone
-- [ ] Right-click a session → "Move to Project" → select a project → session moves
-- [ ] Right-click a session → "Move to Project" → select "Ungrouped" → session moves to ungrouped
-- [ ] Open New Session dialog → verify Project dropdown shows → select a project → create session → session appears under that project
-- [ ] Open New Session dialog → leave Project as "Ungrouped" → create session → session appears in Ungrouped
-- [ ] Right-click project → Move Up/Down → verify project order changes in sidebar
-- [ ] Verify ungrouped bucket does NOT show context menu (no rename/delete on "Ungrouped")
-- [ ] Verify scratch-type projects don't appear in "Move to Project" submenu or project picker
-- [ ] Keyboard: navigate to project with arrow keys → press F2 → inline rename activates
+- [x] Create a new project via the sidebar "New Project" button
+- [x] Verify the project appears in the sidebar immediately after creation
+- [x] Right-click the project → Rename → type new name → Enter → verify name changes
+- [x] Double-click project name → rename works the same way
+- [x] Right-click the project → Delete → select "Move sessions to Ungrouped" → confirm → project gone, sessions moved to Ungrouped
+- [x] Create another project → add sessions → Delete with "Delete all sessions" mode → project and sessions gone
+- [x] Right-click a session → "Move to Project" → select a project → session moves
+- [x] Right-click a session → "Move to Project" → select "Ungrouped" → session moves to ungrouped
+- [x] Open New Session dialog → verify Project dropdown shows → select a project → create session → session appears under that project
+- [x] Open New Session dialog → leave Project as "Ungrouped" → create session → session appears in Ungrouped
+- [x] Right-click project → Move Up/Down → verify project order changes in sidebar
+- [x] Verify ungrouped bucket does NOT show context menu (no rename/delete on "Ungrouped")
+- [x] Verify scratch-type projects don't appear in "Move to Project" submenu or project picker
+- [x] Keyboard: navigate to project with arrow keys → press F2 → inline rename activates
 
 ### Edge Cases
-- [ ] Creating a project with an empty name is rejected (backend validation)
-- [ ] Deleting the last project doesn't crash the UI
-- [ ] Moving a session when there are 0 user projects — the "Move to Project" submenu should not appear
-- [ ] Very long project names truncate properly in sidebar
+- [x] Creating a project with an empty name is rejected (backend validation)
+- [x] Deleting the last project doesn't crash the UI
+- [x] Moving a session when there are 0 user projects — the "Move to Project" submenu should not appear
+- [x] Very long project names truncate properly in sidebar

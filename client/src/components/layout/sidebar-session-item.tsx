@@ -3,13 +3,16 @@
 import React, { useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Copy, GitFork, OctagonX, Pencil, Play, Square, StopCircle, Trash2, WifiOff } from "lucide-react";
+import { Copy, FolderOpen, GitFork, OctagonX, Pencil, Play, Square, StopCircle, Trash2, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { InlineEdit } from "@/components/ui/inline-edit";
@@ -22,8 +25,9 @@ import { useAbortSession } from "@/hooks/use-abort-session";
 import { useDeleteSession } from "@/hooks/use-delete-session";
 import { useResumeSession } from "@/hooks/use-resume-session";
 import { useOpenDirectory } from "@/hooks/use-open-directory";
+import { useMoveSession } from "@/hooks/use-move-session";
 import type { OpenTool } from "@/hooks/use-open-directory";
-import type { SessionListItem } from "@/lib/api-types";
+import type { ProjectResponse, SessionListItem } from "@/lib/api-types";
 import { useSessionsContext } from "@/contexts/sessions-context";
 
 interface SidebarSessionItemProps {
@@ -31,9 +35,10 @@ interface SidebarSessionItemProps {
   isActive: boolean;
   isChild?: boolean;
   refetch: () => void;
+  userProjects?: ProjectResponse[];
 }
 
-export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item, isActive, isChild = false, refetch }: SidebarSessionItemProps) {
+export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item, isActive, isChild = false, refetch, userProjects = [] }: SidebarSessionItemProps) {
   const { instanceId, session, activityStatus, lifecycleStatus } = item;
   const router = useRouter();
   const { renameSession } = useRenameSession();
@@ -43,6 +48,7 @@ export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item,
   const { deleteSession, isDeleting } = useDeleteSession();
   const { resumeSession } = useResumeSession();
   const { openDirectory } = useOpenDirectory();
+  const { moveSession } = useMoveSession();
   const [isRenaming, setIsRenaming] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showForkDialog, setShowForkDialog] = useState(false);
@@ -74,6 +80,9 @@ export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item,
     : null;
 
   const title = session.title || session.id.slice(0, 12);
+
+  // User-type projects (not scratch) for the "Move to Project" submenu
+  const showMoveToProject = userProjects.length > 0;
 
   const handleRename = useCallback(
     async (newTitle: string) => {
@@ -138,6 +147,18 @@ export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item,
       openDirectory(directory, tool);
     },
     [openDirectory]
+  );
+
+  const handleMoveToProject = useCallback(
+    async (projectId: string | null) => {
+      try {
+        await moveSession(item.session.id, projectId);
+        refetch();
+      } catch {
+        // error surfaced inside useMoveSession
+      }
+    },
+    [item.session.id, moveSession, refetch]
   );
 
   return (
@@ -219,6 +240,41 @@ export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item,
             <GitFork className="h-3.5 w-3.5" />
             New context window
           </ContextMenuItem>
+
+          {/* Move to Project — only when user projects exist */}
+          {showMoveToProject && (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuSub>
+                <ContextMenuSubTrigger className="gap-2 text-xs">
+                  <FolderOpen className="h-3.5 w-3.5" />
+                  Move to Project
+                </ContextMenuSubTrigger>
+                <ContextMenuSubContent>
+                  {/* Ungrouped option */}
+                  <ContextMenuItem
+                    onClick={() => handleMoveToProject(null)}
+                    disabled={item.projectId === null || item.projectId === undefined}
+                    className="gap-2 text-xs"
+                  >
+                    Ungrouped
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                  {/* User projects */}
+                  {userProjects.map((project) => (
+                    <ContextMenuItem
+                      key={project.id}
+                      onClick={() => handleMoveToProject(project.id)}
+                      disabled={item.projectId === project.id}
+                      className="gap-2 text-xs"
+                    >
+                      {project.name}
+                    </ContextMenuItem>
+                  ))}
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+            </>
+          )}
 
           <ContextMenuSeparator />
 

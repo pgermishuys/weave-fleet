@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, AlertTriangle, Plus } from "lucide-react";
+import { LayoutGrid, AlertTriangle, Plus, FolderPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -11,19 +11,36 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useSessionsContext } from "@/contexts/sessions-context";
-import { useWorkspaces } from "@/hooks/use-workspaces";
+import { useProjects } from "@/hooks/use-projects";
 import { useCurrentSessionDirectory } from "@/hooks/use-current-session-directory";
-import { SidebarWorkspaceItem } from "@/components/layout/sidebar-workspace-item";
+import { SidebarProjectItem } from "@/components/layout/sidebar-project-item";
 import { NewSessionDialog } from "@/components/session/new-session-dialog";
+import { CreateProjectDialog } from "@/components/fleet/create-project-dialog";
+import { groupSessionsByProject } from "@/lib/workspace-utils";
 
 export function FleetPanel() {
   const pathname = usePathname();
   const { sessions, error, refetch } = useSessionsContext();
-  const workspaces = useWorkspaces(sessions);
+  const { projects, refetch: refetchProjects } = useProjects();
   const currentDirectory = useCurrentSessionDirectory();
   const treeRef = useRef<HTMLDivElement>(null);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
 
   const isFleetActive = pathname === "/" || pathname.startsWith("/?");
+
+  // Group sessions by project using our utility
+  const projectGroups = groupSessionsByProject(sessions, projects);
+
+  // Named (non-null) projects only — used for index/count for reordering
+  const namedGroups = projectGroups.filter((g) => g.projectId !== null);
+
+  // User-type projects (not scratch) — passed down to avoid per-session fetches
+  const userProjects = projects.filter((p) => p.type !== "scratch");
+
+  const handleProjectCreated = useCallback(() => {
+    void refetchProjects();
+    void refetch();
+  }, [refetchProjects, refetch]);
 
   const handleTreeKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -110,12 +127,35 @@ export function FleetPanel() {
           <LayoutGrid className="h-4 w-4 shrink-0" />
           <span className="flex-1 whitespace-nowrap">Fleet</span>
         </Link>
+
+        {/* New Project button */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="shrink-0">
+              <CreateProjectDialog
+                open={newProjectOpen}
+                onOpenChange={setNewProjectOpen}
+                onCreated={handleProjectCreated}
+                trigger={
+                  <button
+                    className="rounded-md p-1 text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground transition-colors"
+                  >
+                    <FolderPlus className="h-3.5 w-3.5" />
+                  </button>
+                }
+              />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="right">New Project</TooltipContent>
+        </Tooltip>
+
         {/* New Session button */}
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="shrink-0">
               <NewSessionDialog
                 defaultDirectory={currentDirectory}
+                userProjects={userProjects}
                 trigger={
                   <button
                     className="rounded-md p-1 text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground transition-colors"
@@ -130,11 +170,11 @@ export function FleetPanel() {
         </Tooltip>
       </div>
 
-      {/* Workspace tree */}
+      {/* Project tree */}
       <div
         ref={treeRef}
         role="tree"
-        aria-label="Workspaces"
+        aria-label="Projects"
         onKeyDown={handleTreeKeyDown}
         className="mt-0.5 space-y-0.5"
       >
@@ -143,19 +183,28 @@ export function FleetPanel() {
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
             <span>Failed to load</span>
           </div>
-        ) : workspaces.length === 0 ? (
+        ) : projectGroups.length === 0 ? (
           <p className="pl-3 pr-3 py-1.5 text-xs text-muted-foreground">
-            No workspaces yet
+            No sessions yet
           </p>
         ) : (
-          workspaces.map((group) => (
-            <SidebarWorkspaceItem
-              key={group.workspaceDirectory}
-              group={group}
-              activeSessionPath={pathname}
-              refetch={refetch}
-            />
-          ))
+          projectGroups.map((group, idx) => {
+            const namedIndex = group.projectId !== null
+              ? namedGroups.findIndex((g) => g.projectId === group.projectId)
+              : -1;
+            return (
+              <SidebarProjectItem
+                key={group.projectId ?? "ungrouped"}
+                group={group}
+                activeSessionPath={pathname}
+                refetch={refetch}
+                refetchProjects={refetchProjects}
+                projectIndex={namedIndex}
+                projectCount={namedGroups.length}
+                userProjects={userProjects}
+              />
+            );
+          })
         )}
       </div>
     </nav>

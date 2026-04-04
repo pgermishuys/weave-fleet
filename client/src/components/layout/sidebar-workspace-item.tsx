@@ -28,6 +28,7 @@ import { useOpenDirectory } from "@/hooks/use-open-directory";
 import type { OpenTool } from "@/hooks/use-open-directory";
 import { OpenToolContextSubmenu } from "@/components/ui/open-tool-menu";
 import type { WorkspaceGroup } from "@/hooks/use-workspaces";
+import type { ProjectResponse } from "@/lib/api-types";
 import { nestSessions } from "@/lib/session-utils";
 
 const PINNED_KEY = "weave:sidebar:pinned";
@@ -36,12 +37,14 @@ interface SidebarWorkspaceItemProps {
   group: WorkspaceGroup;
   activeSessionPath: string;
   refetch: () => void;
+  userProjects?: ProjectResponse[];
 }
 
 export const SidebarWorkspaceItem = React.memo(function SidebarWorkspaceItem({
   group,
   activeSessionPath,
   refetch,
+  userProjects = [],
 }: SidebarWorkspaceItemProps) {
   const searchParams = useSearchParams();
   const workspaceFilter = searchParams.get("workspace");
@@ -163,6 +166,7 @@ export const SidebarWorkspaceItem = React.memo(function SidebarWorkspaceItem({
                   item={item}
                   isActive={activeSessionPath === `/sessions/${item.session.id}`}
                   refetch={refetch}
+                  userProjects={userProjects}
                 />
                 {children.map((child) => (
                   <SidebarSessionItem
@@ -171,6 +175,7 @@ export const SidebarWorkspaceItem = React.memo(function SidebarWorkspaceItem({
                     isActive={activeSessionPath === `/sessions/${child.session.id}`}
                     isChild
                     refetch={refetch}
+                    userProjects={userProjects}
                   />
                 ))}
               </div>
@@ -221,6 +226,7 @@ export const SidebarWorkspaceItem = React.memo(function SidebarWorkspaceItem({
       open={newSessionOpen}
       onOpenChange={setNewSessionOpen}
       defaultDirectory={group.sessions[0]?.workspaceDirectory ?? group.workspaceDirectory}
+      userProjects={userProjects}
     />
     </>
   );

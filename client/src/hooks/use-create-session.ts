@@ -12,6 +12,8 @@ export interface CreateSessionOptions {
   context?: ContextSource;
   /** Harness type to use for this session (e.g. "opencode", "claude"). */
   harnessType?: string;
+  /** Optional project to assign this session to at creation time */
+  projectId?: string;
 }
 
 export interface UseCreateSessionResult {
@@ -39,6 +41,7 @@ export function useCreateSession(): UseCreateSessionResult {
           branch: opts?.branch,
           context: opts?.context,
           harnessType: opts?.harnessType,
+          projectId: opts?.projectId,
         };
 
         const response = await apiFetch("/api/sessions", {

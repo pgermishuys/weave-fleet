@@ -25,9 +25,10 @@ import { useSessionsContext } from "@/contexts/sessions-context";
 import { useHarnesses } from "@/hooks/use-harnesses";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { useRepositories } from "@/hooks/use-repositories";
+import { useProjects } from "@/hooks/use-projects";
 import { DEFAULT_HARNESS_KEY } from "@/components/settings/harnesses-tab";
 import type { ReactNode } from "react";
-import type { ScannedRepository } from "@/lib/api-types";
+import type { ProjectResponse, ScannedRepository } from "@/lib/api-types";
 
 // ─── Source mode: Repository vs Directory ─────────────────────────────────────
 
@@ -63,9 +64,10 @@ interface NewSessionDialogProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   defaultDirectory?: string;
+  userProjects?: ProjectResponse[];
 }
 
-export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, defaultDirectory }: NewSessionDialogProps) {
+export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, defaultDirectory, userProjects: userProjectsProp }: NewSessionDialogProps) {
   const router = useRouter();
   const [internalOpen, setInternalOpen] = useState(false);
   const [directory, setDirectory] = usePersistedState("weave:new-session:lastDirectory", "");
@@ -229,6 +231,13 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
   const { createSession, isLoading, error } = useCreateSession();
   const { refetch } = useSessionsContext();
 
+  // Project picker — skip fetch when caller already provides projects
+  const { projects } = useProjects({ enabled: !userProjectsProp });
+  const userProjects = userProjectsProp ?? projects.filter((p) => p.type !== "scratch");
+  const showProjectPicker = userProjects.length > 0;
+  const UNGROUPED_VALUE = "__ungrouped__";
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(UNGROUPED_VALUE);
+
   // Harness selection — only shown when 2+ harnesses are registered
   const { harnesses, isLoading: harnessesLoading } = useHarnesses();
   const [defaultHarness] = usePersistedState<string>(DEFAULT_HARNESS_KEY, "opencode");
@@ -307,6 +316,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
       setRepoDropdownOpen(false);
       setRepoStrategy("worktree");
       setSelectedHarness("");
+      setSelectedProjectId(UNGROUPED_VALUE);
     }
     setInternalOpen(value);
     onOpenChange?.(value);
@@ -339,6 +349,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
         isolationStrategy: effectiveIsolation,
         branch: effectiveIsolation === "worktree" && branch.trim() ? branch.trim() : undefined,
         harnessType: showHarnessPicker ? selectedHarness : undefined,
+        projectId: selectedProjectId && selectedProjectId !== UNGROUPED_VALUE ? selectedProjectId : undefined,
       });
       setOpen(false);
       refetch();
@@ -541,6 +552,33 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
               disabled={isLoading}
             />
           </div>
+
+          {/* Project picker — only shown when user has projects */}
+          {showProjectPicker && (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="project-select">
+                Project{" "}
+                <span className="text-muted-foreground font-normal">(optional)</span>
+              </label>
+              <Select
+                value={selectedProjectId}
+                onValueChange={setSelectedProjectId}
+                disabled={isLoading}
+              >
+                <SelectTrigger id="project-select" className="w-full">
+                  <SelectValue placeholder="Ungrouped" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UNGROUPED_VALUE}>Ungrouped</SelectItem>
+                  {userProjects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Branch name — only for repository + worktree */}
           {sourceMode === "repository" && repoStrategy === "worktree" && (

@@ -11,9 +11,15 @@ export interface UseProjectsResult {
   refetch: () => void;
 }
 
-export function useProjects(): UseProjectsResult {
+export interface UseProjectsOptions {
+  /** When false, skip the initial fetch. Defaults to true. */
+  enabled?: boolean;
+}
+
+export function useProjects(options?: UseProjectsOptions): UseProjectsResult {
+  const enabled = options?.enabled ?? true;
   const [projects, setProjects] = useState<ProjectResponse[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(enabled);
   const [error, setError] = useState<string | undefined>();
 
   const fetchProjects = useCallback(async () => {
@@ -33,8 +39,8 @@ export function useProjects(): UseProjectsResult {
   }, []);
 
   useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
+    if (enabled) fetchProjects();
+  }, [enabled, fetchProjects]);
 
   return { projects, isLoading, error, refetch: fetchProjects };
 }
