@@ -1,0 +1,122 @@
+{
+  "$comment": "Contract: OpenCode SSE event payloads → Fleet WebSocket event payloads after session ID rewriting",
+  "cases": [
+    {
+      "name": "message_part_updated_text",
+      "fleet_session_id": "fleet-sess-abc",
+      "opencode_event": {
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "opencode-sess-1",
+          "part": {
+            "id": "part-1",
+            "sessionID": "opencode-sess-1",
+            "messageID": "msg-1",
+            "type": "text",
+            "text": "Hello"
+          }
+        }
+      },
+      "expected_fleet_event_payload": {
+        "sessionID": "fleet-sess-abc",
+        "part": {
+          "id": "part-1",
+          "sessionID": "fleet-sess-abc",
+          "messageID": "msg-1",
+          "type": "text",
+          "text": "Hello"
+        }
+      }
+    },
+    {
+      "name": "message_part_updated_tool",
+      "fleet_session_id": "fleet-sess-abc",
+      "opencode_event": {
+        "type": "message.part.updated",
+        "properties": {
+          "sessionID": "opencode-sess-1",
+          "part": {
+            "id": "tool-part-1",
+            "sessionID": "opencode-sess-1",
+            "messageID": "msg-2",
+            "type": "tool",
+            "tool": "bash",
+            "callID": "call-1",
+            "state": { "status": "running" }
+          }
+        }
+      },
+      "expected_fleet_event_payload": {
+        "sessionID": "fleet-sess-abc",
+        "part": {
+          "id": "tool-part-1",
+          "sessionID": "fleet-sess-abc",
+          "messageID": "msg-2",
+          "type": "tool",
+          "tool": "bash",
+          "callID": "call-1",
+          "state": { "status": "running" }
+        }
+      }
+    },
+    {
+      "name": "message_part_delta",
+      "fleet_session_id": "fleet-sess-abc",
+      "opencode_event": {
+        "type": "message.part.delta",
+        "properties": {
+          "sessionID": "opencode-sess-1",
+          "messageID": "msg-1",
+          "partID": "part-1",
+          "field": "text",
+          "delta": " world"
+        }
+      },
+      "expected_fleet_event_payload": {
+        "sessionID": "fleet-sess-abc",
+        "messageID": "msg-1",
+        "partID": "part-1",
+        "field": "text",
+        "delta": " world"
+      }
+    },
+    {
+      "name": "message_updated",
+      "fleet_session_id": "fleet-sess-abc",
+      "opencode_event": {
+        "type": "message.updated",
+        "properties": {
+          "info": {
+            "id": "msg-1",
+            "sessionID": "opencode-sess-1",
+            "role": "assistant",
+            "time": { "created": 2000000 }
+          }
+        }
+      },
+      "expected_fleet_event_payload": {
+        "info": {
+          "id": "msg-1",
+          "sessionID": "fleet-sess-abc",
+          "role": "assistant",
+          "time": { "created": 2000000 }
+        }
+      }
+    },
+    {
+      "name": "session_status_idle",
+      "fleet_session_id": "fleet-sess-abc",
+      "opencode_event": {
+        "type": "session.status",
+        "properties": {
+          "sessionId": "opencode-sess-1",
+          "status": { "type": "idle" }
+        }
+      },
+      "expected_fleet_event_payload": {
+        "sessionId": "fleet-sess-abc",
+        "status": { "type": "idle" }
+      }
+    }
+  ]
+}

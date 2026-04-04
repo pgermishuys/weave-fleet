@@ -128,7 +128,11 @@ public sealed class HarnessEventRelay : BackgroundService
                 // Guard against null Payload — BroadcastAsync serializes via
                 // JsonSerializer.SerializeToElement which throws on null/Undefined JsonElement.
                 // Use an empty object {} as fallback when Payload is null.
-                object payload = evt.Payload ?? JsonSerializer.SerializeToElement(new { });
+                // Rewrite sessionId/sessionID fields in the payload to use the Fleet session ID
+                // so the frontend's session ID checks work correctly (Fleet ID vs Fleet ID).
+                object payload = evt.Payload.HasValue
+                    ? RewriteSessionIds(evt.Payload.Value, fleetSessionId)
+                    : JsonSerializer.SerializeToElement(new { });
                 await _broadcaster.BroadcastAsync(topic, evt.Type, payload, ct).ConfigureAwait(false);
             }
         }
@@ -147,6 +151,56 @@ public sealed class HarnessEventRelay : BackgroundService
                 cts.Cancel();
                 cts.Dispose();
             }
+        }
+    }
+
+    /// <summary>
+    /// Rewrites sessionId/sessionID string fields in a JSON payload to use the Fleet session ID.
+    /// Works recursively on nested objects. Returns a new JsonElement.
+    /// </summary>
+    private static JsonElement RewriteSessionIds(JsonElement source, string fleetSessionId)
+    {
+        if (source.ValueKind != JsonValueKind.Object)
+            return source;
+
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            WriteRewritten(writer, source, fleetSessionId);
+        }
+        return JsonSerializer.Deserialize<JsonElement>(stream.ToArray());
+    }
+
+    private static void WriteRewritten(Utf8JsonWriter writer, JsonElement element, string fleetSessionId)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                foreach (var prop in element.EnumerateObject())
+                {
+                    writer.WritePropertyName(prop.Name);
+                    if ((prop.Name == "sessionId" || prop.Name == "sessionID")
+                        && prop.Value.ValueKind == JsonValueKind.String)
+                    {
+                        writer.WriteStringValue(fleetSessionId);
+                    }
+                    else
+                    {
+                        WriteRewritten(writer, prop.Value, fleetSessionId);
+                    }
+                }
+                writer.WriteEndObject();
+                break;
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (var item in element.EnumerateArray())
+                    WriteRewritten(writer, item, fleetSessionId);
+                writer.WriteEndArray();
+                break;
+            default:
+                element.WriteTo(writer);
+                break;
         }
     }
 }

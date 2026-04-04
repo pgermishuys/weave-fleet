@@ -278,6 +278,94 @@ public sealed class HarnessEventRelayTests
     }
 
     // -----------------------------------------------------------------------
+    // Test 6: Event payloads have session IDs rewritten to Fleet session ID
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task Event_payload_sessionIds_are_rewritten_to_fleet_session_id()
+    {
+        var broadcaster = Substitute.For<IEventBroadcaster>();
+        var sessionRepo = Substitute.For<ISessionRepository>();
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        var scope = Substitute.For<IServiceScope>();
+        var scopeFactory = Substitute.For<IServiceScopeFactory>();
+
+        serviceProvider.GetService(typeof(ISessionRepository)).Returns(sessionRepo);
+        scope.ServiceProvider.Returns(serviceProvider);
+        scopeFactory.CreateScope().Returns(scope);
+
+        var fleetSessionId = "fleet-abc";
+        var instanceId = "instance-payload-test";
+
+        sessionRepo.GetAnyForInstanceAsync(instanceId)
+            .Returns(new Session { Id = fleetSessionId, InstanceId = instanceId });
+
+        // Capture the payload passed to broadcaster
+        object? capturedPayload = null;
+        broadcaster
+            .When(b => b.BroadcastAsync(Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<object>(), Arg.Any<CancellationToken>()))
+            .Do(call => capturedPayload = call.ArgAt<object>(2));
+
+        var tracker = new InstanceTracker();
+        var relay = new HarnessEventRelay(
+            tracker, broadcaster, scopeFactory, NullLogger<HarnessEventRelay>.Instance);
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeInstance(instanceId);
+        tracker.Register(instanceId, instance);
+
+        // Emit event with OpenCode session IDs in the payload
+        var openCodePayload = JsonSerializer.SerializeToElement(new
+        {
+            sessionID = "opencode-session-xyz",
+            part = new
+            {
+                id = "part-1",
+                sessionID = "opencode-session-xyz",
+                messageID = "msg-1",
+                type = "text",
+                text = "Hello"
+            }
+        });
+
+        instance.Emit(new HarnessEvent
+        {
+            Type = "message.part.updated",
+            SessionId = "opencode-session-xyz",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = openCodePayload
+        });
+        instance.Complete();
+
+        // Wait for broadcast
+        await Task.Delay(500);
+
+        Assert.NotNull(capturedPayload);
+
+        // Verify the payload has Fleet session IDs
+        var rewrittenJson = JsonSerializer.Serialize(capturedPayload);
+        using var doc = JsonDocument.Parse(rewrittenJson);
+
+        // Top-level sessionID should be Fleet ID
+        Assert.Equal(fleetSessionId, doc.RootElement.GetProperty("sessionID").GetString());
+
+        // Nested part.sessionID should also be Fleet ID
+        Assert.Equal(fleetSessionId,
+            doc.RootElement.GetProperty("part").GetProperty("sessionID").GetString());
+
+        // Non-session-ID fields should be unchanged
+        Assert.Equal("msg-1",
+            doc.RootElement.GetProperty("part").GetProperty("messageID").GetString());
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    // -----------------------------------------------------------------------
     // Test double: controllable harness instance
     // -----------------------------------------------------------------------
 

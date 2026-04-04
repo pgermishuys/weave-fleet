@@ -14,8 +14,8 @@ import {
   applyTextDelta,
 } from "@/lib/event-state";
 import { useMessagePagination } from "@/hooks/use-message-pagination";
-import { prependMessages, convertSDKMessageToAccumulated } from "@/lib/pagination-utils";
-import type { SDKMessage } from "@/lib/pagination-utils";
+import { prependMessages, convertFleetMessageToAccumulated } from "@/lib/pagination-utils";
+import type { FleetMessage } from "@/lib/pagination-utils";
 import { sessionCache } from "@/lib/session-cache";
 import { useWeaveSocket, onReconnect } from "@/hooks/use-weave-socket";
 
@@ -128,12 +128,12 @@ export function useSessionEvents(
       setInitialScrollPosition(null);
     }
     try {
-      const url = `/api/sessions/${encodeURIComponent(sessionId)}?instanceId=${encodeURIComponent(instanceId)}`;
+      const url = `/api/sessions/${encodeURIComponent(sessionId)}/messages`;
       const response = await apiFetch(url, signal ? { signal } : undefined);
       if (!response.ok) return;
-      const data = await response.json() as { messages?: SDKMessage[] };
+      const data = await response.json() as { messages?: FleetMessage[] };
       if (!data.messages?.length) return;
-      const accumulated = data.messages.map(convertSDKMessageToAccumulated);
+      const accumulated = data.messages.map(convertFleetMessageToAccumulated);
       if (!signal?.aborted) {
         setMessages(
           accumulated.length > MAX_MESSAGES
@@ -165,10 +165,10 @@ export function useSessionEvents(
         }
         return;
       }
-      const data = await response.json() as { messages?: SDKMessage[] };
+      const data = await response.json() as { messages?: FleetMessage[] };
       if (!data.messages?.length) return;
       if (signal?.aborted) return;
-      const accumulated = data.messages.map(convertSDKMessageToAccumulated);
+      const accumulated = data.messages.map(convertFleetMessageToAccumulated);
       setMessages(prev => {
         const existingIds = new Set(prev.map((m: AccumulatedMessage) => m.messageId));
         const newMessages = accumulated.filter((m: AccumulatedMessage) => !existingIds.has(m.messageId));
@@ -400,9 +400,7 @@ export function handleEvent(
   if (type === "message.part.updated") {
     const part = properties?.part;
     if (!part?.messageID) return;
-    const normalizedSessionId = part.sessionID ?? properties?.sessionID ?? sessionId;
-    if (!normalizedSessionId || normalizedSessionId !== sessionId) return;
-    setMessages((prev) => applyPartUpdate(prev, { ...part, sessionID: normalizedSessionId }));
+    setMessages((prev) => applyPartUpdate(prev, { ...part, sessionID: sessionId }));
 
     if (part.type === "tool" && part.state?.status === "completed") {
       if (part.tool === "plan_exit") {
@@ -415,11 +413,10 @@ export function handleEvent(
   }
 
   if (type === "message.part.delta") {
-    const { sessionID, messageID, partID, field, delta } = properties ?? {};
-    if (sessionID !== sessionId) return;
+    const { messageID, partID, field, delta } = properties ?? {};
     if (field !== "text" || !messageID || !partID) return;
     setMessages((prev) =>
-      applyTextDelta(prev, messageID, partID, sessionID, delta ?? "")
+      applyTextDelta(prev, messageID, partID, sessionId, delta ?? "")
     );
     return;
   }

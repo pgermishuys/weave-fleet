@@ -1,23 +1,25 @@
 /**
  * Unit tests for `pagination-utils` — pure-function verification.
  *
- * Tests sliceMessages, prependMessages, and convertSDKMessageToAccumulated.
+ * Tests sliceMessages, prependMessages, convertFleetMessageToAccumulated,
+ * and the deprecated convertSDKMessageToAccumulated.
  */
 
 import { describe, it, expect } from "vitest";
 import {
   sliceMessages,
   prependMessages,
+  convertFleetMessageToAccumulated,
   convertSDKMessageToAccumulated,
 } from "@/lib/pagination-utils";
 import type { AccumulatedMessage } from "@/lib/api-types";
-import type { SDKMessage } from "@/lib/pagination-utils";
+import type { FleetMessage, SDKMessage } from "@/lib/pagination-utils";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/** Create a minimal SDK-shaped message for sliceMessages tests. */
-function makeSDKMsg(id: string, createdAt = 0): { info: { id: string }; parts: never[] } {
-  return { info: { id }, parts: [] as never[] };
+/** Create a minimal Fleet-shaped message for sliceMessages tests. */
+function makeFleetMsgId(id: string): FleetMessage {
+  return { id, role: "assistant", parts: [], timestamp: "", textContent: "" };
 }
 
 /** Create a minimal AccumulatedMessage for prependMessages tests. */
@@ -30,7 +32,19 @@ function makeAccMsg(messageId: string): AccumulatedMessage {
   };
 }
 
-/** Create a full SDKMessage for convertSDKMessageToAccumulated tests. */
+/** Create a full FleetMessage for convertFleetMessageToAccumulated tests. */
+function makeFleetMsg(overrides: Partial<FleetMessage> = {}): FleetMessage {
+  return {
+    id: "msg-1",
+    role: "assistant",
+    parts: [],
+    timestamp: "2025-01-01T00:00:01Z",
+    textContent: "",
+    ...overrides,
+  };
+}
+
+/** Create a full SDKMessage for convertSDKMessageToAccumulated tests (deprecated). */
 function makeFullSDKMsg(overrides: Partial<SDKMessage> = {}): SDKMessage {
   return {
     info: {
@@ -50,12 +64,12 @@ function makeFullSDKMsg(overrides: Partial<SDKMessage> = {}): SDKMessage {
 // ─── sliceMessages ──────────────────────────────────────────────────────────
 
 describe("sliceMessages", () => {
-  const msgs = Array.from({ length: 10 }, (_, i) => makeSDKMsg(`msg-${i}`));
+  const msgs = Array.from({ length: 10 }, (_, i) => makeFleetMsgId(`msg-${i}`));
 
   it("returns last N messages when no cursor", () => {
     const result = sliceMessages(msgs, { limit: 3 });
     expect(result.messages).toHaveLength(3);
-    expect(result.messages.map((m) => m.info.id)).toEqual([
+    expect(result.messages.map((m) => m.id)).toEqual([
       "msg-7",
       "msg-8",
       "msg-9",
@@ -65,7 +79,7 @@ describe("sliceMessages", () => {
   it("returns correct slice when before cursor is provided", () => {
     const result = sliceMessages(msgs, { limit: 3, before: "msg-5" });
     expect(result.messages).toHaveLength(3);
-    expect(result.messages.map((m) => m.info.id)).toEqual([
+    expect(result.messages.map((m) => m.id)).toEqual([
       "msg-2",
       "msg-3",
       "msg-4",
@@ -74,7 +88,7 @@ describe("sliceMessages", () => {
 
   it("returns hasMore: false when returning from the beginning", () => {
     const result = sliceMessages(msgs, { limit: 3, before: "msg-2" });
-    expect(result.messages.map((m) => m.info.id)).toEqual(["msg-0", "msg-1"]);
+    expect(result.messages.map((m) => m.id)).toEqual(["msg-0", "msg-1"]);
     expect(result.pagination.hasMore).toBe(false);
   });
 
@@ -94,7 +108,7 @@ describe("sliceMessages", () => {
   it("handles cursor not found (falls back to tail)", () => {
     const result = sliceMessages(msgs, { limit: 3, before: "nonexistent" });
     expect(result.messages).toHaveLength(3);
-    expect(result.messages.map((m) => m.info.id)).toEqual([
+    expect(result.messages.map((m) => m.id)).toEqual([
       "msg-7",
       "msg-8",
       "msg-9",
@@ -183,7 +197,117 @@ describe("prependMessages", () => {
   });
 });
 
-// ─── convertSDKMessageToAccumulated ─────────────────────────────────────────
+// ─── convertFleetMessageToAccumulated ───────────────────────────────────────
+
+describe("convertFleetMessageToAccumulated", () => {
+  it("converts text parts correctly", () => {
+    const msg = makeFleetMsg({
+      parts: [{ type: "text", kind: 0, text: "Hello world" }],
+    });
+    const result = convertFleetMessageToAccumulated(msg);
+    expect(result.parts).toHaveLength(1);
+    expect(result.parts[0]).toMatchObject({ type: "text", text: "Hello world" });
+  });
+
+  it("generates stable partId for text parts", () => {
+    const msg = makeFleetMsg({
+      id: "msg-1",
+      parts: [{ type: "text", kind: 0, text: "Hello" }],
+    });
+    const result = convertFleetMessageToAccumulated(msg);
+    expect(result.parts[0].partId).toBe("msg-1-text-0");
+  });
+
+  it("converts tool parts with enum state", () => {
+    const msg = makeFleetMsg({
+      parts: [{ type: "tool", kind: 1, toolCallId: "call-1", toolName: "bash", state: 2 }],
+    });
+    const result = convertFleetMessageToAccumulated(msg);
+    expect(result.parts[0]).toMatchObject({
+      type: "tool",
+      tool: "bash",
+      callId: "call-1",
+      state: { status: "completed" },
+    });
+  });
+
+  it("uses toolCallId as partId for tool parts", () => {
+    const msg = makeFleetMsg({
+      parts: [{ type: "tool", kind: 1, toolCallId: "call-99", toolName: "bash", state: 1 }],
+    });
+    const result = convertFleetMessageToAccumulated(msg);
+    expect(result.parts[0].partId).toBe("call-99");
+  });
+
+  it("maps tool state enum values correctly", () => {
+    const states: Array<[number, string]> = [
+      [0, "pending"],
+      [1, "running"],
+      [2, "completed"],
+      [3, "error"],
+    ];
+    for (const [stateNum, expected] of states) {
+      const msg = makeFleetMsg({
+        parts: [{ type: "tool", kind: 1, toolCallId: "c1", toolName: "bash", state: stateNum }],
+      });
+      const result = convertFleetMessageToAccumulated(msg);
+      expect((result.parts[0] as { state: { status: string } }).state.status).toBe(expected);
+    }
+  });
+
+  it("defaults to pending when tool state is missing", () => {
+    const msg = makeFleetMsg({
+      parts: [{ type: "tool", kind: 1, toolCallId: "c1", toolName: "bash" }],
+    });
+    const result = convertFleetMessageToAccumulated(msg);
+    expect((result.parts[0] as { state: { status: string } }).state).toEqual({ status: "pending" });
+  });
+
+  it("skips tool-result parts", () => {
+    const msg = makeFleetMsg({
+      parts: [
+        { type: "tool-result", kind: 2 },
+        { type: "text", kind: 0, text: "done" },
+      ],
+    });
+    const result = convertFleetMessageToAccumulated(msg);
+    expect(result.parts).toHaveLength(1);
+    expect(result.parts[0].type).toBe("text");
+  });
+
+  it("maps user role correctly", () => {
+    const msg = makeFleetMsg({ role: "user" });
+    expect(convertFleetMessageToAccumulated(msg).role).toBe("user");
+  });
+
+  it("maps non-user role to assistant", () => {
+    const msg = makeFleetMsg({ role: "system" });
+    expect(convertFleetMessageToAccumulated(msg).role).toBe("assistant");
+  });
+
+  it("parses ISO timestamp to Unix ms", () => {
+    const msg = makeFleetMsg({ timestamp: "1970-01-01T00:00:01+00:00" });
+    expect(convertFleetMessageToAccumulated(msg).createdAt).toBe(1000);
+  });
+
+  it("handles empty parts array", () => {
+    const msg = makeFleetMsg({ parts: [] });
+    const result = convertFleetMessageToAccumulated(msg);
+    expect(result.parts).toHaveLength(0);
+    expect(result.messageId).toBe("msg-1");
+    expect(result.sessionId).toBe("");
+  });
+
+  it("handles missing text field in text part", () => {
+    const msg = makeFleetMsg({
+      parts: [{ type: "text", kind: 0 }],
+    });
+    const result = convertFleetMessageToAccumulated(msg);
+    expect((result.parts[0] as { text: string }).text).toBe("");
+  });
+});
+
+// ─── convertSDKMessageToAccumulated (deprecated) ────────────────────────────
 
 describe("convertSDKMessageToAccumulated", () => {
   it("converts text parts correctly", () => {

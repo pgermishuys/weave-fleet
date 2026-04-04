@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace WeaveFleet.Domain.Harnesses;
 
@@ -42,6 +43,10 @@ public sealed record HarnessEvent
 public enum MessagePartKind { Text, ToolUse, ToolResult }
 
 /// <summary>One logical piece of an agent message.</summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+[JsonDerivedType(typeof(TextPart), "text")]
+[JsonDerivedType(typeof(ToolUsePart), "tool")]
+[JsonDerivedType(typeof(ToolResultPart), "tool-result")]
 public abstract record MessagePart(MessagePartKind Kind);
 
 /// <summary>Plain text content.</summary>

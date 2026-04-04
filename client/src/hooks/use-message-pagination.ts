@@ -2,8 +2,8 @@
 
 import { useCallback, useRef, useState } from "react";
 import type { AccumulatedMessage } from "@/lib/api-types";
-import { convertSDKMessageToAccumulated } from "@/lib/pagination-utils";
-import type { SDKMessage } from "@/lib/pagination-utils";
+import { convertFleetMessageToAccumulated } from "@/lib/pagination-utils";
+import type { FleetMessage } from "@/lib/pagination-utils";
 import { apiFetch } from "@/lib/api-client";
 import type { PaginationSnapshot } from "@/lib/session-cache";
 
@@ -78,7 +78,7 @@ export function useMessagePagination(): UseMessagePaginationReturn {
         }
 
         const data = (await response.json()) as {
-          messages: SDKMessage[];
+          messages: FleetMessage[];
           pagination: {
             hasMore: boolean;
             oldestMessageId: string | null;
@@ -91,7 +91,7 @@ export function useMessagePagination(): UseMessagePaginationReturn {
         setTotalCount(data.pagination?.totalCount ?? data.messages?.length ?? null);
         setLoadError(null);
 
-        return (data.messages ?? []).map(convertSDKMessageToAccumulated);
+        return (data.messages ?? []).map(convertFleetMessageToAccumulated);
       } catch (err) {
         // Don't treat abort as an error — caller is switching sessions.
         if (err instanceof DOMException && err.name === "AbortError") return [];
@@ -133,7 +133,7 @@ export function useMessagePagination(): UseMessagePaginationReturn {
         }
 
         const data = (await response.json()) as {
-          messages: SDKMessage[];
+          messages: FleetMessage[];
           pagination: {
             hasMore: boolean;
             oldestMessageId: string | null;
@@ -146,7 +146,7 @@ export function useMessagePagination(): UseMessagePaginationReturn {
         setTotalCount(data.pagination?.totalCount ?? data.messages?.length ?? null);
         setLoadError(null);
 
-        return (data.messages ?? []).map(convertSDKMessageToAccumulated);
+        return (data.messages ?? []).map(convertFleetMessageToAccumulated);
       } catch {
         // Don't change hasMore on error — allow retry
         setLoadError("Failed to load older messages");

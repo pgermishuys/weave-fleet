@@ -117,7 +117,20 @@ public static class SessionEndpoints
                 : null;
             var result = await orchestrator.GetSessionMessagesAsync(id, query);
             return result.Match(
-                page => Results.Ok(page),
+                page =>
+                {
+                    var oldest = page.Messages.Count > 0 ? page.Messages[0].Id : null;
+                    return Results.Ok(new
+                    {
+                        messages = page.Messages,
+                        pagination = new
+                        {
+                            hasMore = page.HasMore,
+                            oldestMessageId = oldest,
+                            totalCount = page.Messages.Count
+                        }
+                    });
+                },
                 err => err.ToSessionApiResult());
         })
         .WithName("GetSessionMessages");

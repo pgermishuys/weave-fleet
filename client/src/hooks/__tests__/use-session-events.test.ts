@@ -99,6 +99,7 @@ describe("handleEvent message.part.updated", () => {
           id: "part-1",
           type: "text",
           text: "hello",
+          // messageID intentionally omitted
         },
       },
     } as SSEEvent);
@@ -106,13 +107,17 @@ describe("handleEvent message.part.updated", () => {
     expect(harness.getMessages()).toHaveLength(0);
   });
 
-  it("ignores part updates for a different session", () => {
-    const harness = createStateHarness("sess-1");
+  it("applies text part when event sessionID differs from fleet sessionID (backend rewrites to fleet ID)", () => {
+    // After TODO 4, the backend rewrites event payloads to contain fleet IDs.
+    // The session ID check was removed so topic routing scopes events instead.
+    // Even if the event arrives with a different sessionID, it is applied —
+    // the sessionID in the applied part is overridden with the fleet sessionId.
+    const harness = createStateHarness("fleet-abc");
 
     harness.dispatch({
       type: "message.part.updated",
       properties: {
-        sessionID: "sess-2",
+        sessionID: "opencode-xyz",  // mismatched — would have been dropped before
         part: {
           id: "part-1",
           messageID: "msg-1",
@@ -122,7 +127,12 @@ describe("handleEvent message.part.updated", () => {
       },
     } as SSEEvent);
 
-    expect(harness.getMessages()).toHaveLength(0);
+    const messages = harness.getMessages();
+    // Part is applied regardless of sessionID mismatch
+    expect(messages).toHaveLength(1);
+    // sessionID is overridden with the fleet sessionId
+    expect(messages[0]?.sessionId).toBe("fleet-abc");
+    expect(messages[0]?.parts[0]).toMatchObject({ type: "text", text: "hello" });
   });
 
   it("creates new message with concrete sessionID on fallback", () => {
@@ -145,5 +155,111 @@ describe("handleEvent message.part.updated", () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]?.sessionId).toBe("sess-1");
     expect(messages[0]?.parts[0]).toMatchObject({ type: "text", text: "hello" });
+  });
+});
+
+describe("handleEvent message.part.delta", () => {
+  it("applies text delta correctly", () => {
+    const harness = createStateHarness("sess-1");
+
+    // First create a message via message.updated
+    harness.dispatch({
+      type: "message.updated",
+      properties: {
+        info: { id: "msg-1", role: "assistant", sessionID: "sess-1" },
+      },
+    } as SSEEvent);
+
+    // Then create a part via message.part.updated
+    harness.dispatch({
+      type: "message.part.updated",
+      properties: {
+        sessionID: "sess-1",
+        part: { id: "part-1", messageID: "msg-1", type: "text", text: "" },
+      },
+    } as SSEEvent);
+
+    // Apply delta
+    harness.dispatch({
+      type: "message.part.delta",
+      properties: {
+        sessionID: "sess-1",
+        messageID: "msg-1",
+        partID: "part-1",
+        field: "text",
+        delta: "Hello world",
+      },
+    } as SSEEvent);
+
+    const messages = harness.getMessages();
+    expect(messages[0]?.parts[0]).toMatchObject({ type: "text", text: "Hello world" });
+  });
+
+  it("applies text delta when event sessionID differs from fleet sessionID", () => {
+    // Session ID check was removed — delta should be applied regardless of sessionID in payload.
+    const harness = createStateHarness("fleet-abc");
+
+    harness.dispatch({
+      type: "message.updated",
+      properties: {
+        info: { id: "msg-1", role: "assistant", sessionID: "fleet-abc" },
+      },
+    } as SSEEvent);
+
+    harness.dispatch({
+      type: "message.part.updated",
+      properties: {
+        sessionID: "fleet-abc",
+        part: { id: "part-1", messageID: "msg-1", type: "text", text: "" },
+      },
+    } as SSEEvent);
+
+    harness.dispatch({
+      type: "message.part.delta",
+      properties: {
+        sessionID: "opencode-xyz",  // mismatched — would have been dropped before
+        messageID: "msg-1",
+        partID: "part-1",
+        field: "text",
+        delta: "streaming text",
+      },
+    } as SSEEvent);
+
+    const messages = harness.getMessages();
+    expect(messages[0]?.parts[0]).toMatchObject({ type: "text", text: "streaming text" });
+  });
+
+  it("ignores delta for non-text field", () => {
+    const harness = createStateHarness("sess-1");
+
+    harness.dispatch({
+      type: "message.part.delta",
+      properties: {
+        sessionID: "sess-1",
+        messageID: "msg-1",
+        partID: "part-1",
+        field: "image",  // not "text"
+        delta: "some-data",
+      },
+    } as SSEEvent);
+
+    expect(harness.getMessages()).toHaveLength(0);
+  });
+
+  it("ignores delta when messageID is missing", () => {
+    const harness = createStateHarness("sess-1");
+
+    harness.dispatch({
+      type: "message.part.delta",
+      properties: {
+        sessionID: "sess-1",
+        // messageID intentionally omitted
+        partID: "part-1",
+        field: "text",
+        delta: "hello",
+      },
+    } as SSEEvent);
+
+    expect(harness.getMessages()).toHaveLength(0);
   });
 });

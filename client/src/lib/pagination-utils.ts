@@ -9,7 +9,32 @@ import type { AccumulatedMessage, AccumulatedPart } from "@/lib/api-types";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-/** Raw SDK message shape as returned by the API. */
+/** Fleet HarnessMessage as serialized by ASP.NET Core (camelCase). */
+export interface FleetMessage {
+  id: string;
+  role: string;
+  parts: FleetMessagePart[];
+  timestamp: string;     // ISO 8601 DateTimeOffset
+  textContent: string;   // convenience: concatenated text parts
+}
+
+/** Polymorphic message part — discriminated by "type" field. */
+export interface FleetMessagePart {
+  type: string;          // "text" | "tool" | "tool-result"
+  kind: number;          // MessagePartKind enum (0=Text, 1=ToolUse, 2=ToolResult) — ignored by frontend
+  // TextPart fields
+  text?: string;
+  // ToolUsePart fields
+  toolCallId?: string;
+  toolName?: string;
+  arguments?: unknown;
+  state?: number;        // ToolUseState enum: 0=Pending, 1=Running, 2=Completed, 3=Error
+}
+
+/**
+ * @deprecated Use FleetMessage instead. Kept for backwards compatibility.
+ * Raw SDK message shape as returned by the legacy API.
+ */
 export interface SDKMessageInfo {
   id: string;
   sessionID: string;
@@ -22,6 +47,7 @@ export interface SDKMessageInfo {
   parentID?: string;
 }
 
+/** @deprecated Use FleetMessagePart instead. */
 export interface SDKMessagePart {
   id: string;
   messageID: string;
@@ -39,6 +65,7 @@ export interface SDKMessagePart {
   url?: string;
 }
 
+/** @deprecated Use FleetMessage instead. */
 export interface SDKMessage {
   info: SDKMessageInfo;
   parts: SDKMessagePart[];
@@ -72,7 +99,7 @@ export interface SliceResult<T> {
  *   messages immediately preceding it.
  * - If `before` ID is not found, falls back to returning the tail.
  */
-export function sliceMessages<T extends { info: { id: string } }>(
+export function sliceMessages<T extends { id: string }>(
   allMessages: T[],
   { limit, before }: SliceOptions,
 ): SliceResult<T> {
@@ -88,7 +115,7 @@ export function sliceMessages<T extends { info: { id: string } }>(
   let endIndex: number;
 
   if (before) {
-    const cursorIndex = allMessages.findIndex((m) => m.info.id === before);
+    const cursorIndex = allMessages.findIndex((m) => m.id === before);
     // If cursor not found, fall back to tail behavior
     endIndex = cursorIndex === -1 ? totalCount : cursorIndex;
   } else {
@@ -98,7 +125,7 @@ export function sliceMessages<T extends { info: { id: string } }>(
   const startIndex = Math.max(0, endIndex - limit);
   const slice = allMessages.slice(startIndex, endIndex);
   const hasMore = startIndex > 0;
-  const oldestMessageId = slice.length > 0 ? slice[0].info.id : null;
+  const oldestMessageId = slice.length > 0 ? slice[0].id : null;
 
   return {
     messages: slice,
@@ -128,14 +155,56 @@ export function prependMessages(
   return [...uniqueOlder, ...existing];
 }
 
+// ─── convertFleetMessageToAccumulated ───────────────────────────────────────
+
+/**
+ * Convert a Fleet HarnessMessage (as returned by GET /api/sessions/{id}/messages)
+ * into an AccumulatedMessage suitable for rendering.
+ *
+ * Fleet messages have a flat shape: { id, role, parts: [{ type, ... }], timestamp, textContent }
+ */
+export function convertFleetMessageToAccumulated(msg: FleetMessage): AccumulatedMessage {
+  const parts: AccumulatedPart[] = [];
+
+  for (const part of msg.parts) {
+    if (part.type === "text") {
+      // Fleet TextPart has no ID — generate a stable one from message ID + index
+      parts.push({ partId: `${msg.id}-text-${parts.length}`, type: "text", text: part.text ?? "" });
+    } else if (part.type === "tool") {
+      parts.push({
+        partId: part.toolCallId ?? `${msg.id}-tool-${parts.length}`,
+        type: "tool",
+        tool: part.toolName ?? "",
+        callId: part.toolCallId ?? "",
+        state: mapToolState(part.state),
+      });
+    }
+    // "tool-result" parts are not rendered by the frontend — skip
+  }
+
+  // Parse ISO timestamp to Unix ms
+  const createdAt = msg.timestamp ? new Date(msg.timestamp).getTime() : undefined;
+
+  return {
+    messageId: msg.id,
+    sessionId: "",  // Fleet HarnessMessage doesn't carry sessionId — set from context
+    role: msg.role === "user" ? "user" : "assistant",
+    parts,
+    createdAt,
+  };
+}
+
+function mapToolState(state?: number): unknown {
+  // ToolUseState enum: 0=Pending, 1=Running, 2=Completed, 3=Error
+  const statusMap: Record<number, string> = { 0: "pending", 1: "running", 2: "completed", 3: "error" };
+  return state != null ? { status: statusMap[state] ?? "pending" } : { status: "pending" };
+}
+
 // ─── convertSDKMessageToAccumulated ─────────────────────────────────────────
 
 /**
- * Convert a raw SDK message (as returned by the API) into an AccumulatedMessage.
- *
- * This is the same conversion logic that was inline in
- * `useSessionEvents.loadMessages()` (lines 79-116), extracted for reuse by
- * the pagination hook.
+ * @deprecated Use convertFleetMessageToAccumulated instead.
+ * Convert a raw SDK message (as returned by the legacy API) into an AccumulatedMessage.
  */
 export function convertSDKMessageToAccumulated(msg: SDKMessage): AccumulatedMessage {
   const parts: AccumulatedPart[] = [];

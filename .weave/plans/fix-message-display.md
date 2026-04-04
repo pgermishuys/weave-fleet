@@ -79,7 +79,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
 
 ### Phase 1: Backend — Fix Polymorphic Serialization
 
-- [ ] 1. **Add `[JsonPolymorphic]` to `MessagePart`**
+- [x] 1. **Add `[JsonPolymorphic]` to `MessagePart`**
   **What**: The `MessagePart` abstract record lacks polymorphic serialization. Add `[JsonPolymorphic]` and `[JsonDerivedType]` attributes so `TextPart.Text`, `ToolUsePart.ToolName`, etc. serialize properly.
   **Files**: `src/WeaveFleet.Domain/Harnesses/HarnessTypes.cs`
   **Change**:
@@ -95,7 +95,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
   **Note**: The `Kind` property still serializes as an integer (`kind: 0`). The `type` discriminator is what the frontend will use. Both coexist harmlessly.
   **Acceptance**: `JsonSerializer.Serialize<MessagePart>(new TextPart("hi"))` outputs `{"type":"text","kind":0,"text":"hi"}`.
 
-- [ ] 2. **Add pagination wrapper to `GET /{id}/messages` response**
+- [x] 2. **Add pagination wrapper to `GET /{id}/messages` response**
   **What**: The frontend's `use-message-pagination.ts` expects `{ messages: [...], pagination: { hasMore, oldestMessageId, totalCount } }`. Currently the endpoint returns `MessagePage` directly, which serializes as `{ messages: [...], hasMore: boolean }` — no pagination wrapper. Add the wrapper at the API level.
   **Files**: `src/WeaveFleet.Api/Endpoints/SessionEndpoints.cs`
   **Change**: Update the `GetSessionMessages` handler (lines 113-122):
@@ -127,7 +127,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
   **Note**: `page.Messages` is `IReadOnlyList<HarnessMessage>` — the polymorphic attributes from TODO 1 ensure parts serialize correctly. The anonymous type wrapping ensures camelCase properties: `messages`, `pagination.hasMore`, `pagination.oldestMessageId`, `pagination.totalCount`.
   **Acceptance**: `GET /api/sessions/{id}/messages?limit=50` returns `{ messages: [{ id, role, parts: [{ type: "text", text: "..." }], timestamp, textContent }], pagination: { hasMore, oldestMessageId, totalCount } }`.
 
-- [ ] 3. **Add backend serialization test for `MessagePart` polymorphism**
+- [x] 3. **Add backend serialization test for `MessagePart` polymorphism**
   **What**: Verify `TextPart` and `ToolUsePart` serialize with derived fields and type discriminator.
   **Files**: Create `tests/WeaveFleet.Domain.Tests/Harnesses/HarnessTypesSerializationTests.cs` (or add to an existing test file if there's already a Domain test project)
   **Change**:
@@ -177,7 +177,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
 
 ### Phase 2: Backend — Translate WebSocket Event Payloads
 
-- [ ] 4. **Translate event payloads to Fleet IDs in `HarnessEventRelay.PumpAsync()`**
+- [x] 4. **Translate event payloads to Fleet IDs in `HarnessEventRelay.PumpAsync()`**
   **What**: Currently `PumpAsync()` passes `evt.Payload` (raw OpenCode `JsonElement`) to `BroadcastAsync`. The payload contains OpenCode session IDs (e.g. `{ "info": { "sessionId": "opencode-abc" }, "part": { "sessionId": "opencode-abc" } }`). The frontend expects Fleet session IDs. We need to rewrite session IDs in the payload before broadcasting.
   **Files**: `src/WeaveFleet.Infrastructure/Services/HarnessEventRelay.cs`
   **Change**: Add a helper method that rewrites `sessionId`/`sessionID` fields in the payload, and call it in the pump loop:
@@ -249,7 +249,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
   
   **Acceptance**: When a `message.part.updated` event with `{ "part": { "sessionID": "opencode-abc", ... } }` is broadcast, the frontend receives `{ "part": { "sessionID": "fleet-123", ... } }`.
 
-- [ ] 5. **Add test for event payload session ID rewriting**
+- [x] 5. **Add test for event payload session ID rewriting**
   **What**: Test that `RewriteSessionIds` correctly replaces session IDs at multiple nesting levels.
   **Files**: `tests/WeaveFleet.Infrastructure.Tests/Services/HarnessEventRelayTests.cs` (or a new test file for the static helper)
   **Change**: Since `RewriteSessionIds` is private, test it indirectly through `PumpAsync` behavior, OR make it `internal` with `[InternalsVisibleTo]`. Alternatively, add a test that creates a mock `IHarnessInstance` that yields events with OpenCode session IDs and verify the `IEventBroadcaster` receives Fleet session IDs in the payload.
@@ -257,7 +257,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
 
 ### Phase 3: Frontend — Adapt to Fleet Message Shape
 
-- [ ] 6. **Replace `SDKMessage` types with Fleet-aligned types in `pagination-utils.ts`**
+- [x] 6. **Replace `SDKMessage` types with Fleet-aligned types in `pagination-utils.ts`**
   **What**: Replace `SDKMessage`, `SDKMessageInfo`, `SDKMessagePart` with types that match Fleet's serialized `HarnessMessage` shape. Rewrite `convertSDKMessageToAccumulated` to parse Fleet's flat shape.
   **Files**: `client/src/lib/pagination-utils.ts`
   **Change**:
@@ -353,7 +353,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
 
   **Acceptance**: `convertFleetMessageToAccumulated({ id: "msg-1", role: "assistant", parts: [{ type: "text", kind: 0, text: "Hello" }], timestamp: "2025-01-01T00:00:00Z", textContent: "Hello" })` returns a valid `AccumulatedMessage`.
 
-- [ ] 7. **Update `use-message-pagination.ts` to parse Fleet response shape**
+- [x] 7. **Update `use-message-pagination.ts` to parse Fleet response shape**
   **What**: This hook expects `{ messages: SDKMessage[], pagination: {...} }`. Change it to expect `{ messages: FleetMessage[], pagination: {...} }` and call the renamed converter.
   **Files**: `client/src/hooks/use-message-pagination.ts`
   **Change**:
@@ -372,7 +372,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
   - Change `convertSDKMessageToAccumulated` calls to `convertFleetMessageToAccumulated`.
   **Acceptance**: Initial message load works with Fleet-shaped responses.
 
-- [ ] 8. **Update `use-session-events.ts` to use Fleet types and fix session ID checks**
+- [x] 8. **Update `use-session-events.ts` to use Fleet types and fix session ID checks**
   **What**: Multiple changes needed in this file:
   1. Replace `SDKMessage` import + `convertSDKMessageToAccumulated` with Fleet types.
   2. Fix `loadAllMessages` URL (currently fetches `/api/sessions/${id}` which returns a Session entity, not messages).
@@ -431,7 +431,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
 
   **Acceptance**: Messages display via both REST load and WebSocket streaming paths.
 
-- [ ] 9. **Update `event-state.ts` — `ensureMessage` field names for Fleet events**
+- [x] 9. **Update `event-state.ts` — `ensureMessage` field names for Fleet events**
   **What**: `ensureMessage` reads `info.sessionID`, `info.time.created`, `info.agent`, `info.modelID`, `info.parentID` from the event data. After TODO 4's session ID rewriting, the event payloads still have the OpenCode event structure (nested `info` object with OpenCode field names like `sessionID` not `sessionId`). The casing comes from OpenCode's original JSON — `RewriteSessionIds` only replaces values, not property names. So `info.sessionID` remains `sessionID` (capital ID). This is fine — `ensureMessage` already handles it correctly. **No change needed for field name parsing.**
 
   However, review `isRelevantToSession` — it checks `properties?.part?.sessionID`, `properties?.info?.sessionID`, etc. After TODO 4, these will now contain Fleet IDs, so the comparisons against `sessionId` (Fleet ID) will now **pass** instead of **fail**. This is correct behavior — no code change needed, but the function now works correctly rather than being broken.
@@ -441,7 +441,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
 
 ### Phase 4: Frontend Tests
 
-- [ ] 10. **Update `pagination-utils.test.ts` for Fleet message shape**
+- [x] 10. **Update `pagination-utils.test.ts` for Fleet message shape**
   **What**: All tests that use `SDKMessage` / `makeFullSDKMsg()` need to use `FleetMessage` shape instead. `sliceMessages` tests need to change from `m.info.id` to `m.id`.
   **Files**: `client/src/lib/__tests__/pagination-utils.test.ts`
   **Changes**:
@@ -488,7 +488,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
     ```
   **Acceptance**: `npx vitest run pagination-utils` passes.
 
-- [ ] 11. **Update `use-session-events.test.ts` for divergent session ID scenarios**
+- [x] 11. **Update `use-session-events.test.ts` for divergent session ID scenarios**
   **What**: Add tests that prove events with different payload session IDs still work (testing the redundant-check removal). Also update any tests that depend on `SDKMessage` types.
   **Files**: `client/src/hooks/__tests__/use-session-events.test.ts`
   **Changes**:
@@ -497,7 +497,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
   - The existing `"ignores part updates for a different session"` test: this now tests that missing `messageID` prevents processing (which is still correct). Rename for clarity.
   **Acceptance**: `npx vitest run use-session-events` passes.
 
-- [ ] 12. **Update `event-state.test.ts` if needed**
+- [x] 12. **Update `event-state.test.ts` if needed**
   **What**: Review existing tests. The `ensureMessage` tests use `{ id, sessionID, role }` shape (OpenCode event properties). After TODO 4, these events will still have the same property names — only the *values* change. Tests should still pass as-is.
   **Files**: `client/src/lib/__tests__/event-state.test.ts`
   **Change**: Likely no changes needed. Verify tests pass after the other changes.
@@ -505,7 +505,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
 
 ### Phase 5: Activity Stream — Verify Compatibility
 
-- [ ] 13. **Verify `activity-stream-v1.tsx` compatibility with unchanged `AccumulatedMessage`**
+- [x] 13. **Verify `activity-stream-v1.tsx` compatibility with unchanged `AccumulatedMessage`**
   **What**: The rendering component consumes `AccumulatedMessage` / `AccumulatedPart` which are defined in `api-types.ts`. These types are NOT being changed — only how they're populated. The tool state shape changes from OpenCode's `{ status: "completed", input: {...}, output: {...} }` to Fleet's `{ status: "completed" }` (just the status string). Need to verify:
   1. `ToolCardRouter` and tool state rendering still work with the simplified state shape from REST.
   2. WebSocket events still provide the rich OpenCode tool state (since we only rewrite session IDs, not restructure the payload).
@@ -524,7 +524,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
 
 **Approach**: Shared JSON fixture files define the **contract** — the exact JSON shape that the Fleet API returns. Backend tests verify that domain types serialize to match this shape. Frontend tests verify that this shape parses into valid `AccumulatedMessage` objects. If either side changes independently, the fixture mismatch causes a test failure.
 
-- [ ] 14. **Create shared contract fixture files**
+- [x] 14. **Create shared contract fixture files**
   **What**: Create JSON fixture files that represent the agreed-upon contract between backend and frontend. These live in `tests/contracts/` at the repo root so both `dotnet test` and `vitest` can access them. Four fixture files cover the two contract boundaries (OpenCode→Fleet backend, Fleet API→Frontend).
   **Files**:
   - Create `tests/contracts/opencode-to-fleet-messages.json` — input/expected pairs for REST message mapping
@@ -980,7 +980,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
 
   **Acceptance**: All four JSON files are valid JSON and parseable by both `System.Text.Json` (C#) and `JSON.parse` (TypeScript).
 
-- [ ] 15. **Backend contract tests: OpenCode → Fleet API message shape**
+- [x] 15. **Backend contract tests: OpenCode → Fleet API message shape**
   **What**: Load the `opencode-to-fleet-messages.json` fixture, deserialize the OpenCode input payloads, run them through `OpenCodeMapper.ToHarnessMessage()`, serialize the result with the same `System.Text.Json` settings as the API (default camelCase), and assert the JSON matches the `expected_fleet_message` in the fixture.
   **Files**: Create `tests/WeaveFleet.Infrastructure.Tests/Harnesses/OpenCode/OpenCodeToFleetContractTests.cs`
   **Change**:
@@ -1114,7 +1114,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
   **Run**: `dotnet test --filter "FullyQualifiedName~OpenCodeToFleetContractTests"`
   **Acceptance**: All fixture cases pass — the serialized Fleet API JSON matches the expected shape in the contract.
 
-- [ ] 16. **Backend contract tests: Event payload session ID rewriting**
+- [x] 16. **Backend contract tests: Event payload session ID rewriting**
   **What**: Load the `opencode-to-fleet-events.json` fixture, feed the OpenCode event payloads through `RewriteSessionIds` (or the full `PumpAsync` path via mocks), and assert the output matches the expected Fleet event payload shape.
   **Files**: Create `tests/WeaveFleet.Infrastructure.Tests/Services/EventRewriteContractTests.cs`
   **Change**:
@@ -1226,7 +1226,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
   **Run**: `dotnet test --filter "FullyQualifiedName~EventRewriteContractTests"`
   **Acceptance**: All 5 event fixture cases pass.
 
-- [ ] 17. **Frontend contract tests: Fleet API → AccumulatedMessage**
+- [x] 17. **Frontend contract tests: Fleet API → AccumulatedMessage**
   **What**: Load the `fleet-api-messages.json` fixture, pass each message through `convertFleetMessageToAccumulated()` (from Phase 3), and assert the result matches `expected_accumulated` in the fixture. This is the frontend half of the contract — it proves the frontend can parse what the backend produces.
   **Files**: Create `client/src/lib/__tests__/fleet-message-contract.test.ts`
   **Change**:
@@ -1287,7 +1287,7 @@ Make messages display in the Fleet UI by: (1) fixing backend polymorphic seriali
   **Run**: `cd client && npx vitest run fleet-message-contract`
   **Acceptance**: All generated test cases pass.
 
-- [ ] 18. **Frontend contract tests: Fleet WebSocket events → AccumulatedMessage state**
+- [x] 18. **Frontend contract tests: Fleet WebSocket events → AccumulatedMessage state**
   **What**: Load the `fleet-api-events.json` fixture, replay each event sequence through `handleEvent()` (from `use-session-events.ts`), and assert the resulting `AccumulatedMessage[]` matches the `expected_messages` in the fixture. This verifies the full WebSocket event → state pipeline.
   **Files**: Create `client/src/lib/__tests__/fleet-event-contract.test.ts`
   **Change**:

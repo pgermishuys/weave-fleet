@@ -1,0 +1,114 @@
+{
+  "$comment": "Contract: Fleet WebSocket event payloads as received by the frontend (after session ID rewriting + envelope unwrapping)",
+  "cases": [
+    {
+      "name": "text_part_update_creates_message_and_part",
+      "session_id": "fleet-sess-abc",
+      "events": [
+        {
+          "type": "message.updated",
+          "properties": {
+            "info": { "id": "msg-1", "sessionID": "fleet-sess-abc", "role": "assistant" }
+          }
+        },
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "sessionID": "fleet-sess-abc",
+            "part": { "id": "part-1", "sessionID": "fleet-sess-abc", "messageID": "msg-1", "type": "text", "text": "Hello" }
+          }
+        }
+      ],
+      "expected_messages": [
+        {
+          "messageId": "msg-1",
+          "sessionId": "fleet-sess-abc",
+          "role": "assistant",
+          "parts": [
+            { "partId": "part-1", "type": "text", "text": "Hello" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "text_delta_accumulates",
+      "session_id": "fleet-sess-abc",
+      "events": [
+        {
+          "type": "message.updated",
+          "properties": {
+            "info": { "id": "msg-1", "sessionID": "fleet-sess-abc", "role": "assistant" }
+          }
+        },
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "sessionID": "fleet-sess-abc",
+            "part": { "id": "part-1", "sessionID": "fleet-sess-abc", "messageID": "msg-1", "type": "text", "text": "" }
+          }
+        },
+        {
+          "type": "message.part.delta",
+          "properties": {
+            "sessionID": "fleet-sess-abc",
+            "messageID": "msg-1",
+            "partID": "part-1",
+            "field": "text",
+            "delta": "Hello"
+          }
+        },
+        {
+          "type": "message.part.delta",
+          "properties": {
+            "sessionID": "fleet-sess-abc",
+            "messageID": "msg-1",
+            "partID": "part-1",
+            "field": "text",
+            "delta": " world"
+          }
+        }
+      ],
+      "expected_messages": [
+        {
+          "messageId": "msg-1",
+          "sessionId": "fleet-sess-abc",
+          "role": "assistant",
+          "parts": [
+            { "partId": "part-1", "type": "text", "text": "Hello world" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tool_part_update_with_state",
+      "session_id": "fleet-sess-abc",
+      "events": [
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "sessionID": "fleet-sess-abc",
+            "part": {
+              "id": "tool-1",
+              "sessionID": "fleet-sess-abc",
+              "messageID": "msg-2",
+              "type": "tool",
+              "tool": "bash",
+              "callID": "call-1",
+              "state": { "status": "running" }
+            }
+          }
+        }
+      ],
+      "expected_messages": [
+        {
+          "messageId": "msg-2",
+          "sessionId": "fleet-sess-abc",
+          "role": "assistant",
+          "parts": [
+            { "partId": "tool-1", "type": "tool", "tool": "bash", "callId": "call-1", "state": { "status": "running" } }
+          ]
+        }
+      ]
+    }
+  ]
+}

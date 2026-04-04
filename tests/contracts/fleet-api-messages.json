@@ -1,0 +1,52 @@
+{
+  "$comment": "Contract: Fleet API message response shape — backend must produce this, frontend must consume it",
+  "messages_response": {
+    "messages": [
+      {
+        "id": "msg-user-1",
+        "role": "user",
+        "parts": [
+          { "type": "text", "kind": 0, "text": "Hello world" }
+        ],
+        "timestamp": "1970-01-01T00:00:01+00:00",
+        "textContent": "Hello world"
+      },
+      {
+        "id": "msg-asst-1",
+        "role": "assistant",
+        "parts": [
+          { "type": "text", "kind": 0, "text": "I'll run a command for you." },
+          { "type": "tool", "kind": 1, "toolCallId": "call-1", "toolName": "bash", "arguments": { "command": "ls" }, "state": 2 }
+        ],
+        "timestamp": "1970-01-01T00:00:02+00:00",
+        "textContent": "I'll run a command for you."
+      }
+    ],
+    "pagination": {
+      "hasMore": false,
+      "oldestMessageId": "msg-user-1",
+      "totalCount": 2
+    }
+  },
+  "expected_accumulated": [
+    {
+      "messageId": "msg-user-1",
+      "sessionId": "",
+      "role": "user",
+      "parts": [
+        { "partId": "msg-user-1-text-0", "type": "text", "text": "Hello world" }
+      ],
+      "createdAt": 1000
+    },
+    {
+      "messageId": "msg-asst-1",
+      "sessionId": "",
+      "role": "assistant",
+      "parts": [
+        { "partId": "msg-asst-1-text-0", "type": "text", "text": "I'll run a command for you." },
+        { "partId": "call-1", "type": "tool", "tool": "bash", "callId": "call-1", "state": { "status": "completed" } }
+      ],
+      "createdAt": 2000
+    }
+  ]
+}
