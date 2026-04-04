@@ -20,21 +20,21 @@ public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
     private readonly ConcurrentDictionary<string, Subscription> _subscriptions = new();
 
     /// <inheritdoc />
-    public async Task BroadcastAsync(string topic, string type, object payload, CancellationToken ct = default)
+    public Task BroadcastAsync(string topic, string type, object payload, CancellationToken ct = default)
     {
         var json = JsonSerializer.SerializeToElement(payload);
         var evt = new BroadcastEvent(topic, type, json, DateTimeOffset.UtcNow);
 
         foreach (var sub in _subscriptions.Values)
         {
-            if (!sub.Topics.Contains(topic))
+            if (!sub.Topics.Contains("*") && !sub.Topics.Contains(topic))
                 continue;
 
             // TryWrite is fine — unbounded channel; drop if disposed
             sub.Channel.Writer.TryWrite(evt);
         }
 
-        await Task.CompletedTask; // async signature for interface compatibility
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc />

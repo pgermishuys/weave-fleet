@@ -47,9 +47,9 @@ export function useCommands(instanceId: string): UseCommandsResult {
           const message = (data as { error?: string }).error ?? `HTTP ${response.status}`;
           throw new Error(message);
         }
-        const data = (await response.json()) as AutocompleteCommand[];
+        const body = (await response.json()) as { commands: AutocompleteCommand[] };
         if (!cancelled) {
-          setCommands(data);
+          setCommands(body.commands ?? []);
           setError(undefined);
         }
       } catch (err: unknown) {

@@ -27,7 +27,7 @@ public interface IHarnessInstance : IAsyncDisposable
     Task AbortAsync(CancellationToken ct);
 
     /// <summary>Retrieve the message history for this instance.</summary>
-    Task<IReadOnlyList<HarnessMessage>> GetMessagesAsync(CancellationToken ct);
+    Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct);
 
     /// <summary>Subscribe to a real-time stream of harness events.</summary>
     IAsyncEnumerable<HarnessEvent> SubscribeAsync(CancellationToken ct);

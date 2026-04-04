@@ -38,18 +38,49 @@ public sealed record HarnessEvent
     public JsonElement? Payload { get; init; }
 }
 
-/// <summary>
-/// Normalized message from an agent conversation.
-/// Fields are intentionally minimal — concrete shape will be refined
-/// when the first harness implementation is built.
-/// </summary>
+/// <summary>Discriminator for <see cref="MessagePart"/> subtypes.</summary>
+public enum MessagePartKind { Text, ToolUse, ToolResult }
+
+/// <summary>One logical piece of an agent message.</summary>
+public abstract record MessagePart(MessagePartKind Kind);
+
+/// <summary>Plain text content.</summary>
+public sealed record TextPart(string Text) : MessagePart(MessagePartKind.Text);
+
+/// <summary>The agent invoking a tool.</summary>
+public sealed record ToolUsePart(
+    string ToolCallId,
+    string ToolName,
+    JsonElement Arguments,
+    ToolUseState State) : MessagePart(MessagePartKind.ToolUse);
+
+/// <summary>Output returned by a tool invocation.</summary>
+public sealed record ToolResultPart(
+    string ToolCallId,
+    string Content,
+    bool IsError) : MessagePart(MessagePartKind.ToolResult);
+
+/// <summary>Lifecycle state of a tool invocation.</summary>
+public enum ToolUseState { Pending, Running, Completed, Error }
+
+/// <summary>Normalized message from an agent conversation.</summary>
 public sealed record HarnessMessage
 {
     public required string Id { get; init; }
     public required string Role { get; init; }
-    public required string Content { get; init; }
+    public required IReadOnlyList<MessagePart> Parts { get; init; }
     public required DateTimeOffset Timestamp { get; init; }
+
+    /// <summary>Convenience: concatenated text parts.</summary>
+    public string TextContent =>
+        string.Join("", Parts.OfType<TextPart>().Select(p => p.Text));
 }
+
+/// <summary>Query parameters for paginated message retrieval.</summary>
+public sealed record MessageQuery(int? Limit = null, string? Before = null);
+
+/// <summary>A page of messages with a continuation flag.</summary>
+public sealed record MessagePage(IReadOnlyList<HarnessMessage> Messages, bool HasMore);
 
 /// <summary>Result of a health check on a harness instance.</summary>
 public sealed record HealthCheckResult(bool Healthy, string? Message);

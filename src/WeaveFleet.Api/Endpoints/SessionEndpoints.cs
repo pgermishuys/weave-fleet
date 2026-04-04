@@ -109,12 +109,15 @@ public static class SessionEndpoints
         })
         .WithName("ForkSession");
 
-        // GET /api/sessions/{id}/messages
-        group.MapGet("/{id}/messages", async (string id, SessionOrchestrator orchestrator) =>
+        // GET /api/sessions/{id}/messages?limit=N&before=CURSOR
+        group.MapGet("/{id}/messages", async (string id, int? limit, string? before, SessionOrchestrator orchestrator) =>
         {
-            var result = await orchestrator.GetSessionMessagesAsync(id);
+            var query = (limit is not null || before is not null)
+                ? new MessageQuery(limit, before)
+                : null;
+            var result = await orchestrator.GetSessionMessagesAsync(id, query);
             return result.Match(
-                msgs => Results.Ok(msgs),
+                page => Results.Ok(page),
                 err => err.ToSessionApiResult());
         })
         .WithName("GetSessionMessages");

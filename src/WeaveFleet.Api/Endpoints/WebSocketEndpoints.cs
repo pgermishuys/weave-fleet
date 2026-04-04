@@ -148,13 +148,13 @@ public static class WebSocketEndpoints
         // Subscribe to all topics — we filter on the topic list at broadcast time
         // Use a wildcard "fleet.*" subscription by subscribing to all topics
         // The broadcaster delivers only what was published; we re-check topics here
-        var allTopics = new[] { "sessions", "instances", "activity" };
+        var allTopics = new[] { "*" };
 
         await foreach (var evt in broadcaster.SubscribeAsync(allTopics, ct))
         {
             bool inScope;
             lock (subscribedTopics)
-                inScope = subscribedTopics.Count == 0 || subscribedTopics.Contains(evt.Topic);
+                inScope = subscribedTopics.Contains(evt.Topic);
 
             if (!inScope)
                 continue;
@@ -164,10 +164,13 @@ public static class WebSocketEndpoints
 
             var json = JsonSerializer.Serialize(new
             {
-                type = evt.Type,
+                type = "event",
                 topic = evt.Topic,
-                payload = evt.Payload,
-                timestamp = evt.Timestamp.ToUnixTimeMilliseconds()
+                data = new
+                {
+                    type = evt.Type,
+                    properties = evt.Payload
+                }
             });
 
             var bytes = Encoding.UTF8.GetBytes(json);

@@ -232,16 +232,17 @@ public sealed partial class SessionOrchestrator(
 
     // ── Messages / Diffs ───────────────────────────────────────────────────────
 
-    public async Task<Result<IReadOnlyList<HarnessMessage>>> GetSessionMessagesAsync(
+    public async Task<Result<MessagePage>> GetSessionMessagesAsync(
         string id,
+        MessageQuery? query = null,
         CancellationToken ct = default)
     {
         var instanceResult = await GetLiveInstanceAsync(id);
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 
-        var messages = await instanceResult.Value.GetMessagesAsync(ct);
-        return Result.Success(messages);
+        var page = await instanceResult.Value.GetMessagesAsync(query, ct);
+        return Result.Success(page);
     }
 
     // ── Delete ─────────────────────────────────────────────────────────────────

@@ -59,9 +59,10 @@ public sealed class HarnessTypesTests
         {
             Id = "msg-1",
             Role = "assistant",
-            Content = "Hello",
+            Parts = [new TextPart("Hello")],
             Timestamp = DateTimeOffset.UtcNow
         };
         Assert.Equal("assistant", msg.Role);
+        Assert.Equal("Hello", msg.TextContent);
     }
 }

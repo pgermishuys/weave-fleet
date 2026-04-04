@@ -47,9 +47,15 @@ export function useAgents(instanceId: string): UseAgentsResult {
           const message = (data as { error?: string }).error ?? `HTTP ${response.status}`;
           throw new Error(message);
         }
-        const data = (await response.json()) as AutocompleteAgent[];
+        const data = await response.json();
+        // The API returns { instanceId, agents: [...] } — unwrap the array.
+        const list: AutocompleteAgent[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.agents)
+            ? data.agents
+            : [];
         if (!cancelled) {
-          setAgents(data);
+          setAgents(list);
           setError(undefined);
         }
       } catch (err: unknown) {

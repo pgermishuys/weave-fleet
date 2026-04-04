@@ -8,6 +8,7 @@ using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Data;
 using WeaveFleet.Infrastructure.Data.Repositories;
 using WeaveFleet.Infrastructure.Harnesses;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure;
@@ -26,6 +27,9 @@ public static class DependencyInjection
     {
         // Enable snake_case → PascalCase column mapping for Dapper globally
         DefaultTypeMap.MatchNamesWithUnderscores = true;
+
+        // Register FleetOptions so singleton services (e.g. OpenCodeHarness) can inject it.
+        services.AddSingleton(options);
 
         // Database connection factory (singleton — thread-safe, creates new connections per call)
         services.AddSingleton<IDbConnectionFactory>(_ => new SqliteConnectionFactory(options));
@@ -75,9 +79,22 @@ public static class DependencyInjection
         // EventBroadcaster is singleton — pub/sub hub shared across all requests
         services.AddSingleton<IEventBroadcaster, InMemoryEventBroadcaster>();
 
+        // HarnessEventRelay bridges harness instance events to the broadcaster
+        services.AddHostedService<HarnessEventRelay>();
+
         // HarnessRegistry is Singleton — any IHarness registrations MUST also be
         // Singleton to avoid a captive-dependency runtime failure.
         services.AddSingleton<IHarnessRegistry, HarnessRegistry>();
+
+        // OpenCode harness — singleton to match HarnessRegistry lifetime.
+        // PortAllocator is a standalone singleton seeded from FleetOptions.
+        services.AddSingleton(new PortAllocator(options.HarnessPortRangeStart, options.HarnessPortRangeEnd));
+
+        // Named HttpClient used by OpenCodeHarness.SpawnAsync to create per-instance clients.
+        services.AddHttpClient("OpenCode");
+
+        // IHarness registration — OpenCodeHarness is resolved as IHarness by HarnessRegistry.
+        services.AddSingleton<IHarness, OpenCodeHarness>();
 
         return services;
     }

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry;
+using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -35,6 +36,10 @@ public static class TelemetryExtensions
                 serviceName: FleetInstrumentation.ServiceName,
                 serviceVersion: FleetInstrumentation.ServiceVersion);
 
+        // Per-signal AddOtlpExporter does NOT auto-append /v1/{signal} paths when
+        // Endpoint is explicitly set, so we build the full URL for each signal.
+        var baseEndpoint = telemetryOptions.OtlpEndpoint.TrimEnd('/');
+
         // --- Tracing & Metrics ---
         builder.Services.AddOpenTelemetry()
             .ConfigureResource(r => r.AddService(
@@ -48,7 +53,8 @@ public static class TelemetryExtensions
                     .AddHttpClientInstrumentation()
                     .AddOtlpExporter(otlp =>
                     {
-                        otlp.Endpoint = new Uri(telemetryOptions.OtlpEndpoint);
+                        otlp.Endpoint = new Uri($"{baseEndpoint}/v1/traces");
+                        otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
                     });
 
                 if (telemetryOptions.ConsoleExporterEnabled)
@@ -64,7 +70,8 @@ public static class TelemetryExtensions
                     .AddHttpClientInstrumentation()
                     .AddOtlpExporter(otlp =>
                     {
-                        otlp.Endpoint = new Uri(telemetryOptions.OtlpEndpoint);
+                        otlp.Endpoint = new Uri($"{baseEndpoint}/v1/metrics");
+                        otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
                     });
 
                 if (telemetryOptions.ConsoleExporterEnabled)
@@ -84,7 +91,8 @@ public static class TelemetryExtensions
 
             logging.AddOtlpExporter(otlp =>
             {
-                otlp.Endpoint = new Uri(telemetryOptions.OtlpEndpoint);
+                otlp.Endpoint = new Uri($"{baseEndpoint}/v1/logs");
+                otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
             });
 
             if (telemetryOptions.ConsoleExporterEnabled)
