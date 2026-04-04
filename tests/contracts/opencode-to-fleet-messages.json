@@ -150,6 +150,36 @@
         "timestamp": "1970-01-01T00:00:05+00:00",
         "textContent": ""
       }
+    },
+    {
+      "name": "user_message_with_empty_model_object",
+      "opencode_input": {
+        "info": {
+          "role": "user",
+          "id": "msg-user-empty-model",
+          "sessionId": "opencode-sess-1",
+          "time": { "created": 6000 },
+          "model": {}
+        },
+        "parts": [
+          {
+            "type": "text",
+            "id": "part-txt-6",
+            "sessionId": "opencode-sess-1",
+            "messageId": "msg-user-empty-model",
+            "text": "Hello from user with empty model"
+          }
+        ]
+      },
+      "expected_fleet_message": {
+        "id": "msg-user-empty-model",
+        "role": "user",
+        "parts": [
+          { "type": "text", "kind": 0, "text": "Hello from user with empty model" }
+        ],
+        "timestamp": "1970-01-01T00:00:06+00:00",
+        "textContent": "Hello from user with empty model"
+      }
     }
   ]
 }

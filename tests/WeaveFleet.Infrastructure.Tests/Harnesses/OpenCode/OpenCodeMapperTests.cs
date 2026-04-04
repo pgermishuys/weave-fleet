@@ -181,6 +181,46 @@ public sealed class OpenCodeMapperTests
         Assert.Null(result[1].Mode);
     }
 
+    [Fact]
+    public void ToHarnessAgents_SkipsAgentsWithNullName()
+    {
+        // Agents with null Name are filtered out — a nameless agent cannot be referenced
+        var agents = new[]
+        {
+            new OpenCodeAgentInfo { Name = "valid-agent", Description = "desc" },
+            new OpenCodeAgentInfo { Name = null, Description = "nameless" },
+        };
+
+        var result = OpenCodeMapper.ToHarnessAgents(agents);
+
+        Assert.Single(result);
+        Assert.Equal("valid-agent", result[0].Name);
+    }
+
+    [Fact]
+    public void ToHarnessMessage_UserMessage_WithNullModelRefFields_DoesNotThrow()
+    {
+        // Reproduces the deserialization scenario where "model": {} produces an
+        // OpenCodeModelRef with both fields null. The mapper must not throw.
+        var msg = new OpenCodeMessageWithParts
+        {
+            Info = new OpenCodeUserMessage
+            {
+                Id = "msg-null-model",
+                SessionId = "sess-1",
+                Time = new OpenCodeMessageTime { Created = 1_000_000L },
+                Model = new OpenCodeModelRef(), // ProviderId = null, ModelId = null
+            },
+            Parts = [new OpenCodeTextPart { Text = "test" }],
+        };
+
+        var result = OpenCodeMapper.ToHarnessMessage(msg);
+
+        Assert.Equal("msg-null-model", result.Id);
+        Assert.Equal("user", result.Role);
+        Assert.Single(result.Parts);
+    }
+
     // ---------------------------------------------------------------------------
     // ToHarnessProviders
     // ---------------------------------------------------------------------------

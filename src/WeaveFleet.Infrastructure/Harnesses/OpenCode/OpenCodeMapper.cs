@@ -101,15 +101,17 @@ internal static class OpenCodeMapper
 
     /// <summary>
     /// Maps OpenCode agent info to <see cref="HarnessAgent"/> instances.
+    /// Agents with a null name are skipped — a nameless agent cannot be meaningfully referenced.
     /// </summary>
     internal static IReadOnlyList<HarnessAgent> ToHarnessAgents(
         IReadOnlyList<OpenCodeAgentInfo> agents)
     {
-        var result = new HarnessAgent[agents.Count];
+        var result = new List<HarnessAgent>(agents.Count);
         for (int i = 0; i < agents.Count; i++)
         {
             var a = agents[i];
-            result[i] = new HarnessAgent(a.Name, a.Description, a.Mode);
+            if (a.Name is null) continue;
+            result.Add(new HarnessAgent(a.Name, a.Description, a.Mode));
         }
         return result;
     }

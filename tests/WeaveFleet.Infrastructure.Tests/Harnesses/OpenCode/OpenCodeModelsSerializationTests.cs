@@ -254,4 +254,69 @@ public sealed class OpenCodeModelsSerializationTests
         Assert.Equal("gpt-4o", result.Default!.ModelId);
         Assert.Contains("openai", result.Connected);
     }
+
+    // ---------------------------------------------------------------------------
+    // OpenCodeModelRef — null / missing field tolerance (bug fix)
+    // ---------------------------------------------------------------------------
+
+    [Fact]
+    public void ModelRef_Deserializes_WithMissingFields()
+    {
+        // "model": {} — both providerId and modelId are absent
+        var result = JsonSerializer.Deserialize<OpenCodeModelRef>("{}", Options);
+
+        Assert.NotNull(result);
+        Assert.Null(result.ProviderId);
+        Assert.Null(result.ModelId);
+    }
+
+    [Fact]
+    public void ModelRef_Deserializes_WithNullFields()
+    {
+        // "model": {"providerId":null,"modelId":null}
+        const string json = """{"providerId":null,"modelId":null}""";
+        var result = JsonSerializer.Deserialize<OpenCodeModelRef>(json, Options);
+
+        Assert.NotNull(result);
+        Assert.Null(result.ProviderId);
+        Assert.Null(result.ModelId);
+    }
+
+    [Fact]
+    public void ModelRef_Deserializes_WithPartialFields()
+    {
+        // "model": {"providerId":"openai"} — modelId absent
+        const string json = """{"providerId":"openai"}""";
+        var result = JsonSerializer.Deserialize<OpenCodeModelRef>(json, Options);
+
+        Assert.NotNull(result);
+        Assert.Equal("openai", result.ProviderId);
+        Assert.Null(result.ModelId);
+    }
+
+    [Fact]
+    public void UserMessage_WithEmptyModelObject_Deserializes()
+    {
+        // Full OpenCodeMessageWithParts where "model": {} — the exact payload that triggered the bug
+        const string json = """
+        {
+          "info": {
+            "role": "user",
+            "id": "msg-bug-1",
+            "sessionId": "sess-1",
+            "time": { "created": 1000000 },
+            "model": {}
+          },
+          "parts": []
+        }
+        """;
+
+        var result = JsonSerializer.Deserialize<OpenCodeMessageWithParts>(json, Options);
+
+        Assert.NotNull(result);
+        var userMsg = Assert.IsType<OpenCodeUserMessage>(result.Info);
+        Assert.NotNull(userMsg.Model);
+        Assert.Null(userMsg.Model.ProviderId);
+        Assert.Null(userMsg.Model.ModelId);
+    }
 }

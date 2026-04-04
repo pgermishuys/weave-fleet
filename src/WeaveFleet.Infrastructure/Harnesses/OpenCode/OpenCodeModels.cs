@@ -131,10 +131,16 @@ internal sealed record OpenCodeMessageTime
 }
 
 /// <summary>Model reference (provider + model IDs).</summary>
+/// <remarks>
+/// Fields are nullable and non-required because OpenCode may return messages where
+/// the <c>model</c> object has missing or null fields (e.g., <c>"model": {}</c>).
+/// The write path (<see cref="OpenCodeHarnessInstance.SendPromptAsync"/>) always
+/// provides both values explicitly; only the read/response path needs tolerance.
+/// </remarks>
 internal sealed record OpenCodeModelRef
 {
-    [JsonPropertyName("providerId")] public required string ProviderId { get; init; }
-    [JsonPropertyName("modelId")] public required string ModelId { get; init; }
+    [JsonPropertyName("providerId")] public string? ProviderId { get; init; }
+    [JsonPropertyName("modelId")] public string? ModelId { get; init; }
 }
 
 /// <summary>Working-directory paths associated with a message.</summary>
@@ -408,7 +414,7 @@ internal sealed record OpenCodeRetryStatus : OpenCodeSessionStatus
 /// <summary>Agent metadata returned by GET /agent.</summary>
 internal sealed record OpenCodeAgentInfo
 {
-    [JsonPropertyName("name")] public required string Name { get; init; }
+    [JsonPropertyName("name")] public string? Name { get; init; }
     [JsonPropertyName("description")] public string? Description { get; init; }
     [JsonPropertyName("mode")] public string? Mode { get; init; }
     [JsonPropertyName("hidden")] public bool? Hidden { get; init; }

@@ -241,8 +241,16 @@ public sealed partial class SessionOrchestrator(
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 
-        var page = await instanceResult.Value.GetMessagesAsync(query, ct);
-        return Result.Success(page);
+        try
+        {
+            var page = await instanceResult.Value.GetMessagesAsync(query, ct);
+            return Result.Success(page);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogGetMessagesFailed(ex, id);
+            return FleetError.Unexpected;
+        }
     }
 
     // ── Delete ─────────────────────────────────────────────────────────────────
@@ -313,6 +321,10 @@ public sealed partial class SessionOrchestrator(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to stop instance {InstanceId}")]
     private partial void LogStopFailed(Exception ex, string instanceId);
+
+    [LoggerMessage(Level = LogLevel.Error,
+        Message = "Failed to retrieve messages for session {SessionId} — returning error result")]
+    private partial void LogGetMessagesFailed(Exception ex, string sessionId);
 }
 
 // ── Request / Result DTOs ──────────────────────────────────────────────────────
