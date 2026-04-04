@@ -20,15 +20,20 @@ Build the analytics persistence layer described in the analytics-store-design do
 
 **Dapper patterns**: `DefaultTypeMap.MatchNamesWithUnderscores = true` is set globally in `DependencyInjection.cs`. Repositories use primary constructors with `IDbConnectionFactory`, create+dispose connections per method call. All queries use anonymous object parameters.
 
-**DI patterns**: Connection factory = singleton. Migration runner = singleton. Repositories = scoped. Application services = scoped. Singletons for cross-cutting: `InstanceTracker`, `IEventBroadcaster`, `ConfigService`. The analytics collector and writer should be singletons (they're shared, long-lived, channel-based).
+**DI patterns**: Connection factory = singleton. Migration runner = singleton. Repositories = scoped. Application services = scoped. Singletons for cross-cutting: `InstanceTracker`, `IEventBroadcaster`, `ConfigService`, `RepositoryService`, `GitHubService`, `GitHubApiProxy`, `IIntegrationStore`. `HarnessEventRelay` registered as hosted service via `AddHostedService<HarnessEventRelay>()`. All DI registration lives in `src/WeaveFleet.Infrastructure/DependencyInjection.cs` (there is no Application-layer DI class). The analytics collector and writer should be singletons (they're shared, long-lived, channel-based), and the background services should follow `HarnessEventRelay`'s `AddHostedService` pattern.
 
-**SSE event flow**: `OpenCodeHttpClient.SubscribeToEventsAsync()` → yields `OpenCodeSseEvent` → `OpenCodeHarnessInstance.SubscribeAsync()` calls `OpenCodeMapper.ToHarnessEvent(sseEvt, _openCodeSessionId)` → yields `HarnessEvent` → consumed by `SessionEventEndpoints` SSE and `WebSocketEndpoints`. The `OpenCodeSseEvent.Properties` is a `JsonElement` containing the full message JSON. For `message.updated` events, this includes the `OpenCodeAssistantMessage` with `Cost`, `Tokens`, `ModelId`, `ProviderId`.
+**SSE event flow**: `OpenCodeHttpClient.SubscribeToEventsAsync()` → yields `OpenCodeSseEvent` → `OpenCodeHarnessInstance.SubscribeAsync()` calls `OpenCodeMapper.ToHarnessEvent(sseEvt, _openCodeSessionId)` → yields `HarnessEvent` → consumed by `SessionEventEndpoints` SSE and `WebSocketEndpoints`. The `OpenCodeSseEvent.Properties` is a `JsonElement` containing event-specific JSON. For `message.updated` events, Properties has the shape `{ "info": { ... } }` where `"info"` is an `OpenCodeMessageInfo` object (confirmed by contract fixture `tests/contracts/opencode-to-fleet-events.json`). The `OpenCodeAssistantMessage` subtype carries `Cost`, `Tokens`, `ModelId`, `ProviderId`. Note: `message.created` event Properties structure is unverified — no contract fixture or test data exists for it in the codebase.
 
 **Token data models**: `OpenCodeAssistantMessage` has `Cost` (double?), `Tokens` (`OpenCodeTokenUsage`?), `ModelId` (string?), `ProviderId` (string?). `OpenCodeTokenUsage` has `Input`, `Output`, `Reasoning` (all double), `Cache` (`OpenCodeCacheTokens`?), `Total` (double?). `OpenCodeCacheTokens` has `Read`, `Write` (both double).
 
-**IncrementTokensAsync gap**: `DapperSessionRepository.IncrementTokensAsync(id, tokens, cost)` exists and works (tested!) but is never called. Need to call it from the analytics intercept point.
+**IncrementTokensAsync gap**: `DapperSessionRepository.IncrementTokensAsync(id, tokens, cost)` exists and works (tested!) but is never called. Need to call it from the analytics intercept point. **Type mismatch**: The `tokens` parameter is `int`, but `TokenEventData.TokensTotal` is `double` (matching OpenCode's `OpenCodeTokenUsage` which uses `double` for all fields). Callers must cast with `(int)Math.Round(data.TokensTotal)`.
 
-**No existing BackgroundService**: The codebase has no `BackgroundService` implementations yet. We'll establish the pattern.
+**Existing BackgroundService pattern**: `HarnessEventRelay` (`src/WeaveFleet.Infrastructure/Services/HarnessEventRelay.cs`) is a `BackgroundService` registered via `services.AddHostedService<HarnessEventRelay>()`. It demonstrates the key patterns we need:
+- Uses `IServiceScopeFactory` to resolve scoped dependencies (`ISessionRepository`) from within a singleton service (creates a scope per-use, disposes it immediately)
+- `ExecuteAsync` with `CancellationToken stoppingToken` — stores the token and uses `CancellationTokenSource.CreateLinkedTokenSource(_stoppingToken)` for child tasks
+- Exception handling: catches `OperationCanceledException` (expected on shutdown) separately from unexpected exceptions
+- Uses `LoggerMessage.Define` for high-performance structured logging
+The analytics `BackgroundService` implementations should follow these same patterns.
 
 **Test patterns**: Tests use `TestDbHelper.CreateSharedDbAsync()` which returns a `(SqliteConnection Keeper, IDbConnectionFactory Factory)` tuple. The keeper connection keeps the in-memory DB alive. Tests are xUnit `[Fact]` methods.
 
@@ -73,7 +78,8 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
 - Never block or slow down the SSE event pipeline (fire-and-forget only)
 - Never cause session failures if analytics writes fail
 - Never change `GetFleetSummaryAsync` to read from analytics DB
-- Never add UI/frontend components
+
+> **Note**: The frontend dashboard plan is at `.weave/plans/analytics-frontend.md` — it consumes the API endpoints defined in Phase 6 below.
 
 ## TODOs
 
@@ -287,13 +293,14 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   **What**: Singleton service implementing `IAnalyticsCollector`. Owns a `Channel<AnalyticsEventEnvelope>` (bounded, capacity 10,000, `FullMode.DropOldest`). `AcceptTokenEvent` / `AcceptSessionSnapshot` wrap the data in an envelope and `TryWrite` it to the channel. Exposes `ChannelReader<AnalyticsEventEnvelope>` for the writer service.
   **Files**:
   - Create `src/WeaveFleet.Infrastructure/Analytics/AnalyticsCollector.cs`
-  **Pattern**: Similar to `InMemoryEventBroadcaster`'s channel usage but simpler — single reader, single writer, bounded.
+  **Pattern**: Similar to `InMemoryEventBroadcaster` (`src/WeaveFleet.Infrastructure/Services/InMemoryEventBroadcaster.cs`) channel usage but simpler — single reader, single writer, bounded.
   **Acceptance**: Can accept events without blocking. Reader can drain them.
 
 - [ ] 11. **Implement AnalyticsWriterService (BackgroundService)**
   **What**: Hosted `BackgroundService` that reads from the collector's channel and batch-inserts into the analytics DB. Uses configurable flush interval and max batch size.
   **Files**:
   - Create `src/WeaveFleet.Infrastructure/Analytics/AnalyticsWriterService.cs`
+  **Pattern to follow**: `HarnessEventRelay` (`src/WeaveFleet.Infrastructure/Services/HarnessEventRelay.cs`) — specifically its `IServiceScopeFactory` usage for resolving scoped `ISessionRepository`, `CancellationTokenSource.CreateLinkedTokenSource` pattern, and `LoggerMessage.Define` for structured logging.
   **Implementation**:
   ```
   - Inherits BackgroundService
@@ -305,12 +312,15 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
     5. Session snapshots: INSERT OR REPLACE INTO session_snapshots (upsert)
     6. All writes in a single transaction for the batch
     7. Catch exceptions, log warnings, continue (never crash)
+       — catch OperationCanceledException separately (expected on shutdown, like HarnessEventRelay)
+       — catch Exception for unexpected errors, log and continue
   - Also calls IncrementTokensAsync on the main DB for each token event
+      **Type cast required**: `IncrementTokensAsync(string id, int tokens, double cost)` takes `int tokens`, but `TokenEventData.TokensTotal` is `double`. Use `(int)Math.Round(data.TokensTotal)` when calling: `await sessionRepo.IncrementTokensAsync(data.SessionId, (int)Math.Round(data.TokensTotal), data.Cost);`
   - Also records OTEL metrics for each token event
   ```
-  **Dependencies**: `AnalyticsCollector` (for channel reader), `IAnalyticsDbConnectionFactory`, `ISessionRepository` (for IncrementTokensAsync — scoped, so create a scope), `FleetOptions`, `ILogger`, and the OTEL instruments.
+  **Dependencies**: `AnalyticsCollector` (for channel reader), `IAnalyticsDbConnectionFactory`, `IServiceScopeFactory` (to resolve scoped `ISessionRepository` for IncrementTokensAsync — same pattern as `HarnessEventRelay`), `FleetOptions`, `ILogger`, and the OTEL instruments.
   
-  **Scoped dependency handling**: Since `ISessionRepository` is scoped but the writer is a singleton `BackgroundService`, inject `IServiceScopeFactory` and create a scope when calling `IncrementTokensAsync`.
+  **Scoped dependency handling**: Follow `HarnessEventRelay.PumpAsync` pattern exactly — inject `IServiceScopeFactory`, create a scope with `_scopeFactory.CreateScope()`, resolve `ISessionRepository` from `scope.ServiceProvider.GetRequiredService<ISessionRepository>()`, dispose scope after use.
   **Acceptance**: Token events accumulate in the analytics DB. Main DB session totals update.
 
 - [ ] 12. **Implement AnalyticsRepository (read side)**
@@ -330,10 +340,11 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   **What**: Periodic `BackgroundService` that recomputes `daily_rollups` from `token_events`. Runs every N minutes (configurable). Computes rollups for the last 2 days (to catch late-arriving events).
   **Files**:
   - Create `src/WeaveFleet.Infrastructure/Analytics/AnalyticsRollupService.cs`
+  **Pattern to follow**: `HarnessEventRelay` — use `LoggerMessage.Define` for structured logging, handle `OperationCanceledException` cleanly on shutdown, use `CancellationToken` from `ExecuteAsync`.
   **Implementation**:
   ```
   - Inherits BackgroundService
-  - ExecuteAsync: loop with Task.Delay(rollupInterval)
+  - ExecuteAsync: loop with Task.Delay(rollupInterval, stoppingToken)
   - On each tick:
     1. Compute date range: today and yesterday (UTC)
     2. DELETE FROM daily_rollups WHERE date IN (today, yesterday)
@@ -341,6 +352,8 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
        GROUP BY date, project_id, model_id, provider_id
     4. Also insert fleet-wide rows (project_id='', model_id='', provider_id='')
     5. Wrap in transaction
+  - Catch OperationCanceledException separately (expected on shutdown)
+  - Catch Exception, log warning, continue loop
   ```
   **Acceptance**: Rollups are computed and queryable.
 
@@ -359,15 +372,27 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
       string? projectName,
       string? workspaceDirectory)
   {
-      // Only process message.updated and message.created events
-      if (evt.Type is not ("message.updated" or "message.created"))
+      // Only process message.updated events.
+      // NOTE: message.created is NOT handled here — there is no contract fixture
+      // or test data confirming its Properties structure. If message.created support
+      // is needed later, add a contract case first to verify the shape, then add
+      // handling here (it may or may not use the same { "info": { ... } } wrapper).
+      if (evt.Type is not "message.updated")
           return null;
 
-      // Try to deserialize Properties as an OpenCodeMessageInfo
-      // The properties contain the full message object
+      // The message.updated Properties nests the message under "info":
+      //   { "info": { "id": "...", "role": "assistant", ... } }
+      // Confirmed by contract fixture: tests/contracts/opencode-to-fleet-events.json
+      // (message_updated case). Do NOT deserialize Properties directly.
       try
       {
-          var msgInfo = evt.Properties.Deserialize<OpenCodeMessageInfo>(OpenCodeJsonOptions.Default);
+          if (evt.Properties.ValueKind != JsonValueKind.Object)
+              return null;
+
+          if (!evt.Properties.TryGetProperty("info", out var infoEl))
+              return null;
+
+          var msgInfo = infoEl.Deserialize<OpenCodeMessageInfo>(OpenCodeJsonOptions.Default);
           if (msgInfo is not OpenCodeAssistantMessage assistant)
               return null;
 
@@ -411,9 +436,9 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
       }
   }
   ```
-  **Note**: The `Properties` JsonElement contains the message info directly (as observed from the SSE event structure). Need to verify during implementation whether `Properties` wraps the message in a container or IS the message. If it's wrapped (e.g., `{ "sessionId": "...", "message": { ... } }`), adjust the deserialization path.
+  **Properties structure (verified)**: For `message.updated` events, `OpenCodeSseEvent.Properties` is `{ "info": { ... } }` where the inner object is an `OpenCodeMessageInfo` (polymorphic on `role`). This is confirmed by the contract fixture at `tests/contracts/opencode-to-fleet-events.json` (`message_updated` case, lines 84–105). The code uses `TryGetProperty("info", ...)` to extract the nested element before deserializing.
   
-  **Important detail**: The `OpenCodeSseEvent.Properties` may serialize the message in a structure where the message info is at a specific path. The mapper should handle `message.updated` events where properties may contain the message directly or nested. Use `TryGetProperty` to navigate safely.
+  **`message.created` status**: No contract fixture, test data, or codebase usage confirms the `Properties` structure for `message.created` events. The codebase has zero references to `message.created` in C# code or JSON fixtures. Until a contract case is added verifying its shape, `message.created` is excluded from extraction to avoid silent deserialization failures against an unknown structure.
   **Acceptance**: Given a `message.updated` SSE event with token data, returns a valid `TokenEventData`. Returns null for non-message events.
 
 - [ ] 15. **Wire Analytics Collection into OpenCodeHarnessInstance.SubscribeAsync**
@@ -533,7 +558,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   **What**: Minimal API endpoints for querying analytics data.
   **Files**:
   - Create `src/WeaveFleet.Api/Endpoints/AnalyticsEndpoints.cs`
-  - Modify `src/WeaveFleet.Api/Endpoints/EndpointExtensions.cs` — add `app.MapAnalyticsEndpoints()`
+  - Modify `src/WeaveFleet.Api/Endpoints/EndpointExtensions.cs` — add `app.MapAnalyticsEndpoints();` call
   **Endpoints**:
   ```
   GET /api/analytics/summary?from=&to=&projectId=
@@ -551,7 +576,7 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   GET /api/analytics/export?from=&to=&projectId=&format=json
     → TokenEventRow[] JSON (or CSV if format=csv)
   ```
-  **Pattern**: Follow `FleetEndpoints.cs` style — `MapGroup("/api/analytics").WithTags("Analytics")`, inject `IAnalyticsReader`, parse query params.
+  **Pattern**: Follow the existing endpoint registration convention in `EndpointExtensions.cs` — currently has 14 `Map*Endpoints()` calls (e.g. `app.MapSessionEndpoints()`, `app.MapProjectEndpoints()`, `app.MapFleetSummaryEndpoints()`, etc.). Each endpoint file defines a static `Map*Endpoints(this WebApplication app)` extension method. Add `app.MapAnalyticsEndpoints();` to `MapFleetEndpoints()`. Follow `FleetEndpoints.cs` style — `MapGroup("/api/analytics").WithTags("Analytics")`, inject `IAnalyticsReader`, parse query params.
   
   **Date parsing**: Accept ISO 8601 strings for `from`/`to`, parse to `DateTimeOffset`.
   
@@ -564,41 +589,41 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   **What**: Wire up all analytics services in the DI container.
   **Files**:
   - Modify `src/WeaveFleet.Infrastructure/DependencyInjection.cs`
-  **Registrations** (add to `AddFleetInfrastructure`):
+  **Current DI structure** (in `AddFleetInfrastructure(services, options)`): The method registers FleetOptions as singleton, then database factory + migration runner as singletons, then 6 repositories as scoped, then 7 application services as scoped, then singletons for ConfigService/DirectoryService/RepositoryService/IntegrationStore/GitHubService/GitHubApiProxy/InstanceTracker/IEventBroadcaster, then `AddHostedService<HarnessEventRelay>()`, then harness registry + OpenCode harness as singletons. All registrations live in this single method — there is no `Application/DependencyInjection.cs`.
+  
+  **Registrations** (add analytics block after the `HarnessEventRelay` registration, before harness registry):
   ```csharp
   if (options.AnalyticsEnabled)
   {
-      // Analytics connection factory (singleton)
+      // Analytics connection factory (singleton — same pattern as IDbConnectionFactory)
       var analyticsDbPath = options.ResolvedAnalyticsDatabasePath;
       services.AddSingleton<IAnalyticsDbConnectionFactory>(
           _ => new AnalyticsSqliteConnectionFactory(analyticsDbPath));
 
-      // Analytics migration runner (singleton)
+      // Analytics migration runner (singleton — same pattern as MigrationRunner)
       services.AddSingleton<AnalyticsMigrationRunner>();
 
-      // Analytics collector (singleton — channel buffer)
+      // Analytics collector (singleton — channel buffer, shared across requests)
       services.AddSingleton<AnalyticsCollector>();
       services.AddSingleton<IAnalyticsCollector>(sp => sp.GetRequiredService<AnalyticsCollector>());
 
-      // Analytics repository (scoped — one per request)
+      // Analytics repository (scoped — same pattern as other repositories)
       services.AddScoped<IAnalyticsReader, AnalyticsRepository>();
 
-      // Background services (singleton)
+      // Background services (same pattern as HarnessEventRelay)
       services.AddHostedService<AnalyticsWriterService>();
       services.AddHostedService<AnalyticsRollupService>();
   }
   ```
-  **Important**: When analytics is disabled, `IAnalyticsCollector` should resolve to null or a no-op. Since `SessionOrchestrator` and `OpenCodeHarness` receive `IAnalyticsCollector?` (nullable), register a `NullAnalyticsCollector` when disabled, OR use `services.TryAddSingleton` with conditional. **Simplest**: Make the injection nullable — consumers use `IAnalyticsCollector?` and null-check. When analytics is disabled, don't register `IAnalyticsCollector` at all. Use `sp.GetService<IAnalyticsCollector>()` (returns null if not registered) in the factories.
-  
-  Actually, `SessionOrchestrator` uses primary constructors — nullable DI params need care. **Best approach**: Always register, but use a no-op collector when disabled:
+  **Important**: When analytics is disabled, `IAnalyticsCollector` should resolve to a no-op. Since `SessionOrchestrator` and `OpenCodeHarness` receive `IAnalyticsCollector` in their constructors, always register the interface:
   ```csharp
   if (!options.AnalyticsEnabled)
   {
       services.AddSingleton<IAnalyticsCollector, NullAnalyticsCollector>();
   }
   ```
-  Create a `NullAnalyticsCollector` that implements `IAnalyticsCollector` with no-op methods.
-  **Acceptance**: App starts with analytics enabled (default). All services resolve correctly.
+  Create a `NullAnalyticsCollector` that implements `IAnalyticsCollector` with empty methods. This avoids nullable DI parameters in primary constructors (which `SessionOrchestrator` uses).
+  **Acceptance**: App starts with analytics enabled (default). All services resolve correctly. With analytics disabled, `NullAnalyticsCollector` is injected instead.
 
 - [ ] 21. **Run Analytics Migrations at Startup**
   **What**: Apply analytics migrations during app startup, after main migrations.
@@ -677,10 +702,12 @@ Capture every token/cost event from OpenCode SSE into a queryable, deletion-proo
   **Files**:
   - Modify `tests/WeaveFleet.Infrastructure.Tests/Harnesses/OpenCode/OpenCodeMapperTests.cs`
   **Tests**:
-  - Extracts token data from a valid message.updated event with assistant message
-  - Returns null for user message events
+  - Extracts token data from a valid message.updated event with assistant message (Properties has `"info"` wrapper)
+  - Returns null for user message events (role != assistant)
   - Returns null for non-message events (e.g., session.updated)
+  - Returns null for message.created events (unverified Properties structure — excluded until contract case added)
   - Returns null for assistant message with no token data
+  - Returns null when Properties lacks `"info"` key
   - Handles missing/null fields gracefully
   - Computes estimated cost correctly
   **Acceptance**: All tests pass.
