@@ -42,25 +42,25 @@ export function sessionsChanged(
 /**
  * Groups a flat list of sessions into a nested parent-child structure.
  *
- * Sessions with a `parentSessionId` that matches a `dbId` in the same list
+ * Sessions with a `parentSessionId` that matches a `session.id` in the same list
  * are treated as children of that parent. All other sessions are top-level.
- * Sessions without `dbId` or `parentSessionId` pass through unchanged.
+ * Sessions without `parentSessionId` pass through unchanged.
  *
  * @param options.sort - When true, sorts top-level items and children
  *   alphabetically by title (falling back to session.id). Default: false.
  */
 export function nestSessions(items: SessionListItem[], options?: NestSessionsOptions): NestedSession[] {
-  // Build a map of dbId → SessionListItem for parent lookup
-  const dbIdMap = new Map<string, SessionListItem>();
+  // Build a map of session.id → SessionListItem for parent lookup
+  const sessionIdMap = new Map<string, SessionListItem>();
   for (const s of items) {
-    if (s.dbId) dbIdMap.set(s.dbId, s);
+    sessionIdMap.set(s.session.id, s);
   }
 
   // Identify child sessions and group them under their parent
   const childIds = new Set<string>();
   const childrenByParent = new Map<string, SessionListItem[]>();
   for (const s of items) {
-    if (s.parentSessionId && dbIdMap.has(s.parentSessionId)) {
+    if (s.parentSessionId && sessionIdMap.has(s.parentSessionId)) {
       childIds.add(s.session.id);
       const existing = childrenByParent.get(s.parentSessionId) ?? [];
       existing.push(s);
@@ -73,7 +73,7 @@ export function nestSessions(items: SessionListItem[], options?: NestSessionsOpt
     .filter((s) => !childIds.has(s.session.id))
     .map((s) => ({
       item: s,
-      children: s.dbId ? (childrenByParent.get(s.dbId) ?? []) : [],
+      children: childrenByParent.get(s.session.id) ?? [],
     }));
 
   if (options?.sort) {

@@ -114,8 +114,6 @@ export interface SessionListItem {
   sessionStatus: "active" | "idle" | "stopped" | "completed" | "disconnected" | "error" | "waiting_input";
   session: FleetSession;
   instanceStatus: "running" | "dead";
-  /** Internal Fleet DB session ID — used for parent-child matching */
-  dbId?: string;
   /** Fleet DB session ID of the parent (conductor) session, if this is a child */
   parentSessionId?: string | null;
   /**

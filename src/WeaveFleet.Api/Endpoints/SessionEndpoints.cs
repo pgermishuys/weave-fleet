@@ -219,11 +219,10 @@ public static class SessionEndpoints
             IsolationStrategy: "existing",    // enriched in Phase 4
             SessionStatus: sessionStatus,
             Session: new SessionFleetInfo(
-                Id: s.OpencodeSessionId,
+                Id: s.Id,
                 Title: s.Title,
                 Time: new SessionTime(createdMs, updatedMs)),
             InstanceStatus: "running",        // enriched in Phase 4
-            DbId: s.Id,
             ParentSessionId: s.ParentSessionId,
             SourceDirectory: null,            // enriched in Phase 4
             Branch: null,                     // enriched in Phase 4

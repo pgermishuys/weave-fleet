@@ -18,7 +18,6 @@ function makeItem(overrides: Partial<SessionListItem> & { sessionId?: string } =
     sessionStatus: "active",
     instanceStatus: "running",
     session: { id, title: "Test Session", ...overrides.session } as SessionListItem["session"],
-    dbId: undefined,
     parentSessionId: undefined,
     activityStatus: "busy",
     lifecycleStatus: "running",
@@ -38,7 +37,7 @@ describe("nestSessions", () => {
     expect(nestSessions([])).toEqual([]);
   });
 
-  it("PassesThroughSessionsWithNoParentOrDbId", () => {
+  it("PassesThroughSessionsWithNoParent", () => {
     const items = [makeItem(), makeItem(), makeItem()];
     const result = nestSessions(items);
 
@@ -49,18 +48,19 @@ describe("nestSessions", () => {
   });
 
   it("GroupsChildUnderParent", () => {
-    const parent = makeItem({ sessionId: "parent", dbId: "db-parent" });
+    // session.id IS the DB ID after the fix — parentSessionId references session.id directly
+    const parent = makeItem({ sessionId: "db-parent" });
     const child = makeItem({ sessionId: "child", parentSessionId: "db-parent" });
     const result = nestSessions([parent, child]);
 
     expect(result.length).toBe(1);
-    expect(result[0]!.item.session.id).toBe("parent");
+    expect(result[0]!.item.session.id).toBe("db-parent");
     expect(result[0]!.children.length).toBe(1);
     expect(result[0]!.children[0]!.session.id).toBe("child");
   });
 
   it("GroupsMultipleChildrenUnderOneParent", () => {
-    const parent = makeItem({ sessionId: "p", dbId: "db-p" });
+    const parent = makeItem({ sessionId: "db-p" });
     const c1 = makeItem({ sessionId: "c1", parentSessionId: "db-p" });
     const c2 = makeItem({ sessionId: "c2", parentSessionId: "db-p" });
     const c3 = makeItem({ sessionId: "c3", parentSessionId: "db-p" });
@@ -89,8 +89,8 @@ describe("nestSessions", () => {
   });
 
   it("MultipleParentsWithChildren", () => {
-    const p1 = makeItem({ sessionId: "p1", dbId: "db-p1" });
-    const p2 = makeItem({ sessionId: "p2", dbId: "db-p2" });
+    const p1 = makeItem({ sessionId: "db-p1" });
+    const p2 = makeItem({ sessionId: "db-p2" });
     const c1a = makeItem({ sessionId: "c1a", parentSessionId: "db-p1" });
     const c1b = makeItem({ sessionId: "c1b", parentSessionId: "db-p1" });
     const c2a = makeItem({ sessionId: "c2a", parentSessionId: "db-p2" });
@@ -99,8 +99,8 @@ describe("nestSessions", () => {
     const result = nestSessions([p1, p2, c1a, c1b, c2a, standalone]);
 
     expect(result.length).toBe(3); // p1, p2, standalone
-    const p1Result = result.find((n) => n.item.session.id === "p1");
-    const p2Result = result.find((n) => n.item.session.id === "p2");
+    const p1Result = result.find((n) => n.item.session.id === "db-p1");
+    const p2Result = result.find((n) => n.item.session.id === "db-p2");
     const sResult = result.find((n) => n.item.session.id === "s1");
 
     expect(p1Result!.children.length).toBe(2);
@@ -108,34 +108,22 @@ describe("nestSessions", () => {
     expect(sResult!.children.length).toBe(0);
   });
 
-  it("SessionWithoutDbIdCannotBeParent", () => {
-    // parent has no dbId, so child with parentSessionId cannot link to it
-    const notParent = makeItem({ sessionId: "np" }); // no dbId
-    const wouldBeChild = makeItem({ sessionId: "wbc", parentSessionId: "np" });
-    const result = nestSessions([notParent, wouldBeChild]);
-
-    expect(result.length).toBe(2);
-    result.forEach((n: NestedSession) => {
-      expect(n.children).toEqual([]);
-    });
-  });
-
   it("OrderPreservesInputOrderForTopLevel", () => {
-    const a = makeItem({ sessionId: "a", dbId: "db-a" });
+    const a = makeItem({ sessionId: "db-a" });
     const b = makeItem({ sessionId: "b" });
-    const c = makeItem({ sessionId: "c", dbId: "db-c" });
+    const c = makeItem({ sessionId: "db-c" });
     const childOfA = makeItem({ sessionId: "ca", parentSessionId: "db-a" });
 
     const result = nestSessions([c, b, a, childOfA]);
 
     expect(result.length).toBe(3);
-    expect(result[0]!.item.session.id).toBe("c");
+    expect(result[0]!.item.session.id).toBe("db-c");
     expect(result[1]!.item.session.id).toBe("b");
-    expect(result[2]!.item.session.id).toBe("a");
+    expect(result[2]!.item.session.id).toBe("db-a");
   });
 
-  it("ParentWithDbIdButNoChildrenHasEmptyArray", () => {
-    const parent = makeItem({ sessionId: "lonely", dbId: "db-lonely" });
+  it("ParentSessionHasEmptyChildrenWhenNoChildrenPresent", () => {
+    const parent = makeItem({ sessionId: "db-lonely" });
     const result = nestSessions([parent]);
 
     expect(result.length).toBe(1);
@@ -156,7 +144,7 @@ describe("nestSessions", () => {
   });
 
   it("sorts children within a parent alphabetically by title when sort option is true", () => {
-    const parent = makeItem({ sessionId: "p", dbId: "db-p", session: { id: "p", title: "Parent" } as SessionListItem["session"] });
+    const parent = makeItem({ sessionId: "db-p", session: { id: "db-p", title: "Parent" } as SessionListItem["session"] });
     const zeta = makeItem({ sessionId: "z", parentSessionId: "db-p", session: { id: "z", title: "Zeta" } as SessionListItem["session"] });
     const alphaChild = makeItem({ sessionId: "a", parentSessionId: "db-p", session: { id: "a", title: "Alpha" } as SessionListItem["session"] });
     const mu = makeItem({ sessionId: "m", parentSessionId: "db-p", session: { id: "m", title: "Mu" } as SessionListItem["session"] });

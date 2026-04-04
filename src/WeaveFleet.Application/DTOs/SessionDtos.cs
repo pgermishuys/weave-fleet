@@ -12,7 +12,6 @@ public sealed record SessionListResponse(
     string SessionStatus,
     SessionFleetInfo Session,
     string InstanceStatus,
-    string? DbId,
     string? ParentSessionId,
     string? SourceDirectory,
     string? Branch,

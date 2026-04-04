@@ -78,44 +78,43 @@ export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item,
   const handleRename = useCallback(
     async (newTitle: string) => {
       try {
-        const dbId = item.dbId ?? item.session.id;
         // Optimistically update the title in the sidebar immediately
         patchSessionTitle(item.session.id, newTitle);
-        await renameSession(dbId, newTitle, refetch);
+        await renameSession(item.session.id, newTitle, refetch);
       } catch {
         // error surfaced inside useRenameSession
       }
     },
-    [item.dbId, item.session.id, renameSession, refetch, patchSessionTitle]
+    [item.session.id, renameSession, refetch, patchSessionTitle]
   );
 
   const handleStop = useCallback(async () => {
     try {
-      await terminateSession(session.id, instanceId);
+      await terminateSession(item.session.id, instanceId);
       refetch();
     } catch {
       // error surfaced inside useTerminateSession
     }
-  }, [terminateSession, session.id, instanceId, refetch]);
+  }, [terminateSession, item.session.id, instanceId, refetch]);
 
   const handleAbort = useCallback(async () => {
     try {
-      await abortSession(session.id, instanceId);
+      await abortSession(item.session.id, instanceId);
     } catch {
       // error surfaced inside useAbortSession
     }
-  }, [abortSession, session.id, instanceId]);
+  }, [abortSession, item.session.id, instanceId]);
 
   const handleDeleteConfirm = useCallback(async () => {
     try {
-      await deleteSession(session.id, instanceId);
+      await deleteSession(item.session.id, instanceId);
       refetch();
     } catch {
       // error surfaced inside useDeleteSession
     } finally {
       setShowDeleteConfirm(false);
     }
-  }, [deleteSession, session.id, instanceId, refetch]);
+  }, [deleteSession, item.session.id, instanceId, refetch]);
 
   const handleResume = useCallback(async () => {
     try {
@@ -260,7 +259,7 @@ export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item,
       />
 
       <ForkSessionDialog
-        sourceSessionId={item.dbId ?? item.session.id}
+        sourceSessionId={item.session.id}
         sourceSessionTitle={title}
         open={showForkDialog}
         onOpenChange={setShowForkDialog}

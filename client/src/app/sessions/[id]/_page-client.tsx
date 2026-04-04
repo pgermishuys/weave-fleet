@@ -44,7 +44,7 @@ import type { ImageAttachment } from "@/lib/api-types";
 import Link from "next/link";
 
 interface AncestorInfo {
-  dbId: string;
+  id: string;
   instanceId: string;
   title: string;
 }
@@ -73,10 +73,11 @@ export default function SessionDetailPage() {
   // Subscribe to sessions context so optimistic title patches (from rename)
   // are reflected immediately on the detail page header.
   const { sessions: contextSessions } = useSessionsContext();
-  const contextTitle = useMemo(() => {
-    const match = contextSessions.find((s) => s.session.id === sessionId);
-    return match?.session.title;
-  }, [contextSessions, sessionId]);
+  const contextMatch = useMemo(() =>
+    contextSessions.find((s) => s.session.id === sessionId),
+    [contextSessions, sessionId]
+  );
+  const contextTitle = contextMatch?.session.title;
 
   const { sendPrompt, isSending, error: sendError } = useSendPrompt();
   const { agents } = useAgents(instanceId);
@@ -734,7 +735,7 @@ export default function SessionDetailPage() {
                 href={(() => {
                   const parent = metadata.ancestors!.at(-1);
                   return parent
-                    ? `/sessions/${encodeURIComponent(parent.dbId)}?instanceId=${encodeURIComponent(parent.instanceId)}`
+                    ? `/sessions/${encodeURIComponent(parent.id)}?instanceId=${encodeURIComponent(parent.instanceId)}`
                     : "/";
                 })()}
                 className="shrink-0 hover:text-foreground transition-colors"
@@ -742,10 +743,10 @@ export default function SessionDetailPage() {
                 <ArrowLeft className="h-3 w-3" />
               </Link>
               {metadata.ancestors.map((ancestor, i) => (
-                <Fragment key={ancestor.dbId}>
+                <Fragment key={ancestor.id}>
                   {i > 0 && <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/50" />}
                   <Link
-                    href={`/sessions/${encodeURIComponent(ancestor.dbId)}?instanceId=${encodeURIComponent(ancestor.instanceId)}`}
+                    href={`/sessions/${encodeURIComponent(ancestor.id)}?instanceId=${encodeURIComponent(ancestor.instanceId)}`}
                     className="shrink-0 hover:text-foreground transition-colors truncate max-w-[200px]"
                     title={ancestor.title}
                   >
