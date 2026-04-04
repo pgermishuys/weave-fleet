@@ -28,8 +28,9 @@ async function fetchAvailableTools(): Promise<AvailableTool[]> {
   if (!response.ok) {
     throw new Error(`Failed to fetch available tools: HTTP ${response.status}`);
   }
-  const data = (await response.json()) as { tools: AvailableTool[] };
-  return data.tools;
+  const data = await response.json();
+  const tools = Array.isArray(data?.tools) ? data.tools : Array.isArray(data) ? data : [];
+  return tools as AvailableTool[];
 }
 
 // ── Hook ────────────────────────────────────────────────────────────────────
@@ -89,9 +90,10 @@ export function useAvailableTools(): AvailableToolsState {
 
 /** Filter tools by category. */
 export function getToolsByCategory(
-  tools: AvailableTool[],
+  tools: AvailableTool[] | undefined | null,
   category: AvailableTool["category"]
 ): AvailableTool[] {
+  if (!tools) return [];
   return tools.filter((t) => t.category === category);
 }
 
