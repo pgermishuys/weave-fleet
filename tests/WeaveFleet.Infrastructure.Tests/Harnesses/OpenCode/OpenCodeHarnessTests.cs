@@ -1,4 +1,6 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Harnesses;
@@ -13,6 +15,7 @@ public sealed class OpenCodeHarnessTests
             httpClientFactory: new TestHttpClientFactory(),
             portAllocator: new PortAllocator(10000, 10099),
             options: new FleetOptions(),
+            scopeFactory: Substitute.For<IServiceScopeFactory>(),
             logger: NullLogger<OpenCodeHarness>.Instance,
             loggerFactory: NullLoggerFactory.Instance);
 

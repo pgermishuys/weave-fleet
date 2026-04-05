@@ -118,7 +118,8 @@ public sealed partial class SessionOrchestrator(
             Title = request.Title ?? "Untitled",
             Status = "active",
             Directory = workspace.Directory,
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            HarnessType = harnessType
         };
 
         await sessionRepository.InsertAsync(session);
@@ -182,9 +183,9 @@ public sealed partial class SessionOrchestrator(
         if (workspaceResult.IsFailure)
             return workspaceResult.Error;
 
-        var harness = harnessRegistry.GetByType(DefaultHarnessType);
+        var harness = harnessRegistry.GetByType(session.HarnessType);
         if (harness is null)
-            return FleetError.NotFoundFor("Harness", DefaultHarnessType);
+            return FleetError.NotFoundFor("Harness", session.HarnessType);
 
         IHarnessInstance harnessInstance;
         try
@@ -197,7 +198,7 @@ public sealed partial class SessionOrchestrator(
         }
         catch (Exception ex)
         {
-            LogSpawnFailed(ex, DefaultHarnessType);
+            LogSpawnFailed(ex, session.HarnessType);
             return FleetError.Unexpected;
         }
 
@@ -232,7 +233,7 @@ public sealed partial class SessionOrchestrator(
             Directory = parent.Directory,
             Title = title ?? $"Fork of {parent.Title}",
             ProjectId = parent.ProjectId,
-            HarnessType = DefaultHarnessType,
+            HarnessType = parent.HarnessType,
             IsolationStrategy = "existing"
         }, ct);
     }

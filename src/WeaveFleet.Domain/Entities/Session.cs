@@ -20,4 +20,5 @@ public sealed class Session
     public string? LifecycleStatus { get; set; }
     public int TotalTokens { get; set; }
     public double TotalCost { get; set; }
+    public string HarnessType { get; set; } = "opencode";
 }

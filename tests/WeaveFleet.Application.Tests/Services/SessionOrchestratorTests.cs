@@ -299,4 +299,124 @@ public sealed class SessionOrchestratorTests
         Assert.NotNull(capturedQuery);
         Assert.Equal(10, capturedQuery.Limit);
     }
+
+    // ── Harness type tracking ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateSessionAsync_StoresHarnessType()
+    {
+        // Arrange — request specifies "claude-code"
+        _harnessRegistry.GetByType("claude-code").Returns(_harness);
+        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
+            .Returns(_harnessInstance);
+        _projectRepo.ListAsync().Returns(new List<Project>());
+        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
+        _sessionRepo.InsertAsync(Arg.Any<Session>()).Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = "/tmp/project",
+            HarnessType = "claude-code"
+        });
+
+        // Assert — session stored with correct harness type
+        Assert.True(result.IsSuccess);
+        await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(s =>
+            s.HarnessType == "claude-code"));
+    }
+
+    [Fact]
+    public async Task CreateSessionAsync_DefaultsToOpenCode()
+    {
+        // Arrange — no HarnessType in request
+        _harnessRegistry.GetByType("opencode").Returns(_harness);
+        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
+            .Returns(_harnessInstance);
+        _projectRepo.ListAsync().Returns(new List<Project>());
+        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
+        _sessionRepo.InsertAsync(Arg.Any<Session>()).Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = "/tmp/project"
+            // HarnessType omitted → should default to "opencode"
+        });
+
+        // Assert — default harness type is opencode
+        Assert.True(result.IsSuccess);
+        await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(s =>
+            s.HarnessType == "opencode"));
+    }
+
+    [Fact]
+    public async Task ResumeSessionAsync_UsesStoredHarnessType()
+    {
+        // Arrange — session has harness type "claude-code" in DB
+        var session = new Session
+        {
+            Id = "s-resume",
+            InstanceId = "inst-old",
+            WorkspaceId = "ws-1",
+            HarnessType = "claude-code",
+            Title = "T",
+            Status = "active",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        };
+        _sessionRepo.GetByIdAsync("s-resume").Returns(session);
+        _workspaceRepo.GetByIdAsync("ws-1").Returns(new Domain.Entities.Workspace
+        {
+            Id = "ws-1",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        });
+        _harnessRegistry.GetByType("claude-code").Returns(_harness);
+        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
+            .Returns(_harnessInstance);
+        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
+        _sessionRepo.UpdateForResumeAsync(Arg.Any<string>(), Arg.Any<string>())
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _sut.ResumeSessionAsync("s-resume");
+
+        // Assert — harness resolved using stored type, not default "opencode"
+        Assert.True(result.IsSuccess);
+        _harnessRegistry.Received(1).GetByType("claude-code");
+        _harnessRegistry.DidNotReceive().GetByType("opencode");
+    }
+
+    [Fact]
+    public async Task ForkSessionAsync_InheritsParentHarnessType()
+    {
+        // Arrange — parent has "claude-code"
+        var parent = new Session
+        {
+            Id = "s-parent",
+            InstanceId = "inst-parent",
+            HarnessType = "claude-code",
+            Title = "Parent",
+            Status = "active",
+            Directory = "/tmp/parent",
+            ProjectId = null,
+            CreatedAt = "2026-01-01"
+        };
+        _sessionRepo.GetByIdAsync("s-parent").Returns(parent);
+        _harnessRegistry.GetByType("claude-code").Returns(_harness);
+        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
+            .Returns(_harnessInstance);
+        _projectRepo.ListAsync().Returns(new List<Project>());
+        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
+        _sessionRepo.InsertAsync(Arg.Any<Session>()).Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _sut.ForkSessionAsync("s-parent", "Forked Session");
+
+        // Assert — forked session uses same harness type as parent
+        Assert.True(result.IsSuccess);
+        await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(s =>
+            s.HarnessType == "claude-code"));
+    }
 }

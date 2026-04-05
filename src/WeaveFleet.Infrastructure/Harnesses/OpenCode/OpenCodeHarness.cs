@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
@@ -31,6 +32,7 @@ public sealed class OpenCodeHarness : IHarness
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly PortAllocator _portAllocator;
     private readonly FleetOptions _options;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OpenCodeHarness> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IAnalyticsCollector? _analyticsCollector;
@@ -40,6 +42,7 @@ public sealed class OpenCodeHarness : IHarness
         IHttpClientFactory httpClientFactory,
         PortAllocator portAllocator,
         FleetOptions options,
+        IServiceScopeFactory scopeFactory,
         ILogger<OpenCodeHarness> logger,
         ILoggerFactory loggerFactory,
         IAnalyticsCollector? analyticsCollector = null)
@@ -47,6 +50,7 @@ public sealed class OpenCodeHarness : IHarness
         _httpClientFactory = httpClientFactory;
         _portAllocator = portAllocator;
         _options = options;
+        _scopeFactory = scopeFactory;
         _logger = logger;
         _loggerFactory = loggerFactory;
         _analyticsCollector = analyticsCollector;
@@ -184,12 +188,14 @@ public sealed class OpenCodeHarness : IHarness
             // 6. Create instance
             var instance = new OpenCodeHarnessInstance(
                 instanceId: instanceId,
+                fleetSessionId: options.SessionId,
                 httpClient: openCodeHttpClient,
                 processManager: processManager,
                 portAllocator: _portAllocator,
                 allocatedPort: allocatedPort,
                 workingDirectory: options.WorkingDirectory,
                 shutdownTimeout: TimeSpan.FromSeconds(_options.HarnessShutdownTimeoutSeconds),
+                scopeFactory: _scopeFactory,
                 logger: _loggerFactory.CreateLogger<OpenCodeHarnessInstance>(),
                 analyticsCollector: _analyticsCollector,
                 projectId: options.ProjectId,
@@ -213,34 +219,6 @@ public sealed class OpenCodeHarness : IHarness
         }
     }
 
-    /// <summary>
-    /// Validates that <paramref name="directory"/> is a safe, absolute path that exists on disk.
-    /// Throws <see cref="ArgumentException"/> if the path is relative, contains traversal sequences,
-    /// or does not point to an existing directory.
-    /// </summary>
     private static void ValidateWorkingDirectory(string directory)
-    {
-        if (!Path.IsPathFullyQualified(directory))
-        {
-            throw new ArgumentException(
-                $"Working directory must be an absolute path: '{directory}'",
-                nameof(directory));
-        }
-
-        // Reject explicit ".." segments to block path traversal regardless of OS normalization
-        var parts = directory.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (Array.Exists(parts, p => p == ".."))
-        {
-            throw new ArgumentException(
-                $"Working directory must not contain path traversal sequences: '{directory}'",
-                nameof(directory));
-        }
-
-        if (!Directory.Exists(directory))
-        {
-            throw new ArgumentException(
-                $"Working directory does not exist: '{directory}'",
-                nameof(directory));
-        }
-    }
+        => HarnessHelpers.ValidateWorkingDirectory(directory);
 }
