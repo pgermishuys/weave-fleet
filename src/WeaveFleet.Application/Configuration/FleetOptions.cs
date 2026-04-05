@@ -35,6 +35,14 @@ public sealed class FleetOptions
     /// <summary>Seconds to wait for a harness process to exit gracefully before force-killing. Default: 10.</summary>
     public int HarnessShutdownTimeoutSeconds { get; set; } = 10;
 
+    // ─── Messages ─────────────────────────────────────────────────────────────
+
+    /// <summary>Default page size when fetching messages from a live instance. Default: 10.</summary>
+    public int LiveMessagePageSize { get; set; } = 10;
+
+    /// <summary>Default page size when fetching messages from the database (history). Default: 10.</summary>
+    public int HistoryMessagePageSize { get; set; } = 10;
+
     // ─── Analytics ────────────────────────────────────────────────────────────
 
     /// <summary>Path to the analytics SQLite database file. Default: "" (computed alongside DatabasePath).</summary>

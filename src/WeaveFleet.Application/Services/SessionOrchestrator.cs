@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
@@ -22,6 +23,8 @@ public sealed partial class SessionOrchestrator(
     IProjectRepository projectRepository,
     IEventBroadcaster eventBroadcaster,
     IAnalyticsCollector analyticsCollector,
+    IMessageRepository messageRepository,
+    FleetOptions options,
     ILogger<SessionOrchestrator> logger)
 {
     private const string DefaultHarnessType = "opencode";
@@ -267,20 +270,49 @@ public sealed partial class SessionOrchestrator(
         MessageQuery? query = null,
         CancellationToken ct = default)
     {
-        var instanceResult = await GetLiveInstanceAsync(id);
-        if (instanceResult.IsFailure)
-            return instanceResult.Error;
+        // Validate session exists
+        var session = await sessionRepository.GetByIdAsync(id);
+        if (session is null)
+            return FleetError.NotFoundFor(nameof(Session), id);
 
-        try
+        // Try live instance first
+        var instance = instanceTracker.Get(session.InstanceId);
+        if (instance is not null)
         {
-            var page = await instanceResult.Value.GetMessagesAsync(query, ct);
-            return Result.Success(page);
+            try
+            {
+                var liveLimit = query?.Limit ?? options.LiveMessagePageSize;
+                var page = await instance.GetMessagesAsync(
+                    new MessageQuery(liveLimit, query?.Before), ct);
+                return Result.Success(page);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                LogGetMessagesFailed(ex, id);
+                // Fall through to DB — instance might be in a bad state
+            }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogGetMessagesFailed(ex, id);
-            return FleetError.Unexpected;
-        }
+
+        // Fall back to persisted messages
+        return await GetPersistedMessagesAsync(id, query, ct);
+    }
+
+    private async Task<Result<MessagePage>> GetPersistedMessagesAsync(
+        string sessionId,
+        MessageQuery? query,
+        CancellationToken ct)
+    {
+        _ = ct; // cancellation supported by caller; DB ops are fast
+        var limit = query?.Limit ?? options.HistoryMessagePageSize;
+
+        // Request limit + 1 to determine hasMore
+        var rows = await messageRepository.GetBySessionAsync(sessionId, limit + 1, query?.Before);
+
+        var hasMore = rows.Count > limit;
+        var pageRows = hasMore ? rows.Take(limit).ToList() : (IReadOnlyList<PersistedMessage>)rows;
+
+        var messages = MessagePersistenceService.ToHarnessMessages(pageRows);
+        return Result.Success(new MessagePage(messages, hasMore));
     }
 
     // ── Delete ─────────────────────────────────────────────────────────────────
