@@ -75,4 +75,34 @@ public sealed class FleetOptions
             return Path.Combine(dir ?? ".", "weave-fleet-analytics.db");
         }
     }
+
+    // ─── Claude Code ─────────────────────────────────────────────────────────
+
+    /// <summary>Claude Code harness configuration.</summary>
+    public ClaudeCodeOptions ClaudeCode { get; set; } = new();
+}
+
+/// <summary>Configuration for the Claude Code harness.</summary>
+public sealed class ClaudeCodeOptions
+{
+    /// <summary>Path to the claude binary. Default: "claude" (assumes on PATH).</summary>
+    public string BinaryPath { get; set; } = "claude";
+
+    /// <summary>Default model to use. Null = let Claude Code choose.</summary>
+    public string? DefaultModel { get; set; }
+
+    /// <summary>Permission mode for tool execution. Default: "bypassPermissions".</summary>
+    public string PermissionMode { get; set; } = "bypassPermissions";
+
+    /// <summary>Allowed tools. Empty = use Claude Code defaults.</summary>
+    public string[] AllowedTools { get; set; } = [];
+
+    /// <summary>Maximum agentic turns per prompt. Null = no limit.</summary>
+    public int? MaxTurns { get; set; }
+
+    /// <summary>Maximum budget in USD per prompt. Null = no limit.</summary>
+    public decimal? MaxBudgetUsd { get; set; }
+
+    /// <summary>Timeout in seconds for each prompt process. Default: 300 (5 min).</summary>
+    public int ProcessTimeoutSeconds { get; set; } = 300;
 }

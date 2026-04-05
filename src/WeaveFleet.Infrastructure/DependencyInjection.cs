@@ -11,6 +11,7 @@ using WeaveFleet.Infrastructure.Data;
 using WeaveFleet.Infrastructure.Data.Repositories;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
+using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure;
@@ -126,6 +127,10 @@ public static class DependencyInjection
 
         // IHarness registration — OpenCodeHarness is resolved as IHarness by HarnessRegistry.
         services.AddSingleton<IHarness, OpenCodeHarness>();
+
+        // Claude Code harness — singleton to match HarnessRegistry lifetime.
+        // No port allocator or named HttpClient needed (stdio-based).
+        services.AddSingleton<IHarness, ClaudeCodeHarness>();
 
         return services;
     }

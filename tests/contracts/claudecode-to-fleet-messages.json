@@ -1,0 +1,143 @@
+{
+  "$comment": "Contract: Claude Code NDJSON assistant message payloads → Fleet API response shape after ClaudeCodeMapper + System.Text.Json serialization",
+  "cases": [
+    {
+      "name": "text_only_assistant_message",
+      "claudecode_input": {
+        "type": "assistant",
+        "message": {
+          "id": "msg_1",
+          "role": "assistant",
+          "content": [
+            { "type": "text", "text": "Hello, I can help with that." }
+          ]
+        }
+      },
+      "expected_fleet_message": {
+        "id": "msg_1",
+        "role": "assistant",
+        "parts": [
+          { "type": "text", "kind": 0, "text": "Hello, I can help with that." }
+        ],
+        "textContent": "Hello, I can help with that."
+      }
+    },
+    {
+      "name": "assistant_message_with_tool_use",
+      "claudecode_input": {
+        "type": "assistant",
+        "message": {
+          "id": "msg_2",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "toolu_abc123",
+              "name": "Bash",
+              "input": { "command": "ls -la" }
+            }
+          ]
+        }
+      },
+      "expected_fleet_message": {
+        "id": "msg_2",
+        "role": "assistant",
+        "parts": [
+          {
+            "type": "tool",
+            "kind": 1,
+            "toolCallId": "toolu_abc123",
+            "toolName": "Bash",
+            "arguments": { "command": "ls -la" },
+            "state": 1
+          }
+        ],
+        "textContent": ""
+      }
+    },
+    {
+      "name": "assistant_message_with_mixed_content",
+      "claudecode_input": {
+        "type": "assistant",
+        "message": {
+          "id": "msg_3",
+          "role": "assistant",
+          "content": [
+            { "type": "text", "text": "Let me run that command." },
+            {
+              "type": "tool_use",
+              "id": "toolu_xyz789",
+              "name": "Read",
+              "input": { "file_path": "/tmp/data.txt" }
+            }
+          ]
+        }
+      },
+      "expected_fleet_message": {
+        "id": "msg_3",
+        "role": "assistant",
+        "parts": [
+          { "type": "text", "kind": 0, "text": "Let me run that command." },
+          {
+            "type": "tool",
+            "kind": 1,
+            "toolCallId": "toolu_xyz789",
+            "toolName": "Read",
+            "arguments": { "file_path": "/tmp/data.txt" },
+            "state": 1
+          }
+        ],
+        "textContent": "Let me run that command."
+      }
+    },
+    {
+      "name": "assistant_message_with_tool_result",
+      "claudecode_input": {
+        "type": "assistant",
+        "message": {
+          "id": "msg_4",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "toolu_abc123",
+              "content": "file.txt\nREADME.md",
+              "is_error": false
+            }
+          ]
+        }
+      },
+      "expected_fleet_message": {
+        "id": "msg_4",
+        "role": "assistant",
+        "parts": [
+          {
+            "type": "tool-result",
+            "kind": 2,
+            "toolCallId": "toolu_abc123",
+            "content": "file.txt\nREADME.md",
+            "isError": false
+          }
+        ],
+        "textContent": ""
+      }
+    },
+    {
+      "name": "assistant_message_empty_content",
+      "claudecode_input": {
+        "type": "assistant",
+        "message": {
+          "id": "msg_5",
+          "role": "assistant",
+          "content": []
+        }
+      },
+      "expected_fleet_message": {
+        "id": "msg_5",
+        "role": "assistant",
+        "parts": [],
+        "textContent": ""
+      }
+    }
+  ]
+}
