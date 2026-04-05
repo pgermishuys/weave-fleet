@@ -366,8 +366,494 @@ public sealed class HarnessEventRelayTests
     }
 
     // -----------------------------------------------------------------------
+    // Message persistence tests
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a scope factory backed by a real ServiceCollection so that
+    /// GetRequiredService&lt;T&gt;() resolves correctly without NSubstitute IServiceProvider quirks.
+    /// </summary>
+    private static (IServiceScopeFactory ScopeFactory, ISessionRepository SessionRepo, IMessageRepository MessageRepo)
+        BuildPersistenceDependencies()
+    {
+        var sessionRepo = Substitute.For<ISessionRepository>();
+        var messageRepo = Substitute.For<IMessageRepository>();
+
+        var services = new ServiceCollection();
+        services.AddSingleton(sessionRepo);
+        services.AddSingleton(messageRepo);
+        var rootProvider = services.BuildServiceProvider();
+        var scopeFactory = rootProvider.GetRequiredService<IServiceScopeFactory>();
+
+        return (scopeFactory, sessionRepo, messageRepo);
+    }
+
+    /// <summary>
+    /// Builds a valid OpenCode message.updated event payload with the given role.
+    /// </summary>
+    private static JsonElement BuildMessagePayload(string role = "assistant", string messageId = "msg-1") =>
+        JsonSerializer.SerializeToElement(new
+        {
+            info = new
+            {
+                id = messageId,
+                sessionId = "oc-session",
+                role,
+                time = new { created = 1700000000L }
+            },
+            parts = new[] { new { type = "text", id = "p1", sessionId = "oc-session", messageId, text = "Hello" } }
+        });
+
+    [Fact]
+    public async Task PumpAsync_MessageUpdatedEvent_DoesNotPersist()
+    {
+        var (scopeFactory, sessionRepo, messageRepo) = BuildPersistenceDependencies();
+        var broadcaster = Substitute.For<IEventBroadcaster>();
+        var tracker = new InstanceTracker();
+
+        var fleetSessionId = "fleet-persist-1";
+        var instanceId = "inst-persist-1";
+        sessionRepo.GetAnyForInstanceAsync(instanceId)
+            .Returns(new Session { Id = fleetSessionId, InstanceId = instanceId });
+
+        // Use a broadcast signal to know when the event has been fully processed
+        var broadcastSignal = new TaskCompletionSource<string>();
+        broadcaster
+            .When(b => b.BroadcastAsync(Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<object>(), Arg.Any<CancellationToken>()))
+            .Do(call => broadcastSignal.TrySetResult(call.ArgAt<string>(1)));
+
+        var relay = new HarnessEventRelay(tracker, broadcaster, scopeFactory, NullLogger<HarnessEventRelay>.Instance);
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeInstance(instanceId);
+        tracker.Register(instanceId, instance);
+
+        instance.Emit(new HarnessEvent
+        {
+            Type = "message.updated",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = BuildMessagePayload("assistant")
+        });
+        instance.Complete();
+
+        // Wait for the broadcast to confirm the event was processed through the pump
+        var broadcastedType = await broadcastSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("message.updated", broadcastedType);
+
+        // Give fire-and-forget tasks time to complete
+        await Task.Delay(200);
+
+        // message.updated must NOT trigger UpsertAsync
+        await messageRepo.DidNotReceive().UpsertAsync(Arg.Any<PersistedMessage>());
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task PumpAsync_MessageCreatedEvent_PersistsMessage()
+    {
+        var (scopeFactory, sessionRepo, messageRepo) = BuildPersistenceDependencies();
+        var broadcaster = Substitute.For<IEventBroadcaster>();
+        var tracker = new InstanceTracker();
+
+        var fleetSessionId = "fleet-persist-2";
+        var instanceId = "inst-persist-2";
+        sessionRepo.GetAnyForInstanceAsync(instanceId)
+            .Returns(new Session { Id = fleetSessionId, InstanceId = instanceId });
+
+        // Use a TCS-backed Returns so the Do side-effect fires reliably for async methods
+        var persistSignal = new TaskCompletionSource();
+        messageRepo.UpsertAsync(Arg.Any<PersistedMessage>())
+            .Returns(callInfo =>
+            {
+                persistSignal.TrySetResult();
+                return Task.CompletedTask;
+            });
+
+        var relay = new HarnessEventRelay(tracker, broadcaster, scopeFactory, NullLogger<HarnessEventRelay>.Instance);
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeInstance(instanceId);
+        tracker.Register(instanceId, instance);
+
+        instance.Emit(new HarnessEvent
+        {
+            Type = "message.created",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = BuildMessagePayload("user", "msg-user-1")
+        });
+        instance.Complete();
+
+        await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await messageRepo.Received(1).UpsertAsync(Arg.Is<PersistedMessage>(m =>
+            m.SessionId == fleetSessionId && m.Role == "user"));
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task PumpAsync_NonMessageEvent_DoesNotPersist()
+    {
+        var (scopeFactory, sessionRepo, messageRepo) = BuildPersistenceDependencies();
+        var broadcaster = Substitute.For<IEventBroadcaster>();
+        var tracker = new InstanceTracker();
+
+        var instanceId = "inst-persist-3";
+        sessionRepo.GetAnyForInstanceAsync(instanceId)
+            .Returns(new Session { Id = "fleet-persist-3", InstanceId = instanceId });
+
+        // Use a broadcast signal to know when the event has been fully processed
+        var broadcastSignal = new TaskCompletionSource();
+        broadcaster
+            .When(b => b.BroadcastAsync(Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<object>(), Arg.Any<CancellationToken>()))
+            .Do(_ => broadcastSignal.TrySetResult());
+
+        var relay = new HarnessEventRelay(tracker, broadcaster, scopeFactory, NullLogger<HarnessEventRelay>.Instance);
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeInstance(instanceId);
+        tracker.Register(instanceId, instance);
+
+        instance.Emit(new HarnessEvent
+        {
+            Type = "session.status",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { status = "idle" })
+        });
+        instance.Complete();
+
+        // Wait for the broadcast to confirm the event was processed through the pump
+        await broadcastSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await messageRepo.DidNotReceive().UpsertAsync(Arg.Any<PersistedMessage>());
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task PumpAsync_PersistenceFailure_DoesNotBlockEventDelivery()
+    {
+        var (scopeFactory, sessionRepo, messageRepo) = BuildPersistenceDependencies();
+        var broadcaster = Substitute.For<IEventBroadcaster>();
+        var tracker = new InstanceTracker();
+
+        var fleetSessionId = "fleet-persist-4";
+        var instanceId = "inst-persist-4";
+        sessionRepo.GetAnyForInstanceAsync(instanceId)
+            .Returns(new Session { Id = fleetSessionId, InstanceId = instanceId });
+
+        // Repository always throws
+        messageRepo.UpsertAsync(Arg.Any<PersistedMessage>())
+            .Returns(_ => Task.FromException(new InvalidOperationException("DB is on fire")));
+
+        var broadcastSignal = new TaskCompletionSource<string>();
+        broadcaster
+            .When(b => b.BroadcastAsync(Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<object>(), Arg.Any<CancellationToken>()))
+            .Do(call => broadcastSignal.TrySetResult(call.ArgAt<string>(1)));
+
+        var relay = new HarnessEventRelay(tracker, broadcaster, scopeFactory, NullLogger<HarnessEventRelay>.Instance);
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeInstance(instanceId);
+        tracker.Register(instanceId, instance);
+
+        instance.Emit(new HarnessEvent
+        {
+            Type = "message.created",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = BuildMessagePayload("assistant")
+        });
+        instance.Complete();
+
+        // Broadcast must succeed despite DB failure
+        var broadcastedType = await broadcastSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("message.created", broadcastedType);
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    // -----------------------------------------------------------------------
     // Test double: controllable harness instance
     // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a valid message.part.updated event payload with a text part.
+    /// </summary>
+    private static JsonElement BuildPartPayload(
+        string messageId = "msg-1",
+        string sessionId = "oc-session",
+        string text = "Hello from part") =>
+        JsonSerializer.SerializeToElement(new
+        {
+            part = new
+            {
+                id = "part-1",
+                sessionID = sessionId,
+                messageID = messageId,
+                type = "text",
+                text
+            }
+        });
+
+    [Fact]
+    public async Task PumpAsync_MessagePartUpdated_TextPart_PersistsIncrementally()
+    {
+        var (scopeFactory, sessionRepo, messageRepo) = BuildPersistenceDependencies();
+        var broadcaster = Substitute.For<IEventBroadcaster>();
+        var tracker = new InstanceTracker();
+
+        var fleetSessionId = "fleet-part-persist-1";
+        var instanceId = "inst-part-persist-1";
+        var messageId = "msg-part-1";
+
+        sessionRepo.GetAnyForInstanceAsync(instanceId)
+            .Returns(new Session { Id = fleetSessionId, InstanceId = instanceId });
+
+        // No existing message in DB
+        messageRepo.GetByIdAsync(messageId, fleetSessionId)
+            .Returns(Task.FromResult<PersistedMessage?>(null));
+
+        var persistSignal = new TaskCompletionSource();
+        messageRepo.UpsertAsync(Arg.Any<PersistedMessage>())
+            .Returns(callInfo =>
+            {
+                persistSignal.TrySetResult();
+                return Task.CompletedTask;
+            });
+
+        var relay = new HarnessEventRelay(tracker, broadcaster, scopeFactory, NullLogger<HarnessEventRelay>.Instance);
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeInstance(instanceId);
+        tracker.Register(instanceId, instance);
+
+        instance.Emit(new HarnessEvent
+        {
+            Type = "message.part.updated",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = BuildPartPayload(messageId, "oc-session", "Hello from part")
+        });
+        instance.Complete();
+
+        await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await messageRepo.Received(1).UpsertAsync(Arg.Is<PersistedMessage>(m =>
+            m.Id == messageId &&
+            m.SessionId == fleetSessionId &&
+            m.Role == "assistant" &&
+            m.PartsJson.Contains("Hello from part")));
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task PumpAsync_MessageCreated_EmptyParts_DoesNotOverwriteExisting()
+    {
+        var (scopeFactory, sessionRepo, messageRepo) = BuildPersistenceDependencies();
+        var broadcaster = Substitute.For<IEventBroadcaster>();
+        var tracker = new InstanceTracker();
+
+        var fleetSessionId = "fleet-guard-1";
+        var instanceId = "inst-guard-1";
+        var messageId = "msg-guard-1";
+
+        sessionRepo.GetAnyForInstanceAsync(instanceId)
+            .Returns(new Session { Id = fleetSessionId, InstanceId = instanceId });
+
+        // Existing message with non-empty parts
+        var existingMessage = new PersistedMessage
+        {
+            Id = messageId,
+            SessionId = fleetSessionId,
+            Role = "assistant",
+            PartsJson = """[{"type":"text","text":"existing content"}]""",
+            Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+        };
+        messageRepo.GetByIdAsync(messageId, fleetSessionId)
+            .Returns(Task.FromResult<PersistedMessage?>(existingMessage));
+
+        // Use broadcast signal to know the event was processed
+        var broadcastSignal = new TaskCompletionSource();
+        broadcaster
+            .When(b => b.BroadcastAsync(Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<object>(), Arg.Any<CancellationToken>()))
+            .Do(_ => broadcastSignal.TrySetResult());
+
+        var relay = new HarnessEventRelay(tracker, broadcaster, scopeFactory, NullLogger<HarnessEventRelay>.Instance);
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeInstance(instanceId);
+        tracker.Register(instanceId, instance);
+
+        // Emit message.created with empty parts (assistant skeleton)
+        var emptyPartsPayload = JsonSerializer.SerializeToElement(new
+        {
+            info = new
+            {
+                id = messageId,
+                sessionId = "oc-session",
+                role = "assistant",
+                time = new { created = 1700000000L }
+            },
+            parts = Array.Empty<object>()
+        });
+
+        instance.Emit(new HarnessEvent
+        {
+            Type = "message.created",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = emptyPartsPayload
+        });
+        instance.Complete();
+
+        // Wait for broadcast and fire-and-forget to settle
+        await broadcastSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(200);
+
+        // UpsertAsync must NOT be called — guard prevented overwrite
+        await messageRepo.DidNotReceive().UpsertAsync(Arg.Any<PersistedMessage>());
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task PumpAsync_FullLifecycle_MessageUpdatedDoesNotOverwriteParts()
+    {
+        var (scopeFactory, sessionRepo, messageRepo) = BuildPersistenceDependencies();
+        var broadcaster = Substitute.For<IEventBroadcaster>();
+        var tracker = new InstanceTracker();
+
+        var fleetSessionId = "fleet-lifecycle-1";
+        var instanceId = "inst-lifecycle-1";
+        var messageId = "msg-lifecycle-1";
+
+        sessionRepo.GetAnyForInstanceAsync(instanceId)
+            .Returns(new Session { Id = fleetSessionId, InstanceId = instanceId });
+
+        // Track what was upserted via a sequence: created→part.updated→updated
+        PersistedMessage? lastUpserted = null;
+        var persistedMessages = new List<PersistedMessage>();
+
+        // Step 1: message.created with empty parts → GetByIdAsync returns null (first call)
+        // Step 2: message.part.updated → GetByIdAsync returns the skeleton
+        // Track call counts to simulate state progression
+        var getByIdCallCount = 0;
+        messageRepo.GetByIdAsync(messageId, fleetSessionId)
+            .Returns(callInfo =>
+            {
+                getByIdCallCount++;
+                // First call (from message.created guard): no existing message
+                // Subsequent calls (from TryPersistPartAsync): return last upserted
+                return Task.FromResult(lastUpserted);
+            });
+
+        var upsertSignal = new TaskCompletionSource();
+        messageRepo.UpsertAsync(Arg.Any<PersistedMessage>())
+            .Returns(callInfo =>
+            {
+                lastUpserted = callInfo.ArgAt<PersistedMessage>(0);
+                persistedMessages.Add(lastUpserted);
+                upsertSignal.TrySetResult();
+                return Task.CompletedTask;
+            });
+
+        var relay = new HarnessEventRelay(tracker, broadcaster, scopeFactory, NullLogger<HarnessEventRelay>.Instance);
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeInstance(instanceId);
+        tracker.Register(instanceId, instance);
+
+        // 1) message.created (empty assistant skeleton)
+        var skeletonPayload = JsonSerializer.SerializeToElement(new
+        {
+            info = new
+            {
+                id = messageId,
+                sessionId = "oc-session",
+                role = "assistant",
+                time = new { created = 1700000000L }
+            },
+            parts = Array.Empty<object>()
+        });
+        instance.Emit(new HarnessEvent
+        {
+            Type = "message.created",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = skeletonPayload
+        });
+
+        // 2) message.part.updated (text part arrives)
+        instance.Emit(new HarnessEvent
+        {
+            Type = "message.part.updated",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = BuildPartPayload(messageId, "oc-session", "The actual answer")
+        });
+
+        // 3) message.updated (metadata only — no parts)
+        instance.Emit(new HarnessEvent
+        {
+            Type = "message.updated",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = BuildMessagePayload("assistant", messageId)
+        });
+
+        instance.Complete();
+
+        // Wait for at least one upsert (from part.updated)
+        await upsertSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(300); // Let all fire-and-forget tasks settle
+
+        // Final state must contain the text part (not overwritten by message.updated)
+        Assert.NotNull(lastUpserted);
+        Assert.Contains("The actual answer", lastUpserted.PartsJson);
+
+        // The final persisted state must not be empty
+        Assert.NotEqual("[]", lastUpserted.PartsJson);
+
+        // At least one upsert must have occurred (from message.part.updated)
+        Assert.True(persistedMessages.Count >= 1, "Expected at least one UpsertAsync call from part.updated");
+
+        // message.updated must NOT have been the last event to write — final state has parts
+        // (message.updated is filtered out entirely, so it never calls UpsertAsync)
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
 
     private sealed class FakeInstance : IHarnessInstance
     {

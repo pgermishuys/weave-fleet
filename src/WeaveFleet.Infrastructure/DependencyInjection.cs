@@ -46,6 +46,7 @@ public static class DependencyInjection
         services.AddScoped<ISessionRepository, DapperSessionRepository>();
         services.AddScoped<ISessionCallbackRepository, DapperSessionCallbackRepository>();
         services.AddScoped<IWorkspaceRootRepository, DapperWorkspaceRootRepository>();
+        services.AddScoped<IMessageRepository, DapperMessageRepository>();
 
         // Application services (scoped)
         services.AddScoped<ProjectService>();

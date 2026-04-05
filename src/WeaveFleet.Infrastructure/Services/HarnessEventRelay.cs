@@ -4,8 +4,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
 namespace WeaveFleet.Infrastructure.Services;
 
@@ -23,6 +25,10 @@ public sealed class HarnessEventRelay : BackgroundService
     private static readonly Action<ILogger, string, Exception?> LogPumpFailed =
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(2, "PumpFailed"),
             "Event pump failed for instance {InstanceId}");
+
+    private static readonly Action<ILogger, string, Exception?> LogPersistFailed =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(3, "PersistFailed"),
+            "Failed to persist message event for session {SessionId}");
     private readonly InstanceTracker _tracker;
     private readonly IEventBroadcaster _broadcaster;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -134,6 +140,10 @@ public sealed class HarnessEventRelay : BackgroundService
                     ? RewriteSessionIds(evt.Payload.Value, fleetSessionId)
                     : JsonSerializer.SerializeToElement(new { });
                 await _broadcaster.BroadcastAsync(topic, evt.Type, payload, ct).ConfigureAwait(false);
+
+                // Fire-and-forget message persistence (must never block the event stream)
+                _ = TryPersistMessageAsync(evt, fleetSessionId);
+                _ = TryPersistPartAsync(evt, fleetSessionId);
             }
         }
         catch (OperationCanceledException)
@@ -151,6 +161,155 @@ public sealed class HarnessEventRelay : BackgroundService
                 cts.Cancel();
                 cts.Dispose();
             }
+        }
+    }
+
+    private async Task TryPersistMessageAsync(HarnessEvent evt, string fleetSessionId)
+    {
+        // Only process message.created events
+        if (evt.Type is not "message.created")
+            return;
+
+        try
+        {
+            if (!evt.Payload.HasValue || evt.Payload.Value.ValueKind != JsonValueKind.Object)
+                return;
+
+            var payload = evt.Payload.Value;
+
+            // Guard: must have an "info" property
+            if (!payload.TryGetProperty("info", out var infoEl))
+                return;
+
+            // Guard: only persist user and assistant messages.
+            // Read role from raw JSON — avoid polymorphic deserialization of the abstract base type,
+            // which requires the discriminator to be the first property in STJ polymorphism.
+            if (!infoEl.TryGetProperty("role", out var roleEl))
+                return;
+
+            var role = roleEl.GetString();
+            if (role is not ("user" or "assistant"))
+                return;
+
+            // Deserialize the concrete info type directly (avoids STJ polymorphism ordering issues).
+            OpenCodeMessageInfo? info = role == "assistant"
+                ? infoEl.Deserialize<OpenCodeAssistantMessage>(OpenCodeJsonOptions.Default)
+                : infoEl.Deserialize<OpenCodeUserMessage>(OpenCodeJsonOptions.Default);
+            if (info is null) return;
+
+            // Deserialize parts array separately
+            IReadOnlyList<OpenCodeMessagePart> parts = [];
+            if (payload.TryGetProperty("parts", out var partsEl))
+                parts = partsEl.Deserialize<IReadOnlyList<OpenCodeMessagePart>>(OpenCodeJsonOptions.Default) ?? [];
+
+            var openCodeMessage = new OpenCodeMessageWithParts { Info = info, Parts = parts };
+            var harnessMessage = OpenCodeMapper.ToHarnessMessage(openCodeMessage);
+
+            using var scope = _scopeFactory.CreateScope();
+            var messageRepo = scope.ServiceProvider.GetRequiredService<IMessageRepository>();
+
+            var persisted = MessagePersistenceService.ToPersistedMessage(fleetSessionId, harnessMessage);
+
+            // Don't overwrite existing message that may already have parts from message.part.updated
+            if (harnessMessage.Parts.Count == 0)
+            {
+                var existing = await messageRepo.GetByIdAsync(persisted.Id, persisted.SessionId).ConfigureAwait(false);
+                if (existing is not null) return; // Don't overwrite with empty skeleton
+            }
+
+            await messageRepo.UpsertAsync(persisted).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // Silent failure — persistence must never crash event relay
+            LogPersistFailed(_logger, fleetSessionId, ex);
+        }
+    }
+
+    private async Task TryPersistPartAsync(HarnessEvent evt, string fleetSessionId)
+    {
+        // Only process message.part.updated events
+        if (evt.Type is not "message.part.updated")
+            return;
+
+        try
+        {
+            if (!evt.Payload.HasValue || evt.Payload.Value.ValueKind != JsonValueKind.Object)
+                return;
+
+            var payload = evt.Payload.Value;
+
+            // Extract the "part" object from the payload
+            if (!payload.TryGetProperty("part", out var partEl))
+                return;
+
+            if (partEl.ValueKind != JsonValueKind.Object)
+                return;
+
+            // Extract messageID (uppercase D) from the part object
+            if (!partEl.TryGetProperty("messageID", out var messageIdEl))
+                return;
+
+            var messageId = messageIdEl.GetString();
+            if (string.IsNullOrEmpty(messageId))
+                return;
+
+            // Extract the "type" discriminator from raw JSON before deserializing.
+            // STJ [JsonPolymorphic] requires the discriminator to be the FIRST property in the
+            // JSON object, but real OpenCode SSE payloads have "messageID" before "type".
+            // Avoid the JsonException by extracting "type" manually and dispatching to the
+            // concrete subtype — the same pattern TryPersistMessageAsync uses for "role".
+            if (!partEl.TryGetProperty("type", out var typeEl))
+                return;
+
+            OpenCodeMessagePart? openCodePart = typeEl.GetString() switch
+            {
+                "text" => partEl.Deserialize<OpenCodeTextPart>(OpenCodeJsonOptions.Default),
+                "tool" => partEl.Deserialize<OpenCodeToolPart>(OpenCodeJsonOptions.Default),
+                "reasoning" => partEl.Deserialize<OpenCodeReasoningPart>(OpenCodeJsonOptions.Default),
+                _ => null,
+            };
+
+            if (openCodePart is null)
+                return; // Unsupported or unknown part type
+
+            // Map to Fleet MessagePart
+            var fleetPart = OpenCodeMapper.MapPart(openCodePart);
+            if (fleetPart is null)
+                return; // Mapper returned null (e.g. text part with null Text)
+
+            using var scope = _scopeFactory.CreateScope();
+            var messageRepo = scope.ServiceProvider.GetRequiredService<IMessageRepository>();
+
+            var existing = await messageRepo.GetByIdAsync(messageId, fleetSessionId).ConfigureAwait(false);
+
+            PersistedMessage persisted;
+            if (existing is null)
+            {
+                // Create new skeleton message for this assistant part
+                var partsJson = JsonSerializer.Serialize(
+                    new[] { fleetPart }, MessagePersistenceService.SerializerOptions);
+                persisted = new PersistedMessage
+                {
+                    Id = messageId,
+                    SessionId = fleetSessionId,
+                    Role = "assistant",
+                    PartsJson = partsJson,
+                    Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                    CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+                };
+            }
+            else
+            {
+                persisted = MessagePersistenceService.MergePart(existing, fleetPart);
+            }
+
+            await messageRepo.UpsertAsync(persisted).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // Silent failure — persistence must never crash event relay
+            LogPersistFailed(_logger, fleetSessionId, ex);
         }
     }
 
