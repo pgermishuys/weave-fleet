@@ -49,7 +49,7 @@ export interface UseMessagePaginationReturn extends PaginationState {
   hydratePagination: (snapshot: PaginationSnapshot) => void;
 }
 
-const DEFAULT_PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 10;
 const MIN_FETCH_INTERVAL_MS = 500;
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
