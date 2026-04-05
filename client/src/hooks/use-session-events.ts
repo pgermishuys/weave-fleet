@@ -170,9 +170,22 @@ export function useSessionEvents(
       if (signal?.aborted) return;
       const accumulated = data.messages.map(convertFleetMessageToAccumulated);
       setMessages(prev => {
-        const existingIds = new Set(prev.map((m: AccumulatedMessage) => m.messageId));
-        const newMessages = accumulated.filter((m: AccumulatedMessage) => !existingIds.has(m.messageId));
-        const merged = [...prev, ...newMessages];
+        const incomingById = new Map(accumulated.map((m: AccumulatedMessage) => [m.messageId, m]));
+        // Update existing messages that have richer content in the incoming data,
+        // and append any genuinely new messages.
+        const updated = prev.map((existing: AccumulatedMessage) => {
+          const incoming = incomingById.get(existing.messageId);
+          if (!incoming) return existing;
+          incomingById.delete(existing.messageId);
+          // If the existing message has no renderable parts but the incoming one does, use the incoming version.
+          const existingHasContent = existing.parts.some(
+            (p) => (p.type === "text" && p.text.trim().length > 0) || p.type === "tool" || p.type === "file"
+          );
+          if (!existingHasContent && incoming.parts.length > 0) return incoming;
+          return existing;
+        });
+        const newMessages = Array.from(incomingById.values());
+        const merged = [...updated, ...newMessages];
         return merged.length > MAX_MESSAGES ? merged.slice(merged.length - MAX_MESSAGES) : merged;
       });
     } catch (err) {
