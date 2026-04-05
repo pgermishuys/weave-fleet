@@ -294,6 +294,120 @@ public sealed class OpenCodeModelsSerializationTests
         Assert.Null(result.ModelId);
     }
 
+    // ---------------------------------------------------------------------------
+    // Regression: missing / unknown type discriminators must NOT throw
+    // ---------------------------------------------------------------------------
+
+    [Fact]
+    public void MessageInfo_MissingRoleDiscriminator_DeserializesAsBaseType()
+    {
+        // When OpenCode emits a message without a "role" field, the deserializer
+        // must fall back to the base OpenCodeMessageInfo instead of throwing
+        // NotSupportedException. This was the root cause of the "Failed to load
+        // initial messages" bug.
+        const string json = """
+        {
+          "id":"msg-no-role",
+          "sessionId":"sess-1",
+          "time":{"created":1000000}
+        }
+        """;
+
+        var result = JsonSerializer.Deserialize<OpenCodeMessageInfo>(json, Options);
+
+        Assert.NotNull(result);
+        Assert.IsNotType<OpenCodeUserMessage>(result);
+        Assert.IsNotType<OpenCodeAssistantMessage>(result);
+        Assert.Equal("unknown", result.Role);
+        Assert.Equal("msg-no-role", result.Id);
+    }
+
+    [Fact]
+    public void MessageInfo_UnknownRoleDiscriminator_DeserializesAsBaseType()
+    {
+        // A future role value (e.g. "system") must also fall back gracefully.
+        const string json = """
+        {
+          "role":"system",
+          "id":"msg-system",
+          "sessionId":"sess-1",
+          "time":{"created":1000000}
+        }
+        """;
+
+        var result = JsonSerializer.Deserialize<OpenCodeMessageInfo>(json, Options);
+
+        Assert.NotNull(result);
+        Assert.IsNotType<OpenCodeUserMessage>(result);
+        Assert.IsNotType<OpenCodeAssistantMessage>(result);
+        Assert.Equal("unknown", result.Role);
+    }
+
+    [Fact]
+    public void MessageWithParts_MissingRoleDiscriminator_DeserializesGracefully()
+    {
+        // The full envelope: OpenCodeMessageWithParts whose "info" lacks "role".
+        // This is the exact payload shape returned by the messages endpoint.
+        const string json = """
+        [{
+          "info": {
+            "id": "msg-missing-role",
+            "sessionId": "sess-1",
+            "time": { "created": 1000000 }
+          },
+          "parts": [{"type":"text","id":"p1","sessionId":"sess-1","messageId":"msg-missing-role","text":"hi"}]
+        }]
+        """;
+
+        var result = JsonSerializer.Deserialize<OpenCodeMessageWithParts[]>(json, Options);
+
+        Assert.NotNull(result);
+        Assert.Single(result);
+        Assert.Equal("unknown", result[0].Info.Role);
+        Assert.Single(result[0].Parts);
+    }
+
+    [Fact]
+    public void MessagePart_MissingTypeDiscriminator_DeserializesAsBaseType()
+    {
+        const string json = """
+        {
+          "id":"part-no-type",
+          "sessionId":"sess-1",
+          "messageId":"msg-1"
+        }
+        """;
+
+        var result = JsonSerializer.Deserialize<OpenCodeMessagePart>(json, Options);
+
+        Assert.NotNull(result);
+        Assert.IsNotType<OpenCodeTextPart>(result);
+        Assert.IsNotType<OpenCodeToolPart>(result);
+    }
+
+    [Fact]
+    public void ToolState_MissingStatusDiscriminator_DeserializesAsBaseType()
+    {
+        var result = JsonSerializer.Deserialize<OpenCodeToolState>("{}", Options);
+
+        Assert.NotNull(result);
+        Assert.IsNotType<OpenCodeToolPending>(result);
+        Assert.IsNotType<OpenCodeToolRunning>(result);
+        Assert.IsNotType<OpenCodeToolCompleted>(result);
+        Assert.IsNotType<OpenCodeToolError>(result);
+    }
+
+    [Fact]
+    public void SessionStatus_MissingTypeDiscriminator_DeserializesAsBaseType()
+    {
+        var result = JsonSerializer.Deserialize<OpenCodeSessionStatus>("{}", Options);
+
+        Assert.NotNull(result);
+        Assert.IsNotType<OpenCodeIdleStatus>(result);
+        Assert.IsNotType<OpenCodeBusyStatus>(result);
+        Assert.IsNotType<OpenCodeRetryStatus>(result);
+    }
+
     [Fact]
     public void UserMessage_WithEmptyModelObject_Deserializes()
     {

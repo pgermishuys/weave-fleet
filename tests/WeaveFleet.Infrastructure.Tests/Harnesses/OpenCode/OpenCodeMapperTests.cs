@@ -283,6 +283,62 @@ public sealed class OpenCodeMapperTests
         return new OpenCodeSseEvent { Type = "message.updated", Properties = properties };
     }
 
+    // ---------------------------------------------------------------------------
+    // ToHarnessMessages — skips messages with missing/unknown role discriminator
+    // ---------------------------------------------------------------------------
+
+    [Fact]
+    public void ToHarnessMessages_SkipsMessagesWithUnknownRole()
+    {
+        // Regression: messages deserialized as base OpenCodeMessageInfo (Role == "unknown")
+        // because the role discriminator was missing must be silently skipped rather
+        // than causing a downstream mapping error.
+        var msgs = new List<OpenCodeMessageWithParts>
+        {
+            new()
+            {
+                Info = new OpenCodeUserMessage
+                {
+                    Id = "msg-1",
+                    SessionId = "sess-1",
+                    Time = new OpenCodeMessageTime { Created = 1_000_000L },
+                },
+                Parts = [new OpenCodeTextPart { Text = "Hello" }],
+            },
+            new()
+            {
+                // Base type — missing role discriminator, Role == "unknown"
+                Info = new OpenCodeMessageInfo
+                {
+                    Id = "msg-bad",
+                    SessionId = "sess-1",
+                    Time = new OpenCodeMessageTime { Created = 2_000_000L },
+                },
+                Parts = [new OpenCodeTextPart { Text = "ghost" }],
+            },
+            new()
+            {
+                Info = new OpenCodeAssistantMessage
+                {
+                    Id = "msg-2",
+                    SessionId = "sess-1",
+                    Time = new OpenCodeMessageTime { Created = 3_000_000L },
+                },
+                Parts = [new OpenCodeTextPart { Text = "World" }],
+            },
+        };
+
+        var result = OpenCodeMapper.ToHarnessMessages(msgs);
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal("msg-1", result[0].Id);
+        Assert.Equal("msg-2", result[1].Id);
+    }
+
+    // ---------------------------------------------------------------------------
+    // TryExtractTokenEvent
+    // ---------------------------------------------------------------------------
+
     [Fact]
     public void TryExtractTokenEvent_ValidAssistantMessage_ReturnsTokenEventData()
     {

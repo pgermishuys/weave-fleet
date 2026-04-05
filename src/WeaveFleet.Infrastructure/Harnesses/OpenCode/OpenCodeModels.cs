@@ -75,17 +75,27 @@ internal sealed record OpenCodeMessageWithParts
     [JsonPropertyName("parts")] public IReadOnlyList<OpenCodeMessagePart> Parts { get; init; } = [];
 }
 
-/// <summary>Polymorphic base for user and assistant messages (discriminated by "role").</summary>
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "role")]
+/// <summary>
+/// Polymorphic base for user and assistant messages (discriminated by "role").
+/// Non-abstract so that messages with an unknown or missing role discriminator
+/// fall back to this base type instead of throwing <see cref="System.NotSupportedException"/>.
+/// </summary>
+[JsonPolymorphic(
+    TypeDiscriminatorPropertyName = "role",
+    IgnoreUnrecognizedTypeDiscriminators = true,
+    UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FallBackToBaseType)]
 [JsonDerivedType(typeof(OpenCodeUserMessage), "user")]
 [JsonDerivedType(typeof(OpenCodeAssistantMessage), "assistant")]
-internal abstract record OpenCodeMessageInfo
+internal record OpenCodeMessageInfo
 {
     [JsonPropertyName("id")] public string Id { get; init; } = string.Empty;
     [JsonPropertyName("sessionId")] public string SessionId { get; init; } = string.Empty;
-    /// <summary>Derived from the polymorphic type discriminator; not stored as a property.</summary>
+    /// <summary>
+    /// Derived from the polymorphic type discriminator; not stored as a property.
+    /// Defaults to <c>"unknown"</c> for messages with an unrecognised or missing role.
+    /// </summary>
     [JsonIgnore]
-    public abstract string Role { get; }
+    public virtual string Role => "unknown";
     [JsonPropertyName("time")] public OpenCodeMessageTime Time { get; init; } = new();
 }
 
@@ -171,8 +181,15 @@ internal sealed record OpenCodeCacheTokens
 // Message Parts
 // ---------------------------------------------------------------------------
 
-/// <summary>Polymorphic base for all message content parts (discriminated by "type").</summary>
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+/// <summary>
+/// Polymorphic base for all message content parts (discriminated by "type").
+/// Non-abstract so that parts with an unknown or missing type discriminator
+/// fall back to this base type instead of throwing <see cref="System.NotSupportedException"/>.
+/// </summary>
+[JsonPolymorphic(
+    TypeDiscriminatorPropertyName = "type",
+    IgnoreUnrecognizedTypeDiscriminators = true,
+    UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FallBackToBaseType)]
 [JsonDerivedType(typeof(OpenCodeTextPart), "text")]
 [JsonDerivedType(typeof(OpenCodeToolPart), "tool")]
 [JsonDerivedType(typeof(OpenCodeReasoningPart), "reasoning")]
@@ -185,7 +202,7 @@ internal sealed record OpenCodeCacheTokens
 [JsonDerivedType(typeof(OpenCodePatchPart), "patch")]
 [JsonDerivedType(typeof(OpenCodeRetryPart), "retry")]
 [JsonDerivedType(typeof(OpenCodeCompactionPart), "compaction")]
-internal abstract record OpenCodeMessagePart
+internal record OpenCodeMessagePart
 {
     [JsonPropertyName("id")] public string Id { get; init; } = string.Empty;
     [JsonPropertyName("sessionId")] public string SessionId { get; init; } = string.Empty;
@@ -285,13 +302,20 @@ internal sealed record OpenCodeCompactionPart : OpenCodeMessagePart
 // Tool State
 // ---------------------------------------------------------------------------
 
-/// <summary>Polymorphic tool invocation state (discriminated by "status").</summary>
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "status")]
+/// <summary>
+/// Polymorphic tool invocation state (discriminated by "status").
+/// Non-abstract so that states with an unknown or missing status discriminator
+/// fall back to this base type instead of throwing <see cref="System.NotSupportedException"/>.
+/// </summary>
+[JsonPolymorphic(
+    TypeDiscriminatorPropertyName = "status",
+    IgnoreUnrecognizedTypeDiscriminators = true,
+    UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FallBackToBaseType)]
 [JsonDerivedType(typeof(OpenCodeToolPending), "pending")]
 [JsonDerivedType(typeof(OpenCodeToolRunning), "running")]
 [JsonDerivedType(typeof(OpenCodeToolCompleted), "completed")]
 [JsonDerivedType(typeof(OpenCodeToolError), "error")]
-internal abstract record OpenCodeToolState;
+internal record OpenCodeToolState;
 
 /// <summary>Tool call is queued but not started.</summary>
 internal sealed record OpenCodeToolPending : OpenCodeToolState
@@ -337,12 +361,15 @@ internal sealed record OpenCodePromptRequest
 }
 
 /// <summary>Polymorphic prompt part (discriminated by "type").</summary>
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+[JsonPolymorphic(
+    TypeDiscriminatorPropertyName = "type",
+    IgnoreUnrecognizedTypeDiscriminators = true,
+    UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FallBackToBaseType)]
 [JsonDerivedType(typeof(OpenCodePromptTextPart), "text")]
 [JsonDerivedType(typeof(OpenCodePromptFilePart), "file")]
 [JsonDerivedType(typeof(OpenCodePromptAgentPart), "agent")]
 [JsonDerivedType(typeof(OpenCodePromptSubtaskPart), "subtask")]
-internal abstract record OpenCodePromptPart
+internal record OpenCodePromptPart
 {
     [JsonPropertyName("id")] public string? Id { get; init; }
 }
@@ -383,12 +410,19 @@ internal sealed record OpenCodePromptSubtaskPart : OpenCodePromptPart
 // Session Status
 // ---------------------------------------------------------------------------
 
-/// <summary>Polymorphic session status (discriminated by "type").</summary>
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+/// <summary>
+/// Polymorphic session status (discriminated by "type").
+/// Non-abstract so that statuses with an unknown or missing type discriminator
+/// fall back to this base type instead of throwing <see cref="System.NotSupportedException"/>.
+/// </summary>
+[JsonPolymorphic(
+    TypeDiscriminatorPropertyName = "type",
+    IgnoreUnrecognizedTypeDiscriminators = true,
+    UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FallBackToBaseType)]
 [JsonDerivedType(typeof(OpenCodeIdleStatus), "idle")]
 [JsonDerivedType(typeof(OpenCodeBusyStatus), "busy")]
 [JsonDerivedType(typeof(OpenCodeRetryStatus), "retry")]
-internal abstract record OpenCodeSessionStatus;
+internal record OpenCodeSessionStatus;
 
 /// <summary>Session is idle, waiting for a prompt.</summary>
 internal sealed record OpenCodeIdleStatus : OpenCodeSessionStatus;

@@ -65,14 +65,21 @@ internal static class OpenCodeMapper
 
     /// <summary>
     /// Maps a list of <see cref="OpenCodeMessageWithParts"/> to <see cref="HarnessMessage"/> instances.
+    /// Messages with an unrecognised role (neither "user" nor "assistant") are silently skipped.
     /// </summary>
     internal static IReadOnlyList<HarnessMessage> ToHarnessMessages(
         IReadOnlyList<OpenCodeMessageWithParts> msgs)
     {
-        var result = new HarnessMessage[msgs.Count];
+        var result = new List<HarnessMessage>(msgs.Count);
         for (int i = 0; i < msgs.Count; i++)
         {
-            result[i] = ToHarnessMessage(msgs[i]);
+            var msg = msgs[i];
+            // Skip messages whose role discriminator was missing or unrecognised —
+            // they deserialised as the base OpenCodeMessageInfo (Role == "unknown").
+            if (msg.Info.Role is not ("user" or "assistant"))
+                continue;
+
+            result.Add(ToHarnessMessage(msg));
         }
         return result;
     }
