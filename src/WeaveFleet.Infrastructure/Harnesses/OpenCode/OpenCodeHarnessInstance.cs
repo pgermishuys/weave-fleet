@@ -199,7 +199,7 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
             if (_analyticsCollector is not null)
             {
                 var tokenEvent = OpenCodeMapper.TryExtractTokenEvent(
-                    sseEvt, _openCodeSessionId, _projectId, _projectName, _workingDirectory);
+                    sseEvt, _fleetSessionId, _projectId, _projectName, _workingDirectory);
                 if (tokenEvent is not null)
                     _analyticsCollector.AcceptTokenEvent(tokenEvent);
             }

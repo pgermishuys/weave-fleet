@@ -140,23 +140,35 @@ public sealed class AnalyticsRepository(IAnalyticsDbConnectionFactory connection
         var toStr = toDate?.ToString("O");
 
         var conditions = new List<string>();
-        if (fromStr is not null) conditions.Add("created_at >= @FromDate");
-        if (toStr is not null) conditions.Add("created_at < @ToDate");
-        if (!string.IsNullOrEmpty(projectId)) conditions.Add("project_id = @ProjectId");
+        if (fromStr is not null) conditions.Add("ss.created_at >= @FromDate");
+        if (toStr is not null) conditions.Add("ss.created_at < @ToDate");
+        if (!string.IsNullOrEmpty(projectId)) conditions.Add("ss.project_id = @ProjectId");
 
         var whereClause = conditions.Count > 0
             ? "WHERE " + string.Join(" AND ", conditions)
             : "";
 
+        // Join token_events to get live token/cost totals instead of relying on
+        // the snapshot values which are only set at session creation (0) and deletion.
         var rows = await conn.QueryAsync<SessionSnapshotRow>(
             $"""
             SELECT
-                session_id, title, project_id, project_name,
-                total_tokens, total_cost, total_estimated_cost,
-                model_ids, duration_seconds, created_at
-            FROM session_snapshots
+                ss.session_id, ss.title, ss.project_id, ss.project_name,
+                CAST(COALESCE(te.agg_tokens, ss.total_tokens) AS REAL) AS total_tokens,
+                CAST(COALESCE(te.agg_cost, ss.total_cost) AS REAL) AS total_cost,
+                CAST(COALESCE(te.agg_estimated_cost, ss.total_estimated_cost) AS REAL) AS total_estimated_cost,
+                ss.model_ids, ss.duration_seconds, ss.created_at
+            FROM session_snapshots ss
+            LEFT JOIN (
+                SELECT session_id,
+                       SUM(tokens_total) AS agg_tokens,
+                       SUM(cost) AS agg_cost,
+                       SUM(COALESCE(estimated_cost, 0)) AS agg_estimated_cost
+                FROM token_events
+                GROUP BY session_id
+            ) te ON ss.session_id = te.session_id
             {whereClause}
-            ORDER BY created_at DESC
+            ORDER BY ss.created_at DESC
             LIMIT @Limit
             """,
             new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId, Limit = limit });
