@@ -20,11 +20,19 @@ namespace WeaveFleet.Infrastructure.Analytics;
 /// </summary>
 public sealed partial class AnalyticsWriterService : BackgroundService
 {
+    private const int ProcessedEventIdCapacity = 100_000;
+
     private readonly AnalyticsCollector _collector;
     private readonly IAnalyticsDbConnectionFactory _analyticsDb;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly FleetOptions _options;
     private readonly ILogger<AnalyticsWriterService> _logger;
+
+    /// <summary>
+    /// Tracks event IDs that have already triggered a main DB increment.
+    /// Bounded to <see cref="ProcessedEventIdCapacity"/> entries to prevent unbounded growth.
+    /// </summary>
+    private readonly HashSet<string> _processedEventIds = new(ProcessedEventIdCapacity);
 
     public AnalyticsWriterService(
         AnalyticsCollector collector,
@@ -126,7 +134,7 @@ public sealed partial class AnalyticsWriterService : BackgroundService
             foreach (var evt in tokenEvents)
             {
                 await connection.ExecuteAsync("""
-                    INSERT OR IGNORE INTO token_events (
+                    INSERT INTO token_events (
                         event_id, session_id, project_id, project_name, workspace_directory,
                         model_id, provider_id,
                         tokens_input, tokens_output, tokens_reasoning,
@@ -139,6 +147,15 @@ public sealed partial class AnalyticsWriterService : BackgroundService
                         @TokensCacheRead, @TokensCacheWrite, @TokensTotal,
                         @Cost, @EstimatedCost, @CreatedAt
                     )
+                    ON CONFLICT(event_id) DO UPDATE SET
+                        tokens_input     = CASE WHEN excluded.tokens_total > token_events.tokens_total THEN excluded.tokens_input     ELSE token_events.tokens_input     END,
+                        tokens_output    = CASE WHEN excluded.tokens_total > token_events.tokens_total THEN excluded.tokens_output    ELSE token_events.tokens_output    END,
+                        tokens_reasoning = CASE WHEN excluded.tokens_total > token_events.tokens_total THEN excluded.tokens_reasoning ELSE token_events.tokens_reasoning END,
+                        tokens_cache_read  = CASE WHEN excluded.tokens_total > token_events.tokens_total THEN excluded.tokens_cache_read  ELSE token_events.tokens_cache_read  END,
+                        tokens_cache_write = CASE WHEN excluded.tokens_total > token_events.tokens_total THEN excluded.tokens_cache_write ELSE token_events.tokens_cache_write END,
+                        tokens_total     = CASE WHEN excluded.tokens_total > token_events.tokens_total THEN excluded.tokens_total     ELSE token_events.tokens_total     END,
+                        cost             = CASE WHEN excluded.tokens_total > token_events.tokens_total THEN excluded.cost             ELSE token_events.cost             END,
+                        estimated_cost   = CASE WHEN excluded.tokens_total > token_events.tokens_total THEN excluded.estimated_cost   ELSE token_events.estimated_cost   END
                     """,
                     new
                     {
@@ -201,6 +218,14 @@ public sealed partial class AnalyticsWriterService : BackgroundService
 
             foreach (var evt in tokenEvents)
             {
+                // Guard against double-counting: only increment the main DB once per event_id.
+                // If the set is at capacity, evict all entries to prevent unbounded memory growth.
+                if (_processedEventIds.Count >= ProcessedEventIdCapacity)
+                    _processedEventIds.Clear();
+
+                if (!_processedEventIds.Add(evt.EventId))
+                    continue; // already incremented for this event_id
+
                 try
                 {
                     // IncrementTokensAsync takes int tokens — round from double

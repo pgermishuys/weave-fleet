@@ -476,4 +476,34 @@ public sealed class OpenCodeMapperTests
         Assert.NotNull(result.EstimatedCost);
         Assert.True(result.EstimatedCost > 0);
     }
+
+    [Fact]
+    public void TryExtractTokenEvent_AllZeroTokensAndCost_ReturnsNull()
+    {
+        // Events where both tokens.total and cost are zero carry no meaningful data
+        // and should be filtered out to avoid unnecessary writes.
+        var evt = MakeMessageUpdatedEvent("""
+            {
+              "info": {
+                "id": "msg-zero",
+                "sessionId": "oc-sess-1",
+                "role": "assistant",
+                "time": { "created": 1000000 },
+                "modelId": "claude-sonnet-4",
+                "tokens": {
+                  "input": 0,
+                  "output": 0,
+                  "reasoning": 0,
+                  "cache": { "read": 0, "write": 0 },
+                  "total": 0
+                },
+                "cost": 0
+              }
+            }
+            """);
+
+        var result = OpenCodeMapper.TryExtractTokenEvent(evt, "sess", null, null, null);
+
+        Assert.Null(result);
+    }
 }

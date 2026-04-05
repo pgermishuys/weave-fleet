@@ -209,6 +209,10 @@ internal static class OpenCodeMapper
             var tokensTotal = tokens?.Total ?? 0;
             var cost = assistant.Cost ?? 0;
 
+            // Skip events with no meaningful data — reduces unnecessary writes
+            if (tokensTotal == 0 && cost == 0)
+                return null;
+
             var estimatedCost = ModelPricing.EstimateCost(
                 assistant.ModelId,
                 tokens?.Input ?? 0,

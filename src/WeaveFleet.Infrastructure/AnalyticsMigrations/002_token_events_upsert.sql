@@ -1,0 +1,5 @@
+-- No schema changes required.
+-- The UNIQUE constraint on token_events.event_id (defined in 001_analytics_initial.sql)
+-- is referenced by the ON CONFLICT(event_id) clause introduced in AnalyticsWriterService.
+-- INSERT OR IGNORE was replaced with a conditional UPSERT that retains the row with the
+-- highest tokens_total, ensuring streaming partial updates do not overwrite final totals.
