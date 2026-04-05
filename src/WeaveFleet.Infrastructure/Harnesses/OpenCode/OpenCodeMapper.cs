@@ -19,39 +19,9 @@ internal static class OpenCodeMapper
 
         foreach (var part in msg.Parts)
         {
-            switch (part)
-            {
-                case OpenCodeTextPart textPart when textPart.Text is not null:
-                    parts.Add(new TextPart(textPart.Text));
-                    break;
-
-                case OpenCodeToolPart toolPart:
-                    var toolState = toolPart.State switch
-                    {
-                        OpenCodeToolPending => ToolUseState.Pending,
-                        OpenCodeToolRunning => ToolUseState.Running,
-                        OpenCodeToolCompleted => ToolUseState.Completed,
-                        OpenCodeToolError => ToolUseState.Error,
-                        _ => ToolUseState.Pending,
-                    };
-                    parts.Add(new ToolUsePart(
-                        ToolCallId: toolPart.CallId ?? toolPart.Id,
-                        ToolName: toolPart.Tool ?? string.Empty,
-                        Arguments: toolPart.State switch
-                        {
-                            OpenCodeToolPending p => p.Input ?? default,
-                            OpenCodeToolRunning r => r.Input ?? default,
-                            OpenCodeToolCompleted c => c.Input ?? default,
-                            OpenCodeToolError e => e.Input ?? default,
-                            _ => default,
-                        },
-                        State: toolState));
-                    break;
-
-                case OpenCodeReasoningPart reasoning when reasoning.Text is not null:
-                    parts.Add(new TextPart($"[reasoning] {reasoning.Text}"));
-                    break;
-            }
+            var mapped = MapPart(part);
+            if (mapped is not null)
+                parts.Add(mapped);
         }
 
         return new HarnessMessage
@@ -61,6 +31,47 @@ internal static class OpenCodeMapper
             Parts = parts,
             Timestamp = DateTimeOffsetFromUnixMs(msg.Info.Time.Created),
         };
+    }
+
+    /// <summary>
+    /// Maps a single <see cref="OpenCodeMessagePart"/> to a Fleet <see cref="MessagePart"/>.
+    /// Returns null for unrecognized or unsupported part types.
+    /// </summary>
+    internal static MessagePart? MapPart(OpenCodeMessagePart part)
+    {
+        switch (part)
+        {
+            case OpenCodeTextPart textPart when textPart.Text is not null:
+                return new TextPart(textPart.Text);
+
+            case OpenCodeToolPart toolPart:
+                var toolState = toolPart.State switch
+                {
+                    OpenCodeToolPending => ToolUseState.Pending,
+                    OpenCodeToolRunning => ToolUseState.Running,
+                    OpenCodeToolCompleted => ToolUseState.Completed,
+                    OpenCodeToolError => ToolUseState.Error,
+                    _ => ToolUseState.Pending,
+                };
+                return new ToolUsePart(
+                    ToolCallId: toolPart.CallId ?? toolPart.Id,
+                    ToolName: toolPart.Tool ?? string.Empty,
+                    Arguments: toolPart.State switch
+                    {
+                        OpenCodeToolPending p => p.Input ?? default,
+                        OpenCodeToolRunning r => r.Input ?? default,
+                        OpenCodeToolCompleted c => c.Input ?? default,
+                        OpenCodeToolError e => e.Input ?? default,
+                        _ => default,
+                    },
+                    State: toolState);
+
+            case OpenCodeReasoningPart reasoning when reasoning.Text is not null:
+                return new TextPart($"[reasoning] {reasoning.Text}");
+
+            default:
+                return null;
+        }
     }
 
     /// <summary>
