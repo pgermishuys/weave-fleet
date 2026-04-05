@@ -57,10 +57,6 @@ public static class TelemetryExtensions
                         otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
                     });
 
-                if (telemetryOptions.ConsoleExporterEnabled)
-                {
-                    tracing.AddConsoleExporter();
-                }
             })
             .WithMetrics(metrics =>
             {
@@ -73,11 +69,6 @@ public static class TelemetryExtensions
                         otlp.Endpoint = new Uri($"{baseEndpoint}/v1/metrics");
                         otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
                     });
-
-                if (telemetryOptions.ConsoleExporterEnabled)
-                {
-                    metrics.AddConsoleExporter();
-                }
             });
 
         // --- Logging ---
@@ -94,11 +85,6 @@ public static class TelemetryExtensions
                 otlp.Endpoint = new Uri($"{baseEndpoint}/v1/logs");
                 otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
             });
-
-            if (telemetryOptions.ConsoleExporterEnabled)
-            {
-                logging.AddConsoleExporter();
-            }
         });
 
         return builder;

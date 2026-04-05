@@ -15,6 +15,4 @@ public sealed class TelemetryOptions
     /// <summary>OTLP collector endpoint. Default: http://localhost:4317 (gRPC). Override with OTEL_EXPORTER_OTLP_ENDPOINT env var.</summary>
     public string OtlpEndpoint { get; set; } = "http://localhost:4317";
 
-    /// <summary>Write traces/metrics/logs to console (dev only). Default: false.</summary>
-    public bool ConsoleExporterEnabled { get; set; }
 }
