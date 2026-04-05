@@ -96,7 +96,16 @@ public sealed class OpenCodeHarness : IHarness
                 return new HarnessAvailability(false, "opencode binary not found on PATH.");
             }
 
+            // Drain redirected streams before WaitForExitAsync to prevent deadlock
+            // when the OS pipe buffer fills up and the child process blocks on write.
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
+            var stderrTask = process.StandardError.ReadToEndAsync(ct);
+
             await process.WaitForExitAsync(ct).ConfigureAwait(false);
+
+            await stdoutTask.ConfigureAwait(false);
+            await stderrTask.ConfigureAwait(false);
+
             return process.ExitCode == 0
                 ? new HarnessAvailability(true, null)
                 : new HarnessAvailability(false, $"opencode --version exited with code {process.ExitCode}.");

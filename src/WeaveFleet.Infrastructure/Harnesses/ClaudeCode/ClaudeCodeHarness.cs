@@ -90,7 +90,16 @@ public sealed class ClaudeCodeHarness : IHarness
                 return new HarnessAvailability(false, "claude binary not found on PATH.");
             }
 
+            // Drain redirected streams before WaitForExitAsync to prevent deadlock
+            // when the OS pipe buffer fills up and the child process blocks on write.
+            var stdoutTask = versionProcess.StandardOutput.ReadToEndAsync(ct);
+            var stderrTask = versionProcess.StandardError.ReadToEndAsync(ct);
+
             await versionProcess.WaitForExitAsync(ct).ConfigureAwait(false);
+
+            await stdoutTask.ConfigureAwait(false);
+            await stderrTask.ConfigureAwait(false);
+
             if (versionProcess.ExitCode != 0)
             {
                 return new HarnessAvailability(false,
@@ -122,7 +131,16 @@ public sealed class ClaudeCodeHarness : IHarness
                 return new HarnessAvailability(false, "claude auth check failed: could not start process.");
             }
 
+            // Drain redirected streams before WaitForExitAsync to prevent deadlock
+            // when the OS pipe buffer fills up and the child process blocks on write.
+            var authStdoutTask = authProcess.StandardOutput.ReadToEndAsync(ct);
+            var authStderrTask = authProcess.StandardError.ReadToEndAsync(ct);
+
             await authProcess.WaitForExitAsync(ct).ConfigureAwait(false);
+
+            await authStdoutTask.ConfigureAwait(false);
+            await authStderrTask.ConfigureAwait(false);
+
             if (authProcess.ExitCode != 0)
             {
                 return new HarnessAvailability(false, "claude auth not configured.");

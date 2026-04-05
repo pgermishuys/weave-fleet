@@ -26,17 +26,18 @@ public sealed class HarnessRegistry : IHarnessRegistry
     /// <inheritdoc />
     public async Task<IReadOnlyList<HarnessInfo>> GetAvailabilityAsync(CancellationToken ct)
     {
-        var results = new List<HarnessInfo>(_harnesses.Count);
-        foreach (var harness in _harnesses)
+        var tasks = _harnesses.Select(async harness =>
         {
             var availability = await harness.CheckAvailabilityAsync(ct).ConfigureAwait(false);
-            results.Add(new HarnessInfo(
+            return new HarnessInfo(
                 harness.Type,
                 harness.DisplayName,
                 availability.Available,
                 availability.Reason,
-                harness.Capabilities));
-        }
+                harness.Capabilities);
+        });
+
+        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
         return results;
     }
 }
