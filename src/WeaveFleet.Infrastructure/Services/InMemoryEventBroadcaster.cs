@@ -19,6 +19,9 @@ public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
 
     private readonly ConcurrentDictionary<string, Subscription> _subscriptions = new();
 
+    /// <summary>Number of active subscribers (exposed for test synchronisation).</summary>
+    internal int SubscriberCount => _subscriptions.Count;
+
     /// <inheritdoc />
     public Task BroadcastAsync(string topic, string type, object payload, CancellationToken ct = default)
     {

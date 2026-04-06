@@ -25,8 +25,9 @@ public sealed class InMemoryEventBroadcasterTests
             }
         });
 
-        // Give the subscriber time to register
-        await Task.Delay(50);
+        // Wait until the subscriber has registered
+        while (broadcaster.SubscriberCount < 1)
+            await Task.Delay(10);
 
         await broadcaster.BroadcastAsync("session:abc", "message.updated",
             JsonSerializer.SerializeToElement(new { text = "hello" }));
@@ -52,7 +53,9 @@ public sealed class InMemoryEventBroadcasterTests
             }
         });
 
-        await Task.Delay(50);
+        // Wait until the subscriber has registered
+        while (broadcaster.SubscriberCount < 1)
+            await Task.Delay(10);
 
         await broadcaster.BroadcastAsync("sessions", "session_created",
             JsonSerializer.SerializeToElement(new { id = "s1" }));
@@ -86,7 +89,9 @@ public sealed class InMemoryEventBroadcasterTests
             }
         });
 
-        await Task.Delay(50);
+        // Wait until the subscriber has registered
+        while (broadcaster.SubscriberCount < 1)
+            await Task.Delay(10);
 
         // Broadcast on a different topic — should NOT be delivered to "sessions" subscriber
         await broadcaster.BroadcastAsync("session:abc", "message.updated",
@@ -116,7 +121,9 @@ public sealed class InMemoryEventBroadcasterTests
             }
         });
 
-        await Task.Delay(50);
+        // Wait until the subscriber has registered
+        while (broadcaster.SubscriberCount < 1)
+            await Task.Delay(10);
 
         await broadcaster.BroadcastAsync("sessions", "session_created",
             JsonSerializer.SerializeToElement(new { id = "s1" }));
@@ -162,7 +169,9 @@ public sealed class InMemoryEventBroadcasterTests
             }
         });
 
-        await Task.Delay(50);
+        // Wait until both subscribers have registered
+        while (broadcaster.SubscriberCount < 2)
+            await Task.Delay(10);
 
         // Broadcast on "sessions" — both subscribers should get it
         await broadcaster.BroadcastAsync("sessions", "session_created",
