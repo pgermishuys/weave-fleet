@@ -45,6 +45,7 @@ jobs:
           --logger "trx;LogFileName=test-results.trx"
           --results-directory test-results/
           --no-build
+          -p:SkipFrontendBuild=true
 
       - name: Upload test results
         if: always()
