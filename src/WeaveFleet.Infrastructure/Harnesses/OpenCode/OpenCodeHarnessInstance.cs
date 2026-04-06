@@ -129,13 +129,13 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
             }
         }
 
-        OpenCodeModelRef? modelRef = null;
+        OpenCodeModelRefRequest? modelRef = null;
         if (options?.ModelId is { } modelId)
         {
             var slash = modelId.IndexOf('/', StringComparison.Ordinal);
             if (slash > 0)
             {
-                modelRef = new OpenCodeModelRef
+                modelRef = new OpenCodeModelRefRequest
                 {
                     ProviderId = modelId[..slash],
                     ModelId = modelId[(slash + 1)..],
@@ -143,7 +143,7 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
             }
             else
             {
-                modelRef = new OpenCodeModelRef { ProviderId = modelId, ModelId = modelId };
+                modelRef = new OpenCodeModelRefRequest { ProviderId = modelId, ModelId = modelId };
             }
         }
 
@@ -241,6 +241,42 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
         {
             return new HealthCheckResult(false, ex.Message);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
+    {
+        var agents = await _httpClient.GetAgentsAsync(_workingDirectory, ct).ConfigureAwait(false);
+        return agents.Select(a => new AgentInfo
+        {
+            Name = a.Name ?? string.Empty,
+            Description = a.Description,
+            Mode = a.Mode,
+            Hidden = a.Hidden ?? false,
+            ModelProviderId = a.Model?.ProviderId,
+            ModelId = a.Model?.ModelId,
+        }).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
+    {
+        var response = await _httpClient.GetProvidersAsync(_workingDirectory, ct).ConfigureAwait(false);
+        // Only return connected providers (ones where credentials are configured).
+        var connectedSet = response.Connected?.ToHashSet(StringComparer.Ordinal)
+            ?? new HashSet<string>(StringComparer.Ordinal);
+        return response.All
+            .Where(p => connectedSet.Contains(p.Id))
+            .Select(p => new ProviderInfo
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Models = p.Models.Values.Select(m => new ModelInfo
+                {
+                    Id = m.Id,
+                    Name = m.Name,
+                }).ToList(),
+            }).ToList();
     }
 
     /// <inheritdoc />

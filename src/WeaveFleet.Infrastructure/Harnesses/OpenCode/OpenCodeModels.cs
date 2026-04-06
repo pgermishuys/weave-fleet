@@ -140,17 +140,29 @@ internal sealed record OpenCodeMessageTime
     [JsonPropertyName("completed")] public long? Completed { get; init; }
 }
 
-/// <summary>Model reference (provider + model IDs).</summary>
+/// <summary>Model reference (provider + model IDs) — <b>read/response</b> path.</summary>
 /// <remarks>
 /// Fields are nullable and non-required because OpenCode may return messages where
 /// the <c>model</c> object has missing or null fields (e.g., <c>"model": {}</c>).
-/// The write path (<see cref="OpenCodeHarnessInstance.SendPromptAsync"/>) always
-/// provides both values explicitly; only the read/response path needs tolerance.
+/// OpenCode responses use camelCase (<c>providerId</c> / <c>modelId</c>).
+/// For the write/request path see <see cref="OpenCodeModelRefRequest"/>.
 /// </remarks>
 internal sealed record OpenCodeModelRef
 {
     [JsonPropertyName("providerId")] public string? ProviderId { get; init; }
     [JsonPropertyName("modelId")] public string? ModelId { get; init; }
+}
+
+/// <summary>Model reference (provider + model IDs) — <b>write/request</b> path.</summary>
+/// <remarks>
+/// OpenCode request validation expects <c>providerID</c> / <c>modelID</c> (uppercase D),
+/// which differs from the response path casing. Used in <see cref="OpenCodePromptRequest"/>
+/// and <see cref="OpenCodePromptSubtaskPart"/>.
+/// </remarks>
+internal sealed record OpenCodeModelRefRequest
+{
+    [JsonPropertyName("providerID")] public required string ProviderId { get; init; }
+    [JsonPropertyName("modelID")] public required string ModelId { get; init; }
 }
 
 /// <summary>Working-directory paths associated with a message.</summary>
@@ -353,7 +365,7 @@ internal sealed record OpenCodePromptRequest
 {
     [JsonPropertyName("parts")] public required IReadOnlyList<OpenCodePromptPart> Parts { get; init; }
     [JsonPropertyName("agent")] public string? Agent { get; init; }
-    [JsonPropertyName("model")] public OpenCodeModelRef? Model { get; init; }
+    [JsonPropertyName("model")] public OpenCodeModelRefRequest? Model { get; init; }
     [JsonPropertyName("noReply")] public bool? NoReply { get; init; }
     [JsonPropertyName("format")] public string? Format { get; init; }
     [JsonPropertyName("system")] public string? System { get; init; }
@@ -402,7 +414,7 @@ internal sealed record OpenCodePromptSubtaskPart : OpenCodePromptPart
     [JsonPropertyName("prompt")] public required string Prompt { get; init; }
     [JsonPropertyName("description")] public required string Description { get; init; }
     [JsonPropertyName("agent")] public required string Agent { get; init; }
-    [JsonPropertyName("model")] public OpenCodeModelRef? Model { get; init; }
+    [JsonPropertyName("model")] public OpenCodeModelRefRequest? Model { get; init; }
     [JsonPropertyName("command")] public string? Command { get; init; }
 }
 
@@ -460,7 +472,7 @@ internal sealed record OpenCodeProviderInfo
 {
     [JsonPropertyName("id")] public required string Id { get; init; }
     [JsonPropertyName("name")] public string? Name { get; init; }
-    [JsonPropertyName("models")] public IReadOnlyList<OpenCodeProviderModel> Models { get; init; } = [];
+    [JsonPropertyName("models")] public IReadOnlyDictionary<string, OpenCodeProviderModel> Models { get; init; } = new Dictionary<string, OpenCodeProviderModel>();
 }
 
 /// <summary>A single model within a provider.</summary>

@@ -225,6 +225,14 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<AgentInfo>>([]);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<ProviderInfo>>([]);
+
+    /// <inheritdoc />
     public async Task StopAsync(CancellationToken ct)
     {
         LogStop(_logger, InstanceId, null);

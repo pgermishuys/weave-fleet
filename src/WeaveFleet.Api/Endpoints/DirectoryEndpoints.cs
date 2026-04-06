@@ -21,7 +21,7 @@ public static class DirectoryEndpoints
                 entries = result.Entries.Select(e => new
                 {
                     name = e.Name,
-                    fullPath = e.FullPath,
+                    path = e.FullPath,
                     isGitRepo = e.IsGitRepo,
                     isRoot = e.IsRoot
                 }),

@@ -236,11 +236,11 @@ public sealed class OpenCodeMapperTests
                 {
                     Id = "openai",
                     Name = "OpenAI",
-                    Models =
-                    [
-                        new OpenCodeProviderModel { Id = "gpt-4o", Name = "GPT-4o" },
-                        new OpenCodeProviderModel { Id = "gpt-3.5-turbo", Name = null },
-                    ],
+                    Models = new Dictionary<string, OpenCodeProviderModel>
+                    {
+                        ["gpt-4o"] = new OpenCodeProviderModel { Id = "gpt-4o", Name = "GPT-4o" },
+                        ["gpt-3.5-turbo"] = new OpenCodeProviderModel { Id = "gpt-3.5-turbo", Name = null },
+                    },
                 },
             ],
         };

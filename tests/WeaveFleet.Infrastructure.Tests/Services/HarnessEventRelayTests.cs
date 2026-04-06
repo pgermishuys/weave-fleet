@@ -469,6 +469,10 @@ public sealed class HarnessEventRelayTests
             Task.FromResult(new MessagePage([], false));
         public Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct) =>
             Task.FromResult(new HealthCheckResult(true, null));
+        public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<AgentInfo>>([]);
+        public Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<ProviderInfo>>([]);
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

@@ -100,3 +100,29 @@ public sealed record PromptOptions
     public string? ModelId { get; init; }
     public IReadOnlyList<HarnessAttachment>? Attachments { get; init; }
 }
+
+/// <summary>An agent available for selection in the UI.</summary>
+public sealed record AgentInfo
+{
+    public required string Name { get; init; }
+    public string? Description { get; init; }
+    public string? Mode { get; init; }
+    public bool Hidden { get; init; }
+    public string? ModelProviderId { get; init; }
+    public string? ModelId { get; init; }
+}
+
+/// <summary>A model provider with its available models.</summary>
+public sealed record ProviderInfo
+{
+    public required string Id { get; init; }
+    public string? Name { get; init; }
+    public required IReadOnlyList<ModelInfo> Models { get; init; }
+}
+
+/// <summary>A model available within a provider.</summary>
+public sealed record ModelInfo
+{
+    public required string Id { get; init; }
+    public string? Name { get; init; }
+}

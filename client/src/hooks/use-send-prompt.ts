@@ -63,6 +63,7 @@ export function useSendPrompt(): UseSendPromptResult {
           }
         } else {
           // Regular prompt — route to promptAsync endpoint.
+          const modelId = model ? `${model.providerID}/${model.modelID}` : undefined;
           const response = await apiFetch(
             `/api/sessions/${encodeURIComponent(sessionId)}/prompt`,
             {
@@ -72,7 +73,7 @@ export function useSendPrompt(): UseSendPromptResult {
                 instanceId,
                 text,
                 agent,
-                model,
+                model: modelId,
                 ...(attachments && attachments.length > 0 ? { attachments } : {}),
               }),
             }

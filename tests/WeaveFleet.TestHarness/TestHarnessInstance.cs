@@ -45,6 +45,14 @@ public sealed class TestHarnessInstance : IHarnessInstance
         => Task.FromResult(new HealthCheckResult(Healthy: true, Message: null));
 
     /// <inheritdoc/>
+    public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<AgentInfo>>([]);
+
+    /// <inheritdoc/>
+    public Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<ProviderInfo>>([]);
+
+    /// <inheritdoc/>
     public async Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct)
     {
         if (_scenario.ThrowOnSendPrompt)

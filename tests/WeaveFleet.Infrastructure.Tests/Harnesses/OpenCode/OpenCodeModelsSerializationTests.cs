@@ -234,10 +234,10 @@ public sealed class OpenCodeModelsSerializationTests
             {
               "id":"openai",
               "name":"OpenAI",
-              "models":[
-                {"id":"gpt-4o","name":"GPT-4o"},
-                {"id":"gpt-3.5-turbo","name":"GPT-3.5 Turbo"}
-              ]
+              "models":{
+                "gpt-4o":{"id":"gpt-4o","name":"GPT-4o"},
+                "gpt-3.5-turbo":{"id":"gpt-3.5-turbo","name":"GPT-3.5 Turbo"}
+              }
             }
           ],
           "default":{"providerId":"openai","modelId":"gpt-4o"},

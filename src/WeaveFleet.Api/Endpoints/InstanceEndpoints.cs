@@ -12,15 +12,25 @@ public static class InstanceEndpoints
         var group = app.MapGroup("/api/instances/{id}").WithTags("Instances");
 
         // GET /api/instances/{id}/models — harness capabilities (model list)
-        // Models are harness-type-level metadata; we return an empty list for now
-        // since IHarnessInstance doesn't expose per-instance model lists.
-        group.MapGet("/models", (string id, InstanceTracker tracker) =>
+        group.MapGet("/models", async (string id, InstanceTracker tracker, CancellationToken ct) =>
         {
             var instance = tracker.Get(id);
             if (instance is null)
                 return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
 
-            return Results.Ok(new { instanceId = id, models = Array.Empty<object>() });
+            var providers = await instance.GetProvidersAsync(ct);
+            // Return AvailableProvider[] — the frontend hook expects a bare array
+            var result = providers.Select(p => new
+            {
+                id = p.Id,
+                name = p.Name ?? p.Id,
+                models = p.Models.Select(m => new
+                {
+                    id = m.Id,
+                    name = m.Name ?? m.Id,
+                }),
+            });
+            return Results.Ok(result);
         })
         .WithName("GetInstanceModels");
 
@@ -36,13 +46,27 @@ public static class InstanceEndpoints
         .WithName("GetInstanceCommands");
 
         // GET /api/instances/{id}/agents — available agents
-        group.MapGet("/agents", (string id, InstanceTracker tracker) =>
+        group.MapGet("/agents", async (string id, InstanceTracker tracker, CancellationToken ct) =>
         {
             var instance = tracker.Get(id);
             if (instance is null)
                 return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
 
-            return Results.Ok(new { instanceId = id, agents = Array.Empty<object>() });
+            var agents = await instance.GetAgentsAsync(ct);
+            // Return { instanceId, agents: AutocompleteAgent[] }
+            var result = agents.Select(a => new
+            {
+                name = a.Name,
+                description = a.Description,
+                mode = a.Mode ?? "agent",
+                hidden = a.Hidden,
+                model = a.ModelProviderId is not null ? new
+                {
+                    providerID = a.ModelProviderId,
+                    modelID = a.ModelId ?? string.Empty,
+                } : null,
+            });
+            return Results.Ok(new { instanceId = id, agents = result });
         })
         .WithName("GetInstanceAgents");
 

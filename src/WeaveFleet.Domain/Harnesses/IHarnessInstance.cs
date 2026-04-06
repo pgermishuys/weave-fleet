@@ -34,4 +34,10 @@ public interface IHarnessInstance : IAsyncDisposable
 
     /// <summary>Check whether this instance is still healthy.</summary>
     Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct);
+
+    /// <summary>List available agents for this instance.</summary>
+    Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct);
+
+    /// <summary>List available model providers for this instance.</summary>
+    Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct);
 }

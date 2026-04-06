@@ -69,7 +69,7 @@ public static class SessionEndpoints
         group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionOrchestrator orchestrator) =>
         {
             var options = req.Agent is not null || req.Model is not null
-                ? new PromptOptions { Agent = req.Agent }
+                ? new PromptOptions { Agent = req.Agent, ModelId = req.Model }
                 : null;
             var result = await orchestrator.PromptSessionAsync(id, req.Text, options);
             return result.Match(_ => Results.Ok(), err => err.ToSessionApiResult());

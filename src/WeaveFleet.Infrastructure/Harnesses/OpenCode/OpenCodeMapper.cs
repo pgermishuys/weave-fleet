@@ -145,7 +145,7 @@ internal static class OpenCodeMapper
         for (int i = 0; i < response.All.Count; i++)
         {
             var p = response.All[i];
-            var models = p.Models
+            var models = p.Models.Values
                 .Select(m => new HarnessModel(m.Id, m.Name ?? m.Id))
                 .ToList();
             result[i] = new HarnessProvider(p.Id, p.Name ?? p.Id, models);
