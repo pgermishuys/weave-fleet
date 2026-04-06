@@ -74,5 +74,8 @@ public sealed class HarnessRegistryTests
 
         public Task<IHarnessInstance> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct)
             => throw new NotSupportedException("FakeHarness cannot spawn.");
+
+        public Task<IHarnessInstance> ResumeAsync(HarnessResumeOptions options, CancellationToken ct)
+            => throw new NotSupportedException("FakeHarness cannot resume.");
     }
 }

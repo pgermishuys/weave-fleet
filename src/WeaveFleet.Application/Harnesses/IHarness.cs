@@ -22,4 +22,7 @@ public interface IHarness
 
     /// <summary>Spawn a new agent instance for the given session.</summary>
     Task<IHarnessInstance> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct);
+
+    /// <summary>Resume an existing agent session using the stored resume token.</summary>
+    Task<IHarnessInstance> ResumeAsync(HarnessResumeOptions options, CancellationToken ct);
 }

@@ -195,4 +195,29 @@ public sealed class ClaudeCodeHarness : IHarness
             throw;
         }
     }
+
+    /// <inheritdoc />
+    public Task<IHarnessInstance> ResumeAsync(HarnessResumeOptions options, CancellationToken ct)
+    {
+        string instanceId = $"claude-code-{Guid.NewGuid():N}";
+        HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
+
+        var instance = new ClaudeCodeHarnessInstance(
+            instanceId: instanceId,
+            fleetSessionId: options.SessionId,
+            workingDirectory: options.WorkingDirectory,
+            config: _options.ClaudeCode,
+            environmentVariables: options.Environment,
+            shutdownTimeout: TimeSpan.FromSeconds(_options.HarnessShutdownTimeoutSeconds),
+            scopeFactory: _scopeFactory,
+            logger: _loggerFactory.CreateLogger<ClaudeCodeHarnessInstance>(),
+            loggerFactory: _loggerFactory,
+            analyticsCollector: _analyticsCollector,
+            projectId: options.ProjectId,
+            projectName: options.ProjectName,
+            claudeSessionId: options.ResumeToken);
+
+        LogSpawned(_logger, instanceId, null);
+        return Task.FromResult<IHarnessInstance>(instance);
+    }
 }

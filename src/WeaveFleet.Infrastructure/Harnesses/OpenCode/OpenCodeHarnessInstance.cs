@@ -71,7 +71,8 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
         ILogger<OpenCodeHarnessInstance> logger,
         IAnalyticsCollector? analyticsCollector = null,
         string? projectId = null,
-        string? projectName = null)
+        string? projectName = null,
+        string? openCodeSessionId = null)
     {
         InstanceId = instanceId;
         _fleetSessionId = fleetSessionId;
@@ -86,6 +87,7 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
         _analyticsCollector = analyticsCollector;
         _projectId = projectId;
         _projectName = projectName;
+        _openCodeSessionId = openCodeSessionId;
 
         _status = HarnessInstanceStatus.Idle;
 
@@ -98,6 +100,9 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
 
     /// <inheritdoc />
     public string HarnessType => "opencode";
+
+    /// <inheritdoc />
+    public string? ResumeToken => _openCodeSessionId;
 
     /// <inheritdoc />
     public HarnessInstanceStatus Status => _status;
@@ -350,6 +355,8 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
                     .ConfigureAwait(false);
                 _openCodeSessionId = session.Id;
                 LogSessionCreated(_logger, session.Id, null);
+                // Persist resume token for session recovery
+                _ = PersistResumeTokenAsync(session.Id);
             }
         }
         finally
@@ -364,6 +371,20 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
 
         LogProcessExited(_logger, InstanceId, exitCode, null);
         _status = HarnessInstanceStatus.Error;
+    }
+
+    private async Task PersistResumeTokenAsync(string token)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var repo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
+            await repo.UpdateResumeTokenAsync(_fleetSessionId, token).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            LogPersistFailed(_logger, _fleetSessionId, ex);
+        }
     }
 
     private async Task TryPersistMessageAsync(HarnessEvent evt)

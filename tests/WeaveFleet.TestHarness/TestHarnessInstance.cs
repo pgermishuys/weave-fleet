@@ -38,6 +38,9 @@ public sealed class TestHarnessInstance : IHarnessInstance
     public string HarnessType { get; }
 
     /// <inheritdoc/>
+    public string? ResumeToken => null;
+
+    /// <inheritdoc/>
     public HarnessInstanceStatus Status => _status;
 
     /// <inheritdoc/>

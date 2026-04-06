@@ -190,11 +190,23 @@ public sealed partial class SessionOrchestrator(
         IHarnessInstance harnessInstance;
         try
         {
-            harnessInstance = await harness.SpawnAsync(new HarnessSpawnOptions
+            if (session.HarnessResumeToken is not null && harness.Capabilities.SupportsResume)
             {
-                SessionId = session.Id,
-                WorkingDirectory = workspaceResult.Value
-            }, ct);
+                harnessInstance = await harness.ResumeAsync(new HarnessResumeOptions
+                {
+                    SessionId = session.Id,
+                    WorkingDirectory = workspaceResult.Value,
+                    ResumeToken = session.HarnessResumeToken
+                }, ct);
+            }
+            else
+            {
+                harnessInstance = await harness.SpawnAsync(new HarnessSpawnOptions
+                {
+                    SessionId = session.Id,
+                    WorkingDirectory = workspaceResult.Value
+                }, ct);
+            }
         }
         catch (Exception ex)
         {

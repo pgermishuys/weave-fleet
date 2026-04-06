@@ -2,6 +2,18 @@ using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Application.Harnesses;
 
+/// <summary>Options for resuming an existing harness session.</summary>
+public sealed record HarnessResumeOptions
+{
+    public required string SessionId { get; init; }
+    public required string WorkingDirectory { get; init; }
+    public required string ResumeToken { get; init; }
+    public string? ProjectId { get; init; }
+    public string? ProjectName { get; init; }
+    public IReadOnlyDictionary<string, string> Environment { get; init; }
+        = new Dictionary<string, string>();
+}
+
 /// <summary>Options for spawning a new harness instance.</summary>
 public sealed record HarnessSpawnOptions
 {

@@ -70,7 +70,7 @@ public sealed class OpenCodeHarness : IHarness
         SupportsModelSelection = true,
         SupportsCommands = true,
         SupportsForking = true,
-        SupportsResume = false,
+        SupportsResume = true,
         SupportsImageAttachments = true,
         SupportsStreaming = true,
     };
@@ -230,4 +230,108 @@ public sealed class OpenCodeHarness : IHarness
 
     private static void ValidateWorkingDirectory(string directory)
         => HarnessHelpers.ValidateWorkingDirectory(directory);
+
+    /// <inheritdoc />
+    public async Task<IHarnessInstance> ResumeAsync(HarnessResumeOptions options, CancellationToken ct)
+    {
+        string instanceId = $"opencode-{Guid.NewGuid():N}";
+        int allocatedPort = 0;
+        OpenCodeProcessManager? processManager = null;
+
+        try
+        {
+            ValidateWorkingDirectory(options.WorkingDirectory);
+
+            string password = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+            const string username = "opencode";
+
+            var startupTimeout = TimeSpan.FromSeconds(_options.HarnessStartupTimeoutSeconds);
+            processManager = new OpenCodeProcessManager(
+                _loggerFactory.CreateLogger<OpenCodeProcessManager>());
+
+            var processInfo = await processManager.StartAsync(
+                new OpenCodeProcessOptions
+                {
+                    Port = 0,
+                    Hostname = "127.0.0.1",
+                    WorkingDirectory = options.WorkingDirectory,
+                    Password = password,
+                    Username = username,
+                    EnvironmentVariables = options.Environment,
+                    StartupTimeout = startupTimeout,
+                },
+                ct).ConfigureAwait(false);
+
+            allocatedPort = processInfo.Port;
+
+            var httpClient = _httpClientFactory.CreateClient("OpenCode");
+            httpClient.BaseAddress = processInfo.BaseUrl;
+            httpClient.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue(
+                    "Basic",
+                    Convert.ToBase64String(
+                        System.Text.Encoding.UTF8.GetBytes($"{username}:{password}")));
+
+            var openCodeHttpClient = new OpenCodeHttpClient(
+                httpClient,
+                _loggerFactory.CreateLogger<OpenCodeHttpClient>());
+
+            Exception? lastEx = null;
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                try
+                {
+                    await openCodeHttpClient.CheckHealthAsync(ct).ConfigureAwait(false);
+                    lastEx = null;
+                    break;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    lastEx = ex;
+                    if (attempt < 2)
+                    {
+                        await Task.Delay(500, ct).ConfigureAwait(false);
+                    }
+                }
+            }
+
+            if (lastEx is not null)
+            {
+                throw new InvalidOperationException(
+                    $"OpenCode process started but health check failed after 3 attempts.", lastEx);
+            }
+
+            var instance = new OpenCodeHarnessInstance(
+                instanceId: instanceId,
+                fleetSessionId: options.SessionId,
+                httpClient: openCodeHttpClient,
+                processManager: processManager,
+                portAllocator: _portAllocator,
+                allocatedPort: allocatedPort,
+                workingDirectory: options.WorkingDirectory,
+                shutdownTimeout: TimeSpan.FromSeconds(_options.HarnessShutdownTimeoutSeconds),
+                scopeFactory: _scopeFactory,
+                logger: _loggerFactory.CreateLogger<OpenCodeHarnessInstance>(),
+                analyticsCollector: _analyticsCollector,
+                projectId: options.ProjectId,
+                projectName: options.ProjectName,
+                openCodeSessionId: options.ResumeToken);
+
+            LogSpawned(_logger, instanceId, null);
+            return instance;
+        }
+        catch
+        {
+            LogSpawnFailed(_logger, instanceId, null);
+            if (processManager is not null)
+            {
+                await processManager.DisposeAsync().ConfigureAwait(false);
+            }
+            if (allocatedPort > 0)
+            {
+                _portAllocator.ReleasePort(allocatedPort);
+            }
+            throw;
+        }
+    }
 }

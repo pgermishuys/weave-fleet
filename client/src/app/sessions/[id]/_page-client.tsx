@@ -312,9 +312,19 @@ export default function SessionDetailPage() {
         }
         return r.json();
       })
-      .then((data: { workspaceId?: string; workspaceDirectory?: string; isolationStrategy?: string; session?: { title?: string; time?: { created?: number } }; ancestors?: AncestorInfo[]; dbTitle?: string; harnessType?: string } | null) => {
+      .then((data: { workspaceId?: string; workspaceDirectory?: string; isolationStrategy?: string; session?: { title?: string; time?: { created?: number } }; ancestors?: AncestorInfo[]; dbTitle?: string; harnessType?: string; lifecycleStatus?: string } | null) => {
         if (!data) return;
         metadataFetchedRef.current = true;
+        // Check lifecycle status from DB — if stopped/completed the session is
+        // resumable regardless of whether the harness instance is reachable.
+        const isSessionStopped = data.lifecycleStatus === "stopped" || data.lifecycleStatus === "completed";
+        if (isSessionStopped) {
+          setIsStopped(true);
+          setIsResumable(true);
+        } else {
+          setIsStopped(false);
+          setIsResumable(false);
+        }
         setMetadata({
           workspaceId: data.workspaceId ?? null,
           workspaceDirectory: data.workspaceDirectory ?? null,
@@ -349,15 +359,23 @@ export default function SessionDetailPage() {
     fetchMetadata();
   }, [fetchMetadata]);
 
-  // Safety net: if SSE connects successfully, the instance is alive.
-  // Clear any false isResumable flag from a transient metadata fetch failure
-  // (e.g. caused by module re-evaluation during dev HMR).
-  // Also retry metadata fetch if it hasn't succeeded yet — this handles
-  // subagent sessions where the initial fetch may have raced against
-  // session creation.
+  // When SSE connects or reconnects, re-verify instance health via the
+  // metadata endpoint.  If the fetch succeeds the instance is alive and
+  // fetchMetadata will NOT set isResumable; if it fails (instance dead)
+  // fetchMetadata sets isResumable = true, which correctly keeps the
+  // resume banner visible.
+  //
+  // Previous logic blindly cleared isResumable on "connected", but
+  // "connected" only means the initial API load finished — it does NOT
+  // prove the harness instance is alive (e.g. after a backend restart
+  // the WebSocket reconnects to the orchestrator while the session's
+  // harness is still dead).
   useEffect(() => {
     if (status === "connected" && isResumable && !isStopped) {
-      setIsResumable(false);
+      // Re-check: fetchMetadata will clear isResumable only if the
+      // instance actually responds (r.ok), or re-set it if the
+      // instance is dead (!r.ok / network error).
+      fetchMetadata();
     }
     if (status === "connected" && !metadataFetchedRef.current) {
       fetchMetadata();
@@ -512,6 +530,14 @@ export default function SessionDetailPage() {
   const handleResume = useCallback(async () => {
     try {
       const result = await resumeSession(sessionId);
+      // Immediately reset stopped/resumable state so the UI reflects the
+      // resumed session without waiting for the metadata re-fetch that
+      // fires after navigation.  The component is NOT remounted because
+      // the route param (sessionId) stays the same — only the query-string
+      // instanceId changes — so local state from the stopped session
+      // would otherwise persist and keep the prompt input disabled.
+      setIsStopped(false);
+      setIsResumable(false);
       navigate(
         `/sessions/${encodeURIComponent(result.session.id)}?instanceId=${encodeURIComponent(result.instanceId)}`,
         { replace: true }
@@ -708,8 +734,12 @@ export default function SessionDetailPage() {
         {/* Main content with tabs */}
         <div className={`flex flex-1 flex-col overflow-hidden${isFolded ? " fold-left" : ""}`}>
           {isStopped && (
-            <div className="px-4 py-2 bg-muted/50 border-b border-border text-sm text-muted-foreground text-center">
-              Session stopped — conversation history preserved above.
+            <div className="px-4 py-2 bg-muted/50 border-b border-border text-sm text-muted-foreground flex items-center justify-between">
+              <span>Session stopped — conversation history preserved above.</span>
+              <Button variant="outline" size="sm" onClick={handleResume} disabled={isResuming} className="gap-1.5">
+                <RotateCcw className="h-3.5 w-3.5" />
+                {isResuming ? "Resuming…" : "Resume Session"}
+              </Button>
             </div>
           )}
           {isResumable && !isStopped && (

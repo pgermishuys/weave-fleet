@@ -373,6 +373,7 @@ public sealed class SessionOrchestratorTests
             CreatedAt = "2026-01-01"
         });
         _harnessRegistry.GetByType("claude-code").Returns(_harness);
+        _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = false });
         _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
             .Returns(_harnessInstance);
         _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
@@ -386,6 +387,128 @@ public sealed class SessionOrchestratorTests
         Assert.True(result.IsSuccess);
         _harnessRegistry.Received(1).GetByType("claude-code");
         _harnessRegistry.DidNotReceive().GetByType("opencode");
+    }
+
+    [Fact]
+    public async Task ResumeSessionAsync_WhenTokenPresent_AndSupportsResume_CallsResumeAsync()
+    {
+        // Arrange — session has a resume token and harness supports resume
+        var session = new Session
+        {
+            Id = "s-resume-token",
+            InstanceId = "inst-old",
+            WorkspaceId = "ws-2",
+            HarnessType = "opencode",
+            HarnessResumeToken = "existing-session-token",
+            Title = "T",
+            Status = "active",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        };
+        _sessionRepo.GetByIdAsync("s-resume-token").Returns(session);
+        _workspaceRepo.GetByIdAsync("ws-2").Returns(new Domain.Entities.Workspace
+        {
+            Id = "ws-2",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        });
+        _harnessRegistry.GetByType("opencode").Returns(_harness);
+        _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = true });
+        _harness.ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>())
+            .Returns(_harnessInstance);
+        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
+        _sessionRepo.UpdateForResumeAsync(Arg.Any<string>(), Arg.Any<string>())
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _sut.ResumeSessionAsync("s-resume-token");
+
+        // Assert — ResumeAsync called with correct token; SpawnAsync NOT called
+        Assert.True(result.IsSuccess);
+        await _harness.Received(1).ResumeAsync(
+            Arg.Is<HarnessResumeOptions>(o => o.ResumeToken == "existing-session-token"),
+            Arg.Any<CancellationToken>());
+        await _harness.DidNotReceive().SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ResumeSessionAsync_WhenTokenNull_FallsBackToSpawnAsync()
+    {
+        // Arrange — session has no resume token → SpawnAsync is called
+        var session = new Session
+        {
+            Id = "s-resume-notok",
+            InstanceId = "inst-old",
+            WorkspaceId = "ws-3",
+            HarnessType = "opencode",
+            HarnessResumeToken = null,
+            Title = "T",
+            Status = "active",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        };
+        _sessionRepo.GetByIdAsync("s-resume-notok").Returns(session);
+        _workspaceRepo.GetByIdAsync("ws-3").Returns(new Domain.Entities.Workspace
+        {
+            Id = "ws-3",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        });
+        _harnessRegistry.GetByType("opencode").Returns(_harness);
+        _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = true });
+        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
+            .Returns(_harnessInstance);
+        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
+        _sessionRepo.UpdateForResumeAsync(Arg.Any<string>(), Arg.Any<string>())
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _sut.ResumeSessionAsync("s-resume-notok");
+
+        // Assert — SpawnAsync used as fallback; ResumeAsync NOT called
+        Assert.True(result.IsSuccess);
+        await _harness.Received(1).SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
+        await _harness.DidNotReceive().ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ResumeSessionAsync_WhenTokenPresent_ButSupportsResumeFalse_FallsBackToSpawnAsync()
+    {
+        // Arrange — token exists but harness doesn't support resume → SpawnAsync fallback
+        var session = new Session
+        {
+            Id = "s-resume-nosupp",
+            InstanceId = "inst-old",
+            WorkspaceId = "ws-4",
+            HarnessType = "opencode",
+            HarnessResumeToken = "some-token",
+            Title = "T",
+            Status = "active",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        };
+        _sessionRepo.GetByIdAsync("s-resume-nosupp").Returns(session);
+        _workspaceRepo.GetByIdAsync("ws-4").Returns(new Domain.Entities.Workspace
+        {
+            Id = "ws-4",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        });
+        _harnessRegistry.GetByType("opencode").Returns(_harness);
+        _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = false });
+        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
+            .Returns(_harnessInstance);
+        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
+        _sessionRepo.UpdateForResumeAsync(Arg.Any<string>(), Arg.Any<string>())
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _sut.ResumeSessionAsync("s-resume-nosupp");
+
+        // Assert — SpawnAsync used (SupportsResume = false overrides token)
+        Assert.True(result.IsSuccess);
+        await _harness.Received(1).SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
+        await _harness.DidNotReceive().ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

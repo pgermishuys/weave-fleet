@@ -11,6 +11,12 @@ public interface IHarnessInstance : IAsyncDisposable
     /// <summary>Unique identifier for this running instance.</summary>
     string InstanceId { get; }
 
+    /// <summary>
+    /// Opaque token used to resume this session after a crash or restart.
+    /// Null if the harness has not yet captured a session ID or does not support resume.
+    /// </summary>
+    string? ResumeToken { get; }
+
     /// <summary>The harness type that created this instance (e.g. "opencode").</summary>
     string HarnessType { get; }
 

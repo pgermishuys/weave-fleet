@@ -449,6 +449,7 @@ public sealed class HarnessEventRelayTests
 
         public string InstanceId { get; }
         public string HarnessType => "fake";
+        public string? ResumeToken => null;
         public HarnessInstanceStatus Status => HarnessInstanceStatus.Running;
 
         public void Emit(HarnessEvent evt) => _channel.Writer.TryWrite(evt);

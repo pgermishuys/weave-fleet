@@ -76,11 +76,11 @@ public sealed class OpenCodeHarnessTests
     }
 
     [Fact]
-    public void Capabilities_SupportsResume_IsFalse()
+    public void Capabilities_SupportsResume_IsTrue()
     {
         var harness = CreateHarness();
 
-        Assert.False(harness.Capabilities.SupportsResume);
+        Assert.True(harness.Capabilities.SupportsResume);
     }
 
     [Fact]

@@ -89,7 +89,11 @@ public static class SessionEndpoints
         {
             var result = await orchestrator.ResumeSessionAsync(id);
             return result.Match(
-                session => Results.Ok(new { session }),
+                session => Results.Ok(new
+                {
+                    instanceId = session.InstanceId,
+                    session
+                }),
                 err => err.ToSessionApiResult());
         })
         .WithName("ResumeSession");

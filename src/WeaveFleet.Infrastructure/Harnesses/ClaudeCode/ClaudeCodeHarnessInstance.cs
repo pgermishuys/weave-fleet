@@ -78,7 +78,8 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
         ILoggerFactory loggerFactory,
         IAnalyticsCollector? analyticsCollector = null,
         string? projectId = null,
-        string? projectName = null)
+        string? projectName = null,
+        string? claudeSessionId = null)
     {
         InstanceId = instanceId;
         _fleetSessionId = fleetSessionId;
@@ -92,6 +93,7 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
         _analyticsCollector = analyticsCollector;
         _projectId = projectId;
         _projectName = projectName;
+        _claudeSessionId = claudeSessionId;
     }
 
     /// <inheritdoc />
@@ -99,6 +101,9 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
 
     /// <inheritdoc />
     public string HarnessType => "claude-code";
+
+    /// <inheritdoc />
+    public string? ResumeToken => _claudeSessionId;
 
     /// <inheritdoc />
     public HarnessInstanceStatus Status => _status;
@@ -292,6 +297,8 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
                     {
                         _claudeSessionId = init.SessionId;
                         LogSessionId(_logger, init.SessionId, null);
+                        // Persist resume token for session recovery
+                        _ = PersistResumeTokenAsync(init.SessionId);
                     }
 
                     if (init.Model is not null)
@@ -324,7 +331,11 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
                     }
 
                     if (result.SessionId is not null && _claudeSessionId is null)
+                    {
                         _claudeSessionId = result.SessionId;
+                        // Persist resume token captured from result message (fallback)
+                        _ = PersistResumeTokenAsync(result.SessionId);
+                    }
 
                     _status = HarnessInstanceStatus.Idle;
                 }
@@ -366,6 +377,20 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
         catch (Exception ex)
         {
             // Silent failure — persistence must never crash the instance
+            LogPersistFailed(_logger, _fleetSessionId, ex);
+        }
+    }
+
+    private async Task PersistResumeTokenAsync(string token)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var repo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
+            await repo.UpdateResumeTokenAsync(_fleetSessionId, token).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
             LogPersistFailed(_logger, _fleetSessionId, ex);
         }
     }

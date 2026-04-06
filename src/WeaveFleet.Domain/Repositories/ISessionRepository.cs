@@ -18,6 +18,7 @@ public interface ISessionRepository
     Task<IReadOnlyList<Session>> GetNonTerminalForInstanceAsync(string instanceId);
     Task UpdateTitleAsync(string id, string title);
     Task UpdateForResumeAsync(string id, string instanceId);
+    Task UpdateResumeTokenAsync(string id, string resumeToken);
     Task<IReadOnlyList<Session>> GetActiveChildrenAsync(string parentDbId);
     Task<IReadOnlySet<string>> GetIdsWithActiveChildrenAsync();
     Task<IReadOnlyList<Session>> GetForWorkspaceAsync(string workspaceId);

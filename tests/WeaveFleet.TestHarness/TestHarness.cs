@@ -68,4 +68,17 @@ public sealed class TestHarness : IHarness
 
         return Task.FromResult(instance);
     }
+
+    /// <inheritdoc/>
+    public Task<IHarnessInstance> ResumeAsync(HarnessResumeOptions options, CancellationToken ct)
+    {
+        if (_scenario.ThrowOnSpawn)
+            throw new InvalidOperationException("TestHarness: configured to fail on resume.");
+
+        IHarnessInstance instance = new TestHarnessInstance(
+            instanceId: options.SessionId,
+            scenario: _scenario);
+
+        return Task.FromResult(instance);
+    }
 }

@@ -17,10 +17,10 @@ public sealed class DapperSessionRepository(IDbConnectionFactory connectionFacto
             """
             INSERT INTO sessions (id, workspace_id, instance_id, project_id, opencode_session_id, title,
                 status, directory, created_at, stopped_at, parent_session_id, activity_status,
-                lifecycle_status, total_tokens, total_cost, harness_type)
+                lifecycle_status, total_tokens, total_cost, harness_type, harness_resume_token)
             VALUES (@Id, @WorkspaceId, @InstanceId, @ProjectId, @OpencodeSessionId, @Title,
                 @Status, @Directory, @CreatedAt, @StoppedAt, @ParentSessionId, @ActivityStatus,
-                @LifecycleStatus, @TotalTokens, @TotalCost, @HarnessType)
+                @LifecycleStatus, @TotalTokens, @TotalCost, @HarnessType, @HarnessResumeToken)
             """, session);
     }
 
@@ -128,10 +128,16 @@ public sealed class DapperSessionRepository(IDbConnectionFactory connectionFacto
 
     public async Task UpdateStatusAsync(string id, string status, string? stoppedAt = null)
     {
+        var lifecycleStatus = status switch
+        {
+            "stopped" => "stopped",
+            "completed" => "completed",
+            _ => "running"
+        };
         using var conn = connectionFactory.CreateConnection();
         await conn.ExecuteAsync(
-            "UPDATE sessions SET status = @Status, stopped_at = @StoppedAt WHERE id = @Id",
-            new { Id = id, Status = status, StoppedAt = stoppedAt });
+            "UPDATE sessions SET status = @Status, stopped_at = @StoppedAt, lifecycle_status = @LifecycleStatus WHERE id = @Id",
+            new { Id = id, Status = status, StoppedAt = stoppedAt, LifecycleStatus = lifecycleStatus });
     }
 
     public async Task<IReadOnlyList<Session>> GetForInstanceAsync(string instanceId)
@@ -172,8 +178,16 @@ public sealed class DapperSessionRepository(IDbConnectionFactory connectionFacto
     {
         using var conn = connectionFactory.CreateConnection();
         await conn.ExecuteAsync(
-            "UPDATE sessions SET instance_id = @InstanceId, status = 'active', stopped_at = NULL WHERE id = @Id",
+            "UPDATE sessions SET instance_id = @InstanceId, status = 'active', stopped_at = NULL, lifecycle_status = 'running', activity_status = NULL WHERE id = @Id",
             new { Id = id, InstanceId = instanceId });
+    }
+
+    public async Task UpdateResumeTokenAsync(string id, string resumeToken)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteAsync(
+            "UPDATE sessions SET harness_resume_token = @ResumeToken WHERE id = @Id",
+            new { Id = id, ResumeToken = resumeToken });
     }
 
     public async Task<IReadOnlyList<Session>> GetActiveChildrenAsync(string parentDbId)
@@ -241,7 +255,7 @@ public sealed class DapperSessionRepository(IDbConnectionFactory connectionFacto
     {
         using var conn = connectionFactory.CreateConnection();
         return await conn.ExecuteAsync(
-            "UPDATE sessions SET status = 'stopped', stopped_at = @StoppedAt WHERE status NOT IN @TerminalStatuses",
+            "UPDATE sessions SET status = 'stopped', stopped_at = @StoppedAt, lifecycle_status = 'stopped' WHERE status NOT IN @TerminalStatuses",
             new { StoppedAt = stoppedAt, TerminalStatuses });
     }
 
