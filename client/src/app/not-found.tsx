@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "react-router";
 
 export default function NotFound() {
   return (
@@ -8,7 +8,7 @@ export default function NotFound() {
         The page you&apos;re looking for doesn&apos;t exist.
       </p>
       <Link
-        href="/"
+        to="/"
         className="text-sm text-primary underline underline-offset-4 hover:text-primary/80"
       >
         Back to Fleet

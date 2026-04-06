@@ -1,4 +1,3 @@
-"use client";
 
 /** Format large numbers with abbreviations (e.g. 12345 → "12.3k"). */
 function formatTokenCount(count: number): string {

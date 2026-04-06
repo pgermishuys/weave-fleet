@@ -1,4 +1,3 @@
-"use client";
 
 import { Header } from "@/components/layout/header";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";

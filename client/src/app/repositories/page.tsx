@@ -1,6 +1,5 @@
-"use client";
 
-import Link from "next/link";
+import { Link } from "react-router";
 import { FolderGit2 } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { useRepositories } from "@/hooks/use-repositories";
@@ -23,7 +22,7 @@ export default function RepositoriesPage() {
             </p>
             <p className="text-xs text-muted-foreground/70">
               Configure workspace roots in{" "}
-              <Link href="/settings" className="underline hover:text-foreground">
+              <Link to="/settings" className="underline hover:text-foreground">
                 Settings &rsaquo; Repositories
               </Link>
               .

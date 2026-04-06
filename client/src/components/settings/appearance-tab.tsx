@@ -1,4 +1,3 @@
-"use client";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeSwitcher } from "@/components/settings/theme-switcher";

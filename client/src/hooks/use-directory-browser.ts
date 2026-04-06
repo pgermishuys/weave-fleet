@@ -1,4 +1,3 @@
-"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import type { DirectoryEntry, DirectoryListResponse } from "@/lib/api-types";

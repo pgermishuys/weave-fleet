@@ -1,8 +1,7 @@
-"use client";
 
 import { useCallback, useRef, useState } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link } from "react-router";
+import { useLocation } from "react-router";
 import { LayoutGrid, AlertTriangle, Plus, FolderPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -19,7 +18,7 @@ import { CreateProjectDialog } from "@/components/fleet/create-project-dialog";
 import { groupSessionsByProject } from "@/lib/workspace-utils";
 
 export function FleetPanel() {
-  const pathname = usePathname();
+  const { pathname } = useLocation();
   const { sessions, error, refetch } = useSessionsContext();
   const { projects, refetch: refetchProjects } = useProjects();
   const currentDirectory = useCurrentSessionDirectory();
@@ -119,7 +118,7 @@ export function FleetPanel() {
       >
         {/* All Sessions link */}
         <Link
-          href="/"
+          to="/"
           data-all-sessions
           tabIndex={0}
           className="flex flex-1 items-center gap-1 min-w-0"

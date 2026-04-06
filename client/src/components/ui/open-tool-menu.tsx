@@ -1,4 +1,3 @@
-"use client";
 
 import { ExternalLink, Loader2 } from "lucide-react";
 import type { OpenTool } from "@/hooks/use-open-directory";

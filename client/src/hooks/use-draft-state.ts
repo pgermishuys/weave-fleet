@@ -1,4 +1,3 @@
-"use client";
 
 import { useCallback, useEffect, useRef } from "react";
 import { usePersistedState, removePersistedKey } from "./use-persisted-state";

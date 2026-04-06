@@ -4,7 +4,7 @@
  * Priority order for API base URL:
  *   1. Runtime override via `setApiBase(url)` (highest priority)
  *   2. `window.__WEAVE_API_BASE__` — injected by backend via <script> tag
- *   3. Build-time `NEXT_PUBLIC_API_BASE_URL` env var
+ *   3. Build-time `VITE_API_BASE_URL` env var
  *   4. Empty string — relative URLs / same-origin mode (default)
  */
 
@@ -26,7 +26,7 @@ function getApiBase(): string {
     return ((window as { __WEAVE_API_BASE__?: string }).__WEAVE_API_BASE__ as string).replace(/\/$/, "");
   }
   // Fallback to build-time env var
-  return (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
+  return (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 }
 
 /**

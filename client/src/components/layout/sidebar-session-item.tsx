@@ -1,8 +1,7 @@
-"use client";
 
 import React, { useState, useCallback } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { Link } from "react-router";
+import { useNavigate } from "react-router";
 import { Copy, FolderOpen, GitFork, OctagonX, Pencil, Play, Square, StopCircle, Trash2, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -40,7 +39,7 @@ interface SidebarSessionItemProps {
 
 export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item, isActive, isChild = false, refetch, userProjects = [] }: SidebarSessionItemProps) {
   const { instanceId, session, activityStatus, lifecycleStatus } = item;
-  const router = useRouter();
+  const navigate = useNavigate();
   const { renameSession } = useRenameSession();
   const { patchSessionTitle } = useSessionsContext();
   const { terminateSession } = useTerminateSession();
@@ -129,14 +128,14 @@ export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item,
     try {
       const result = await resumeSession(session.id);
       refetch();
-      router.push(
+      navigate(
         `/sessions/${encodeURIComponent(result.session.id)}?instanceId=${encodeURIComponent(result.instanceId)}`
       );
     } catch {
       // error surfaced inside useResumeSession
       refetch();
     }
-  }, [resumeSession, session.id, router, refetch]);
+  }, [resumeSession, session.id, navigate, refetch]);
 
   const handleCopyId = useCallback(() => {
     navigator.clipboard.writeText(session.id).catch(() => {});
@@ -166,7 +165,7 @@ export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item,
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <Link
-            href={`/sessions/${encodeURIComponent(session.id)}?instanceId=${encodeURIComponent(instanceId)}`}
+            to={`/sessions/${encodeURIComponent(session.id)}?instanceId=${encodeURIComponent(instanceId)}`}
             data-tree-leaf
             tabIndex={0}
             onClick={(e) => {

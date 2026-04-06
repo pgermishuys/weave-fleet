@@ -1,4 +1,3 @@
-"use client";
 
 import { useTheme, ALL_THEMES, THEME_LABELS, type Theme } from "@/contexts/theme-context";
 import { cn } from "@/lib/utils";

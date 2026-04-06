@@ -1,4 +1,3 @@
-"use client";
 
 import { useState, useCallback } from "react";
 import { Globe, ChevronRight, ChevronDown, Copy, Check, Loader2, X } from "lucide-react";

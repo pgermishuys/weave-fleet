@@ -1,4 +1,3 @@
-"use client";
 
 import { Header } from "@/components/layout/header";
 import { mockPipelines, getStatusColor } from "@/lib/mock-data";

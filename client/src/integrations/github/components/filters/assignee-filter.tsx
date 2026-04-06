@@ -1,4 +1,3 @@
-"use client";
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -109,7 +108,6 @@ export function AssigneeFilter({
                           isSelected ? "opacity-100" : "opacity-0"
                         )}
                       />
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={user.avatar_url}
                         alt=""

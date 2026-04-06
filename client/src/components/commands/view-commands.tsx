@@ -1,4 +1,3 @@
-"use client";
 
 import { useEffect, useCallback } from "react";
 import { PanelLeftClose, Palette, Filter, Maximize, ZoomIn, ZoomOut, Sun, Moon } from "lucide-react";

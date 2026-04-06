@@ -1,12 +1,9 @@
-"use client";
-
-import Image from "next/image";
 
 export default function WelcomePage() {
   return (
     <div className="flex flex-col items-center justify-center h-full p-4 sm:p-8">
       <div className="flex flex-col items-center gap-4 max-w-md text-center">
-        <Image
+        <img
           src="/weave_logo.png"
           alt="Weave"
           width={72}
@@ -26,7 +23,7 @@ export default function WelcomePage() {
           started, or create a new session.
         </p>
         <p className="mt-6 text-[10px] text-muted-foreground/50">
-          v{process.env.NEXT_PUBLIC_APP_VERSION} · {process.env.NEXT_PUBLIC_COMMIT_SHA}
+          v{import.meta.env.VITE_APP_VERSION} · {import.meta.env.VITE_COMMIT_SHA}
         </p>
       </div>
     </div>

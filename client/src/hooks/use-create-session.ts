@@ -1,4 +1,3 @@
-"use client";
 
 import { useState, useCallback } from "react";
 import type { CreateSessionRequest, CreateSessionResponse } from "@/lib/api-types";

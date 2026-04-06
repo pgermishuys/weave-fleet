@@ -1,4 +1,3 @@
-"use client";
 
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import { useSendPrompt } from "@/hooks/use-send-prompt";

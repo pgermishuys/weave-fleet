@@ -1,4 +1,3 @@
-"use client";
 
 import { useEffect, useCallback, useState } from "react";
 import { Loader2, FolderOpen, ExternalLink } from "lucide-react";

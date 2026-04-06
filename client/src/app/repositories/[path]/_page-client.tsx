@@ -1,6 +1,5 @@
-"use client";
 
-import { usePathname } from "next/navigation";
+import { useParams } from "react-router";
 import {
   Calendar,
   Clock,
@@ -19,10 +18,8 @@ import { formatRelativeTime } from "@/lib/format-utils";
 import { RepositorySummary } from "@/components/repositories/repository-summary";
 
 export default function RepositoryDetailPage() {
-  const pathname = usePathname();
-  // Parse path from URL (/repositories/{path}) instead of server params,
-  // which contain the template placeholder "_" from the RSC payload.
-  const repoPath = decodeURIComponent(pathname.split("/").filter(Boolean)[1] ?? "");
+  const { path } = useParams();
+  const repoPath = decodeURIComponent(path ?? "");
 
   const repoName = repoPath.split(/[\\/]/).filter(Boolean).at(-1) ?? repoPath;
   const { detail, isLoading, error } = useRepositoryDetail(repoPath);

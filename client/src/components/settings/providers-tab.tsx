@@ -1,4 +1,3 @@
-"use client";
 
 import { Loader2, Plug, Wifi, WifiOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";

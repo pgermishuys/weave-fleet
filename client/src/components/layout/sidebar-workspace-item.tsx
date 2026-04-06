@@ -1,8 +1,7 @@
-"use client";
 
 import React, { useState, useCallback } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { Link } from "react-router";
+import { useSearchParams } from "react-router";
 import { Pencil, Pin, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -46,7 +45,7 @@ export const SidebarWorkspaceItem = React.memo(function SidebarWorkspaceItem({
   refetch,
   userProjects = [],
 }: SidebarWorkspaceItemProps) {
-  const searchParams = useSearchParams();
+  const [searchParams] = useSearchParams();
   const workspaceFilter = searchParams.get("workspace");
   const isActiveWorkspace = workspaceFilter
     ? group.sessions.some((s) => s.workspaceId === workspaceFilter)
@@ -126,7 +125,7 @@ export const SidebarWorkspaceItem = React.memo(function SidebarWorkspaceItem({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link
-                  href={`/?workspace=${encodeURIComponent(group.workspaceId)}`}
+                  to={`/?workspace=${encodeURIComponent(group.workspaceId)}`}
                   className="flex-1 min-w-0"
                   onClick={(e) => {
                     if (isRenaming) {

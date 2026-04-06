@@ -1,4 +1,3 @@
-"use client";
 
 import { useEffect, useRef } from "react";
 import { Search, User, Bot, Wrench, X, ChevronDown } from "lucide-react";

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "react-router";
 import { Session } from "@/lib/types";
 import { formatTokens, formatCost, getStatusDot, formatRelativeTime } from "@/lib/format-utils";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -61,7 +61,7 @@ export function SessionCard({ session }: SessionCardProps) {
     : 0;
 
   return (
-    <Link href={`/sessions/${session.id}`}>
+    <Link to={`/sessions/${session.id}`}>
       <Card className="transition-all hover:border-foreground/20 hover:shadow-md cursor-pointer group">
         <CardHeader className="pb-2 pt-4 px-4">
           <div className="flex items-start justify-between">

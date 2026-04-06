@@ -1,7 +1,6 @@
-"use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link } from "react-router";
+import { useLocation } from "react-router";
 import { Github, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -20,7 +19,7 @@ import { useBookmarkedRepos } from "@/integrations/github/hooks/use-bookmarked-r
 import { AddRepoDialog } from "@/integrations/github/components/add-repo-dialog";
 
 export function GitHubPanel() {
-  const pathname = usePathname();
+  const { pathname } = useLocation();
   const { connectedIntegrations } = useIntegrationsContext();
   const { repos, removeRepo, error } = useBookmarkedRepos();
   const isGitHubConnected = connectedIntegrations.some((i) => i.id === "github");
@@ -39,7 +38,7 @@ export function GitHubPanel() {
         )}
       >
         <Link
-          href="/github"
+          to="/github"
           className="flex flex-1 items-center gap-1 min-w-0"
         >
           <Github className="h-4 w-4 shrink-0" />
@@ -87,7 +86,7 @@ export function GitHubPanel() {
               <ContextMenu key={repo.fullName}>
                 <ContextMenuTrigger asChild>
                   <Link
-                    href={repoPath}
+                    to={repoPath}
                     className={cn(
                       "flex items-center gap-2 rounded-md pl-6 pr-3 py-1.5 text-xs transition-colors",
                       isActive

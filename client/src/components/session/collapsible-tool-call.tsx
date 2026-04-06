@@ -1,4 +1,3 @@
-"use client";
 
 import { useState } from "react";
 import { SquareTerminal, X, Loader2, ChevronRight, ChevronDown, Copy, Check } from "lucide-react";

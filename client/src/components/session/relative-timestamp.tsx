@@ -1,4 +1,3 @@
-"use client";
 
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { formatTimestamp, formatRelativeTime } from "@/lib/format-utils";

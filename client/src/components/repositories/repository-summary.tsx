@@ -1,4 +1,3 @@
-"use client";
 
 import { BookOpen, GitBranch, GitCommit, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";

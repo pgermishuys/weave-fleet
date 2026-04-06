@@ -1,4 +1,3 @@
-"use client";
 
 import { createRepoMetadataCache, type RepoMetadataCacheResult } from "./create-repo-metadata-cache";
 import type { GitHubLabel } from "../types";

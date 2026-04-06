@@ -1,4 +1,3 @@
-"use client";
 
 import { CheckCircle2, Circle, ClipboardList, Loader2, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";

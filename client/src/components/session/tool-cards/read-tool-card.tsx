@@ -1,4 +1,3 @@
-"use client";
 
 import { useState, useCallback, useMemo } from "react";
 import { FileText, ChevronRight, ChevronDown, Copy, Check, Loader2, X } from "lucide-react";

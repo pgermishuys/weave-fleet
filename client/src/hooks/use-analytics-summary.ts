@@ -1,4 +1,3 @@
-"use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { AnalyticsSummary } from "@/lib/api-types";

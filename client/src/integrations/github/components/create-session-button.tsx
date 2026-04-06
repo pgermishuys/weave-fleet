@@ -1,7 +1,6 @@
-"use client";
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -80,7 +79,7 @@ interface CreateSessionButtonProps {
 }
 
 export function CreateSessionButton({ contextSource, directory: defaultDir }: CreateSessionButtonProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [directory, setDirectory] = usePersistedState("weave:new-session:lastDirectory", defaultDir ?? "");
 
@@ -343,14 +342,14 @@ export function CreateSessionButton({ contextSource, directory: defaultDir }: Cr
         });
         setOpen(false);
         refetch();
-        router.push(
+        navigate(
           `/sessions/${encodeURIComponent(session.id)}?instanceId=${encodeURIComponent(instanceId)}`
         );
       } catch {
         // error is set by useCreateSession
       }
     },
-    [effectiveDirectory, isLoading, title, effectiveIsolation, effectiveBranch, contextSource, createSession, refetch, router]
+    [effectiveDirectory, isLoading, title, effectiveIsolation, effectiveBranch, contextSource, createSession, refetch, navigate]
   );
 
   // ── Open/close management ───────────────────────────────────────────────

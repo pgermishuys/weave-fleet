@@ -1,6 +1,5 @@
-"use client";
 
-import { usePathname } from "next/navigation";
+import { useParams } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { CircleDot, GitPullRequest } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -13,12 +12,9 @@ import { useGitHubPulls } from "@/integrations/github/hooks/use-github-pulls";
 import { DEFAULT_ISSUE_FILTER } from "@/integrations/github/types";
 
 export default function GitHubRepoPage() {
-  const pathname = usePathname();
-  // Parse owner/repo from URL (/github/{owner}/{repo}) instead of server
-  // params, which contain the template placeholder "_" from the RSC payload.
-  const segments = pathname.split("/").filter(Boolean);
-  const owner = decodeURIComponent(segments[1] ?? "");
-  const repo = decodeURIComponent(segments[2] ?? "");
+  const { owner: ownerParam, repo: repoParam } = useParams();
+  const owner = decodeURIComponent(ownerParam ?? "");
+  const repo = decodeURIComponent(repoParam ?? "");
   const { connectedIntegrations } = useIntegrationsContext();
   const isGitHubConnected = connectedIntegrations.some((i) => i.id === "github");
 

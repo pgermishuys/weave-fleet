@@ -1,7 +1,6 @@
-"use client";
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DirectoryPicker } from "@/components/session/directory-picker";
@@ -68,7 +67,7 @@ interface NewSessionDialogProps {
 }
 
 export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, defaultDirectory, userProjects: userProjectsProp }: NewSessionDialogProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [internalOpen, setInternalOpen] = useState(false);
   const [directory, setDirectory] = usePersistedState("weave:new-session:lastDirectory", "");
 
@@ -353,7 +352,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
       });
       setOpen(false);
       refetch();
-      router.push(
+      navigate(
         `/sessions/${encodeURIComponent(session.id)}?instanceId=${encodeURIComponent(instanceId)}`
       );
     } catch {

@@ -1,7 +1,6 @@
-"use client";
 
 import React from "react";
-import Link from "next/link";
+import { Link } from "react-router";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -77,7 +76,7 @@ export const LiveSessionCard = React.memo(function LiveSessionCard({
 
   const cardContent = (
     <div className={`relative group ${isInactive ? "opacity-60" : ""}`} data-testid="session-card" data-session-id={session.id}>
-      <Link href={`/sessions/${encodeURIComponent(session.id)}?instanceId=${encodeURIComponent(instanceId)}`}>
+      <Link to={`/sessions/${encodeURIComponent(session.id)}?instanceId=${encodeURIComponent(instanceId)}`}>
         <Card className="transition-all hover:border-foreground/20 hover:shadow-md cursor-pointer">
           <CardHeader className="pb-2 pt-4 px-4">
             <div className="flex items-start justify-between">

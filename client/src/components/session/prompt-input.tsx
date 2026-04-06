@@ -1,4 +1,3 @@
-"use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
@@ -416,7 +415,6 @@ export function PromptInput({
         <div className="flex gap-2 flex-wrap px-1">
           {pendingAttachments.map((att) => (
             <div key={att.id} className="relative group">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={att.previewUrl}
                 alt={att.filename}

@@ -1,5 +1,3 @@
-"use client";
-
 import { SessionsProvider } from "@/contexts/sessions-context";
 import { SidebarProvider } from "@/contexts/sidebar-context";
 import { KeybindingsProvider } from "@/contexts/keybindings-context";

@@ -1,4 +1,3 @@
-"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { FolderGit2, Loader2, Plus, Trash2 } from "lucide-react";
@@ -168,7 +167,6 @@ export function RepositoriesTab() {
       {/* Add directory */}
       <div className="space-y-2">
         <h3 className="text-sm font-semibold">Add directory</h3>
-        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
         <div
           className="flex gap-2 items-start"
           onKeyDown={handleKeyDown}

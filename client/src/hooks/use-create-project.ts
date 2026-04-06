@@ -1,4 +1,3 @@
-"use client";
 
 import { useState } from "react";
 import type { CreateProjectRequest, ProjectResponse } from "@/lib/api-types";

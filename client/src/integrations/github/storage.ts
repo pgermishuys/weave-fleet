@@ -1,4 +1,3 @@
-"use client";
 
 import { removePersistedKey } from "@/hooks/use-persisted-state";
 

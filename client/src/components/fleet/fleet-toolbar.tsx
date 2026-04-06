@@ -1,4 +1,3 @@
-"use client";
 
 import { useEffect } from "react";
 import { Search, Group, ArrowUpDown, Check } from "lucide-react";

@@ -1,22 +1,25 @@
 import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
+import tseslint from "typescript-eslint";
+import reactPlugin from "eslint-plugin-react";
+import reactHooksPlugin from "eslint-plugin-react-hooks";
 
 const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-  // Override default ignores of eslint-config-next.
+  ...tseslint.configs.recommended,
+  {
+    plugins: { react: reactPlugin },
+    settings: { react: { version: "detect" } },
+  },
+  {
+    plugins: { "react-hooks": reactHooksPlugin },
+    rules: reactHooksPlugin.configs.recommended.rules,
+  },
   globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
     // Weave internal files (plans, spikes, state):
     ".weave/**",
     // Build artifacts:
-    "cli.js",
     "dist/**",
+    // Stale Next.js build cache (delete with task 35):
+    ".next/**",
   ]),
 ]);
 

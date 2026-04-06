@@ -1,7 +1,6 @@
-"use client";
 
 import { useState, type ReactNode } from "react";
-import Link from "next/link";
+import { Link } from "react-router";
 import { Loader2, Lock, Star } from "lucide-react";
 import {
   Dialog,
@@ -62,7 +61,7 @@ export function AddRepoDialog({ trigger }: AddRepoDialogProps) {
             <p>
               Go to{" "}
               <Link
-                href="/settings?tab=integrations"
+                to="/settings?tab=integrations"
                 className="underline hover:text-foreground"
                 onClick={() => setOpen(false)}
               >

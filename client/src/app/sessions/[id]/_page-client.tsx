@@ -1,6 +1,5 @@
-"use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { Header } from "@/components/layout/header";
 import { ActivityStreamV1 } from "@/components/session/activity-stream-v1";
 import { PromptInput } from "@/components/session/prompt-input";
@@ -41,7 +40,7 @@ import { SlashCommandProvider } from "@/contexts/slash-command-context";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import type { SelectedModel } from "@/components/session/model-selector";
 import type { ImageAttachment } from "@/lib/api-types";
-import Link from "next/link";
+import { Link } from "react-router";
 
 interface AncestorInfo {
   id: string;
@@ -60,14 +59,11 @@ interface SessionMetadata {
 }
 
 export default function SessionDetailPage() {
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
+  const [searchParams] = useSearchParams();
+  const { id: sessionIdParam } = useParams();
 
-  // Parse the session ID from the URL pathname instead of useParams().
-  // The Go server serves template RSC payloads (generated for the placeholder
-  // "_") for all dynamic session IDs, so useParams() returns "_" rather than
-  // the real ID from the URL.
-  const sessionId = decodeURIComponent(pathname.split("/")[2] ?? "");
+  // Use React Router params instead of pathname parsing
+  const sessionId = decodeURIComponent(sessionIdParam ?? "");
   const instanceId = searchParams.get("instanceId") ?? "";
 
   // Subscribe to sessions context so optimistic title patches (from rename)
@@ -103,7 +99,7 @@ export default function SessionDetailPage() {
   const { abortSession, isAborting } = useAbortSession();
   const { resumeSession, isResuming } = useResumeSession();
   const { deleteSession: permanentDelete, isDeleting } = useDeleteSession();
-  const router = useRouter();
+  const navigate = useNavigate();
   const { diffs, isLoading: diffsLoading, error: diffsError, fetchDiffs } = useDiffs(sessionId, instanceId);
   const [isStopped, setIsStopped] = useState(false);
   const [stopConfirm, setStopConfirm] = useState(false);
@@ -516,22 +512,23 @@ export default function SessionDetailPage() {
   const handleResume = useCallback(async () => {
     try {
       const result = await resumeSession(sessionId);
-      router.replace(
-        `/sessions/${encodeURIComponent(result.session.id)}?instanceId=${encodeURIComponent(result.instanceId)}`
+      navigate(
+        `/sessions/${encodeURIComponent(result.session.id)}?instanceId=${encodeURIComponent(result.instanceId)}`,
+        { replace: true }
       );
     } catch {
       // error surfaced via useResumeSession
     }
-  }, [resumeSession, router, sessionId]);
+  }, [resumeSession, navigate, sessionId]);
 
   const handlePermanentDelete = useCallback(async () => {
     try {
       await permanentDelete(sessionId, instanceId);
-      router.push("/");
+      navigate("/");
     } catch {
       // error surfaced via useDeleteSession
     }
-  }, [permanentDelete, router, sessionId, instanceId]);
+  }, [permanentDelete, navigate, sessionId, instanceId]);
 
   if (!instanceId) {
     return (
@@ -735,7 +732,7 @@ export default function SessionDetailPage() {
           {metadata.ancestors && metadata.ancestors.length > 0 && (
             <div className="flex items-center gap-1.5 px-4 py-1.5 text-xs text-muted-foreground border-b border-border/40 overflow-x-auto">
               <Link
-                href={(() => {
+                to={(() => {
                   const parent = metadata.ancestors!.at(-1);
                   return parent
                     ? `/sessions/${encodeURIComponent(parent.id)}?instanceId=${encodeURIComponent(parent.instanceId)}`
@@ -749,7 +746,7 @@ export default function SessionDetailPage() {
                 <Fragment key={ancestor.id}>
                   {i > 0 && <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/50" />}
                   <Link
-                    href={`/sessions/${encodeURIComponent(ancestor.id)}?instanceId=${encodeURIComponent(ancestor.instanceId)}`}
+                    to={`/sessions/${encodeURIComponent(ancestor.id)}?instanceId=${encodeURIComponent(ancestor.instanceId)}`}
                     className="shrink-0 hover:text-foreground transition-colors truncate max-w-[200px]"
                     title={ancestor.title}
                   >

@@ -1,7 +1,6 @@
-"use client";
 
 import { useCallback, useMemo, useState, useDeferredValue, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useNavigate, useSearchParams } from "react-router";
 import { Header, NewSessionButton } from "@/components/layout/header";
 import { SummaryBar } from "@/components/fleet/summary-bar";
 import { FleetToolbar } from "@/components/fleet/fleet-toolbar";
@@ -34,8 +33,8 @@ function FleetPageInner() {
   const { deleteSession, isDeleting } = useDeleteSession();
   const { openDirectory } = useOpenDirectory();
   const { isFolded } = useFoldableScreen();
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const workspaceFilter = searchParams.get("workspace");
 
   const [deleteTarget, setDeleteTarget] = useState<{
@@ -80,14 +79,14 @@ function FleetPageInner() {
   const handleResume = useCallback(async (sessionId: string) => {
     try {
       const result = await resumeSession(sessionId);
-      router.push(
+      navigate(
         `/sessions/${encodeURIComponent(result.session.id)}?instanceId=${encodeURIComponent(result.instanceId)}`
       );
     } catch {
       // error surfaced inside useResumeSession
       refetch();
     }
-  }, [resumeSession, router, refetch]);
+  }, [resumeSession, navigate, refetch]);
 
   const handleDeleteRequest = useCallback((sessionId: string, instanceId: string) => {
     const item = sessions.find((s) => s.session.id === sessionId);

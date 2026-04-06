@@ -1,4 +1,3 @@
-"use client";
 
 import { useState, useCallback, useMemo, type KeyboardEvent, type RefObject } from "react";
 import { useCommands } from "@/hooks/use-commands";

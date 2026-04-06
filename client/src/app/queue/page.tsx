@@ -1,4 +1,3 @@
-"use client";
 
 import { Header } from "@/components/layout/header";
 import { mockQueueItems, formatCost, formatTokens, formatDuration, getStatusColor, getStatusDot } from "@/lib/mock-data";

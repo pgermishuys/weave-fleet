@@ -1,7 +1,6 @@
-"use client";
 
 import { useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router";
 import { Loader2, AlertCircle, GitFork } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +28,7 @@ export function ForkSessionDialog({
   open,
   onOpenChange,
 }: ForkSessionDialogProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const { forkSession, clearError, isForking, error } = useForkSession();
   const { refetch } = useSessionsContext();
@@ -53,7 +52,7 @@ export function ForkSessionDialog({
       });
       handleClose(false);
       refetch();
-      router.push(
+      navigate(
         `/sessions/${encodeURIComponent(session.id)}?instanceId=${encodeURIComponent(instanceId)}`
       );
     } catch {

@@ -1,4 +1,3 @@
-"use client";
 
 import { createContext, useContext, useEffect } from "react";
 import { usePersistedState } from "@/hooks/use-persisted-state";

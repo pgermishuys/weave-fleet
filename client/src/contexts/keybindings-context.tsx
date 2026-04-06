@@ -1,4 +1,3 @@
-"use client";
 
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import { usePersistedState } from "@/hooks/use-persisted-state";

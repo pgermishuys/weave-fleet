@@ -1,4 +1,3 @@
-"use client";
 
 import { Suspense } from "react";
 import { Wifi, WifiOff, RefreshCw, Loader2 } from "lucide-react";

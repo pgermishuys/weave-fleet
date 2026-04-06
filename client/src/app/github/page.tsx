@@ -1,6 +1,5 @@
-"use client";
 
-import Link from "next/link";
+import { Link } from "react-router";
 import { Github } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { useIntegrationsContext } from "@/contexts/integrations-context";
@@ -41,7 +40,7 @@ export default function GitHubPage() {
             {repos.map((repo) => (
               <Link
                 key={repo.fullName}
-                href={`/github/${repo.owner}/${repo.name}`}
+                to={`/github/${repo.owner}/${repo.name}`}
                 className="group flex flex-col gap-1 rounded-lg border border-border bg-card p-4 hover:bg-accent/50 transition-colors"
               >
                 <div className="flex items-center gap-2">

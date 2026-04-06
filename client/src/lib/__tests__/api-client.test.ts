@@ -1,16 +1,20 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 // We need to test with different env var values, so we re-import the module
-// after manipulating the env. Vitest's module cache must be reset between tests.
+// after stubbing the env. Vitest's module cache must be reset between tests.
 
 describe("api-client", () => {
   beforeEach(() => {
     vi.resetModules();
   });
 
-  describe("when NEXT_PUBLIC_API_BASE_URL is unset", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  describe("when VITE_API_BASE_URL is unset", () => {
     beforeEach(() => {
-      delete process.env.NEXT_PUBLIC_API_BASE_URL;
+      vi.stubEnv("VITE_API_BASE_URL", "");
     });
 
     it("apiUrl returns the path unchanged", async () => {
@@ -37,9 +41,9 @@ describe("api-client", () => {
     });
   });
 
-  describe("when NEXT_PUBLIC_API_BASE_URL is set", () => {
+  describe("when VITE_API_BASE_URL is set", () => {
     beforeEach(() => {
-      process.env.NEXT_PUBLIC_API_BASE_URL = "http://localhost:3000";
+      vi.stubEnv("VITE_API_BASE_URL", "http://localhost:3000");
     });
 
     it("apiUrl prepends the base URL", async () => {
@@ -71,9 +75,9 @@ describe("api-client", () => {
     });
   });
 
-  describe("when NEXT_PUBLIC_API_BASE_URL has a trailing slash", () => {
+  describe("when VITE_API_BASE_URL has a trailing slash", () => {
     beforeEach(() => {
-      process.env.NEXT_PUBLIC_API_BASE_URL = "http://localhost:3000/";
+      vi.stubEnv("VITE_API_BASE_URL", "http://localhost:3000/");
     });
 
     it("apiUrl strips the trailing slash before prepending", async () => {

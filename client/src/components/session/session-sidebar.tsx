@@ -1,4 +1,3 @@
-"use client";
 
 import { Session } from "@/lib/types";
 import { formatTokens, formatCost, getStatusDot } from "@/lib/mock-data";

@@ -1,4 +1,3 @@
-"use client";
 
 import type { AnalyticsTopItem } from "@/lib/api-types";
 import { formatLargeNumber, formatAnalyticsCost } from "@/lib/format-utils";

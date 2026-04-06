@@ -1,7 +1,6 @@
-"use client";
 
 import { useEffect, useCallback } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useNavigate, useLocation } from "react-router";
 import { LayoutGrid, Settings, ChevronRight, ChevronLeft, Clock, List } from "lucide-react";
 import { useCommandRegistry } from "@/contexts/command-registry-context";
 import { useKeybindings } from "@/contexts/keybindings-context";
@@ -11,12 +10,11 @@ export function NavigationCommands() {
   const { registerCommand, unregisterCommand } = useCommandRegistry();
   const { bindings } = useKeybindings();
   const { sessions } = useSessionsContext();
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
 
-  const goToFleet = useCallback(() => router.push("/"), [router]);
-  const goToSettings = useCallback(() => router.push("/settings"), [router]);
+  const goToFleet = useCallback(() => navigate("/"), [navigate]);
+  const goToSettings = useCallback(() => navigate("/settings"), [navigate]);
 
   // Navigate to next/previous session based on current position in session list
   const navigateSession = useCallback(
@@ -34,11 +32,11 @@ export function NavigationCommands() {
           ? (currentIndex + 1) % sessions.length
           : (currentIndex - 1 + sessions.length) % sessions.length;
       const target = sessions[targetIndex];
-      router.push(
+      navigate(
         `/sessions/${encodeURIComponent(target.session.id)}?instanceId=${encodeURIComponent(target.instanceId)}`
       );
     },
-    [sessions, pathname, router]
+    [sessions, pathname, navigate]
   );
 
   const goToNextSession = useCallback(() => navigateSession("next"), [navigateSession]);
@@ -46,10 +44,10 @@ export function NavigationCommands() {
   const goToMostRecent = useCallback(() => {
     if (sessions.length === 0) return;
     const target = sessions[0]; // sessions are sorted by most recent
-    router.push(
+    navigate(
       `/sessions/${encodeURIComponent(target.session.id)}?instanceId=${encodeURIComponent(target.instanceId)}`
     );
-  }, [sessions, router]);
+  }, [sessions, navigate]);
 
   useEffect(() => {
     registerCommand({
@@ -118,7 +116,7 @@ export function NavigationCommands() {
           icon: List,
           category: "Navigation" as const,
           action: () =>
-            router.push(
+            navigate(
               `/sessions/${encodeURIComponent(s.session.id)}?instanceId=${encodeURIComponent(s.instanceId)}`
             ),
         })),

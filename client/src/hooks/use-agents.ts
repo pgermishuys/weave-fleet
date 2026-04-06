@@ -1,4 +1,3 @@
-"use client";
 
 import { useState, useEffect } from "react";
 import type { AutocompleteAgent } from "@/lib/api-types";

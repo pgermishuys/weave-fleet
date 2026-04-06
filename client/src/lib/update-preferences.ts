@@ -1,4 +1,3 @@
-"use client";
 
 import { usePersistedState } from "@/hooks/use-persisted-state";
 

@@ -1,4 +1,3 @@
-"use client";
 
 import { useCallback, useRef, useState } from "react";
 import type { AccumulatedMessage } from "@/lib/api-types";

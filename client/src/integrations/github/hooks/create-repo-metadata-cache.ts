@@ -1,4 +1,3 @@
-"use client";
 
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { apiFetch } from "@/lib/api-client";

@@ -1,7 +1,6 @@
-"use client";
 
 import { memo, useMemo, useCallback, useEffect, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams } from "react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +11,7 @@ import { useActivityFilter } from "@/hooks/use-activity-filter";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart, AutocompleteAgent } from "@/lib/api-types";
 import { isTaskToolCall, getTaskToolInput, getTaskToolSessionId } from "@/lib/api-types";
-import Link from "next/link";
+import { Link } from "react-router";
 import type { SessionConnectionStatus } from "@/hooks/use-session-events";
 import { isTodoWriteTool, parseTodoOutput } from "@/lib/todo-utils";
 import { resolveAgentColor } from "@/lib/agent-colors";
@@ -236,7 +235,7 @@ function TaskDelegationItem({ part, currentSessionId }: { part: AccumulatedToolP
   // and the current page's instanceId — no DB lookup required.
   // Note: the ID may be either a Fleet DB ID or an OpenCode session ID
   // depending on how the child was created; resolveSession handles both.
-  const searchParams = useSearchParams();
+  const [searchParams] = useSearchParams();
   const parentInstanceId = searchParams.get("instanceId");
   const childSessionId = getTaskToolSessionId(part);
 
@@ -290,7 +289,7 @@ function TaskDelegationItem({ part, currentSessionId }: { part: AccumulatedToolP
   if (childUrl) {
     return (
       <Link
-        href={childUrl}
+        to={childUrl}
         className="my-1 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs border-l-2 border-l-indigo-500/60 block hover:bg-muted/50 hover:border-border transition-colors"
       >
         {cardContent}
@@ -454,7 +453,6 @@ const MessageItem = memo(function MessageItem({
                 rel="noopener noreferrer"
                 className="block"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={part.url}
                   alt={part.filename ?? "Image attachment"}

@@ -1,8 +1,7 @@
-"use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link } from "react-router";
+import { useLocation } from "react-router";
 import {
   ChevronRight,
   FolderGit2,
@@ -18,7 +17,7 @@ import {
 import { useRepositories, groupByRoot } from "@/hooks/use-repositories";
 
 export function RepositoriesPanel() {
-  const pathname = usePathname();
+  const { pathname } = useLocation();
   const { repositories, isLoading, error, refresh } = useRepositories();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -79,7 +78,7 @@ export function RepositoriesPanel() {
         )}
       >
         <Link
-          href="/repositories"
+          to="/repositories"
           className="flex flex-1 items-center gap-1 min-w-0"
         >
           <FolderGit2 className="h-4 w-4 shrink-0" />
@@ -133,7 +132,7 @@ export function RepositoriesPanel() {
       {!isLoading && !error && repositories.length === 0 && (
         <p className="px-3 py-2 text-xs text-muted-foreground">
           No repositories found.{" "}
-          <Link href="/settings" className="underline hover:text-foreground">
+          <Link to="/settings" className="underline hover:text-foreground">
             Add workspace roots in Settings &rsaquo; Repositories.
           </Link>
         </p>
@@ -177,7 +176,7 @@ export function RepositoriesPanel() {
                       return (
                         <Link
                           key={repo.path}
-                          href={repoHref}
+                          to={repoHref}
                           className={cn(
                             "flex items-center gap-2 rounded-md pl-6 pr-3 py-1.5 text-xs transition-colors",
                             isActive

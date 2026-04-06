@@ -1,9 +1,7 @@
-"use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import Link from "next/link";
-import Image from "next/image";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Link } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { LayoutGrid, Github, Settings, FolderGit2, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -101,14 +99,14 @@ interface IconRailLinkProps {
 }
 
 function IconRailLink({ icon: Icon, label, href }: IconRailLinkProps) {
-  const pathname = usePathname();
+  const { pathname } = useLocation();
   const isActive = pathname.startsWith(href);
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Link
-          href={href}
+          to={href}
           aria-label={label}
           aria-current={isActive ? "page" : undefined}
           className={cn(
@@ -138,12 +136,12 @@ function VersionBadge() {
     <Tooltip>
       <TooltipTrigger asChild>
         <p className="text-center text-[9px] text-muted-foreground/40 select-none py-1 cursor-default leading-tight">
-          v{process.env.NEXT_PUBLIC_APP_VERSION?.split(".")[0]}
+          v{import.meta.env.VITE_APP_VERSION?.split(".")[0]}
         </p>
       </TooltipTrigger>
       <TooltipContent side="right">
-        v{process.env.NEXT_PUBLIC_APP_VERSION} ·{" "}
-        {process.env.NEXT_PUBLIC_COMMIT_SHA}
+        v{import.meta.env.VITE_APP_VERSION} ·{" "}
+        {import.meta.env.VITE_COMMIT_SHA}
       </TooltipContent>
     </Tooltip>
   );
@@ -153,7 +151,7 @@ function ProfileBadge() {
   const [profile, setProfile] = useState<string | null>(
     () => {
       // Use build-time value as initial hint (avoids flash on dev)
-      const buildTime = process.env.NEXT_PUBLIC_WEAVE_PROFILE;
+      const buildTime = import.meta.env.VITE_WEAVE_PROFILE;
       return buildTime && buildTime !== "default" ? buildTime : null;
     }
   );
@@ -192,9 +190,9 @@ function ProfileBadge() {
 
 export function SidebarIconRail() {
   const { activeView, panelOpen, setActiveView, isMobileNav, setMobileDrawerOpen } = useSidebar();
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const [searchParams] = useSearchParams();
   const isWelcome = activeView === "welcome";
 
   // Full URL including search params (e.g. /sessions/abc?instanceId=xyz)
@@ -248,9 +246,9 @@ export function SidebarIconRail() {
     const target = lastPathByView.current[activeView] ?? VIEW_DEFAULT_ROUTE[activeView];
     // Only navigate if we're not already on a route belonging to this view
     if (viewForPathname(pathname) !== activeView) {
-      router.push(target);
+      navigate(target);
     }
-  }, [activeView, pathname, router]);
+  }, [activeView, pathname, navigate]);
 
   // Switch to a view (used by icon rail buttons)
   const handleSwitch = useCallback(
@@ -293,7 +291,7 @@ export function SidebarIconRail() {
                   className="absolute left-0 top-1/4 h-1/2 w-0.5 rounded-r-sm bg-icon-rail-active"
                 />
               )}
-              <Image
+              <img
                 src="/weave_logo.png"
                 alt="Weave"
                 width={28}

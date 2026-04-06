@@ -1,6 +1,5 @@
-"use client";
 
-import { usePathname, useSearchParams } from "next/navigation";
+import { useLocation, useSearchParams } from "react-router";
 import { useSessionsContext } from "@/contexts/sessions-context";
 
 /**
@@ -11,8 +10,8 @@ import { useSessionsContext } from "@/contexts/sessions-context";
  * project path) over `workspaceDirectory` (the derived worktree path).
  */
 export function useCurrentSessionDirectory(): string | undefined {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const { pathname } = useLocation();
+  const [searchParams] = useSearchParams();
   const { sessions } = useSessionsContext();
 
   // Only match /sessions/<id> routes

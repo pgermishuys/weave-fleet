@@ -1,4 +1,3 @@
-"use client";
 
 import { useCallback, useState } from "react";
 import type { ForkSessionRequest, ForkSessionResponse } from "@/lib/api-types";

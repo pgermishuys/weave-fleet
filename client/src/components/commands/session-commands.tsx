@@ -1,4 +1,3 @@
-"use client";
 
 import { useEffect, useCallback, useState } from "react";
 import { Plus, RefreshCw, OctagonX } from "lucide-react";

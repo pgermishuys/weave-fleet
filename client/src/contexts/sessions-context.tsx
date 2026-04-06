@@ -1,4 +1,3 @@
-"use client";
 
 import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useSessions } from "@/hooks/use-sessions";

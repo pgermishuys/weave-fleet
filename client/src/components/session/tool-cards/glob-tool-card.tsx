@@ -1,4 +1,3 @@
-"use client";
 
 import { useState, useMemo } from "react";
 import { FolderSearch, ChevronRight, ChevronDown, Loader2, Check, X } from "lucide-react";

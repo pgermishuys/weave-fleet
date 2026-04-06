@@ -1,4 +1,3 @@
-"use client";
 
 import type { AccumulatedPart } from "@/lib/api-types";
 import { CollapsibleToolCall } from "../collapsible-tool-call";
