@@ -75,7 +75,7 @@ export default function SessionDetailPage() {
   );
   const contextTitle = contextMatch?.session.title;
 
-  const { sendPrompt, isSending, error: sendError } = useSendPrompt();
+  const { sendPrompt, error: sendError } = useSendPrompt();
   const { agents } = useAgents(instanceId);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const { providers } = useModels(instanceId);
@@ -397,7 +397,6 @@ export default function SessionDetailPage() {
     }
     return { input, output, reasoning };
   }, [messages]);
-  const totalTokens = tokenBreakdown.input + tokenBreakdown.output + tokenBreakdown.reasoning;
   const totalCost = useMemo(
     () => messages.reduce((sum, m) => sum + (m.cost ?? 0), 0),
     [messages]

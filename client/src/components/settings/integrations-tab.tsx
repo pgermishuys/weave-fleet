@@ -55,7 +55,7 @@ function GitHubConnectedActions({
 }
 
 export function IntegrationsTab() {
-  const { connect, disconnect, integrations } = useIntegrationsContext();
+  const { disconnect, integrations } = useIntegrationsContext();
   const manifests = getIntegrations();
 
   const isConnected = (id: string) =>

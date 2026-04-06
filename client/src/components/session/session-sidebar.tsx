@@ -1,8 +1,7 @@
 
 import { Session } from "@/lib/types";
-import { formatTokens, formatCost, getStatusDot } from "@/lib/mock-data";
+import { formatTokens, formatCost } from "@/lib/mock-data";
 import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
   CheckSquare,

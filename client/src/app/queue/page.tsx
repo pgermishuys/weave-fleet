@@ -1,8 +1,8 @@
 
 import { Header } from "@/components/layout/header";
-import { mockQueueItems, formatCost, formatTokens, formatDuration, getStatusColor, getStatusDot } from "@/lib/mock-data";
+import { mockQueueItems, formatCost, formatTokens, formatDuration, getStatusDot } from "@/lib/mock-data";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Clock, Coins, Hash, Play, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
 

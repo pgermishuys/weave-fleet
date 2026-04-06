@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import {
   AlertDialog,
@@ -31,12 +31,13 @@ export function ConfirmDeleteProjectDialog({
   const [mode, setMode] = useState<DeleteProjectMode>("move_to_scratch");
 
   // Reset to the safer default each time the dialog closes
-  useEffect(() => {
-    if (!open) setMode("move_to_scratch");
-  }, [open]);
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) setMode("move_to_scratch");
+    onOpenChange(nextOpen);
+  };
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete Project</AlertDialogTitle>

@@ -187,7 +187,7 @@ export function FleetPanel() {
             No sessions yet
           </p>
         ) : (
-          projectGroups.map((group, idx) => {
+          projectGroups.map((group) => {
             const namedIndex = group.projectId !== null
               ? namedGroups.findIndex((g) => g.projectId === group.projectId)
               : -1;

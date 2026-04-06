@@ -9,7 +9,6 @@ import {
   FileCode,
   Hash,
   Coins,
-  MessageSquare,
   ArrowRight,
 } from "lucide-react";
 

@@ -26,7 +26,7 @@ type ButtonState = "idle" | "executing" | "success" | "error";
  * - The command name is not in the known commands set
  * - The context is disabled (session stopped/errored)
  */
-export function SlashCommandCode({ children, className, ...props }: InlineCodeProps) {
+export function SlashCommandCode({ children, ...props }: InlineCodeProps) {
   const ctx = useSlashCommandContext();
   const [buttonState, setButtonState] = useState<ButtonState>("idle");
 

@@ -35,7 +35,7 @@ jobs:
           restore-keys: nuget-${{ runner.os }}-
 
       - name: Build solution
-        run: dotnet build WeaveFleet.slnx --configuration Release
+        run: dotnet build WeaveFleet.slnx --configuration Release -p:SkipFrontendBuild=true
 
       - name: Run .NET tests
         run: >
