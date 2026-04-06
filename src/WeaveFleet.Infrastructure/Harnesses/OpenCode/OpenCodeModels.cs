@@ -492,6 +492,17 @@ internal sealed record OpenCodeProvidersResponse
 }
 
 // ---------------------------------------------------------------------------
+// Commands
+// ---------------------------------------------------------------------------
+
+/// <summary>Command metadata returned by GET /command.</summary>
+internal sealed record OpenCodeCommandInfo
+{
+    [JsonPropertyName("name")] public required string Name { get; init; }
+    [JsonPropertyName("description")] public string? Description { get; init; }
+}
+
+// ---------------------------------------------------------------------------
 // SSE Events
 // ---------------------------------------------------------------------------
 

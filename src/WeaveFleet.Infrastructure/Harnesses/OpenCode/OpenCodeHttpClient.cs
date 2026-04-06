@@ -179,6 +179,13 @@ internal sealed class OpenCodeHttpClient
         return await GetAsync<IReadOnlyList<OpenCodeAgentInfo>>(url, ct).ConfigureAwait(false) ?? [];
     }
 
+    /// <summary>GET /command?directory={directory}</summary>
+    public async Task<IReadOnlyList<OpenCodeCommandInfo>> GetCommandsAsync(string directory, CancellationToken ct)
+    {
+        var url = BuildUrl("/command", directory);
+        return await GetAsync<IReadOnlyList<OpenCodeCommandInfo>>(url, ct).ConfigureAwait(false) ?? [];
+    }
+
     /// <summary>GET /provider?directory={directory}</summary>
     public async Task<OpenCodeProvidersResponse> GetProvidersAsync(string directory, CancellationToken ct)
     {

@@ -35,13 +35,19 @@ public static class InstanceEndpoints
         .WithName("GetInstanceModels");
 
         // GET /api/instances/{id}/commands — available slash commands
-        group.MapGet("/commands", (string id, InstanceTracker tracker) =>
+        group.MapGet("/commands", async (string id, InstanceTracker tracker, CancellationToken ct) =>
         {
             var instance = tracker.Get(id);
             if (instance is null)
                 return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
 
-            return Results.Ok(new { instanceId = id, commands = Array.Empty<object>() });
+            var commands = await instance.GetCommandsAsync(ct);
+            var result = commands.Select(c => new
+            {
+                name = c.Name,
+                description = c.Description,
+            });
+            return Results.Ok(new { instanceId = id, commands = result });
         })
         .WithName("GetInstanceCommands");
 

@@ -249,6 +249,17 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct)
+    {
+        var commands = await _httpClient.GetCommandsAsync(_workingDirectory, ct).ConfigureAwait(false);
+        return commands.Select(c => new CommandInfo
+        {
+            Name = c.Name,
+            Description = c.Description,
+        }).ToList();
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
     {
         var agents = await _httpClient.GetAgentsAsync(_workingDirectory, ct).ConfigureAwait(false);

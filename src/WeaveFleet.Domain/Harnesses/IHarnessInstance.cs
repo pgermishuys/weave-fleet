@@ -44,6 +44,9 @@ public interface IHarnessInstance : IAsyncDisposable
     /// <summary>List available agents for this instance.</summary>
     Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct);
 
+    /// <summary>List available slash commands for this instance.</summary>
+    Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct);
+
     /// <summary>List available model providers for this instance.</summary>
     Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct);
 }

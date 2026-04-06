@@ -112,6 +112,13 @@ public sealed record AgentInfo
     public string? ModelId { get; init; }
 }
 
+/// <summary>A slash command available for selection in the UI.</summary>
+public sealed record CommandInfo
+{
+    public required string Name { get; init; }
+    public string? Description { get; init; }
+}
+
 /// <summary>A model provider with its available models.</summary>
 public sealed record ProviderInfo
 {
