@@ -63,16 +63,18 @@ public sealed class TestHarnessInstanceTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         // Start subscription BEFORE sending prompt so we don't miss events
-        var eventsTask = CollectEventsAsync(instance, expectedCount: 4, cts.Token);
+        var eventsTask = CollectEventsAsync(instance, expectedCount: 6, cts.Token);
 
         await instance.SendPromptAsync("Hello!", null, cts.Token);
         var events = await eventsTask;
 
-        Assert.Equal(4, events.Count);
-        Assert.Equal("session.busy", events[0].Type);
-        Assert.Equal("message.updated", events[1].Type);
-        Assert.Equal("message.part.updated", events[2].Type);
-        Assert.Equal("session.idle", events[3].Type);
+        Assert.Equal(6, events.Count);
+        Assert.Equal("session.status", events[0].Type);
+        Assert.Equal("message.updated", events[1].Type);   // user message
+        Assert.Equal("message.part.updated", events[2].Type); // user part
+        Assert.Equal("message.updated", events[3].Type);   // assistant message
+        Assert.Equal("message.part.updated", events[4].Type); // assistant part
+        Assert.Equal("session.idle", events[5].Type);
     }
 
     [Fact]
@@ -108,8 +110,8 @@ public sealed class TestHarnessInstanceTests
         var instance = new TestHarnessInstance(sessionId, scenario);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
-        // Collect 8 events (4 per prompt)
-        var eventsTask = CollectEventsAsync(instance, expectedCount: 8, cts.Token);
+        // Collect 12 events (6 per prompt)
+        var eventsTask = CollectEventsAsync(instance, expectedCount: 12, cts.Token);
 
         await instance.SendPromptAsync("First prompt", null, cts.Token);
 
@@ -119,7 +121,7 @@ public sealed class TestHarnessInstanceTests
         await instance.SendPromptAsync("Second prompt", null, cts.Token);
         var events = await eventsTask;
 
-        Assert.Equal(8, events.Count);
+        Assert.Equal(12, events.Count);
     }
 
     // ── AbortAsync cancellation ──────────────────────────────────────────────
@@ -134,7 +136,7 @@ public sealed class TestHarnessInstanceTests
             .WithPromptResponse(b => b
                 .AddEvent(new HarnessEvent
                 {
-                    Type = "session.busy",
+                    Type = "session.status",
                     SessionId = sessionId,
                     Timestamp = DateTimeOffset.UtcNow,
                     Payload = JsonSerializer.SerializeToElement(new { })

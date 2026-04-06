@@ -65,8 +65,8 @@ public sealed class SessionDetailPage(IPage page)
 
     /// <summary>Wait for at least N messages to appear.</summary>
     public async Task WaitForMessageCountAsync(int minimumCount, int timeoutMs = 5_000)
-        => await Assertions.Expect(MessageItems).ToHaveCountAsync(minimumCount,
-            new LocatorAssertionsToHaveCountOptions { Timeout = timeoutMs });
+        => await Assertions.Expect(MessageItems.Nth(minimumCount - 1)).ToBeAttachedAsync(
+            new LocatorAssertionsToBeAttachedOptions { Timeout = timeoutMs });
 
     /// <summary>
     /// Wait for any message item containing the given text to appear.

@@ -81,7 +81,7 @@ public sealed class TestScenarioBuilderTests
     }
 
     [Fact]
-    public void WithSimpleTextResponse_enqueues_4_events()
+    public void WithSimpleTextResponse_enqueues_6_events()
     {
         var scenario = new TestScenarioBuilder()
             .WithSimpleTextResponse("sess-1", "msg-1", "Hello back!")
@@ -89,11 +89,13 @@ public sealed class TestScenarioBuilderTests
 
         Assert.Single(scenario.PromptResponses);
         var events = scenario.PromptResponses.Dequeue();
-        Assert.Equal(4, events.Count);
+        Assert.Equal(6, events.Count);
         Assert.Equal("session.status", events[0].Event.Type);
-        Assert.Equal("message.updated", events[1].Event.Type);
-        Assert.Equal("message.part.updated", events[2].Event.Type);
-        Assert.Equal("session.idle", events[3].Event.Type);
+        Assert.Equal("message.updated", events[1].Event.Type);   // user message
+        Assert.Equal("message.part.updated", events[2].Event.Type); // user part
+        Assert.Equal("message.updated", events[3].Event.Type);   // assistant message
+        Assert.Equal("message.part.updated", events[4].Event.Type); // assistant part
+        Assert.Equal("session.idle", events[5].Event.Type);
     }
 
     [Fact]

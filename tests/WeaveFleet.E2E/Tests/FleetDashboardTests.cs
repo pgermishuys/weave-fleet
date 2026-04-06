@@ -16,12 +16,31 @@ public sealed class FleetDashboardTests : E2ETestBase,
 
     /// <summary>
     /// Task 14: Dashboard loads successfully with no sessions and shows the empty state and summary bar.
+    /// Cleans up any sessions that may exist from other tests sharing this factory.
     /// </summary>
     [Fact]
     public async Task Dashboard_WithNoSessions_ShowsEmptyStateAndSummaryBar()
     {
         await WithFailureCapture(async () =>
         {
+            // Clean up sessions left by other tests in this class (shared factory/DB)
+            var sessionsResponse = await Page.APIRequest.GetAsync("/api/sessions");
+            if (sessionsResponse.Ok)
+            {
+                var body = await sessionsResponse.JsonAsync();
+                if (body?.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    foreach (var item in body.Value.EnumerateArray())
+                    {
+                        if (item.TryGetProperty("session", out var session) &&
+                            session.TryGetProperty("id", out var idProp))
+                        {
+                            await Page.APIRequest.DeleteAsync($"/api/sessions/{idProp.GetString()}");
+                        }
+                    }
+                }
+            }
+
             var dashboard = new FleetDashboardPage(Page);
             await dashboard.GotoAsync();
 
@@ -59,6 +78,9 @@ public sealed class FleetDashboardTests : E2ETestBase,
 
             // Navigate back to dashboard
             await Page.GotoAsync("/");
+
+            // Wait for at least one session card to appear (API poll may take a moment)
+            await dashboard.WaitForSessionCountAsync(1);
 
             // The session card should now appear
             var cards = await dashboard.GetSessionCardsAsync();

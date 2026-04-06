@@ -29,7 +29,7 @@ public sealed class SessionMessageTests : E2ETestBase,
                     "_placeholder_",
                     "msg-stream-1",
                     "This is the streamed response from TestHarness",
-                    TimeSpan.FromMilliseconds(20)));
+                    TimeSpan.FromMilliseconds(500)));
 
             var dashboard = new FleetDashboardPage(Page);
             await dashboard.GotoAsync();
@@ -86,10 +86,13 @@ public sealed class SessionMessageTests : E2ETestBase,
 
             await detail.SendPromptAsync("Generate a response");
 
+            // Wait for at least one message to appear (the user's prompt)
+            await detail.WaitForMessageCountAsync(1);
+
             // Wait for the session to go idle (response complete)
             await detail.WaitForIdleAsync();
 
-            // At least one message item should exist (the user's prompt)
+            // At least one message item should exist
             var allMessages = await detail.GetMessageItemsAsync();
             Assert.True(allMessages.Count >= 1, $"Expected at least 1 message, got {allMessages.Count}");
         });
@@ -109,7 +112,7 @@ public sealed class SessionMessageTests : E2ETestBase,
                     "_placeholder_",
                     "msg-status-1",
                     "Status tracking response",
-                    TimeSpan.FromMilliseconds(100)));
+                    TimeSpan.FromMilliseconds(500)));
 
             var dashboard = new FleetDashboardPage(Page);
             await dashboard.GotoAsync();
