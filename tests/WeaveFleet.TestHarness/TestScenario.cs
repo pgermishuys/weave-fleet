@@ -120,7 +120,9 @@ public sealed class TestScenarioBuilder
 
     /// <summary>
     /// Enqueue a simple text response for the next prompt.
-    /// Emits: session.busy → message.updated (assistant) → session.idle
+    /// Emits: session.status(busy) → message.updated → message.part.updated → session.idle
+    /// Payload structure matches the OpenCode SSE contract so the frontend can parse them.
+    /// See tests/contracts/opencode-to-fleet-events.json for the canonical format.
     /// </summary>
     public TestScenarioBuilder WithSimpleTextResponse(
         string sessionId,
@@ -128,18 +130,20 @@ public sealed class TestScenarioBuilder
         string text,
         TimeSpan? delay = null)
     {
-        var ts = DateTimeOffset.UtcNow;
+        var partId = $"{messageId}-part-1";
         var responseDelay = delay ?? TimeSpan.FromMilliseconds(10);
 
         return WithPromptResponse(b => b
-            .AddEvent(MakeEvent(sessionId, "session.busy", new { sessionId, status = "busy" }))
+            .AddEvent(MakeEvent(sessionId, "session.status",
+                new { sessionId, status = new { type = "busy" } }))
             .AddEvent(MakeEvent(sessionId, "message.updated",
-                new { sessionId, message = new { id = messageId, role = "assistant", parts = Array.Empty<object>() } }),
+                new { info = new { id = messageId, sessionID = sessionId, role = "assistant" } }),
                 responseDelay)
             .AddEvent(MakeEvent(sessionId, "message.part.updated",
-                new { sessionId, messageId, part = new { type = "text", text } }),
+                new { sessionID = sessionId, part = new { id = partId, sessionID = sessionId, messageID = messageId, type = "text", text } }),
                 responseDelay)
-            .AddEvent(MakeEvent(sessionId, "session.idle", new { sessionId, status = "idle" }))
+            .AddEvent(MakeEvent(sessionId, "session.idle",
+                new { sessionId, status = new { type = "idle" } }))
         );
     }
 

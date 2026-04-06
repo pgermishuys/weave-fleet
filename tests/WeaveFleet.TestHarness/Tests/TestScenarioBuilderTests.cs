@@ -90,7 +90,7 @@ public sealed class TestScenarioBuilderTests
         Assert.Single(scenario.PromptResponses);
         var events = scenario.PromptResponses.Dequeue();
         Assert.Equal(4, events.Count);
-        Assert.Equal("session.busy", events[0].Event.Type);
+        Assert.Equal("session.status", events[0].Event.Type);
         Assert.Equal("message.updated", events[1].Event.Type);
         Assert.Equal("message.part.updated", events[2].Event.Type);
         Assert.Equal("session.idle", events[3].Event.Type);
@@ -126,9 +126,9 @@ public sealed class TestScenarioBuilderTests
 
         Assert.Equal(2, scenario.PromptResponses.Count);
         var first = scenario.PromptResponses.Dequeue();
-        Assert.Equal("session.busy", first[0].Event.Type);
+        Assert.Equal("session.status", first[0].Event.Type);
         var second = scenario.PromptResponses.Dequeue();
-        Assert.Equal("session.busy", second[0].Event.Type);
+        Assert.Equal("session.status", second[0].Event.Type);
     }
 
     [Fact]
