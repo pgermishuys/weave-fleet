@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  checks: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -56,6 +60,14 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      - name: Report .NET test results
+        if: success() || failure()
+        uses: dorny/test-reporter@v1
+        with:
+          name: .NET Test Results
+          path: test-results/**/*.trx
+          reporter: dotnet-trx
+
   # ── Frontend checks (lint, typecheck, unit tests) ────────────────────────
   client:
     name: Client
@@ -86,8 +98,25 @@ jobs:
         working-directory: client
 
       - name: Unit tests
-        run: npm test
+        run: npx vitest run --reporter=default --reporter=junit --outputFile=test-results/client-results.xml
         working-directory: client
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-test-results-${{ github.run_id }}
+          path: client/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Report client test results
+        if: success() || failure()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Client Test Results
+          path: client/test-results/**/*.xml
+          reporter: java-junit
 
   # ── Playwright E2E tests ─────────────────────────────────────────────────
   e2e:
@@ -177,3 +206,11 @@ jobs:
             tests/WeaveFleet.E2E/test-results/
           retention-days: 7
           if-no-files-found: ignore
+
+      - name: Report E2E test results
+        if: success() || failure()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Playwright E2E Results
+          path: test-results/**/*.trx
+          reporter: dotnet-trx
