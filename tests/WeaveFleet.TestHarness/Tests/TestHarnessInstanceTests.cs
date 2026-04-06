@@ -110,18 +110,23 @@ public sealed class TestHarnessInstanceTests
         var instance = new TestHarnessInstance(sessionId, scenario);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
-        // Collect 12 events (6 per prompt)
-        var eventsTask = CollectEventsAsync(instance, expectedCount: 12, cts.Token);
-
+        // Send first prompt and wait for its 6 events to be fully emitted.
+        // This avoids a race where the second SendPromptAsync cancels the
+        // first prompt's in-flight CTS before all events are written.
+        var firstEventsTask = CollectEventsAsync(instance, expectedCount: 6, cts.Token);
         await instance.SendPromptAsync("First prompt", null, cts.Token);
+        var firstBatch = await firstEventsTask;
+        Assert.Equal(6, firstBatch.Count);
 
-        // Wait for first batch to complete
-        await Task.Delay(100, cts.Token);
-
+        // Now send the second prompt and collect its events
+        var secondEventsTask = CollectEventsAsync(instance, expectedCount: 6, cts.Token);
         await instance.SendPromptAsync("Second prompt", null, cts.Token);
-        var events = await eventsTask;
+        var secondBatch = await secondEventsTask;
+        Assert.Equal(6, secondBatch.Count);
 
-        Assert.Equal(12, events.Count);
+        // Verify both batches were dequeued in order
+        var allEvents = firstBatch.Concat(secondBatch).ToList();
+        Assert.Equal(12, allEvents.Count);
     }
 
     // ── AbortAsync cancellation ──────────────────────────────────────────────
