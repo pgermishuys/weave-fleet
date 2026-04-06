@@ -1,0 +1,3 @@
+# Playwright test artifacts (screenshots, traces) generated on test failure.
+# These are stored locally for debugging but should not be committed.
+test-results/

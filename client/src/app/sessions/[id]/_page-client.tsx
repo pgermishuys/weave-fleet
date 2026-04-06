@@ -550,6 +550,8 @@ export default function SessionDetailPage() {
         actions={
           <div className="flex items-center gap-2">
             <span
+              data-testid="session-status-indicator"
+              data-status={sessionStatus === "busy" ? "working" : "idle"}
               className={`h-2 w-2 rounded-full ${
                 sessionStatus === "busy"
                   ? "bg-green-500 animate-pulse"
@@ -594,6 +596,7 @@ export default function SessionDetailPage() {
               <Button
                 variant={abortConfirm ? "destructive" : "outline"}
                 size="sm"
+                data-testid="abort-button"
                 className="hidden sm:inline-flex h-7 px-2 text-xs gap-1"
                 onClick={handleAbort}
                 disabled={isAborting}

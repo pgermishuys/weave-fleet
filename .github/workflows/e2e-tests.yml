@@ -1,0 +1,101 @@
+name: E2E Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── .NET SDK ──────────────────────────────────────────────────────────
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # ── Node.js (for frontend build) ──────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      # ── npm cache ─────────────────────────────────────────────────────────
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: client
+
+      # ── Build SPA ─────────────────────────────────────────────────────────
+      - name: Build frontend SPA
+        run: npm run build
+        working-directory: client
+
+      # ── NuGet cache ───────────────────────────────────────────────────────
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # ── Build solution ────────────────────────────────────────────────────
+      - name: Build solution
+        run: dotnet build WeaveFleet.slnx --configuration Release
+
+      # ── Playwright browser cache ──────────────────────────────────────────
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('Directory.Packages.props') }}
+          restore-keys: playwright-${{ runner.os }}-
+
+      # ── Install Playwright browsers ───────────────────────────────────────
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pwsh tests/WeaveFleet.E2E/bin/Release/net10.0/playwright.ps1 install chromium --with-deps
+
+      # Install OS dependencies even on cache hit (they are not cached)
+      - name: Install Playwright OS dependencies
+        run: pwsh tests/WeaveFleet.E2E/bin/Release/net10.0/playwright.ps1 install-deps chromium
+
+      # ── Run E2E tests ─────────────────────────────────────────────────────
+      - name: Run E2E tests
+        run: >
+          dotnet test tests/WeaveFleet.E2E/
+          --configuration Release
+          --filter "Category=E2E"
+          --logger "trx;LogFileName=e2e-results.trx"
+          --results-directory test-results/
+          --no-build
+        env:
+          ASPNETCORE_ENVIRONMENT: Test
+
+      # ── Upload test artifacts on failure ──────────────────────────────────
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results-${{ github.run_id }}
+          path: |
+            test-results/
+            tests/WeaveFleet.E2E/test-results/
+          retention-days: 7
+          if-no-files-found: ignore

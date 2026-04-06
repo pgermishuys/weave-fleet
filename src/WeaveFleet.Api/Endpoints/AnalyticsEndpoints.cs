@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Microsoft.AspNetCore.Mvc;
 using WeaveFleet.Application.Analytics;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -19,7 +20,7 @@ public static class AnalyticsEndpoints
             string? from,
             string? to,
             string? projectId,
-            IAnalyticsReader? reader) =>
+            [FromServices] IAnalyticsReader? reader) =>
         {
             if (reader is null)
                 return Results.Problem("Analytics is disabled.", statusCode: 503);
@@ -35,7 +36,7 @@ public static class AnalyticsEndpoints
             string? from,
             string? to,
             string? projectId,
-            IAnalyticsReader? reader) =>
+            [FromServices] IAnalyticsReader? reader) =>
         {
             if (reader is null)
                 return Results.Problem("Analytics is disabled.", statusCode: 503);
@@ -52,7 +53,7 @@ public static class AnalyticsEndpoints
             string? to,
             string? projectId,
             int? limit,
-            IAnalyticsReader? reader) =>
+            [FromServices] IAnalyticsReader? reader) =>
         {
             if (reader is null)
                 return Results.Problem("Analytics is disabled.", statusCode: 503);
@@ -67,7 +68,7 @@ public static class AnalyticsEndpoints
         group.MapGet("/models", async (
             string? from,
             string? to,
-            IAnalyticsReader? reader) =>
+            [FromServices] IAnalyticsReader? reader) =>
         {
             if (reader is null)
                 return Results.Problem("Analytics is disabled.", statusCode: 503);
@@ -84,7 +85,7 @@ public static class AnalyticsEndpoints
             string? to,
             string? projectId,
             string? format,
-            IAnalyticsReader? reader) =>
+            [FromServices] IAnalyticsReader? reader) =>
         {
             if (reader is null)
                 return Results.Problem("Analytics is disabled.", statusCode: 503);

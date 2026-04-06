@@ -109,3 +109,6 @@ internal static partial class StartupLog
         Message = "Recovery: marked {Instances} instance(s) and {Sessions} session(s) as stopped.")]
     public static partial void RecoveryComplete(ILogger logger, int instances, int sessions);
 }
+
+// Expose Program for WebApplicationFactory in E2E tests
+public partial class Program { }

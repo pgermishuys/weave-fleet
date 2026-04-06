@@ -383,6 +383,9 @@ const MessageItem = memo(function MessageItem({
 
   return (
     <div
+      data-testid="message-item"
+      data-role={message.role}
+      data-message-id={message.messageId}
       className={`flex gap-3 px-4 py-3 hover:bg-accent/20 border-b border-border/40 border-l-2${isMatchingMessage ? " bg-yellow-500/5" : ""}`}
       style={{ borderLeftColor: agentColor ?? "transparent" }}
     >
@@ -651,7 +654,7 @@ export function ActivityStreamV1({
   });
 
   return (
-    <div className="flex flex-col h-full">
+    <div data-testid="activity-stream" className="flex flex-col h-full">
       {/* Connection status banner */}
       {status === "disconnected" && (
         <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-xs text-amber-500 flex items-center gap-2">

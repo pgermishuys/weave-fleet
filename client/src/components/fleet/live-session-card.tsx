@@ -76,14 +76,14 @@ export const LiveSessionCard = React.memo(function LiveSessionCard({
   const canAbort = activityStatus === "busy" && !!onAbort;
 
   const cardContent = (
-    <div className={`relative group ${isInactive ? "opacity-60" : ""}`}>
+    <div className={`relative group ${isInactive ? "opacity-60" : ""}`} data-testid="session-card" data-session-id={session.id}>
       <Link href={`/sessions/${encodeURIComponent(session.id)}?instanceId=${encodeURIComponent(instanceId)}`}>
         <Card className="transition-all hover:border-foreground/20 hover:shadow-md cursor-pointer">
           <CardHeader className="pb-2 pt-4 px-4">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2">
-                <span className={`h-2.5 w-2.5 rounded-full ${sessionStatusDot}`} />
-                <h3 className="font-semibold text-sm font-mono truncate max-w-[140px]">
+                <span className={`h-2.5 w-2.5 rounded-full ${sessionStatusDot}`} data-testid="session-status-indicator" data-status={sessionStatusLabel} />
+                <h3 className="font-semibold text-sm font-mono truncate max-w-[140px]" data-testid="session-title">
                   {session.title || session.id.slice(0, 12)}
                 </h3>
               </div>
@@ -154,6 +154,7 @@ export const LiveSessionCard = React.memo(function LiveSessionCard({
         <Button
           variant="ghost"
           size="icon"
+          data-testid="session-terminate-button"
           className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-muted-foreground hover:text-destructive hover:bg-destructive/10 touch-none pointer-coarse:opacity-100 pointer-coarse:h-9 pointer-coarse:w-9"
           onClick={(e) => {
             e.preventDefault();
@@ -169,6 +170,7 @@ export const LiveSessionCard = React.memo(function LiveSessionCard({
         <Button
           variant="ghost"
           size="icon"
+          data-testid="session-abort-button"
           className="absolute top-2 right-10 h-8 w-8 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 touch-none pointer-coarse:opacity-100 pointer-coarse:h-9 pointer-coarse:w-9"
           onClick={(e) => {
             e.preventDefault();
@@ -184,6 +186,7 @@ export const LiveSessionCard = React.memo(function LiveSessionCard({
         <Button
           variant="ghost"
           size="icon"
+          data-testid="session-delete-button"
           className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-red-600 dark:text-red-400 hover:text-red-500 hover:bg-red-500/10 touch-none pointer-coarse:opacity-100 pointer-coarse:h-9 pointer-coarse:w-9"
           onClick={(e) => {
             e.preventDefault();
@@ -199,6 +202,7 @@ export const LiveSessionCard = React.memo(function LiveSessionCard({
         <Button
           variant="ghost"
           size="icon"
+          data-testid="session-resume-button"
           className={`absolute top-2 right-10 h-8 w-8 transition-opacity text-muted-foreground pointer-coarse:h-9 pointer-coarse:w-9 ${
             isResuming
               ? "opacity-100 cursor-not-allowed"

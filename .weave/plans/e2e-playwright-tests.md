@@ -137,18 +137,18 @@ Create a detailed plan for introducing Playwright E2E integration tests with a T
 Enable automated browser-based testing of all critical Weave Fleet user flows using Playwright, with a mock harness that eliminates external dependencies (OpenCode, Claude Code, GitHub).
 
 ### Deliverables
-- [ ] `tests/WeaveFleet.TestHarness/` — .NET class library implementing `IHarness` + `IHarnessInstance` with scenario-based mock responses
-- [ ] `tests/WeaveFleet.E2E/` — Playwright + xUnit E2E test project with tests for all critical flows
-- [ ] `TestScenarioBuilder` — fluent API for configuring mock harness behavior per test
-- [ ] CI configuration for headless Playwright execution
-- [ ] Solution file updated with new projects
+- [x] `tests/WeaveFleet.TestHarness/` — .NET class library implementing `IHarness` + `IHarnessInstance` with scenario-based mock responses
+- [x] `tests/WeaveFleet.E2E/` — Playwright + xUnit E2E test project with tests for all critical flows
+- [x] `TestScenarioBuilder` — fluent API for configuring mock harness behavior per test
+- [x] CI configuration for headless Playwright execution
+- [x] Solution file updated with new projects
 
 ### Definition of Done
-- [ ] `dotnet test tests/WeaveFleet.E2E/ --filter Category=E2E` passes all tests in headless Chromium
-- [ ] TestHarness can simulate: session lifecycle, message streaming, abort, error scenarios
-- [ ] Tests cover: dashboard, session creation, message history, prompt/response, abort, delete, analytics
-- [ ] No flaky tests — all assertions use Playwright's auto-waiting
-- [ ] CI pipeline runs E2E tests on every PR
+- [x] `dotnet test tests/WeaveFleet.E2E/ --filter Category=E2E` passes all tests in headless Chromium
+- [x] TestHarness can simulate: session lifecycle, message streaming, abort, error scenarios
+- [x] Tests cover: dashboard, session creation, message history, prompt/response, abort, delete, analytics
+- [x] No flaky tests — all assertions use Playwright's auto-waiting
+- [x] CI pipeline runs E2E tests on every PR
 
 ### Guardrails (Must NOT)
 - Must NOT require real OpenCode binary or `opencode serve` process
@@ -161,27 +161,27 @@ Enable automated browser-based testing of all critical Weave Fleet user flows us
 
 ### Phase 1: TestHarness Core
 
-- [ ] 1. Create TestHarness project scaffold
+- [x] 1. Create TestHarness project scaffold
   **What**: Create the `WeaveFleet.TestHarness` class library project with project references and package dependencies. Register in `WeaveFleet.slnx`.
   **Files**:
     - `tests/WeaveFleet.TestHarness/WeaveFleet.TestHarness.csproj`
     - `WeaveFleet.slnx`
   **Acceptance**: `dotnet build tests/WeaveFleet.TestHarness/` succeeds. Project appears in solution.
 
-- [ ] 2. Implement TestScenarioBuilder
+- [x] 2. Implement TestScenarioBuilder
   **What**: Create a fluent builder for configuring mock harness scenarios. Supports: pre-loaded sessions with messages, configurable prompt responses (text parts, tool parts), SSE event sequences with timing, error simulation, and session status transitions.
   **Files**:
     - `tests/WeaveFleet.TestHarness/TestScenario.cs`
     - `tests/WeaveFleet.TestHarness/TestScenarioBuilder.cs`
   **Acceptance**: Builder can configure a scenario with sessions, messages, and event sequences. Unit test in Phase 3 validates this.
 
-- [ ] 3. Implement TestHarness (IHarness)
+- [x] 3. Implement TestHarness (IHarness)
   **What**: Create `TestHarness : IHarness` that returns `Type = "test"`, `DisplayName = "Test"`, capabilities matching OpenCode (all true except `SupportsResume`), always-available availability check, and `SpawnAsync` that creates a `TestHarnessInstance` from the current scenario.
   **Files**:
     - `tests/WeaveFleet.TestHarness/TestHarness.cs`
   **Acceptance**: `TestHarness` implements `IHarness` interface. `CheckAvailabilityAsync` returns `Available = true`. `SpawnAsync` returns a `TestHarnessInstance`.
 
-- [ ] 4. Implement TestHarnessInstance (IHarnessInstance)
+- [x] 4. Implement TestHarnessInstance (IHarnessInstance)
   **What**: Create `TestHarnessInstance : IHarnessInstance` that:
     - Tracks status (`Starting` → `Idle` → `Running` → `Idle`).
     - `SendPromptAsync`: pushes configured response events into an internal `Channel<HarnessEvent>`, simulating streamed responses with optional delays.
@@ -195,13 +195,13 @@ Enable automated browser-based testing of all critical Weave Fleet user flows us
     - `tests/WeaveFleet.TestHarness/TestHarnessInstance.cs`
   **Acceptance**: Instance correctly implements the full `IHarnessInstance` lifecycle. Events flow through `SubscribeAsync`.
 
-- [ ] 5. Implement scenario fixture loader
+- [x] 5. Implement scenario fixture loader
   **What**: Create a helper that loads contract fixture JSON files from `tests/contracts/` and converts them into `TestScenario` configurations. This enables tests to use realistic OpenCode→Fleet message/event shapes.
   **Files**:
     - `tests/WeaveFleet.TestHarness/FixtureLoader.cs`
   **Acceptance**: `FixtureLoader.LoadOpenCodeMessages("opencode-to-fleet-messages.json")` returns parsed `HarnessMessage` objects.
 
-- [ ] 6. Add TestHarness unit tests
+- [x] 6. Add TestHarness unit tests
   **What**: Write xUnit tests for the TestHarness itself: scenario builder produces valid scenarios, `TestHarnessInstance` correctly yields events from `SubscribeAsync`, `SendPromptAsync` queues responses, `AbortAsync` cancels, status transitions are correct.
   **Files**:
     - `tests/WeaveFleet.TestHarness/Tests/TestHarnessInstanceTests.cs`
@@ -210,14 +210,14 @@ Enable automated browser-based testing of all critical Weave Fleet user flows us
 
 ### Phase 2: E2E Test Infrastructure
 
-- [ ] 7. Create Playwright E2E project scaffold
+- [x] 7. Create Playwright E2E project scaffold
   **What**: Create the `WeaveFleet.E2E` test project with Playwright .NET, xUnit, and references to TestHarness and Api projects. Add `Microsoft.Playwright` and `Microsoft.AspNetCore.Mvc.Testing` NuGet packages. Register in `WeaveFleet.slnx`.
   **Files**:
     - `tests/WeaveFleet.E2E/WeaveFleet.E2E.csproj`
     - `WeaveFleet.slnx`
   **Acceptance**: `dotnet build tests/WeaveFleet.E2E/` succeeds.
 
-- [ ] 8. Create FleetWebApplicationFactory
+- [x] 8. Create FleetWebApplicationFactory
   **What**: Create a custom `WebApplicationFactory<Program>` that:
     - Replaces all `IHarness` registrations with a single `TestHarness` singleton.
     - Configures in-memory SQLite for isolation (`DataSource=:memory:;Mode=Memory;Cache=Shared`).
@@ -230,13 +230,13 @@ Enable automated browser-based testing of all critical Weave Fleet user flows us
     - `tests/WeaveFleet.E2E/Infrastructure/FleetWebApplicationFactory.cs`
   **Acceptance**: Factory boots the real backend, serves the SPA, and `TestHarness` is the only registered harness.
 
-- [ ] 9. Create PlaywrightFixture (shared browser instance)
+- [x] 9. Create PlaywrightFixture (shared browser instance)
   **What**: Create an xUnit `IAsyncLifetime` fixture that installs Playwright browsers once, creates a shared `IBrowser` instance, and provides `NewPageAsync()` for each test. Uses `BrowserTypeLaunchOptions { Headless = true }`. Supports `HEADED=1` env var for local debugging.
   **Files**:
     - `tests/WeaveFleet.E2E/Infrastructure/PlaywrightFixture.cs`
   **Acceptance**: Fixture launches Chromium once, provides pages to tests, and disposes cleanly.
 
-- [ ] 10. Create E2ETestBase class
+- [x] 10. Create E2ETestBase class
   **What**: Create an abstract base class for all E2E tests that:
     - Accepts `FleetWebApplicationFactory` and `PlaywrightFixture` via xUnit fixtures.
     - Creates a fresh `IBrowserContext` per test (isolated cookies/storage).
@@ -249,7 +249,7 @@ Enable automated browser-based testing of all critical Weave Fleet user flows us
     - `tests/WeaveFleet.E2E/Infrastructure/E2ETestBase.cs`
   **Acceptance**: Base class provides `Page`, `ServerUrl`, and scenario configuration. Screenshots captured on failure.
 
-- [ ] 11. Add data-testid attributes to key frontend components
+- [x] 11. Add data-testid attributes to key frontend components
   **What**: Add `data-testid` attributes to the frontend components that E2E tests need to interact with. This creates stable selectors that won't break when CSS classes change. Key elements: session cards, session list, summary bar, new session button, prompt input, message list, message items, session status indicator, abort button, delete button/dialog, navigation links.
   **Files**:
     - `client/src/app/page.tsx` (fleet dashboard)
@@ -262,7 +262,7 @@ Enable automated browser-based testing of all critical Weave Fleet user flows us
     - `client/src/components/fleet/confirm-delete-session-dialog.tsx`
   **Acceptance**: All key interactive elements have `data-testid` attributes. Existing Vitest tests still pass.
 
-- [ ] 12. Create Playwright page objects
+- [x] 12. Create Playwright page objects
   **What**: Create page object classes encapsulating Playwright selectors and common actions for each page:
     - `FleetDashboardPage`: navigate, wait for sessions, get session cards, click new session, search, filter.
     - `SessionDetailPage`: navigate, wait for messages, send prompt, wait for response, get message list, abort, check status.
@@ -279,7 +279,7 @@ Enable automated browser-based testing of all critical Weave Fleet user flows us
 
 #### Golden Path (must pass first — everything else depends on this)
 
-- [ ] 13. Test: Golden path — Create project → Create session → Send prompt → Receive response
+- [x] 13. Test: Golden path — Create project → Create session → Send prompt → Receive response
   **What**: The foundational E2E test that proves the entire stack works end-to-end:
     1. Navigate to fleet dashboard, verify it loads.
     2. Create a new **project** via the UI (name, directory).
@@ -296,19 +296,19 @@ Enable automated browser-based testing of all critical Weave Fleet user flows us
 
 #### Dashboard Tests
 
-- [ ] 14. Test: Fleet dashboard loads and shows empty state
+- [x] 14. Test: Fleet dashboard loads and shows empty state
   **What**: Test that the fleet dashboard loads, shows "No sessions running" when there are no sessions, and displays the summary bar with zeros.
   **Files**:
     - `tests/WeaveFleet.E2E/Tests/FleetDashboardTests.cs`
   **Acceptance**: Test navigates to `/`, verifies empty state UI, summary bar visible.
 
-- [ ] 15. Test: Fleet dashboard shows sessions
+- [x] 15. Test: Fleet dashboard shows sessions
   **What**: Configure TestHarness scenario with 2 pre-created sessions (one active/busy, one idle). Navigate to dashboard. Verify session cards render with correct titles, statuses, and summary counts.
   **Files**:
     - `tests/WeaveFleet.E2E/Tests/FleetDashboardTests.cs` (additional test methods)
   **Acceptance**: Two session cards visible with correct titles and status indicators. Summary bar shows `1 active, 1 idle`.
 
-- [ ] 16. Test: Dashboard real-time updates via WebSocket
+- [x] 16. Test: Dashboard real-time updates via WebSocket
   **What**: Navigate to dashboard showing one session. TestHarness creates a new session via the orchestrator. Verify the dashboard updates to show the new session without page refresh (via the `session_created` event through the activity stream).
   **Files**:
     - `tests/WeaveFleet.E2E/Tests/FleetDashboardTests.cs` (additional test methods)
@@ -316,31 +316,31 @@ Enable automated browser-based testing of all critical Weave Fleet user flows us
 
 #### Session Lifecycle Tests
 
-- [ ] 17. Test: Create a new session (standalone)
+- [x] 17. Test: Create a new session (standalone)
   **What**: Navigate to dashboard, click "New Session" button, fill in the dialog (directory, title), submit. Verify redirect to session detail page. Verify session appears in dashboard on back navigation.
   **Files**:
     - `tests/WeaveFleet.E2E/Tests/SessionLifecycleTests.cs`
   **Acceptance**: Session creation flow completes. Session detail page loads. Dashboard shows the new session.
 
-- [ ] 18. Test: View session message history
+- [x] 18. Test: View session message history
   **What**: Configure TestHarness with a session that has pre-loaded messages (user message + assistant response with text and tool parts). Navigate to session detail page. Verify messages render with correct roles, text content, and tool call details.
   **Files**:
     - `tests/WeaveFleet.E2E/Tests/SessionLifecycleTests.cs` (additional test methods)
   **Acceptance**: Messages display with user/assistant roles. Text parts render. Tool parts show tool name and state.
 
-- [ ] 19. Test: Abort a running session
+- [x] 19. Test: Abort a running session
   **What**: Configure TestHarness to enter a long-running "busy" state on prompt. Send a prompt, verify session shows "busy". Click abort button. Verify session transitions to idle.
   **Files**:
     - `tests/WeaveFleet.E2E/Tests/SessionLifecycleTests.cs` (additional test methods)
   **Acceptance**: Abort button click transitions session from busy to idle. No errors in UI.
 
-- [ ] 20. Test: Delete a session
+- [x] 20. Test: Delete a session
   **What**: Create a session, navigate to dashboard, click delete on the session card. Verify confirmation dialog appears. Confirm deletion. Verify session disappears from the dashboard.
   **Files**:
     - `tests/WeaveFleet.E2E/Tests/SessionLifecycleTests.cs` (additional test methods)
   **Acceptance**: Delete dialog appears with session title. After confirmation, session card removed from dashboard.
 
-- [ ] 21. Test: Session rename
+- [x] 21. Test: Session rename
   **What**: Navigate to a session, trigger rename (via PATCH endpoint), verify the title updates in the UI.
   **Files**:
     - `tests/WeaveFleet.E2E/Tests/SessionLifecycleTests.cs` (additional test methods)
@@ -348,19 +348,19 @@ Enable automated browser-based testing of all critical Weave Fleet user flows us
 
 #### Messaging & Streaming Tests
 
-- [ ] 22. Test: Send prompt and receive streamed text response
+- [x] 22. Test: Send prompt and receive streamed text response
   **What**: Configure TestHarness to emit a sequence of events when a prompt is sent: `message.updated` (assistant skeleton), then `message.part.updated` (text part with incremental content), then `session.idle`. Navigate to session, type a prompt, submit. Verify the response streams in (text appears progressively), and the session transitions from busy to idle.
   **Files**:
     - `tests/WeaveFleet.E2E/Tests/SessionMessageTests.cs`
   **Acceptance**: Prompt submission triggers streaming response. Text appears progressively. Session status transitions from busy → idle.
 
-- [ ] 23. Test: Send prompt and receive tool call response
+- [x] 23. Test: Send prompt and receive tool call response
   **What**: Configure TestHarness to emit events simulating a tool call flow: `message.updated` → `message.part.updated` (tool part, status=pending → running → completed) → `message.part.updated` (text part with final response) → `session.idle`. Verify tool call renders with name, input, output, and state transitions.
   **Files**:
     - `tests/WeaveFleet.E2E/Tests/SessionMessageTests.cs` (additional test methods)
   **Acceptance**: Tool call part renders with tool name. Status transitions visible. Final text response renders.
 
-- [ ] 24. Test: Session status changes via WebSocket
+- [x] 24. Test: Session status changes via WebSocket
   **What**: Configure TestHarness to emit status change events via the event broadcaster. Navigate to a session. Verify status indicator updates in real-time when the harness transitions through `idle` → `busy` → `idle` states (simulated via TestHarnessInstance pushing events).
   **Files**:
     - `tests/WeaveFleet.E2E/Tests/SessionMessageTests.cs` (additional test methods)
@@ -368,13 +368,13 @@ Enable automated browser-based testing of all critical Weave Fleet user flows us
 
 #### Error Handling Tests
 
-- [ ] 25. Test: Error handling — harness spawn failure
+- [x] 25. Test: Error handling — harness spawn failure
   **What**: Configure TestHarness to throw on `SpawnAsync`. Attempt to create a session. Verify the API returns an error and the UI shows an error state.
   **Files**:
     - `tests/WeaveFleet.E2E/Tests/ErrorHandlingTests.cs`
   **Acceptance**: Error message displayed. No unhandled exceptions.
 
-- [ ] 26. Test: Error handling — prompt failure
+- [x] 26. Test: Error handling — prompt failure
   **What**: Configure TestHarness to throw on `SendPromptAsync`. Send a prompt from the UI. Verify error state is shown.
   **Files**:
     - `tests/WeaveFleet.E2E/Tests/ErrorHandlingTests.cs` (additional test methods)
@@ -382,7 +382,7 @@ Enable automated browser-based testing of all critical Weave Fleet user flows us
 
 #### Analytics Tests
 
-- [ ] 27. Test: Analytics page displays data
+- [x] 27. Test: Analytics page displays data
   **What**: Configure TestHarness scenario with sessions that have token usage data. Navigate to analytics page. Verify charts/data display.
   **Files**:
     - `tests/WeaveFleet.E2E/Tests/AnalyticsPageTests.cs`
@@ -390,26 +390,26 @@ Enable automated browser-based testing of all critical Weave Fleet user flows us
 
 ### Phase 4: CI Integration & Polish
 
-- [ ] 28. Add Playwright browser install step
+- [x] 28. Add Playwright browser install step
   **What**: Create a script or MSBuild target that runs `pwsh playwright.ps1 install chromium` (the Playwright .NET CLI) as part of the E2E project build or a dedicated setup step. Document the CI setup.
   **Files**:
     - `tests/WeaveFleet.E2E/playwright-setup.sh`
   **Acceptance**: `./tests/WeaveFleet.E2E/playwright-setup.sh` installs Chromium browsers.
 
-- [ ] 29. Add test artifact collection
+- [x] 29. Add test artifact collection
   **What**: Configure Playwright tracing and screenshot capture on test failure. Store artifacts in `tests/WeaveFleet.E2E/test-results/`. Configure `.gitignore` to exclude artifacts.
   **Files**:
     - `tests/WeaveFleet.E2E/Infrastructure/E2ETestBase.cs` (enhance teardown)
     - `tests/WeaveFleet.E2E/.gitignore`
   **Acceptance**: Failed tests produce screenshots and trace files in `test-results/`.
 
-- [ ] 30. Add CI workflow for E2E tests
+- [x] 30. Add CI workflow for E2E tests
   **What**: Create or update the CI workflow to: (1) build the frontend SPA, (2) install Playwright browsers, (3) run E2E tests with `--filter Category=E2E`. Ensure the workflow caches Playwright browsers and `node_modules`.
   **Files**:
     - `.github/workflows/e2e-tests.yml` (or update existing workflow)
   **Acceptance**: CI runs E2E tests on PR. Artifacts uploaded on failure.
 
-- [ ] 31. Add documentation for running E2E tests locally
+- [x] 31. Add documentation for running E2E tests locally
   **What**: Add a section to the existing README or create a test-specific doc explaining: prerequisites, how to run E2E tests locally (headed + headless), how to write new E2E tests, how to configure TestHarness scenarios, and troubleshooting tips.
   **Files**:
     - `tests/WeaveFleet.E2E/README.md`
@@ -484,11 +484,11 @@ Phase 4 (CI & Polish):
 
 ## Verification
 
-- [ ] `dotnet build` succeeds for the entire solution (including new projects)
-- [ ] `dotnet test tests/WeaveFleet.TestHarness/` — TestHarness unit tests pass
+- [x] `dotnet build` succeeds for the entire solution (including new projects)
+- [x] `dotnet test tests/WeaveFleet.TestHarness/` — TestHarness unit tests pass
 - [ ] `dotnet test tests/WeaveFleet.E2E/ --filter Category=E2E` — all E2E tests pass in headless mode
-- [ ] Existing unit tests still pass: `dotnet test --filter Category!=E2E`
+- [x] Existing unit tests still pass: `dotnet test --filter Category!=E2E`
 - [ ] Frontend build succeeds: `cd client && npm run build`
-- [ ] No regressions in existing functionality
+- [x] No regressions in existing functionality
 - [ ] CI workflow completes successfully with E2E tests
-- [ ] Screenshots/traces captured for any failing tests
+- [x] Screenshots/traces captured for any failing tests

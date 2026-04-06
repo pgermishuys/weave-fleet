@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\WeaveFleet.Application\WeaveFleet.Application.csproj" />
+    <ProjectReference Include="..\..\src\WeaveFleet.Domain\WeaveFleet.Domain.csproj" />
+  </ItemGroup>
+
+  <!-- Embed contract fixture files so FixtureLoader can read them from the assembly manifest -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\contracts\*.json" LogicalName="contracts/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

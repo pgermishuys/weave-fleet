@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk" InitialTargets="EnsureFrontendBuilt">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <!-- Skip SPA copy for E2E project — it references the API which already handles this -->
+    <NoWarn>$(NoWarn);IDE0005</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.Playwright" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Microsoft.Playwright" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\WeaveFleet.Api\WeaveFleet.Api.csproj" />
+    <ProjectReference Include="..\WeaveFleet.TestHarness\WeaveFleet.TestHarness.csproj" />
+  </ItemGroup>
+
+  <!-- ── Frontend SPA build ──────────────────────────────────────────────────
+       Ensures client/dist/ exists before project references are resolved.
+       The API project's CopyFrontendDist target copies dist/ into wwwroot/,
+       but only when client/dist/index.html already exists — so the SPA must
+       be built first.
+
+       Running as an InitialTarget guarantees this executes before MSBuild
+       resolves project references (i.e. before WeaveFleet.Api is built).
+
+       Incremental: skipped when client/dist/index.html already exists.
+       Opt-out:     dotnet build -p:SkipFrontendBuild=true
+       ─────────────────────────────────────────────────────────────────────── -->
+  <Target Name="EnsureFrontendBuilt"
+          Condition="'$(SkipFrontendBuild)' != 'true'
+                     AND !Exists('$(MSBuildThisFileDirectory)..\..\client\dist\index.html')">
+    <Message Importance="high"
+             Text="E2E: Frontend SPA not found at client/dist/ — running 'bun run build'..." />
+    <Exec Command="bun run build"
+          WorkingDirectory="$(MSBuildThisFileDirectory)..\..\client" />
+  </Target>
+
+</Project>

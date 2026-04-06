@@ -38,8 +38,9 @@ export function ConfirmDeleteSessionDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel data-testid="delete-dialog-cancel" disabled={isDeleting}>Cancel</AlertDialogCancel>
           <AlertDialogAction
+            data-testid="delete-dialog-confirm"
             variant="destructive"
             disabled={isDeleting}
             onClick={(e) => {

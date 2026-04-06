@@ -364,7 +364,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className="sm:max-w-md top-[10%] translate-y-0 max-h-[85vh] overflow-y-auto">
+      <DialogContent data-testid="new-session-dialog" className="sm:max-w-md top-[10%] translate-y-0 max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>New Session</DialogTitle>
         </DialogHeader>
@@ -650,6 +650,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
 
           <Button
             type="submit"
+            data-testid="create-session-submit"
             className="w-full weave-gradient-bg hover:opacity-90 border-0"
             disabled={!effectiveDirectory || isLoading}
           >

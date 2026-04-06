@@ -11,5 +11,7 @@
     <Project Path="tests/WeaveFleet.Application.Tests/WeaveFleet.Application.Tests.csproj" />
     <Project Path="tests/WeaveFleet.Domain.Tests/WeaveFleet.Domain.Tests.csproj" />
     <Project Path="tests/WeaveFleet.Infrastructure.Tests/WeaveFleet.Infrastructure.Tests.csproj" />
+    <Project Path="tests/WeaveFleet.TestHarness/WeaveFleet.TestHarness.csproj" />
+    <Project Path="tests/WeaveFleet.E2E/WeaveFleet.E2E.csproj" />
   </Folder>
 </Solution>

@@ -498,7 +498,7 @@ function FleetPageInner() {
         {renderContent()}
 
         {!isLoading && sessions.length === 0 && !error && (
-          <div className="flex flex-col items-center justify-center h-48 text-muted-foreground text-sm gap-3">
+          <div data-testid="empty-state" className="flex flex-col items-center justify-center h-48 text-muted-foreground text-sm gap-3">
             <p>No sessions running.</p>
             <p className="text-xs">Click &ldquo;New Session&rdquo; to start a new agent session.</p>
           </div>

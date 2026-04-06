@@ -50,7 +50,7 @@ export function NewSessionButton() {
     <NewSessionDialog
       defaultDirectory={currentDirectory}
       trigger={
-        <Button size="sm" className="gap-1.5 weave-gradient-bg hover:opacity-90 border-0">
+        <Button size="sm" data-testid="new-session-button" className="gap-1.5 weave-gradient-bg hover:opacity-90 border-0">
           <Plus className="h-3.5 w-3.5" />
           <span className="hidden xs:inline">New Session</span>
           <span className="xs:hidden">New</span>

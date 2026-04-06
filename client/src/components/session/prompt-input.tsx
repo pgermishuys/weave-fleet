@@ -478,6 +478,7 @@ export function PromptInput({
           ref={inputRef}
           rows={1}
           value={value}
+          data-testid="prompt-input"
           onChange={(e) => {
             setValueAndPersist(e.target.value);
             setCursorPos(e.target.selectionStart ?? 0);
@@ -539,6 +540,7 @@ export function PromptInput({
           type="button"
           size="icon"
           variant="default"
+          data-testid="prompt-send-button"
           disabled={!canSend}
           onClick={() => void handleSend()}
           title={sessionStatus === "busy" ? "Queue message" : "Send message"}

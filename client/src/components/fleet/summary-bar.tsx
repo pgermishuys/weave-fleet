@@ -40,14 +40,15 @@ export function SummaryBar({ summary }: SummaryBarProps) {
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3" data-testid="summary-bar">
       {items.map((item) => (
         <div
           key={item.label}
           className="flex flex-col items-center rounded-lg border bg-card p-2 sm:p-3 text-center"
+          data-testid={`summary-${item.label.toLowerCase()}`}
         >
           <item.icon className={`h-4 w-4 ${item.color}`} />
-          <span className="mt-1 text-lg font-semibold">{item.value}</span>
+          <span className="mt-1 text-lg font-semibold" data-testid={`summary-${item.label.toLowerCase()}-count`}>{item.value}</span>
           <span className="text-xs text-muted-foreground">{item.label}</span>
         </div>
       ))}
