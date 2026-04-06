@@ -39,6 +39,10 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(6, "PersistFailed"),
             "Failed to persist message event for session {SessionId}");
 
+    private static readonly Action<ILogger, string, Exception?> LogSendCommand =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(7, "SendCommand"),
+            "Sending command to OpenCode instance {InstanceId}.");
+
     private readonly OpenCodeHttpClient _httpClient;
     private readonly OpenCodeProcessManager _processManager;
     private readonly PortAllocator _portAllocator;
@@ -161,6 +165,32 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
 
         LogSendPrompt(_logger, InstanceId, null);
         await _httpClient.SendPromptAsyncFireAndForget(
+            _openCodeSessionId!,
+            request,
+            _workingDirectory,
+            ct).ConfigureAwait(false);
+
+        _status = HarnessInstanceStatus.Running;
+    }
+
+    /// <inheritdoc />
+    public async Task SendCommandAsync(CommandOptions options, CancellationToken ct)
+    {
+        await EnsureSessionAsync(ct).ConfigureAwait(false);
+
+        // OpenCode's CommandInput expects "model" as a plain string (e.g. "provider/model"),
+        // unlike the prompt endpoint which accepts { providerID, modelID }.
+        // It also requires "arguments" as a non-optional string.
+        var request = new OpenCodeCommandRequest
+        {
+            Command = options.Command,
+            Arguments = options.Arguments ?? string.Empty,
+            Agent = options.Agent,
+            Model = options.ModelId,
+        };
+
+        LogSendCommand(_logger, InstanceId, null);
+        await _httpClient.SendCommandAsync(
             _openCodeSessionId!,
             request,
             _workingDirectory,

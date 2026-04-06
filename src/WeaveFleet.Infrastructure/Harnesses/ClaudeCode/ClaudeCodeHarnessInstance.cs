@@ -176,6 +176,23 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
     }
 
     /// <inheritdoc />
+    public Task SendCommandAsync(CommandOptions options, CancellationToken ct)
+    {
+        // Sanitize arguments: collapse newlines to spaces to prevent prompt injection
+        var sanitizedArgs = options.Arguments?.ReplaceLineEndings(" ");
+
+        var promptText = string.IsNullOrWhiteSpace(sanitizedArgs)
+            ? $"/{options.Command}"
+            : $"/{options.Command} {sanitizedArgs}";
+
+        var promptOptions = options.Agent is not null || options.ModelId is not null
+            ? new PromptOptions { Agent = options.Agent, ModelId = options.ModelId }
+            : null;
+
+        return SendPromptAsync(promptText, promptOptions, ct);
+    }
+
+    /// <inheritdoc />
     public async Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct)
     {
         // Claude Code has no "get messages" API — always read from database

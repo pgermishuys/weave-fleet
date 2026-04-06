@@ -26,18 +26,18 @@ Add command execution support to the harness system. Harnesses can already **lis
 Enable command execution through the full stack: API → Orchestrator → HarnessInstance → Agent.
 
 ### Deliverables
-- [ ] `CommandOptions` record in domain layer
-- [ ] `SendCommandAsync` method on `IHarnessInstance` interface
-- [ ] OpenCode implementation (native HTTP call to `/session/:id/command`)
-- [ ] Claude Code implementation (delegate to `SendPromptAsync`)
-- [ ] `SessionOrchestrator.CommandSessionAsync` method
-- [ ] `POST /api/sessions/{id}/command` endpoint (replace 501 stub)
-- [ ] `POST /api/instances/{id}/command` endpoint (instance-level)
-- [ ] Test harness implementation
+- [x] `CommandOptions` record in domain layer
+- [x] `SendCommandAsync` method on `IHarnessInstance` interface
+- [x] OpenCode implementation (native HTTP call to `/session/:id/command`)
+- [x] Claude Code implementation (delegate to `SendPromptAsync`)
+- [x] `SessionOrchestrator.CommandSessionAsync` method
+- [x] `POST /api/sessions/{id}/command` endpoint (replace 501 stub)
+- [x] `POST /api/instances/{id}/command` endpoint (instance-level)
+- [x] Test harness implementation
 
 ### Definition of Done
-- [ ] `dotnet build` succeeds with no errors
-- [ ] `dotnet test` passes all existing + new tests
+- [x] `dotnet build` succeeds with no errors
+- [x] `dotnet test` passes all existing + new tests
 - [ ] `POST /api/sessions/{id}/command` returns 202 for a valid command
 - [ ] `POST /api/instances/{id}/command` returns 202 for a valid command
 
@@ -51,7 +51,7 @@ Enable command execution through the full stack: API → Orchestrator → Harnes
 
 ### Domain Layer
 
-- [ ] 1. **Add `CommandOptions` record to `HarnessTypes.cs`**
+- [x] 1. **Add `CommandOptions` record to `HarnessTypes.cs`**
   **What**: Add a new record after `PromptOptions` (line 102) with the shape:
   ```csharp
   public sealed record CommandOptions
@@ -65,7 +65,7 @@ Enable command execution through the full stack: API → Orchestrator → Harnes
   **Files**: `src/WeaveFleet.Domain/Harnesses/HarnessTypes.cs`
   **Acceptance**: Record compiles, follows same style as `PromptOptions`
 
-- [ ] 2. **Add `SendCommandAsync` to `IHarnessInstance`**
+- [x] 2. **Add `SendCommandAsync` to `IHarnessInstance`**
   **What**: Add after `SendPromptAsync` (line 30):
   ```csharp
   /// <summary>Execute a slash command on the agent.</summary>
@@ -76,7 +76,7 @@ Enable command execution through the full stack: API → Orchestrator → Harnes
 
 ### Infrastructure — OpenCode
 
-- [ ] 3. **Add `OpenCodeCommandRequest` model to `OpenCodeModels.cs`**
+- [x] 3. **Add `OpenCodeCommandRequest` model to `OpenCodeModels.cs`**
   **What**: Add after the `OpenCodePromptRequest` section (~line 373) a new request model:
   ```csharp
   /// <summary>Request body for POST /session/:id/command.</summary>
@@ -93,7 +93,7 @@ Enable command execution through the full stack: API → Orchestrator → Harnes
   **Files**: `src/WeaveFleet.Infrastructure/Harnesses/OpenCode/OpenCodeModels.cs`
   **Acceptance**: Model compiles, follows established naming/attribute conventions
 
-- [ ] 4. **Add `SendCommandAsync` to `OpenCodeHttpClient`**
+- [x] 4. **Add `SendCommandAsync` to `OpenCodeHttpClient`**
   **What**: Add a new method after `SendPromptAsyncFireAndForget` (line 135), following the same fire-and-forget pattern:
   ```csharp
   /// <summary>POST /session/{sessionId}/command?directory={directory} — fire and forget.</summary>
@@ -125,7 +125,7 @@ Enable command execution through the full stack: API → Orchestrator → Harnes
   **Files**: `src/WeaveFleet.Infrastructure/Harnesses/OpenCode/OpenCodeHttpClient.cs`
   **Acceptance**: Method compiles, follows same pattern as `SendPromptAsyncFireAndForget`
 
-- [ ] 5. **Implement `SendCommandAsync` in `OpenCodeHarnessInstance`**
+- [x] 5. **Implement `SendCommandAsync` in `OpenCodeHarnessInstance`**
   **What**: Add a new method after `SendPromptAsync` (line 170). Follow the same pattern:
   1. Call `EnsureSessionAsync(ct)`
   2. Build `OpenCodeModelRefRequest` from `options.ModelId` (same slash-split logic as `SendPromptAsync` lines 137-153)
@@ -145,7 +145,7 @@ Enable command execution through the full stack: API → Orchestrator → Harnes
 
 ### Infrastructure — Claude Code
 
-- [ ] 6. **Implement `SendCommandAsync` in `ClaudeCodeHarnessInstance`**
+- [x] 6. **Implement `SendCommandAsync` in `ClaudeCodeHarnessInstance`**
   **What**: Add after `SendPromptAsync` (line 176). Claude Code has no native command concept, so format the command as a prompt and delegate:
   ```csharp
   /// <inheritdoc />
@@ -167,7 +167,7 @@ Enable command execution through the full stack: API → Orchestrator → Harnes
 
 ### Infrastructure — Test Harness & Test Fakes
 
-- [ ] 7. **Implement `SendCommandAsync` in `TestHarnessInstance`**
+- [x] 7. **Implement `SendCommandAsync` in `TestHarnessInstance`**
   **What**: Add after `SendPromptAsync` (line 90). The test harness should delegate to `SendPromptAsync` with formatted text (same as Claude Code approach), so test scenarios that enqueue prompt responses also work for commands:
   ```csharp
   /// <inheritdoc/>
@@ -187,7 +187,7 @@ Enable command execution through the full stack: API → Orchestrator → Harnes
   **Files**: `tests/WeaveFleet.TestHarness/TestHarnessInstance.cs`
   **Acceptance**: Compiles, reuses existing prompt response queuing mechanism
 
-- [ ] 7b. **Implement `SendCommandAsync` in `FakeInstance` (test fake)**
+- [x] 7b. **Implement `SendCommandAsync` in `FakeInstance` (test fake)**
   **What**: The `FakeInstance` class in `HarnessEventRelayTests.cs` is a hand-rolled `IHarnessInstance` used in relay tests. Add a no-op implementation:
   ```csharp
   public Task SendCommandAsync(CommandOptions options, CancellationToken ct) => Task.CompletedTask;
@@ -197,7 +197,7 @@ Enable command execution through the full stack: API → Orchestrator → Harnes
 
 ### Application Layer — Orchestrator
 
-- [ ] 8. **Add `CommandSessionAsync` to `SessionOrchestrator`**
+- [x] 8. **Add `CommandSessionAsync` to `SessionOrchestrator`**
   **What**: Add after `PromptSessionAsync` (line 267). Follow the exact same pattern:
   ```csharp
   public async Task<Result<Unit>> CommandSessionAsync(
@@ -218,7 +218,7 @@ Enable command execution through the full stack: API → Orchestrator → Harnes
 
 ### API Layer
 
-- [ ] 9. **Add `SendCommandApiRequest` record to `SessionEndpoints.cs`**
+- [x] 9. **Add `SendCommandApiRequest` record to `SessionEndpoints.cs`**
   **What**: Add after `ForkSessionApiRequest` (line 281):
   ```csharp
   internal sealed record SendCommandApiRequest(
@@ -230,7 +230,7 @@ Enable command execution through the full stack: API → Orchestrator → Harnes
   **Files**: `src/WeaveFleet.Api/Endpoints/SessionEndpoints.cs`
   **Acceptance**: Record compiles, follows existing naming pattern
 
-- [ ] 10. **Replace 501 stub with real implementation in `SessionEndpoints.cs`**
+- [x] 10. **Replace 501 stub with real implementation in `SessionEndpoints.cs`**
   **What**: Replace the stub at lines 167-170 with:
   ```csharp
   group.MapPost("/{id}/command", async (string id, SendCommandApiRequest req, SessionOrchestrator orchestrator) =>
@@ -251,7 +251,7 @@ Enable command execution through the full stack: API → Orchestrator → Harnes
   **Files**: `src/WeaveFleet.Api/Endpoints/SessionEndpoints.cs`
   **Acceptance**: Endpoint returns 202 for valid requests, proper error codes for invalid ones
 
-- [ ] 11. **Add `POST /api/instances/{id}/command` to `InstanceEndpoints.cs`**
+- [x] 11. **Add `POST /api/instances/{id}/command` to `InstanceEndpoints.cs`**
   **What**: Add after the existing `/commands` GET endpoint (line 52), a direct instance-level command endpoint:
   ```csharp
   group.MapPost("/command", async (string id, SendCommandApiRequest req, InstanceTracker tracker, CancellationToken ct) =>
@@ -287,12 +287,12 @@ Enable command execution through the full stack: API → Orchestrator → Harnes
 In practice, TODOs 1-2 should be done first, then everything else can be done in a single pass since the compiler will enforce correctness.
 
 ## Verification
-- [ ] `dotnet build` succeeds across the entire solution
-- [ ] `dotnet test` passes — all existing tests continue to work
-- [ ] The `TestHarnessInstance` compiles (proves interface contract satisfied)
+- [x] `dotnet build` succeeds across the entire solution
+- [x] `dotnet test` passes — all existing tests continue to work
+- [x] The `TestHarnessInstance` compiles (proves interface contract satisfied)
 - [ ] Manual verification: `POST /api/sessions/{id}/command` with `{"command":"compact"}` returns 202 (with a running OpenCode session)
 - [ ] Manual verification: `POST /api/instances/{id}/command` with `{"command":"compact"}` returns 202
-- [ ] No regressions in existing prompt, abort, or event streaming flows
+- [x] No regressions in existing prompt, abort, or event streaming flows
 
 ## Potential Pitfalls
 1. **OpenCode command endpoint URL**: Verify the actual OpenCode endpoint is `/session/:id/command` (not `/command`). The context states it is session-scoped.

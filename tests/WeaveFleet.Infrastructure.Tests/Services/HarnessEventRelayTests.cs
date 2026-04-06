@@ -465,6 +465,7 @@ public sealed class HarnessEventRelayTests
         public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
         public Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct) =>
             Task.CompletedTask;
+        public Task SendCommandAsync(CommandOptions options, CancellationToken ct) => Task.CompletedTask;
         public Task AbortAsync(CancellationToken ct) => Task.CompletedTask;
         public Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct) =>
             Task.FromResult(new MessagePage([], false));

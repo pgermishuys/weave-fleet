@@ -29,6 +29,9 @@ public interface IHarnessInstance : IAsyncDisposable
     /// <summary>Send a user prompt to the agent.</summary>
     Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct);
 
+    /// <summary>Execute a slash command on the agent.</summary>
+    Task SendCommandAsync(CommandOptions options, CancellationToken ct);
+
     /// <summary>Abort the current agent operation.</summary>
     Task AbortAsync(CancellationToken ct);
 

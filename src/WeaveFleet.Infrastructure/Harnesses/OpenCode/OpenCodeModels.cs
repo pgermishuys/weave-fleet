@@ -522,3 +522,23 @@ internal sealed record OpenCodeForkRequest
 {
     [JsonPropertyName("messageId")] public string? MessageId { get; init; }
 }
+
+// ---------------------------------------------------------------------------
+// Command Request
+// ---------------------------------------------------------------------------
+
+/// <summary>Request body for POST /session/:id/command.</summary>
+/// <remarks>
+/// OpenCode's <c>CommandInput</c> Zod schema requires <c>arguments</c> as a non-optional string
+/// and <c>model</c> as a plain string (e.g. <c>"provider/model"</c>), unlike the prompt endpoint
+/// which accepts an object. Callers must always set <see cref="Arguments"/> (default to
+/// <see cref="string.Empty"/>) and pass <see cref="Model"/> as a combined <c>providerID/modelID</c> string.
+/// </remarks>
+internal sealed record OpenCodeCommandRequest
+{
+    [JsonPropertyName("command")] public required string Command { get; init; }
+    [JsonPropertyName("arguments")] public required string Arguments { get; init; }
+    [JsonPropertyName("agent")] public string? Agent { get; init; }
+    [JsonPropertyName("model")] public string? Model { get; init; }
+    [JsonPropertyName("messageID")] public string? MessageId { get; init; }
+}

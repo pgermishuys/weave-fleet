@@ -164,9 +164,24 @@ public static class SessionEndpoints
         })
         .WithName("GetSessionStatus");
 
-        // POST /api/sessions/{id}/command — stub (harness command API not yet defined)
-        group.MapPost("/{id}/command", (string id) =>
-            Results.Json(new { error = "Not implemented" }, statusCode: 501))
+        // POST /api/sessions/{id}/command
+        group.MapPost("/{id}/command", async (string id, SendCommandApiRequest req, SessionOrchestrator orchestrator) =>
+        {
+            var options = new CommandOptions
+            {
+                Command = req.Command,
+                Arguments = req.Arguments,
+                Agent = req.Agent,
+                ModelId = req.Model,
+            };
+
+            var validationError = options.Validate();
+            if (validationError is not null)
+                return Results.BadRequest(new { error = validationError });
+
+            var result = await orchestrator.CommandSessionAsync(id, options);
+            return result.Match(_ => Results.Accepted(), err => err.ToSessionApiResult());
+        })
         .WithName("SendSessionCommand");
 
         // DELETE /api/sessions/{id}
@@ -279,6 +294,12 @@ internal sealed record OnCompleteInfo(string NotifySessionId, string NotifyInsta
 internal sealed record SendPromptApiRequest(string Text, string? Agent, string? Model);
 
 internal sealed record ForkSessionApiRequest(string? Title);
+
+internal sealed record SendCommandApiRequest(
+    string Command,
+    string? Arguments,
+    string? Agent,
+    string? Model);
 
 // ── FleetError → IResult helper ─────────────────────────────────────────────
 

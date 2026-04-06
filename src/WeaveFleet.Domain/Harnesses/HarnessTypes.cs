@@ -101,6 +101,45 @@ public sealed record PromptOptions
     public IReadOnlyList<HarnessAttachment>? Attachments { get; init; }
 }
 
+/// <summary>Options for executing a slash command on an agent.</summary>
+public sealed record CommandOptions
+{
+    /// <summary>Maximum allowed length for a command name.</summary>
+    private const int MaxCommandLength = 64;
+
+    /// <summary>Maximum allowed length for command arguments.</summary>
+    private const int MaxArgumentsLength = 4096;
+
+    public required string Command { get; init; }
+    public string? Arguments { get; init; }
+    public string? Agent { get; init; }
+    public string? ModelId { get; init; }
+
+    /// <summary>
+    /// Validates the command name and arguments. Returns <c>null</c> when valid,
+    /// or an error message describing the first violation found.
+    /// </summary>
+    public string? Validate()
+    {
+        if (string.IsNullOrWhiteSpace(Command))
+            return "Command name is required.";
+
+        if (Command.Length > MaxCommandLength)
+            return $"Command name exceeds {MaxCommandLength} characters.";
+
+        foreach (var ch in Command)
+        {
+            if (!char.IsLetterOrDigit(ch) && ch is not ('_' or '-'))
+                return $"Command name contains invalid character '{ch}'. Only letters, digits, hyphens, and underscores are allowed.";
+        }
+
+        if (Arguments is not null && Arguments.Length > MaxArgumentsLength)
+            return $"Arguments exceed {MaxArgumentsLength} characters.";
+
+        return null;
+    }
+}
+
 /// <summary>An agent available for selection in the UI.</summary>
 public sealed record AgentInfo
 {

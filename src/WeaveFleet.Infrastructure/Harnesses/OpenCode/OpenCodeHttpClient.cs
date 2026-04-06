@@ -134,6 +134,32 @@ internal sealed class OpenCodeHttpClient
         }
     }
 
+    /// <summary>POST /session/{sessionId}/command?directory={directory} — fire and forget.</summary>
+    public async Task SendCommandAsync(
+        string sessionId,
+        OpenCodeCommandRequest request,
+        string directory,
+        CancellationToken ct)
+    {
+        var url = BuildUrl($"/session/{Uri.EscapeDataString(sessionId)}/command", directory);
+        var logUrl = RedactDirectory(url);
+        LogRequest(_logger, $"POST {logUrl}", null);
+
+        var content = new StringContent(
+            JsonSerializer.Serialize(request, OpenCodeJsonOptions.Default),
+            Encoding.UTF8,
+            "application/json");
+
+        using var response = await _httpClient.PostAsync(url, content, ct).ConfigureAwait(false);
+        LogResponse(_logger, (int)response.StatusCode, logUrl, null);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            LogRequestFailed(_logger, (int)response.StatusCode, logUrl, null);
+            response.EnsureSuccessStatusCode();
+        }
+    }
+
     /// <summary>GET /session/{sessionId}/message?directory={directory}[&amp;limit=N][&amp;before=cursor]</summary>
     public async Task<IReadOnlyList<OpenCodeMessageWithParts>> GetMessagesAsync(
         string sessionId,
@@ -356,5 +382,17 @@ internal sealed class OpenCodeHttpClient
     {
         char separator = path.Contains('?') ? '&' : '?';
         return $"{path}{separator}directory={Uri.EscapeDataString(directory)}";
+    }
+
+    /// <summary>Strips the <c>directory</c> query parameter value from a URL for safe logging.</summary>
+    private static string RedactDirectory(string url)
+    {
+        const string marker = "directory=";
+        var idx = url.IndexOf(marker, StringComparison.Ordinal);
+        if (idx < 0) return url;
+        var endIdx = url.IndexOf('&', idx);
+        return endIdx < 0
+            ? string.Concat(url.AsSpan(0, idx + marker.Length), "[redacted]")
+            : string.Concat(url.AsSpan(0, idx + marker.Length), "[redacted]", url.AsSpan(endIdx));
     }
 }

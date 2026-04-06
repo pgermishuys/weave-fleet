@@ -276,6 +276,19 @@ public sealed partial class SessionOrchestrator(
         return Unit.Value;
     }
 
+    public async Task<Result<Unit>> CommandSessionAsync(
+        string id,
+        CommandOptions options,
+        CancellationToken ct = default)
+    {
+        var instanceResult = await GetLiveInstanceAsync(id);
+        if (instanceResult.IsFailure)
+            return instanceResult.Error;
+
+        await instanceResult.Value.SendCommandAsync(options, ct);
+        return Unit.Value;
+    }
+
     // ── Messages / Diffs ───────────────────────────────────────────────────────
 
     public async Task<Result<MessagePage>> GetSessionMessagesAsync(

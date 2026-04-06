@@ -433,4 +433,49 @@ public sealed class OpenCodeModelsSerializationTests
         Assert.Null(userMsg.Model.ProviderId);
         Assert.Null(userMsg.Model.ModelId);
     }
+
+    // ---------------------------------------------------------------------------
+    // OpenCodeCommandRequest — arguments always present, model is plain string
+    // ---------------------------------------------------------------------------
+
+    [Fact]
+    public void CommandRequest_Serializes_ArgumentsAlwaysPresent()
+    {
+        // OpenCode's CommandInput Zod schema requires "arguments" as a non-optional string.
+        // Even when empty, the field must be present in the JSON payload.
+        var request = new OpenCodeCommandRequest
+        {
+            Command = "weave-health",
+            Arguments = string.Empty,
+        };
+
+        var json = JsonSerializer.Serialize(request, Options);
+
+        Assert.Contains("\"command\":\"weave-health\"", json);
+        Assert.Contains("\"arguments\":\"\"", json);
+        // Null optional fields should be omitted
+        Assert.DoesNotContain("\"agent\"", json);
+        Assert.DoesNotContain("\"model\"", json);
+        Assert.DoesNotContain("\"messageID\"", json);
+    }
+
+    [Fact]
+    public void CommandRequest_Serializes_ModelAsPlainString()
+    {
+        // OpenCode's CommandInput expects model as z.string().optional(),
+        // not an object like the prompt endpoint.
+        var request = new OpenCodeCommandRequest
+        {
+            Command = "test-cmd",
+            Arguments = "some args",
+            Model = "openai/gpt-4o",
+            Agent = "build",
+        };
+
+        var json = JsonSerializer.Serialize(request, Options);
+
+        Assert.Contains("\"model\":\"openai/gpt-4o\"", json);
+        Assert.Contains("\"agent\":\"build\"", json);
+        Assert.Contains("\"arguments\":\"some args\"", json);
+    }
 }

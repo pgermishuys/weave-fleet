@@ -90,6 +90,23 @@ public sealed class TestHarnessInstance : IHarnessInstance
     }
 
     /// <inheritdoc/>
+    public Task SendCommandAsync(CommandOptions options, CancellationToken ct)
+    {
+        // Sanitize arguments: collapse newlines to spaces to prevent prompt injection
+        var sanitizedArgs = options.Arguments?.ReplaceLineEndings(" ");
+
+        var text = string.IsNullOrWhiteSpace(sanitizedArgs)
+            ? $"/{options.Command}"
+            : $"/{options.Command} {sanitizedArgs}";
+
+        var promptOptions = options.Agent is not null || options.ModelId is not null
+            ? new PromptOptions { Agent = options.Agent, ModelId = options.ModelId }
+            : null;
+
+        return SendPromptAsync(text, promptOptions, ct);
+    }
+
+    /// <inheritdoc/>
     public Task AbortAsync(CancellationToken ct)
     {
         _promptCts?.Cancel();

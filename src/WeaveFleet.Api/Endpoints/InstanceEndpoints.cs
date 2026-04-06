@@ -1,4 +1,5 @@
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Api.Endpoints;
 
@@ -50,6 +51,30 @@ public static class InstanceEndpoints
             return Results.Ok(new { instanceId = id, commands = result });
         })
         .WithName("GetInstanceCommands");
+
+        // POST /api/instances/{id}/command — execute a slash command on the instance
+        group.MapPost("/command", async (string id, SendCommandApiRequest req, InstanceTracker tracker, CancellationToken ct) =>
+        {
+            var instance = tracker.Get(id);
+            if (instance is null)
+                return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
+
+            var options = new CommandOptions
+            {
+                Command = req.Command,
+                Arguments = req.Arguments,
+                Agent = req.Agent,
+                ModelId = req.Model,
+            };
+
+            var validationError = options.Validate();
+            if (validationError is not null)
+                return Results.BadRequest(new { error = validationError });
+
+            await instance.SendCommandAsync(options, ct);
+            return Results.Accepted();
+        })
+        .WithName("SendInstanceCommand");
 
         // GET /api/instances/{id}/agents — available agents
         group.MapGet("/agents", async (string id, InstanceTracker tracker, CancellationToken ct) =>
