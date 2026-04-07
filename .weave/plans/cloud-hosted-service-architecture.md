@@ -117,6 +117,20 @@ The most cross-cutting change. Every user-facing entity needs ownership.
 - [ ] Add indexes on `user_id` columns
 - [ ] Backfill strategy for existing data (assign to a default local user)
 
+**Known authorization gaps introduced by the task delegation feature** (must be closed before multi-tenancy):
+
+The sub-agent/task delegation feature (`ToolUsePart.ChildSessionId`, `OnComplete` callbacks, ancestor breadcrumbs) was built correctly for a local single-user context, but introduces the following attack surfaces that must be addressed when user identity is added:
+
+| Gap | Location | Risk |
+|-----|----------|------|
+| `OnComplete.NotifySessionId` accepted from untrusted client with no ownership check | `SessionEndpoints.cs` → `SessionOrchestrator.cs` | Attacker creates a child session with `notifySessionId` pointing to another user's session; callback fires a prompt into that session on completion |
+| Ancestor chain walk in `GetSessionDetailAsync` has no authorization check | `SessionService.cs` lines 61–68 | `GET /api/sessions/{any-id}` lets an authenticated user walk up the parent chain to discover and read sessions they don't own |
+| `ParentSessionId` exposed on every `SessionListResponse` item without filtering | `SessionDtos.cs` + `SessionEndpoints.cs` `ToListResponse()` | Leaks orchestration topology (parent-child relationships) across all sessions regardless of ownership |
+| `childSessionId` extracted from task tool output and used as navigation target without backend permission check | `activity-stream-v1.tsx` `TaskDelegationItem` | If a child session ID leaks, frontend navigates the user directly to a session they don't own |
+| `HarnessEventRelay.TryFireCallbacksAsync` fires into target session without verifying same workspace/owner as source | `HarnessEventRelay.cs` | Child session in one user's context can prompt a parent session belonging to a different user |
+
+**Fix pattern**: When `IUserContext` exists (Pillars 1–2), all five of these reduce to the same ownership check — verify `session.UserId == currentUser.Id` (or `session.OrgId` for shared org sessions) before accepting, traversing, or firing into a session. No structural redesign required; only guard clauses need adding at the identified call sites.
+
 **Organization/Team layer** (Phase 2):
 - [ ] `Organization` entity: `Id`, `Name`, `OwnerUserId`, `CreatedAt`
 - [ ] `OrganizationMember` entity: `OrganizationId`, `UserId`, `Role` (owner/admin/member)

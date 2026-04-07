@@ -633,11 +633,203 @@ Make sub-agent delegation work end-to-end: parent sessions can spawn children, t
 
   **Acceptance**: `dotnet test --filter SubAgentDelegationTests` passes. Both tests complete within 30s timeout. Traces captured on failure for debugging.
 
+- [ ] 17. Playwright E2E test: `ChildSession_SessionList_HasParentSessionId`
+  **What**: API-level E2E test verifying that `parentSessionId` is returned on child sessions in the session list endpoint.
+  Steps:
+    1. Create parent session via `POST /api/sessions`
+    2. Create child session with `onComplete` targeting the parent
+    3. `GET /api/sessions` — enumerate the array and find the child session
+    4. Assert `parentSessionId` property exists on the child and equals the parent session ID
+  **Important**: The sessions list returns `SessionListResponse` — the session ID is nested at `session.id`, NOT at the top level `id`. Use `s.GetProperty("session").GetProperty("id")` to find sessions in the array. See "Lessons Learned" pitfall #3 below.
+  **Files**: `tests/WeaveFleet.E2E/Tests/SubAgentDelegationTests.cs` — add to existing class
+  **Dependencies**: Task 10 (set `ParentSessionId` on child creation)
+  **Acceptance**: Test passes. Child session in list has `parentSessionId` matching parent.
+
+- [ ] 18. Playwright E2E test: `TaskDelegation_CardRendersAndNavigatesToChildSession`
+  **What**: The key E2E test proving the `TaskDelegationItem` card renders correctly in the parent session's activity stream and enables navigation to/from the child session. This test requires **both** backend changes (task tool part serialization) and frontend changes (card rendering with `data-testid` attributes).
+
+  **Prerequisites** (changes required before this test can pass):
+  - `ToolUsePart` must have `Output: JsonElement?` and `ChildSessionId: string?` properties
+  - `OpenCodeMapper.MapPart` must extract `output` and `childSessionId` from harness event JSON
+  - Frontend `AccumulatedToolPart` must have `arguments?`, `output?`, `childSessionId?` fields
+  - `getTaskToolInput` must check `part.arguments ?? (part.state as any)?.input`
+  - `getTaskToolSessionId` must check `part.childSessionId` first
+  - `convertFleetMessageToAccumulated` must map these fields from the API response
+  - `TaskDelegationItem` must render with `data-testid="task-delegation-card"` (with `data-child-session-id` attr), `data-testid="task-delegation-title"`, `data-testid="task-delegation-description"`
+  - `TestHarness.GetInstance(sessionId)` must exist to retrieve a specific instance
+  - `TestHarnessInstance.AddMessage(HarnessMessage)` must exist (thread-safe) to inject messages
+  - `TestHarnessInstance.GetMessagesAsync()` must combine scenario + dynamically added messages
+  - Frontend bundle must be rebuilt after TypeScript changes (see "Lessons Learned" pitfall #1)
+
+  **Test infrastructure additions to `SessionDetailPage.cs`:**
+  - `GetTaskDelegationCard(string? childSessionId)` — locates card by `[data-testid='task-delegation-card']` and optional `[data-child-session-id='{childSessionId}']`
+  - `WaitForTaskDelegationCardAsync(int timeoutMs = 5_000)` — waits for first card visible
+  - `ClickTaskDelegationCardAsync(string? childSessionId)` — clicks card, waits for load, returns new `SessionDetailPage`
+  - `GetAncestorLink(string title)` — `Page.GetByRole(AriaRole.Link, new() { NameString = title, Exact = true })` (**must use `Exact = true`** — see "Lessons Learned" pitfall #2)
+  - `ClickAncestorLinkAsync(string title)` — clicks ancestor link, waits for load, returns new `SessionDetailPage`
+
+  Steps:
+    1. Create parent session via `POST /api/sessions` with title "Task Delegation Parent"
+    2. Create child session with `onComplete` targeting parent, title "Task Delegation Child"
+    3. Inject a task tool call message into the parent's harness instance via `TestHarness.GetInstance(parentId).AddMessage(...)`:
+       ```
+       HarnessMessage with role = "assistant", Parts = [
+         ToolUsePart {
+           ToolCallId = "call_test_001",
+           Name = "task",
+           Arguments = JsonElement { "description": "Explore authentication patterns", "subagent_type": "explorer", ... },
+           Output = JsonElement { "result": "Found 3 auth patterns..." },
+           ChildSessionId = childId,
+           State = JsonElement { "status": "completed" }
+         }
+       ]
+       ```
+    4. Navigate to parent session detail page
+    5. `WaitForTaskDelegationCardAsync()` — wait for card to appear
+    6. `GetTaskDelegationCard(childId)` — assert visible
+    7. Assert title contains "Explorer" (case-insensitive) via `data-testid="task-delegation-title"`
+    8. Assert description contains "authentication patterns" via `data-testid="task-delegation-description"`
+    9. `ClickTaskDelegationCardAsync(childId)` → navigates to child session
+    10. Assert URL contains child session ID
+    11. `GetAncestorLink("Task Delegation Parent")` — assert breadcrumb visible (uses `Exact = true`)
+    12. `ClickAncestorLinkAsync("Task Delegation Parent")` → navigates back to parent
+    13. Assert URL contains parent session ID
+    14. `WaitForTaskDelegationCardAsync()` — card still visible after return
+
+  **Files**:
+    - `tests/WeaveFleet.E2E/Tests/SubAgentDelegationTests.cs` — add to existing class
+    - `tests/WeaveFleet.E2E/Pages/SessionDetailPage.cs` — add task delegation card + ancestor link methods
+    - `tests/WeaveFleet.TestHarness/TestHarness.cs` — add `GetInstance(string sessionId)`
+    - `tests/WeaveFleet.TestHarness/TestHarnessInstance.cs` — add `AddMessage`, update `GetMessagesAsync`
+  **Dependencies**: Tasks 1–10 (backend), plus frontend rendering changes and frontend bundle rebuild.
+  **Acceptance**: `dotnet test --filter TaskDelegation_CardRendersAndNavigatesToChildSession` passes.
+
+- [ ] 19. Unit test: `HarnessMessageSerializationTests` — ToolUsePart JSON round-trip
+  **What**: Verify that `HarnessMessage.Parts` with `[JsonPolymorphic]` correctly serializes `ToolUsePart` including `arguments`, `output`, and `childSessionId` using `JsonSerializerDefaults.Web` (camelCase property names). This catches serialization issues before they manifest as E2E failures.
+  **Files**: `tests/WeaveFleet.Application.Tests/Services/HarnessMessageSerializationTests.cs` — new file
+  **Acceptance**: Serialized JSON contains `"arguments"`, `"output"`, `"childSessionId"` keys with correct values. Deserialization round-trips back to equivalent `ToolUsePart`.
+
+---
+
+## Follow-Up: Task Delegation Card Rendering (was `task-card-rendering.md`)
+
+> This section documents a follow-up plan that was implemented in a worktree that was subsequently cleaned up.
+> All code changes were lost. This section preserves the scope and lessons learned so the work can be redone.
+
+### What It Covered
+
+The sub-agent-support plan (above) covers the backend orchestration glue. The task-card-rendering plan covered the **frontend rendering** and **E2E test infrastructure** needed to display `TaskDelegationItem` cards in the parent session's activity stream when a child session is spawned via the Task tool.
+
+### Changes Made (31 tasks, all completed — code lost)
+
+**Backend — Domain (`HarnessTypes.cs`):**
+- Added `Output: JsonElement?` and `ChildSessionId: string?` properties to `ToolUsePart`
+- These carry the task tool's result and the spawned child's session ID from harness events
+
+**Backend — Infrastructure (`OpenCodeMapper.cs`):**
+- Updated `MapPart` to extract `output` and `childSessionId` from the harness event JSON into the new `ToolUsePart` properties
+
+**Backend — Infrastructure (`OpenCodeHarnessInstance.cs`):**
+- Added `IsParentEvent` filter in `SubscribeAsync` to distinguish parent-session events from child-session events
+
+**Frontend — `api-types.ts`:**
+- Added `arguments?: Record<string, unknown>`, `output?: Record<string, unknown>`, `childSessionId?: string` to `AccumulatedToolPart`
+- Updated `getTaskToolInput` to check `part.arguments ?? (part.state as any)?.input` (fallback chain — the harness sends `arguments` at the top level, not nested under `state.input`)
+- Updated `getTaskToolSessionId` to check `part.childSessionId` first (before falling back to `state?.childSessionId`)
+
+**Frontend — `pagination-utils.ts`:**
+- Updated `convertFleetMessageToAccumulated` to map `arguments`, `output`, and `childSessionId` from the API response onto the accumulated tool part
+
+**Frontend — `activity-stream-v1.tsx`:**
+- Updated `TaskDelegationItem` component to use `part.output ?? state?.output` for the result display
+- Added `data-testid="task-delegation-card"` (with `data-child-session-id` attribute), `data-testid="task-delegation-title"`, `data-testid="task-delegation-description"` for Playwright selectors
+
+**Test Harness (`TestHarness.cs`):**
+- Added `GetInstance(string sessionId)` method to retrieve a specific `TestHarnessInstance` by session ID
+
+**Test Harness (`TestHarnessInstance.cs`):**
+- Added `AddMessage(HarnessMessage)` method (thread-safe via `SemaphoreSlim`) to inject messages into a running test instance
+- Updated `GetMessagesAsync()` to combine scenario messages + dynamically added messages
+
+**E2E Page Object (`SessionDetailPage.cs`):**
+- Added `GetTaskDelegationCard(string? childSessionId)` — locates card by `data-testid` and optional `data-child-session-id`
+- Added `WaitForTaskDelegationCardAsync(int timeoutMs)` — waits for first card to appear
+- Added `ClickTaskDelegationCardAsync(string? childSessionId)` — clicks card and returns new page object
+- Added `GetAncestorLink(string title)` — locates breadcrumb link by role with **`Exact = true`**
+- Added `ClickAncestorLinkAsync(string title)` — clicks breadcrumb and returns new page object
+
+**E2E Test (`SubAgentDelegationTests.cs`):**
+- Added `TaskDelegation_CardRendersAndNavigatesToChildSession` test that:
+  1. Creates parent + child sessions via API
+  2. Injects a task tool call message into the parent's harness instance via `AddMessage`
+  3. Navigates to parent session detail page
+  4. Asserts `TaskDelegationItem` card renders with correct title ("Explorer") and description
+  5. Clicks card → navigates to child session
+  6. Asserts ancestor breadcrumb shows parent title
+  7. Clicks breadcrumb → navigates back to parent
+  8. Asserts task card is still visible
+
+**New Test File (`HarnessMessageSerializationTests.cs`):**
+- Verified that `HarnessMessage.Parts` with `[JsonPolymorphic]` correctly serializes `ToolUsePart` including `arguments`, `output`, and `childSessionId` fields using `JsonSerializerDefaults.Web` (camelCase)
+
+### Lessons Learned / Implementation Pitfalls
+
+These issues were discovered after all 31 code tasks were complete and tests were failing:
+
+#### 1. Frontend bundle must be rebuilt after TypeScript source changes
+
+**Problem**: The built JS in `wwwroot/assets/` was stale — built before the TypeScript source changes. The minified `getTaskToolInput` function only checked `state?.input` (old code), not `part.arguments` (new code). This caused `TaskDelegationItem` to never render — `getTaskToolInput` returned `null`, so `CollapsibleToolCall` was used instead.
+
+**Symptom**: E2E test timed out at `WaitForTaskDelegationCardAsync()`. Screenshot showed "task ✓" (generic collapsible) instead of the delegation card.
+
+**Fix**: Run `cd client && npm run build` before `dotnet build -c Release` and before E2E tests. The npm/node executable is at `C:\Users\piete\AppData\Local\nvm\v22.16.0\npm.cmd` (nvm4w manages Node on this machine — `npm` is not on the default shell PATH in the worktree environment).
+
+**Prevention**: Add a verification step to the plan: after any frontend source changes, rebuild the bundle and verify the built JS contains the expected code before running E2E tests.
+
+#### 2. Playwright `GetByRole` needs `Exact = true` to avoid sidebar link collisions
+
+**Problem**: `GetByRole(AriaRole.Link, new() { Name = "Task Delegation Parent" })` matched TWO elements:
+1. The sidebar navigation link (text: "Task Delegation Parent **Rename**" — Playwright does substring matching by default)
+2. The ancestor breadcrumb link (text: "Task Delegation Parent" — exact)
+
+**Symptom**: `PlaywrightException: strict mode violation: resolved to 2 elements`
+
+**Fix**: Use `Exact = true` in ALL `GetByRole` calls that target ancestor breadcrumb links:
+- `SessionDetailPage.GetAncestorLink`: `new PageGetByRoleOptions { NameString = title, Exact = true }`
+- Any inline `Page.GetByRole(AriaRole.Link, ...)` in tests: add `Exact = true`
+
+**Applies to**: `ParentChildSession_AncestorBreadcrumbsRender` test AND `TaskDelegation_CardRendersAndNavigatesToChildSession` test.
+
+#### 3. Session list API response nests `id` under `session` object
+
+**Problem**: `ChildSession_SessionList_HasParentSessionId` test used `s.GetProperty("id")` to find a session in the list, but `GET /api/sessions` returns `SessionListResponse` which has `session: { id, title, time }` — the ID is at `s.GetProperty("session").GetProperty("id")`, not at the top level.
+
+**Symptom**: `KeyNotFoundException: The given key was not present in the dictionary` at `JsonElement.GetProperty("id")`
+
+**Fix**: Use `s.GetProperty("session").GetProperty("id").GetString()` when searching the sessions list array.
+
+### Verification Checklist (for re-implementation)
+
+When re-implementing this work, verify each of these before marking done:
+
+- [ ] Frontend bundle rebuilt: `cd client && npm run build` (find npm via nvm4w: `C:\Users\piete\AppData\Local\nvm\v22.16.0\npm.cmd`)
+- [ ] `dotnet build -c Release WeaveFleet.slnx` — 0 warnings, 0 errors
+- [ ] `dotnet test -c Release WeaveFleet.slnx --filter "Category!=E2E" --no-build` — all pass
+- [ ] `dotnet test -c Release WeaveFleet.slnx --filter "FullyQualifiedName~TaskDelegation_CardRendersAndNavigatesToChildSession" --no-build` — passes
+- [ ] `dotnet test -c Release WeaveFleet.slnx --filter "Category=E2E" --no-build` — all 19 pass, 0 failures
+- [ ] All `GetByRole(AriaRole.Link, ...)` calls for breadcrumbs use `Exact = true`
+- [ ] All session list lookups use `s.GetProperty("session").GetProperty("id")` not `s.GetProperty("id")`
+
+---
+
 ## Verification
-- [ ] `dotnet build` succeeds with no errors
-- [ ] `dotnet test` — all existing and new tests pass
+- [ ] Frontend bundle rebuilt: `cd client && npm run build` (see "Lessons Learned" pitfall #1 for npm path)
+- [ ] `dotnet build -c Release WeaveFleet.slnx` succeeds with 0 warnings, 0 errors
+- [ ] `dotnet test -c Release WeaveFleet.slnx --filter "Category!=E2E" --no-build` — all existing and new tests pass
 - [ ] Manual smoke test: create a session → `GET /api/sessions/{id}` returns enriched response with `ancestors: []`, `workspaceId`, `workspaceDirectory`, `harnessType`, `lifecycleStatus`
 - [ ] Manual smoke test: create parent + child session with `onComplete` → child's `ParentSessionId` is set → `GET /api/sessions/{childId}` returns ancestors array containing parent
 - [ ] Session list shows accurate busy/idle status (not always "active")
 - [ ] No regression in session create/delete/resume/fork flows
-- [ ] E2E: `SubAgentDelegationTests` pass — ancestor breadcrumbs render, session nesting works
+- [ ] E2E: `dotnet test -c Release WeaveFleet.slnx --filter "Category=E2E" --no-build` — all pass (tasks 16–18)
+- [ ] All `GetByRole(AriaRole.Link, ...)` calls for breadcrumbs use `Exact = true` (see "Lessons Learned" pitfall #2)
+- [ ] All session list lookups use `s.GetProperty("session").GetProperty("id")` not `s.GetProperty("id")` (see "Lessons Learned" pitfall #3)
