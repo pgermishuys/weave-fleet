@@ -161,6 +161,14 @@ internal sealed class OpenCodeHttpClient
     }
 
     /// <summary>GET /session/{sessionId}/message?directory={directory}[&amp;limit=N][&amp;before=cursor]</summary>
+    /// <remarks>
+    /// Deserializes each message manually to work around a STJ polymorphism limitation:
+    /// the <c>role</c> type discriminator on <see cref="OpenCodeMessageInfo"/> may not be the
+    /// first property in the OpenCode API response, which causes STJ to fall back to the base
+    /// type (Role = "unknown") instead of the concrete <see cref="OpenCodeUserMessage"/> or
+    /// <see cref="OpenCodeAssistantMessage"/> subtypes. This mirrors the workaround in
+    /// <see cref="OpenCodeHarnessInstance.TryPersistMessageAsync"/>.
+    /// </remarks>
     public async Task<IReadOnlyList<OpenCodeMessageWithParts>> GetMessagesAsync(
         string sessionId,
         string directory,
@@ -172,8 +180,112 @@ internal sealed class OpenCodeHttpClient
         if (limit.HasValue) sb.Append(System.Globalization.CultureInfo.InvariantCulture, $"&limit={limit.Value}");
         if (before is not null) sb.Append(System.Globalization.CultureInfo.InvariantCulture, $"&before={Uri.EscapeDataString(before)}");
 
-        return await GetAsync<IReadOnlyList<OpenCodeMessageWithParts>>(sb.ToString(), ct).ConfigureAwait(false)
-               ?? [];
+        var url = sb.ToString();
+        LogRequest(_logger, $"GET {url}", null);
+
+        using var response = await _httpClient.GetAsync(url, ct).ConfigureAwait(false);
+        LogResponse(_logger, (int)response.StatusCode, url, null);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            LogRequestFailed(_logger, (int)response.StatusCode, url, null);
+            response.EnsureSuccessStatusCode();
+        }
+
+        using var doc = await JsonDocument.ParseAsync(
+            await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false), cancellationToken: ct)
+            .ConfigureAwait(false);
+
+        if (doc.RootElement.ValueKind != JsonValueKind.Array)
+            return [];
+
+        return DeserializeMessages(doc.RootElement);
+    }
+
+    /// <summary>
+    /// Deserializes an array of OpenCode messages, manually dispatching on the <c>info.role</c>
+    /// discriminator to avoid STJ polymorphism ordering issues.
+    /// </summary>
+    private static List<OpenCodeMessageWithParts> DeserializeMessages(JsonElement array)
+    {
+        var result = new List<OpenCodeMessageWithParts>();
+
+        foreach (var element in array.EnumerateArray())
+        {
+            if (element.ValueKind != JsonValueKind.Object)
+                continue;
+
+            if (!element.TryGetProperty("info", out var infoEl) || infoEl.ValueKind != JsonValueKind.Object)
+                continue;
+
+            // Read role from raw JSON — avoid polymorphic deserialization of the abstract base type,
+            // which requires the discriminator to be the first property in STJ polymorphism.
+            if (!infoEl.TryGetProperty("role", out var roleEl))
+                continue;
+
+            var role = roleEl.GetString();
+            if (role is not ("user" or "assistant"))
+                continue;
+
+            OpenCodeMessageInfo? info = role == "assistant"
+                ? infoEl.Deserialize<OpenCodeAssistantMessage>(OpenCodeJsonOptions.Default)
+                : infoEl.Deserialize<OpenCodeUserMessage>(OpenCodeJsonOptions.Default);
+
+            if (info is null)
+                continue;
+
+            var parts = element.TryGetProperty("parts", out var partsEl)
+                ? DeserializeParts(partsEl)
+                : [];
+
+            result.Add(new OpenCodeMessageWithParts { Info = info, Parts = parts });
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Deserializes an array of message parts, manually dispatching on the <c>type</c>
+    /// discriminator to avoid STJ polymorphism ordering issues.
+    /// Mirrors the pattern in <see cref="OpenCodeHarnessInstance.TryPersistPartAsync"/>.
+    /// </summary>
+    internal static List<OpenCodeMessagePart> DeserializeParts(JsonElement partsArray)
+    {
+        if (partsArray.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var result = new List<OpenCodeMessagePart>();
+
+        foreach (var partEl in partsArray.EnumerateArray())
+        {
+            if (partEl.ValueKind != JsonValueKind.Object)
+                continue;
+
+            if (!partEl.TryGetProperty("type", out var typeEl))
+                continue;
+
+            OpenCodeMessagePart? part = typeEl.GetString() switch
+            {
+                "text" => partEl.Deserialize<OpenCodeTextPart>(OpenCodeJsonOptions.Default),
+                "tool" => partEl.Deserialize<OpenCodeToolPart>(OpenCodeJsonOptions.Default),
+                "reasoning" => partEl.Deserialize<OpenCodeReasoningPart>(OpenCodeJsonOptions.Default),
+                "step-start" => partEl.Deserialize<OpenCodeStepStartPart>(OpenCodeJsonOptions.Default),
+                "step-finish" => partEl.Deserialize<OpenCodeStepFinishPart>(OpenCodeJsonOptions.Default),
+                "file" => partEl.Deserialize<OpenCodeFilePart>(OpenCodeJsonOptions.Default),
+                "agent" => partEl.Deserialize<OpenCodeAgentPart>(OpenCodeJsonOptions.Default),
+                "subtask" => partEl.Deserialize<OpenCodeSubtaskPart>(OpenCodeJsonOptions.Default),
+                "snapshot" => partEl.Deserialize<OpenCodeSnapshotPart>(OpenCodeJsonOptions.Default),
+                "patch" => partEl.Deserialize<OpenCodePatchPart>(OpenCodeJsonOptions.Default),
+                "retry" => partEl.Deserialize<OpenCodeRetryPart>(OpenCodeJsonOptions.Default),
+                "compaction" => partEl.Deserialize<OpenCodeCompactionPart>(OpenCodeJsonOptions.Default),
+                _ => null,
+            };
+
+            if (part is not null)
+                result.Add(part);
+        }
+
+        return result;
     }
 
     /// <summary>POST /session/{sessionId}/abort?directory={directory}</summary>

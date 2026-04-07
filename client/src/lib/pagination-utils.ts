@@ -16,6 +16,7 @@ export interface FleetMessage {
   parts: FleetMessagePart[];
   timestamp: string;     // ISO 8601 DateTimeOffset
   textContent: string;   // convenience: concatenated text parts
+  agent?: string;        // agent name (e.g. "loom", "thread") — null for non-agent messages
 }
 
 /** Polymorphic message part — discriminated by "type" field. */
@@ -191,6 +192,7 @@ export function convertFleetMessageToAccumulated(msg: FleetMessage): Accumulated
     role: msg.role === "user" ? "user" : "assistant",
     parts,
     createdAt,
+    agent: msg.agent,
   };
 }
 

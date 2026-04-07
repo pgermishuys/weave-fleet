@@ -76,6 +76,21 @@ public sealed class SessionDetailPage(IPage page)
         => await Assertions.Expect(MessageItems.Filter(new LocatorFilterOptions { HasText = text }))
             .ToHaveCountAsync(1, new LocatorAssertionsToHaveCountOptions { Timeout = timeoutMs });
 
+    /// <summary>Get the sender name displayed on a specific message item (e.g. "You", "Loom", "Assistant").</summary>
+    public static async Task<string?> GetMessageSenderNameAsync(ILocator messageItem)
+        => await messageItem.GetByTestId("message-sender-name").TextContentAsync();
+
+    /// <summary>Get all sender names displayed on messages with the given role.</summary>
+    public async Task<IReadOnlyList<string?>> GetSenderNamesByRoleAsync(string role)
+    {
+        var messages = GetMessagesByRole(role);
+        var count = await messages.CountAsync();
+        var names = new List<string?>(count);
+        for (var i = 0; i < count; i++)
+            names.Add(await GetMessageSenderNameAsync(messages.Nth(i)));
+        return names;
+    }
+
     // ── Prompt / Send ─────────────────────────────────────────────────────────
 
     /// <summary>Type text into the prompt input and send it.</summary>

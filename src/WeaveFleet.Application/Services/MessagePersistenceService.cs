@@ -32,6 +32,7 @@ public sealed class MessagePersistenceService
             PartsJson = partsJson,
             Timestamp = message.Timestamp.ToString("O"),
             CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            AgentName = message.Agent,
         };
     }
 
@@ -53,6 +54,7 @@ public sealed class MessagePersistenceService
                 persisted.Timestamp,
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.RoundtripKind),
+            Agent = persisted.AgentName,
         };
     }
 
@@ -113,6 +115,7 @@ public sealed class MessagePersistenceService
             PartsJson = JsonSerializer.Serialize(parts, SerializerOptions),
             Timestamp = existing.Timestamp,
             CreatedAt = existing.CreatedAt,
+            AgentName = existing.AgentName,
         };
     }
 }

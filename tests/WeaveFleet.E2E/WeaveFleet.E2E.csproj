@@ -22,6 +22,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\WeaveFleet.Api\WeaveFleet.Api.csproj" />
+    <ProjectReference Include="..\..\src\WeaveFleet.Application\WeaveFleet.Application.csproj" />
+    <ProjectReference Include="..\..\src\WeaveFleet.Domain\WeaveFleet.Domain.csproj" />
+    <ProjectReference Include="..\..\src\WeaveFleet.Infrastructure\WeaveFleet.Infrastructure.csproj" />
     <ProjectReference Include="..\WeaveFleet.TestHarness\WeaveFleet.TestHarness.csproj" />
   </ItemGroup>
 

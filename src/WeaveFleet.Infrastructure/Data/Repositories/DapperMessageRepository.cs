@@ -12,12 +12,13 @@ public sealed class DapperMessageRepository(IDbConnectionFactory connectionFacto
         using var conn = connectionFactory.CreateConnection();
         await conn.ExecuteAsync(
             """
-            INSERT INTO messages (id, session_id, role, parts_json, timestamp, created_at)
-            VALUES (@Id, @SessionId, @Role, @PartsJson, @Timestamp, @CreatedAt)
+            INSERT INTO messages (id, session_id, role, parts_json, timestamp, created_at, agent_name)
+            VALUES (@Id, @SessionId, @Role, @PartsJson, @Timestamp, @CreatedAt, @AgentName)
             ON CONFLICT(id, session_id) DO UPDATE SET
                 role = excluded.role,
                 parts_json = excluded.parts_json,
-                timestamp = excluded.timestamp
+                timestamp = excluded.timestamp,
+                agent_name = COALESCE(excluded.agent_name, messages.agent_name)
             """, message);
     }
 
@@ -34,12 +35,13 @@ public sealed class DapperMessageRepository(IDbConnectionFactory connectionFacto
             {
                 await conn.ExecuteAsync(
                     """
-                    INSERT INTO messages (id, session_id, role, parts_json, timestamp, created_at)
-                    VALUES (@Id, @SessionId, @Role, @PartsJson, @Timestamp, @CreatedAt)
+                    INSERT INTO messages (id, session_id, role, parts_json, timestamp, created_at, agent_name)
+                    VALUES (@Id, @SessionId, @Role, @PartsJson, @Timestamp, @CreatedAt, @AgentName)
                     ON CONFLICT(id, session_id) DO UPDATE SET
                         role = excluded.role,
                         parts_json = excluded.parts_json,
-                        timestamp = excluded.timestamp
+                        timestamp = excluded.timestamp,
+                        agent_name = COALESCE(excluded.agent_name, messages.agent_name)
                     """, message, tx);
             }
             tx.Commit();

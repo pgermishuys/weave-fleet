@@ -76,6 +76,9 @@ public sealed record HarnessMessage
     public required IReadOnlyList<MessagePart> Parts { get; init; }
     public required DateTimeOffset Timestamp { get; init; }
 
+    /// <summary>The agent that produced this message (e.g. "loom", "thread").</summary>
+    public string? Agent { get; init; }
+
     /// <summary>Convenience: concatenated text parts.</summary>
     public string TextContent =>
         string.Join("", Parts.OfType<TextPart>().Select(p => p.Text));

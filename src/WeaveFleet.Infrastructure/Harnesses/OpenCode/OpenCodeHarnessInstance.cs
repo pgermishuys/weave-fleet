@@ -461,10 +461,11 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
                 : infoEl.Deserialize<OpenCodeUserMessage>(OpenCodeJsonOptions.Default);
             if (info is null) return;
 
-            // Deserialize parts array separately
+            // Deserialize parts array manually — same STJ polymorphism workaround as
+            // DeserializeParts: the "type" discriminator may not be the first property.
             IReadOnlyList<OpenCodeMessagePart> parts = [];
             if (payload.TryGetProperty("parts", out var partsEl))
-                parts = partsEl.Deserialize<IReadOnlyList<OpenCodeMessagePart>>(OpenCodeJsonOptions.Default) ?? [];
+                parts = OpenCodeHttpClient.DeserializeParts(partsEl);
 
             var openCodeMessage = new OpenCodeMessageWithParts { Info = info, Parts = parts };
             var harnessMessage = OpenCodeMapper.ToHarnessMessage(openCodeMessage);
@@ -478,7 +479,16 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
             if (harnessMessage.Parts.Count == 0)
             {
                 var existing = await messageRepo.GetByIdAsync(persisted.Id, persisted.SessionId).ConfigureAwait(false);
-                if (existing is not null) return; // Don't overwrite with empty skeleton
+                if (existing is not null)
+                {
+                    // Still update agent if the skeleton was created without one
+                    if (existing.AgentName is null && persisted.AgentName is not null)
+                    {
+                        existing.AgentName = persisted.AgentName;
+                        await messageRepo.UpsertAsync(existing).ConfigureAwait(false);
+                    }
+                    return;
+                }
             }
 
             await messageRepo.UpsertAsync(persisted).ConfigureAwait(false);
@@ -547,20 +557,33 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
 
             var existing = await messageRepo.GetByIdAsync(messageId, _fleetSessionId).ConfigureAwait(false);
 
+            // Try to extract agent and role from the event info (if present)
+            string? agentName = null;
+            string skeletonRole = "assistant"; // default for backwards compat
+            if (payload.TryGetProperty("info", out var infoEl))
+            {
+                if (infoEl.TryGetProperty("agent", out var agentEl))
+                    agentName = agentEl.GetString();
+
+                if (infoEl.TryGetProperty("role", out var roleEl) && roleEl.GetString() is "user")
+                    skeletonRole = "user";
+            }
+
             PersistedMessage persisted;
             if (existing is null)
             {
-                // Create new skeleton message for this assistant part
+                // Create new skeleton message for this part
                 var partsJson = JsonSerializer.Serialize(
                     new[] { fleetPart }, MessagePersistenceService.SerializerOptions);
                 persisted = new PersistedMessage
                 {
                     Id = messageId,
                     SessionId = _fleetSessionId,
-                    Role = "assistant",
+                    Role = skeletonRole,
                     PartsJson = partsJson,
                     Timestamp = DateTimeOffset.UtcNow.ToString("O"),
                     CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+                    AgentName = agentName,
                 };
             }
             else

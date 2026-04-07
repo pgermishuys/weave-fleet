@@ -398,7 +398,7 @@ const MessageItem = memo(function MessageItem({
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center gap-2 flex-wrap">
           {isUser ? (
-            <span className="text-xs font-medium">You</span>
+            <span className="text-xs font-medium" data-testid="message-sender-name">You</span>
           ) : (
             <>
               {/* TUI pattern: ▣ AgentName · modelID · duration */}
@@ -408,7 +408,7 @@ const MessageItem = memo(function MessageItem({
               >
                 ▣
               </span>
-              <span className="text-xs font-medium">
+              <span className="text-xs font-medium" data-testid="message-sender-name">
                 {message.agent ? toTitleCase(message.agent) : "Assistant"}
               </span>
               {message.modelID && (

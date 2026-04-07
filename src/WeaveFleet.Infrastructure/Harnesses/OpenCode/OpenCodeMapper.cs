@@ -30,6 +30,7 @@ internal static class OpenCodeMapper
             Role = msg.Info.Role,
             Parts = parts,
             Timestamp = DateTimeOffsetFromUnixMs(msg.Info.Time.Created),
+            Agent = ExtractAgent(msg.Info),
         };
     }
 
@@ -156,6 +157,17 @@ internal static class OpenCodeMapper
     /// <summary>Converts a Unix millisecond timestamp to <see cref="DateTimeOffset"/>.</summary>
     internal static DateTimeOffset DateTimeOffsetFromUnixMs(long ms)
         => DateTimeOffset.FromUnixTimeMilliseconds(ms);
+
+    /// <summary>
+    /// Extracts the agent name from a polymorphic <see cref="OpenCodeMessageInfo"/> subtype.
+    /// Returns <c>null</c> for base-type messages that lack an agent field.
+    /// </summary>
+    private static string? ExtractAgent(OpenCodeMessageInfo info) => info switch
+    {
+        OpenCodeAssistantMessage a => a.Agent,
+        OpenCodeUserMessage u => u.Agent,
+        _ => null,
+    };
 
     /// <summary>
     /// Attempts to extract token/cost data from an OpenCode SSE event.
