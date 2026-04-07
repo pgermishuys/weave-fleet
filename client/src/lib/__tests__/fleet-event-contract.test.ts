@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import type React from "react";
-import type { AccumulatedMessage, SSEEvent } from "@/lib/api-types";
+import type { AccumulatedMessage, WebSocketEvent } from "@/lib/api-types";
 import { handleEvent } from "@/hooks/use-session-events";
 
 const fixturesDir = resolve(__dirname, "../../../../tests/contracts");
@@ -54,7 +54,7 @@ function createStateHarness(sessionId: string) {
     current: null,
   };
 
-  const dispatch = (event: SSEEvent) => {
+  const dispatch = (event: WebSocketEvent) => {
     handleEvent(
       event,
       sessionId,
@@ -88,7 +88,7 @@ describe("Fleet WebSocket events → AccumulatedMessage state contract", () => {
 
       // Replay all events in sequence
       for (const event of testCase.events) {
-        harness.dispatch(event as SSEEvent);
+        harness.dispatch(event as WebSocketEvent);
       }
 
       const messages = harness.getMessages();

@@ -39,12 +39,6 @@ export function apiUrl(path: string): string {
 }
 
 /**
- * Build a full SSE URL from a path. Semantically identical to `apiUrl`
- * but named distinctly for readability at EventSource call sites.
- */
-export const sseUrl = apiUrl;
-
-/**
  * Build a WebSocket URL from an HTTP path.
  *
  * Converts the base URL scheme:

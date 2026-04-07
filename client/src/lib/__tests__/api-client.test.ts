@@ -22,13 +22,6 @@ describe("api-client", () => {
       expect(apiUrl("/api/sessions")).toBe("/api/sessions");
     });
 
-    it("sseUrl returns the path unchanged", async () => {
-      const { sseUrl } = await import("../api-client");
-      expect(sseUrl("/api/notifications/stream")).toBe(
-        "/api/notifications/stream"
-      );
-    });
-
     it("apiFetch calls fetch with the relative path", async () => {
       const mockFetch = vi.fn().mockResolvedValue(new Response("ok"));
       vi.stubGlobal("fetch", mockFetch);
@@ -50,13 +43,6 @@ describe("api-client", () => {
       const { apiUrl } = await import("../api-client");
       expect(apiUrl("/api/sessions")).toBe(
         "http://localhost:3000/api/sessions"
-      );
-    });
-
-    it("sseUrl prepends the base URL", async () => {
-      const { sseUrl } = await import("../api-client");
-      expect(sseUrl("/api/notifications/stream")).toBe(
-        "http://localhost:3000/api/notifications/stream"
       );
     });
 

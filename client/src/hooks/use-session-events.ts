@@ -2,7 +2,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import type {
   AccumulatedMessage,
-  SSEEvent,
+  WebSocketEvent,
 } from "@/lib/api-types";
 import { apiFetch } from "@/lib/api-client";
 import { fetchSessionStatus } from "@/lib/session-status-utils";
@@ -269,9 +269,9 @@ export function useSessionEvents(
     const topic = `session:${sessionId}`;
     const unsub = subscribe([topic], (_topic: string, rawData: unknown) => {
       if (!isMounted.current) return;
-      let event: SSEEvent;
+      let event: WebSocketEvent;
       try {
-        event = rawData as SSEEvent;
+        event = rawData as WebSocketEvent;
       } catch {
         return;
       }
@@ -361,7 +361,7 @@ type SetSessionStatus = React.Dispatch<React.SetStateAction<"idle" | "busy">>;
 type SetError = React.Dispatch<React.SetStateAction<string | undefined>>;
 
 export function handleEvent(
-  event: SSEEvent,
+  event: WebSocketEvent,
   sessionId: string,
   setMessages: SetMessages,
   setStatus: SetStatus,

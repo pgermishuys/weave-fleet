@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type React from "react";
-import type { AccumulatedMessage, SSEEvent } from "@/lib/api-types";
+import type { AccumulatedMessage, WebSocketEvent } from "@/lib/api-types";
 import { handleEvent } from "@/hooks/use-session-events";
 
 function createStateHarness(sessionId: string) {
@@ -35,7 +35,7 @@ function createStateHarness(sessionId: string) {
   };
   const lastMessageIdRef: React.MutableRefObject<string | null> = { current: null };
 
-  const dispatch = (event: SSEEvent) => {
+  const dispatch = (event: WebSocketEvent) => {
     handleEvent(
       event,
       sessionId,
@@ -67,7 +67,7 @@ describe("handleEvent message.part.updated", () => {
           sessionID: "sess-1",
         },
       },
-    } as SSEEvent);
+    } as WebSocketEvent);
 
     harness.dispatch({
       type: "message.part.updated",
@@ -80,7 +80,7 @@ describe("handleEvent message.part.updated", () => {
           text: "hello",
         },
       },
-    } as SSEEvent);
+    } as WebSocketEvent);
 
     const messages = harness.getMessages();
     expect(messages).toHaveLength(1);
@@ -102,7 +102,7 @@ describe("handleEvent message.part.updated", () => {
           // messageID intentionally omitted
         },
       },
-    } as SSEEvent);
+    } as WebSocketEvent);
 
     expect(harness.getMessages()).toHaveLength(0);
   });
@@ -125,7 +125,7 @@ describe("handleEvent message.part.updated", () => {
           text: "hello",
         },
       },
-    } as SSEEvent);
+    } as WebSocketEvent);
 
     const messages = harness.getMessages();
     // Part is applied regardless of sessionID mismatch
@@ -149,7 +149,7 @@ describe("handleEvent message.part.updated", () => {
           text: "hello",
         },
       },
-    } as SSEEvent);
+    } as WebSocketEvent);
 
     const messages = harness.getMessages();
     expect(messages).toHaveLength(1);
@@ -168,7 +168,7 @@ describe("handleEvent message.part.delta", () => {
       properties: {
         info: { id: "msg-1", role: "assistant", sessionID: "sess-1" },
       },
-    } as SSEEvent);
+    } as WebSocketEvent);
 
     // Then create a part via message.part.updated
     harness.dispatch({
@@ -177,7 +177,7 @@ describe("handleEvent message.part.delta", () => {
         sessionID: "sess-1",
         part: { id: "part-1", messageID: "msg-1", type: "text", text: "" },
       },
-    } as SSEEvent);
+    } as WebSocketEvent);
 
     // Apply delta
     harness.dispatch({
@@ -189,7 +189,7 @@ describe("handleEvent message.part.delta", () => {
         field: "text",
         delta: "Hello world",
       },
-    } as SSEEvent);
+    } as WebSocketEvent);
 
     const messages = harness.getMessages();
     expect(messages[0]?.parts[0]).toMatchObject({ type: "text", text: "Hello world" });
@@ -204,7 +204,7 @@ describe("handleEvent message.part.delta", () => {
       properties: {
         info: { id: "msg-1", role: "assistant", sessionID: "fleet-abc" },
       },
-    } as SSEEvent);
+    } as WebSocketEvent);
 
     harness.dispatch({
       type: "message.part.updated",
@@ -212,7 +212,7 @@ describe("handleEvent message.part.delta", () => {
         sessionID: "fleet-abc",
         part: { id: "part-1", messageID: "msg-1", type: "text", text: "" },
       },
-    } as SSEEvent);
+    } as WebSocketEvent);
 
     harness.dispatch({
       type: "message.part.delta",
@@ -223,7 +223,7 @@ describe("handleEvent message.part.delta", () => {
         field: "text",
         delta: "streaming text",
       },
-    } as SSEEvent);
+    } as WebSocketEvent);
 
     const messages = harness.getMessages();
     expect(messages[0]?.parts[0]).toMatchObject({ type: "text", text: "streaming text" });
@@ -241,7 +241,7 @@ describe("handleEvent message.part.delta", () => {
         field: "image",  // not "text"
         delta: "some-data",
       },
-    } as SSEEvent);
+    } as WebSocketEvent);
 
     expect(harness.getMessages()).toHaveLength(0);
   });
@@ -258,7 +258,7 @@ describe("handleEvent message.part.delta", () => {
         field: "text",
         delta: "hello",
       },
-    } as SSEEvent);
+    } as WebSocketEvent);
 
     expect(harness.getMessages()).toHaveLength(0);
   });

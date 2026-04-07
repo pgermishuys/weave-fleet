@@ -191,11 +191,11 @@ export interface ReorderProjectRequest {
 // ─── Streamed Event Model ──────────────────────────────────────────────────
 
 /**
- * The simplified event model sent from the SSE proxy to the browser.
+ * The simplified event model sent from the WebSocket to the browser.
  * Each event carries the raw SDK event type + properties for the client
  * to handle — we avoid mapping here to stay close to the SDK source of truth.
  */
-export interface SSEEvent {
+export interface WebSocketEvent {
   type: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   properties: Record<string, any>;
