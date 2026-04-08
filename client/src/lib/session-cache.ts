@@ -6,7 +6,7 @@
  * No React dependencies — pure TypeScript module.
  */
 
-import type { AccumulatedMessage } from "@/lib/api-types";
+import type { AccumulatedMessage, DelegationDto } from "@/lib/api-types";
 import type { PrReference } from "@/lib/pr-utils";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -34,6 +34,8 @@ export interface CacheEntry {
   scrollHeight: number;
   /** Last known session activity status. */
   sessionStatus: "idle" | "busy";
+  /** Last known delegations for this session. */
+  delegations: DelegationDto[];
   /** The last known message ID — used for gap-fill via loadMessagesSince on hydration. */
   lastMessageId: string | null;
   /** Unix timestamp (ms) when this entry was saved — used for TTL checks. */

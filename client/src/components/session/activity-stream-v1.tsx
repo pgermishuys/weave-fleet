@@ -1,17 +1,14 @@
 
 import { memo, useMemo, useCallback, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Bot, User, SquareTerminal, Loader2, AlertCircle, RefreshCw, ChevronDown, ArrowUpRight, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Bot, User, SquareTerminal, Loader2, AlertCircle, RefreshCw, ChevronDown } from "lucide-react";
 import { useScrollAnchor } from "@/hooks/use-scroll-anchor";
 import { useActivityFilter } from "@/hooks/use-activity-filter";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
-import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart, AutocompleteAgent } from "@/lib/api-types";
-import { isTaskToolCall, getTaskToolInput, getTaskToolSessionId } from "@/lib/api-types";
-import { Link } from "react-router";
+import type { AccumulatedMessage, AccumulatedPart, AccumulatedFilePart, AutocompleteAgent, DelegationDto } from "@/lib/api-types";
 import type { SessionConnectionStatus } from "@/hooks/use-session-events";
 import { isTodoWriteTool, parseTodoOutput } from "@/lib/todo-utils";
 import { resolveAgentColor } from "@/lib/agent-colors";
@@ -20,9 +17,11 @@ import { ToolCardRouter } from "./tool-cards/tool-card-router";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { RelativeTimestamp } from "./relative-timestamp";
 import { ActivityStreamToolbar } from "./activity-stream-toolbar";
+import { DelegationCard } from "./delegation-card";
 
 interface ActivityStreamV1Props {
   messages: AccumulatedMessage[];
+  delegations: DelegationDto[];
   status: SessionConnectionStatus;
   sessionStatus: "idle" | "busy";
   error?: string;
@@ -41,7 +40,7 @@ interface ActivityStreamV1Props {
   totalMessageCount?: number | null;
   /** Error from the last failed older-messages fetch (null when no error). */
   loadOlderError?: string | null;
-  /** The current page's OpenCode session ID — threaded to TaskDelegationItem for parent breadcrumbs. */
+  /** The current Fleet session ID. */
   currentSessionId?: string;
 
   /**
@@ -223,93 +222,18 @@ function CollapsedThinkingIndicator({ message }: { message: AccumulatedMessage }
   );
 }
 
-// ─── Task Delegation Block ─────────────────────────────────────────────────
-
-function TaskDelegationItem({ part, currentSessionId }: { part: AccumulatedToolPart; currentSessionId?: string }) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const state = part.state as any;
-  const input = getTaskToolInput(part);
-
-  // The child session runs on the same OpenCode instance as the parent.
-  // We can build the navigation URL directly from the extracted session ID
-  // and the current page's instanceId — no DB lookup required.
-  // Note: the ID may be either a Fleet DB ID or an OpenCode session ID
-  // depending on how the child was created; resolveSession handles both.
-  const [searchParams] = useSearchParams();
-  const parentInstanceId = searchParams.get("instanceId");
-  const childSessionId = getTaskToolSessionId(part);
-
-  if (!input) return null;
-
-  const isRunning = state?.status === "running" || state?.status === "pending" || !state?.status;
-  const isError = state?.status === "error";
-  const isCompleted = !isRunning && !isError;
-
-  const title = input.subagent_type
-    ? `${toTitleCase(input.subagent_type)} Task`
-    : "Subagent Task";
-
-  const childUrl = childSessionId && parentInstanceId
-    ? `/sessions/${encodeURIComponent(childSessionId)}?instanceId=${encodeURIComponent(parentInstanceId)}${currentSessionId ? `&parentSessionId=${encodeURIComponent(currentSessionId)}` : ""}`
-    : null;
-
-  // Status summary from part.state (no API calls needed)
-  const outputPreview = (() => {
-    if (!state?.output) return null;
-    const firstLine = String(state.output).split("\n")[0];
-    return firstLine.length > 80 ? firstLine.slice(0, 80) + "…" : firstLine;
-  })();
-
-  const cardContent = (
-    <>
-      <div className="flex items-center gap-2 font-medium text-foreground/80">
-        {isRunning && <Loader2 className="h-3 w-3 animate-spin text-indigo-400 shrink-0" />}
-        {isCompleted && (
-          <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
-        )}
-        {isError && (
-          <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
-        )}
-        <span className="flex-1">{title}</span>
-        {childUrl && (
-          <ArrowUpRight className="h-3 w-3 shrink-0 text-muted-foreground/60" />
-        )}
-      </div>
-      {input.description && (
-        <p className="mt-1 text-muted-foreground leading-relaxed">{input.description}</p>
-      )}
-      {outputPreview && !isRunning && (
-        <p className={`mt-1 leading-relaxed truncate ${isError ? "text-red-500/80" : "text-muted-foreground/70"}`}>
-          {outputPreview}
-        </p>
-      )}
-    </>
-  );
-
-  if (childUrl) {
-    return (
-      <Link
-        to={childUrl}
-        className="my-1 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs border-l-2 border-l-indigo-500/60 block hover:bg-muted/50 hover:border-border transition-colors"
-      >
-        {cardContent}
-      </Link>
-    );
-  }
-
-  return (
-    <div className="my-1 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs border-l-2 border-l-indigo-500/60">
-      {cardContent}
-    </div>
-  );
-}
-
 // ─── Tool Call Item ─────────────────────────────────────────────────────────
 
-function ToolCallItem({ part, currentSessionId }: { part: AccumulatedPart & { type: "tool" }; currentSessionId?: string }) {
-  // Delegate task tool calls to the delegation block renderer
-  if (isTaskToolCall(part) && getTaskToolInput(part)) {
-    return <TaskDelegationItem part={part} currentSessionId={currentSessionId} />;
+function ToolCallItem({ part, delegations, currentSessionId }: { part: AccumulatedPart & { type: "tool" }; delegations: DelegationDto[]; currentSessionId?: string }) {
+  const delegation = delegations.find((candidate) => candidate.parentToolCallId === part.callId);
+
+  if (delegation) {
+    return (
+      <DelegationCard
+        delegation={delegation}
+        currentSessionId={currentSessionId}
+      />
+    );
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -343,6 +267,7 @@ function ToolCallItem({ part, currentSessionId }: { part: AccumulatedPart & { ty
 
 interface MessageItemProps {
   message: AccumulatedMessage;
+  delegations: DelegationDto[];
   agents?: AutocompleteAgent[];
   parentCreatedAt?: number;
   highlightQuery?: string;
@@ -352,6 +277,7 @@ interface MessageItemProps {
 
 const MessageItem = memo(function MessageItem({
   message,
+  delegations,
   agents,
   parentCreatedAt,
   isMatchingMessage,
@@ -437,7 +363,12 @@ const MessageItem = memo(function MessageItem({
         {toolParts.length > 0 && (
           <div className="space-y-0.5">
             {toolParts.map((part) => (
-              <ToolCallItem key={part.partId} part={part} currentSessionId={currentSessionId} />
+              <ToolCallItem
+                key={part.partId}
+                part={part}
+                delegations={delegations}
+                currentSessionId={currentSessionId}
+              />
             ))}
           </div>
         )}
@@ -498,6 +429,7 @@ function DurationSeparator({ durationMs }: { durationMs: number }) {
 
 export function ActivityStreamV1({
   messages,
+  delegations,
   status,
   sessionStatus,
   error,
@@ -640,6 +572,25 @@ export function ActivityStreamV1({
     }
     return map;
   }, [messages]);
+
+  const anchoredToolCallIds = useMemo(() => {
+    const toolCallIds = new Set<string>();
+
+    for (const message of filteredMessages) {
+      for (const part of message.parts) {
+        if (part.type === "tool") {
+          toolCallIds.add(part.callId);
+        }
+      }
+    }
+
+    return toolCallIds;
+  }, [filteredMessages]);
+
+  const unanchoredDelegations = useMemo(
+    () => delegations.filter((delegation) => !delegation.parentToolCallId || !anchoredToolCallIds.has(delegation.parentToolCallId)),
+    [anchoredToolCallIds, delegations],
+  );
 
   // ── Virtualizer for the message list ──────────────────────────────────────
   // Only renders items visible in the viewport plus an overscan buffer,
@@ -799,6 +750,7 @@ export function ActivityStreamV1({
                       {gap > 30_000 && <DurationSeparator durationMs={gap} />}
                       <MessageItem
                         message={message}
+                        delegations={delegations}
                         agents={agents}
                         parentCreatedAt={message.parentID ? createdAtByMessageId.get(message.parentID) : undefined}
                         highlightQuery={isFiltering ? searchQuery : undefined}
@@ -808,6 +760,21 @@ export function ActivityStreamV1({
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {unanchoredDelegations.length > 0 && (
+              <div className="border-t border-border/40 px-4 py-3 space-y-1.5">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Delegations
+                </div>
+                {unanchoredDelegations.map((delegation) => (
+                  <DelegationCard
+                    key={delegation.delegationId}
+                    delegation={delegation}
+                    currentSessionId={currentSessionId}
+                  />
+                ))}
               </div>
             )}
 

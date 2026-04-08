@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import type React from "react";
-import type { AccumulatedMessage, WebSocketEvent } from "@/lib/api-types";
+import type { AccumulatedMessage, DelegationDto, WebSocketEvent } from "@/lib/api-types";
 import { handleEvent } from "@/hooks/use-session-events";
 
 const fixturesDir = resolve(__dirname, "../../../../tests/contracts");
@@ -14,6 +14,7 @@ function loadFixture(filename: string) {
 
 function createStateHarness(sessionId: string) {
   let messages: AccumulatedMessage[] = [];
+  let delegations: DelegationDto[] = [];
   let status: string | undefined;
   let sessionStatus: "idle" | "busy" = "idle";
   let error: string | undefined;
@@ -30,6 +31,12 @@ function createStateHarness(sessionId: string) {
     status =
       typeof update === "function"
         ? (update as (prev: string | undefined) => string)(status)
+        : update;
+  };
+  const setDelegations = (update: React.SetStateAction<DelegationDto[]>) => {
+    delegations =
+      typeof update === "function"
+        ? (update as (prev: DelegationDto[]) => DelegationDto[])(delegations)
         : update;
   };
   const setSessionStatus = (
@@ -59,6 +66,7 @@ function createStateHarness(sessionId: string) {
       event,
       sessionId,
       setMessages,
+      setDelegations,
       setStatus as React.Dispatch<
         React.SetStateAction<
           | "connecting"

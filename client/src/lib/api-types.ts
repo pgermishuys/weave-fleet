@@ -21,6 +21,7 @@ export type { SessionActivityStatus, SessionLifecycleStatus, InstanceStatus };
 export interface FleetSession {
   id: string;
   title: string;
+  isHidden?: boolean;
   time: {
     created: number;
     updated: number;
@@ -142,6 +143,7 @@ export interface SessionListItem {
    * Instance status — whether the OpenCode process backing this session is healthy.
    */
   typedInstanceStatus: InstanceStatus;
+  isHidden: boolean;
   /**
    * Total token count across all messages (populated when available from SSE aggregation or DB).
    */
@@ -199,6 +201,14 @@ export interface WebSocketEvent {
   type: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   properties: Record<string, any>;
+}
+
+export interface DelegationDto {
+  delegationId: string;
+  parentToolCallId: string | null;
+  childSessionId: string | null;
+  title: string;
+  status: "pending" | "running" | "completed" | "error" | "cancelled";
 }
 
 // ─── Accumulated Message (for useSessionEvents) ────────────────────────────
@@ -278,43 +288,6 @@ export interface AvailableProvider {
   models: AvailableModel[];
 }
 
-// ─── Task Tool Call Helpers ─────────────────────────────────────────────────
-
-export function isTaskToolCall(part: AccumulatedToolPart): boolean {
-  return part.tool === "task";
-}
-
-export function getTaskToolInput(
-  part: AccumulatedToolPart
-): { subagent_type?: string; description?: string } | null {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const state = part.state as any;
-  const input = state?.input;
-  if (!input?.subagent_type && !input?.description) return null;
-  return { subagent_type: input.subagent_type, description: input.description };
-}
-
-export function getTaskToolSessionId(part: AccumulatedToolPart): string | null {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const state = part.state as any;
-
-  // 1. Check state.metadata — the SDK's ToolStateCompleted/ToolStateRunning
-  //    may carry a sessionId (or sessionID) set by the tool implementation.
-  const fromMetadata =
-    state?.metadata?.sessionId ?? state?.metadata?.sessionID ?? null;
-  if (fromMetadata) return fromMetadata;
-
-  // 2. Parse the output string — the Task tool returns "task_id: ses_xxx"
-  //    as the first line of its output when the child session completes.
-  const output = state?.output;
-  if (typeof output === "string") {
-    const match = output.match(/task_id:\s*(\S+)/);
-    if (match?.[1]) return match[1];
-  }
-
-  return null;
-}
-
 // File search returns Array<string> (file paths) — no wrapper type needed
 
 // ─── Directory Browser Types ────────────────────────────────────────────────
@@ -375,6 +348,7 @@ export interface HarnessCapabilities {
   supportsResume: boolean;
   supportsImageAttachments: boolean;
   supportsStreaming: boolean;
+  supportsDelegation: boolean;
 }
 
 /** Information about a registered harness */

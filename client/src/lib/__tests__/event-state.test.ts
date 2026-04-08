@@ -207,6 +207,23 @@ describe("applyPartUpdate", () => {
       expect(part.tool).toBe("");
       expect(part.callId).toBe("");
     });
+
+    it("uses camelCase callId when callID is absent", () => {
+      const prev = [makeMessage()];
+      const result = applyPartUpdate(prev, {
+        messageID: "msg-1",
+        sessionID: "sess-1",
+        type: "tool",
+        id: "tool-part-3",
+        tool: "task",
+        callId: "call-camel",
+        state: { status: "running" },
+      });
+
+      const part = result[0].parts[0] as { tool: string; callId: string };
+      expect(part.tool).toBe("task");
+      expect(part.callId).toBe("call-camel");
+    });
   });
 
   describe("step-finish parts", () => {
@@ -423,6 +440,18 @@ describe("isRelevantToSession", () => {
   it("returns false for message.part.delta when sessionID does not match", () => {
     expect(
       isRelevantToSession("message.part.delta", { sessionID: "other" }, SESSION)
+    ).toBe(false);
+  });
+
+  it("returns true for delegation.created when parentSessionId matches", () => {
+    expect(
+      isRelevantToSession("delegation.created", { parentSessionId: SESSION }, SESSION)
+    ).toBe(true);
+  });
+
+  it("returns false for delegation.updated when parentSessionId does not match", () => {
+    expect(
+      isRelevantToSession("delegation.updated", { parentSessionId: "other" }, SESSION)
     ).toBe(false);
   });
 

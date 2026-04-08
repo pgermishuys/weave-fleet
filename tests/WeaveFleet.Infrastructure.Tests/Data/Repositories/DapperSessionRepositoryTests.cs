@@ -97,6 +97,33 @@ public sealed class DapperSessionRepositoryTests
     }
 
     [Fact]
+    public async Task InsertAndGetById_PersistsHiddenFlag()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var (ws, inst) = await InsertDependenciesAsync(factory);
+        var session = new Session
+        {
+            Id = Guid.NewGuid().ToString(),
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-hidden-1",
+            Title = "Hidden Session",
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            IsHidden = true
+        };
+
+        await repo.InsertAsync(session);
+        var retrieved = await repo.GetByIdAsync(session.Id);
+
+        Assert.NotNull(retrieved);
+        Assert.True(retrieved.IsHidden);
+    }
+
+    [Fact]
     public async Task ListAsync_ReturnsAllSessions()
     {
         var (conn, repo, factory) = await CreateAsync();

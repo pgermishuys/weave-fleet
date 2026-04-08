@@ -13,7 +13,7 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 /// Wraps a running <c>opencode serve</c> process and HTTP client for a single session.
 /// Implements <see cref="IHarnessInstance"/>.
 /// </summary>
-internal sealed class OpenCodeHarnessInstance : IHarnessInstance
+internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
 {
     private static readonly Action<ILogger, string, Exception?> LogSendPrompt =
         LoggerMessage.Define<string>(LogLevel.Debug, new EventId(1, "SendPrompt"),
@@ -42,6 +42,10 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
     private static readonly Action<ILogger, string, Exception?> LogSendCommand =
         LoggerMessage.Define<string>(LogLevel.Debug, new EventId(7, "SendCommand"),
             "Sending command to OpenCode instance {InstanceId}.");
+
+    private static readonly Action<ILogger, string, Exception?> LogDelegationFailed =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(8, "DelegationFailed"),
+            "Failed to process delegation event for session {SessionId}");
 
     private readonly OpenCodeHttpClient _httpClient;
     private readonly OpenCodeProcessManager _processManager;
@@ -230,6 +234,30 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
             .SubscribeToEventsAsync(_workingDirectory, ct)
             .ConfigureAwait(false))
         {
+            var resolvedOpenCodeSessionId = OpenCodeMapper.TryResolveSessionId(sseEvt);
+            var isParentEvent = string.IsNullOrWhiteSpace(_openCodeSessionId)
+                || string.IsNullOrWhiteSpace(resolvedOpenCodeSessionId)
+                || string.Equals(resolvedOpenCodeSessionId, _openCodeSessionId, StringComparison.Ordinal);
+
+            string? routedFleetSessionId = null;
+            if (!isParentEvent && !string.IsNullOrWhiteSpace(resolvedOpenCodeSessionId))
+            {
+                routedFleetSessionId = await TryResolveChildFleetSessionIdAsync(resolvedOpenCodeSessionId).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(routedFleetSessionId))
+                    continue;
+            }
+
+            if (!isParentEvent)
+            {
+                var childEvent = OpenCodeMapper.ToHarnessEvent(sseEvt, resolvedOpenCodeSessionId) with
+                {
+                    FleetSessionId = routedFleetSessionId
+                };
+
+                yield return childEvent;
+                continue;
+            }
+
             // Fire-and-forget analytics intercept — never blocks or throws
             if (_analyticsCollector is not null)
             {
@@ -244,9 +272,24 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
             // Fire-and-forget persistence (instance-owned — never blocks event stream)
             _ = TryPersistMessageAsync(harnessEvent);
             _ = TryPersistPartAsync(harnessEvent);
+            _ = TryEmitDelegationAsync(sseEvt);
 
             yield return harnessEvent;
         }
+    }
+
+    private async Task<string?> TryResolveChildFleetSessionIdAsync(string openCodeSessionId)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var repo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
+        var session = await repo.GetByHarnessIdAsync(openCodeSessionId).ConfigureAwait(false);
+        if (session is null)
+            return null;
+
+        if (!string.Equals(session.ParentSessionId, _fleetSessionId, StringComparison.Ordinal))
+            return null;
+
+        return session.Id;
     }
 
     /// <inheritdoc />
@@ -597,6 +640,55 @@ internal sealed class OpenCodeHarnessInstance : IHarnessInstance
         {
             // Silent failure — persistence must never crash event stream
             LogPersistFailed(_logger, _fleetSessionId, ex);
+        }
+    }
+
+    private async Task TryEmitDelegationAsync(OpenCodeSseEvent sseEvt)
+    {
+        try
+        {
+            var extraction = OpenCodeMapper.TryExtractDelegation(sseEvt, _fleetSessionId);
+            var serializedExtraction = JsonSerializer.Serialize(extraction);
+            if (extraction is null)
+                return;
+
+            using var scope = _scopeFactory.CreateScope();
+            var delegationService = scope.ServiceProvider.GetRequiredService<DelegationService>();
+
+            var delegation = await delegationService.HandleDelegationDetectedAsync(
+                extraction.ParentSessionId,
+                extraction.ToolCallId,
+                extraction.Title).ConfigureAwait(false);
+
+            if (!string.IsNullOrWhiteSpace(extraction.ChildSessionId))
+            {
+                var sessionOrchestrator = scope.ServiceProvider.GetRequiredService<SessionOrchestrator>();
+                var childSessionResult = await sessionOrchestrator.EnsureDelegatedChildSessionAsync(
+                    extraction.ParentSessionId,
+                    extraction.ChildSessionId,
+                    extraction.Title).ConfigureAwait(false);
+
+                if (childSessionResult.IsFailure)
+                    return;
+
+                delegation = await delegationService.HandleChildLinkedAsync(
+                        extraction.ParentSessionId,
+                        extraction.ToolCallId,
+                        childSessionResult.Value.Id)
+                    .ConfigureAwait(false)
+                    ?? delegation;
+            }
+
+            if (extraction.Status is "completed" or "error" or "cancelled")
+            {
+                await delegationService.HandleDelegationFinishedAsync(
+                    delegation.DelegationId,
+                    extraction.Status).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            LogDelegationFailed(_logger, _fleetSessionId, ex);
         }
     }
 }

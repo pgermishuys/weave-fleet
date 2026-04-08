@@ -9,12 +9,41 @@ namespace WeaveFleet.Application.Tests.Services;
 public sealed class SessionServiceTests
 {
     private readonly ISessionRepository _sessionRepo = Substitute.For<ISessionRepository>();
+    private readonly ISessionCallbackRepository _callbackRepo = Substitute.For<ISessionCallbackRepository>();
+    private readonly IDelegationRepository _delegationRepo = Substitute.For<IDelegationRepository>();
     private readonly IProjectRepository _projectRepo = Substitute.For<IProjectRepository>();
+    private readonly IWorkspaceRepository _workspaceRepo = Substitute.For<IWorkspaceRepository>();
+    private readonly IInstanceRepository _instanceRepo = Substitute.For<IInstanceRepository>();
+    private readonly IEventBroadcaster _eventBroadcaster = Substitute.For<IEventBroadcaster>();
+    private readonly WeaveFleet.Application.Analytics.IAnalyticsCollector _analyticsCollector =
+        Substitute.For<WeaveFleet.Application.Analytics.IAnalyticsCollector>();
+    private readonly IMessageRepository _messageRepo = Substitute.For<IMessageRepository>();
+    private readonly SessionOrchestrator _sessionOrchestrator;
     private readonly SessionService _sut;
 
     public SessionServiceTests()
     {
-        _sut = new SessionService(_sessionRepo, _projectRepo);
+        var workspaceService = new WorkspaceService(
+            _workspaceRepo,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceService>.Instance);
+        var instanceService = new InstanceService(_instanceRepo, _sessionRepo);
+        var delegationService = new DelegationService(_delegationRepo, _eventBroadcaster);
+        _sessionOrchestrator = new SessionOrchestrator(
+            workspaceService,
+            instanceService,
+            Substitute.For<WeaveFleet.Application.Harnesses.IHarnessRegistry>(),
+            new InstanceTracker(),
+            _sessionRepo,
+            _callbackRepo,
+            _delegationRepo,
+            _projectRepo,
+            _eventBroadcaster,
+            _analyticsCollector,
+            _messageRepo,
+            delegationService,
+            new WeaveFleet.Application.Configuration.FleetOptions(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance);
+        _sut = new SessionService(_sessionRepo, _projectRepo, _sessionOrchestrator);
     }
 
     [Fact]
@@ -43,7 +72,10 @@ public sealed class SessionServiceTests
     [Fact]
     public async Task DeleteSessionAsync_WhenExists_ReturnsTrue()
     {
+        _sessionRepo.GetByIdAsync("s1").Returns(MakeSession("s1"));
+        _delegationRepo.GetByChildSessionIdAsync("s1").Returns((Delegation?)null);
         _sessionRepo.DeleteAsync("s1").Returns(true);
+        _instanceRepo.UpdateStatusAsync("i1", "stopped", Arg.Any<string>()).Returns(Task.CompletedTask);
 
         var result = await _sut.DeleteSessionAsync("s1");
 
@@ -53,7 +85,7 @@ public sealed class SessionServiceTests
     [Fact]
     public async Task DeleteSessionAsync_WhenMissing_ReturnsFailure()
     {
-        _sessionRepo.DeleteAsync("missing").Returns(false);
+        _sessionRepo.GetByIdAsync("missing").Returns((Session?)null);
 
         var result = await _sut.DeleteSessionAsync("missing");
 

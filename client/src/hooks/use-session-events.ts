@@ -2,6 +2,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import type {
   AccumulatedMessage,
+  DelegationDto,
   WebSocketEvent,
 } from "@/lib/api-types";
 import { apiFetch } from "@/lib/api-client";
@@ -12,6 +13,7 @@ import {
   applyPartUpdate,
   applyTextDelta,
 } from "@/lib/event-state";
+import { applyDelegationCreated, applyDelegationUpdated } from "@/lib/delegation-state";
 import { useMessagePagination } from "@/hooks/use-message-pagination";
 import { prependMessages, convertFleetMessageToAccumulated } from "@/lib/pagination-utils";
 import type { FleetMessage } from "@/lib/pagination-utils";
@@ -28,6 +30,7 @@ export type SessionConnectionStatus =
 
 export interface UseSessionEventsResult {
   messages: AccumulatedMessage[];
+  delegations: DelegationDto[];
   status: SessionConnectionStatus;
   sessionStatus: "idle" | "busy";
   error?: string;
@@ -66,7 +69,6 @@ export interface UseSessionEventsResult {
 
 /** Maximum messages held in memory — oldest are evicted when exceeded. */
 const MAX_MESSAGES = 500;
-
 export function useSessionEvents(
   sessionId: string,
   instanceId: string,
@@ -79,6 +81,7 @@ export function useSessionEvents(
   suppressAutoScrollRef?: React.MutableRefObject<boolean>,
 ): UseSessionEventsResult {
   const [messages, setMessages] = useState<AccumulatedMessage[]>([]);
+  const [delegations, setDelegations] = useState<DelegationDto[]>([]);
   const [status, setStatus] = useState<SessionConnectionStatus>("connecting");
   const [sessionStatus, setSessionStatus] = useState<"idle" | "busy">("idle");
   const [error, setError] = useState<string | undefined>();
@@ -104,13 +107,15 @@ export function useSessionEvents(
 
   // Refs for cleanup closure (useState values are stale in cleanup)
   const messagesRef = useRef<AccumulatedMessage[]>(messages);
+  const delegationsRef = useRef<DelegationDto[]>(delegations);
   const sessionStatusRef = useRef<"idle" | "busy">(sessionStatus);
   const snapshotPaginationRef = useRef(snapshotPagination);
   useEffect(() => {
     messagesRef.current = messages;
+    delegationsRef.current = delegations;
     sessionStatusRef.current = sessionStatus;
     snapshotPaginationRef.current = snapshotPagination;
-  });
+  }, [delegations, messages, sessionStatus, snapshotPagination]);
 
   // Scroll position written by ActivityStreamV1 on every scroll
   const scrollPositionRef = useRef<{ scrollTop: number; scrollHeight: number } | null>(null);
@@ -208,6 +213,24 @@ export function useSessionEvents(
     }
   }, [sessionId, instanceId, paginationLoadInitial]);
 
+  const loadDelegations = useCallback(async (signal?: AbortSignal): Promise<void> => {
+    if (!sessionId || !instanceId) return;
+    try {
+      const response = await apiFetch(
+        `/api/sessions/${encodeURIComponent(sessionId)}/delegations`,
+        signal ? { signal } : undefined,
+      );
+      if (!response.ok) return;
+
+      const data = await response.json() as DelegationDto[];
+      if (!signal?.aborted) {
+        setDelegations(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+    }
+  }, [instanceId, sessionId]);
+
   const loadSessionStatus = useCallback(async (signal?: AbortSignal): Promise<void> => {
     if (!sessionId || !instanceId) return;
     const s = await fetchSessionStatus(sessionId, instanceId);
@@ -231,6 +254,7 @@ export function useSessionEvents(
     // old messages visible because loadInitialMessages() only calls
     // setMessages when there are messages to show.
     setMessages([]);
+    setDelegations([]);
     setSessionStatus("idle");
     setStatus("connecting");
     setError(undefined);
@@ -241,12 +265,13 @@ export function useSessionEvents(
       // Cache hit: hydrate instantly, then gap-fill
       if (suppressAutoScrollRef) suppressAutoScrollRef.current = true;
       setMessages(cached.messages);
+      setDelegations(cached.delegations);
       setSessionStatus(cached.sessionStatus);
       lastMessageIdRef.current = cached.lastMessageId;
       hydratePagination(cached.pagination);
       setCacheHit(true);
       setInitialScrollPosition({ scrollTop: cached.scrollPosition, scrollHeight: cached.scrollHeight });
-      void Promise.all([loadMessagesSince(cached.lastMessageId, signal), loadSessionStatus(signal)])
+      void Promise.all([loadMessagesSince(cached.lastMessageId, signal), loadSessionStatus(signal), loadDelegations(signal)])
         .then(() => {
           if (isMounted.current && !signal.aborted) setStatus("connected");
         })
@@ -254,7 +279,7 @@ export function useSessionEvents(
           if (isMounted.current && !signal.aborted) setStatus("connected");
         });
     } else {
-      void Promise.all([loadInitialMessages(signal), loadSessionStatus(signal)])
+      void Promise.all([loadInitialMessages(signal), loadSessionStatus(signal), loadDelegations(signal)])
         .then(() => {
           if (isMounted.current && !signal.aborted) setStatus("connected");
         })
@@ -275,14 +300,18 @@ export function useSessionEvents(
       } catch {
         return;
       }
-      handleEvent(event, sessionId, setMessages, setStatus, setSessionStatus, setError, onAgentSwitchRef, lastMessageIdRef);
+      handleEvent(event, sessionId, setMessages, setDelegations, setStatus, setSessionStatus, setError, onAgentSwitchRef, lastMessageIdRef);
     });
 
     // On WebSocket reconnect, gap-fill from the last known message so that
     // messages missed during the disconnection are fetched from the server.
     const unsubReconnect = onReconnect(() => {
       if (!isMounted.current) return;
-      void loadMessagesSince(lastMessageIdRef.current);
+      void Promise.all([
+        loadMessagesSince(lastMessageIdRef.current),
+        loadDelegations(),
+        loadSessionStatus(),
+      ]);
     });
 
     return () => {
@@ -298,6 +327,7 @@ export function useSessionEvents(
         const scrollPos = scrollPositionRef.current;
         sessionCache.set(sessionId, instanceId, {
           messages: messagesRef.current,
+          delegations: delegationsRef.current,
           scrollPosition: scrollPos?.scrollTop ?? 0,
           scrollHeight: scrollPos?.scrollHeight ?? 0,
           sessionStatus: sessionStatusRef.current,
@@ -325,6 +355,7 @@ export function useSessionEvents(
     setStatus("recovering");
     void Promise.all([
       loadMessagesSince(lastMessageIdRef.current),
+      loadDelegations(),
       loadSessionStatus(),
     ]).then(() => {
       if (isMounted.current) {
@@ -332,10 +363,11 @@ export function useSessionEvents(
         setError(undefined);
       }
     });
-  }, [loadMessagesSince, loadSessionStatus]);
+  }, [loadDelegations, loadMessagesSince, loadSessionStatus]);
 
   return {
     messages,
+    delegations,
     status,
     sessionStatus,
     error,
@@ -356,6 +388,7 @@ export function useSessionEvents(
 // ─── Event handler (pure — receives setters to avoid stale closures) ──────────
 
 type SetMessages = React.Dispatch<React.SetStateAction<AccumulatedMessage[]>>;
+type SetDelegations = React.Dispatch<React.SetStateAction<DelegationDto[]>>;
 type SetStatus = React.Dispatch<React.SetStateAction<SessionConnectionStatus>>;
 type SetSessionStatus = React.Dispatch<React.SetStateAction<"idle" | "busy">>;
 type SetError = React.Dispatch<React.SetStateAction<string | undefined>>;
@@ -364,6 +397,7 @@ export function handleEvent(
   event: WebSocketEvent,
   sessionId: string,
   setMessages: SetMessages,
+  setDelegations: SetDelegations,
   setStatus: SetStatus,
   setSessionStatus: SetSessionStatus,
   setError: SetError,
@@ -371,6 +405,11 @@ export function handleEvent(
   lastMessageIdRef: React.MutableRefObject<string | null>,
 ): void {
   const { type, properties } = event;
+  const delegationId = properties?.delegationId ?? properties?.DelegationId;
+  const parentToolCallId = properties?.parentToolCallId ?? properties?.ParentToolCallId;
+  const childSessionId = properties?.childSessionId ?? properties?.ChildSessionId;
+  const delegationTitle = properties?.title ?? properties?.Title;
+  const delegationStatus = properties?.status ?? properties?.Status;
 
   if (type === "server.connected") {
     setStatus("connected");
@@ -406,6 +445,30 @@ export function handleEvent(
       }
       return next;
     });
+    return;
+  }
+
+  if (type === "delegation.created") {
+    if (!delegationId) return;
+    setDelegations((prev) => applyDelegationCreated(prev, {
+      delegationId,
+      parentToolCallId,
+      childSessionId,
+      title: delegationTitle,
+      status: delegationStatus,
+    }));
+    return;
+  }
+
+  if (type === "delegation.updated") {
+    if (!delegationId) return;
+    setDelegations((prev) => applyDelegationUpdated(prev, {
+      delegationId,
+      parentToolCallId,
+      childSessionId,
+      title: delegationTitle,
+      status: delegationStatus,
+    }));
     return;
   }
 

@@ -27,8 +27,10 @@ export function FleetPanel() {
 
   const isFleetActive = pathname === "/" || pathname.startsWith("/?");
 
+  const visibleSessions = sessions.filter((session) => !session.isHidden);
+
   // Group sessions by project using our utility
-  const projectGroups = groupSessionsByProject(sessions, projects);
+  const projectGroups = groupSessionsByProject(visibleSessions, projects);
 
   // Named (non-null) projects only — used for index/count for reordering
   const namedGroups = projectGroups.filter((g) => g.projectId !== null);

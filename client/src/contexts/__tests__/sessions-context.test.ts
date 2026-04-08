@@ -20,6 +20,7 @@ function makeSession(id: string, overrides: Partial<SessionListItem> = {}): Sess
     activityStatus: "idle",
     lifecycleStatus: "running",
     typedInstanceStatus: "running",
+    isHidden: false,
     ...overrides,
   };
 }

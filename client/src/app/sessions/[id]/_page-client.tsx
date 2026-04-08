@@ -64,7 +64,7 @@ export default function SessionDetailPage() {
 
   // Use React Router params instead of pathname parsing
   const sessionId = decodeURIComponent(sessionIdParam ?? "");
-  const instanceId = searchParams.get("instanceId") ?? "";
+  const urlInstanceId = searchParams.get("instanceId") ?? "";
 
   // Subscribe to sessions context so optimistic title patches (from rename)
   // are reflected immediately on the detail page header.
@@ -73,7 +73,13 @@ export default function SessionDetailPage() {
     contextSessions.find((s) => s.session.id === sessionId),
     [contextSessions, sessionId]
   );
+  const instanceId = urlInstanceId || contextMatch?.instanceId || "";
   const contextTitle = contextMatch?.session.title;
+  const parentSessionId = searchParams.get("parentSessionId") ?? contextMatch?.parentSessionId ?? null;
+  const parentContextMatch = useMemo(() =>
+    parentSessionId ? contextSessions.find((s) => s.session.id === parentSessionId) : undefined,
+    [contextSessions, parentSessionId]
+  );
 
   const { sendPrompt, error: sendError } = useSendPrompt();
   const { agents } = useAgents(instanceId);
@@ -89,7 +95,7 @@ export default function SessionDetailPage() {
   // suppress auto-scroll-to-bottom during cache hydration.
   const suppressAutoScrollRef = useRef(false);
 
-  const { messages, status, sessionStatus, error, forceIdle, reconnect, reconnectAttempt, hasMoreMessages, isLoadingOlder, loadOlderMessages, totalMessageCount, loadOlderError, cacheHit, initialScrollPosition, scrollPositionRef } = useSessionEvents(
+  const { messages, delegations, status, sessionStatus, error, forceIdle, reconnect, reconnectAttempt, hasMoreMessages, isLoadingOlder, loadOlderMessages, totalMessageCount, loadOlderError, cacheHit, initialScrollPosition, scrollPositionRef } = useSessionEvents(
     sessionId,
     instanceId,
     setSelectedAgent,
@@ -758,35 +764,51 @@ export default function SessionDetailPage() {
               </Button>
             </div>
           )}
-          {metadata.ancestors && metadata.ancestors.length > 0 && (
+          {(metadata.ancestors && metadata.ancestors.length > 0) || parentSessionId ? (
             <div className="flex items-center gap-1.5 px-4 py-1.5 text-xs text-muted-foreground border-b border-border/40 overflow-x-auto">
-              <Link
-                to={(() => {
-                  const parent = metadata.ancestors!.at(-1);
-                  return parent
-                    ? `/sessions/${encodeURIComponent(parent.id)}?instanceId=${encodeURIComponent(parent.instanceId)}`
-                    : "/";
-                })()}
-                className="shrink-0 hover:text-foreground transition-colors"
-              >
-                <ArrowLeft className="h-3 w-3" />
-              </Link>
-              {metadata.ancestors.map((ancestor, i) => (
-                <Fragment key={ancestor.id}>
-                  {i > 0 && <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/50" />}
+              {metadata.ancestors && metadata.ancestors.length > 0 ? (
+                <>
                   <Link
-                    to={`/sessions/${encodeURIComponent(ancestor.id)}?instanceId=${encodeURIComponent(ancestor.instanceId)}`}
-                    className="shrink-0 hover:text-foreground transition-colors truncate max-w-[200px]"
-                    title={ancestor.title}
+                    to={(() => {
+                      const parent = metadata.ancestors!.at(-1);
+                      return parent
+                        ? `/sessions/${encodeURIComponent(parent.id)}?instanceId=${encodeURIComponent(parent.instanceId)}`
+                        : "/";
+                    })()}
+                    className="shrink-0 hover:text-foreground transition-colors"
                   >
-                    {ancestor.title}
+                    <ArrowLeft className="h-3 w-3" />
                   </Link>
-                </Fragment>
-              ))}
-              <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/50" />
-              <span className="shrink-0 text-foreground font-medium truncate max-w-[200px]">Current</span>
+                  {metadata.ancestors.map((ancestor, i) => (
+                    <Fragment key={ancestor.id}>
+                      {i > 0 && <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/50" />}
+                      <Link
+                        to={`/sessions/${encodeURIComponent(ancestor.id)}?instanceId=${encodeURIComponent(ancestor.instanceId)}`}
+                        className="shrink-0 hover:text-foreground transition-colors truncate max-w-[200px]"
+                        title={ancestor.title}
+                      >
+                        {ancestor.title}
+                      </Link>
+                    </Fragment>
+                  ))}
+                  <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/50" />
+                  <span className="shrink-0 text-foreground font-medium truncate max-w-[200px]">Current</span>
+                </>
+              ) : parentSessionId && parentContextMatch ? (
+                <>
+                  <Link
+                    to={`/sessions/${encodeURIComponent(parentSessionId)}?instanceId=${encodeURIComponent(parentContextMatch.instanceId)}`}
+                    className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                  >
+                    <ArrowLeft className="h-3 w-3" />
+                    <span className="truncate max-w-[240px]">{parentContextMatch.session.title}</span>
+                  </Link>
+                  <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/50" />
+                  <span className="shrink-0 text-foreground font-medium truncate max-w-[200px]">Current</span>
+                </>
+              ) : null}
             </div>
-          )}
+          ) : null}
           <Tabs
             defaultValue="activity"
             className="flex flex-1 flex-col overflow-hidden"
@@ -810,6 +832,7 @@ export default function SessionDetailPage() {
                 >
                   <ActivityStreamV1
                     messages={messages}
+                    delegations={delegations}
                     status={status}
                     sessionStatus={sessionStatus}
                     error={error}

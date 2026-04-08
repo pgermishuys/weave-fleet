@@ -20,10 +20,12 @@ public sealed partial class SessionOrchestrator(
     InstanceTracker instanceTracker,
     ISessionRepository sessionRepository,
     ISessionCallbackRepository sessionCallbackRepository,
+    IDelegationRepository delegationRepository,
     IProjectRepository projectRepository,
     IEventBroadcaster eventBroadcaster,
     IAnalyticsCollector analyticsCollector,
     IMessageRepository messageRepository,
+    DelegationService delegationService,
     FleetOptions options,
     ILogger<SessionOrchestrator> logger)
 {
@@ -250,6 +252,111 @@ public sealed partial class SessionOrchestrator(
         }, ct);
     }
 
+    public async Task<Result<Session>> EnsureDelegatedChildSessionAsync(
+        string parentSessionId,
+        string childHarnessSessionId,
+        string title,
+        CancellationToken ct = default)
+    {
+        var parent = await sessionRepository.GetByIdAsync(parentSessionId);
+        if (parent is null)
+            return FleetError.NotFoundFor(nameof(Session), parentSessionId);
+
+        var existing = await sessionRepository.GetByHarnessIdAsync(childHarnessSessionId);
+        if (existing is not null)
+            return existing;
+
+        var harness = harnessRegistry.GetByType(parent.HarnessType);
+        if (harness is null)
+            return FleetError.NotFoundFor("Harness", parent.HarnessType);
+
+        if (!harness.Capabilities.SupportsResume)
+            return FleetError.ValidationError("Session.ResumeUnsupported", $"Harness '{parent.HarnessType}' does not support delegated child resume.");
+
+        var childSessionId = Guid.NewGuid().ToString();
+        IHarnessInstance harnessInstance;
+        try
+        {
+            harnessInstance = await harness.ResumeAsync(new HarnessResumeOptions
+            {
+                SessionId = childSessionId,
+                WorkingDirectory = parent.Directory,
+                ResumeToken = childHarnessSessionId,
+                ProjectId = parent.ProjectId,
+                ProjectName = await ResolveProjectNameAsync(parent.ProjectId)
+            }, ct);
+        }
+        catch (Exception ex)
+        {
+            LogSpawnFailed(ex, parent.HarnessType);
+            return FleetError.Unexpected;
+        }
+
+        var instanceResult = await instanceService.RegisterInstanceAsync(
+            id: harnessInstance.InstanceId,
+            port: 0,
+            pid: null,
+            directory: parent.Directory,
+            url: string.Empty);
+        if (instanceResult.IsFailure)
+        {
+            await SafeStopAsync(harnessInstance, ct);
+            return instanceResult.Error;
+        }
+
+        var session = new Session
+        {
+            Id = childSessionId,
+            WorkspaceId = parent.WorkspaceId,
+            InstanceId = harnessInstance.InstanceId,
+            ProjectId = parent.ProjectId,
+            OpencodeSessionId = childHarnessSessionId,
+            Title = string.IsNullOrWhiteSpace(title) ? "Delegated Session" : title,
+            Status = "active",
+            Directory = parent.Directory,
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            ParentSessionId = parent.Id,
+            LifecycleStatus = "running",
+            HarnessType = parent.HarnessType,
+            HarnessResumeToken = childHarnessSessionId,
+            IsHidden = true
+        };
+
+        await sessionRepository.InsertAsync(session);
+        instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
+        LogSessionCreated(session.Id, session.WorkspaceId, session.InstanceId);
+
+        analyticsCollector.AcceptSessionSnapshot(new SessionSnapshotData(
+            SessionId: session.Id,
+            ParentSessionId: parent.Id,
+            ProjectId: session.ProjectId,
+            ProjectName: await ResolveProjectNameAsync(session.ProjectId),
+            WorkspaceDirectory: session.Directory,
+            Title: session.Title,
+            Status: "active",
+            TotalTokens: 0,
+            TotalCost: 0,
+            TotalEstimatedCost: 0,
+            MessageCount: 0,
+            ModelIds: [],
+            CreatedAt: DateTimeOffset.UtcNow,
+            EndedAt: null,
+            DurationSeconds: null));
+
+        await eventBroadcaster.BroadcastAsync("sessions", "session_created", new
+        {
+            sessionId = session.Id,
+            instanceId = session.InstanceId,
+            workspaceId = session.WorkspaceId,
+            title = session.Title,
+            projectId = session.ProjectId,
+            parentSessionId = session.ParentSessionId,
+            isHidden = true
+        }, ct);
+
+        return session;
+    }
+
     // ── Prompt / Abort ─────────────────────────────────────────────────────────
 
     public async Task<Result<Unit>> PromptSessionAsync(
@@ -349,6 +456,14 @@ public sealed partial class SessionOrchestrator(
         if (session is null)
             return FleetError.NotFoundFor(nameof(Session), id);
 
+        var delegation = await delegationRepository.GetByChildSessionIdAsync(id);
+        if (delegation is not null)
+        {
+            await delegationService.HandleDelegationFinishedAsync(
+                delegation.Id,
+                GetDelegationTerminalStatus(session.Status));
+        }
+
         // Stop live instance if running
         var liveInstance = instanceTracker.Get(session.InstanceId);
         if (liveInstance is not null)
@@ -418,6 +533,12 @@ public sealed partial class SessionOrchestrator(
         catch (Exception ex) { LogStopFailed(ex, instance.InstanceId); }
     }
 
+    private static string GetDelegationTerminalStatus(string sessionStatus) => sessionStatus switch
+    {
+        "error" => "error",
+        _ => "completed"
+    };
+
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to spawn harness {HarnessType}")]
     private partial void LogSpawnFailed(Exception ex, string harnessType);
 
@@ -431,6 +552,15 @@ public sealed partial class SessionOrchestrator(
     [LoggerMessage(Level = LogLevel.Error,
         Message = "Failed to retrieve messages for session {SessionId} — returning error result")]
     private partial void LogGetMessagesFailed(Exception ex, string sessionId);
+
+    private async Task<string?> ResolveProjectNameAsync(string? projectId)
+    {
+        if (projectId is null)
+            return null;
+
+        var projects = await projectRepository.ListAsync();
+        return projects.FirstOrDefault(p => p.Id == projectId)?.Name;
+    }
 }
 
 // ── Request / Result DTOs ──────────────────────────────────────────────────────

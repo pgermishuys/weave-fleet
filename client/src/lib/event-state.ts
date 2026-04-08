@@ -140,7 +140,7 @@ export function applyPartUpdate(
         partId: part.id,
         type: "tool",
         tool: part.tool ?? "",
-        callId: part.callID ?? "",
+        callId: part.callID ?? part.callId ?? "",
         state: part.state,
       };
       const existing = msg.parts.find((p) => p.partId === part.id);
@@ -271,6 +271,10 @@ export function isRelevantToSession(
   // message.part.delta (undocumented event for streaming text)
   if (type === "message.part.delta") {
     return properties?.sessionID === sessionId;
+  }
+
+  if (type === "delegation.created" || type === "delegation.updated") {
+    return properties?.parentSessionId === sessionId;
   }
 
   // Unknown events — skip to avoid noise

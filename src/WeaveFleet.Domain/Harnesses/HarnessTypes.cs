@@ -25,6 +25,7 @@ public sealed record HarnessCapabilities
     public bool SupportsResume { get; init; }
     public bool SupportsImageAttachments { get; init; }
     public bool SupportsStreaming { get; init; }
+    public bool SupportsDelegation { get; init; }
 }
 
 /// <summary>Whether a harness binary/service is available on this machine.</summary>
@@ -35,6 +36,7 @@ public sealed record HarnessEvent
 {
     public required string Type { get; init; }
     public required string SessionId { get; init; }
+    public string? FleetSessionId { get; init; }
     public required DateTimeOffset Timestamp { get; init; }
     public JsonElement? Payload { get; init; }
 }

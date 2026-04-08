@@ -19,6 +19,7 @@ public sealed class SessionOrchestratorTests
     private readonly IHarnessInstance _harnessInstance = Substitute.For<IHarnessInstance>();
     private readonly ISessionRepository _sessionRepo = Substitute.For<ISessionRepository>();
     private readonly ISessionCallbackRepository _callbackRepo = Substitute.For<ISessionCallbackRepository>();
+    private readonly IDelegationRepository _delegationRepo = Substitute.For<IDelegationRepository>();
     private readonly IProjectRepository _projectRepo = Substitute.For<IProjectRepository>();
     private readonly IWorkspaceRepository _workspaceRepo = Substitute.For<IWorkspaceRepository>();
     private readonly IInstanceRepository _instanceRepo = Substitute.For<IInstanceRepository>();
@@ -26,6 +27,7 @@ public sealed class SessionOrchestratorTests
     private readonly IAnalyticsCollector _analyticsCollector = Substitute.For<IAnalyticsCollector>();
     private readonly IMessageRepository _messageRepo = Substitute.For<IMessageRepository>();
     private readonly InstanceTracker _tracker = new();
+    private readonly DelegationService _delegationService;
     private readonly SessionOrchestrator _sut;
 
     public SessionOrchestratorTests()
@@ -35,6 +37,7 @@ public sealed class SessionOrchestratorTests
             NullLogger<WorkspaceService>.Instance);
 
         var instanceService = new InstanceService(_instanceRepo, _sessionRepo);
+        _delegationService = new DelegationService(_delegationRepo, _eventBroadcaster);
 
         _sut = new SessionOrchestrator(
             workspaceService,
@@ -43,10 +46,12 @@ public sealed class SessionOrchestratorTests
             _tracker,
             _sessionRepo,
             _callbackRepo,
+            _delegationRepo,
             _projectRepo,
             _eventBroadcaster,
             _analyticsCollector,
             _messageRepo,
+            _delegationService,
             new FleetOptions(),
             NullLogger<SessionOrchestrator>.Instance);
 
@@ -541,5 +546,103 @@ public sealed class SessionOrchestratorTests
         Assert.True(result.IsSuccess);
         await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(s =>
             s.HarnessType == "claude-code"));
+    }
+
+    [Fact]
+    public async Task EnsureDelegatedChildSessionAsync_CreatesHiddenChildSession()
+    {
+        var parent = new Session
+        {
+            Id = "parent-1",
+            InstanceId = "inst-parent",
+            WorkspaceId = "ws-1",
+            HarnessType = "opencode",
+            ProjectId = "proj-1",
+            Title = "Parent",
+            Status = "active",
+            Directory = "/tmp/parent",
+            CreatedAt = "2026-01-01"
+        };
+
+        _sessionRepo.GetByIdAsync("parent-1").Returns(parent);
+        _sessionRepo.GetByHarnessIdAsync("oc-child-1").Returns((Session?)null);
+        _projectRepo.ListAsync().Returns([
+            new Project { Id = "proj-1", Name = "Project One", Type = "user", Position = 0, CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01" },
+        ]);
+        _harnessRegistry.GetByType("opencode").Returns(_harness);
+        _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = true });
+
+        var childInstance = Substitute.For<IHarnessInstance>();
+        childInstance.InstanceId.Returns("inst-child");
+        childInstance.HarnessType.Returns("opencode");
+        childInstance.Status.Returns(HarnessInstanceStatus.Running);
+        _harness.ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>())
+            .Returns(childInstance);
+        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
+        _sessionRepo.InsertAsync(Arg.Any<Session>()).Returns(Task.CompletedTask);
+
+        var result = await _sut.EnsureDelegatedChildSessionAsync("parent-1", "oc-child-1", "thread");
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value.IsHidden);
+        Assert.Equal("parent-1", result.Value.ParentSessionId);
+        Assert.Equal("oc-child-1", result.Value.HarnessResumeToken);
+        Assert.Equal("oc-child-1", result.Value.OpencodeSessionId);
+
+        await _harness.Received(1).ResumeAsync(
+            Arg.Is<HarnessResumeOptions>(o => o.ResumeToken == "oc-child-1" && o.SessionId == result.Value.Id),
+            Arg.Any<CancellationToken>());
+        await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(s =>
+            s.IsHidden &&
+            s.ParentSessionId == "parent-1" &&
+            s.InstanceId == "inst-child" &&
+            s.HarnessResumeToken == "oc-child-1"));
+    }
+
+    [Fact]
+    public async Task DeleteSessionAsync_WhenSessionIsDelegationChild_CompletesDelegationBeforeDelete()
+    {
+        var session = new Session
+        {
+            Id = "child-1",
+            InstanceId = "inst-1",
+            WorkspaceId = "ws-1",
+            Title = "Child",
+            Status = "completed",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        };
+        var delegation = new Delegation
+        {
+            Id = "del-1",
+            ParentSessionId = "parent-1",
+            ChildSessionId = "child-1",
+            ParentToolCallId = "tool-1",
+            Title = "reviewer",
+            Status = "running",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UpdatedAt = DateTime.UtcNow.ToString("O")
+        };
+
+        _sessionRepo.GetByIdAsync("child-1").Returns(session);
+        _delegationRepo.GetByChildSessionIdAsync("child-1").Returns(delegation);
+        _delegationRepo.GetByIdAsync("del-1").Returns(delegation);
+        _sessionRepo.DeleteAsync("child-1").Returns(true);
+        _instanceRepo.UpdateStatusAsync("inst-1", "stopped", Arg.Any<string>()).Returns(Task.CompletedTask);
+
+        var result = await _sut.DeleteSessionAsync("child-1");
+
+        Assert.True(result.IsSuccess);
+        Received.InOrder(async () =>
+        {
+            await _delegationRepo.GetByChildSessionIdAsync("child-1");
+            await _delegationRepo.GetByIdAsync("del-1");
+            await _delegationRepo.UpdateStatusAsync(
+                Arg.Is("del-1"),
+                Arg.Is("completed"),
+                Arg.Any<string>(),
+                Arg.Any<string>());
+            await _sessionRepo.DeleteAsync("child-1");
+        });
     }
 }

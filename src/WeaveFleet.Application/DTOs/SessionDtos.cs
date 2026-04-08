@@ -18,6 +18,7 @@ public sealed record SessionListResponse(
     string? ActivityStatus,
     string LifecycleStatus,
     string TypedInstanceStatus,
+    bool IsHidden,
     int? TotalTokens,
     double? TotalCost,
     string? ProjectId,

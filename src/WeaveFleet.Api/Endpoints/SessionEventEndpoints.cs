@@ -17,7 +17,7 @@ public static class SessionEventEndpoints
         app.MapGet("/api/sessions/{id}/events", async (
             string id,
             ISessionRepository sessionRepo,
-            InstanceTracker tracker,
+            IEventBroadcaster broadcaster,
             HttpContext context,
             CancellationToken ct) =>
         {
@@ -29,8 +29,7 @@ public static class SessionEventEndpoints
             context.Response.Headers.CacheControl = "no-cache";
             context.Response.Headers.Connection = "keep-alive";
 
-            var instance = tracker.Get(session.InstanceId);
-            if (instance is null)
+            if (session.Status is "completed" or "failed" or "aborted")
             {
                 // No live instance — send a single "stopped" event and close
                 var stoppedData = JsonSerializer.Serialize(new { sessionId = id, status = "stopped" });
@@ -38,11 +37,11 @@ public static class SessionEventEndpoints
                 return Results.Empty;
             }
 
-            await foreach (var evt in instance.SubscribeAsync(ct))
+            await foreach (var evt in broadcaster.SubscribeAsync([$"session:{id}"], ct))
             {
                 var data = JsonSerializer.Serialize(new
                 {
-                    sessionId = evt.SessionId,
+                    sessionId = id,
                     type = evt.Type,
                     payload = evt.Payload,
                     timestamp = evt.Timestamp.ToUnixTimeMilliseconds()

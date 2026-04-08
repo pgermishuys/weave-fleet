@@ -73,6 +73,7 @@ public sealed class OpenCodeHarness : IHarness
         SupportsResume = true,
         SupportsImageAttachments = true,
         SupportsStreaming = true,
+        SupportsDelegation = true,
     };
 
     /// <inheritdoc />

@@ -64,6 +64,7 @@ public sealed class ClaudeCodeHarness : IHarness
         SupportsResume = true,
         SupportsImageAttachments = false,
         SupportsStreaming = true,
+        SupportsDelegation = false,
     };
 
     /// <inheritdoc />

@@ -95,6 +95,14 @@ public sealed class ClaudeCodeHarnessTests
         Assert.False(harness.Capabilities.SupportsImageAttachments);
     }
 
+    [Fact]
+    public void Capabilities_SupportsDelegation_IsFalse()
+    {
+        var harness = CreateHarness();
+
+        Assert.False(harness.Capabilities.SupportsDelegation);
+    }
+
     [Fact(Skip = "Integration: requires claude binary on PATH")]
     public async Task CheckAvailability_WhenBinaryMissing_ReturnsNotAvailable()
     {

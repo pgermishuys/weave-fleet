@@ -39,6 +39,21 @@ public static class SessionEndpoints
         })
         .WithName("GetSession");
 
+        // GET /api/sessions/{id}/delegations
+        group.MapGet("/{id}/delegations", async (
+            string id,
+            SessionService sessionService,
+            DelegationService delegationService) =>
+        {
+            var sessionResult = await sessionService.GetSessionAsync(id);
+            return await sessionResult.Match<Task<IResult>>(
+                async _ => Results.Ok(await delegationService.GetDelegationsAsync(id)),
+                error => Task.FromResult(error.ToSessionApiResult()));
+        })
+        .Produces<IReadOnlyList<DelegationDto>>(200)
+        .Produces(404)
+        .WithName("GetSessionDelegations");
+
         // POST /api/sessions — create session via orchestrator
         group.MapPost("/", async (CreateSessionApiRequest req, SessionOrchestrator orchestrator) =>
         {
@@ -249,6 +264,7 @@ public static class SessionEndpoints
             ActivityStatus: activityStatus,
             LifecycleStatus: lifecycleStatus,
             TypedInstanceStatus: "running",   // enriched in Phase 4
+            IsHidden: s.IsHidden,
             TotalTokens: s.TotalTokens > 0 ? s.TotalTokens : null,
             TotalCost: s.TotalCost > 0 ? s.TotalCost : null,
             ProjectId: s.ProjectId,

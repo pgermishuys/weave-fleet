@@ -17,10 +17,10 @@ public sealed class DapperSessionRepository(IDbConnectionFactory connectionFacto
             """
             INSERT INTO sessions (id, workspace_id, instance_id, project_id, opencode_session_id, title,
                 status, directory, created_at, stopped_at, parent_session_id, activity_status,
-                lifecycle_status, total_tokens, total_cost, harness_type, harness_resume_token)
+                lifecycle_status, is_hidden, total_tokens, total_cost, harness_type, harness_resume_token)
             VALUES (@Id, @WorkspaceId, @InstanceId, @ProjectId, @OpencodeSessionId, @Title,
                 @Status, @Directory, @CreatedAt, @StoppedAt, @ParentSessionId, @ActivityStatus,
-                @LifecycleStatus, @TotalTokens, @TotalCost, @HarnessType, @HarnessResumeToken)
+                @LifecycleStatus, @IsHidden, @TotalTokens, @TotalCost, @HarnessType, @HarnessResumeToken)
             """, session);
     }
 

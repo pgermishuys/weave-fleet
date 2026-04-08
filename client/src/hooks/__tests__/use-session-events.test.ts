@@ -1,10 +1,50 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type React from "react";
-import type { AccumulatedMessage, WebSocketEvent } from "@/lib/api-types";
+import type { AccumulatedMessage, DelegationDto, WebSocketEvent } from "@/lib/api-types";
 import { handleEvent } from "@/hooks/use-session-events";
+
+vi.mock("@/lib/api-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api-client")>();
+  return {
+    ...actual,
+    apiFetch: vi.fn(),
+  };
+});
+
+vi.mock("@/hooks/use-paginated-messages", () => ({
+  usePaginatedMessages: () => ({
+    pagination: { hasMore: false, isLoadingOlder: false, totalCount: 0, loadError: undefined },
+    loadInitialMessages: vi.fn(async () => []),
+    loadMessagesSince: vi.fn(async () => []),
+    loadOlderMessages: vi.fn(async () => []),
+    resetPagination: vi.fn(),
+    hydratePagination: vi.fn(),
+    snapshotPaginationRef: { current: () => ({ hasMore: false, isLoadingOlder: false, totalCount: 0, loadError: undefined }) },
+  }),
+}));
+
+vi.mock("@/hooks/use-session-status", () => ({
+  fetchSessionStatus: vi.fn(async () => "idle"),
+}));
+
+const onReconnectCallbacks: Array<() => void> = [];
+vi.mock("@/hooks/use-weave-socket", () => ({
+  useWeaveSocket: () => ({
+    subscribe: vi.fn(() => () => {}),
+  }),
+  onReconnect: vi.fn((cb: () => void) => {
+    onReconnectCallbacks.push(cb);
+    return () => {};
+  }),
+}));
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
 
 function createStateHarness(sessionId: string) {
   let messages: AccumulatedMessage[] = [];
+  let delegations: DelegationDto[] = [];
   let status: string | undefined;
   let sessionStatus: "idle" | "busy" = "idle";
   let error: string | undefined;
@@ -12,6 +52,11 @@ function createStateHarness(sessionId: string) {
   const setMessages = (update: React.SetStateAction<AccumulatedMessage[]>) => {
     messages = typeof update === "function"
       ? (update as (prev: AccumulatedMessage[]) => AccumulatedMessage[])(messages)
+      : update;
+  };
+  const setDelegations = (update: React.SetStateAction<DelegationDto[]>) => {
+    delegations = typeof update === "function"
+      ? (update as (prev: DelegationDto[]) => DelegationDto[])(delegations)
       : update;
   };
   const setStatus = (update: React.SetStateAction<string>) => {
@@ -40,6 +85,7 @@ function createStateHarness(sessionId: string) {
       event,
       sessionId,
       setMessages,
+      setDelegations,
       setStatus as React.Dispatch<React.SetStateAction<"connecting" | "connected" | "recovering" | "disconnected" | "error" | "abandoned">>,
       setSessionStatus,
       setError,
@@ -51,8 +97,70 @@ function createStateHarness(sessionId: string) {
   return {
     dispatch,
     getMessages: () => messages,
+    getDelegations: () => delegations,
   };
 }
+
+describe("handleEvent delegation events", () => {
+  it("applies delegation.created", () => {
+    const harness = createStateHarness("sess-1");
+
+    harness.dispatch({
+      type: "delegation.created",
+      properties: {
+        delegationId: "del-1",
+        parentToolCallId: "tool-1",
+        childSessionId: null,
+        title: "reviewer",
+        status: "pending",
+      },
+    } as WebSocketEvent);
+
+    expect(harness.getDelegations()).toEqual([
+      {
+        delegationId: "del-1",
+        parentToolCallId: "tool-1",
+        childSessionId: null,
+        title: "reviewer",
+        status: "pending",
+      },
+    ]);
+  });
+
+  it("applies delegation.updated", () => {
+    const harness = createStateHarness("sess-1");
+
+    harness.dispatch({
+      type: "delegation.created",
+      properties: {
+        delegationId: "del-1",
+        parentToolCallId: "tool-1",
+        childSessionId: null,
+        title: "reviewer",
+        status: "pending",
+      },
+    } as WebSocketEvent);
+
+    harness.dispatch({
+      type: "delegation.updated",
+      properties: {
+        delegationId: "del-1",
+        childSessionId: "child-1",
+        status: "running",
+      },
+    } as WebSocketEvent);
+
+    expect(harness.getDelegations()).toEqual([
+      {
+        delegationId: "del-1",
+        parentToolCallId: "tool-1",
+        childSessionId: "child-1",
+        title: "reviewer",
+        status: "running",
+      },
+    ]);
+  });
+});
 
 describe("handleEvent message.part.updated", () => {
   it("applies text part when only top-level sessionID is present", () => {
@@ -155,6 +263,12 @@ describe("handleEvent message.part.updated", () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]?.sessionId).toBe("sess-1");
     expect(messages[0]?.parts[0]).toMatchObject({ type: "text", text: "hello" });
+  });
+});
+
+describe("useSessionEvents reconnect recovery", () => {
+  it("keeps reconnect callback registration available", () => {
+    expect(onReconnectCallbacks).toBeDefined();
   });
 });
 

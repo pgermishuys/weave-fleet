@@ -157,6 +157,48 @@ public sealed class OpenCodeMapperTests
         Assert.Equal("fallback-id", result.SessionId);
     }
 
+    [Fact]
+    public void ToHarnessEvent_UsesNestedInfoSessionId_WhenTopLevelSessionIdMissing()
+    {
+        var properties = JsonDocument.Parse(
+            """
+            {
+              "info": {
+                "id": "msg-1",
+                "sessionId": "nested-session",
+                "role": "assistant"
+              }
+            }
+            """).RootElement;
+        var evt = new OpenCodeSseEvent { Type = "message.updated", Properties = properties };
+
+        var result = OpenCodeMapper.ToHarnessEvent(evt, "fallback-id");
+
+        Assert.Equal("nested-session", result.SessionId);
+    }
+
+    [Fact]
+    public void ToHarnessEvent_UsesNestedPartSessionId_WhenTopLevelSessionIdMissing()
+    {
+        var properties = JsonDocument.Parse(
+            """
+            {
+              "part": {
+                "id": "part-1",
+                "sessionID": "part-session",
+                "messageID": "msg-1",
+                "type": "text",
+                "text": "hello"
+              }
+            }
+            """).RootElement;
+        var evt = new OpenCodeSseEvent { Type = "message.part.updated", Properties = properties };
+
+        var result = OpenCodeMapper.ToHarnessEvent(evt, "fallback-id");
+
+        Assert.Equal("part-session", result.SessionId);
+    }
+
     // ---------------------------------------------------------------------------
     // ToHarnessAgents
     // ---------------------------------------------------------------------------
@@ -503,6 +545,310 @@ public sealed class OpenCodeMapperTests
             """);
 
         var result = OpenCodeMapper.TryExtractTokenEvent(evt, "sess", null, null, null);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void TryExtractDelegation_TaskToolPending_ReturnsExtraction()
+    {
+        var evt = new OpenCodeSseEvent
+        {
+            Type = "message.part.updated",
+            Properties = JsonDocument.Parse(
+                """
+                {
+                  "part": {
+                    "id": "part-1",
+                    "sessionID": "oc-parent",
+                    "messageID": "msg-1",
+                    "type": "tool",
+                    "tool": "task",
+                    "callID": "tool-1",
+                    "state": {
+                      "status": "pending",
+                      "input": {
+                        "subagent_type": "reviewer",
+                        "description": "Review the patch"
+                      }
+                    }
+                  }
+                }
+                """).RootElement
+        };
+
+        var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
+
+        Assert.NotNull(result);
+        Assert.Equal("fleet-parent", result.ParentSessionId);
+        Assert.Equal("tool-1", result.ToolCallId);
+        Assert.Equal("reviewer", result.Title);
+        Assert.Equal("pending", result.Status);
+        Assert.Null(result.ChildSessionId);
+    }
+
+    [Fact]
+    public void TryExtractDelegation_TaskToolRunningWithChildSession_ReturnsExtraction()
+    {
+        var evt = new OpenCodeSseEvent
+        {
+            Type = "message.part.updated",
+            Properties = JsonDocument.Parse(
+                """
+                {
+                  "part": {
+                    "id": "part-1",
+                    "sessionID": "oc-parent",
+                    "messageID": "msg-1",
+                    "type": "tool",
+                    "tool": "task",
+                    "callID": "tool-1",
+                    "state": {
+                      "status": "running",
+                      "input": {
+                        "subagent_type": "reviewer"
+                      },
+                      "metadata": {
+                        "sessionId": "fleet-child"
+                      }
+                    }
+                  }
+                }
+                """).RootElement
+        };
+
+        var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
+
+        Assert.NotNull(result);
+        Assert.Equal("running", result.Status);
+        Assert.Equal("fleet-child", result.ChildSessionId);
+    }
+
+    [Fact]
+    public void TryExtractDelegation_TaskToolRunningWithNestedChildMetadata_ReturnsExtraction()
+    {
+        var evt = new OpenCodeSseEvent
+        {
+            Type = "message.part.updated",
+            Properties = JsonDocument.Parse(
+                """
+                {
+                  "part": {
+                    "id": "part-1",
+                    "sessionID": "oc-parent",
+                    "messageID": "msg-1",
+                    "type": "tool",
+                    "tool": "task",
+                    "callID": "tool-1",
+                    "state": {
+                      "status": "running",
+                      "input": {
+                        "subagent_type": "reviewer"
+                      },
+                      "metadata": {
+                        "child": {
+                          "sessionId": "fleet-child"
+                        }
+                      }
+                    }
+                  }
+                }
+                """).RootElement
+        };
+
+        var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
+
+        Assert.NotNull(result);
+        Assert.Equal("fleet-child", result.ChildSessionId);
+    }
+
+    [Fact]
+    public void TryExtractDelegation_TaskToolRunningWithNestedSessionMetadata_ReturnsExtraction()
+    {
+        var evt = new OpenCodeSseEvent
+        {
+            Type = "message.part.updated",
+            Properties = JsonDocument.Parse(
+                """
+                {
+                  "part": {
+                    "id": "part-1",
+                    "sessionID": "oc-parent",
+                    "messageID": "msg-1",
+                    "type": "tool",
+                    "tool": "task",
+                    "callID": "tool-1",
+                    "state": {
+                      "status": "running",
+                      "input": {
+                        "subagent_type": "reviewer"
+                      },
+                      "metadata": {
+                        "session": {
+                          "session_id": "fleet-child"
+                        }
+                      }
+                    }
+                  }
+                }
+                """).RootElement
+        };
+
+        var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
+
+        Assert.NotNull(result);
+        Assert.Equal("fleet-child", result.ChildSessionId);
+    }
+
+    [Fact]
+    public void TryExtractDelegation_TaskToolCancelled_ReturnsExtraction()
+    {
+        var evt = new OpenCodeSseEvent
+        {
+            Type = "message.part.updated",
+            Properties = JsonDocument.Parse(
+                """
+                {
+                  "part": {
+                    "id": "part-1",
+                    "type": "tool",
+                    "tool": "task",
+                    "callID": "tool-1",
+                    "state": {
+                      "status": "cancelled",
+                      "input": {
+                        "subagent_type": "reviewer"
+                      }
+                    }
+                  }
+                }
+                """).RootElement
+        };
+
+        var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
+
+        Assert.NotNull(result);
+        Assert.Equal("cancelled", result.Status);
+    }
+
+    [Fact]
+    public void TryExtractDelegation_UsesAgentField_WhenSubagentTypeMissing()
+    {
+        var evt = new OpenCodeSseEvent
+        {
+            Type = "message.part.updated",
+            Properties = JsonDocument.Parse(
+                """
+                {
+                  "part": {
+                    "id": "part-1",
+                    "type": "tool",
+                    "tool": "task",
+                    "callID": "tool-1",
+                    "state": {
+                      "status": "pending",
+                      "input": {
+                        "agent": "thread"
+                      }
+                    }
+                  }
+                }
+                """).RootElement
+        };
+
+        var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
+
+        Assert.NotNull(result);
+        Assert.Equal("thread", result.Title);
+    }
+
+    [Fact]
+    public void TryExtractDelegation_SubtaskPartWithChildSession_ReturnsRunningExtraction()
+    {
+        var evt = new OpenCodeSseEvent
+        {
+            Type = "message.part.updated",
+            Properties = JsonDocument.Parse(
+                """
+                {
+                  "part": {
+                    "id": "subtask-1",
+                    "type": "subtask",
+                    "callId": "tool-1",
+                    "agent": "thread",
+                    "description": "Investigate issue",
+                    "metadata": {
+                      "child": {
+                        "sessionId": "child-1"
+                      }
+                    }
+                  }
+                }
+                """).RootElement
+        };
+
+        var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
+
+        Assert.NotNull(result);
+        Assert.Equal("tool-1", result.ToolCallId);
+        Assert.Equal("thread", result.Title);
+        Assert.Equal("running", result.Status);
+        Assert.Equal("child-1", result.ChildSessionId);
+    }
+
+    [Fact]
+    public void TryExtractDelegation_SubtaskPartWithoutChildSession_ReturnsPendingExtraction()
+    {
+        var evt = new OpenCodeSseEvent
+        {
+            Type = "message.part.updated",
+            Properties = JsonDocument.Parse(
+                """
+                {
+                  "part": {
+                    "id": "subtask-1",
+                    "type": "subtask",
+                    "callId": "tool-1",
+                    "description": "Investigate issue",
+                    "agent": "thread"
+                  }
+                }
+                """).RootElement
+        };
+
+        var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
+
+        Assert.NotNull(result);
+        Assert.Equal("pending", result.Status);
+        Assert.Null(result.ChildSessionId);
+    }
+
+    [Fact]
+    public void TryExtractDelegation_NonTaskTool_ReturnsNull()
+    {
+        var evt = new OpenCodeSseEvent
+        {
+            Type = "message.part.updated",
+            Properties = JsonDocument.Parse(
+                """
+                {
+                  "part": {
+                    "id": "part-1",
+                    "type": "tool",
+                    "tool": "bash",
+                    "callID": "tool-1",
+                    "state": {
+                      "status": "running",
+                      "input": {
+                        "subagent_type": "reviewer"
+                      }
+                    }
+                  }
+                }
+                """).RootElement
+        };
+
+        var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
 
         Assert.Null(result);
     }

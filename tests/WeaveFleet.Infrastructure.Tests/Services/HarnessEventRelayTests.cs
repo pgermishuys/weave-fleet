@@ -277,12 +277,8 @@ public sealed class HarnessEventRelayTests
         await relay.StopAsync(CancellationToken.None);
     }
 
-    // -----------------------------------------------------------------------
-    // Test 6: Event payloads have session IDs rewritten to Fleet session ID
-    // -----------------------------------------------------------------------
-
     [Fact]
-    public async Task Event_payload_sessionIds_are_rewritten_to_fleet_session_id()
+    public async Task Event_payload_sessionIds_are_preserved_when_broadcast()
     {
         var broadcaster = Substitute.For<IEventBroadcaster>();
         var sessionRepo = Substitute.For<ISessionRepository>();
@@ -300,7 +296,6 @@ public sealed class HarnessEventRelayTests
         sessionRepo.GetAnyForInstanceAsync(instanceId)
             .Returns(new Session { Id = fleetSessionId, InstanceId = instanceId });
 
-        // Capture the payload passed to broadcaster
         object? capturedPayload = null;
         broadcaster
             .When(b => b.BroadcastAsync(Arg.Any<string>(), Arg.Any<string>(),
@@ -318,8 +313,7 @@ public sealed class HarnessEventRelayTests
         var instance = new FakeInstance(instanceId);
         tracker.Register(instanceId, instance);
 
-        // Emit event with OpenCode session IDs in the payload
-        var openCodePayload = JsonSerializer.SerializeToElement(new
+        var payload = JsonSerializer.SerializeToElement(new
         {
             sessionID = "opencode-session-xyz",
             part = new
@@ -337,66 +331,38 @@ public sealed class HarnessEventRelayTests
             Type = "message.part.updated",
             SessionId = "opencode-session-xyz",
             Timestamp = DateTimeOffset.UtcNow,
-            Payload = openCodePayload
+            Payload = payload
         });
         instance.Complete();
 
-        // Wait for broadcast
         await Task.Delay(500);
 
         Assert.NotNull(capturedPayload);
 
-        // Verify the payload has Fleet session IDs
-        var rewrittenJson = JsonSerializer.Serialize(capturedPayload);
-        using var doc = JsonDocument.Parse(rewrittenJson);
+        var broadcastJson = JsonSerializer.Serialize(capturedPayload);
+        using var doc = JsonDocument.Parse(broadcastJson);
 
-        // Top-level sessionID should be Fleet ID
-        Assert.Equal(fleetSessionId, doc.RootElement.GetProperty("sessionID").GetString());
-
-        // Nested part.sessionID should also be Fleet ID
-        Assert.Equal(fleetSessionId,
+        Assert.Equal("opencode-session-xyz", doc.RootElement.GetProperty("sessionID").GetString());
+        Assert.Equal("opencode-session-xyz",
             doc.RootElement.GetProperty("part").GetProperty("sessionID").GetString());
-
-        // Non-session-ID fields should be unchanged
-        Assert.Equal("msg-1",
-            doc.RootElement.GetProperty("part").GetProperty("messageID").GetString());
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);
     }
 
-    // -----------------------------------------------------------------------
-    // Test: session_id (snake_case) rewriting
-    // -----------------------------------------------------------------------
-
     [Fact]
-    public async Task RewriteSessionIds_HandlesSnakeCaseSessionId()
+    public async Task Child_routed_events_are_broadcast_on_child_topic()
     {
-        var broadcaster = Substitute.For<IEventBroadcaster>();
-        var sessionRepo = Substitute.For<ISessionRepository>();
-        var serviceProvider = Substitute.For<IServiceProvider>();
-        var scope = Substitute.For<IServiceScope>();
-        var scopeFactory = Substitute.For<IServiceScopeFactory>();
-
-        serviceProvider.GetService(typeof(ISessionRepository)).Returns(sessionRepo);
-        scope.ServiceProvider.Returns(serviceProvider);
-        scopeFactory.CreateScope().Returns(scope);
-
-        var fleetSessionId = "fleet-snake-case";
-        var instanceId = "instance-snake-case";
-
-        sessionRepo.GetAnyForInstanceAsync(instanceId)
-            .Returns(new Session { Id = fleetSessionId, InstanceId = instanceId });
-
-        object? capturedPayload = null;
-        broadcaster
-            .When(b => b.BroadcastAsync(Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<object>(), Arg.Any<CancellationToken>()))
-            .Do(call => capturedPayload = call.ArgAt<object>(2));
-
+        var (broadcaster, sessionRepo, scopeFactory, broadcastSignal) = BuildDependencies();
         var tracker = new InstanceTracker();
         var relay = new HarnessEventRelay(
             tracker, broadcaster, scopeFactory, NullLogger<HarnessEventRelay>.Instance);
+
+        var fleetSessionId = "fleet-parent";
+        var instanceId = "instance-child-topic";
+
+        sessionRepo.GetAnyForInstanceAsync(instanceId)
+            .Returns(new Session { Id = fleetSessionId, InstanceId = instanceId });
 
         using var cts = new CancellationTokenSource();
         await relay.StartAsync(cts.Token);
@@ -405,36 +371,20 @@ public sealed class HarnessEventRelayTests
         var instance = new FakeInstance(instanceId);
         tracker.Register(instanceId, instance);
 
-        // Claude Code uses snake_case session_id in its payloads
-        var claudeCodePayload = JsonSerializer.SerializeToElement(new
-        {
-            session_id = "claude-code-session-xyz",
-            result = "Done",
-            num_turns = 3
-        });
-
         instance.Emit(new HarnessEvent
         {
-            Type = "result.success",
-            SessionId = "claude-code-session-xyz",
+            Type = "message.part.updated",
+            SessionId = "oc-child",
+            FleetSessionId = "fleet-child",
             Timestamp = DateTimeOffset.UtcNow,
-            Payload = claudeCodePayload
+            Payload = JsonSerializer.SerializeToElement(new { part = new { id = "part-1" } })
         });
         instance.Complete();
 
-        // Wait for broadcast
-        await Task.Delay(500);
+        var result = await broadcastSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        Assert.NotNull(capturedPayload);
-
-        var rewrittenJson = JsonSerializer.Serialize(capturedPayload);
-        using var doc = JsonDocument.Parse(rewrittenJson);
-
-        // session_id (snake_case) should be rewritten to the Fleet session ID
-        Assert.Equal(fleetSessionId, doc.RootElement.GetProperty("session_id").GetString());
-
-        // Non-session fields should be unchanged
-        Assert.Equal("Done", doc.RootElement.GetProperty("result").GetString());
+        Assert.Equal("session:fleet-child", result.Topic);
+        Assert.Equal("message.part.updated", result.Type);
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);

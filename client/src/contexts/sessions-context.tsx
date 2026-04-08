@@ -29,7 +29,7 @@ const defaultValue: SessionsContextValue = {
   patchWorkspaceDisplayName: () => {},
 };
 
-const SessionsContext = createContext<SessionsContextValue>(defaultValue);
+export const SessionsContext = createContext<SessionsContextValue>(defaultValue);
 
 /**
  * Map an incoming activityStatus to the legacy sessionStatus field.
@@ -190,17 +190,23 @@ export function SessionsProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    function handleSessionCreated() {
+      void refetch();
+    }
+
     sse.on("activity_status", handleActivityStatus);
     sse.on("token_update", handleTokenUpdate);
+    sse.on("session_created", handleSessionCreated);
     return () => {
       sse.off("activity_status", handleActivityStatus);
       sse.off("token_update", handleTokenUpdate);
+      sse.off("session_created", handleSessionCreated);
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
     };
-  }, [sse]);
+  }, [refetch, sse]);
 
   // Merge polled sessions with any pending SSE patches.
   // Prune patches that the poll has caught up with (instead of clearing all).

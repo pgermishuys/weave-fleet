@@ -9,7 +9,8 @@ namespace WeaveFleet.Application.Services;
 /// </summary>
 public sealed class SessionService(
     ISessionRepository sessionRepository,
-    IProjectRepository projectRepository)
+    IProjectRepository projectRepository,
+    SessionOrchestrator sessionOrchestrator)
 {
     public async Task<Result<IReadOnlyList<Session>>> ListSessionsAsync(
         int limit = 100,
@@ -32,9 +33,10 @@ public sealed class SessionService(
 
     public async Task<Result<bool>> DeleteSessionAsync(string id)
     {
-        var deleted = await sessionRepository.DeleteAsync(id);
-        if (!deleted)
-            return FleetError.NotFoundFor(nameof(Session), id);
+        var result = await sessionOrchestrator.DeleteSessionAsync(id);
+        if (result.IsFailure)
+            return result.Error;
+
         return true;
     }
 

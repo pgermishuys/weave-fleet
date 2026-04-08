@@ -10,6 +10,18 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 /// </summary>
 internal static class OpenCodeMapper
 {
+    private static readonly string[] InfoPath = ["info"];
+    private static readonly string[] PartPath = ["part"];
+    private static readonly string[] ChildPath = ["child"];
+    private static readonly string[] SessionPath = ["session"];
+
+    internal sealed record DelegationExtraction(
+        string ParentSessionId,
+        string ToolCallId,
+        string Title,
+        string Status,
+        string? ChildSessionId);
+
     /// <summary>
     /// Maps an <see cref="OpenCodeMessageWithParts"/> to a <see cref="HarnessMessage"/>.
     /// </summary>
@@ -101,14 +113,7 @@ internal static class OpenCodeMapper
     /// </summary>
     internal static HarnessEvent ToHarnessEvent(OpenCodeSseEvent evt, string? sessionId)
     {
-        // Try to extract sessionId from properties if present
-        string resolvedSession = sessionId ?? string.Empty;
-        if (evt.Properties.ValueKind == JsonValueKind.Object
-            && evt.Properties.TryGetProperty("sessionId", out var sid)
-            && sid.ValueKind == JsonValueKind.String)
-        {
-            resolvedSession = sid.GetString() ?? resolvedSession;
-        }
+        var resolvedSession = TryResolveSessionId(evt) ?? sessionId ?? string.Empty;
 
         return new HarnessEvent
         {
@@ -255,5 +260,185 @@ internal static class OpenCodeMapper
             // Silent failure — analytics must never crash sessions
             return null;
         }
+    }
+
+    internal static DelegationExtraction? TryExtractDelegation(OpenCodeSseEvent evt, string parentSessionId)
+    {
+        if (evt.Type is not "message.part.updated")
+            return null;
+
+        if (string.IsNullOrWhiteSpace(parentSessionId))
+            return null;
+
+        try
+        {
+            if (evt.Properties.ValueKind != JsonValueKind.Object)
+                return null;
+
+            if (!evt.Properties.TryGetProperty("part", out var partEl) || partEl.ValueKind != JsonValueKind.Object)
+                return null;
+
+            if (TryExtractSubtaskDelegation(partEl, parentSessionId) is { } subtaskExtraction)
+                return subtaskExtraction;
+
+            if (!HasStringProperty(partEl, "type", out var partType) || partType != "tool")
+                return null;
+
+            if (!HasStringProperty(partEl, "tool", out var toolName) || toolName != "task")
+                return null;
+
+            if (!TryGetStringProperty(partEl, out var toolCallId, "callID", "callId")
+                || string.IsNullOrWhiteSpace(toolCallId))
+                return null;
+
+            if (!partEl.TryGetProperty("state", out var stateEl) || stateEl.ValueKind != JsonValueKind.Object)
+                return null;
+
+            if (!HasStringProperty(stateEl, "status", out var status)
+                || status is not ("pending" or "running" or "completed" or "error" or "cancelled"))
+                return null;
+
+            if (!stateEl.TryGetProperty("input", out var inputEl) || inputEl.ValueKind != JsonValueKind.Object)
+                return null;
+
+            if (!TryGetStringProperty(inputEl, out var title, "subagent_type", "agent")
+                || string.IsNullOrWhiteSpace(title))
+                return null;
+
+            string? childSessionId = null;
+            if (stateEl.TryGetProperty("metadata", out var metadataEl) && metadataEl.ValueKind == JsonValueKind.Object)
+            {
+                _ = TryGetStringProperty(metadataEl, out childSessionId, "sessionId", "sessionID", "session_id");
+
+                if (string.IsNullOrWhiteSpace(childSessionId)
+                    && TryGetNestedStringProperty(metadataEl, out var nestedChildSessionId, ChildPath, "sessionId", "sessionID", "session_id"))
+                {
+                    childSessionId = nestedChildSessionId;
+                }
+
+                if (string.IsNullOrWhiteSpace(childSessionId)
+                    && TryGetNestedStringProperty(metadataEl, out var nestedSessionChildSessionId, SessionPath, "sessionId", "sessionID", "session_id"))
+                {
+                    childSessionId = nestedSessionChildSessionId;
+                }
+            }
+
+            return new DelegationExtraction(parentSessionId, toolCallId, title, status, childSessionId);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static DelegationExtraction? TryExtractSubtaskDelegation(JsonElement partEl, string parentSessionId)
+    {
+        if (!HasStringProperty(partEl, "type", out var partType) || partType != "subtask")
+            return null;
+
+        if (!TryGetStringProperty(partEl, out var toolCallId, "callId", "callID")
+            || string.IsNullOrWhiteSpace(toolCallId))
+        {
+            return null;
+        }
+
+        if (!TryGetStringProperty(partEl, out var title, "agent", "description")
+            || string.IsNullOrWhiteSpace(title))
+        {
+            return null;
+        }
+
+        string? childSessionId = null;
+        if (partEl.TryGetProperty("metadata", out var metadataEl) && metadataEl.ValueKind == JsonValueKind.Object)
+        {
+            _ = TryGetStringProperty(metadataEl, out childSessionId, "sessionId", "sessionID", "session_id");
+
+            if (string.IsNullOrWhiteSpace(childSessionId)
+                && TryGetNestedStringProperty(metadataEl, out var nestedChildSessionId, ChildPath, "sessionId", "sessionID", "session_id"))
+            {
+                childSessionId = nestedChildSessionId;
+            }
+
+            if (string.IsNullOrWhiteSpace(childSessionId)
+                && TryGetNestedStringProperty(metadataEl, out var nestedSessionChildSessionId, SessionPath, "sessionId", "sessionID", "session_id"))
+            {
+                childSessionId = nestedSessionChildSessionId;
+            }
+        }
+
+        var status = string.IsNullOrWhiteSpace(childSessionId) ? "pending" : "running";
+        return new DelegationExtraction(parentSessionId, toolCallId, title, status, childSessionId);
+    }
+
+    internal static string? TryResolveSessionId(OpenCodeSseEvent evt)
+    {
+        if (evt.Properties.ValueKind != JsonValueKind.Object)
+            return null;
+
+        if (TryGetStringProperty(evt.Properties, out var topLevelSessionId, "sessionId", "sessionID", "session_id")
+            && !string.IsNullOrWhiteSpace(topLevelSessionId))
+        {
+            return topLevelSessionId;
+        }
+
+        if (TryGetNestedStringProperty(evt.Properties, out var infoSessionId, InfoPath, "sessionId", "sessionID", "session_id")
+            && !string.IsNullOrWhiteSpace(infoSessionId))
+        {
+            return infoSessionId;
+        }
+
+        if (TryGetNestedStringProperty(evt.Properties, out var partSessionId, PartPath, "sessionId", "sessionID", "session_id")
+            && !string.IsNullOrWhiteSpace(partSessionId))
+        {
+            return partSessionId;
+        }
+
+        return null;
+    }
+
+    private static bool HasStringProperty(JsonElement element, string propertyName, out string value)
+    {
+        value = string.Empty;
+        if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.String)
+            return false;
+
+        value = property.GetString() ?? string.Empty;
+        return true;
+    }
+
+    private static bool TryGetStringProperty(JsonElement element, out string? value, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.String)
+                continue;
+
+            value = property.GetString();
+            return true;
+        }
+
+        value = null;
+        return false;
+    }
+
+    private static bool TryGetNestedStringProperty(
+        JsonElement element,
+        out string? value,
+        string[] objectPath,
+        params string[] propertyNames)
+    {
+        var current = element;
+        for (int i = 0; i < objectPath.Length; i++)
+        {
+            if (!current.TryGetProperty(objectPath[i], out var next) || next.ValueKind != JsonValueKind.Object)
+            {
+                value = null;
+                return false;
+            }
+
+            current = next;
+        }
+
+        return TryGetStringProperty(current, out value, propertyNames);
     }
 }

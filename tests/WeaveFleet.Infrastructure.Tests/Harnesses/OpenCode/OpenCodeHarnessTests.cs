@@ -100,6 +100,14 @@ public sealed class OpenCodeHarnessTests
     }
 
     [Fact]
+    public void Capabilities_SupportsDelegation_IsTrue()
+    {
+        var harness = CreateHarness();
+
+        Assert.True(harness.Capabilities.SupportsDelegation);
+    }
+
+    [Fact]
     [Trait("Category", "Integration")]
     public async Task CheckAvailability_WhenBinaryMissing_ReturnsNotAvailable()
     {
