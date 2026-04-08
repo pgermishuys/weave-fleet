@@ -165,21 +165,28 @@ jobs:
       - name: Build solution
         run: dotnet build WeaveFleet.slnx --configuration Release
 
+      # ── Resolve Playwright version ────────────────────────────────────────
+      - name: Get installed Playwright version
+        shell: pwsh
+        run: |
+          $version = (Select-Xml -Path "Directory.Packages.props" -XPath "//PackageVersion[@Include='Microsoft.Playwright']/@Version").Node.Value
+          "PLAYWRIGHT_VERSION=$version" >> $env:GITHUB_ENV
+
       # ── Playwright browser cache ──────────────────────────────────────────
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('Directory.Packages.props') }}
-          restore-keys: playwright-${{ runner.os }}-
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ env.PLAYWRIGHT_VERSION }}
+          restore-keys: playwright-${{ runner.os }}-${{ runner.arch }}-
 
       # ── Install Playwright browsers ───────────────────────────────────────
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pwsh tests/WeaveFleet.E2E/bin/Release/net10.0/playwright.ps1 install chromium --with-deps
+        run: pwsh tests/WeaveFleet.E2E/bin/Release/net10.0/playwright.ps1 install chromium
 
-      # Install OS dependencies even on cache hit (they are not cached)
+      # Install OS dependencies on every run (GitHub-hosted runners are ephemeral)
       - name: Install Playwright OS dependencies
         run: pwsh tests/WeaveFleet.E2E/bin/Release/net10.0/playwright.ps1 install-deps chromium
 
