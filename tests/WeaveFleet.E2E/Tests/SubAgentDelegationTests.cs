@@ -34,9 +34,8 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
             var now = DateTimeOffset.UtcNow;
             var workspaceId = $"ws-{Guid.NewGuid():N}";
             var parentInstanceId = $"inst-parent-{Guid.NewGuid():N}";
-            var childInstanceId = $"inst-child-{Guid.NewGuid():N}";
+            var childHarnessSessionId = $"oc-child-{Guid.NewGuid():N}";
             var parentSessionId = $"sess-parent-{Guid.NewGuid():N}";
-            var childSessionId = $"sess-child-{Guid.NewGuid():N}";
             var parentToolCallId = $"tool-{Guid.NewGuid():N}";
 
             var connFactory = _factory.KestrelServices.GetRequiredService<IDbConnectionFactory>();
@@ -61,16 +60,6 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                 Status = "running",
                 CreatedAt = now.ToString("O"),
             });
-            await instanceRepo.InsertAsync(new Instance
-            {
-                Id = childInstanceId,
-                Port = 0,
-                Directory = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar),
-                Url = "http://127.0.0.1:0",
-                Status = "running",
-                CreatedAt = now.ToString("O"),
-            });
-
             var sessionRepo = new DapperSessionRepository(connFactory);
             await sessionRepo.InsertAsync(new Session
             {
@@ -85,35 +74,6 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                 LifecycleStatus = "running",
                 ActivityStatus = "busy",
                 HarnessType = "opencode",
-            });
-            await sessionRepo.InsertAsync(new Session
-            {
-                Id = childSessionId,
-                WorkspaceId = workspaceId,
-                InstanceId = childInstanceId,
-                OpencodeSessionId = $"oc-child-{Guid.NewGuid():N}",
-                Title = "Thread",
-                Status = "active",
-                Directory = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar),
-                CreatedAt = now.ToString("O"),
-                ParentSessionId = parentSessionId,
-                LifecycleStatus = "running",
-                ActivityStatus = "busy",
-                HarnessType = "opencode",
-                IsHidden = true,
-            });
-
-            var delegationRepo = new DapperDelegationRepository(connFactory);
-            await delegationRepo.InsertAsync(new Delegation
-            {
-                Id = $"del-{Guid.NewGuid():N}",
-                ParentSessionId = parentSessionId,
-                ChildSessionId = childSessionId,
-                ParentToolCallId = parentToolCallId,
-                Title = "thread",
-                Status = "running",
-                CreatedAt = now.ToString("O"),
-                UpdatedAt = now.ToString("O"),
             });
 
             var messageRepo = new DapperMessageRepository(connFactory);
@@ -136,76 +96,108 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                         Agent = "loom",
                     }));
 
-            var childHarness = new TestHarnessInstance(childInstanceId, new TestScenario());
-            tracker.Register(childInstanceId, childHarness);
-
-            var detail = new SessionDetailPage(Page);
-            await detail.GotoAsync(parentSessionId, parentInstanceId);
-
-            var delegationLink = Page.Locator("nav")
-                .Locator(
-                    $"a[data-tree-leaf][href=\"/sessions/{Uri.EscapeDataString(childSessionId)}?instanceId={Uri.EscapeDataString(childInstanceId)}\"]");
-
-            await Microsoft.Playwright.Assertions.Expect(delegationLink)
-                .ToBeVisibleAsync();
-
-            var childRequestCount = 0;
-            Page.Request += (_, request) =>
+            using (var scope = _factory.KestrelServices.CreateScope())
             {
-                if (request.Url.Contains($"/api/sessions/{childSessionId}/messages", StringComparison.Ordinal))
-                    Interlocked.Increment(ref childRequestCount);
-            };
+                var delegationService = scope.ServiceProvider.GetRequiredService<DelegationService>();
+                var sessionOrchestrator = scope.ServiceProvider.GetRequiredService<SessionOrchestrator>();
 
-            await delegationLink.ClickAsync();
+                await delegationService.HandleDelegationDetectedAsync(parentSessionId, parentToolCallId, "thread");
 
-            await Microsoft.Playwright.Assertions.Expect(Page)
-                .ToHaveURLAsync(
-                    new System.Text.RegularExpressions.Regex(
-                        $"/sessions/{System.Text.RegularExpressions.Regex.Escape(childSessionId)}\\?instanceId={System.Text.RegularExpressions.Regex.Escape(childInstanceId)}$"),
-                    new Microsoft.Playwright.PageAssertionsToHaveURLOptions { Timeout = 5_000 });
-            await detail.WaitForLoadedAsync();
-            var baselineRequests = Volatile.Read(ref childRequestCount);
+                var childSessionResult = await sessionOrchestrator.EnsureDelegatedChildSessionAsync(
+                    parentSessionId,
+                    childHarnessSessionId,
+                    "thread");
+                Assert.True(childSessionResult.IsSuccess, childSessionResult.IsFailure ? childSessionResult.Error.ToString() : null);
 
-            await childHarness.PushEventAsync(new HarnessEvent
-            {
-                Type = "message.updated",
-                SessionId = "oc-child-live",
-                FleetSessionId = childSessionId,
-                Timestamp = DateTimeOffset.UtcNow,
-                Payload = System.Text.Json.JsonSerializer.SerializeToElement(new
+                var childSession = childSessionResult.Value;
+
+                var linkedDelegation = await delegationService.HandleChildLinkedAsync(
+                    parentSessionId,
+                    parentToolCallId,
+                    childSession.Id);
+                Assert.NotNull(linkedDelegation);
+
+                var childHarness = Assert.IsType<TestHarnessInstance>(tracker.Get(childSession.InstanceId));
+
+                var detail = new SessionDetailPage(Page);
+                await detail.GotoAsync(parentSessionId, parentInstanceId);
+
+                var delegationLink = Page.Locator(
+                    $"a[href=\"/sessions/{Uri.EscapeDataString(childSession.Id)}?instanceId={Uri.EscapeDataString(childSession.InstanceId)}&parentSessionId={Uri.EscapeDataString(parentSessionId)}\"]");
+
+                await Microsoft.Playwright.Assertions.Expect(delegationLink)
+                    .ToBeVisibleAsync(new Microsoft.Playwright.LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
+
+                var childRequestCount = 0;
+                Page.Request += (_, request) =>
                 {
-                    info = new
-                    {
-                        id = "msg-child-live",
-                        sessionID = "oc-child-live",
-                        role = "assistant",
-                        time = new { created = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() },
-                        agent = "thread",
-                    }
-                })
-            });
-            await childHarness.PushEventAsync(new HarnessEvent
-            {
-                Type = "message.part.updated",
-                SessionId = "oc-child-live",
-                FleetSessionId = childSessionId,
-                Timestamp = DateTimeOffset.UtcNow,
-                Payload = System.Text.Json.JsonSerializer.SerializeToElement(new
+                    if (request.Url.Contains($"/api/sessions/{childSession.Id}/messages", StringComparison.Ordinal))
+                        Interlocked.Increment(ref childRequestCount);
+                };
+
+                var initialChildMessagesResponse = Page.WaitForResponseAsync(response =>
+                    response.Url.Contains($"/api/sessions/{childSession.Id}/messages", StringComparison.Ordinal)
+                    && response.Ok);
+
+                await delegationLink.ClickAsync();
+
+                await Microsoft.Playwright.Assertions.Expect(Page)
+                    .ToHaveURLAsync(
+                        new System.Text.RegularExpressions.Regex(
+                            $"/sessions/{System.Text.RegularExpressions.Regex.Escape(childSession.Id)}\\?instanceId={System.Text.RegularExpressions.Regex.Escape(childSession.InstanceId)}&parentSessionId={System.Text.RegularExpressions.Regex.Escape(parentSessionId)}$"),
+                        new Microsoft.Playwright.PageAssertionsToHaveURLOptions { Timeout = 5_000 });
+                await initialChildMessagesResponse;
+                await detail.WaitForLoadedAsync();
+
+                var breadcrumbLink = Page.Locator(
+                    $"a[href=\"/sessions/{Uri.EscapeDataString(parentSessionId)}?instanceId={Uri.EscapeDataString(parentInstanceId)}\"]")
+                    .Last;
+                await Microsoft.Playwright.Assertions.Expect(breadcrumbLink)
+                    .ToContainTextAsync("Parent Session");
+
+                var baselineRequests = Volatile.Read(ref childRequestCount);
+
+                await childHarness.PushEventAsync(new HarnessEvent
                 {
-                    part = new
+                    Type = "message.updated",
+                    SessionId = childHarnessSessionId,
+                    FleetSessionId = childSession.Id,
+                    Timestamp = DateTimeOffset.UtcNow,
+                    Payload = System.Text.Json.JsonSerializer.SerializeToElement(new
                     {
-                        id = "part-child-live",
-                        messageID = "msg-child-live",
-                        sessionID = "oc-child-live",
-                        type = "text",
-                        text = "Live child websocket output"
-                    }
-                })
-            });
+                        info = new
+                        {
+                            id = "msg-child-live",
+                            sessionID = childHarnessSessionId,
+                            role = "assistant",
+                            time = new { created = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() },
+                            agent = "thread",
+                        }
+                    })
+                });
+                await childHarness.PushEventAsync(new HarnessEvent
+                {
+                    Type = "message.part.updated",
+                    SessionId = childHarnessSessionId,
+                    FleetSessionId = childSession.Id,
+                    Timestamp = DateTimeOffset.UtcNow,
+                    Payload = System.Text.Json.JsonSerializer.SerializeToElement(new
+                    {
+                        part = new
+                        {
+                            id = "part-child-live",
+                            messageID = "msg-child-live",
+                            sessionID = childHarnessSessionId,
+                            type = "text",
+                            text = "Live child websocket output"
+                        }
+                    })
+                });
 
-            await detail.WaitForMessageTextAsync("Live child websocket output", 5_000);
+                await detail.WaitForMessageTextAsync("Live child websocket output", 5_000);
 
-            Assert.Equal(baselineRequests, Volatile.Read(ref childRequestCount));
+                Assert.Equal(baselineRequests, Volatile.Read(ref childRequestCount));
+            }
         });
     }
 }

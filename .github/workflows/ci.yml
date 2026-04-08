@@ -135,22 +135,26 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      # ── Node.js (for frontend build) ──────────────────────────────────────
+      # ── Node.js (for frontend toolchain) ──────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: client/package-lock.json
+ 
+      # ── Bun (used by E2E frontend build target) ───────────────────────────
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
-      # ── npm cache ─────────────────────────────────────────────────────────
+      # ── Install frontend dependencies ─────────────────────────────────────
       - name: Install frontend dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
         working-directory: client
 
       # ── Build SPA ─────────────────────────────────────────────────────────
       - name: Build frontend SPA
-        run: npm run build
+        run: bun run build
         working-directory: client
 
       # ── NuGet cache ───────────────────────────────────────────────────────

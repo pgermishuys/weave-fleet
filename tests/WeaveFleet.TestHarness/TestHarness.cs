@@ -27,7 +27,7 @@ public sealed class TestHarness : IHarness
         SupportsModelSelection = true,
         SupportsCommands = true,
         SupportsForking = true,
-        SupportsResume = false,    // matches plan spec
+        SupportsResume = true,
         SupportsImageAttachments = true,
         SupportsStreaming = true
     };
