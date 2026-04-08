@@ -31,6 +31,7 @@ function makeSession(overrides: Partial<SessionListItem> = {}): SessionListItem 
     activityStatus: "busy",
     lifecycleStatus: "running",
     typedInstanceStatus: "running",
+    isHidden: false,
     ...overrides,
   };
 }

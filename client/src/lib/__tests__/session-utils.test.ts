@@ -22,6 +22,7 @@ function makeItem(overrides: Partial<SessionListItem> & { sessionId?: string } =
     activityStatus: "busy",
     lifecycleStatus: "running",
     typedInstanceStatus: "running",
+    isHidden: false,
     ...overrides,
   };
 }
