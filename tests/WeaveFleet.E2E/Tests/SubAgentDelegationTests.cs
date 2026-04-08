@@ -117,25 +117,24 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
             });
 
             var messageRepo = new DapperMessageRepository(connFactory);
-            await messageRepo.UpsertAsync(new PersistedMessage
-            {
-                Id = $"msg-parent-{Guid.NewGuid():N}",
-                SessionId = parentSessionId,
-                Role = "assistant",
-                PartsJson = JsonSerializer.Serialize(new object[]
-                {
-                    new
+            await messageRepo.UpsertAsync(
+                MessagePersistenceService.ToPersistedMessage(
+                    parentSessionId,
+                    new HarnessMessage
                     {
-                        type = "tool",
-                        partId = "part-tool-1",
-                        tool = "task",
-                        callId = parentToolCallId,
-                        state = new { status = "running" }
-                    }
-                }),
-                Timestamp = now.ToString("O"),
-                AgentName = "loom",
-            });
+                        Id = $"msg-parent-{Guid.NewGuid():N}",
+                        Role = "assistant",
+                        Parts =
+                        [
+                            new ToolUsePart(
+                                ToolCallId: parentToolCallId,
+                                ToolName: "task",
+                                Arguments: JsonSerializer.SerializeToElement(new { subagent_type = "thread" }),
+                                State: ToolUseState.Running)
+                        ],
+                        Timestamp = now,
+                        Agent = "loom",
+                    }));
 
             var childHarness = new TestHarnessInstance(childInstanceId, new TestScenario());
             tracker.Register(childInstanceId, childHarness);
@@ -143,7 +142,10 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
             var detail = new SessionDetailPage(Page);
             await detail.GotoAsync(parentSessionId, parentInstanceId);
 
-            await Microsoft.Playwright.Assertions.Expect(Page.GetByRole(Microsoft.Playwright.AriaRole.Link, new() { Name = "thread" }))
+            var delegationLink = Page.Locator(
+                $"a[href=\"/sessions/{Uri.EscapeDataString(childSessionId)}?instanceId={Uri.EscapeDataString(childInstanceId)}\"]");
+
+            await Microsoft.Playwright.Assertions.Expect(delegationLink)
                 .ToBeVisibleAsync();
 
             var childRequestCount = 0;
@@ -153,12 +155,14 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                     Interlocked.Increment(ref childRequestCount);
             };
 
-            await Page.GetByRole(Microsoft.Playwright.AriaRole.Link, new() { Name = "thread" }).ClickAsync();
+            await delegationLink.ClickAsync();
 
+            await Microsoft.Playwright.Assertions.Expect(Page)
+                .ToHaveURLAsync(
+                    new System.Text.RegularExpressions.Regex(
+                        $"/sessions/{System.Text.RegularExpressions.Regex.Escape(childSessionId)}\\?instanceId={System.Text.RegularExpressions.Regex.Escape(childInstanceId)}$"),
+                    new Microsoft.Playwright.PageAssertionsToHaveURLOptions { Timeout = 5_000 });
             await detail.WaitForLoadedAsync();
-            await Microsoft.Playwright.Assertions.Expect(Page.GetByRole(Microsoft.Playwright.AriaRole.Link, new() { Name = "Parent Session" }))
-                .ToBeVisibleAsync();
-
             var baselineRequests = Volatile.Read(ref childRequestCount);
 
             await childHarness.PushEventAsync(new HarnessEvent

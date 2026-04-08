@@ -613,7 +613,8 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             Directory = "/tmp",
             CreatedAt = DateTime.UtcNow.ToString("O")
         });
-        sessionRepo.GetByHarnessIdAsync("child-1").Returns((Session?)null);
+        Session? persistedChildSession = null;
+        sessionRepo.GetByHarnessIdAsync("child-1").Returns(_ => persistedChildSession);
         var harnessRegistry = Substitute.For<IHarnessRegistry>();
         var harness = Substitute.For<IHarness>();
         harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = true });
@@ -625,6 +626,12 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         harnessRegistry.GetByType("opencode").Returns(harness);
         var instanceRepo = Substitute.For<IInstanceRepository>();
         instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
+        sessionRepo.InsertAsync(Arg.Any<Session>())
+            .Returns(callInfo =>
+            {
+                persistedChildSession = callInfo.Arg<Session>();
+                return Task.CompletedTask;
+            });
         var projectRepo = Substitute.For<IProjectRepository>();
         projectRepo.ListAsync().Returns(new List<Project>());
         var callbackRepo = Substitute.For<ISessionCallbackRepository>();
@@ -783,7 +790,8 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             Directory = "/tmp",
             CreatedAt = DateTime.UtcNow.ToString("O")
         });
-        sessionRepo.GetByHarnessIdAsync("child-1").Returns((Session?)null);
+        Session? persistedChildSession = null;
+        sessionRepo.GetByHarnessIdAsync("child-1").Returns(_ => persistedChildSession);
         var harnessRegistry = Substitute.For<IHarnessRegistry>();
         var harness = Substitute.For<IHarness>();
         harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = true });
@@ -795,6 +803,12 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         harnessRegistry.GetByType("opencode").Returns(harness);
         var instanceRepo = Substitute.For<IInstanceRepository>();
         instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
+        sessionRepo.InsertAsync(Arg.Any<Session>())
+            .Returns(callInfo =>
+            {
+                persistedChildSession = callInfo.Arg<Session>();
+                return Task.CompletedTask;
+            });
         var projectRepo = Substitute.For<IProjectRepository>();
         projectRepo.ListAsync().Returns(new List<Project>());
         var callbackRepo = Substitute.For<ISessionCallbackRepository>();
