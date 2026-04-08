@@ -117,12 +117,15 @@ export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item,
     try {
       await deleteSession(item.session.id, instanceId);
       refetch();
+      if (isActive) {
+        navigate("/", { replace: true });
+      }
     } catch {
       // error surfaced inside useDeleteSession
     } finally {
       setShowDeleteConfirm(false);
     }
-  }, [deleteSession, item.session.id, instanceId, refetch]);
+  }, [deleteSession, item.session.id, instanceId, refetch, isActive, navigate]);
 
   const handleResume = useCallback(async () => {
     try {
