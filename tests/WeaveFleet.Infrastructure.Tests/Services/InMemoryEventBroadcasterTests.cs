@@ -34,7 +34,7 @@ public sealed class InMemoryEventBroadcasterTests
 
         await subscribeTask;
 
-        Assert.Contains("session:abc", received);
+        received.ShouldContain("session:abc");
     }
 
     [Fact]
@@ -62,7 +62,7 @@ public sealed class InMemoryEventBroadcasterTests
 
         await subscribeTask;
 
-        Assert.Contains("sessions", received);
+        received.ShouldContain("sessions");
     }
 
     // -----------------------------------------------------------------------
@@ -102,7 +102,7 @@ public sealed class InMemoryEventBroadcasterTests
         await cts.CancelAsync();
         await subscribeTask;
 
-        Assert.Empty(received);
+        received.ShouldBeEmpty();
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public sealed class InMemoryEventBroadcasterTests
 
         await subscribeTask;
 
-        Assert.Contains("sessions", received);
+        received.ShouldContain("sessions");
     }
 
     // -----------------------------------------------------------------------
@@ -179,8 +179,8 @@ public sealed class InMemoryEventBroadcasterTests
 
         await Task.WhenAll(wildcardDone.Task, specificDone.Task).WaitAsync(TimeSpan.FromSeconds(3));
 
-        Assert.Contains("sessions", wildcardReceived);
-        Assert.Contains("sessions", specificReceived);
+        wildcardReceived.ShouldContain("sessions");
+        specificReceived.ShouldContain("sessions");
 
         await cts.CancelAsync();
     }

@@ -48,10 +48,10 @@ public sealed class SessionDelegationsEndpointTests
 
         var result = await InvokeGetSessionDelegations("session-1", sessionService, delegationService);
 
-        var ok = Assert.IsType<Ok<IReadOnlyList<DelegationDto>>>(result);
-        Assert.NotNull(ok.Value);
-        Assert.Single(ok.Value);
-        Assert.Equal("del-1", ok.Value[0].DelegationId);
+        var ok = result.ShouldBeOfType<Ok<IReadOnlyList<DelegationDto>>>();
+        ok.Value.ShouldNotBeNull();
+        ok.Value.Count.ShouldBe(1);
+        ok.Value[0].DelegationId.ShouldBe("del-1");
     }
 
     [Fact]
@@ -68,8 +68,8 @@ public sealed class SessionDelegationsEndpointTests
 
         var result = await InvokeGetSessionDelegations("missing", sessionService, delegationService);
 
-        Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
-        Assert.Equal(StatusCodes.Status404NotFound, ((IStatusCodeHttpResult)result).StatusCode);
+        result.ShouldBeAssignableTo<IStatusCodeHttpResult>();
+        ((IStatusCodeHttpResult)result).StatusCode.ShouldBe(StatusCodes.Status404NotFound);
     }
 
     private static async Task<IResult> InvokeGetSessionDelegations(

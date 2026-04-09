@@ -8,23 +8,23 @@ public sealed class HarnessTypesTests
     public void HarnessCapabilities_DefaultsToAllFalse()
     {
         var caps = new HarnessCapabilities();
-        Assert.False(caps.RequiresInitialPrompt);
-        Assert.False(caps.SupportsAgents);
-        Assert.False(caps.SupportsModelSelection);
-        Assert.False(caps.SupportsCommands);
-        Assert.False(caps.SupportsForking);
-        Assert.False(caps.SupportsResume);
-        Assert.False(caps.SupportsImageAttachments);
-        Assert.False(caps.SupportsStreaming);
+        caps.RequiresInitialPrompt.ShouldBeFalse();
+        caps.SupportsAgents.ShouldBeFalse();
+        caps.SupportsModelSelection.ShouldBeFalse();
+        caps.SupportsCommands.ShouldBeFalse();
+        caps.SupportsForking.ShouldBeFalse();
+        caps.SupportsResume.ShouldBeFalse();
+        caps.SupportsImageAttachments.ShouldBeFalse();
+        caps.SupportsStreaming.ShouldBeFalse();
     }
 
     [Fact]
     public void HarnessCapabilities_WithInitReturnsNewInstance()
     {
         var caps = new HarnessCapabilities { SupportsStreaming = true, RequiresInitialPrompt = true };
-        Assert.True(caps.SupportsStreaming);
-        Assert.True(caps.RequiresInitialPrompt);
-        Assert.False(caps.SupportsAgents);
+        caps.SupportsStreaming.ShouldBeTrue();
+        caps.RequiresInitialPrompt.ShouldBeTrue();
+        caps.SupportsAgents.ShouldBeFalse();
     }
 
     [Fact]
@@ -32,16 +32,16 @@ public sealed class HarnessTypesTests
     {
         var a = new HarnessAvailability(true, null);
         var b = new HarnessAvailability(true, null);
-        Assert.Equal(a, b);
+        a.ShouldBe(b);
     }
 
     [Fact]
     public void HarnessInstanceStatus_HasExpectedValues()
     {
         var values = Enum.GetValues<HarnessInstanceStatus>();
-        Assert.Equal(6, values.Length);
-        Assert.Contains(HarnessInstanceStatus.Starting, values);
-        Assert.Contains(HarnessInstanceStatus.Error, values);
+        values.Length.ShouldBe(6);
+        values.ShouldContain(HarnessInstanceStatus.Starting);
+        values.ShouldContain(HarnessInstanceStatus.Error);
     }
 
     [Fact]
@@ -49,7 +49,7 @@ public sealed class HarnessTypesTests
     {
         var a = new HealthCheckResult(true, null);
         var b = new HealthCheckResult(true, null);
-        Assert.Equal(a, b);
+        a.ShouldBe(b);
     }
 
     [Fact]
@@ -62,7 +62,7 @@ public sealed class HarnessTypesTests
             Parts = [new TextPart("Hello")],
             Timestamp = DateTimeOffset.UtcNow
         };
-        Assert.Equal("assistant", msg.Role);
-        Assert.Equal("Hello", msg.TextContent);
+        msg.Role.ShouldBe("assistant");
+        msg.TextContent.ShouldBe("Hello");
     }
 }

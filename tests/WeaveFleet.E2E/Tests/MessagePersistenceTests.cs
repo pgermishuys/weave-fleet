@@ -97,14 +97,14 @@ public sealed class MessagePersistenceTests : E2ETestBase,
 
             // ── Assert: verify sender names ──
             var userNames = await detail.GetSenderNamesByRoleAsync("user");
-            Assert.Single(userNames);
-            Assert.Equal("You", userNames[0]);
+            userNames.Count.ShouldBe(1);
+            userNames[0].ShouldBe("You");
 
             var assistantNames = await detail.GetSenderNamesByRoleAsync("assistant");
-            Assert.Equal(3, assistantNames.Count);
-            Assert.Contains("Loom", assistantNames);
-            Assert.Contains("Thread", assistantNames);
-            Assert.Contains("Assistant", assistantNames); // fallback for null agent
+            assistantNames.Count.ShouldBe(3);
+            assistantNames.ShouldContain("Loom");
+            assistantNames.ShouldContain("Thread");
+            assistantNames.ShouldContain("Assistant"); // fallback for null agent
         });
     }
 
@@ -174,12 +174,12 @@ public sealed class MessagePersistenceTests : E2ETestBase,
             // The assistant message should show "Shuttle", not "Assistant"
             var assistantMsg = detail.GetMessagesByRole("assistant").First;
             var senderName = await SessionDetailPage.GetMessageSenderNameAsync(assistantMsg);
-            Assert.Equal("Shuttle", senderName);
+            senderName.ShouldBe("Shuttle");
 
             // The user message should show "You"
             var userMsg = detail.GetMessagesByRole("user").First;
             var userName = await SessionDetailPage.GetMessageSenderNameAsync(userMsg);
-            Assert.Equal("You", userName);
+            userName.ShouldBe("You");
         });
     }
 

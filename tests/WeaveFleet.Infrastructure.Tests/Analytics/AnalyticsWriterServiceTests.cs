@@ -112,7 +112,7 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         var count = await conn.ExecuteScalarAsync<int>(
             "SELECT COUNT(*) FROM token_events WHERE event_id = 'evt-write-1'");
 
-        Assert.Equal(1, count);
+        count.ShouldBe(1);
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         var count = await conn.ExecuteScalarAsync<int>(
             "SELECT COUNT(*) FROM session_snapshots WHERE session_id = 'sess-upsert-1'");
 
-        Assert.Equal(1, count);
+        count.ShouldBe(1);
     }
 
     [Fact]
@@ -147,11 +147,11 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         using var conn = _analyticsFactory!.CreateConnection();
         var count = await conn.ExecuteScalarAsync<int>(
             "SELECT COUNT(*) FROM token_events WHERE event_id = 'evt-idem-1'");
-        Assert.Equal(1, count);
+        count.ShouldBe(1);
 
         var retained = await conn.QuerySingleAsync<double>(
             "SELECT tokens_total FROM token_events WHERE event_id = 'evt-idem-1'");
-        Assert.Equal(360, retained);
+        retained.ShouldBe(360);
     }
 
     [Fact]
@@ -169,11 +169,11 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         using var conn = _analyticsFactory!.CreateConnection();
         var count = await conn.ExecuteScalarAsync<int>(
             "SELECT COUNT(*) FROM token_events WHERE event_id = 'evt-upsert-higher'");
-        Assert.Equal(1, count);
+        count.ShouldBe(1);
 
         var tokensTotal = await conn.QuerySingleAsync<double>(
             "SELECT tokens_total FROM token_events WHERE event_id = 'evt-upsert-higher'");
-        Assert.Equal(360, tokensTotal);
+        tokensTotal.ShouldBe(360);
     }
 
     [Fact]
@@ -191,11 +191,11 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         using var conn = _analyticsFactory!.CreateConnection();
         var count = await conn.ExecuteScalarAsync<int>(
             "SELECT COUNT(*) FROM token_events WHERE event_id = 'evt-upsert-lower'");
-        Assert.Equal(1, count);
+        count.ShouldBe(1);
 
         var tokensTotal = await conn.QuerySingleAsync<double>(
             "SELECT tokens_total FROM token_events WHERE event_id = 'evt-upsert-lower'");
-        Assert.Equal(360, tokensTotal);
+        tokensTotal.ShouldBe(360);
     }
 
     [Fact]
@@ -228,6 +228,6 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         var count = await conn.ExecuteScalarAsync<int>(
             "SELECT COUNT(*) FROM token_events WHERE event_id LIKE 'evt-batch-%'");
 
-        Assert.Equal(5, count);
+        count.ShouldBe(5);
     }
 }

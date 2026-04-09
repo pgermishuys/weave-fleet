@@ -33,9 +33,9 @@ public sealed class DapperInstanceRepositoryTests
         await repo.InsertAsync(inst);
         var retrieved = await repo.GetByIdAsync(inst.Id);
 
-        Assert.NotNull(retrieved);
-        Assert.Equal(inst.Port, retrieved.Port);
-        Assert.Equal("running", retrieved.Status);
+        retrieved.ShouldNotBeNull();
+        retrieved.Port.ShouldBe(inst.Port);
+        retrieved.Status.ShouldBe("running");
     }
 
     [Fact]
@@ -53,8 +53,8 @@ public sealed class DapperInstanceRepositoryTests
         await repo.InsertAsync(stopped);
 
         var results = await repo.GetRunningAsync();
-        Assert.Single(results);
-        Assert.Equal(running.Id, results[0].Id);
+        results.Count.ShouldBe(1);
+        results[0].Id.ShouldBe(running.Id);
     }
 
     [Fact]
@@ -68,9 +68,9 @@ public sealed class DapperInstanceRepositoryTests
 
         var count = await repo.MarkAllStoppedAsync(DateTime.UtcNow.ToString("O"));
 
-        Assert.Equal(2, count);
+        count.ShouldBe(2);
         var running = await repo.GetRunningAsync();
-        Assert.Empty(running);
+        running.ShouldBeEmpty();
     }
 
     [Fact]
@@ -85,7 +85,8 @@ public sealed class DapperInstanceRepositoryTests
         await repo.UpdateStatusAsync(inst.Id, "stopped", DateTime.UtcNow.ToString("O"));
 
         var retrieved = await repo.GetByIdAsync(inst.Id);
-        Assert.Equal("stopped", retrieved!.Status);
-        Assert.NotNull(retrieved.StoppedAt);
+        retrieved.ShouldNotBeNull();
+        retrieved.Status.ShouldBe("stopped");
+        retrieved.StoppedAt.ShouldNotBeNull();
     }
 }

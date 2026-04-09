@@ -28,9 +28,9 @@ public sealed class ProjectServiceTests
 
         var result = await _sut.CreateProjectAsync("New Project");
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal("New Project", result.Value.Name);
-        Assert.Equal(6, result.Value.Position); // 5 + 1
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Name.ShouldBe("New Project");
+        result.Value.Position.ShouldBe(6); // 5 + 1
         await _projectRepo.Received(1).InsertAsync(Arg.Is<Project>(p => p.Position == 6));
     }
 
@@ -41,8 +41,8 @@ public sealed class ProjectServiceTests
 
         var result = await _sut.GetProjectAsync("missing");
 
-        Assert.True(result.IsFailure);
-        Assert.Contains("NotFound", result.Error.Code);
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldContain("NotFound");
     }
 
     [Fact]
@@ -56,8 +56,8 @@ public sealed class ProjectServiceTests
 
         var result = await _sut.DeleteProjectAsync("scratch-id", "move_to_scratch");
 
-        Assert.True(result.IsFailure);
-        Assert.StartsWith("Validation.", result.Error.Code);
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldStartWith("Validation.");
     }
 
     [Fact]
@@ -71,8 +71,8 @@ public sealed class ProjectServiceTests
 
         var result = await _sut.DeleteProjectAsync("p1", "invalid-mode");
 
-        Assert.True(result.IsFailure);
-        Assert.StartsWith("Validation.", result.Error.Code);
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldStartWith("Validation.");
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public sealed class ProjectServiceTests
 
         var result = await _sut.DeleteProjectAsync("p1", "delete_sessions");
 
-        Assert.True(result.IsSuccess);
+        result.IsSuccess.ShouldBeTrue();
         await _sessionRepo.Received(1).DeleteByProjectIdAsync("p1");
         await _projectRepo.Received(1).DeleteAsync("p1");
     }
@@ -102,8 +102,8 @@ public sealed class ProjectServiceTests
 
         var result = await _sut.EnsureScratchProjectAsync();
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal("scratch", result.Value.Type);
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Type.ShouldBe("scratch");
         await _projectRepo.Received(1).InsertAsync(Arg.Is<Project>(p => p.Type == "scratch"));
     }
 
@@ -115,8 +115,8 @@ public sealed class ProjectServiceTests
 
         var result = await _sut.EnsureScratchProjectAsync();
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal("s1", result.Value.Id);
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Id.ShouldBe("s1");
         await _projectRepo.DidNotReceive().InsertAsync(Arg.Any<Project>());
     }
 }

@@ -65,9 +65,9 @@ public sealed class DapperSessionRepositoryTests
         await repo.InsertAsync(session);
         var retrieved = await repo.GetByIdAsync(session.Id);
 
-        Assert.NotNull(retrieved);
-        Assert.Equal(session.Title, retrieved.Title);
-        Assert.Equal("active", retrieved.Status);
+        retrieved.ShouldNotBeNull();
+        retrieved.Title.ShouldBe(session.Title);
+        retrieved.Status.ShouldBe("active");
     }
 
     [Fact]
@@ -92,8 +92,8 @@ public sealed class DapperSessionRepositoryTests
 
         var found = await repo.GetByHarnessIdAsync("oc-harness-42");
 
-        Assert.NotNull(found);
-        Assert.Equal(session.Id, found.Id);
+        found.ShouldNotBeNull();
+        found.Id.ShouldBe(session.Id);
     }
 
     [Fact]
@@ -119,8 +119,8 @@ public sealed class DapperSessionRepositoryTests
         await repo.InsertAsync(session);
         var retrieved = await repo.GetByIdAsync(session.Id);
 
-        Assert.NotNull(retrieved);
-        Assert.True(retrieved.IsHidden);
+        retrieved.ShouldNotBeNull();
+        retrieved.IsHidden.ShouldBeTrue();
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public sealed class DapperSessionRepositoryTests
         }
 
         var list = await repo.ListAsync();
-        Assert.Equal(3, list.Count);
+        list.Count.ShouldBe(3);
     }
 
     [Fact]
@@ -173,8 +173,9 @@ public sealed class DapperSessionRepositoryTests
         await repo.UpdateStatusAsync(session.Id, "stopped", DateTime.UtcNow.ToString("O"));
 
         var updated = await repo.GetByIdAsync(session.Id);
-        Assert.Equal("stopped", updated!.Status);
-        Assert.NotNull(updated.StoppedAt);
+        updated.ShouldNotBeNull();
+        updated.Status.ShouldBe("stopped");
+        updated.StoppedAt.ShouldNotBeNull();
     }
 
     [Fact]
@@ -200,9 +201,9 @@ public sealed class DapperSessionRepositoryTests
         await repo.IncrementTokensAsync(session.Id, 100, 0.01);
         var result = await repo.IncrementTokensAsync(session.Id, 200, 0.02);
 
-        Assert.NotNull(result);
-        Assert.Equal(300, result.Value.TotalTokens);
-        Assert.Equal(0.03, result.Value.TotalCost, 5);
+        result.ShouldNotBeNull();
+        result.Value.TotalTokens.ShouldBe(300);
+        result.Value.TotalCost.ShouldBe(0.03, 0.00001);
     }
 
     [Fact]
@@ -217,7 +218,7 @@ public sealed class DapperSessionRepositoryTests
 
         var (totalTokens, totalCost) = await repo.GetFleetTokenTotalsAsync();
 
-        Assert.Equal(200, totalTokens);
-        Assert.Equal(0.20, totalCost, 5);
+        totalTokens.ShouldBe(200);
+        totalCost.ShouldBe(0.20, 0.00001);
     }
 }

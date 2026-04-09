@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Shouldly;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
@@ -218,8 +219,8 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         await messageRepo.DidNotReceive().UpsertAsync(Arg.Any<PersistedMessage>());
 
         // Assert the first delivered event is message.updated
-        Assert.NotEmpty(capturedEvents);
-        Assert.Equal("message.updated", capturedEvents[0].Type);
+        capturedEvents.ShouldNotBeEmpty();
+        capturedEvents[0].Type.ShouldBe("message.updated");
 
         await cts.CancelAsync();
         await consumeTask;
@@ -326,8 +327,8 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         await consumeTask;
 
         // Event must be delivered despite DB failure
-        Assert.NotEmpty(events);
-        Assert.Equal("message.created", events[0].Type);
+        events.ShouldNotBeEmpty();
+        events[0].Type.ShouldBe("message.created");
 
         await instance.DisposeAsync();
     }
@@ -481,14 +482,14 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         await consumeTask;
 
         // Final state must contain the text part (not overwritten by message.updated)
-        Assert.NotNull(lastUpserted);
-        Assert.Contains("The actual answer", lastUpserted.PartsJson);
+        lastUpserted.ShouldNotBeNull();
+        lastUpserted.PartsJson.ShouldContain("The actual answer");
 
         // The final persisted state must not be empty
-        Assert.NotEqual("[]", lastUpserted.PartsJson);
+        lastUpserted.PartsJson.ShouldNotBe("[]");
 
         // At least one upsert must have occurred (from message.part.updated)
-        Assert.True(persistedMessages.Count >= 1, "Expected at least one UpsertAsync call from part.updated");
+        (persistedMessages.Count >= 1).ShouldBeTrue("Expected at least one UpsertAsync call from part.updated");
 
         await instance.DisposeAsync();
     }
@@ -980,9 +981,9 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         await cts.CancelAsync();
         var events = await consumeTask;
 
-        var routed = Assert.Single(events);
-        Assert.Equal("oc-child", routed.SessionId);
-        Assert.Equal("fleet-child", routed.FleetSessionId);
+        var routed = events.ShouldHaveSingleItem();
+        routed.SessionId.ShouldBe("oc-child");
+        routed.FleetSessionId.ShouldBe("fleet-child");
         await messageRepo.DidNotReceive().UpsertAsync(Arg.Any<PersistedMessage>());
 
         await instance.DisposeAsync();

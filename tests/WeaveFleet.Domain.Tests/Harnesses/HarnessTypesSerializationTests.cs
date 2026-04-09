@@ -17,8 +17,8 @@ public sealed class HarnessTypesSerializationTests
         // Use camelCase options to match ASP.NET Core API serialization
         var json = JsonSerializer.Serialize(part, CamelCaseOptions);
         using var doc = JsonDocument.Parse(json);
-        Assert.Equal("text", doc.RootElement.GetProperty("type").GetString());
-        Assert.Equal("Hello world", doc.RootElement.GetProperty("text").GetString());
+        doc.RootElement.GetProperty("type").GetString().ShouldBe("text");
+        doc.RootElement.GetProperty("text").GetString().ShouldBe("Hello world");
     }
 
     [Fact]
@@ -27,9 +27,9 @@ public sealed class HarnessTypesSerializationTests
         MessagePart part = new ToolUsePart("call-1", "bash", JsonSerializer.SerializeToElement(new { cmd = "ls" }), ToolUseState.Running);
         var json = JsonSerializer.Serialize(part, CamelCaseOptions);
         using var doc = JsonDocument.Parse(json);
-        Assert.Equal("tool", doc.RootElement.GetProperty("type").GetString());
-        Assert.Equal("call-1", doc.RootElement.GetProperty("toolCallId").GetString());
-        Assert.Equal("bash", doc.RootElement.GetProperty("toolName").GetString());
+        doc.RootElement.GetProperty("type").GetString().ShouldBe("tool");
+        doc.RootElement.GetProperty("toolCallId").GetString().ShouldBe("call-1");
+        doc.RootElement.GetProperty("toolName").GetString().ShouldBe("bash");
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public sealed class HarnessTypesSerializationTests
         var json = JsonSerializer.Serialize(page, CamelCaseOptions);
         using var doc = JsonDocument.Parse(json);
         var firstPart = doc.RootElement.GetProperty("messages")[0].GetProperty("parts")[0];
-        Assert.Equal("text", firstPart.GetProperty("type").GetString());
-        Assert.Equal("Hi", firstPart.GetProperty("text").GetString());
+        firstPart.GetProperty("type").GetString().ShouldBe("text");
+        firstPart.GetProperty("text").GetString().ShouldBe("Hi");
     }
 }

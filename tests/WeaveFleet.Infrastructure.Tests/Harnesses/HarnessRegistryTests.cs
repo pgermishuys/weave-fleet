@@ -10,7 +10,7 @@ public sealed class HarnessRegistryTests
     public void GetAll_WhenEmpty_ReturnsEmptyList()
     {
         var registry = new HarnessRegistry([]);
-        Assert.Empty(registry.GetAll());
+        registry.GetAll().ShouldBeEmpty();
     }
 
     [Fact]
@@ -20,8 +20,8 @@ public sealed class HarnessRegistryTests
         var registry = new HarnessRegistry([harness]);
 
         var found = registry.GetByType("opencode");
-        Assert.NotNull(found);
-        Assert.Equal("opencode", found.Type);
+        found.ShouldNotBeNull();
+        found.Type.ShouldBe("opencode");
     }
 
     [Fact]
@@ -30,15 +30,15 @@ public sealed class HarnessRegistryTests
         var harness = new FakeHarness("opencode", "OpenCode");
         var registry = new HarnessRegistry([harness]);
 
-        Assert.NotNull(registry.GetByType("OpenCode"));
-        Assert.NotNull(registry.GetByType("OPENCODE"));
+        registry.GetByType("OpenCode").ShouldNotBeNull();
+        registry.GetByType("OPENCODE").ShouldNotBeNull();
     }
 
     [Fact]
     public void GetByType_ReturnsNullWhenNotFound()
     {
         var registry = new HarnessRegistry([]);
-        Assert.Null(registry.GetByType("nonexistent"));
+        registry.GetByType("nonexistent").ShouldBeNull();
     }
 
     [Fact]
@@ -50,12 +50,12 @@ public sealed class HarnessRegistryTests
 
         var results = await registry.GetAvailabilityAsync(CancellationToken.None);
 
-        Assert.Equal(2, results.Count);
-        Assert.Equal("opencode", results[0].Type);
-        Assert.True(results[0].Available);
-        Assert.Equal("Claude Code", results[1].DisplayName);
-        Assert.False(results[1].Available);
-        Assert.Equal("Binary not found", results[1].Reason);
+        results.Count.ShouldBe(2);
+        results[0].Type.ShouldBe("opencode");
+        results[0].Available.ShouldBeTrue();
+        results[1].DisplayName.ShouldBe("Claude Code");
+        results[1].Available.ShouldBeFalse();
+        results[1].Reason.ShouldBe("Binary not found");
     }
 
     /// <summary>Minimal fake for testing the registry — NOT a real harness.</summary>

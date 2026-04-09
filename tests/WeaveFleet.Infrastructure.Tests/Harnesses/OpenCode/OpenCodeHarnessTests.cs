@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Harnesses;
@@ -24,7 +25,7 @@ public sealed class OpenCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.Equal("opencode", harness.Type);
+        harness.Type.ShouldBe("opencode");
     }
 
     [Fact]
@@ -32,7 +33,7 @@ public sealed class OpenCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.Equal("OpenCode", harness.DisplayName);
+        harness.DisplayName.ShouldBe("OpenCode");
     }
 
     [Fact]
@@ -40,7 +41,7 @@ public sealed class OpenCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.False(harness.Capabilities.RequiresInitialPrompt);
+        harness.Capabilities.RequiresInitialPrompt.ShouldBeFalse();
     }
 
     [Fact]
@@ -48,7 +49,7 @@ public sealed class OpenCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.True(harness.Capabilities.SupportsAgents);
+        harness.Capabilities.SupportsAgents.ShouldBeTrue();
     }
 
     [Fact]
@@ -56,7 +57,7 @@ public sealed class OpenCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.True(harness.Capabilities.SupportsModelSelection);
+        harness.Capabilities.SupportsModelSelection.ShouldBeTrue();
     }
 
     [Fact]
@@ -64,7 +65,7 @@ public sealed class OpenCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.True(harness.Capabilities.SupportsCommands);
+        harness.Capabilities.SupportsCommands.ShouldBeTrue();
     }
 
     [Fact]
@@ -72,7 +73,7 @@ public sealed class OpenCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.True(harness.Capabilities.SupportsForking);
+        harness.Capabilities.SupportsForking.ShouldBeTrue();
     }
 
     [Fact]
@@ -80,7 +81,7 @@ public sealed class OpenCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.True(harness.Capabilities.SupportsResume);
+        harness.Capabilities.SupportsResume.ShouldBeTrue();
     }
 
     [Fact]
@@ -88,7 +89,7 @@ public sealed class OpenCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.True(harness.Capabilities.SupportsImageAttachments);
+        harness.Capabilities.SupportsImageAttachments.ShouldBeTrue();
     }
 
     [Fact]
@@ -96,7 +97,7 @@ public sealed class OpenCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.True(harness.Capabilities.SupportsStreaming);
+        harness.Capabilities.SupportsStreaming.ShouldBeTrue();
     }
 
     [Fact]
@@ -104,7 +105,7 @@ public sealed class OpenCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.True(harness.Capabilities.SupportsDelegation);
+        harness.Capabilities.SupportsDelegation.ShouldBeTrue();
     }
 
     [Fact]
@@ -118,12 +119,12 @@ public sealed class OpenCodeHarnessTests
         var result = await harness.CheckAvailabilityAsync(CancellationToken.None);
 
         // We can only assert the shape — whether it's available depends on the environment.
-        Assert.NotNull(result);
+        result.ShouldNotBeNull();
         // Either available (binary found) or not (binary missing) — both are valid results.
         if (!result.Available)
         {
-            Assert.NotNull(result.Reason);
-            Assert.Contains("opencode", result.Reason, StringComparison.OrdinalIgnoreCase);
+            result.Reason.ShouldNotBeNull();
+            result.Reason.Contains("opencode", StringComparison.OrdinalIgnoreCase).ShouldBeTrue();
         }
     }
 

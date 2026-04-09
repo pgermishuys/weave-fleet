@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Shouldly;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.ClaudeCode;
@@ -23,11 +24,11 @@ public sealed class ClaudeCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<ClaudeCodeStreamMessage>(json, Options);
 
-        var msg = Assert.IsType<ClaudeCodeSystemMessage>(result);
-        Assert.Equal("init", msg.Subtype);
-        Assert.Equal("sess-abc123", msg.SessionId);
-        Assert.Equal("claude-opus-4-5", msg.Model);
-        Assert.True(msg.Tools.HasValue);
+        var msg = result.ShouldBeOfType<ClaudeCodeSystemMessage>();
+        msg.Subtype.ShouldBe("init");
+        msg.SessionId.ShouldBe("sess-abc123");
+        msg.Model.ShouldBe("claude-opus-4-5");
+        msg.Tools.HasValue.ShouldBeTrue();
     }
 
     [Fact]
@@ -50,13 +51,14 @@ public sealed class ClaudeCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<ClaudeCodeStreamMessage>(json, Options);
 
-        var msg = Assert.IsType<ClaudeCodeAssistantMessage>(result);
-        Assert.NotNull(msg.Message);
-        Assert.Equal("msg-001", msg.Message.Id);
-        Assert.Equal("end_turn", msg.Message.StopReason);
-        Assert.NotNull(msg.Message.Content);
-        var textBlock = Assert.IsType<ClaudeCodeTextBlock>(Assert.Single(msg.Message.Content));
-        Assert.Equal("Hello, world!", textBlock.Text);
+        var msg = result.ShouldBeOfType<ClaudeCodeAssistantMessage>();
+        msg.Message.ShouldNotBeNull();
+        msg.Message.Id.ShouldBe("msg-001");
+        msg.Message.StopReason.ShouldBe("end_turn");
+        msg.Message.Content.ShouldNotBeNull();
+        msg.Message.Content.Count.ShouldBe(1);
+        var textBlock = msg.Message.Content[0].ShouldBeOfType<ClaudeCodeTextBlock>();
+        textBlock.Text.ShouldBe("Hello, world!");
     }
 
     [Fact]
@@ -84,13 +86,14 @@ public sealed class ClaudeCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<ClaudeCodeStreamMessage>(json, Options);
 
-        var msg = Assert.IsType<ClaudeCodeAssistantMessage>(result);
-        Assert.NotNull(msg.Message?.Content);
+        var msg = result.ShouldBeOfType<ClaudeCodeAssistantMessage>();
+        msg.Message?.Content.ShouldNotBeNull();
         var content = msg.Message!.Content!;
-        var toolBlock = Assert.IsType<ClaudeCodeToolUseBlock>(Assert.Single(content));
-        Assert.Equal("toolu_xyz", toolBlock.Id);
-        Assert.Equal("Edit", toolBlock.Name);
-        Assert.Equal(JsonValueKind.Object, toolBlock.Input.ValueKind);
+        content.Count.ShouldBe(1);
+        var toolBlock = content[0].ShouldBeOfType<ClaudeCodeToolUseBlock>();
+        toolBlock.Id.ShouldBe("toolu_xyz");
+        toolBlock.Name.ShouldBe("Edit");
+        toolBlock.Input.ValueKind.ShouldBe(JsonValueKind.Object);
     }
 
     [Fact]
@@ -118,13 +121,14 @@ public sealed class ClaudeCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<ClaudeCodeStreamMessage>(json, Options);
 
-        var msg = Assert.IsType<ClaudeCodeAssistantMessage>(result);
-        Assert.NotNull(msg.Message?.Content);
+        var msg = result.ShouldBeOfType<ClaudeCodeAssistantMessage>();
+        msg.Message?.Content.ShouldNotBeNull();
         var content = msg.Message!.Content!;
-        var resultBlock = Assert.IsType<ClaudeCodeToolResultBlock>(Assert.Single(content));
-        Assert.Equal("toolu_xyz", resultBlock.ToolUseId);
-        Assert.Equal("File written successfully.", resultBlock.Content);
-        Assert.False(resultBlock.IsError);
+        content.Count.ShouldBe(1);
+        var resultBlock = content[0].ShouldBeOfType<ClaudeCodeToolResultBlock>();
+        resultBlock.ToolUseId.ShouldBe("toolu_xyz");
+        resultBlock.Content.ShouldBe("File written successfully.");
+        resultBlock.IsError.ShouldBe((bool?)false);
     }
 
     [Fact]
@@ -148,12 +152,12 @@ public sealed class ClaudeCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<ClaudeCodeStreamMessage>(json, Options);
 
-        var msg = Assert.IsType<ClaudeCodeAssistantMessage>(result);
-        Assert.NotNull(msg.Message?.Content);
+        var msg = result.ShouldBeOfType<ClaudeCodeAssistantMessage>();
+        msg.Message?.Content.ShouldNotBeNull();
         var content = msg.Message!.Content!;
-        Assert.Equal(2, content.Count);
-        Assert.IsType<ClaudeCodeTextBlock>(content[0]);
-        Assert.IsType<ClaudeCodeToolUseBlock>(content[1]);
+        content.Count.ShouldBe(2);
+        content[0].ShouldBeOfType<ClaudeCodeTextBlock>();
+        content[1].ShouldBeOfType<ClaudeCodeToolUseBlock>();
     }
 
     [Fact]
@@ -174,16 +178,16 @@ public sealed class ClaudeCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<ClaudeCodeStreamMessage>(json, Options);
 
-        var msg = Assert.IsType<ClaudeCodeResultMessage>(result);
-        Assert.Equal("success", msg.Subtype);
-        Assert.Equal("Task completed.", msg.Result);
-        Assert.Equal(5432L, msg.DurationMs);
-        Assert.Equal(3, msg.NumTurns);
-        Assert.Equal(0.042m, msg.TotalCostUsd);
-        Assert.Equal("sess-abc123", msg.SessionId);
-        Assert.NotNull(msg.Usage);
-        Assert.Equal(500, msg.Usage.InputTokens);
-        Assert.Equal(200, msg.Usage.OutputTokens);
+        var msg = result.ShouldBeOfType<ClaudeCodeResultMessage>();
+        msg.Subtype.ShouldBe("success");
+        msg.Result.ShouldBe("Task completed.");
+        msg.DurationMs.ShouldBe(5432L);
+        msg.NumTurns.ShouldBe(3);
+        msg.TotalCostUsd.ShouldBe(0.042m);
+        msg.SessionId.ShouldBe("sess-abc123");
+        msg.Usage.ShouldNotBeNull();
+        msg.Usage.InputTokens.ShouldBe(500);
+        msg.Usage.OutputTokens.ShouldBe(200);
     }
 
     [Fact]
@@ -201,11 +205,11 @@ public sealed class ClaudeCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<ClaudeCodeStreamMessage>(json, Options);
 
-        var msg = Assert.IsType<ClaudeCodeResultMessage>(result);
-        Assert.Equal("error_max_turns", msg.Subtype);
-        Assert.Equal(10, msg.NumTurns);
-        Assert.Equal("sess-xyz", msg.SessionId);
-        Assert.Null(msg.Result);
+        var msg = result.ShouldBeOfType<ClaudeCodeResultMessage>();
+        msg.Subtype.ShouldBe("error_max_turns");
+        msg.NumTurns.ShouldBe(10);
+        msg.SessionId.ShouldBe("sess-xyz");
+        msg.Result.ShouldBeNull();
     }
 
     [Fact]
@@ -222,11 +226,11 @@ public sealed class ClaudeCodeModelsSerializationTests
 
         var usage = JsonSerializer.Deserialize<ClaudeCodeUsage>(json, Options);
 
-        Assert.NotNull(usage);
-        Assert.Equal(100, usage.InputTokens);
-        Assert.Equal(50, usage.OutputTokens);
-        Assert.Equal(20, usage.CacheReadInputTokens);
-        Assert.Equal(10, usage.CacheCreationInputTokens);
+        usage.ShouldNotBeNull();
+        usage.InputTokens.ShouldBe(100);
+        usage.OutputTokens.ShouldBe(50);
+        usage.CacheReadInputTokens.ShouldBe(20);
+        usage.CacheCreationInputTokens.ShouldBe(10);
     }
 
     [Fact]
@@ -236,8 +240,8 @@ public sealed class ClaudeCodeModelsSerializationTests
 
         var block = JsonSerializer.Deserialize<ClaudeCodeContentBlock>(json, Options);
 
-        var textBlock = Assert.IsType<ClaudeCodeTextBlock>(block);
-        Assert.Equal("Some text", textBlock.Text);
+        var textBlock = block.ShouldBeOfType<ClaudeCodeTextBlock>();
+        textBlock.Text.ShouldBe("Some text");
     }
 
     [Fact]
@@ -247,9 +251,9 @@ public sealed class ClaudeCodeModelsSerializationTests
 
         var block = JsonSerializer.Deserialize<ClaudeCodeContentBlock>(json, Options);
 
-        var toolUse = Assert.IsType<ClaudeCodeToolUseBlock>(block);
-        Assert.Equal("toolu_1", toolUse.Id);
-        Assert.Equal("Bash", toolUse.Name);
+        var toolUse = block.ShouldBeOfType<ClaudeCodeToolUseBlock>();
+        toolUse.Id.ShouldBe("toolu_1");
+        toolUse.Name.ShouldBe("Bash");
     }
 
     [Fact]
@@ -259,10 +263,10 @@ public sealed class ClaudeCodeModelsSerializationTests
 
         var block = JsonSerializer.Deserialize<ClaudeCodeContentBlock>(json, Options);
 
-        var toolResult = Assert.IsType<ClaudeCodeToolResultBlock>(block);
-        Assert.Equal("toolu_1", toolResult.ToolUseId);
-        Assert.Equal("ok", toolResult.Content);
-        Assert.False(toolResult.IsError);
+        var toolResult = block.ShouldBeOfType<ClaudeCodeToolResultBlock>();
+        toolResult.ToolUseId.ShouldBe("toolu_1");
+        toolResult.Content.ShouldBe("ok");
+        toolResult.IsError.ShouldBe((bool?)false);
     }
 
     [Fact]
@@ -274,7 +278,7 @@ public sealed class ClaudeCodeModelsSerializationTests
         var result = JsonSerializer.Deserialize<ClaudeCodeStreamMessage>(json, Options);
 
         // Should not throw — falls back to base type
-        Assert.IsType<ClaudeCodeStreamMessage>(result);
+        result.ShouldBeOfType<ClaudeCodeStreamMessage>();
     }
 
     [Fact]
@@ -284,7 +288,7 @@ public sealed class ClaudeCodeModelsSerializationTests
 
         var block = JsonSerializer.Deserialize<ClaudeCodeContentBlock>(json, Options);
 
-        Assert.IsType<ClaudeCodeContentBlock>(block);
+        block.ShouldBeOfType<ClaudeCodeContentBlock>();
     }
 
     [Fact]
@@ -294,6 +298,6 @@ public sealed class ClaudeCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<ClaudeCodeStreamMessage>(json, Options);
 
-        Assert.IsType<ClaudeCodeStreamMessage>(result);
+        result.ShouldBeOfType<ClaudeCodeStreamMessage>();
     }
 }

@@ -35,7 +35,7 @@ public sealed class SessionLifecycleTests : E2ETestBase,
             var detail = await dialog.SubmitAsync();
 
             // Should be on the session detail page
-            Assert.Contains("/sessions/", Page.Url);
+            Page.Url.ShouldContain("/sessions/");
 
             // Activity stream should be visible
             await detail.WaitForLoadedAsync();

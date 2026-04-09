@@ -25,9 +25,9 @@ public sealed class DelegationServiceTests
 
         var result = await _sut.HandleDelegationDetectedAsync("parent-1", "tool-1", "Code Review");
 
-        Assert.Equal("tool-1", result.ParentToolCallId);
-        Assert.Equal("Code Review", result.Title);
-        Assert.Equal("pending", result.Status);
+        result.ParentToolCallId.ShouldBe("tool-1");
+        result.Title.ShouldBe("Code Review");
+        result.Status.ShouldBe("pending");
 
         await _delegationRepository.Received(1).InsertAsync(Arg.Is<Delegation>(d =>
             d.ParentSessionId == "parent-1" &&
@@ -66,8 +66,8 @@ public sealed class DelegationServiceTests
 
         var result = await _sut.HandleDelegationDetectedAsync("parent-1", "tool-1", "Ignored");
 
-        Assert.Equal("del-1", result.DelegationId);
-        Assert.Equal("Code Review", result.Title);
+        result.DelegationId.ShouldBe("del-1");
+        result.Title.ShouldBe("Code Review");
 
         await _delegationRepository.DidNotReceive().InsertAsync(Arg.Any<Delegation>());
         await _eventBroadcaster.DidNotReceive().BroadcastAsync(
@@ -95,9 +95,9 @@ public sealed class DelegationServiceTests
 
         var result = await _sut.HandleChildLinkedAsync("parent-1", "tool-1", "child-1");
 
-        Assert.NotNull(result);
-        Assert.Equal("child-1", result.ChildSessionId);
-        Assert.Equal("running", result.Status);
+        result.ShouldNotBeNull();
+        result!.ChildSessionId.ShouldBe("child-1");
+        result.Status.ShouldBe("running");
 
         await _delegationRepository.Received(1).UpdateChildSessionIdAsync(
             "del-1",
@@ -136,8 +136,8 @@ public sealed class DelegationServiceTests
 
         var result = await _sut.HandleDelegationFinishedAsync("del-1", "completed");
 
-        Assert.NotNull(result);
-        Assert.Equal("completed", result.Status);
+        result.ShouldNotBeNull();
+        result!.Status.ShouldBe("completed");
 
         await _delegationRepository.Received(1).UpdateStatusAsync(
             Arg.Is("del-1"),
@@ -169,6 +169,6 @@ public sealed class DelegationServiceTests
 
         var act = () => _sut.HandleDelegationFinishedAsync("del-1", "error");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(act);
+        await Should.ThrowAsync<InvalidOperationException>(act);
     }
 }

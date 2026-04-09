@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 
@@ -20,7 +21,7 @@ public sealed class ClaudeCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.Equal("claude-code", harness.Type);
+        harness.Type.ShouldBe("claude-code");
     }
 
     [Fact]
@@ -28,7 +29,7 @@ public sealed class ClaudeCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.Equal("Claude Code", harness.DisplayName);
+        harness.DisplayName.ShouldBe("Claude Code");
     }
 
     [Fact]
@@ -36,7 +37,7 @@ public sealed class ClaudeCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.True(harness.Capabilities.RequiresInitialPrompt);
+        harness.Capabilities.RequiresInitialPrompt.ShouldBeTrue();
     }
 
     [Fact]
@@ -44,7 +45,7 @@ public sealed class ClaudeCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.True(harness.Capabilities.SupportsResume);
+        harness.Capabilities.SupportsResume.ShouldBeTrue();
     }
 
     [Fact]
@@ -52,7 +53,7 @@ public sealed class ClaudeCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.True(harness.Capabilities.SupportsModelSelection);
+        harness.Capabilities.SupportsModelSelection.ShouldBeTrue();
     }
 
     [Fact]
@@ -60,7 +61,7 @@ public sealed class ClaudeCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.True(harness.Capabilities.SupportsStreaming);
+        harness.Capabilities.SupportsStreaming.ShouldBeTrue();
     }
 
     [Fact]
@@ -68,7 +69,7 @@ public sealed class ClaudeCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.False(harness.Capabilities.SupportsAgents);
+        harness.Capabilities.SupportsAgents.ShouldBeFalse();
     }
 
     [Fact]
@@ -76,7 +77,7 @@ public sealed class ClaudeCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.False(harness.Capabilities.SupportsCommands);
+        harness.Capabilities.SupportsCommands.ShouldBeFalse();
     }
 
     [Fact]
@@ -84,7 +85,7 @@ public sealed class ClaudeCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.False(harness.Capabilities.SupportsForking);
+        harness.Capabilities.SupportsForking.ShouldBeFalse();
     }
 
     [Fact]
@@ -92,7 +93,7 @@ public sealed class ClaudeCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.False(harness.Capabilities.SupportsImageAttachments);
+        harness.Capabilities.SupportsImageAttachments.ShouldBeFalse();
     }
 
     [Fact]
@@ -100,7 +101,7 @@ public sealed class ClaudeCodeHarnessTests
     {
         var harness = CreateHarness();
 
-        Assert.False(harness.Capabilities.SupportsDelegation);
+        harness.Capabilities.SupportsDelegation.ShouldBeFalse();
     }
 
     [Fact(Skip = "Integration: requires claude binary on PATH")]
@@ -117,7 +118,7 @@ public sealed class ClaudeCodeHarnessTests
 
         var result = await harness.CheckAvailabilityAsync(CancellationToken.None);
 
-        Assert.False(result.Available);
-        Assert.NotNull(result.Reason);
+        result.Available.ShouldBeFalse();
+        result.Reason.ShouldNotBeNull();
     }
 }

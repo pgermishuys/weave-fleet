@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
+using Shouldly;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.ClaudeCode;
@@ -26,10 +27,10 @@ public sealed class ClaudeCodeStdioClientTests
             .ReadMessagesAsync(reader, NullLogger.Instance, CancellationToken.None)
             .ToListAsync();
 
-        Assert.Equal(3, messages.Count);
-        Assert.IsType<ClaudeCodeSystemMessage>(messages[0]);
-        Assert.IsType<ClaudeCodeAssistantMessage>(messages[1]);
-        Assert.IsType<ClaudeCodeResultMessage>(messages[2]);
+        messages.Count.ShouldBe(3);
+        messages[0].ShouldBeOfType<ClaudeCodeSystemMessage>();
+        messages[1].ShouldBeOfType<ClaudeCodeAssistantMessage>();
+        messages[2].ShouldBeOfType<ClaudeCodeResultMessage>();
     }
 
     [Fact]
@@ -46,7 +47,7 @@ public sealed class ClaudeCodeStdioClientTests
             .ReadMessagesAsync(reader, NullLogger.Instance, CancellationToken.None)
             .ToListAsync();
 
-        Assert.Equal(2, messages.Count);
+        messages.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -63,9 +64,9 @@ public sealed class ClaudeCodeStdioClientTests
             .ReadMessagesAsync(reader, NullLogger.Instance, CancellationToken.None)
             .ToListAsync();
 
-        Assert.Equal(2, messages.Count);
-        Assert.IsType<ClaudeCodeSystemMessage>(messages[0]);
-        Assert.IsType<ClaudeCodeResultMessage>(messages[1]);
+        messages.Count.ShouldBe(2);
+        messages[0].ShouldBeOfType<ClaudeCodeSystemMessage>();
+        messages[1].ShouldBeOfType<ClaudeCodeResultMessage>();
     }
 
     [Fact]
@@ -79,7 +80,7 @@ public sealed class ClaudeCodeStdioClientTests
             .ReadMessagesAsync(emptyReader, NullLogger.Instance, CancellationToken.None)
             .ToListAsync();
 
-        Assert.Empty(messages);
+        messages.ShouldBeEmpty();
     }
 
     [Fact]
@@ -102,7 +103,7 @@ public sealed class ClaudeCodeStdioClientTests
             .ToListAsync(CancellationToken.None);
 
         // With pre-cancelled token, should yield 0 or few messages (not all 100)
-        Assert.True(messages.Count < 100);
+        messages.Count.ShouldBeLessThan(100);
     }
 
     [Fact]
@@ -117,7 +118,7 @@ public sealed class ClaudeCodeStdioClientTests
             .ToListAsync();
 
         // Unknown type falls back to base ClaudeCodeStreamMessage (not skipped, not thrown)
-        Assert.Single(messages);
-        Assert.IsType<ClaudeCodeStreamMessage>(messages[0]);
+        messages.Count.ShouldBe(1);
+        messages[0].ShouldBeOfType<ClaudeCodeStreamMessage>();
     }
 }

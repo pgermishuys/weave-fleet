@@ -11,6 +11,6 @@ public sealed class SmokeTests
     {
         // This placeholder ensures dotnet test discovers this project.
         // Real integration tests using WebApplicationFactory will replace this.
-        Assert.True(true);
+        true.ShouldBeTrue();
     }
 }

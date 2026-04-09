@@ -30,9 +30,9 @@ public sealed class DapperWorkspaceRepositoryTests
         await repo.InsertAsync(ws);
         var retrieved = await repo.GetByIdAsync(ws.Id);
 
-        Assert.NotNull(retrieved);
-        Assert.Equal(ws.Directory, retrieved.Directory);
-        Assert.Equal("existing", retrieved.IsolationStrategy);
+        retrieved.ShouldNotBeNull();
+        retrieved.Directory.ShouldBe(ws.Directory);
+        retrieved.IsolationStrategy.ShouldBe("existing");
     }
 
     [Fact]
@@ -52,8 +52,8 @@ public sealed class DapperWorkspaceRepositoryTests
 
         var found = await repo.GetByDirectoryAsync("/home/user/project", "worktree");
 
-        Assert.NotNull(found);
-        Assert.Equal(ws.Id, found.Id);
+        found.ShouldNotBeNull();
+        found.Id.ShouldBe(ws.Id);
     }
 
     [Fact]
@@ -74,7 +74,8 @@ public sealed class DapperWorkspaceRepositoryTests
         await repo.MarkCleanedAsync(ws.Id);
         var retrieved = await repo.GetByIdAsync(ws.Id);
 
-        Assert.NotNull(retrieved!.CleanedUpAt);
+        retrieved.ShouldNotBeNull();
+        retrieved.CleanedUpAt.ShouldNotBeNull();
     }
 
     [Fact]
@@ -95,6 +96,7 @@ public sealed class DapperWorkspaceRepositoryTests
         await repo.UpdateDisplayNameAsync(ws.Id, "My Project");
         var retrieved = await repo.GetByIdAsync(ws.Id);
 
-        Assert.Equal("My Project", retrieved!.DisplayName);
+        retrieved.ShouldNotBeNull();
+        retrieved.DisplayName.ShouldBe("My Project");
     }
 }

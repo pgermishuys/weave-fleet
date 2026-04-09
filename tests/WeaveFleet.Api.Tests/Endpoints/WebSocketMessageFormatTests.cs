@@ -34,7 +34,7 @@ public sealed class WebSocketMessageFormatTests
         var json = SerializeEnvelope(evt);
         using var doc = JsonDocument.Parse(json);
 
-        Assert.Equal("event", doc.RootElement.GetProperty("type").GetString());
+        doc.RootElement.GetProperty("type").GetString().ShouldBe("event");
     }
 
     [Fact]
@@ -46,10 +46,11 @@ public sealed class WebSocketMessageFormatTests
         var json = SerializeEnvelope(evt);
         using var doc = JsonDocument.Parse(json);
 
-        Assert.Equal("message.updated", doc.RootElement
+        doc.RootElement
             .GetProperty("data")
             .GetProperty("type")
-            .GetString());
+            .GetString()
+            .ShouldBe("message.updated");
     }
 
     [Fact]
@@ -61,7 +62,7 @@ public sealed class WebSocketMessageFormatTests
         var json = SerializeEnvelope(evt);
         using var doc = JsonDocument.Parse(json);
 
-        Assert.Equal("session:fleet-123", doc.RootElement.GetProperty("topic").GetString());
+        doc.RootElement.GetProperty("topic").GetString().ShouldBe("session:fleet-123");
     }
 
     [Fact]
@@ -77,9 +78,9 @@ public sealed class WebSocketMessageFormatTests
         var properties = doc.RootElement.GetProperty("data").GetProperty("properties");
 
         // properties should be the payload object, not a double-encoded string
-        Assert.Equal(JsonValueKind.Object, properties.ValueKind);
-        Assert.Equal("hello world", properties.GetProperty("text").GetString());
-        Assert.Equal(42, properties.GetProperty("count").GetInt32());
+        properties.ValueKind.ShouldBe(JsonValueKind.Object);
+        properties.GetProperty("text").GetString().ShouldBe("hello world");
+        properties.GetProperty("count").GetInt32().ShouldBe(42);
     }
 
     [Fact]
@@ -93,9 +94,9 @@ public sealed class WebSocketMessageFormatTests
         var root = doc.RootElement;
 
         // Frontend does NOT use payload or timestamp at top level — verify they're absent
-        Assert.False(root.TryGetProperty("payload", out _),
+        root.TryGetProperty("payload", out _).ShouldBeFalse(
             "Top-level 'payload' field must not be present (use data.properties instead)");
-        Assert.False(root.TryGetProperty("timestamp", out _),
+        root.TryGetProperty("timestamp", out _).ShouldBeFalse(
             "Top-level 'timestamp' field must not be present");
     }
 
@@ -111,8 +112,8 @@ public sealed class WebSocketMessageFormatTests
         using var doc = JsonDocument.Parse(json);
 
         var properties = doc.RootElement.GetProperty("data").GetProperty("properties");
-        Assert.Equal(JsonValueKind.Object, properties.ValueKind);
-        Assert.Empty(properties.EnumerateObject());
+        properties.ValueKind.ShouldBe(JsonValueKind.Object);
+        properties.EnumerateObject().ShouldBeEmpty();
     }
 
     [Fact]
@@ -126,14 +127,14 @@ public sealed class WebSocketMessageFormatTests
         var root = doc.RootElement;
 
         // Top-level structure
-        Assert.Equal("event", root.GetProperty("type").GetString());
-        Assert.Equal("session:fleet-abc", root.GetProperty("topic").GetString());
+        root.GetProperty("type").GetString().ShouldBe("event");
+        root.GetProperty("topic").GetString().ShouldBe("session:fleet-abc");
 
         // data object
         var data = root.GetProperty("data");
-        Assert.Equal("message.updated", data.GetProperty("type").GetString());
+        data.GetProperty("type").GetString().ShouldBe("message.updated");
         var props = data.GetProperty("properties");
-        Assert.Equal("msg-1", props.GetProperty("messageId").GetString());
-        Assert.Equal("assistant", props.GetProperty("role").GetString());
+        props.GetProperty("messageId").GetString().ShouldBe("msg-1");
+        props.GetProperty("role").GetString().ShouldBe("assistant");
     }
 }

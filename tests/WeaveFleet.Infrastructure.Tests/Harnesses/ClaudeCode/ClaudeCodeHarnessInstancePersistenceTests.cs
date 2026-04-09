@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
@@ -129,9 +130,9 @@ public sealed class ClaudeCodeHarnessInstancePersistenceTests
 
         var page = await instance.GetMessagesAsync(null, CancellationToken.None);
 
-        Assert.Equal(2, page.Messages.Count);
-        Assert.Equal("user", page.Messages[0].Role);
-        Assert.Equal("assistant", page.Messages[1].Role);
+        page.Messages.Count.ShouldBe(2);
+        page.Messages[0].Role.ShouldBe("user");
+        page.Messages[1].Role.ShouldBe("assistant");
     }
 
     [Fact]
@@ -147,8 +148,8 @@ public sealed class ClaudeCodeHarnessInstancePersistenceTests
 
         var page = await instance.GetMessagesAsync(null, CancellationToken.None);
 
-        Assert.Empty(page.Messages);
-        Assert.False(page.HasMore);
+        page.Messages.ShouldBeEmpty();
+        page.HasMore.ShouldBeFalse();
     }
 
     [Fact]
@@ -196,8 +197,8 @@ public sealed class ClaudeCodeHarnessInstancePersistenceTests
         var query = new MessageQuery { Limit = 5 };
         var page = await instance.GetMessagesAsync(query, CancellationToken.None);
 
-        Assert.Equal(5, page.Messages.Count);
-        Assert.True(page.HasMore);
+        page.Messages.Count.ShouldBe(5);
+        page.HasMore.ShouldBeTrue();
     }
 
     [Fact]
@@ -226,8 +227,8 @@ public sealed class ClaudeCodeHarnessInstancePersistenceTests
         var query = new MessageQuery { Limit = 10 };
         var page = await instance.GetMessagesAsync(query, CancellationToken.None);
 
-        Assert.Equal(3, page.Messages.Count);
-        Assert.False(page.HasMore);
+        page.Messages.Count.ShouldBe(3);
+        page.HasMore.ShouldBeFalse();
     }
 
     // -----------------------------------------------------------------------
@@ -332,12 +333,12 @@ public sealed class ClaudeCodeHarnessInstancePersistenceTests
 
         var page = await instance.GetMessagesAsync(null, CancellationToken.None);
 
-        Assert.Single(page.Messages);
+        page.Messages.Count.ShouldBe(1);
         var msg = page.Messages[0];
-        Assert.Equal("assistant", msg.Role);
-        Assert.Single(msg.Parts);
-        var textPart = Assert.IsType<TextPart>(msg.Parts[0]);
-        Assert.Equal("The answer is 42", textPart.Text);
+        msg.Role.ShouldBe("assistant");
+        msg.Parts.Count.ShouldBe(1);
+        var textPart = msg.Parts[0].ShouldBeOfType<TextPart>();
+        textPart.Text.ShouldBe("The answer is 42");
     }
 
     // -----------------------------------------------------------------------
@@ -352,7 +353,7 @@ public sealed class ClaudeCodeHarnessInstancePersistenceTests
 
         await using var instance = CreateInstance(fleetSessionId, scopeFactory);
 
-        Assert.Null(instance.ResumeToken);
+        instance.ResumeToken.ShouldBeNull();
     }
 
     [Fact]
@@ -365,7 +366,7 @@ public sealed class ClaudeCodeHarnessInstancePersistenceTests
         await using var instance = CreateInstance(
             fleetSessionId, scopeFactory, claudeSessionId: claudeSessionId);
 
-        Assert.Equal(claudeSessionId, instance.ResumeToken);
+        instance.ResumeToken.ShouldBe(claudeSessionId);
     }
 
     [Fact]
@@ -384,7 +385,7 @@ public sealed class ClaudeCodeHarnessInstancePersistenceTests
             fleetSessionId, scopeFactory, claudeSessionId: claudeSessionId);
 
         // The resume token is already set — even before any prompt is sent
-        Assert.Equal(claudeSessionId, instance.ResumeToken);
+        instance.ResumeToken.ShouldBe(claudeSessionId);
 
         // After spawn, the token remains the pre-populated value (unchanged by failed process start)
         try
@@ -397,7 +398,7 @@ public sealed class ClaudeCodeHarnessInstancePersistenceTests
         }
 
         // ResumeToken must still equal the pre-populated value
-        Assert.Equal(claudeSessionId, instance.ResumeToken);
+        instance.ResumeToken.ShouldBe(claudeSessionId);
     }
 
     [Fact]
@@ -419,7 +420,7 @@ public sealed class ClaudeCodeHarnessInstancePersistenceTests
         using var scope = scopeFactory.CreateScope();
         var resolvedRepo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
 
-        Assert.NotNull(resolvedRepo);
-        Assert.Same(sessionRepo, resolvedRepo);
+        resolvedRepo.ShouldNotBeNull();
+        resolvedRepo.ShouldBeSameAs(sessionRepo);
     }
 }

@@ -33,10 +33,10 @@ public sealed class DapperProjectRepositoryTests
         await repo.InsertAsync(project);
         var retrieved = await repo.GetByIdAsync(project.Id);
 
-        Assert.NotNull(retrieved);
-        Assert.Equal(project.Name, retrieved.Name);
-        Assert.Equal(project.Description, retrieved.Description);
-        Assert.Equal("user", retrieved.Type);
+        retrieved.ShouldNotBeNull();
+        retrieved.Name.ShouldBe(project.Name);
+        retrieved.Description.ShouldBe(project.Description);
+        retrieved.Type.ShouldBe("user");
     }
 
     [Fact]
@@ -58,8 +58,8 @@ public sealed class DapperProjectRepositoryTests
 
         var retrieved = await repo.GetScratchProjectAsync();
 
-        Assert.NotNull(retrieved);
-        Assert.Equal("scratch", retrieved.Type);
+        retrieved.ShouldNotBeNull();
+        retrieved.Type.ShouldBe("scratch");
     }
 
     [Fact]
@@ -73,9 +73,9 @@ public sealed class DapperProjectRepositoryTests
 
         var list = await repo.ListAsync();
 
-        Assert.Equal(2, list.Count);
-        Assert.Equal("A", list[0].Name);
-        Assert.Equal("B", list[1].Name);
+        list.Count.ShouldBe(2);
+        list[0].Name.ShouldBe("A");
+        list[1].Name.ShouldBe("B");
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class DapperProjectRepositoryTests
         await repo.DeleteAsync(project.Id);
 
         var retrieved = await repo.GetByIdAsync(project.Id);
-        Assert.Null(retrieved);
+        retrieved.ShouldBeNull();
     }
 
     [Fact]
@@ -103,6 +103,6 @@ public sealed class DapperProjectRepositoryTests
         await repo.InsertAsync(project);
 
         var count = await repo.GetSessionCountAsync(project.Id);
-        Assert.Equal(0, count);
+        count.ShouldBe(0);
     }
 }

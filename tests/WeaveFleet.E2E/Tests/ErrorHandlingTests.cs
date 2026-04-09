@@ -40,7 +40,7 @@ public sealed class ErrorHandlingTests : E2ETestBase,
             await Page.WaitForTimeoutAsync(2_000);
 
             // Should still be on the dashboard (no redirect to session detail)
-            Assert.DoesNotContain("/sessions/", Page.Url);
+            Page.Url.ShouldNotContain("/sessions/");
 
             // An error message should appear in the dialog or on the page
             var errorLocator = Page.GetByText("error", new Microsoft.Playwright.PageGetByTextOptions { Exact = false })

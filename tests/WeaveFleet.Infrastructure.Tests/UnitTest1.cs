@@ -14,6 +14,6 @@ public sealed class DependencyInjectionTests
 
         // Should not throw
         services.AddFleetInfrastructure(options);
-        Assert.True(true);
+        true.ShouldBeTrue();
     }
 }

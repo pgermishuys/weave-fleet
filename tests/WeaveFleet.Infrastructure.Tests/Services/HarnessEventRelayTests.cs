@@ -86,8 +86,8 @@ public sealed class HarnessEventRelayTests
         // Wait for broadcast
         var result = await broadcastSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        Assert.Equal($"session:{fleetSessionId}", result.Topic);
-        Assert.Equal("message.updated", result.Type);
+        result.Topic.ShouldBe($"session:{fleetSessionId}");
+        result.Type.ShouldBe("message.updated");
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);
@@ -226,7 +226,7 @@ public sealed class HarnessEventRelayTests
 
         var result = await broadcastSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        Assert.Equal($"session:{fleetSessionId}", result.Topic);
+        result.Topic.ShouldBe($"session:{fleetSessionId}");
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);
@@ -271,7 +271,7 @@ public sealed class HarnessEventRelayTests
 
         var result = await broadcastSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        Assert.Equal($"session:{fleetSessionId}", result.Topic);
+        result.Topic.ShouldBe($"session:{fleetSessionId}");
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);
@@ -337,14 +337,13 @@ public sealed class HarnessEventRelayTests
 
         await Task.Delay(500);
 
-        Assert.NotNull(capturedPayload);
+        capturedPayload.ShouldNotBeNull();
 
         var broadcastJson = JsonSerializer.Serialize(capturedPayload);
         using var doc = JsonDocument.Parse(broadcastJson);
 
-        Assert.Equal("opencode-session-xyz", doc.RootElement.GetProperty("sessionID").GetString());
-        Assert.Equal("opencode-session-xyz",
-            doc.RootElement.GetProperty("part").GetProperty("sessionID").GetString());
+        doc.RootElement.GetProperty("sessionID").GetString().ShouldBe("opencode-session-xyz");
+        doc.RootElement.GetProperty("part").GetProperty("sessionID").GetString().ShouldBe("opencode-session-xyz");
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);
@@ -383,8 +382,8 @@ public sealed class HarnessEventRelayTests
 
         var result = await broadcastSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        Assert.Equal("session:fleet-child", result.Topic);
-        Assert.Equal("message.part.updated", result.Type);
+        result.Topic.ShouldBe("session:fleet-child");
+        result.Type.ShouldBe("message.part.updated");
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);

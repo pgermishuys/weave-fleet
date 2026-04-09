@@ -21,8 +21,8 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
 
         using var conn = factory.CreateConnection();
 
-        Assert.NotNull(conn);
-        Assert.Equal(System.Data.ConnectionState.Open, conn.State);
+        conn.ShouldNotBeNull();
+        conn.State.ShouldBe(System.Data.ConnectionState.Open);
     }
 
     [Fact]
@@ -36,7 +36,7 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
 
         cmd.CommandText = "PRAGMA foreign_keys";
         var result = cmd.ExecuteScalar();
-        Assert.Equal(1L, result);
+        result.ShouldBe(1L);
     }
 
     [Fact]
@@ -49,7 +49,7 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
         var factory = new SqliteConnectionFactory(options);
         using var conn = factory.CreateConnection();
 
-        Assert.True(Directory.Exists(subDir));
+        Directory.Exists(subDir).ShouldBeTrue();
         conn.Close();
         SqliteConnection.ClearAllPools();
         if (File.Exists(dbPath)) File.Delete(dbPath);

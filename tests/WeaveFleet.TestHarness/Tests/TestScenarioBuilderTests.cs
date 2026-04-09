@@ -9,11 +9,11 @@ public sealed class TestScenarioBuilderTests
     {
         var scenario = new TestScenarioBuilder().Build();
 
-        Assert.Empty(scenario.Messages);
-        Assert.Empty(scenario.PromptResponses);
-        Assert.False(scenario.ThrowOnSpawn);
-        Assert.False(scenario.ThrowOnSendPrompt);
-        Assert.Equal(HarnessInstanceStatus.Idle, scenario.InitialStatus);
+        scenario.Messages.ShouldBeEmpty();
+        scenario.PromptResponses.ShouldBeEmpty();
+        scenario.ThrowOnSpawn.ShouldBeFalse();
+        scenario.ThrowOnSendPrompt.ShouldBeFalse();
+        scenario.InitialStatus.ShouldBe(HarnessInstanceStatus.Idle);
     }
 
     [Fact]
@@ -23,13 +23,13 @@ public sealed class TestScenarioBuilderTests
             .WithUserMessage("msg-1", "Hello world")
             .Build();
 
-        Assert.Single(scenario.Messages);
+        scenario.Messages.Count.ShouldBe(1);
         var msg = scenario.Messages[0];
-        Assert.Equal("msg-1", msg.Id);
-        Assert.Equal("user", msg.Role);
-        Assert.Equal("Hello world", msg.TextContent);
-        var part = Assert.IsType<TextPart>(msg.Parts[0]);
-        Assert.Equal("Hello world", part.Text);
+        msg.Id.ShouldBe("msg-1");
+        msg.Role.ShouldBe("user");
+        msg.TextContent.ShouldBe("Hello world");
+        var part = msg.Parts[0].ShouldBeOfType<TextPart>();
+        part.Text.ShouldBe("Hello world");
     }
 
     [Fact]
@@ -39,10 +39,10 @@ public sealed class TestScenarioBuilderTests
             .WithAssistantMessage("msg-2", "Response text")
             .Build();
 
-        Assert.Single(scenario.Messages);
+        scenario.Messages.Count.ShouldBe(1);
         var msg = scenario.Messages[0];
-        Assert.Equal("assistant", msg.Role);
-        Assert.Equal("Response text", msg.TextContent);
+        msg.Role.ShouldBe("assistant");
+        msg.TextContent.ShouldBe("Response text");
     }
 
     [Fact]
@@ -58,11 +58,11 @@ public sealed class TestScenarioBuilderTests
             .WithAssistantMessageParts("msg-3", parts)
             .Build();
 
-        Assert.Single(scenario.Messages);
+        scenario.Messages.Count.ShouldBe(1);
         var msg = scenario.Messages[0];
-        Assert.Equal(2, msg.Parts.Count);
-        Assert.IsType<TextPart>(msg.Parts[0]);
-        Assert.IsType<ToolUsePart>(msg.Parts[1]);
+        msg.Parts.Count.ShouldBe(2);
+        msg.Parts[0].ShouldBeOfType<TextPart>();
+        msg.Parts[1].ShouldBeOfType<ToolUsePart>();
     }
 
     [Fact]
@@ -74,10 +74,10 @@ public sealed class TestScenarioBuilderTests
             .WithUserMessage("u2", "Third")
             .Build();
 
-        Assert.Equal(3, scenario.Messages.Count);
-        Assert.Equal("u1", scenario.Messages[0].Id);
-        Assert.Equal("a1", scenario.Messages[1].Id);
-        Assert.Equal("u2", scenario.Messages[2].Id);
+        scenario.Messages.Count.ShouldBe(3);
+        scenario.Messages[0].Id.ShouldBe("u1");
+        scenario.Messages[1].Id.ShouldBe("a1");
+        scenario.Messages[2].Id.ShouldBe("u2");
     }
 
     [Fact]
@@ -87,15 +87,15 @@ public sealed class TestScenarioBuilderTests
             .WithSimpleTextResponse("sess-1", "msg-1", "Hello back!")
             .Build();
 
-        Assert.Single(scenario.PromptResponses);
+        scenario.PromptResponses.Count.ShouldBe(1);
         var events = scenario.PromptResponses.Dequeue();
-        Assert.Equal(6, events.Count);
-        Assert.Equal("session.status", events[0].Event.Type);
-        Assert.Equal("message.updated", events[1].Event.Type);   // user message
-        Assert.Equal("message.part.updated", events[2].Event.Type); // user part
-        Assert.Equal("message.updated", events[3].Event.Type);   // assistant message
-        Assert.Equal("message.part.updated", events[4].Event.Type); // assistant part
-        Assert.Equal("session.idle", events[5].Event.Type);
+        events.Count.ShouldBe(6);
+        events[0].Event.Type.ShouldBe("session.status");
+        events[1].Event.Type.ShouldBe("message.updated");   // user message
+        events[2].Event.Type.ShouldBe("message.part.updated"); // user part
+        events[3].Event.Type.ShouldBe("message.updated");   // assistant message
+        events[4].Event.Type.ShouldBe("message.part.updated"); // assistant part
+        events[5].Event.Type.ShouldBe("session.idle");
     }
 
     [Fact]
@@ -112,10 +112,10 @@ public sealed class TestScenarioBuilderTests
             )
             .Build();
 
-        Assert.Single(scenario.PromptResponses);
+        scenario.PromptResponses.Count.ShouldBe(1);
         var events = scenario.PromptResponses.Dequeue();
-        Assert.Single(events);
-        Assert.Equal("custom.event", events[0].Event.Type);
+        events.Count.ShouldBe(1);
+        events[0].Event.Type.ShouldBe("custom.event");
     }
 
     [Fact]
@@ -126,11 +126,11 @@ public sealed class TestScenarioBuilderTests
             .WithSimpleTextResponse("sess-1", "msg-2", "Second")
             .Build();
 
-        Assert.Equal(2, scenario.PromptResponses.Count);
+        scenario.PromptResponses.Count.ShouldBe(2);
         var first = scenario.PromptResponses.Dequeue();
-        Assert.Equal("session.status", first[0].Event.Type);
+        first[0].Event.Type.ShouldBe("session.status");
         var second = scenario.PromptResponses.Dequeue();
-        Assert.Equal("session.status", second[0].Event.Type);
+        second[0].Event.Type.ShouldBe("session.status");
     }
 
     [Fact]
@@ -140,8 +140,8 @@ public sealed class TestScenarioBuilderTests
             .WithSpawnFailure()
             .Build();
 
-        Assert.True(scenario.ThrowOnSpawn);
-        Assert.False(scenario.ThrowOnSendPrompt);
+        scenario.ThrowOnSpawn.ShouldBeTrue();
+        scenario.ThrowOnSendPrompt.ShouldBeFalse();
     }
 
     [Fact]
@@ -151,8 +151,8 @@ public sealed class TestScenarioBuilderTests
             .WithSendPromptFailure()
             .Build();
 
-        Assert.False(scenario.ThrowOnSpawn);
-        Assert.True(scenario.ThrowOnSendPrompt);
+        scenario.ThrowOnSpawn.ShouldBeFalse();
+        scenario.ThrowOnSendPrompt.ShouldBeTrue();
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public sealed class TestScenarioBuilderTests
             .WithInitialStatus(HarnessInstanceStatus.Running)
             .Build();
 
-        Assert.Equal(HarnessInstanceStatus.Running, scenario.InitialStatus);
+        scenario.InitialStatus.ShouldBe(HarnessInstanceStatus.Running);
     }
 
     // ── TestHarness integration ──────────────────────────────────────────────
@@ -182,8 +182,8 @@ public sealed class TestScenarioBuilderTests
             CancellationToken.None);
 
         var page = await instance.GetMessagesAsync(null, CancellationToken.None);
-        Assert.Single(page.Messages);
-        Assert.Equal("msg-1", page.Messages[0].Id);
+        page.Messages.Count.ShouldBe(1);
+        page.Messages[0].Id.ShouldBe("msg-1");
     }
 
     [Fact]
@@ -192,7 +192,7 @@ public sealed class TestScenarioBuilderTests
         var harness = new TestHarness();
         harness.Configure(b => b.WithSpawnFailure());
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Should.ThrowAsync<InvalidOperationException>(() =>
             harness.SpawnAsync(
                 new WeaveFleet.Application.Harnesses.HarnessSpawnOptions
                 {
@@ -208,14 +208,14 @@ public sealed class TestScenarioBuilderTests
         var harness = new TestHarness();
         var result = await harness.CheckAvailabilityAsync(CancellationToken.None);
 
-        Assert.True(result.Available);
-        Assert.Null(result.Reason);
+        result.Available.ShouldBeTrue();
+        result.Reason.ShouldBeNull();
     }
 
     [Fact]
     public void TestHarness_Type_is_opencode()
     {
         var harness = new TestHarness();
-        Assert.Equal("opencode", harness.Type);
+        harness.Type.ShouldBe("opencode");
     }
 }

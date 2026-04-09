@@ -24,12 +24,12 @@ public sealed class MessagePersistenceServiceTests
         var persisted = MessagePersistenceService.ToPersistedMessage("session-1", original);
         var restored = MessagePersistenceService.ToHarnessMessage(persisted);
 
-        Assert.Single(restored.Parts);
-        var text = Assert.IsType<TextPart>(restored.Parts[0]);
-        Assert.Equal("Hello, world!", text.Text);
-        Assert.Equal(original.Id, restored.Id);
-        Assert.Equal(original.Role, restored.Role);
-        Assert.Equal(original.Timestamp, restored.Timestamp);
+        restored.Parts.Count.ShouldBe(1);
+        var text = restored.Parts[0].ShouldBeOfType<TextPart>();
+        text.Text.ShouldBe("Hello, world!");
+        restored.Id.ShouldBe(original.Id);
+        restored.Role.ShouldBe(original.Role);
+        restored.Timestamp.ShouldBe(original.Timestamp);
     }
 
     [Fact]
@@ -43,13 +43,13 @@ public sealed class MessagePersistenceServiceTests
         var persisted = MessagePersistenceService.ToPersistedMessage("session-1", original);
         var restored = MessagePersistenceService.ToHarnessMessage(persisted);
 
-        Assert.Single(restored.Parts);
-        var tool = Assert.IsType<ToolUsePart>(restored.Parts[0]);
-        Assert.Equal("call-1", tool.ToolCallId);
-        Assert.Equal("my_tool", tool.ToolName);
-        Assert.Equal(ToolUseState.Completed, tool.State);
-        Assert.Equal("bar", tool.Arguments.GetProperty("foo").GetString());
-        Assert.Equal(42, tool.Arguments.GetProperty("count").GetInt32());
+        restored.Parts.Count.ShouldBe(1);
+        var tool = restored.Parts[0].ShouldBeOfType<ToolUsePart>();
+        tool.ToolCallId.ShouldBe("call-1");
+        tool.ToolName.ShouldBe("my_tool");
+        tool.State.ShouldBe(ToolUseState.Completed);
+        tool.Arguments.GetProperty("foo").GetString().ShouldBe("bar");
+        tool.Arguments.GetProperty("count").GetInt32().ShouldBe(42);
     }
 
     [Fact]
@@ -62,11 +62,11 @@ public sealed class MessagePersistenceServiceTests
         var persisted = MessagePersistenceService.ToPersistedMessage("session-1", original);
         var restored = MessagePersistenceService.ToHarnessMessage(persisted);
 
-        Assert.Single(restored.Parts);
-        var result = Assert.IsType<ToolResultPart>(restored.Parts[0]);
-        Assert.Equal("call-2", result.ToolCallId);
-        Assert.Equal("result content", result.Content);
-        Assert.False(result.IsError);
+        restored.Parts.Count.ShouldBe(1);
+        var result = restored.Parts[0].ShouldBeOfType<ToolResultPart>();
+        result.ToolCallId.ShouldBe("call-2");
+        result.Content.ShouldBe("result content");
+        result.IsError.ShouldBeFalse();
     }
 
     [Fact]
@@ -83,13 +83,13 @@ public sealed class MessagePersistenceServiceTests
         var persisted = MessagePersistenceService.ToPersistedMessage("session-1", original);
         var restored = MessagePersistenceService.ToHarnessMessage(persisted);
 
-        Assert.Equal(4, restored.Parts.Count);
-        Assert.IsType<TextPart>(restored.Parts[0]);
-        Assert.IsType<ToolUsePart>(restored.Parts[1]);
-        Assert.IsType<ToolResultPart>(restored.Parts[2]);
-        Assert.IsType<TextPart>(restored.Parts[3]);
-        Assert.Equal("Thinking...", ((TextPart)restored.Parts[0]).Text);
-        Assert.Equal("Done.", ((TextPart)restored.Parts[3]).Text);
+        restored.Parts.Count.ShouldBe(4);
+        restored.Parts[0].ShouldBeOfType<TextPart>();
+        restored.Parts[1].ShouldBeOfType<ToolUsePart>();
+        restored.Parts[2].ShouldBeOfType<ToolResultPart>();
+        restored.Parts[3].ShouldBeOfType<TextPart>();
+        restored.Parts[0].ShouldBeOfType<TextPart>().Text.ShouldBe("Thinking...");
+        restored.Parts[3].ShouldBeOfType<TextPart>().Text.ShouldBe("Done.");
     }
 
     [Fact]
@@ -100,11 +100,11 @@ public sealed class MessagePersistenceServiceTests
 
         var persisted = MessagePersistenceService.ToPersistedMessage(sessionId, message);
 
-        Assert.Equal(sessionId, persisted.SessionId);
-        Assert.Equal(message.Id, persisted.Id);
-        Assert.Equal("user", persisted.Role);
-        Assert.Equal(message.Timestamp.ToString("O"), persisted.Timestamp);
-        Assert.False(string.IsNullOrEmpty(persisted.CreatedAt));
+        persisted.SessionId.ShouldBe(sessionId);
+        persisted.Id.ShouldBe(message.Id);
+        persisted.Role.ShouldBe("user");
+        persisted.Timestamp.ShouldBe(message.Timestamp.ToString("O"));
+        string.IsNullOrEmpty(persisted.CreatedAt).ShouldBeFalse();
     }
 
     // -----------------------------------------------------------------------
@@ -134,9 +134,9 @@ public sealed class MessagePersistenceServiceTests
         var result = MessagePersistenceService.MergePart(existing, newPart);
 
         var restored = MessagePersistenceService.ToHarnessMessage(result);
-        Assert.Single(restored.Parts);
-        var text = Assert.IsType<TextPart>(restored.Parts[0]);
-        Assert.Equal("Hello world", text.Text);
+        restored.Parts.Count.ShouldBe(1);
+        var text = restored.Parts[0].ShouldBeOfType<TextPart>();
+        text.Text.ShouldBe("Hello world");
     }
 
     [Fact]
@@ -149,10 +149,10 @@ public sealed class MessagePersistenceServiceTests
         var result = MessagePersistenceService.MergePart(existing, newPart);
 
         var restored = MessagePersistenceService.ToHarnessMessage(result);
-        Assert.Single(restored.Parts);
-        var tool = Assert.IsType<ToolUsePart>(restored.Parts[0]);
-        Assert.Equal("call-99", tool.ToolCallId);
-        Assert.Equal("my_tool", tool.ToolName);
+        restored.Parts.Count.ShouldBe(1);
+        var tool = restored.Parts[0].ShouldBeOfType<ToolUsePart>();
+        tool.ToolCallId.ShouldBe("call-99");
+        tool.ToolName.ShouldBe("my_tool");
     }
 
     [Fact]
@@ -172,10 +172,10 @@ public sealed class MessagePersistenceServiceTests
         var result = MessagePersistenceService.MergePart(existingMsg, updatedPart);
 
         var restored = MessagePersistenceService.ToHarnessMessage(result);
-        Assert.Single(restored.Parts); // replaced in-place, not appended
-        var tool = Assert.IsType<ToolUsePart>(restored.Parts[0]);
-        Assert.Equal("call-1", tool.ToolCallId);
-        Assert.Equal(ToolUseState.Completed, tool.State);
+        restored.Parts.Count.ShouldBe(1); // replaced in-place, not appended
+        var tool = restored.Parts[0].ShouldBeOfType<ToolUsePart>();
+        tool.ToolCallId.ShouldBe("call-1");
+        tool.State.ShouldBe(ToolUseState.Completed);
     }
 
     [Fact]
@@ -192,8 +192,8 @@ public sealed class MessagePersistenceServiceTests
         var result = MessagePersistenceService.MergePart(existingMsg, newPart);
 
         var restored = MessagePersistenceService.ToHarnessMessage(result);
-        Assert.Equal(2, restored.Parts.Count);
-        Assert.All(restored.Parts, p => Assert.IsType<ToolUsePart>(p));
+        restored.Parts.Count.ShouldBe(2);
+        restored.Parts.All(static p => p is ToolUsePart).ShouldBeTrue();
     }
 
     [Fact]
@@ -207,9 +207,9 @@ public sealed class MessagePersistenceServiceTests
         var result = MessagePersistenceService.MergePart(existingMsg, updatedText);
 
         var restored = MessagePersistenceService.ToHarnessMessage(result);
-        Assert.Single(restored.Parts); // replaced, not appended
-        var text = Assert.IsType<TextPart>(restored.Parts[0]);
-        Assert.Equal("New text", text.Text);
+        restored.Parts.Count.ShouldBe(1); // replaced, not appended
+        var text = restored.Parts[0].ShouldBeOfType<TextPart>();
+        text.Text.ShouldBe("New text");
     }
 
     [Fact]
@@ -227,9 +227,8 @@ public sealed class MessagePersistenceServiceTests
         var result = MessagePersistenceService.MergePart(existingMsg, newText);
 
         var restored = MessagePersistenceService.ToHarnessMessage(result);
-        Assert.Equal(2, restored.Parts.Count);
-        Assert.IsType<ToolUsePart>(restored.Parts[0]);
-        Assert.IsType<TextPart>(restored.Parts[1]);
-        Assert.Equal("Final answer", ((TextPart)restored.Parts[1]).Text);
+        restored.Parts.Count.ShouldBe(2);
+        restored.Parts[0].ShouldBeOfType<ToolUsePart>();
+        restored.Parts[1].ShouldBeOfType<TextPart>().Text.ShouldBe("Final answer");
     }
 }

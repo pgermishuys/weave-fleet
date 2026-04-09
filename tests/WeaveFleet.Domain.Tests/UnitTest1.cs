@@ -8,9 +8,9 @@ public sealed class ResultTests
     public void Success_ReturnsSuccessResult()
     {
         var result = Result.Success(42);
-        Assert.True(result.IsSuccess);
-        Assert.False(result.IsFailure);
-        Assert.Equal(42, result.Value);
+        result.IsSuccess.ShouldBeTrue();
+        result.IsFailure.ShouldBeFalse();
+        result.Value.ShouldBe(42);
     }
 
     [Fact]
@@ -18,16 +18,16 @@ public sealed class ResultTests
     {
         var error = FleetError.NotFound;
         var result = Result.Failure<int>(error);
-        Assert.False(result.IsSuccess);
-        Assert.True(result.IsFailure);
-        Assert.Equal(error, result.Error);
+        result.IsSuccess.ShouldBeFalse();
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(error);
     }
 
     [Fact]
     public void Value_ThrowsOnFailure()
     {
         var result = Result.Failure<int>(FleetError.NotFound);
-        Assert.Throws<InvalidOperationException>(() => result.Value);
+        Should.Throw<InvalidOperationException>(() => _ = result.Value);
     }
 
     [Fact]
@@ -35,7 +35,7 @@ public sealed class ResultTests
     {
         var success = Result.Success(10);
         var output = success.Match(v => v * 2, _ => -1);
-        Assert.Equal(20, output);
+        output.ShouldBe(20);
     }
 }
 
@@ -45,15 +45,15 @@ public sealed class FleetErrorTests
     public void NotFoundFor_BuildsCorrectCode()
     {
         var error = FleetError.NotFoundFor("Session", "abc-123");
-        Assert.Equal("Session.NotFound", error.Code);
-        Assert.Contains("abc-123", error.Description);
+        error.Code.ShouldBe("Session.NotFound");
+        error.Description.ShouldContain("abc-123");
     }
 
     [Fact]
     public void ValidationError_BuildsCorrectCode()
     {
         var error = FleetError.ValidationError("Name", "Name is required");
-        Assert.Equal("Validation.Name", error.Code);
+        error.Code.ShouldBe("Validation.Name");
     }
 }
 
@@ -62,6 +62,6 @@ public sealed class UnitTypeTests
     [Fact]
     public void Unit_EqualsAnotherUnit()
     {
-        Assert.Equal(Unit.Value, Unit.Value);
+        Unit.Value.ShouldBe(Unit.Value);
     }
 }

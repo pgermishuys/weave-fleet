@@ -65,6 +65,13 @@ dotnet test --filter "Category!=E2E"
 
 ## Writing New E2E Tests
 
+## Assertion Conventions
+
+- Use **Shouldly** for assertions in new and touched E2E tests.
+- Migrate existing xUnit `Assert` usage incrementally rather than as a wholesale rewrite.
+- Keep NSubstitute interaction assertions such as `Received()` and `DidNotReceive()` unchanged.
+- Prefer actual-first forms such as `actual.ShouldBe(expected)` and `value.ShouldNotBeNull()`.
+
 ### Minimal test class
 
 ```csharp

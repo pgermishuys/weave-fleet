@@ -66,10 +66,10 @@ public sealed class AnalyticsRepositoryTests : IAsyncLifetime
     {
         var summary = await _repo!.GetSummaryAsync(null, null, null);
 
-        Assert.Equal(960, summary.TotalTokens);   // 310+500+150
-        Assert.InRange(summary.TotalCost, 0.034, 0.036); // 0.01+0.02+0.005
-        Assert.Equal(3, summary.MessageCount);
-        Assert.Equal(2, summary.SessionCount);
+        summary.TotalTokens.ShouldBe(960); // 310+500+150
+        summary.TotalCost.ShouldBeInRange(0.034, 0.036); // 0.01+0.02+0.005
+        summary.MessageCount.ShouldBe(3);
+        summary.SessionCount.ShouldBe(2);
     }
 
     [Fact]
@@ -77,9 +77,9 @@ public sealed class AnalyticsRepositoryTests : IAsyncLifetime
     {
         var summary = await _repo!.GetSummaryAsync(null, null, "proj-a");
 
-        Assert.Equal(810, summary.TotalTokens);
-        Assert.Equal(1, summary.SessionCount);
-        Assert.Equal(2, summary.MessageCount);
+        summary.TotalTokens.ShouldBe(810);
+        summary.SessionCount.ShouldBe(1);
+        summary.MessageCount.ShouldBe(2);
     }
 
     [Fact]
@@ -88,8 +88,8 @@ public sealed class AnalyticsRepositoryTests : IAsyncLifetime
         var from = new DateTimeOffset(2026, 1, 16, 0, 0, 0, TimeSpan.Zero);
         var summary = await _repo!.GetSummaryAsync(from, null, null);
 
-        Assert.Equal(150, summary.TotalTokens);
-        Assert.Equal(1, summary.MessageCount);
+        summary.TotalTokens.ShouldBe(150);
+        summary.MessageCount.ShouldBe(1);
     }
 
     // ── GetDailyAsync ──────────────────────────────────────────────────────────
@@ -99,7 +99,7 @@ public sealed class AnalyticsRepositoryTests : IAsyncLifetime
     {
         var daily = await _repo!.GetDailyAsync(null, null, null);
 
-        Assert.Equal(2, daily.Count);
+        daily.Count.ShouldBe(2);
     }
 
     // ── GetSessionsAsync ───────────────────────────────────────────────────────
@@ -109,7 +109,7 @@ public sealed class AnalyticsRepositoryTests : IAsyncLifetime
     {
         var sessions = await _repo!.GetSessionsAsync(null, null, null, 50);
 
-        Assert.Equal(2, sessions.Count);
+        sessions.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public sealed class AnalyticsRepositoryTests : IAsyncLifetime
     {
         var sessions = await _repo!.GetSessionsAsync(null, null, null, 1);
 
-        Assert.Single(sessions);
+        sessions.Count.ShouldBe(1);
     }
 
     [Fact]
@@ -125,8 +125,8 @@ public sealed class AnalyticsRepositoryTests : IAsyncLifetime
     {
         var sessions = await _repo!.GetSessionsAsync(null, null, "proj-b", 50);
 
-        Assert.Single(sessions);
-        Assert.Equal("sess-2", sessions[0].SessionId);
+        sessions.Count.ShouldBe(1);
+        sessions[0].SessionId.ShouldBe("sess-2");
     }
 
     // ── GetModelsAsync ─────────────────────────────────────────────────────────
@@ -136,7 +136,7 @@ public sealed class AnalyticsRepositoryTests : IAsyncLifetime
     {
         var models = await _repo!.GetModelsAsync(null, null);
 
-        Assert.Equal(2, models.Count);
+        models.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -145,8 +145,8 @@ public sealed class AnalyticsRepositoryTests : IAsyncLifetime
         var models = await _repo!.GetModelsAsync(null, null);
         var claude = models.First(m => m.ModelId == "claude-sonnet");
 
-        Assert.Equal(810, claude.Tokens);
-        Assert.Equal(2, claude.MessageCount);
+        claude.Tokens.ShouldBe(810);
+        claude.MessageCount.ShouldBe(2);
     }
 
     // ── ExportTokenEventsAsync ─────────────────────────────────────────────────
@@ -156,7 +156,7 @@ public sealed class AnalyticsRepositoryTests : IAsyncLifetime
     {
         var rows = await _repo!.ExportTokenEventsAsync(null, null, null);
 
-        Assert.Equal(3, rows.Count);
+        rows.Count.ShouldBe(3);
     }
 
     [Fact]
@@ -164,8 +164,8 @@ public sealed class AnalyticsRepositoryTests : IAsyncLifetime
     {
         var rows = await _repo!.ExportTokenEventsAsync(null, null, "proj-a");
 
-        Assert.Equal(2, rows.Count);
-        Assert.All(rows, r => Assert.Equal("proj-a", r.ProjectId));
+        rows.Count.ShouldBe(2);
+        rows.ShouldAllBe(r => r.ProjectId == "proj-a");
     }
 
     [Fact]
@@ -174,7 +174,7 @@ public sealed class AnalyticsRepositoryTests : IAsyncLifetime
         var to = new DateTimeOffset(2026, 1, 16, 0, 0, 0, TimeSpan.Zero);
         var rows = await _repo!.ExportTokenEventsAsync(null, to, null);
 
-        Assert.Equal(2, rows.Count); // only Jan 15 events
+        rows.Count.ShouldBe(2); // only Jan 15 events
     }
 
     [Fact]
@@ -183,6 +183,6 @@ public sealed class AnalyticsRepositoryTests : IAsyncLifetime
         // Verify INSERT OR IGNORE idempotency
         // The seeded evt-1 should only appear once
         var rows = await _repo!.ExportTokenEventsAsync(null, null, null);
-        Assert.Single(rows, r => r.EventId == "evt-1");
+        rows.Count(r => r.EventId == "evt-1").ShouldBe(1);
     }
 }

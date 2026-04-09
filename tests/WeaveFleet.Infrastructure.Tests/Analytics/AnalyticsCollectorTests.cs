@@ -49,9 +49,9 @@ public sealed class AnalyticsCollectorTests
 
         collector.AcceptTokenEvent(evt);
 
-        Assert.True(collector.Reader.TryRead(out var envelope));
-        var tokenEnvelope = Assert.IsType<TokenEventEnvelope>(envelope);
-        Assert.Equal("evt-1", tokenEnvelope.Data.EventId);
+        collector.Reader.TryRead(out var envelope).ShouldBeTrue();
+        var tokenEnvelope = envelope.ShouldBeOfType<TokenEventEnvelope>();
+        tokenEnvelope.Data.EventId.ShouldBe("evt-1");
     }
 
     [Fact]
@@ -62,9 +62,9 @@ public sealed class AnalyticsCollectorTests
 
         collector.AcceptSessionSnapshot(snap);
 
-        Assert.True(collector.Reader.TryRead(out var envelope));
-        var snapshotEnvelope = Assert.IsType<SessionSnapshotEnvelope>(envelope);
-        Assert.Equal("sess-42", snapshotEnvelope.Data.SessionId);
+        collector.Reader.TryRead(out var envelope).ShouldBeTrue();
+        var snapshotEnvelope = envelope.ShouldBeOfType<SessionSnapshotEnvelope>();
+        snapshotEnvelope.Data.SessionId.ShouldBe("sess-42");
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public sealed class AnalyticsCollectorTests
                 collector.AcceptTokenEvent(MakeTokenEvent($"evt-{i}"));
         });
 
-        Assert.Null(exception);
+        exception.ShouldBeNull();
     }
 
     [Fact]
@@ -91,6 +91,6 @@ public sealed class AnalyticsCollectorTests
             Task.Run(() => collector.AcceptTokenEvent(MakeTokenEvent($"evt-{i}"))));
 
         var exception = await Record.ExceptionAsync(() => Task.WhenAll(tasks));
-        Assert.Null(exception);
+        exception.ShouldBeNull();
     }
 }

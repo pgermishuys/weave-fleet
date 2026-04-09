@@ -33,13 +33,13 @@ public sealed class MigrationRunnerTests
         var tables = (await conn.QueryAsync<string>(
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")).ToList();
 
-        Assert.Contains("projects", tables);
-        Assert.Contains("workspaces", tables);
-        Assert.Contains("instances", tables);
-        Assert.Contains("sessions", tables);
-        Assert.Contains("session_callbacks", tables);
-        Assert.Contains("workspace_roots", tables);
-        Assert.Contains("_migrations", tables);
+        tables.ShouldContain("projects");
+        tables.ShouldContain("workspaces");
+        tables.ShouldContain("instances");
+        tables.ShouldContain("sessions");
+        tables.ShouldContain("session_callbacks");
+        tables.ShouldContain("workspace_roots");
+        tables.ShouldContain("_migrations");
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public sealed class MigrationRunnerTests
         await runner.ApplyMigrationsAsync(conn);
 
         var count = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM _migrations");
-        Assert.True(count > 0, "Expected at least one migration to be recorded.");
+        count.ShouldBeGreaterThan(0);
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public sealed class MigrationRunnerTests
         await runner.ApplyMigrationsAsync(conn);
         var countAfterSecond = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM _migrations");
 
-        Assert.Equal(countAfterFirst, countAfterSecond);
+        countAfterSecond.ShouldBe(countAfterFirst);
     }
 
     [Fact]
@@ -88,12 +88,11 @@ public sealed class MigrationRunnerTests
         // Verify 001 comes first if there are multiple
         if (migrations.Count > 1)
         {
-            Assert.True(string.Compare(migrations[0], migrations[1], StringComparison.Ordinal) < 0,
-                "Migrations should be applied in ascending filename order.");
+            string.Compare(migrations[0], migrations[1], StringComparison.Ordinal).ShouldBeLessThan(0);
         }
 
-        Assert.NotEmpty(migrations);
-        Assert.Contains(migrations, m => m.StartsWith("001_", StringComparison.Ordinal));
+        migrations.ShouldNotBeEmpty();
+        migrations.ShouldContain(m => m.StartsWith("001_", StringComparison.Ordinal));
     }
 
     // ── Segment filter tests ──────────────────────────────────────────────────
@@ -114,9 +113,9 @@ public sealed class MigrationRunnerTests
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")).ToList();
 
         // Analytics tables should NOT be created by the main runner
-        Assert.DoesNotContain("token_events", tables);
-        Assert.DoesNotContain("session_snapshots", tables);
-        Assert.DoesNotContain("daily_rollups", tables);
+        tables.ShouldNotContain("token_events");
+        tables.ShouldNotContain("session_snapshots");
+        tables.ShouldNotContain("daily_rollups");
     }
 
     [Fact]
@@ -133,13 +132,13 @@ public sealed class MigrationRunnerTests
         var tables = (await conn.QueryAsync<string>(
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")).ToList();
 
-        Assert.Contains("token_events", tables);
-        Assert.Contains("session_snapshots", tables);
-        Assert.Contains("daily_rollups", tables);
+        tables.ShouldContain("token_events");
+        tables.ShouldContain("session_snapshots");
+        tables.ShouldContain("daily_rollups");
 
         // Main app tables should NOT be created by the analytics runner
-        Assert.DoesNotContain("sessions", tables);
-        Assert.DoesNotContain("projects", tables);
+        tables.ShouldNotContain("sessions");
+        tables.ShouldNotContain("projects");
     }
 
     [Fact]
@@ -159,8 +158,7 @@ public sealed class MigrationRunnerTests
 
         // All recorded migrations should be from the "Migrations" folder,
         // not from "AnalyticsMigrations"
-        Assert.All(mainMigrations, name =>
-            Assert.DoesNotContain("analytics", name, StringComparison.OrdinalIgnoreCase));
+        mainMigrations.ShouldAllBe(name => !name.Contains("analytics", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

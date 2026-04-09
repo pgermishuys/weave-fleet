@@ -54,8 +54,8 @@ public sealed class SessionServiceTests
 
         var result = await _sut.GetSessionAsync("s1");
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal("s1", result.Value.Id);
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Id.ShouldBe("s1");
     }
 
     [Fact]
@@ -65,8 +65,8 @@ public sealed class SessionServiceTests
 
         var result = await _sut.GetSessionAsync("missing");
 
-        Assert.True(result.IsFailure);
-        Assert.Contains("NotFound", result.Error.Code);
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldContain("NotFound");
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public sealed class SessionServiceTests
 
         var result = await _sut.DeleteSessionAsync("s1");
 
-        Assert.True(result.IsSuccess);
+        result.IsSuccess.ShouldBeTrue();
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public sealed class SessionServiceTests
 
         var result = await _sut.DeleteSessionAsync("missing");
 
-        Assert.True(result.IsFailure);
+        result.IsFailure.ShouldBeTrue();
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public sealed class SessionServiceTests
 
         var result = await _sut.MoveSessionToProjectAsync("s1", "p1");
 
-        Assert.True(result.IsSuccess);
+        result.IsSuccess.ShouldBeTrue();
     }
 
     [Fact]
@@ -116,11 +116,11 @@ public sealed class SessionServiceTests
 
         var result = await _sut.GetFleetSummaryAsync();
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(3, result.Value.ActiveSessions);
-        Assert.Equal(1, result.Value.IdleSessions);
-        Assert.Equal(1000, result.Value.TotalTokens);
-        Assert.Equal(0.50, result.Value.TotalCost, 5);
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.ActiveSessions.ShouldBe(3);
+        result.Value.IdleSessions.ShouldBe(1);
+        result.Value.TotalTokens.ShouldBe(1000);
+        result.Value.TotalCost.ShouldBe(0.50, 0.00001);
     }
 
     private static Session MakeSession(string id) => new()

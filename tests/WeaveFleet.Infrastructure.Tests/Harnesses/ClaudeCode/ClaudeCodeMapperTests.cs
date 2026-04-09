@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Shouldly;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 
@@ -27,11 +28,12 @@ public sealed class ClaudeCodeMapperTests
 
         var result = ClaudeCodeMapper.ToHarnessMessage(msg, ts);
 
-        Assert.Equal("msg-001", result.Id);
-        Assert.Equal("assistant", result.Role);
-        Assert.Equal(ts, result.Timestamp);
-        var part = Assert.IsType<TextPart>(Assert.Single(result.Parts));
-        Assert.Equal("Hello, world!", part.Text);
+        result.Id.ShouldBe("msg-001");
+        result.Role.ShouldBe("assistant");
+        result.Timestamp.ShouldBe(ts);
+        result.Parts.Count.ShouldBe(1);
+        var part = result.Parts[0].ShouldBeOfType<TextPart>();
+        part.Text.ShouldBe("Hello, world!");
     }
 
     [Fact]
@@ -49,10 +51,11 @@ public sealed class ClaudeCodeMapperTests
 
         var result = ClaudeCodeMapper.ToHarnessMessage(msg, DateTimeOffset.UtcNow);
 
-        var part = Assert.IsType<ToolUsePart>(Assert.Single(result.Parts));
-        Assert.Equal("toolu_abc", part.ToolCallId);
-        Assert.Equal("Edit", part.ToolName);
-        Assert.Equal(ToolUseState.Running, part.State);
+        result.Parts.Count.ShouldBe(1);
+        var part = result.Parts[0].ShouldBeOfType<ToolUsePart>();
+        part.ToolCallId.ShouldBe("toolu_abc");
+        part.ToolName.ShouldBe("Edit");
+        part.State.ShouldBe(ToolUseState.Running);
     }
 
     [Fact]
@@ -74,10 +77,11 @@ public sealed class ClaudeCodeMapperTests
 
         var result = ClaudeCodeMapper.ToHarnessMessage(msg, DateTimeOffset.UtcNow);
 
-        var part = Assert.IsType<ToolResultPart>(Assert.Single(result.Parts));
-        Assert.Equal("toolu_abc", part.ToolCallId);
-        Assert.Equal("File written.", part.Content);
-        Assert.False(part.IsError);
+        result.Parts.Count.ShouldBe(1);
+        var part = result.Parts[0].ShouldBeOfType<ToolResultPart>();
+        part.ToolCallId.ShouldBe("toolu_abc");
+        part.Content.ShouldBe("File written.");
+        part.IsError.ShouldBeFalse();
     }
 
     [Fact]
@@ -99,9 +103,9 @@ public sealed class ClaudeCodeMapperTests
 
         var result = ClaudeCodeMapper.ToHarnessMessage(msg, DateTimeOffset.UtcNow);
 
-        Assert.Equal(2, result.Parts.Count);
-        Assert.IsType<TextPart>(result.Parts[0]);
-        Assert.IsType<ToolUsePart>(result.Parts[1]);
+        result.Parts.Count.ShouldBe(2);
+        result.Parts[0].ShouldBeOfType<TextPart>();
+        result.Parts[1].ShouldBeOfType<ToolUsePart>();
     }
 
     [Fact]
@@ -114,7 +118,7 @@ public sealed class ClaudeCodeMapperTests
 
         var result = ClaudeCodeMapper.ToHarnessMessage(msg, DateTimeOffset.UtcNow);
 
-        Assert.Empty(result.Parts);
+        result.Parts.ShouldBeEmpty();
     }
 
     [Fact]
@@ -124,8 +128,8 @@ public sealed class ClaudeCodeMapperTests
 
         var result = ClaudeCodeMapper.ToHarnessMessage(msg, DateTimeOffset.UtcNow);
 
-        Assert.False(string.IsNullOrEmpty(result.Id));
-        Assert.StartsWith("assistant-", result.Id);
+        result.Id.ShouldNotBeNullOrEmpty();
+        result.Id.ShouldStartWith("assistant-");
     }
 
     // -----------------------------------------------------------------------
@@ -139,11 +143,12 @@ public sealed class ClaudeCodeMapperTests
 
         var result = ClaudeCodeMapper.ToUserMessage("Fix the bug.", ts);
 
-        Assert.Equal("user", result.Role);
-        Assert.Equal(ts, result.Timestamp);
-        Assert.StartsWith("user-", result.Id);
-        var part = Assert.IsType<TextPart>(Assert.Single(result.Parts));
-        Assert.Equal("Fix the bug.", part.Text);
+        result.Role.ShouldBe("user");
+        result.Timestamp.ShouldBe(ts);
+        result.Id.ShouldStartWith("user-");
+        result.Parts.Count.ShouldBe(1);
+        var part = result.Parts[0].ShouldBeOfType<TextPart>();
+        part.Text.ShouldBe("Fix the bug.");
     }
 
     // -----------------------------------------------------------------------
@@ -165,10 +170,10 @@ public sealed class ClaudeCodeMapperTests
 
         var events = ClaudeCodeMapper.ToFrontendEvents(msg, "fleet-sess-1");
 
-        Assert.Equal(2, events.Count);
-        Assert.Equal("message.updated", events[0].Type);
-        Assert.Equal("message.part.updated", events[1].Type);
-        Assert.Equal("fleet-sess-1", events[0].SessionId);
+        events.Count.ShouldBe(2);
+        events[0].Type.ShouldBe("message.updated");
+        events[1].Type.ShouldBe("message.part.updated");
+        events[0].SessionId.ShouldBe("fleet-sess-1");
     }
 
     [Fact]
@@ -186,12 +191,12 @@ public sealed class ClaudeCodeMapperTests
         var events = ClaudeCodeMapper.ToFrontendEvents(msg, "fleet-sess-1");
 
         var payload = events[0].Payload!.Value;
-        Assert.Equal(JsonValueKind.Object, payload.ValueKind);
+        payload.ValueKind.ShouldBe(JsonValueKind.Object);
         var info = payload.GetProperty("info");
-        Assert.Equal("msg-1", info.GetProperty("id").GetString());
-        Assert.Equal("assistant", info.GetProperty("role").GetString());
-        Assert.Equal("fleet-sess-1", info.GetProperty("sessionID").GetString());
-        Assert.True(info.GetProperty("time").GetProperty("created").GetInt64() > 0);
+        info.GetProperty("id").GetString().ShouldBe("msg-1");
+        info.GetProperty("role").GetString().ShouldBe("assistant");
+        info.GetProperty("sessionID").GetString().ShouldBe("fleet-sess-1");
+        info.GetProperty("time").GetProperty("created").GetInt64().ShouldBeGreaterThan(0);
     }
 
     [Fact]
@@ -209,10 +214,10 @@ public sealed class ClaudeCodeMapperTests
         var events = ClaudeCodeMapper.ToFrontendEvents(msg, "fleet-sess-1");
 
         var partPayload = events[1].Payload!.Value.GetProperty("part");
-        Assert.Equal("text", partPayload.GetProperty("type").GetString());
-        Assert.Equal("Hello, world!", partPayload.GetProperty("text").GetString());
-        Assert.Equal("msg-1", partPayload.GetProperty("messageID").GetString());
-        Assert.Equal("fleet-sess-1", partPayload.GetProperty("sessionID").GetString());
+        partPayload.GetProperty("type").GetString().ShouldBe("text");
+        partPayload.GetProperty("text").GetString().ShouldBe("Hello, world!");
+        partPayload.GetProperty("messageID").GetString().ShouldBe("msg-1");
+        partPayload.GetProperty("sessionID").GetString().ShouldBe("fleet-sess-1");
     }
 
     [Fact]
@@ -235,16 +240,16 @@ public sealed class ClaudeCodeMapperTests
         var events = ClaudeCodeMapper.ToFrontendEvents(msg, "fleet-sess-1");
 
         // 1 message.updated + 2 message.part.updated (text + tool)
-        Assert.Equal(3, events.Count);
-        Assert.Equal("message.updated", events[0].Type);
-        Assert.Equal("message.part.updated", events[1].Type);
-        Assert.Equal("message.part.updated", events[2].Type);
+        events.Count.ShouldBe(3);
+        events[0].Type.ShouldBe("message.updated");
+        events[1].Type.ShouldBe("message.part.updated");
+        events[2].Type.ShouldBe("message.part.updated");
 
         var toolPart = events[2].Payload!.Value.GetProperty("part");
-        Assert.Equal("tool", toolPart.GetProperty("type").GetString());
-        Assert.Equal("Edit", toolPart.GetProperty("tool").GetString());
-        Assert.Equal("toolu_1", toolPart.GetProperty("callID").GetString());
-        Assert.Equal("running", toolPart.GetProperty("state").GetProperty("status").GetString());
+        toolPart.GetProperty("type").GetString().ShouldBe("tool");
+        toolPart.GetProperty("tool").GetString().ShouldBe("Edit");
+        toolPart.GetProperty("callID").GetString().ShouldBe("toolu_1");
+        toolPart.GetProperty("state").GetProperty("status").GetString().ShouldBe("running");
     }
 
     [Fact]
@@ -254,9 +259,10 @@ public sealed class ClaudeCodeMapperTests
 
         var events = ClaudeCodeMapper.ToFrontendEvents(msg, "fleet-sess-1");
 
-        var evt = Assert.Single(events);
-        Assert.Equal("session.idle", evt.Type);
-        Assert.Equal("fleet-sess-1", evt.SessionId);
+        events.Count.ShouldBe(1);
+        var evt = events[0];
+        evt.Type.ShouldBe("session.idle");
+        evt.SessionId.ShouldBe("fleet-sess-1");
     }
 
     [Fact]
@@ -266,7 +272,7 @@ public sealed class ClaudeCodeMapperTests
 
         var events = ClaudeCodeMapper.ToFrontendEvents(msg, "fleet-sess-1");
 
-        Assert.Empty(events);
+        events.ShouldBeEmpty();
     }
 
     [Fact]
@@ -279,8 +285,9 @@ public sealed class ClaudeCodeMapperTests
 
         var events = ClaudeCodeMapper.ToFrontendEvents(msg, "fleet-sess-1");
 
-        var evt = Assert.Single(events);
-        Assert.Equal("message.updated", evt.Type);
+        events.Count.ShouldBe(1);
+        var evt = events[0];
+        evt.Type.ShouldBe("message.updated");
     }
 
     // -----------------------------------------------------------------------
@@ -292,10 +299,10 @@ public sealed class ClaudeCodeMapperTests
     {
         var evt = ClaudeCodeMapper.CreateSessionStatusEvent("fleet-sess-1", "busy");
 
-        Assert.Equal("session.status", evt.Type);
-        Assert.Equal("fleet-sess-1", evt.SessionId);
+        evt.Type.ShouldBe("session.status");
+        evt.SessionId.ShouldBe("fleet-sess-1");
         var payload = evt.Payload!.Value;
-        Assert.Equal("busy", payload.GetProperty("status").GetProperty("type").GetString());
+        payload.GetProperty("status").GetProperty("type").GetString().ShouldBe("busy");
     }
 
     // -----------------------------------------------------------------------
@@ -310,7 +317,7 @@ public sealed class ClaudeCodeMapperTests
 
         var result = ClaudeCodeMapper.ToMessagePart(block);
 
-        Assert.Null(result);
+        result.ShouldBeNull();
     }
 
     [Fact]
@@ -320,7 +327,7 @@ public sealed class ClaudeCodeMapperTests
 
         var result = ClaudeCodeMapper.ToMessagePart(block);
 
-        Assert.Null(result);
+        result.ShouldBeNull();
     }
 
     // -----------------------------------------------------------------------
@@ -352,16 +359,16 @@ public sealed class ClaudeCodeMapperTests
             workspaceDirectory: "/home/user/project",
             modelId: "claude-opus-4-5");
 
-        Assert.NotNull(data);
-        Assert.Equal("sess-1", data.SessionId);
-        Assert.Equal("proj-1", data.ProjectId);
-        Assert.Equal("My Project", data.ProjectName);
-        Assert.Equal("anthropic", data.ProviderId);
-        Assert.Equal(500.0, data.TokensInput);
-        Assert.Equal(200.0, data.TokensOutput);
-        Assert.Equal(10.0, data.TokensCacheRead);
-        Assert.Equal(5.0, data.TokensCacheWrite);
-        Assert.Equal(0.042, data.Cost, precision: 6);
+        data.ShouldNotBeNull();
+        data.SessionId.ShouldBe("sess-1");
+        data.ProjectId.ShouldBe("proj-1");
+        data.ProjectName.ShouldBe("My Project");
+        data.ProviderId.ShouldBe("anthropic");
+        data.TokensInput.ShouldBe(500.0);
+        data.TokensOutput.ShouldBe(200.0);
+        data.TokensCacheRead.ShouldBe(10.0);
+        data.TokensCacheWrite.ShouldBe(5.0);
+        data.Cost.ShouldBe(0.042, 0.000001);
     }
 
     [Fact]
@@ -378,7 +385,7 @@ public sealed class ClaudeCodeMapperTests
         var data = ClaudeCodeMapper.TryExtractTokenEvent(
             result, "sess-2", null, null, null, null);
 
-        Assert.Null(data);
+        data.ShouldBeNull();
     }
 
     [Fact]
@@ -396,10 +403,10 @@ public sealed class ClaudeCodeMapperTests
         var data = ClaudeCodeMapper.TryExtractTokenEvent(
             result, "sess-3", null, null, null, "claude-haiku-3-5");
 
-        Assert.NotNull(data);
-        Assert.Equal(100.0, data.TokensInput);
-        Assert.Equal(50.0, data.TokensOutput);
-        Assert.Equal(0.0, data.Cost);
+        data.ShouldNotBeNull();
+        data.TokensInput.ShouldBe(100.0);
+        data.TokensOutput.ShouldBe(50.0);
+        data.Cost.ShouldBe(0.0);
     }
 
     [Fact]
@@ -416,8 +423,8 @@ public sealed class ClaudeCodeMapperTests
         var data = ClaudeCodeMapper.TryExtractTokenEvent(
             result, "fleet-sess-fallback", null, null, null, null);
 
-        Assert.NotNull(data);
+        data.ShouldNotBeNull();
         // result.SessionId takes precedence
-        Assert.Equal("claude-native-sess", data.SessionId);
+        data.SessionId.ShouldBe("claude-native-sess");
     }
 }

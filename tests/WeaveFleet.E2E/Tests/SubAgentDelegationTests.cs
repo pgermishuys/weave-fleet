@@ -107,7 +107,7 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                     parentSessionId,
                     childHarnessSessionId,
                     "thread");
-                Assert.True(childSessionResult.IsSuccess, childSessionResult.IsFailure ? childSessionResult.Error.ToString() : null);
+                childSessionResult.IsSuccess.ShouldBeTrue(childSessionResult.IsFailure ? childSessionResult.Error.ToString() : null);
 
                 var childSession = childSessionResult.Value;
 
@@ -115,9 +115,9 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                     parentSessionId,
                     parentToolCallId,
                     childSession.Id);
-                Assert.NotNull(linkedDelegation);
+                linkedDelegation.ShouldNotBeNull();
 
-                var childHarness = Assert.IsType<TestHarnessInstance>(tracker.Get(childSession.InstanceId));
+                var childHarness = tracker.Get(childSession.InstanceId).ShouldBeOfType<TestHarnessInstance>();
 
                 var detail = new SessionDetailPage(Page);
                 await detail.GotoAsync(parentSessionId, parentInstanceId);
@@ -196,7 +196,7 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
 
                 await detail.WaitForMessageTextAsync("Live child websocket output", 5_000);
 
-                Assert.Equal(baselineRequests, Volatile.Read(ref childRequestCount));
+                Volatile.Read(ref childRequestCount).ShouldBe(baselineRequests);
             }
         });
     }

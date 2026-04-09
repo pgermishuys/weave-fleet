@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Shouldly;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 
@@ -51,8 +52,7 @@ public sealed class ClaudeCodeToFleetContractTests
             var streamMessage = JsonSerializer.Deserialize<ClaudeCodeStreamMessage>(
                 claudeCodeInput, ClaudeCodeOptions)!;
 
-            Assert.IsType<ClaudeCodeAssistantMessage>(streamMessage);
-            var assistantMessage = (ClaudeCodeAssistantMessage)streamMessage;
+            var assistantMessage = streamMessage.ShouldBeOfType<ClaudeCodeAssistantMessage>();
 
             // Map through ClaudeCodeMapper
             var harnessMessage = ClaudeCodeMapper.ToHarnessMessage(
@@ -76,7 +76,7 @@ public sealed class ClaudeCodeToFleetContractTests
     /// </summary>
     private static void AssertJsonEqual(JsonElement expected, JsonElement actual, string context)
     {
-        Assert.Equal(expected.ValueKind, actual.ValueKind);
+        actual.ValueKind.ShouldBe(expected.ValueKind);
 
         switch (expected.ValueKind)
         {
@@ -92,7 +92,7 @@ public sealed class ClaudeCodeToFleetContractTests
                 // Check that expected props exist in actual
                 foreach (var (key, expectedVal) in expectedProps)
                 {
-                    Assert.True(actualProps.ContainsKey(key),
+                    actualProps.ContainsKey(key).ShouldBeTrue(
                         $"{context}: missing property '{key}' in actual. Actual keys: [{string.Join(", ", actualProps.Keys)}]");
                     AssertJsonEqual(expectedVal, actualProps[key], $"{context}.{key}");
                 }
@@ -101,22 +101,22 @@ public sealed class ClaudeCodeToFleetContractTests
             case JsonValueKind.Array:
                 var expectedArr = expected.EnumerateArray().ToList();
                 var actualArr = actual.EnumerateArray().ToList();
-                Assert.Equal(expectedArr.Count, actualArr.Count);
+                actualArr.Count.ShouldBe(expectedArr.Count);
                 for (var i = 0; i < expectedArr.Count; i++)
                     AssertJsonEqual(expectedArr[i], actualArr[i], $"{context}[{i}]");
                 break;
 
             case JsonValueKind.String:
-                Assert.Equal(expected.GetString(), actual.GetString());
+                actual.GetString().ShouldBe(expected.GetString());
                 break;
 
             case JsonValueKind.Number:
-                Assert.Equal(expected.GetRawText(), actual.GetRawText());
+                actual.GetRawText().ShouldBe(expected.GetRawText());
                 break;
 
             case JsonValueKind.True:
             case JsonValueKind.False:
-                Assert.Equal(expected.GetBoolean(), actual.GetBoolean());
+                actual.GetBoolean().ShouldBe(expected.GetBoolean());
                 break;
         }
     }

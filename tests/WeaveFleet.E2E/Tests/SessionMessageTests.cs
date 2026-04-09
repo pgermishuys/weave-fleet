@@ -42,7 +42,7 @@ public sealed class SessionMessageTests : E2ETestBase,
 
             // Session should start idle
             var initialStatus = await detail.GetStatusAsync();
-            Assert.Equal("idle", initialStatus);
+            initialStatus.ShouldBe("idle");
 
             // Send a prompt
             await detail.SendPromptAsync("Tell me something");
@@ -94,7 +94,7 @@ public sealed class SessionMessageTests : E2ETestBase,
 
             // At least one message item should exist
             var allMessages = await detail.GetMessageItemsAsync();
-            Assert.True(allMessages.Count >= 1, $"Expected at least 1 message, got {allMessages.Count}");
+            allMessages.Count.ShouldBeGreaterThanOrEqualTo(1, $"Expected at least 1 message, got {allMessages.Count}");
         });
     }
 
@@ -125,7 +125,7 @@ public sealed class SessionMessageTests : E2ETestBase,
 
             // Verify initial idle status
             var initialStatus = await detail.GetStatusAsync();
-            Assert.Equal("idle", initialStatus);
+            initialStatus.ShouldBe("idle");
 
             // Send prompt — status goes busy
             await detail.SendPromptAsync("Track my status");
@@ -135,7 +135,7 @@ public sealed class SessionMessageTests : E2ETestBase,
             await detail.WaitForIdleAsync();
 
             var finalStatus = await detail.GetStatusAsync();
-            Assert.Equal("idle", finalStatus);
+            finalStatus.ShouldBe("idle");
         });
     }
 }

@@ -27,11 +27,11 @@ public sealed class AnalyticsPageTests : E2ETestBase,
 
             // Page should load without a hard error
             var hasError = await analytics.HasErrorAsync();
-            Assert.False(hasError, "Analytics page showed an error state");
+            hasError.ShouldBeFalse("Analytics page showed an error state");
 
             // No JavaScript errors should have thrown (check page title is present)
             var title = await Page.TitleAsync();
-            Assert.NotNull(title);
+            title.ShouldNotBeNull();
         });
     }
 }

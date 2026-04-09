@@ -1,3 +1,4 @@
+using Shouldly;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
@@ -11,7 +12,7 @@ public sealed class PortAllocatorTests
 
         int port = allocator.AllocatePort();
 
-        Assert.InRange(port, 10000, 10009);
+        port.ShouldBeInRange(10000, 10009);
     }
 
     [Fact]
@@ -23,7 +24,7 @@ public sealed class PortAllocatorTests
         for (int i = 0; i < 5; i++)
         {
             bool added = allocated.Add(allocator.AllocatePort());
-            Assert.True(added, "Duplicate port was allocated.");
+            added.ShouldBeTrue("Duplicate port was allocated.");
         }
     }
 
@@ -36,10 +37,10 @@ public sealed class PortAllocatorTests
         allocator.AllocatePort();
         allocator.AllocatePort();
 
-        var ex = Assert.Throws<InvalidOperationException>(() => allocator.AllocatePort());
-        Assert.Contains("Port range exhausted", ex.Message);
-        Assert.Contains("20000", ex.Message);
-        Assert.Contains("20002", ex.Message);
+        var ex = Should.Throw<InvalidOperationException>(() => allocator.AllocatePort());
+        ex.Message.ShouldContain("Port range exhausted");
+        ex.Message.ShouldContain("20000");
+        ex.Message.ShouldContain("20002");
     }
 
     [Fact]
@@ -48,12 +49,12 @@ public sealed class PortAllocatorTests
         var allocator = new PortAllocator(30000, 30000); // single port
 
         int first = allocator.AllocatePort();
-        Assert.Equal(30000, first);
+        first.ShouldBe(30000);
 
         allocator.ReleasePort(first);
 
         int second = allocator.AllocatePort();
-        Assert.Equal(30000, second);
+        second.ShouldBe(30000);
     }
 
     [Fact]
@@ -62,8 +63,7 @@ public sealed class PortAllocatorTests
         // ReleasePort on a port that was never allocated must not throw
         var allocator = new PortAllocator(40000, 40009);
 
-        var ex = Record.Exception(() => allocator.ReleasePort(40005));
-        Assert.Null(ex);
+        Should.NotThrow(() => allocator.ReleasePort(40005));
     }
 
     [Fact]
@@ -71,19 +71,19 @@ public sealed class PortAllocatorTests
     {
         var allocator = new PortAllocator(50000, 50009);
 
-        Assert.Equal(0, allocator.AllocatedCount);
+        allocator.AllocatedCount.ShouldBe(0);
 
         int p1 = allocator.AllocatePort();
-        Assert.Equal(1, allocator.AllocatedCount);
+        allocator.AllocatedCount.ShouldBe(1);
 
         int p2 = allocator.AllocatePort();
-        Assert.Equal(2, allocator.AllocatedCount);
+        allocator.AllocatedCount.ShouldBe(2);
 
         allocator.ReleasePort(p1);
-        Assert.Equal(1, allocator.AllocatedCount);
+        allocator.AllocatedCount.ShouldBe(1);
 
         allocator.ReleasePort(p2);
-        Assert.Equal(0, allocator.AllocatedCount);
+        allocator.AllocatedCount.ShouldBe(0);
     }
 
     [Fact]
@@ -91,13 +91,13 @@ public sealed class PortAllocatorTests
     {
         var allocator = new PortAllocator(60000, 60004); // 5 ports
 
-        Assert.Equal(5, allocator.AvailableCount);
+        allocator.AvailableCount.ShouldBe(5);
 
         int p = allocator.AllocatePort();
-        Assert.Equal(4, allocator.AvailableCount);
+        allocator.AvailableCount.ShouldBe(4);
 
         allocator.ReleasePort(p);
-        Assert.Equal(5, allocator.AvailableCount);
+        allocator.AvailableCount.ShouldBe(5);
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public sealed class PortAllocatorTests
             results.Add(allocator.AllocatePort());
         })));
 
-        Assert.Equal(portCount, results.Count);
-        Assert.Equal(portCount, results.Distinct().Count()); // no duplicates
+        results.Count.ShouldBe(portCount);
+        results.Distinct().Count().ShouldBe(portCount); // no duplicates
     }
 }

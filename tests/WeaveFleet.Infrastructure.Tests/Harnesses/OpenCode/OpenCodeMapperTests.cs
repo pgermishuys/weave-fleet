@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Shouldly;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
@@ -27,11 +28,11 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.ToHarnessMessage(msg);
 
-        Assert.Equal("msg-user-1", result.Id);
-        Assert.Equal("user", result.Role);
-        Assert.Equal(DateTimeOffset.FromUnixTimeMilliseconds(1_000_000L), result.Timestamp);
-        Assert.Single(result.Parts);
-        Assert.Equal("Hello", result.TextContent);
+        result.Id.ShouldBe("msg-user-1");
+        result.Role.ShouldBe("user");
+        result.Timestamp.ShouldBe(DateTimeOffset.FromUnixTimeMilliseconds(1_000_000L));
+        result.Parts.Count.ShouldBe(1);
+        result.TextContent.ShouldBe("Hello");
     }
 
     // ---------------------------------------------------------------------------
@@ -56,10 +57,10 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.ToHarnessMessage(msg);
 
-        Assert.Equal("msg-asst-1", result.Id);
-        Assert.Equal("assistant", result.Role);
-        Assert.Equal(DateTimeOffset.FromUnixTimeMilliseconds(2_000_000L), result.Timestamp);
-        Assert.Empty(result.Parts);
+        result.Id.ShouldBe("msg-asst-1");
+        result.Role.ShouldBe("assistant");
+        result.Timestamp.ShouldBe(DateTimeOffset.FromUnixTimeMilliseconds(2_000_000L));
+        result.Parts.ShouldBeEmpty();
     }
 
     // ---------------------------------------------------------------------------
@@ -86,8 +87,8 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.ToHarnessMessage(msg);
 
-        Assert.Equal(2, result.Parts.Count);
-        Assert.Equal("Part one. Part two.", result.TextContent);
+        result.Parts.Count.ShouldBe(2);
+        result.TextContent.ShouldBe("Part one. Part two.");
     }
 
     // ---------------------------------------------------------------------------
@@ -119,11 +120,11 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.ToHarnessMessage(msg);
 
-        Assert.Single(result.Parts);
-        var toolPart = Assert.IsType<ToolUsePart>(result.Parts[0]);
-        Assert.Equal("call-1", toolPart.ToolCallId);
-        Assert.Equal("bash", toolPart.ToolName);
-        Assert.Equal(ToolUseState.Completed, toolPart.State);
+        result.Parts.Count.ShouldBe(1);
+        var toolPart = result.Parts[0].ShouldBeOfType<ToolUsePart>();
+        toolPart.ToolCallId.ShouldBe("call-1");
+        toolPart.ToolName.ShouldBe("bash");
+        toolPart.State.ShouldBe(ToolUseState.Completed);
     }
 
     // ---------------------------------------------------------------------------
@@ -140,10 +141,10 @@ public sealed class OpenCodeMapperTests
         var result = OpenCodeMapper.ToHarnessEvent(evt, "fallback-session");
         var after = DateTimeOffset.UtcNow;
 
-        Assert.Equal("session.status", result.Type);
-        Assert.Equal("sess-42", result.SessionId); // extracted from properties
-        Assert.InRange(result.Timestamp, before, after);
-        Assert.Equal(JsonValueKind.Object, result.Payload!.Value.ValueKind);
+        result.Type.ShouldBe("session.status");
+        result.SessionId.ShouldBe("sess-42"); // extracted from properties
+        result.Timestamp.ShouldBeInRange(before, after);
+        result.Payload!.Value.ValueKind.ShouldBe(JsonValueKind.Object);
     }
 
     [Fact]
@@ -154,7 +155,7 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.ToHarnessEvent(evt, "fallback-id");
 
-        Assert.Equal("fallback-id", result.SessionId);
+        result.SessionId.ShouldBe("fallback-id");
     }
 
     [Fact]
@@ -174,7 +175,7 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.ToHarnessEvent(evt, "fallback-id");
 
-        Assert.Equal("nested-session", result.SessionId);
+        result.SessionId.ShouldBe("nested-session");
     }
 
     [Fact]
@@ -196,7 +197,7 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.ToHarnessEvent(evt, "fallback-id");
 
-        Assert.Equal("part-session", result.SessionId);
+        result.SessionId.ShouldBe("part-session");
     }
 
     // ---------------------------------------------------------------------------
@@ -214,13 +215,13 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.ToHarnessAgents(agents);
 
-        Assert.Equal(2, result.Count);
-        Assert.Equal("coder", result[0].Name);
-        Assert.Equal("writes code", result[0].Description);
-        Assert.Equal("build", result[0].Mode);
-        Assert.Equal("reviewer", result[1].Name);
-        Assert.Null(result[1].Description);
-        Assert.Null(result[1].Mode);
+        result.Count.ShouldBe(2);
+        result[0].Name.ShouldBe("coder");
+        result[0].Description.ShouldBe("writes code");
+        result[0].Mode.ShouldBe("build");
+        result[1].Name.ShouldBe("reviewer");
+        result[1].Description.ShouldBeNull();
+        result[1].Mode.ShouldBeNull();
     }
 
     [Fact]
@@ -235,8 +236,8 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.ToHarnessAgents(agents);
 
-        Assert.Single(result);
-        Assert.Equal("valid-agent", result[0].Name);
+        result.Count.ShouldBe(1);
+        result[0].Name.ShouldBe("valid-agent");
     }
 
     [Fact]
@@ -258,9 +259,9 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.ToHarnessMessage(msg);
 
-        Assert.Equal("msg-null-model", result.Id);
-        Assert.Equal("user", result.Role);
-        Assert.Single(result.Parts);
+        result.Id.ShouldBe("msg-null-model");
+        result.Role.ShouldBe("user");
+        result.Parts.Count.ShouldBe(1);
     }
 
     // ---------------------------------------------------------------------------
@@ -289,14 +290,14 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.ToHarnessProviders(response);
 
-        Assert.Single(result);
-        Assert.Equal("openai", result[0].Id);
-        Assert.Equal("OpenAI", result[0].Name);
-        Assert.Equal(2, result[0].Models.Count);
-        Assert.Equal("gpt-4o", result[0].Models[0].Id);
-        Assert.Equal("GPT-4o", result[0].Models[0].Name);
+        result.Count.ShouldBe(1);
+        result[0].Id.ShouldBe("openai");
+        result[0].Name.ShouldBe("OpenAI");
+        result[0].Models.Count.ShouldBe(2);
+        result[0].Models[0].Id.ShouldBe("gpt-4o");
+        result[0].Models[0].Name.ShouldBe("GPT-4o");
         // Model with null Name falls back to Id
-        Assert.Equal("gpt-3.5-turbo", result[0].Models[1].Name);
+        result[0].Models[1].Name.ShouldBe("gpt-3.5-turbo");
     }
 
     // ---------------------------------------------------------------------------
@@ -308,11 +309,11 @@ public sealed class OpenCodeMapperTests
     {
         // Unix epoch = 0ms → 1970-01-01 00:00:00 UTC
         var epoch = OpenCodeMapper.DateTimeOffsetFromUnixMs(0L);
-        Assert.Equal(DateTimeOffset.UnixEpoch, epoch);
+        epoch.ShouldBe(DateTimeOffset.UnixEpoch);
 
         // 1_000ms = 1 second after epoch
         var oneSecond = OpenCodeMapper.DateTimeOffsetFromUnixMs(1_000L);
-        Assert.Equal(DateTimeOffset.UnixEpoch.AddSeconds(1), oneSecond);
+        oneSecond.ShouldBe(DateTimeOffset.UnixEpoch.AddSeconds(1));
     }
 
     // ---------------------------------------------------------------------------
@@ -372,9 +373,9 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.ToHarnessMessages(msgs);
 
-        Assert.Equal(2, result.Count);
-        Assert.Equal("msg-1", result[0].Id);
-        Assert.Equal("msg-2", result[1].Id);
+        result.Count.ShouldBe(2);
+        result[0].Id.ShouldBe("msg-1");
+        result[1].Id.ShouldBe("msg-2");
     }
 
     // ---------------------------------------------------------------------------
@@ -408,19 +409,19 @@ public sealed class OpenCodeMapperTests
         var result = OpenCodeMapper.TryExtractTokenEvent(
             evt, "fleet-sess-1", "proj-1", "MyProject", "/workspace");
 
-        Assert.NotNull(result);
-        Assert.Equal("fleet-sess-1:msg-1", result.EventId);
-        Assert.Equal("fleet-sess-1", result.SessionId);
-        Assert.Equal("claude-sonnet-4", result.ModelId);
-        Assert.Equal("anthropic", result.ProviderId);
-        Assert.Equal(100, result.TokensInput);
-        Assert.Equal(200, result.TokensOutput);
-        Assert.Equal(10, result.TokensReasoning);
-        Assert.Equal(50, result.TokensCacheRead);
-        Assert.Equal(360, result.TokensTotal);
-        Assert.Equal(0.005, result.Cost);
-        Assert.Equal("proj-1", result.ProjectId);
-        Assert.Equal("MyProject", result.ProjectName);
+        result.ShouldNotBeNull();
+        result.EventId.ShouldBe("fleet-sess-1:msg-1");
+        result.SessionId.ShouldBe("fleet-sess-1");
+        result.ModelId.ShouldBe("claude-sonnet-4");
+        result.ProviderId.ShouldBe("anthropic");
+        result.TokensInput.ShouldBe(100);
+        result.TokensOutput.ShouldBe(200);
+        result.TokensReasoning.ShouldBe(10);
+        result.TokensCacheRead.ShouldBe(50);
+        result.TokensTotal.ShouldBe(360);
+        result.Cost.ShouldBe(0.005);
+        result.ProjectId.ShouldBe("proj-1");
+        result.ProjectName.ShouldBe("MyProject");
     }
 
     [Fact]
@@ -439,7 +440,7 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.TryExtractTokenEvent(evt, "sess", null, null, null);
 
-        Assert.Null(result);
+        result.ShouldBeNull();
     }
 
     [Fact]
@@ -450,7 +451,7 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.TryExtractTokenEvent(evt, "sess", null, null, null);
 
-        Assert.Null(result);
+        result.ShouldBeNull();
     }
 
     [Fact]
@@ -462,7 +463,7 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.TryExtractTokenEvent(evt, "sess", null, null, null);
 
-        Assert.Null(result);
+        result.ShouldBeNull();
     }
 
     [Fact]
@@ -481,7 +482,7 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.TryExtractTokenEvent(evt, "sess", null, null, null);
 
-        Assert.Null(result);
+        result.ShouldBeNull();
     }
 
     [Fact]
@@ -492,7 +493,7 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.TryExtractTokenEvent(evt, "sess", null, null, null);
 
-        Assert.Null(result);
+        result.ShouldBeNull();
     }
 
     [Fact]
@@ -514,9 +515,9 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.TryExtractTokenEvent(evt, "sess", null, null, null);
 
-        Assert.NotNull(result);
-        Assert.NotNull(result.EstimatedCost);
-        Assert.True(result.EstimatedCost > 0);
+        result.ShouldNotBeNull();
+        result.EstimatedCost.ShouldNotBeNull();
+        (result.EstimatedCost > 0).ShouldBeTrue();
     }
 
     [Fact]
@@ -546,7 +547,7 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.TryExtractTokenEvent(evt, "sess", null, null, null);
 
-        Assert.Null(result);
+        result.ShouldBeNull();
     }
 
     [Fact]
@@ -579,12 +580,12 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
 
-        Assert.NotNull(result);
-        Assert.Equal("fleet-parent", result.ParentSessionId);
-        Assert.Equal("tool-1", result.ToolCallId);
-        Assert.Equal("reviewer", result.Title);
-        Assert.Equal("pending", result.Status);
-        Assert.Null(result.ChildSessionId);
+        result.ShouldNotBeNull();
+        result.ParentSessionId.ShouldBe("fleet-parent");
+        result.ToolCallId.ShouldBe("tool-1");
+        result.Title.ShouldBe("reviewer");
+        result.Status.ShouldBe("pending");
+        result.ChildSessionId.ShouldBeNull();
     }
 
     [Fact]
@@ -619,9 +620,9 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
 
-        Assert.NotNull(result);
-        Assert.Equal("running", result.Status);
-        Assert.Equal("fleet-child", result.ChildSessionId);
+        result.ShouldNotBeNull();
+        result.Status.ShouldBe("running");
+        result.ChildSessionId.ShouldBe("fleet-child");
     }
 
     [Fact]
@@ -658,8 +659,8 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
 
-        Assert.NotNull(result);
-        Assert.Equal("fleet-child", result.ChildSessionId);
+        result.ShouldNotBeNull();
+        result.ChildSessionId.ShouldBe("fleet-child");
     }
 
     [Fact]
@@ -696,8 +697,8 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
 
-        Assert.NotNull(result);
-        Assert.Equal("fleet-child", result.ChildSessionId);
+        result.ShouldNotBeNull();
+        result.ChildSessionId.ShouldBe("fleet-child");
     }
 
     [Fact]
@@ -727,8 +728,8 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
 
-        Assert.NotNull(result);
-        Assert.Equal("cancelled", result.Status);
+        result.ShouldNotBeNull();
+        result.Status.ShouldBe("cancelled");
     }
 
     [Fact]
@@ -758,8 +759,8 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
 
-        Assert.NotNull(result);
-        Assert.Equal("thread", result.Title);
+        result.ShouldNotBeNull();
+        result.Title.ShouldBe("thread");
     }
 
     [Fact]
@@ -789,11 +790,11 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
 
-        Assert.NotNull(result);
-        Assert.Equal("tool-1", result.ToolCallId);
-        Assert.Equal("thread", result.Title);
-        Assert.Equal("running", result.Status);
-        Assert.Equal("child-1", result.ChildSessionId);
+        result.ShouldNotBeNull();
+        result.ToolCallId.ShouldBe("tool-1");
+        result.Title.ShouldBe("thread");
+        result.Status.ShouldBe("running");
+        result.ChildSessionId.ShouldBe("child-1");
     }
 
     [Fact]
@@ -818,9 +819,9 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
 
-        Assert.NotNull(result);
-        Assert.Equal("pending", result.Status);
-        Assert.Null(result.ChildSessionId);
+        result.ShouldNotBeNull();
+        result.Status.ShouldBe("pending");
+        result.ChildSessionId.ShouldBeNull();
     }
 
     [Fact]
@@ -850,6 +851,6 @@ public sealed class OpenCodeMapperTests
 
         var result = OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent");
 
-        Assert.Null(result);
+        result.ShouldBeNull();
     }
 }

@@ -18,8 +18,8 @@ public sealed class ModelPricingTests
         var cost = ModelPricing.EstimateCost(modelId, inputTokens: 1000, outputTokens: 500,
             reasoningTokens: 0, cacheReadTokens: 0);
 
-        Assert.NotNull(cost);
-        Assert.True(cost > 0, $"Expected positive cost for {modelId}");
+        cost.ShouldNotBeNull();
+        cost!.Value.ShouldBeGreaterThan(0d, $"Expected positive cost for {modelId}");
     }
 
     [Fact]
@@ -28,7 +28,7 @@ public sealed class ModelPricingTests
         var cost = ModelPricing.EstimateCost("some-unknown-model-xyz",
             inputTokens: 1000, outputTokens: 500, reasoningTokens: 0, cacheReadTokens: 0);
 
-        Assert.Null(cost);
+        cost.ShouldBeNull();
     }
 
     [Fact]
@@ -37,7 +37,7 @@ public sealed class ModelPricingTests
         var cost = ModelPricing.EstimateCost(null,
             inputTokens: 1000, outputTokens: 500, reasoningTokens: 0, cacheReadTokens: 0);
 
-        Assert.Null(cost);
+        cost.ShouldBeNull();
     }
 
     [Fact]
@@ -46,8 +46,8 @@ public sealed class ModelPricingTests
         var cost = ModelPricing.EstimateCost("claude-sonnet-4",
             inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cacheReadTokens: 0);
 
-        Assert.NotNull(cost);
-        Assert.Equal(0.0, cost!.Value, precision: 10);
+        cost.ShouldNotBeNull();
+        cost!.Value.ShouldBe(0.0, 0.0000000001);
     }
 
     [Fact]
@@ -60,9 +60,9 @@ public sealed class ModelPricingTests
         var costFromCacheRead = ModelPricing.EstimateCost("claude-sonnet-4",
             inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cacheReadTokens: 1000);
 
-        Assert.NotNull(costFromInput);
-        Assert.NotNull(costFromCacheRead);
-        Assert.True(costFromCacheRead < costFromInput,
+        costFromInput.ShouldNotBeNull();
+        costFromCacheRead.ShouldNotBeNull();
+        costFromCacheRead!.Value.ShouldBeLessThan(costFromInput!.Value,
             "Cache read tokens should cost less than full input tokens");
     }
 
@@ -74,7 +74,7 @@ public sealed class ModelPricingTests
         var cost = ModelPricing.EstimateCost("claude-sonnet-4-20250514",
             inputTokens: 1000, outputTokens: 500, reasoningTokens: 0, cacheReadTokens: 0);
 
-        Assert.NotNull(cost);
-        Assert.InRange(cost!.Value, 0.009, 0.015); // within ±30% of expected
+        cost.ShouldNotBeNull();
+        cost!.Value.ShouldBeInRange(0.009, 0.015); // within ±30% of expected
     }
 }

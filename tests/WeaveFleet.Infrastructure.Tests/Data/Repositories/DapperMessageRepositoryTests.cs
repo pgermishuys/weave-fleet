@@ -90,7 +90,7 @@ public sealed class DapperMessageRepositoryTests
         await repo.UpsertAsync(msg);
 
         var count = await repo.CountBySessionAsync(sessionId);
-        Assert.Equal(1, count);
+        count.ShouldBe(1);
     }
 
     [Fact]
@@ -125,8 +125,8 @@ public sealed class DapperMessageRepositoryTests
         });
 
         var messages = await repo.GetBySessionAsync(sessionId, 10, null);
-        Assert.Single(messages);
-        Assert.Contains("complete", messages[0].PartsJson);
+        messages.Count.ShouldBe(1);
+        messages[0].PartsJson.ShouldContain("complete");
     }
 
     [Fact]
@@ -145,9 +145,9 @@ public sealed class DapperMessageRepositoryTests
 
         var messages = await repo.GetBySessionAsync(sessionId, 10, null);
 
-        Assert.Equal(3, messages.Count);
-        Assert.True(string.Compare(messages[0].Timestamp, messages[1].Timestamp, StringComparison.Ordinal) <= 0);
-        Assert.True(string.Compare(messages[1].Timestamp, messages[2].Timestamp, StringComparison.Ordinal) <= 0);
+        messages.Count.ShouldBe(3);
+        string.Compare(messages[0].Timestamp, messages[1].Timestamp, StringComparison.Ordinal).ShouldBeLessThanOrEqualTo(0);
+        string.Compare(messages[1].Timestamp, messages[2].Timestamp, StringComparison.Ordinal).ShouldBeLessThanOrEqualTo(0);
     }
 
     [Fact]
@@ -164,7 +164,7 @@ public sealed class DapperMessageRepositoryTests
 
         var page = await repo.GetBySessionAsync(sessionId, 3, null);
 
-        Assert.Equal(3, page.Count);
+        page.Count.ShouldBe(3);
     }
 
     [Fact]
@@ -185,9 +185,8 @@ public sealed class DapperMessageRepositoryTests
         // Request page before the 3rd message (ids[2] = t2) — should get t0 and t1
         var page = await repo.GetBySessionAsync(sessionId, 10, ids[2]);
 
-        Assert.Equal(2, page.Count);
-        Assert.All(page, m =>
-            Assert.True(string.Compare(m.Timestamp, base_.AddMinutes(2).ToString("O"), StringComparison.Ordinal) < 0));
+        page.Count.ShouldBe(2);
+        page.ShouldAllBe(m => string.Compare(m.Timestamp, base_.AddMinutes(2).ToString("O"), StringComparison.Ordinal) < 0);
     }
 
     [Fact]
@@ -200,7 +199,7 @@ public sealed class DapperMessageRepositoryTests
 
         var messages = await repo.GetBySessionAsync(sessionId, 10, null);
 
-        Assert.Empty(messages);
+        messages.ShouldBeEmpty();
     }
 
     [Fact]
@@ -217,7 +216,7 @@ public sealed class DapperMessageRepositoryTests
 
         var count = await repo.CountBySessionAsync(sessionId);
 
-        Assert.Equal(3, count);
+        count.ShouldBe(3);
     }
 
     [Fact]
@@ -234,7 +233,7 @@ public sealed class DapperMessageRepositoryTests
         await repo.DeleteBySessionAsync(sessionId);
 
         var count = await repo.CountBySessionAsync(sessionId);
-        Assert.Equal(0, count);
+        count.ShouldBe(0);
     }
 
     [Fact]
@@ -251,7 +250,7 @@ public sealed class DapperMessageRepositoryTests
         await repo.UpsertBatchAsync(messages);
 
         var count = await repo.CountBySessionAsync(sessionId);
-        Assert.Equal(4, count);
+        count.ShouldBe(4);
     }
 
     [Fact]
@@ -270,7 +269,7 @@ public sealed class DapperMessageRepositoryTests
         await directConn.ExecuteAsync("DELETE FROM sessions WHERE id = @Id", new { Id = sessionId });
 
         var count = await repo.CountBySessionAsync(sessionId);
-        Assert.Equal(0, count);
+        count.ShouldBe(0);
     }
 
     [Fact]
@@ -295,11 +294,11 @@ public sealed class DapperMessageRepositoryTests
 
         var result = await repo.GetByIdAsync(id, sessionId);
 
-        Assert.NotNull(result);
-        Assert.Equal(id, result.Id);
-        Assert.Equal(sessionId, result.SessionId);
-        Assert.Equal("assistant", result.Role);
-        Assert.Contains("hello", result.PartsJson);
+        result.ShouldNotBeNull();
+        result.Id.ShouldBe(id);
+        result.SessionId.ShouldBe(sessionId);
+        result.Role.ShouldBe("assistant");
+        result.PartsJson.ShouldContain("hello");
     }
 
     [Fact]
@@ -312,6 +311,6 @@ public sealed class DapperMessageRepositoryTests
 
         var result = await repo.GetByIdAsync("non-existent-id", sessionId);
 
-        Assert.Null(result);
+        result.ShouldBeNull();
     }
 }

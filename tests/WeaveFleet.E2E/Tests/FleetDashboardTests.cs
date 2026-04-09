@@ -52,7 +52,7 @@ public sealed class FleetDashboardTests : E2ETestBase,
 
             // No session cards should exist
             var cards = await dashboard.GetSessionCardsAsync();
-            Assert.Empty(cards);
+            cards.ShouldBeEmpty();
         });
     }
 
@@ -84,7 +84,7 @@ public sealed class FleetDashboardTests : E2ETestBase,
 
             // The session card should now appear
             var cards = await dashboard.GetSessionCardsAsync();
-            Assert.True(cards.Count >= 1, $"Expected at least 1 session card, got {cards.Count}");
+            cards.Count.ShouldBeGreaterThanOrEqualTo(1, $"Expected at least 1 session card, got {cards.Count}");
         });
     }
 

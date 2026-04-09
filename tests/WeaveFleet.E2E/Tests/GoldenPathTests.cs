@@ -65,7 +65,7 @@ public sealed class GoldenPathTests : E2ETestBase,
 
             // At least one message should be visible (user message)
             var messages = await detail.GetMessageItemsAsync();
-            Assert.True(messages.Count >= 1, $"Expected at least 1 message, got {messages.Count}");
+            messages.Count.ShouldBeGreaterThanOrEqualTo(1, $"Expected at least 1 message, got {messages.Count}");
         });
     }
 }

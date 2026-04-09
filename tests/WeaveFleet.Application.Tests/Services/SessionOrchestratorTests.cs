@@ -73,8 +73,8 @@ public sealed class SessionOrchestratorTests
             Directory = "/tmp/project"
         });
 
-        Assert.True(result.IsFailure);
-        Assert.Contains("Harness", result.Error.Description);
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldContain("Harness");
     }
 
     [Fact]
@@ -98,9 +98,9 @@ public sealed class SessionOrchestratorTests
             Title = "My Session"
         });
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal("My Session", result.Value.Session.Title);
-        Assert.Equal("inst-1", result.Value.InstanceId);
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Session.Title.ShouldBe("My Session");
+        result.Value.InstanceId.ShouldBe("inst-1");
         await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(s =>
             s.Title == "My Session" && s.ProjectId == "scratch-1"));
     }
@@ -118,8 +118,8 @@ public sealed class SessionOrchestratorTests
             Directory = "/tmp/project"
         });
 
-        Assert.True(result.IsFailure);
-        Assert.Equal(FleetError.Unexpected.Code, result.Error.Code);
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe(FleetError.Unexpected.Code);
     }
 
     // ── PromptSessionAsync ────────────────────────────────────────────────────
@@ -131,8 +131,8 @@ public sealed class SessionOrchestratorTests
 
         var result = await _sut.PromptSessionAsync("missing", "hello");
 
-        Assert.True(result.IsFailure);
-        Assert.Contains("Session", result.Error.Description);
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldContain("Session");
     }
 
     [Fact]
@@ -146,8 +146,8 @@ public sealed class SessionOrchestratorTests
 
         var result = await _sut.PromptSessionAsync("s1", "hello");
 
-        Assert.True(result.IsFailure);
-        Assert.Contains("Instance", result.Error.Description);
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldContain("Instance");
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public sealed class SessionOrchestratorTests
 
         var result = await _sut.PromptSessionAsync("s1", "hello");
 
-        Assert.True(result.IsSuccess);
+        result.IsSuccess.ShouldBeTrue();
         await _harnessInstance.Received(1).SendPromptAsync("hello", null, Arg.Any<CancellationToken>());
     }
 
@@ -200,8 +200,8 @@ public sealed class SessionOrchestratorTests
 
         var result = await _sut.GetSessionMessagesAsync("s1");
 
-        Assert.True(result.IsSuccess);
-        Assert.Single(result.Value.Messages);
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Messages.Count.ShouldBe(1);
         await _messageRepo.DidNotReceive().GetBySessionAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<string?>());
     }
 
@@ -216,8 +216,8 @@ public sealed class SessionOrchestratorTests
 
         var result = await _sut.GetSessionMessagesAsync("s1");
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(3, result.Value.Messages.Count);
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Messages.Count.ShouldBe(3);
     }
 
     [Fact]
@@ -230,9 +230,9 @@ public sealed class SessionOrchestratorTests
 
         var result = await _sut.GetSessionMessagesAsync("s1");
 
-        Assert.True(result.IsSuccess);
-        Assert.Empty(result.Value.Messages);
-        Assert.False(result.Value.HasMore);
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Messages.ShouldBeEmpty();
+        result.Value.HasMore.ShouldBeFalse();
     }
 
     [Fact]
@@ -249,8 +249,8 @@ public sealed class SessionOrchestratorTests
 
         var result = await _sut.GetSessionMessagesAsync("s1");
 
-        Assert.True(result.IsSuccess);
-        Assert.Equal(2, result.Value.Messages.Count);
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Messages.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -260,8 +260,8 @@ public sealed class SessionOrchestratorTests
 
         var result = await _sut.GetSessionMessagesAsync("ghost");
 
-        Assert.True(result.IsFailure);
-        Assert.Contains("Session", result.Error.Description);
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldContain("Session");
     }
 
     [Fact]
@@ -280,8 +280,8 @@ public sealed class SessionOrchestratorTests
 
         var result = await _sut.GetSessionMessagesAsync("s2");
 
-        Assert.True(result.IsSuccess);
-        Assert.True(result.Value.HasMore);
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.HasMore.ShouldBeTrue();
         // The DB was called with HistoryMessagePageSize+1 (default 10 → fetches 11)
         await _messageRepo.Received(1).GetBySessionAsync("s2", 11, null);
     }
@@ -301,8 +301,8 @@ public sealed class SessionOrchestratorTests
         await _sut.GetSessionMessagesAsync("s3");
 
         // Default LiveMessagePageSize is 10
-        Assert.NotNull(capturedQuery);
-        Assert.Equal(10, capturedQuery.Limit);
+        capturedQuery.ShouldNotBeNull();
+        capturedQuery!.Limit.ShouldBe(10);
     }
 
     // ── Harness type tracking ─────────────────────────────────────────────────
@@ -326,7 +326,7 @@ public sealed class SessionOrchestratorTests
         });
 
         // Assert — session stored with correct harness type
-        Assert.True(result.IsSuccess);
+        result.IsSuccess.ShouldBeTrue();
         await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(s =>
             s.HarnessType == "claude-code"));
     }
@@ -350,7 +350,7 @@ public sealed class SessionOrchestratorTests
         });
 
         // Assert — default harness type is opencode
-        Assert.True(result.IsSuccess);
+        result.IsSuccess.ShouldBeTrue();
         await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(s =>
             s.HarnessType == "opencode"));
     }
@@ -389,7 +389,7 @@ public sealed class SessionOrchestratorTests
         var result = await _sut.ResumeSessionAsync("s-resume");
 
         // Assert — harness resolved using stored type, not default "opencode"
-        Assert.True(result.IsSuccess);
+        result.IsSuccess.ShouldBeTrue();
         _harnessRegistry.Received(1).GetByType("claude-code");
         _harnessRegistry.DidNotReceive().GetByType("opencode");
     }
@@ -429,7 +429,7 @@ public sealed class SessionOrchestratorTests
         var result = await _sut.ResumeSessionAsync("s-resume-token");
 
         // Assert — ResumeAsync called with correct token; SpawnAsync NOT called
-        Assert.True(result.IsSuccess);
+        result.IsSuccess.ShouldBeTrue();
         await _harness.Received(1).ResumeAsync(
             Arg.Is<HarnessResumeOptions>(o => o.ResumeToken == "existing-session-token"),
             Arg.Any<CancellationToken>());
@@ -471,7 +471,7 @@ public sealed class SessionOrchestratorTests
         var result = await _sut.ResumeSessionAsync("s-resume-notok");
 
         // Assert — SpawnAsync used as fallback; ResumeAsync NOT called
-        Assert.True(result.IsSuccess);
+        result.IsSuccess.ShouldBeTrue();
         await _harness.Received(1).SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
         await _harness.DidNotReceive().ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>());
     }
@@ -511,7 +511,7 @@ public sealed class SessionOrchestratorTests
         var result = await _sut.ResumeSessionAsync("s-resume-nosupp");
 
         // Assert — SpawnAsync used (SupportsResume = false overrides token)
-        Assert.True(result.IsSuccess);
+        result.IsSuccess.ShouldBeTrue();
         await _harness.Received(1).SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
         await _harness.DidNotReceive().ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>());
     }
@@ -543,7 +543,7 @@ public sealed class SessionOrchestratorTests
         var result = await _sut.ForkSessionAsync("s-parent", "Forked Session");
 
         // Assert — forked session uses same harness type as parent
-        Assert.True(result.IsSuccess);
+        result.IsSuccess.ShouldBeTrue();
         await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(s =>
             s.HarnessType == "claude-code"));
     }
@@ -583,11 +583,11 @@ public sealed class SessionOrchestratorTests
 
         var result = await _sut.EnsureDelegatedChildSessionAsync("parent-1", "oc-child-1", "thread");
 
-        Assert.True(result.IsSuccess);
-        Assert.True(result.Value.IsHidden);
-        Assert.Equal("parent-1", result.Value.ParentSessionId);
-        Assert.Equal("oc-child-1", result.Value.HarnessResumeToken);
-        Assert.Equal("oc-child-1", result.Value.OpencodeSessionId);
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.IsHidden.ShouldBeTrue();
+        result.Value.ParentSessionId.ShouldBe("parent-1");
+        result.Value.HarnessResumeToken.ShouldBe("oc-child-1");
+        result.Value.OpencodeSessionId.ShouldBe("oc-child-1");
 
         await _harness.Received(1).ResumeAsync(
             Arg.Is<HarnessResumeOptions>(o => o.ResumeToken == "oc-child-1" && o.SessionId == result.Value.Id),
@@ -632,7 +632,7 @@ public sealed class SessionOrchestratorTests
 
         var result = await _sut.DeleteSessionAsync("child-1");
 
-        Assert.True(result.IsSuccess);
+        result.IsSuccess.ShouldBeTrue();
         Received.InOrder(async () =>
         {
             await _delegationRepo.GetByChildSessionIdAsync("child-1");

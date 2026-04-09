@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Shouldly;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
@@ -13,13 +14,13 @@ public sealed class OpenCodeModelsSerializationTests
         const string json = """{"healthy":true,"version":"1.2.3"}""";
         var result = JsonSerializer.Deserialize<OpenCodeHealthResponse>(json, Options);
 
-        Assert.NotNull(result);
-        Assert.True(result.Healthy);
-        Assert.Equal("1.2.3", result.Version);
+        result.ShouldNotBeNull();
+        result.Healthy.ShouldBeTrue();
+        result.Version.ShouldBe("1.2.3");
 
         var roundTripped = JsonSerializer.Serialize(result, Options);
-        Assert.Contains("\"healthy\":true", roundTripped);
-        Assert.Contains("\"version\":\"1.2.3\"", roundTripped);
+        roundTripped.ShouldContain("\"healthy\":true");
+        roundTripped.ShouldContain("\"version\":\"1.2.3\"");
     }
 
     [Fact]
@@ -28,11 +29,11 @@ public sealed class OpenCodeModelsSerializationTests
         const string json = """{"id":"sess-1","version":"1","time":{"created":1000000,"updated":2000000}}""";
         var result = JsonSerializer.Deserialize<OpenCodeSessionInfo>(json, Options);
 
-        Assert.NotNull(result);
-        Assert.Equal("sess-1", result.Id);
-        Assert.Equal("1", result.Version);
-        Assert.Null(result.Title);
-        Assert.Equal(1000000L, result.Time!.Created);
+        result.ShouldNotBeNull();
+        result.Id.ShouldBe("sess-1");
+        result.Version.ShouldBe("1");
+        result.Title.ShouldBeNull();
+        result.Time!.Created.ShouldBe(1000000L);
     }
 
     [Fact]
@@ -55,12 +56,12 @@ public sealed class OpenCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<OpenCodeSessionInfo>(json, Options);
 
-        Assert.NotNull(result);
-        Assert.Equal("sess-2", result.Id);
-        Assert.Equal("my-session", result.Slug);
-        Assert.Equal("My Session", result.Title);
-        Assert.Equal("sess-0", result.ParentId);
-        Assert.Equal(1500000L, result.Time!.Compacting);
+        result.ShouldNotBeNull();
+        result.Id.ShouldBe("sess-2");
+        result.Slug.ShouldBe("my-session");
+        result.Title.ShouldBe("My Session");
+        result.ParentId.ShouldBe("sess-0");
+        result.Time!.Compacting.ShouldBe(1500000L);
     }
 
     [Fact]
@@ -78,12 +79,12 @@ public sealed class OpenCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<OpenCodeMessageInfo>(json, Options);
 
-        Assert.NotNull(result);
-        Assert.IsType<OpenCodeUserMessage>(result);
+        result.ShouldNotBeNull();
+        result.ShouldBeOfType<OpenCodeUserMessage>();
         var user = (OpenCodeUserMessage)result;
-        Assert.Equal("msg-1", user.Id);
-        Assert.Equal("user", user.Role);
-        Assert.Equal("default", user.Agent);
+        user.Id.ShouldBe("msg-1");
+        user.Role.ShouldBe("user");
+        user.Agent.ShouldBe("default");
     }
 
     [Fact]
@@ -105,14 +106,14 @@ public sealed class OpenCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<OpenCodeMessageInfo>(json, Options);
 
-        Assert.NotNull(result);
-        Assert.IsType<OpenCodeAssistantMessage>(result);
+        result.ShouldNotBeNull();
+        result.ShouldBeOfType<OpenCodeAssistantMessage>();
         var assistant = (OpenCodeAssistantMessage)result;
-        Assert.Equal("gpt-4o", assistant.ModelId);
-        Assert.Equal("openai", assistant.ProviderId);
-        Assert.Equal("end_turn", assistant.Finish);
-        Assert.Equal(0.001, assistant.Cost);
-        Assert.Equal(2500000L, assistant.Time.Completed);
+        assistant.ModelId.ShouldBe("gpt-4o");
+        assistant.ProviderId.ShouldBe("openai");
+        assistant.Finish.ShouldBe("end_turn");
+        assistant.Cost.ShouldBe(0.001);
+        assistant.Time.Completed.ShouldBe(2500000L);
     }
 
     [Fact]
@@ -130,9 +131,9 @@ public sealed class OpenCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<OpenCodeMessagePart>(json, Options);
 
-        Assert.NotNull(result);
-        Assert.IsType<OpenCodeTextPart>(result);
-        Assert.Equal("Hello world", ((OpenCodeTextPart)result).Text);
+        result.ShouldNotBeNull();
+        result.ShouldBeOfType<OpenCodeTextPart>();
+        ((OpenCodeTextPart)result).Text.ShouldBe("Hello world");
     }
 
     [Fact]
@@ -152,12 +153,12 @@ public sealed class OpenCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<OpenCodeMessagePart>(json, Options);
 
-        Assert.NotNull(result);
-        Assert.IsType<OpenCodeToolPart>(result);
+        result.ShouldNotBeNull();
+        result.ShouldBeOfType<OpenCodeToolPart>();
         var tool = (OpenCodeToolPart)result;
-        Assert.Equal("bash", tool.Tool);
-        Assert.Equal("call-1", tool.CallId);
-        Assert.IsType<OpenCodeToolCompleted>(tool.State);
+        tool.Tool.ShouldBe("bash");
+        tool.CallId.ShouldBe("call-1");
+        tool.State.ShouldBeOfType<OpenCodeToolCompleted>();
     }
 
     [Fact]
@@ -174,8 +175,8 @@ public sealed class OpenCodeModelsSerializationTests
         foreach (var (json, expectedType) in cases)
         {
             var result = JsonSerializer.Deserialize<OpenCodeToolState>(json, Options);
-            Assert.NotNull(result);
-            Assert.IsType(expectedType, result);
+            result.ShouldNotBeNull();
+            result.GetType().ShouldBe(expectedType);
         }
     }
 
@@ -190,12 +191,12 @@ public sealed class OpenCodeModelsSerializationTests
 
         var json = JsonSerializer.Serialize(request, Options);
 
-        Assert.Contains("\"parts\"", json);
-        Assert.Contains("\"type\":\"text\"", json);
-        Assert.Contains("\"text\":\"Hello\"", json);
-        Assert.Contains("\"agent\":\"default\"", json);
+        json.ShouldContain("\"parts\"");
+        json.ShouldContain("\"type\":\"text\"");
+        json.ShouldContain("\"text\":\"Hello\"");
+        json.ShouldContain("\"agent\":\"default\"");
         // Null fields should be omitted
-        Assert.DoesNotContain("\"model\"", json);
+        json.ShouldNotContain("\"model\"");
     }
 
     [Fact]
@@ -205,9 +206,9 @@ public sealed class OpenCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<OpenCodeSseEvent>(json, Options);
 
-        Assert.NotNull(result);
-        Assert.Equal("session.status", result.Type);
-        Assert.Equal(JsonValueKind.Object, result.Properties.ValueKind);
+        result.ShouldNotBeNull();
+        result.Type.ShouldBe("session.status");
+        result.Properties.ValueKind.ShouldBe(JsonValueKind.Object);
     }
 
     [Fact]
@@ -217,12 +218,12 @@ public sealed class OpenCodeModelsSerializationTests
         var busy = JsonSerializer.Deserialize<OpenCodeSessionStatus>("""{"type":"busy","since":1000000}""", Options);
         var retry = JsonSerializer.Deserialize<OpenCodeSessionStatus>("""{"type":"retry","reason":"rate limit","delay":2000,"count":1}""", Options);
 
-        Assert.IsType<OpenCodeIdleStatus>(idle);
-        Assert.IsType<OpenCodeBusyStatus>(busy);
-        Assert.Equal(1000000L, ((OpenCodeBusyStatus)busy!).Since);
-        Assert.IsType<OpenCodeRetryStatus>(retry);
-        Assert.Equal("rate limit", ((OpenCodeRetryStatus)retry!).Reason);
-        Assert.Equal(2000, ((OpenCodeRetryStatus)retry!).Delay);
+        idle.ShouldBeOfType<OpenCodeIdleStatus>();
+        busy.ShouldBeOfType<OpenCodeBusyStatus>();
+        ((OpenCodeBusyStatus)busy!).Since.ShouldBe(1000000L);
+        retry.ShouldBeOfType<OpenCodeRetryStatus>();
+        ((OpenCodeRetryStatus)retry!).Reason.ShouldBe("rate limit");
+        ((OpenCodeRetryStatus)retry!).Delay.ShouldBe(2000);
     }
 
     [Fact]
@@ -247,12 +248,12 @@ public sealed class OpenCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<OpenCodeProvidersResponse>(json, Options);
 
-        Assert.NotNull(result);
-        Assert.Single(result.All);
-        Assert.Equal("openai", result.All[0].Id);
-        Assert.Equal(2, result.All[0].Models.Count);
-        Assert.Equal("gpt-4o", result.Default!.ModelId);
-        Assert.Contains("openai", result.Connected);
+        result.ShouldNotBeNull();
+        result.All.Count.ShouldBe(1);
+        result.All[0].Id.ShouldBe("openai");
+        result.All[0].Models.Count.ShouldBe(2);
+        result.Default!.ModelId.ShouldBe("gpt-4o");
+        result.Connected.ShouldContain("openai");
     }
 
     // ---------------------------------------------------------------------------
@@ -265,9 +266,9 @@ public sealed class OpenCodeModelsSerializationTests
         // "model": {} — both providerId and modelId are absent
         var result = JsonSerializer.Deserialize<OpenCodeModelRef>("{}", Options);
 
-        Assert.NotNull(result);
-        Assert.Null(result.ProviderId);
-        Assert.Null(result.ModelId);
+        result.ShouldNotBeNull();
+        result.ProviderId.ShouldBeNull();
+        result.ModelId.ShouldBeNull();
     }
 
     [Fact]
@@ -277,9 +278,9 @@ public sealed class OpenCodeModelsSerializationTests
         const string json = """{"providerId":null,"modelId":null}""";
         var result = JsonSerializer.Deserialize<OpenCodeModelRef>(json, Options);
 
-        Assert.NotNull(result);
-        Assert.Null(result.ProviderId);
-        Assert.Null(result.ModelId);
+        result.ShouldNotBeNull();
+        result.ProviderId.ShouldBeNull();
+        result.ModelId.ShouldBeNull();
     }
 
     [Fact]
@@ -289,9 +290,9 @@ public sealed class OpenCodeModelsSerializationTests
         const string json = """{"providerId":"openai"}""";
         var result = JsonSerializer.Deserialize<OpenCodeModelRef>(json, Options);
 
-        Assert.NotNull(result);
-        Assert.Equal("openai", result.ProviderId);
-        Assert.Null(result.ModelId);
+        result.ShouldNotBeNull();
+        result.ProviderId.ShouldBe("openai");
+        result.ModelId.ShouldBeNull();
     }
 
     // ---------------------------------------------------------------------------
@@ -315,11 +316,11 @@ public sealed class OpenCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<OpenCodeMessageInfo>(json, Options);
 
-        Assert.NotNull(result);
-        Assert.IsNotType<OpenCodeUserMessage>(result);
-        Assert.IsNotType<OpenCodeAssistantMessage>(result);
-        Assert.Equal("unknown", result.Role);
-        Assert.Equal("msg-no-role", result.Id);
+        result.ShouldNotBeNull();
+        result.ShouldNotBeOfType<OpenCodeUserMessage>();
+        result.ShouldNotBeOfType<OpenCodeAssistantMessage>();
+        result.Role.ShouldBe("unknown");
+        result.Id.ShouldBe("msg-no-role");
     }
 
     [Fact]
@@ -337,10 +338,10 @@ public sealed class OpenCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<OpenCodeMessageInfo>(json, Options);
 
-        Assert.NotNull(result);
-        Assert.IsNotType<OpenCodeUserMessage>(result);
-        Assert.IsNotType<OpenCodeAssistantMessage>(result);
-        Assert.Equal("unknown", result.Role);
+        result.ShouldNotBeNull();
+        result.ShouldNotBeOfType<OpenCodeUserMessage>();
+        result.ShouldNotBeOfType<OpenCodeAssistantMessage>();
+        result.Role.ShouldBe("unknown");
     }
 
     [Fact]
@@ -361,10 +362,10 @@ public sealed class OpenCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<OpenCodeMessageWithParts[]>(json, Options);
 
-        Assert.NotNull(result);
-        Assert.Single(result);
-        Assert.Equal("unknown", result[0].Info.Role);
-        Assert.Single(result[0].Parts);
+        result.ShouldNotBeNull();
+        result.Length.ShouldBe(1);
+        result[0].Info.Role.ShouldBe("unknown");
+        result[0].Parts.Count.ShouldBe(1);
     }
 
     [Fact]
@@ -380,9 +381,9 @@ public sealed class OpenCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<OpenCodeMessagePart>(json, Options);
 
-        Assert.NotNull(result);
-        Assert.IsNotType<OpenCodeTextPart>(result);
-        Assert.IsNotType<OpenCodeToolPart>(result);
+        result.ShouldNotBeNull();
+        result.ShouldNotBeOfType<OpenCodeTextPart>();
+        result.ShouldNotBeOfType<OpenCodeToolPart>();
     }
 
     [Fact]
@@ -390,11 +391,11 @@ public sealed class OpenCodeModelsSerializationTests
     {
         var result = JsonSerializer.Deserialize<OpenCodeToolState>("{}", Options);
 
-        Assert.NotNull(result);
-        Assert.IsNotType<OpenCodeToolPending>(result);
-        Assert.IsNotType<OpenCodeToolRunning>(result);
-        Assert.IsNotType<OpenCodeToolCompleted>(result);
-        Assert.IsNotType<OpenCodeToolError>(result);
+        result.ShouldNotBeNull();
+        result.ShouldNotBeOfType<OpenCodeToolPending>();
+        result.ShouldNotBeOfType<OpenCodeToolRunning>();
+        result.ShouldNotBeOfType<OpenCodeToolCompleted>();
+        result.ShouldNotBeOfType<OpenCodeToolError>();
     }
 
     [Fact]
@@ -402,10 +403,10 @@ public sealed class OpenCodeModelsSerializationTests
     {
         var result = JsonSerializer.Deserialize<OpenCodeSessionStatus>("{}", Options);
 
-        Assert.NotNull(result);
-        Assert.IsNotType<OpenCodeIdleStatus>(result);
-        Assert.IsNotType<OpenCodeBusyStatus>(result);
-        Assert.IsNotType<OpenCodeRetryStatus>(result);
+        result.ShouldNotBeNull();
+        result.ShouldNotBeOfType<OpenCodeIdleStatus>();
+        result.ShouldNotBeOfType<OpenCodeBusyStatus>();
+        result.ShouldNotBeOfType<OpenCodeRetryStatus>();
     }
 
     [Fact]
@@ -427,11 +428,11 @@ public sealed class OpenCodeModelsSerializationTests
 
         var result = JsonSerializer.Deserialize<OpenCodeMessageWithParts>(json, Options);
 
-        Assert.NotNull(result);
-        var userMsg = Assert.IsType<OpenCodeUserMessage>(result.Info);
-        Assert.NotNull(userMsg.Model);
-        Assert.Null(userMsg.Model.ProviderId);
-        Assert.Null(userMsg.Model.ModelId);
+        result.ShouldNotBeNull();
+        var userMsg = result.Info.ShouldBeOfType<OpenCodeUserMessage>();
+        userMsg.Model.ShouldNotBeNull();
+        userMsg.Model.ProviderId.ShouldBeNull();
+        userMsg.Model.ModelId.ShouldBeNull();
     }
 
     // ---------------------------------------------------------------------------
@@ -451,12 +452,12 @@ public sealed class OpenCodeModelsSerializationTests
 
         var json = JsonSerializer.Serialize(request, Options);
 
-        Assert.Contains("\"command\":\"weave-health\"", json);
-        Assert.Contains("\"arguments\":\"\"", json);
+        json.ShouldContain("\"command\":\"weave-health\"");
+        json.ShouldContain("\"arguments\":\"\"");
         // Null optional fields should be omitted
-        Assert.DoesNotContain("\"agent\"", json);
-        Assert.DoesNotContain("\"model\"", json);
-        Assert.DoesNotContain("\"messageID\"", json);
+        json.ShouldNotContain("\"agent\"");
+        json.ShouldNotContain("\"model\"");
+        json.ShouldNotContain("\"messageID\"");
     }
 
     [Fact]
@@ -474,8 +475,8 @@ public sealed class OpenCodeModelsSerializationTests
 
         var json = JsonSerializer.Serialize(request, Options);
 
-        Assert.Contains("\"model\":\"openai/gpt-4o\"", json);
-        Assert.Contains("\"agent\":\"build\"", json);
-        Assert.Contains("\"arguments\":\"some args\"", json);
+        json.ShouldContain("\"model\":\"openai/gpt-4o\"");
+        json.ShouldContain("\"agent\":\"build\"");
+        json.ShouldContain("\"arguments\":\"some args\"");
     }
 }

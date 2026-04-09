@@ -13,7 +13,7 @@ public sealed class TestHarnessInstanceTests
         var scenario = new TestScenarioBuilder().Build();
         var instance = new TestHarnessInstance("inst-1", scenario);
 
-        Assert.Equal(HarnessInstanceStatus.Idle, instance.Status);
+        instance.Status.ShouldBe(HarnessInstanceStatus.Idle);
     }
 
     [Fact]
@@ -24,7 +24,7 @@ public sealed class TestHarnessInstanceTests
             .Build();
         var instance = new TestHarnessInstance("inst-1", scenario);
 
-        Assert.Equal(HarnessInstanceStatus.Starting, instance.Status);
+        instance.Status.ShouldBe(HarnessInstanceStatus.Starting);
     }
 
     [Fact]
@@ -35,7 +35,7 @@ public sealed class TestHarnessInstanceTests
 
         await instance.StopAsync(CancellationToken.None);
 
-        Assert.Equal(HarnessInstanceStatus.Stopped, instance.Status);
+        instance.Status.ShouldBe(HarnessInstanceStatus.Stopped);
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public sealed class TestHarnessInstanceTests
 
         await instance.AbortAsync(CancellationToken.None);
 
-        Assert.Equal(HarnessInstanceStatus.Idle, instance.Status);
+        instance.Status.ShouldBe(HarnessInstanceStatus.Idle);
     }
 
     // ── SendPromptAsync / SubscribeAsync event flow ──────────────────────────
@@ -68,13 +68,13 @@ public sealed class TestHarnessInstanceTests
         await instance.SendPromptAsync("Hello!", null, cts.Token);
         var events = await eventsTask;
 
-        Assert.Equal(6, events.Count);
-        Assert.Equal("session.status", events[0].Type);
-        Assert.Equal("message.updated", events[1].Type);   // user message
-        Assert.Equal("message.part.updated", events[2].Type); // user part
-        Assert.Equal("message.updated", events[3].Type);   // assistant message
-        Assert.Equal("message.part.updated", events[4].Type); // assistant part
-        Assert.Equal("session.idle", events[5].Type);
+        events.Count.ShouldBe(6);
+        events[0].Type.ShouldBe("session.status");
+        events[1].Type.ShouldBe("message.updated");   // user message
+        events[2].Type.ShouldBe("message.part.updated"); // user part
+        events[3].Type.ShouldBe("message.updated");   // assistant message
+        events[4].Type.ShouldBe("message.part.updated"); // assistant part
+        events[5].Type.ShouldBe("session.idle");
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public sealed class TestHarnessInstanceTests
         }
         catch (OperationCanceledException) { }
 
-        Assert.Empty(events);
+        events.ShouldBeEmpty();
     }
 
     [Fact]
@@ -116,17 +116,17 @@ public sealed class TestHarnessInstanceTests
         var firstEventsTask = CollectEventsAsync(instance, expectedCount: 6, cts.Token);
         await instance.SendPromptAsync("First prompt", null, cts.Token);
         var firstBatch = await firstEventsTask;
-        Assert.Equal(6, firstBatch.Count);
+        firstBatch.Count.ShouldBe(6);
 
         // Now send the second prompt and collect its events
         var secondEventsTask = CollectEventsAsync(instance, expectedCount: 6, cts.Token);
         await instance.SendPromptAsync("Second prompt", null, cts.Token);
         var secondBatch = await secondEventsTask;
-        Assert.Equal(6, secondBatch.Count);
+        secondBatch.Count.ShouldBe(6);
 
         // Verify both batches were dequeued in order
         var allEvents = firstBatch.Concat(secondBatch).ToList();
-        Assert.Equal(12, allEvents.Count);
+        allEvents.Count.ShouldBe(12);
     }
 
     // ── AbortAsync cancellation ──────────────────────────────────────────────
@@ -169,7 +169,7 @@ public sealed class TestHarnessInstanceTests
         await instance.AbortAsync(cts.Token);
 
         // Status should be Idle now (set by AbortAsync)
-        Assert.Equal(HarnessInstanceStatus.Idle, instance.Status);
+        instance.Status.ShouldBe(HarnessInstanceStatus.Idle);
     }
 
     // ── GetMessagesAsync ─────────────────────────────────────────────────────
@@ -185,12 +185,12 @@ public sealed class TestHarnessInstanceTests
         var instance = new TestHarnessInstance("sess-1", scenario);
         var page = await instance.GetMessagesAsync(null, CancellationToken.None);
 
-        Assert.Equal(2, page.Messages.Count);
-        Assert.Equal("msg-1", page.Messages[0].Id);
-        Assert.Equal("user", page.Messages[0].Role);
-        Assert.Equal("msg-2", page.Messages[1].Id);
-        Assert.Equal("assistant", page.Messages[1].Role);
-        Assert.False(page.HasMore);
+        page.Messages.Count.ShouldBe(2);
+        page.Messages[0].Id.ShouldBe("msg-1");
+        page.Messages[0].Role.ShouldBe("user");
+        page.Messages[1].Id.ShouldBe("msg-2");
+        page.Messages[1].Role.ShouldBe("assistant");
+        page.HasMore.ShouldBeFalse();
     }
 
     [Fact]
@@ -205,8 +205,8 @@ public sealed class TestHarnessInstanceTests
         var instance = new TestHarnessInstance("sess-1", scenario);
         var page = await instance.GetMessagesAsync(new MessageQuery(Limit: 2), CancellationToken.None);
 
-        Assert.Equal(2, page.Messages.Count);
-        Assert.True(page.HasMore);
+        page.Messages.Count.ShouldBe(2);
+        page.HasMore.ShouldBeTrue();
     }
 
     // ── CheckHealthAsync ─────────────────────────────────────────────────────
@@ -219,8 +219,8 @@ public sealed class TestHarnessInstanceTests
 
         var result = await instance.CheckHealthAsync(CancellationToken.None);
 
-        Assert.True(result.Healthy);
-        Assert.Null(result.Message);
+        result.Healthy.ShouldBeTrue();
+        result.Message.ShouldBeNull();
     }
 
     // ── ThrowOnSendPrompt ────────────────────────────────────────────────────
@@ -234,7 +234,7 @@ public sealed class TestHarnessInstanceTests
 
         var instance = new TestHarnessInstance("sess-1", scenario);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Should.ThrowAsync<InvalidOperationException>(() =>
             instance.SendPromptAsync("test", null, CancellationToken.None));
     }
 
@@ -257,8 +257,8 @@ public sealed class TestHarnessInstanceTests
         });
 
         var events = await eventsTask;
-        Assert.Single(events);
-        Assert.Equal("custom.event", events[0].Type);
+        events.Count.ShouldBe(1);
+        events[0].Type.ShouldBe("custom.event");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
