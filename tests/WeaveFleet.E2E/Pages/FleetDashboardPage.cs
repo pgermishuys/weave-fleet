@@ -124,9 +124,28 @@ public sealed class FleetDashboardPage(IPage page)
     /// <summary>Change the retention filter through the toolbar.</summary>
     public async Task SetRetentionFilterAsync(string label)
     {
-        await _page.GetByTestId("retention-filter-trigger").ClickAsync();
         var key = label.ToLowerInvariant();
         var option = _page.GetByTestId($"retention-filter-option-{key}");
+
+        // Radix dropdowns can occasionally miss the initial open click in CI
+        // when layout/animation is still settling, so retry the trigger until
+        // the target option is actually visible.
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            await _page.GetByTestId("retention-filter-trigger").ClickAsync(new LocatorClickOptions { Force = true });
+
+            try
+            {
+                await Assertions.Expect(option).ToBeVisibleAsync(
+                    new LocatorAssertionsToBeVisibleOptions { Timeout = 2_000 });
+                break;
+            }
+            catch when (attempt < 2)
+            {
+                // retry open
+            }
+        }
+
         await Assertions.Expect(option).ToBeVisibleAsync();
         await option.ClickAsync(new LocatorClickOptions { Force = true });
     }
