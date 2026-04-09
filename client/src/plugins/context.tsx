@@ -1,15 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { useIntegrations } from "@/hooks/use-integrations";
-import type { IntegrationStatusInfo } from "@/lib/api-types";
 import { setGitHubConfigured } from "@/integrations/github/manifest";
 import { loadBuiltInPlugins } from "./loader";
 import { createPluginRuntime } from "./runtime";
 import type { FleetPluginRuntime } from "./runtime";
-import type {
-  FleetPluginManifest,
-  FleetPluginStatus,
-  PluginConnectionStatus,
-} from "./types";
+import type { PluginConnectionStatus } from "./types";
 
 export interface PluginRuntimeContextValue extends FleetPluginRuntime {
   isLoading: boolean;
@@ -31,32 +26,6 @@ const defaultValue: PluginRuntimeContextValue = {
 };
 
 const PluginRuntimeContext = createContext<PluginRuntimeContextValue>(defaultValue);
-
-function toPluginStatus(status: IntegrationStatusInfo): FleetPluginStatus {
-  return {
-    pluginId: status.id,
-    status: status.status as PluginConnectionStatus,
-    connectedAt: status.connectedAt,
-    actions: [],
-  };
-}
-
-function buildStatuses(
-  manifests: readonly FleetPluginManifest[],
-  integrationStatuses: readonly IntegrationStatusInfo[]
-): FleetPluginStatus[] {
-  const statusesById = new Map(
-    integrationStatuses.map((status) => [status.id, toPluginStatus(status)])
-  );
-
-  return manifests.map((manifest) =>
-    statusesById.get(manifest.descriptor.id) ?? {
-      pluginId: manifest.descriptor.id,
-      status: "disconnected",
-      actions: [],
-    }
-  );
-}
 
 export function PluginRuntimeProvider({ children }: { children: ReactNode }) {
   const {

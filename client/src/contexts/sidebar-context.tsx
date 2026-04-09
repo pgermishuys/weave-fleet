@@ -84,7 +84,7 @@ function migrateSidebarStorage(): void {
     const raw = localStorage.getItem(SIDEBAR_ACTIVE_VIEW_KEY);
     if (raw !== null) {
       try {
-        const value = JSON.parse(raw) as string;
+        JSON.parse(raw);
       } catch {
         localStorage.removeItem(SIDEBAR_ACTIVE_VIEW_KEY);
       }
