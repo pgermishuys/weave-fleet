@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useIntegrationsContext } from "@/contexts/integrations-context";
-import { getIntegrations } from "@/integrations/registry";
+import { usePluginRuntime } from "@/plugins/context";
+import { getSettingsSections } from "@/plugins/slots";
 import { useGitHubRepos } from "@/integrations/github/hooks/use-github-repos";
 
 function formatRelativeTime(ts: number | null): string {
@@ -56,12 +57,13 @@ function GitHubConnectedActions({
 
 export function IntegrationsTab() {
   const { disconnect, integrations } = useIntegrationsContext();
-  const manifests = getIntegrations();
+  const { manifests, descriptors } = usePluginRuntime();
+  const settingsSections = getSettingsSections(manifests);
 
   const isConnected = (id: string) =>
     integrations.some((i) => i.id === id && i.status === "connected");
 
-  if (manifests.length === 0) {
+  if (settingsSections.length === 0) {
     return (
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
@@ -83,18 +85,21 @@ export function IntegrationsTab() {
       </p>
 
       <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-        {manifests.map((manifest) => {
-          const connected = isConnected(manifest.id);
-          const Icon = manifest.icon;
-          const SettingsComponent = manifest.settingsComponent;
+        {settingsSections.map((section) => {
+          const connected = isConnected(section.pluginId);
+          const descriptor = descriptors.find((entry) => entry.id === section.pluginId);
+          const Icon = section.icon;
+          const SettingsComponent = section.component;
 
           return (
-            <Card key={manifest.id} className={connected ? "" : "opacity-80"}>
+            <Card key={section.id} className={connected ? "" : "opacity-80"}>
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Icon size={20} />
-                    <h4 className="text-sm font-semibold">{manifest.name}</h4>
+                    {Icon ? <Icon size={20} /> : null}
+                    <h4 className="text-sm font-semibold">
+                      {descriptor?.displayName ?? section.title}
+                    </h4>
                   </div>
                   {connected ? (
                     <Badge
@@ -116,15 +121,15 @@ export function IntegrationsTab() {
                 </div>
 
                 {connected ? (
-                  manifest.id === "github" ? (
+                  section.pluginId === "github" ? (
                     <GitHubConnectedActions
-                      onDisconnect={() => disconnect(manifest.id)}
+                      onDisconnect={() => disconnect(section.pluginId)}
                     />
                   ) : (
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => disconnect(manifest.id)}
+                      onClick={() => disconnect(section.pluginId)}
                     >
                       Disconnect
                     </Button>

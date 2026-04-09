@@ -7,9 +7,9 @@ namespace WeaveFleet.Api.Endpoints;
 /// </summary>
 public static class GitHubAuthEndpoints
 {
-    public static WebApplication MapGitHubAuthEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapGitHubAuthEndpoints(this IEndpointRouteBuilder endpointRouteBuilder)
     {
-        var group = app.MapGroup("/api/integrations/github/auth").WithTags("GitHub");
+        var group = endpointRouteBuilder.MapGroup("/api/integrations/github/auth").WithTags("GitHub");
 
         // POST /api/integrations/github/auth/device-code — initiates GitHub OAuth device flow
         group.MapPost("/device-code", async (GitHubService gitHubService, CancellationToken ct) =>
@@ -38,12 +38,22 @@ public static class GitHubAuthEndpoints
             if (string.IsNullOrWhiteSpace(req.DeviceCode))
                 return Results.BadRequest(new { error = "deviceCode is required." });
 
-            var token = await gitHubService.PollForTokenAsync(req.DeviceCode, ct);
+            var result = await gitHubService.PollForTokenAsync(req.DeviceCode, ct);
 
-            if (token is null)
-                return Results.Ok(new { status = "pending" });
-
-            return Results.Ok(new { status = "success" });
+            return Results.Ok(new
+            {
+                status = result.Status switch
+                {
+                    DeviceFlowPollStatus.Pending => "pending",
+                    DeviceFlowPollStatus.Complete => "complete",
+                    DeviceFlowPollStatus.Expired => "expired",
+                    DeviceFlowPollStatus.Denied => "denied",
+                    DeviceFlowPollStatus.Error => "error",
+                    _ => throw new InvalidOperationException($"Unsupported device flow poll status '{result.Status}'."),
+                },
+                interval = result.Interval,
+                message = result.Message,
+            });
         })
         .WithName("GitHubPollForToken");
 
@@ -63,7 +73,7 @@ public static class GitHubAuthEndpoints
         })
         .WithName("GitHubConnectionStatus");
 
-        return app;
+        return endpointRouteBuilder;
     }
 
     private sealed record PollRequest(string DeviceCode);

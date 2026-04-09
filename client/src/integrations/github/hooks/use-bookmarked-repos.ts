@@ -56,6 +56,23 @@ async function syncToServer(repos: BookmarkedRepo[]): Promise<void> {
   }
 }
 
+function normalizeBookmarksResponse(data: unknown): BookmarkedRepo[] {
+  if (Array.isArray(data)) {
+    return data as BookmarkedRepo[];
+  }
+
+  if (
+    data &&
+    typeof data === "object" &&
+    "bookmarks" in data &&
+    Array.isArray((data as { bookmarks?: unknown }).bookmarks)
+  ) {
+    return (data as { bookmarks: BookmarkedRepo[] }).bookmarks;
+  }
+
+  return [];
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 interface UseBookmarkedReposResult {
@@ -84,7 +101,7 @@ export function useBookmarkedRepos(): UseBookmarkedReposResult {
       try {
         const res = await apiFetch(BOOKMARKS_API);
         if (res.ok) {
-          serverRepos = (await res.json()) as BookmarkedRepo[];
+          serverRepos = normalizeBookmarksResponse(await res.json());
         }
       } catch (err) {
         fetchFailed = true;

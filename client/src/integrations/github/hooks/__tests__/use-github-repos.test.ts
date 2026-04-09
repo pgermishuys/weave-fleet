@@ -128,4 +128,49 @@ describe("useGitHubRepos", () => {
       expect(result.current.isLoading).toBe(false);
     });
   });
+
+  it("requests successive pages until a short page is returned", async () => {
+    apiFetchMock
+      .mockResolvedValueOnce(
+        mockResponse(
+          Array.from({ length: 100 }, (_, index) => ({
+            id: index + 1,
+            full_name: `octocat/repo-${index + 1}`,
+            name: `repo-${index + 1}`,
+            owner: { login: "octocat", avatar_url: "https://example.com" },
+            private: false,
+            language: "TypeScript",
+            stargazers_count: index,
+          }))
+        )
+      )
+      .mockResolvedValueOnce(
+        mockResponse([
+          {
+            id: 101,
+            full_name: "octocat/repo-101",
+            name: "repo-101",
+            owner: { login: "octocat", avatar_url: "https://example.com" },
+            private: false,
+            language: "TypeScript",
+            stargazers_count: 101,
+          },
+        ])
+      );
+
+    const useGitHubRepos = await loadUseGitHubRepos();
+    const { result } = renderHook(() => useGitHubRepos());
+
+    await act(async () => {
+      result.current.refresh();
+    });
+
+    await waitFor(() => {
+      expect(result.current.repos).toHaveLength(101);
+    });
+
+    expect(apiFetchMock).toHaveBeenCalledTimes(2);
+    expect(apiFetchMock.mock.calls[0]?.[0]).toContain("page=1");
+    expect(apiFetchMock.mock.calls[1]?.[0]).toContain("page=2");
+  });
 });

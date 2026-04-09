@@ -142,4 +142,7 @@ export const githubManifest: IntegrationManifest = {
   ),
   isConfigured: () => _isGitHubConfigured,
   resolveContext,
+  pluginDescriptor: {
+    hasBackend: true,
+  },
 };

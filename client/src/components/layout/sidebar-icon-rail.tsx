@@ -1,9 +1,11 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Link } from "react-router";
-import { useLocation, useNavigate, useSearchParams } from "react-router";
-import { LayoutGrid, Github, Settings, FolderGit2, BarChart3 } from "lucide-react";
+import { matchPath, useLocation, useNavigate, useSearchParams } from "react-router";
+import { LayoutGrid, Settings, FolderGit2, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePluginRuntime } from "@/plugins/context";
+import { getRoutes, getSidebarViews } from "@/plugins/slots";
 import {
   Tooltip,
   TooltipContent,
@@ -17,7 +19,7 @@ import {
 
 // ── Default routes per view ──────────────────────────────────────────────────
 
-const VIEW_DEFAULT_ROUTE: Record<SidebarView, string> = {
+const CORE_VIEW_DEFAULT_ROUTE: Record<string, string> = {
   welcome: "/welcome",
   fleet: "/",
   github: "/github",
@@ -29,20 +31,34 @@ function isFleetRoute(pathname: string): boolean {
   return pathname === "/" || pathname.startsWith("/sessions");
 }
 
-/** Map a pathname to the view it belongs to (if any) */
-export function viewForPathname(pathname: string): SidebarView | null {
+export function viewForPathname(
+  pathname: string,
+  pluginRoutes: ReadonlyArray<{ path?: string; viewId?: string }> = []
+): SidebarView | null {
   if (pathname === "/welcome") return "welcome";
   if (pathname === "/github" || pathname.startsWith("/github/")) return "github";
   if (pathname === "/repositories" || pathname.startsWith("/repositories/")) return "repositories";
   if (isFleetRoute(pathname)) return "fleet";
+
+  for (const route of pluginRoutes) {
+    if (!route.path || !route.viewId) {
+      continue;
+    }
+
+    if (matchPath({ path: route.path, end: true }, pathname)) {
+      return route.viewId;
+    }
+  }
+
   return null;
 }
 
 export function nextViewForSwitch(
   activeView: SidebarView,
-  targetView: SidebarView
+  targetView: SidebarView,
+  panelViews: ReadonlySet<SidebarView> = new Set(["fleet", "github", "repositories"])
 ): SidebarView {
-  if (activeView === targetView && viewHasPanel(targetView)) {
+  if (activeView === targetView && viewHasPanel(targetView, panelViews)) {
     return "welcome";
   }
 
@@ -189,11 +205,18 @@ function ProfileBadge() {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function SidebarIconRail() {
-  const { activeView, panelOpen, setActiveView, isMobileNav, setMobileDrawerOpen } = useSidebar();
+  const { activeView, panelOpen, panelViews, setActiveView, isMobileNav, setMobileDrawerOpen } = useSidebar();
+  const { manifests } = usePluginRuntime();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [searchParams] = useSearchParams();
   const isWelcome = activeView === "welcome";
+  const pluginSidebarViews = getSidebarViews(manifests);
+  const pluginRoutes = getRoutes(manifests);
+  const defaultRoutes: Record<string, string> = Object.fromEntries([
+    ...Object.entries(CORE_VIEW_DEFAULT_ROUTE),
+    ...pluginSidebarViews.map((item) => [item.viewId, item.defaultPath]),
+  ]);
 
   // Full URL including search params (e.g. /sessions/abc?instanceId=xyz)
   const fullUrl = searchParams.toString()
@@ -202,27 +225,32 @@ export function SidebarIconRail() {
 
   // Track the last pathname visited for each view so we can restore it
   const lastPathByView = useRef<Record<string, string>>({
-    welcome: VIEW_DEFAULT_ROUTE.welcome,
-    fleet: VIEW_DEFAULT_ROUTE.fleet,
-    github: VIEW_DEFAULT_ROUTE.github,
-    repositories: VIEW_DEFAULT_ROUTE.repositories,
+    ...CORE_VIEW_DEFAULT_ROUTE,
   });
+
+  useEffect(() => {
+    for (const [view, route] of Object.entries(defaultRoutes)) {
+      if (!lastPathByView.current[view]) {
+        lastPathByView.current[view] = String(route);
+      }
+    }
+  }, [defaultRoutes]);
 
   // Keep the map up-to-date as the user navigates within a view
   useEffect(() => {
-    const owningView = viewForPathname(pathname);
+    const owningView = viewForPathname(pathname, pluginRoutes);
     if (owningView) {
       lastPathByView.current[owningView] = fullUrl;
     }
-  }, [fullUrl, pathname]);
+  }, [fullUrl, pathname, pluginRoutes]);
 
   // Route is source-of-truth for active view on direct navigation/history.
   useEffect(() => {
-    const owningView = viewForPathname(pathname);
+    const owningView = viewForPathname(pathname, pluginRoutes);
     if (owningView && owningView !== activeView) {
       setActiveView(owningView);
     }
-  }, [activeView, pathname, setActiveView]);
+  }, [activeView, pathname, pluginRoutes, setActiveView]);
 
   // Close mobile drawer when user navigates to a new route.
   // Track previous pathname so this only fires on actual navigation,
@@ -243,19 +271,19 @@ export function SidebarIconRail() {
     if (prevViewRef.current === activeView) return;
     prevViewRef.current = activeView;
 
-    const target = lastPathByView.current[activeView] ?? VIEW_DEFAULT_ROUTE[activeView];
+    const target = lastPathByView.current[activeView] ?? defaultRoutes[activeView] ?? "/";
     // Only navigate if we're not already on a route belonging to this view
-    if (viewForPathname(pathname) !== activeView) {
+    if (viewForPathname(pathname, pluginRoutes) !== activeView) {
       navigate(target);
     }
-  }, [activeView, pathname, navigate]);
+  }, [activeView, defaultRoutes, navigate, pathname, pluginRoutes]);
 
   // Switch to a view (used by icon rail buttons)
   const handleSwitch = useCallback(
     (view: SidebarView) => {
-      setActiveView(nextViewForSwitch(activeView, view));
+      setActiveView(nextViewForSwitch(activeView, view, panelViews));
     },
-    [activeView, setActiveView]
+    [activeView, panelViews, setActiveView]
   );
 
   return (
@@ -307,7 +335,15 @@ export function SidebarIconRail() {
       {/* Top section: view togglers */}
       <div className="flex flex-col gap-0.5 px-1">
         <IconRailButton icon={LayoutGrid} label="Fleet" view="fleet" onSwitch={handleSwitch} />
-        <IconRailButton icon={Github} label="GitHub" view="github" onSwitch={handleSwitch} />
+        {pluginSidebarViews.map((item) => (
+          <IconRailButton
+            key={item.pluginId + item.viewId}
+            icon={item.icon}
+            label={item.label}
+            view={item.viewId}
+            onSwitch={handleSwitch}
+          />
+        ))}
         <IconRailButton icon={FolderGit2} label="Repositories" view="repositories" onSwitch={handleSwitch} />
       </div>
 

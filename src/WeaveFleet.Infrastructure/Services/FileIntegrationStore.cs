@@ -5,7 +5,9 @@ using WeaveFleet.Application.Services;
 namespace WeaveFleet.Infrastructure.Services;
 
 /// <summary>
-/// Persists integration configs in ~/.weave/integrations.json.
+/// Transitional file-backed store for integration-shaped config data.
+/// Plugin state should flow through <c>IPluginStateStore</c>, which currently
+/// adapts to this implementation during the migration.
 /// </summary>
 public sealed class FileIntegrationStore : IIntegrationStore
 {

@@ -1,4 +1,5 @@
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Infrastructure.Services;
@@ -130,15 +131,31 @@ public static class FleetEndpoints
         .WithName("RefreshRepositories");
 
         // GET /api/integrations — returns integration statuses
-        group.MapGet("/integrations", async (GitHubService gitHubService, CancellationToken ct) =>
+        group.MapGet("/integrations", async (IPluginCatalog pluginCatalog, CancellationToken ct) =>
         {
-            var connected = await gitHubService.IsConnectedAsync(ct);
+            var descriptors = await pluginCatalog.GetDescriptorsAsync(ct).ConfigureAwait(false);
+            var statuses = await pluginCatalog.GetStatusesAsync(ct).ConfigureAwait(false);
+
+            var statusById = statuses.ToDictionary(status => status.PluginId, StringComparer.Ordinal);
+
             return Results.Ok(new
             {
-                integrations = new[]
+                integrations = descriptors.Select(descriptor => new
                 {
-                    new { id = "github", name = "GitHub", connected }
-                }
+                    id = descriptor.Id,
+                    name = descriptor.DisplayName,
+                    status = statusById.TryGetValue(descriptor.Id, out var status)
+                        ? status.Status switch
+                        {
+                            PluginConnectionStatus.Connected => "connected",
+                            PluginConnectionStatus.Error => "error",
+                            _ => "disconnected",
+                        }
+                        : "disconnected",
+                    connectedAt = statusById.TryGetValue(descriptor.Id, out status)
+                        ? status.ConnectedAt
+                        : null,
+                })
             });
         })
         .WithName("GetIntegrations");

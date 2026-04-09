@@ -4,7 +4,9 @@ using System.Text.Json.Nodes;
 namespace WeaveFleet.Application.Services;
 
 /// <summary>
-/// Abstraction for persisting integration tokens and settings (e.g. GitHub OAuth token).
+/// Transitional persistence abstraction for integration-shaped config data.
+/// The canonical host seam is <c>IPluginStateStore</c>; keep this interface only
+/// while compatibility callers are being migrated.
 /// </summary>
 public interface IIntegrationStore
 {

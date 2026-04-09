@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Infrastructure.Services;
 
@@ -10,17 +11,23 @@ namespace WeaveFleet.Api.Endpoints;
 /// </summary>
 public static class GitHubEndpoints
 {
-    public static WebApplication MapGitHubEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapGitHubEndpoints(this IEndpointRouteBuilder endpointRouteBuilder)
     {
-        var group = app.MapGroup("/api/integrations/github").WithTags("GitHub");
+        var group = endpointRouteBuilder.MapGroup("/api/integrations/github").WithTags("GitHub");
 
         // GET /api/integrations/github/repos — list authenticated user repos
         group.MapGet("/repos", async (
+            int? page,
+            int? perPage,
+            string? sort,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
             CancellationToken ct) =>
         {
-            return await ProxyAsync(gitHubService, proxy, "user/repos?per_page=100&sort=updated", ct: ct);
+            var pageString = page?.ToString(CultureInfo.InvariantCulture);
+            var perPageString = (perPage ?? 100).ToString(CultureInfo.InvariantCulture);
+            var query = BuildQuery(("page", pageString), ("per_page", perPageString), ("sort", sort ?? "updated"));
+            return await ProxyAsync(gitHubService, proxy, $"user/repos{query}", ct: ct);
         })
         .WithName("GitHubListRepos");
 
@@ -191,27 +198,47 @@ public static class GitHubEndpoints
         .WithName("GitHubGetPRStatus");
 
         // GET /api/integrations/github/bookmarks — stored bookmarked repos
-        group.MapGet("/bookmarks", async (IIntegrationStore store, CancellationToken ct) =>
+        group.MapGet("/bookmarks", async (IPluginStateStore store, CancellationToken ct) =>
         {
-            var config = await store.GetConfigAsync("github_bookmarks", ct);
-            var bookmarks = config?["repos"] as JsonArray ?? [];
-            return Results.Ok(new { bookmarks });
+            var config = await store.GetStateAsync("github_bookmarks", ct);
+            var bookmarks = ToBookmarkedRepos(config?["repos"] as JsonArray);
+            return Results.Ok(bookmarks);
         })
         .WithName("GitHubGetBookmarks");
+
+        // PUT /api/integrations/github/bookmarks — replace bookmark set
+        group.MapPut("/bookmarks", async (
+            BookmarkSyncRequest req,
+            IPluginStateStore store,
+            CancellationToken ct) =>
+        {
+            var repos = new JsonArray();
+            foreach (var bookmark in req.Bookmarks)
+                repos.Add(bookmark.FullName);
+
+            var config = new JsonObject
+            {
+                ["repos"] = repos,
+            };
+
+            await store.SetStateAsync("github_bookmarks", config, ct);
+            return Results.NoContent();
+        })
+        .WithName("GitHubSyncBookmarks");
 
         // POST /api/integrations/github/bookmarks — add a bookmark
         group.MapPost("/bookmarks", async (
             BookmarkRequest req,
-            IIntegrationStore store,
+            IPluginStateStore store,
             CancellationToken ct) =>
         {
-            var config = await store.GetConfigAsync("github_bookmarks", ct) ?? [];
+            var config = await store.GetStateAsync("github_bookmarks", ct) ?? [];
             var repos = config["repos"] as JsonArray ?? new JsonArray();
             var exists = repos.Any(r => r?.GetValue<string>() == req.Repo);
             if (!exists)
                 repos.Add(req.Repo);
             config["repos"] = repos;
-            await store.SetConfigAsync("github_bookmarks", config, ct);
+            await store.SetStateAsync("github_bookmarks", config, ct);
             return Results.NoContent();
         })
         .WithName("GitHubAddBookmark");
@@ -220,11 +247,11 @@ public static class GitHubEndpoints
         group.MapDelete("/bookmarks/{owner}/{repo}", async (
             string owner,
             string repo,
-            IIntegrationStore store,
+            IPluginStateStore store,
             CancellationToken ct) =>
         {
             var fullName = $"{owner}/{repo}";
-            var config = await store.GetConfigAsync("github_bookmarks", ct);
+            var config = await store.GetStateAsync("github_bookmarks", ct);
             if (config is null) return Results.NoContent();
 
             var repos = config["repos"] as JsonArray;
@@ -234,12 +261,12 @@ public static class GitHubEndpoints
             if (item is not null) repos.Remove(item);
 
             config["repos"] = repos;
-            await store.SetConfigAsync("github_bookmarks", config, ct);
+            await store.SetStateAsync("github_bookmarks", config, ct);
             return Results.NoContent();
         })
         .WithName("GitHubRemoveBookmark");
 
-        return app;
+        return endpointRouteBuilder;
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
@@ -272,5 +299,20 @@ public static class GitHubEndpoints
         return qs.Length > 0 ? $"?{qs}" : string.Empty;
     }
 
+    private static BookmarkedRepoDto[] ToBookmarkedRepos(JsonArray? repos)
+        => (repos ?? [])
+            .Select(entry => entry?.GetValue<string>())
+            .Where(fullName => !string.IsNullOrWhiteSpace(fullName))
+            .Select(fullName =>
+            {
+                var parts = fullName!.Split('/', 2, StringSplitOptions.TrimEntries);
+                var owner = parts.ElementAtOrDefault(0) ?? string.Empty;
+                var name = parts.ElementAtOrDefault(1) ?? string.Empty;
+                return new BookmarkedRepoDto(fullName, owner, name);
+            })
+            .ToArray();
+
     private sealed record BookmarkRequest(string Repo);
+    private sealed record BookmarkSyncRequest(IReadOnlyList<BookmarkedRepoDto> Bookmarks);
+    private sealed record BookmarkedRepoDto(string FullName, string Owner, string Name);
 }

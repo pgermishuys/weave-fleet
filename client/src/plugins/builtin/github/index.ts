@@ -1,0 +1,1 @@
+export { githubPluginManifest } from "./plugin";

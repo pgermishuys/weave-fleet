@@ -92,6 +92,20 @@ describe("useBookmarkedRepos", () => {
     expect(result.current.error).toBeNull();
   });
 
+  it("accepts legacy wrapped bookmarks response on mount", async () => {
+    apiFetchMock.mockResolvedValue(mockResponse({ bookmarks: [repoB, repoA] }));
+
+    const { useBookmarkedRepos } = await loadHook();
+    const { result } = renderHook(() => useBookmarkedRepos());
+
+    await waitFor(() => {
+      expect(result.current.repos).toHaveLength(2);
+    });
+
+    expect(result.current.repos[0]?.fullName).toBe("acme/alpha");
+    expect(result.current.repos[1]?.fullName).toBe("acme/bravo");
+  });
+
   it("sets error state when initial fetch fails", async () => {
     apiFetchMock.mockRejectedValue(new Error("Network error"));
 
@@ -127,7 +141,10 @@ describe("useBookmarkedRepos", () => {
     // Should have called PUT to sync
     expect(apiFetchMock).toHaveBeenCalledWith(
       "/api/integrations/github/bookmarks",
-      expect.objectContaining({ method: "PUT" })
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ bookmarks: [repoA] }),
+      })
     );
   });
 
@@ -177,6 +194,14 @@ describe("useBookmarkedRepos", () => {
       expect(result.current.repos).toHaveLength(1);
       expect(result.current.repos[0]?.fullName).toBe("acme/bravo");
     });
+
+    expect(apiFetchMock).toHaveBeenLastCalledWith(
+      "/api/integrations/github/bookmarks",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ bookmarks: [repoB] }),
+      })
+    );
   });
 
   it("hasRepo returns correct boolean", async () => {

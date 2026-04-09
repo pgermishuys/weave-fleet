@@ -4,6 +4,7 @@ using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Analytics;
@@ -12,6 +13,8 @@ using WeaveFleet.Infrastructure.Data.Repositories;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
+using WeaveFleet.Infrastructure.Plugins;
+using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure;
@@ -21,6 +24,14 @@ namespace WeaveFleet.Infrastructure;
 /// </summary>
 public static class DependencyInjection
 {
+    public static IServiceCollection AddBuiltInPlugin<TPlugin>(this IServiceCollection services)
+        where TPlugin : class, IBackendPlugin
+    {
+        services.AddSingleton<TPlugin>();
+        services.AddSingleton<IBackendPlugin>(serviceProvider => serviceProvider.GetRequiredService<TPlugin>());
+        return services;
+    }
+
     /// <summary>
     /// Adds all infrastructure services (database, repositories, external clients) to the service collection.
     /// </summary>
@@ -71,6 +82,8 @@ public static class DependencyInjection
 
         // Integration store — singleton, file-backed
         services.AddSingleton<IIntegrationStore, FileIntegrationStore>();
+        services.AddSingleton<IPluginStateStore, PluginStateStore>();
+        services.AddSingleton<IPluginCatalog, BuiltInPluginCatalog>();
 
         // HttpClient factory for GitHub API calls
         services.AddHttpClient();
@@ -78,6 +91,7 @@ public static class DependencyInjection
         // GitHub services — singleton
         services.AddSingleton<GitHubService>();
         services.AddSingleton<GitHubApiProxy>();
+        services.AddBuiltInPlugin<GitHubBackendPlugin>();
 
         // InstanceTracker is singleton — holds live in-process handles across requests
         services.AddSingleton<InstanceTracker>();

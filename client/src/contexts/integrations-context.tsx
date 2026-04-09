@@ -1,12 +1,15 @@
 
-import { createContext, useContext, useMemo, useEffect } from "react";
+import { createContext, useContext, useMemo } from "react";
 import type { ReactNode } from "react";
-import { useIntegrations } from "@/hooks/use-integrations";
 import type { IntegrationStatusInfo } from "@/hooks/use-integrations";
+import { usePluginRuntime } from "@/plugins/context";
 
-// Side-effect import — registers the GitHub integration in the registry
-import "@/integrations/github";
-import { setGitHubConfigured } from "@/integrations/github/manifest";
+/**
+ * Transitional compatibility context.
+ *
+ * Plugin runtime state is canonical; this context preserves the old
+ * integration-shaped API for callers that have not yet moved to plugin terms.
+ */
 
 export interface IntegrationsContextValue {
   integrations: IntegrationStatusInfo[];
@@ -32,21 +35,34 @@ const IntegrationsContext =
   createContext<IntegrationsContextValue>(defaultValue);
 
 export function IntegrationsProvider({ children }: { children: ReactNode }) {
-  const { integrations, isLoading, error, connect, disconnect, refetch } =
-    useIntegrations();
+  const {
+    descriptors,
+    statuses,
+    isLoading,
+    error,
+    connect,
+    disconnect,
+    refetch,
+  } = usePluginRuntime();
+
+  const integrations = useMemo<IntegrationStatusInfo[]>(
+    () =>
+      descriptors.map((descriptor) => {
+        const status = statuses.find((entry) => entry.pluginId === descriptor.id);
+        return {
+          id: descriptor.id,
+          name: descriptor.displayName,
+          status: status?.status ?? "disconnected",
+          connectedAt: status?.connectedAt,
+        };
+      }),
+    [descriptors, statuses]
+  );
 
   const connectedIntegrations = useMemo(
     () => integrations.filter((i) => i.status === "connected"),
     [integrations]
   );
-
-  // Keep manifest isConfigured() in sync with polling results
-  useEffect(() => {
-    const isGitHubConnected = integrations.some(
-      (i) => i.id === "github" && i.status === "connected"
-    );
-    setGitHubConfigured(isGitHubConnected);
-  }, [integrations]);
 
   const value = useMemo(
     () => ({

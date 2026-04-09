@@ -51,6 +51,7 @@ describe("Integration Registry", () => {
     const all = registry.getIntegrations();
     expect(all).toContain(a);
     expect(all).toContain(b);
+    expect(all.map((manifest) => manifest.id)).toEqual(["github", "jira"]);
   });
 
   it("getIntegration returns undefined for unknown id", () => {

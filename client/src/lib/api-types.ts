@@ -10,6 +10,10 @@ import type {
   InstanceStatus,
 } from "@/lib/types";
 import type { ContextSource } from "@/integrations/types";
+import type {
+  FleetPluginDescriptor,
+  FleetPluginStatus,
+} from "@/plugins/types";
 
 // Re-export status types for consumer convenience
 export type { SessionActivityStatus, SessionLifecycleStatus, SessionRetentionStatus, InstanceStatus };
@@ -576,8 +580,13 @@ export interface HistoryResponse {
 export interface IntegrationStatusInfo {
   id: string;
   name: string;
-  status: "connected" | "disconnected";
+  status: "connected" | "disconnected" | "error";
   connectedAt?: string;
+}
+
+export interface PluginCatalogResponse {
+  plugins: FleetPluginDescriptor[];
+  statuses: FleetPluginStatus[];
 }
 
 // ─── GitHub Device Authorization Flow Types (RFC 8628) ─────────────────────

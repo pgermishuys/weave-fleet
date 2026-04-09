@@ -3,12 +3,16 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { useIsMobileNav } from "@/hooks/use-media-query";
+import { usePluginRuntime } from "@/plugins/context";
+import { getSidebarPanels } from "@/plugins/slots";
 
 const SIDEBAR_ACTIVE_VIEW_KEY = "weave:sidebar:activeView";
 const SIDEBAR_WIDTH_KEY = "weave:sidebar:width";
@@ -22,14 +26,18 @@ export const SIDEBAR_DEFAULT_WIDTH = 224;
 // @deprecated use SIDEBAR_RAIL_WIDTH instead
 export const SIDEBAR_COLLAPSED_WIDTH = SIDEBAR_RAIL_WIDTH;
 
-export type SidebarView = "welcome" | "fleet" | "github" | "repositories";
+export type SidebarView = string;
 
 /** Views that show a contextual side panel */
-const PANEL_VIEWS = new Set<SidebarView>(["fleet", "github", "repositories"]);
+const CORE_PANEL_VIEWS = new Set<SidebarView>(["fleet", "repositories"]);
+const LEGACY_PANEL_VIEWS = new Set<SidebarView>(["fleet", "github", "repositories"]);
 
 /** Whether the given view shows a contextual side panel */
-export function viewHasPanel(view: SidebarView): boolean {
-  return PANEL_VIEWS.has(view);
+export function viewHasPanel(
+  view: SidebarView,
+  panelViews: ReadonlySet<SidebarView> = LEGACY_PANEL_VIEWS
+): boolean {
+  return panelViews.has(view);
 }
 
 interface SidebarContextValue {
@@ -39,6 +47,8 @@ interface SidebarContextValue {
   readonly panelOpen: boolean;
   /** Set the active view — panel visibility is derived automatically */
   setActiveView: (view: SidebarView) => void;
+  /** Views that own a contextual side panel */
+  readonly panelViews: ReadonlySet<SidebarView>;
   /** Toggle sidebar panel (⌘B): switches between welcome and last panel view */
   toggleSidebar: () => void;
   /** Read-only backwards-compat alias: collapsed === !panelOpen */
@@ -75,9 +85,6 @@ function migrateSidebarStorage(): void {
     if (raw !== null) {
       try {
         const value = JSON.parse(raw) as string;
-        if (!PANEL_VIEWS.has(value as SidebarView) && value !== "welcome") {
-          localStorage.removeItem(SIDEBAR_ACTIVE_VIEW_KEY);
-        }
       } catch {
         localStorage.removeItem(SIDEBAR_ACTIVE_VIEW_KEY);
       }
@@ -94,6 +101,12 @@ interface SidebarProviderProps {
 export function SidebarProvider({ children }: SidebarProviderProps) {
   // Run synchronous migration before any hook reads localStorage
   migrateSidebarStorage();
+  const { manifests } = usePluginRuntime();
+  const pluginPanels = useMemo(() => getSidebarPanels(manifests), [manifests]);
+  const panelViews = useMemo(
+    () => new Set<SidebarView>([...LEGACY_PANEL_VIEWS, ...CORE_PANEL_VIEWS, ...pluginPanels.map((panel) => panel.viewId)]),
+    [pluginPanels]
+  );
 
   const [activeView, setActiveViewState] = usePersistedState<SidebarView>(
     SIDEBAR_ACTIVE_VIEW_KEY,
@@ -112,21 +125,25 @@ export function SidebarProvider({ children }: SidebarProviderProps) {
   const isMobileNav = useIsMobileNav();
 
   // Track the last panel view so ⌘B can restore it
-  const lastPanelViewRef = useRef<SidebarView>(
-    viewHasPanel(activeView) ? activeView : "fleet"
-  );
+  const lastPanelViewRef = useRef<SidebarView>("fleet");
+
+  useEffect(() => {
+    if (viewHasPanel(activeView, panelViews)) {
+      lastPanelViewRef.current = activeView;
+    }
+  }, [activeView, panelViews]);
 
   // Derive panel visibility from the active view
-  const panelOpen = viewHasPanel(activeView);
+  const panelOpen = viewHasPanel(activeView, panelViews);
 
   const setActiveView = useCallback(
     (view: SidebarView) => {
-      if (viewHasPanel(view)) {
+      if (viewHasPanel(view, panelViews)) {
         lastPanelViewRef.current = view;
       }
       setActiveViewState(view);
     },
-    [setActiveViewState]
+    [panelViews, setActiveViewState]
   );
 
   const toggleSidebar = useCallback(() => {
@@ -150,6 +167,7 @@ export function SidebarProvider({ children }: SidebarProviderProps) {
         activeView,
         panelOpen,
         setActiveView,
+        panelViews,
         toggleSidebar,
         get collapsed() {
           return !panelOpen;

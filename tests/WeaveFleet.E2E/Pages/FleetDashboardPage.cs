@@ -125,20 +125,27 @@ public sealed class FleetDashboardPage(IPage page)
     public async Task SetRetentionFilterAsync(string label)
     {
         var key = label.ToLowerInvariant();
-        var option = _page.GetByTestId($"retention-filter-option-{key}");
 
         // Radix dropdowns can occasionally miss the initial open click in CI
         // when layout/animation is still settling, so retry the trigger until
-        // the target option is actually visible.
+        // the target option is actually visible and clickable.
         for (var attempt = 0; attempt < 3; attempt++)
         {
+            var option = _page.GetByTestId($"retention-filter-option-{key}");
             await _page.GetByTestId("retention-filter-trigger").ClickAsync(new LocatorClickOptions { Force = true });
 
             try
             {
                 await Assertions.Expect(option).ToBeVisibleAsync(
                     new LocatorAssertionsToBeVisibleOptions { Timeout = 2_000 });
-                break;
+
+                await option.ClickAsync(new LocatorClickOptions
+                {
+                    Force = true,
+                    Timeout = 2_000,
+                });
+
+                return;
             }
             catch when (attempt < 2)
             {
@@ -146,8 +153,9 @@ public sealed class FleetDashboardPage(IPage page)
             }
         }
 
-        await Assertions.Expect(option).ToBeVisibleAsync();
-        await option.ClickAsync(new LocatorClickOptions { Force = true });
+        var finalOption = _page.GetByTestId($"retention-filter-option-{key}");
+        await Assertions.Expect(finalOption).ToBeVisibleAsync();
+        await finalOption.ClickAsync(new LocatorClickOptions { Force = true });
     }
 
     /// <summary>Click a session card to navigate to the session detail page.</summary>

@@ -1,6 +1,8 @@
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { usePluginRuntime } from "@/plugins/context";
+import { getSidebarPanels } from "@/plugins/slots";
 import {
   useSidebar,
   SIDEBAR_MIN_WIDTH,
@@ -9,12 +11,15 @@ import {
 } from "@/contexts/sidebar-context";
 import { useSidebarResize } from "@/hooks/use-sidebar-resize";
 import { FleetPanel } from "@/components/layout/fleet-panel";
-import { GitHubPanel } from "@/components/layout/github-panel";
 import { RepositoriesPanel } from "@/components/layout/repositories-panel";
 
 export function ContextualPanel() {
+  const { manifests } = usePluginRuntime();
   const { activeView, toggleSidebar, width, setWidth, isResizing, setIsResizing } =
     useSidebar();
+  const pluginPanels = useMemo(() => getSidebarPanels(manifests), [manifests]);
+  const activePluginPanel = pluginPanels.find((panel) => panel.viewId === activeView);
+  const ActivePluginPanel = activePluginPanel?.component;
 
   const handleResizeStart = useCallback(() => {
     setIsResizing(true);
@@ -48,22 +53,22 @@ export function ContextualPanel() {
   return (
     <div
       role="region"
-      aria-label={
-        activeView === "fleet"
-          ? "Fleet panel"
-          : activeView === "github"
-          ? "GitHub panel"
+        aria-label={
+          activeView === "fleet"
+            ? "Fleet panel"
           : activeView === "repositories"
-          ? "Repositories panel"
+            ? "Repositories panel"
+          : activePluginPanel
+            ? `${activeView} panel`
           : "Sidebar panel"
-      }
+        }
       style={{ width }}
       className="relative flex flex-col h-full overflow-hidden"
     >
       {/* Panel content */}
       {activeView === "fleet" && <FleetPanel />}
-      {activeView === "github" && <GitHubPanel />}
       {activeView === "repositories" && <RepositoriesPanel />}
+      {ActivePluginPanel ? <ActivePluginPanel /> : null}
 
       {/* Resize handle */}
       <div

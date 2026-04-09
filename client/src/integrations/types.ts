@@ -1,4 +1,13 @@
 import type { ComponentType } from "react";
+import type { FleetPluginTrustLevel } from "@/plugins/types";
+
+/**
+ * Transitional compatibility types.
+ *
+ * The plugin host in `client/src/plugins/**` is the canonical extension seam.
+ * Keep these integration-flavored shapes only while legacy GitHub callers are
+ * being migrated off the old vocabulary.
+ */
 
 /** The boundary type between integrations and core Fleet */
 export interface ContextSource {
@@ -18,6 +27,10 @@ export interface IntegrationManifest {
   isConfigured: () => boolean; // Checks if token/config exists
   settingsComponent?: ComponentType; // Settings panel for this integration
   resolveContext: (url: string) => Promise<ContextSource | null>; // URL → context
+  pluginDescriptor?: {
+    trustLevel?: FleetPluginTrustLevel;
+    hasBackend?: boolean;
+  };
 }
 
 /** Connection status for an integration */

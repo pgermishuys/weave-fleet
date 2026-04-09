@@ -4,7 +4,8 @@ import { KeybindingsProvider } from "@/contexts/keybindings-context";
 import { CommandRegistryProvider } from "@/contexts/command-registry-context";
 import { ThemeProvider } from "@/contexts/theme-context";
 import { IntegrationsProvider } from "@/contexts/integrations-context";
-import { GitHubRepoCacheWarmer } from "@/integrations/github/components/repo-cache-warmer";
+import { PluginRuntimeProvider, usePluginRuntime } from "@/plugins/context";
+import { getStartupHooks } from "@/plugins/slots";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sidebar } from "@/components/layout/sidebar";
 import { NavigationCommands } from "@/components/commands/navigation-commands";
@@ -61,27 +62,44 @@ function SwipeableLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function PluginStartupHooks() {
+  const { manifests } = usePluginRuntime();
+  const startupHooks = getStartupHooks(manifests);
+
+  return startupHooks.map((hook) => {
+    const HookComponent = hook.component;
+
+    return (
+      <Suspense key={hook.id} fallback={null}>
+        <HookComponent />
+      </Suspense>
+    );
+  });
+}
+
 export function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider>
       <SessionsProvider>
-        <IntegrationsProvider>
-          <GitHubRepoCacheWarmer />
-          <SidebarProvider>
-            <KeybindingsProvider>
-              <CommandRegistryProvider>
-                <TooltipProvider delayDuration={0}>
-                  <SwipeableLayout>{children}</SwipeableLayout>
-                </TooltipProvider>
-                <Suspense><NavigationCommands /></Suspense>
-                <Suspense><ViewCommands /></Suspense>
-                <Suspense><SessionCommands /></Suspense>
-                <CommandPalette />
-                <Suspense><TauriUpdateDialog /></Suspense>
-              </CommandRegistryProvider>
-            </KeybindingsProvider>
-          </SidebarProvider>
-        </IntegrationsProvider>
+        <PluginRuntimeProvider>
+          <IntegrationsProvider>
+            <PluginStartupHooks />
+            <SidebarProvider>
+              <KeybindingsProvider>
+                <CommandRegistryProvider>
+                  <TooltipProvider delayDuration={0}>
+                    <SwipeableLayout>{children}</SwipeableLayout>
+                  </TooltipProvider>
+                  <Suspense><NavigationCommands /></Suspense>
+                  <Suspense><ViewCommands /></Suspense>
+                  <Suspense><SessionCommands /></Suspense>
+                  <CommandPalette />
+                  <Suspense><TauriUpdateDialog /></Suspense>
+                </CommandRegistryProvider>
+              </KeybindingsProvider>
+            </SidebarProvider>
+          </IntegrationsProvider>
+        </PluginRuntimeProvider>
       </SessionsProvider>
     </ThemeProvider>
   );

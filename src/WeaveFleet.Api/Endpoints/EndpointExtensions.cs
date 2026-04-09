@@ -1,3 +1,8 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
+using WeaveFleet.Application.Plugins;
+
 namespace WeaveFleet.Api.Endpoints;
 
 /// <summary>
@@ -7,6 +12,7 @@ public static class EndpointExtensions
 {
     public static WebApplication MapFleetEndpoints(this WebApplication app)
     {
+        app.MapPluginEndpoints();
         app.MapSessionEndpoints();
         app.MapProjectEndpoints();
         app.MapFleetSummaryEndpoints();
@@ -20,9 +26,18 @@ public static class EndpointExtensions
         app.MapWorkspaceEndpoints();
         app.MapSessionEventEndpoints();
         app.MapWebSocketEndpoints();
-        app.MapGitHubAuthEndpoints();
-        app.MapGitHubEndpoints();
+        app.MapBackendPluginEndpoints();
         app.MapAnalyticsEndpoints();
+
+        return app;
+    }
+
+    public static WebApplication MapBackendPluginEndpoints(this WebApplication app)
+    {
+        foreach (var plugin in app.Services.GetServices<IBackendPlugin>())
+        {
+            plugin.MapEndpoints(app);
+        }
 
         return app;
     }
