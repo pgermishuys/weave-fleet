@@ -2,6 +2,7 @@ import {
   deriveDisplayName,
   groupSessionsByWorkspace,
   filterSessionsByWorkspace,
+  filterSessionsByRetention,
 } from "@/lib/workspace-utils";
 import type { SessionListItem, FleetSession } from "@/lib/api-types";
 
@@ -30,6 +31,8 @@ function makeSession(overrides: Partial<SessionListItem> = {}): SessionListItem 
     session: makeFleetSession(),
     activityStatus: "busy",
     lifecycleStatus: "running",
+    retentionStatus: "active",
+    archivedAt: null,
     typedInstanceStatus: "running",
     isHidden: false,
     ...overrides,
@@ -626,5 +629,34 @@ describe("filterSessionsByWorkspace", () => {
     expect(result).toHaveLength(2);
     expect(result).toContain(existing);
     expect(result).toContain(worktree);
+  });
+});
+
+describe("filterSessionsByRetention", () => {
+  it("returns only active sessions by default filter", () => {
+    const active = makeSession({ instanceId: "inst-active", retentionStatus: "active" });
+    const archived = makeSession({ instanceId: "inst-archived", retentionStatus: "archived", archivedAt: "2026-01-01T00:00:00Z" });
+
+    const result = filterSessionsByRetention([active, archived], "active");
+
+    expect(result).toEqual([active]);
+  });
+
+  it("returns archived sessions when archived filter selected", () => {
+    const active = makeSession({ instanceId: "inst-active", retentionStatus: "active" });
+    const archived = makeSession({ instanceId: "inst-archived", retentionStatus: "archived", archivedAt: "2026-01-01T00:00:00Z" });
+
+    const result = filterSessionsByRetention([active, archived], "archived");
+
+    expect(result).toEqual([archived]);
+  });
+
+  it("returns all sessions when all filter selected", () => {
+    const active = makeSession({ instanceId: "inst-active", retentionStatus: "active" });
+    const archived = makeSession({ instanceId: "inst-archived", retentionStatus: "archived", archivedAt: "2026-01-01T00:00:00Z" });
+
+    const result = filterSessionsByRetention([active, archived], "all");
+
+    expect(result).toEqual([active, archived]);
   });
 });

@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router";
 import { Header, NewSessionButton } from "@/components/layout/header";
 import { SummaryBar } from "@/components/fleet/summary-bar";
 import { FleetToolbar } from "@/components/fleet/fleet-toolbar";
-import type { GroupBy, SortBy } from "@/components/fleet/fleet-toolbar";
+import type { GroupBy, RetentionFilter, SortBy } from "@/components/fleet/fleet-toolbar";
 import { SessionGroup } from "@/components/fleet/session-group";
 import { LiveSessionCard } from "@/components/fleet/live-session-card";
 import { useFoldableScreen } from "@/hooks/use-foldable-screen";
@@ -13,6 +13,8 @@ import { useTerminateSession } from "@/hooks/use-terminate-session";
 import { useAbortSession } from "@/hooks/use-abort-session";
 import { useResumeSession } from "@/hooks/use-resume-session";
 import { useDeleteSession } from "@/hooks/use-delete-session";
+import { useArchiveSession } from "@/hooks/use-archive-session";
+import { useUnarchiveSession } from "@/hooks/use-unarchive-session";
 import { useOpenDirectory } from "@/hooks/use-open-directory";
 import type { OpenTool } from "@/hooks/use-open-directory";
 
@@ -26,11 +28,21 @@ import type { SessionListItem } from "@/lib/api-types";
 import { Loader2 } from "lucide-react";
 
 function FleetPageInner() {
-  const { sessions, isLoading, error, refetch, summary: liveSummary } = useSessionsContext();
+  const {
+    sessions,
+    retentionFilter,
+    setRetentionFilter,
+    isLoading,
+    error,
+    refetch,
+    summary: liveSummary,
+  } = useSessionsContext();
   const { terminateSession } = useTerminateSession();
   const { abortSession } = useAbortSession();
   const { resumeSession, resumingSessionId } = useResumeSession();
   const { deleteSession, isDeleting } = useDeleteSession();
+  const { archiveSession } = useArchiveSession();
+  const { unarchiveSession } = useUnarchiveSession();
   const { openDirectory } = useOpenDirectory();
   const { isFolded } = useFoldableScreen();
   const navigate = useNavigate();
@@ -58,6 +70,10 @@ function FleetPageInner() {
   const handleSortByChange = useCallback((sortBy: SortBy) => {
     setPrefs((prev) => ({ ...prev, sortBy }));
   }, [setPrefs]);
+
+  const handleRetentionFilterChange = useCallback((nextRetentionFilter: RetentionFilter) => {
+    setRetentionFilter(nextRetentionFilter);
+  }, [setRetentionFilter]);
 
   const handleTerminate = useCallback(async (sessionId: string, instanceId: string) => {
     try {
@@ -97,6 +113,24 @@ function FleetPageInner() {
     });
   }, [sessions]);
 
+  const handleArchive = useCallback(async (sessionId: string) => {
+    try {
+      await archiveSession(sessionId);
+      refetch();
+    } catch {
+      // error surfaced inside useArchiveSession
+    }
+  }, [archiveSession, refetch]);
+
+  const handleUnarchive = useCallback(async (sessionId: string) => {
+    try {
+      await unarchiveSession(sessionId);
+      refetch();
+    } catch {
+      // error surfaced inside useUnarchiveSession
+    }
+  }, [unarchiveSession, refetch]);
+
   const handleDeleteConfirm = useCallback(async () => {
     if (!deleteTarget) return;
     try {
@@ -120,17 +154,22 @@ function FleetPageInner() {
     [sessions, workspaceFilter]
   );
 
+  const fleetVisibleSessions = useMemo(
+    () => workspaceFiltered.filter((session) => !session.isHidden),
+    [workspaceFiltered]
+  );
+
   // Apply search filter
   const searchFiltered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return workspaceFiltered;
-    return workspaceFiltered.filter((s) => {
+    if (!q) return fleetVisibleSessions;
+    return fleetVisibleSessions.filter((s) => {
       const title = s.session.title?.toLowerCase() ?? "";
       const dir = (s.sourceDirectory ?? s.workspaceDirectory).toLowerCase();
       const displayName = s.workspaceDisplayName?.toLowerCase() ?? "";
       return title.includes(q) || dir.includes(q) || displayName.includes(q);
     });
-  }, [workspaceFiltered, search]);
+  }, [fleetVisibleSessions, search]);
 
   // Apply sort within session arrays
   const sortSessions = useCallback((items: SessionListItem[]): SessionListItem[] => {
@@ -183,8 +222,8 @@ function FleetPageInner() {
 
   const subtitle =
     sessions.length > 0
-      ? `${liveCount} active session${liveCount !== 1 ? "s" : ""}`
-      : "No active sessions";
+      ? `${sessions.length} ${retentionFilter === "all" ? "session" : retentionFilter} session${sessions.length !== 1 ? "s" : ""}`
+      : `No ${retentionFilter === "all" ? "sessions" : `${retentionFilter} sessions`}`;
 
   // Group by "Session Status" (working / idle)
   const groupedBySessionStatus = useMemo(() => {
@@ -220,9 +259,11 @@ function FleetPageInner() {
                        isParent={children.length > 0}
                        onTerminate={handleTerminate}
                        onResume={handleResume}
-                       onDelete={handleDeleteRequest}
-                       onOpen={handleOpen}
-                       onAbort={handleAbort}
+                        onDelete={handleDeleteRequest}
+                        onArchive={handleArchive}
+                        onUnarchive={handleUnarchive}
+                        onOpen={handleOpen}
+                        onAbort={handleAbort}
                        isResuming={resumingSessionId === item.session.id}
                      />
                      {children.map((child) => (
@@ -232,9 +273,11 @@ function FleetPageInner() {
                          isChild
                          onTerminate={handleTerminate}
                          onResume={handleResume}
-                         onDelete={handleDeleteRequest}
-                         onOpen={handleOpen}
-                         onAbort={handleAbort}
+                          onDelete={handleDeleteRequest}
+                          onArchive={handleArchive}
+                          onUnarchive={handleUnarchive}
+                          onOpen={handleOpen}
+                          onAbort={handleAbort}
                          isResuming={resumingSessionId === child.session.id}
                        />
                      ))}
@@ -288,9 +331,11 @@ function FleetPageInner() {
                        isParent={children.length > 0}
                        onTerminate={handleTerminate}
                        onResume={handleResume}
-                       onDelete={handleDeleteRequest}
-                       onOpen={handleOpen}
-                       onAbort={handleAbort}
+                        onDelete={handleDeleteRequest}
+                        onArchive={handleArchive}
+                        onUnarchive={handleUnarchive}
+                        onOpen={handleOpen}
+                        onAbort={handleAbort}
                        isResuming={resumingSessionId === item.session.id}
                      />
                      {children.map((child) => (
@@ -300,9 +345,11 @@ function FleetPageInner() {
                          isChild
                          onTerminate={handleTerminate}
                          onResume={handleResume}
-                         onDelete={handleDeleteRequest}
-                         onOpen={handleOpen}
-                         onAbort={handleAbort}
+                          onDelete={handleDeleteRequest}
+                          onArchive={handleArchive}
+                          onUnarchive={handleUnarchive}
+                          onOpen={handleOpen}
+                          onAbort={handleAbort}
                          isResuming={resumingSessionId === child.session.id}
                        />
                      ))}
@@ -348,9 +395,11 @@ function FleetPageInner() {
                        isParent={children.length > 0}
                        onTerminate={handleTerminate}
                        onResume={handleResume}
-                       onDelete={handleDeleteRequest}
-                       onOpen={handleOpen}
-                       onAbort={handleAbort}
+                        onDelete={handleDeleteRequest}
+                        onArchive={handleArchive}
+                        onUnarchive={handleUnarchive}
+                        onOpen={handleOpen}
+                        onAbort={handleAbort}
                        isResuming={resumingSessionId === item.session.id}
                      />
                      {children.map((child) => (
@@ -360,9 +409,11 @@ function FleetPageInner() {
                          isChild
                          onTerminate={handleTerminate}
                          onResume={handleResume}
-                         onDelete={handleDeleteRequest}
-                         onOpen={handleOpen}
-                         onAbort={handleAbort}
+                          onDelete={handleDeleteRequest}
+                          onArchive={handleArchive}
+                          onUnarchive={handleUnarchive}
+                          onOpen={handleOpen}
+                          onAbort={handleAbort}
                          isResuming={resumingSessionId === child.session.id}
                        />
                      ))}
@@ -407,6 +458,8 @@ function FleetPageInner() {
                 onTerminate={handleTerminate}
                 onResume={handleResume}
                 onDelete={handleDeleteRequest}
+                onArchive={handleArchive}
+                onUnarchive={handleUnarchive}
                 onOpen={handleOpen}
                 onAbort={handleAbort}
                 isResuming={resumingSessionId === item.session.id}
@@ -419,6 +472,8 @@ function FleetPageInner() {
                   onTerminate={handleTerminate}
                   onResume={handleResume}
                   onDelete={handleDeleteRequest}
+                  onArchive={handleArchive}
+                  onUnarchive={handleUnarchive}
                   onOpen={handleOpen}
                   onAbort={handleAbort}
                   isResuming={resumingSessionId === child.session.id}
@@ -452,6 +507,8 @@ function FleetPageInner() {
               onTerminate={handleTerminate}
               onResume={handleResume}
               onDelete={handleDeleteRequest}
+              onArchive={handleArchive}
+              onUnarchive={handleUnarchive}
               onAbort={handleAbort}
               onOpen={handleOpen}
               resumingSessionId={resumingSessionId}
@@ -475,9 +532,11 @@ function FleetPageInner() {
         <FleetToolbar
           groupBy={prefs.groupBy}
           sortBy={prefs.sortBy}
+          retentionFilter={retentionFilter}
           search={search}
           onGroupByChange={handleGroupByChange}
           onSortByChange={handleSortByChange}
+          onRetentionFilterChange={handleRetentionFilterChange}
           onSearchChange={setSearch}
         />
 

@@ -8,6 +8,8 @@ import type { SessionListItem } from "@/lib/api-types";
 
 const mockNavigate = vi.fn();
 const mockDeleteSession = vi.fn<(...args: [string, string]) => Promise<void>>();
+const mockArchiveSession = vi.fn<(...args: [string]) => Promise<void>>();
+const mockUnarchiveSession = vi.fn<(...args: [string]) => Promise<void>>();
 
 vi.mock("react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-router")>();
@@ -31,6 +33,14 @@ vi.mock("@/hooks/use-abort-session", () => ({
 
 vi.mock("@/hooks/use-delete-session", () => ({
   useDeleteSession: () => ({ deleteSession: mockDeleteSession, isDeleting: false }),
+}));
+
+vi.mock("@/hooks/use-archive-session", () => ({
+  useArchiveSession: () => ({ archiveSession: mockArchiveSession, isArchiving: false }),
+}));
+
+vi.mock("@/hooks/use-unarchive-session", () => ({
+  useUnarchiveSession: () => ({ unarchiveSession: mockUnarchiveSession, isUnarchiving: false }),
 }));
 
 vi.mock("@/hooks/use-resume-session", () => ({
@@ -99,6 +109,8 @@ const item: SessionListItem = {
   branch: null,
   activityStatus: "busy",
   lifecycleStatus: "running",
+  retentionStatus: "active",
+  archivedAt: null,
   typedInstanceStatus: "running",
   isHidden: false,
 };
@@ -106,6 +118,8 @@ const item: SessionListItem = {
 function renderWithProviders(isActive: boolean, refetch = vi.fn()) {
   const value: SessionsContextValue = {
     sessions: [item],
+    retentionFilter: "active",
+    setRetentionFilter: vi.fn(),
     isLoading: false,
     error: undefined,
     refetch: vi.fn(),
@@ -131,13 +145,17 @@ describe("SidebarSessionItem", () => {
     mockNavigate.mockReset();
     mockDeleteSession.mockReset();
     mockDeleteSession.mockResolvedValue(undefined);
+    mockArchiveSession.mockReset();
+    mockArchiveSession.mockResolvedValue(undefined);
+    mockUnarchiveSession.mockReset();
+    mockUnarchiveSession.mockResolvedValue(undefined);
   });
 
   it("navigates to fleet after deleting the active session", async () => {
     const user = userEvent.setup();
     const { refetch } = renderWithProviders(true);
 
-    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await user.click(screen.getByRole("button", { name: "Permanently Delete" }));
     await user.click(screen.getByTestId("delete-dialog-confirm"));
 
     await waitFor(() => {
@@ -151,7 +169,7 @@ describe("SidebarSessionItem", () => {
     const user = userEvent.setup();
     const { refetch } = renderWithProviders(false);
 
-    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await user.click(screen.getByRole("button", { name: "Permanently Delete" }));
     await user.click(screen.getByTestId("delete-dialog-confirm"));
 
     await waitFor(() => {
@@ -160,5 +178,65 @@ describe("SidebarSessionItem", () => {
     });
 
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("archives a stopped active session", async () => {
+    const user = userEvent.setup();
+    const stoppedItem = { ...item, lifecycleStatus: "stopped" as const, activityStatus: "idle" as const };
+    const value: SessionsContextValue = {
+      sessions: [stoppedItem],
+      retentionFilter: "active",
+      setRetentionFilter: vi.fn(),
+      isLoading: false,
+      error: undefined,
+      refetch: vi.fn(),
+      summary: null,
+      patchSessionTitle: vi.fn(),
+      patchWorkspaceDisplayName: vi.fn(),
+    };
+
+    render(
+      <SessionsContext.Provider value={value}>
+        <MemoryRouter>
+          <SidebarSessionItem item={stoppedItem} isActive={false} refetch={value.refetch} userProjects={[]} />
+        </MemoryRouter>
+      </SessionsContext.Provider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Archive" }));
+
+    await waitFor(() => {
+      expect(mockArchiveSession).toHaveBeenCalledWith("session-1");
+    });
+  });
+
+  it("unarchives an archived session", async () => {
+    const user = userEvent.setup();
+    const archivedItem = { ...item, lifecycleStatus: "stopped" as const, activityStatus: "idle" as const, retentionStatus: "archived" as const, archivedAt: "2026-01-01T00:00:00Z" };
+    const value: SessionsContextValue = {
+      sessions: [archivedItem],
+      retentionFilter: "archived",
+      setRetentionFilter: vi.fn(),
+      isLoading: false,
+      error: undefined,
+      refetch: vi.fn(),
+      summary: null,
+      patchSessionTitle: vi.fn(),
+      patchWorkspaceDisplayName: vi.fn(),
+    };
+
+    render(
+      <SessionsContext.Provider value={value}>
+        <MemoryRouter>
+          <SidebarSessionItem item={archivedItem} isActive={false} refetch={value.refetch} userProjects={[]} />
+        </MemoryRouter>
+      </SessionsContext.Provider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Unarchive" }));
+
+    await waitFor(() => {
+      expect(mockUnarchiveSession).toHaveBeenCalledWith("session-1");
+    });
   });
 });

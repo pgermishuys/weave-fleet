@@ -44,6 +44,18 @@ public sealed class SessionServiceTests
             new WeaveFleet.Application.Configuration.FleetOptions(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance);
         _sut = new SessionService(_sessionRepo, _projectRepo, _sessionOrchestrator);
+        _instanceRepo.GetByIdAsync(Arg.Any<string>()).Returns(callInfo => new Instance
+        {
+            Id = callInfo.Arg<string>(),
+            Port = 0,
+            Directory = "/tmp",
+            Url = string.Empty,
+            Status = "running",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+        _sessionRepo.UpdateStatusAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>()).Returns(Task.CompletedTask);
+        _sessionRepo.ArchiveAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(Task.CompletedTask);
+        _sessionRepo.UnarchiveAsync(Arg.Any<string>()).Returns(Task.CompletedTask);
     }
 
     [Fact]
@@ -80,6 +92,92 @@ public sealed class SessionServiceTests
         var result = await _sut.DeleteSessionAsync("s1");
 
         result.IsSuccess.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task StopSessionAsync_WhenOrchestratorSucceeds_ReturnsSuccess()
+    {
+        _sessionRepo.GetByIdAsync("s-stop").Returns(MakeSession("s-stop"));
+        _instanceRepo.UpdateStatusAsync("i1", "stopped", Arg.Any<string>()).Returns(Task.CompletedTask);
+
+        var result = await _sut.StopSessionAsync("s-stop");
+
+        result.IsSuccess.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task UpdateRetentionAsync_WhenArchived_ArchivesSession()
+    {
+        _sessionRepo.GetByIdAsync("s1").Returns(new Session
+        {
+            Id = "s1",
+            WorkspaceId = "w1",
+            InstanceId = "i1",
+            OpencodeSessionId = "oc-s1",
+            Title = "Test",
+            Status = "stopped",
+            RetentionStatus = "active",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01T00:00:00.0000000Z"
+        });
+
+        var result = await _sut.UpdateRetentionAsync("s1", "archived");
+
+        result.IsSuccess.ShouldBeTrue();
+        await _sessionRepo.Received(1).ArchiveAsync("s1", Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task UpdateRetentionAsync_WhenUnsupportedStatus_ReturnsValidationFailure()
+    {
+        var result = await _sut.UpdateRetentionAsync("s1", "deleted");
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe("Validation.Session.RetentionStatus");
+    }
+
+    [Fact]
+    public async Task ListSessionsAsync_WhenRetentionFilterMissing_DefaultsToActive()
+    {
+        _sessionRepo.ListAsync(
+            10,
+            5,
+            Arg.Any<IReadOnlyList<string>?>(),
+            Arg.Any<string?>(),
+            Arg.Any<IReadOnlyList<string>?>())
+            .Returns([MakeSession("s1")]);
+
+        var result = await _sut.ListSessionsAsync(10, 5, null, null, null);
+
+        result.IsSuccess.ShouldBeTrue();
+        await _sessionRepo.Received(1).ListAsync(
+            10,
+            5,
+            Arg.Is<IReadOnlyList<string>?>(value => value == null),
+            Arg.Is<string?>(value => value == null),
+            Arg.Is<IReadOnlyList<string>?>(value => value != null && value.Count == 1 && value[0] == "active"));
+    }
+
+    [Fact]
+    public async Task ListSessionsAsync_WhenRetentionFilterAll_OmitsRetentionConstraint()
+    {
+        _sessionRepo.ListAsync(
+            10,
+            0,
+            Arg.Any<IReadOnlyList<string>?>(),
+            Arg.Any<string?>(),
+            Arg.Any<IReadOnlyList<string>?>())
+            .Returns([MakeSession("s1")]);
+
+        var result = await _sut.ListSessionsAsync(10, 0, null, null, "all");
+
+        result.IsSuccess.ShouldBeTrue();
+        await _sessionRepo.Received(1).ListAsync(
+            10,
+            0,
+            Arg.Is<IReadOnlyList<string>?>(value => value == null),
+            Arg.Is<string?>(value => value == null),
+            Arg.Is<IReadOnlyList<string>?>(value => value == null));
     }
 
     [Fact]
@@ -131,6 +229,7 @@ public sealed class SessionServiceTests
         OpencodeSessionId = $"oc-{id}",
         Title = "Test",
         Status = "active",
+        RetentionStatus = "active",
         Directory = "/tmp",
         CreatedAt = "2026-01-01T00:00:00.0000000Z"
     };

@@ -8,11 +8,16 @@ public interface ISessionRepository
     Task<Session?> GetByIdAsync(string id);
     Task<Session?> GetByHarnessIdAsync(string harnessSessionId);
     Task<IReadOnlyList<Session>> ListAsync(int limit = 100, int offset = 0, IReadOnlyList<string>? statuses = null, string? projectId = null);
+    Task<IReadOnlyList<Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses);
     Task DeleteByProjectIdAsync(string projectId);
     Task<int> CountAsync(IReadOnlyList<string>? statuses = null);
+    Task<int> CountAsync(IReadOnlyList<string>? statuses, IReadOnlyList<string>? retentionStatuses);
     Task<(int Active, int Idle)> GetStatusCountsAsync();
     Task<IReadOnlyList<Session>> ListActiveAsync();
+    Task<IReadOnlyList<Session>> ListActiveAsync(IReadOnlyList<string>? retentionStatuses);
     Task UpdateStatusAsync(string id, string status, string? stoppedAt = null);
+    Task ArchiveAsync(string id, string archivedAt);
+    Task UnarchiveAsync(string id);
     Task<IReadOnlyList<Session>> GetForInstanceAsync(string instanceId);
     Task<Session?> GetAnyForInstanceAsync(string instanceId);
     Task<IReadOnlyList<Session>> GetNonTerminalForInstanceAsync(string instanceId);
@@ -22,6 +27,7 @@ public interface ISessionRepository
     Task<IReadOnlyList<Session>> GetActiveChildrenAsync(string parentDbId);
     Task<IReadOnlySet<string>> GetIdsWithActiveChildrenAsync();
     Task<IReadOnlyList<Session>> GetForWorkspaceAsync(string workspaceId);
+    Task<IReadOnlyList<Session>> GetForWorkspaceAsync(string workspaceId, IReadOnlyList<string>? retentionStatuses);
     Task<bool> DeleteAsync(string id);
     Task<(int TotalTokens, double TotalCost)?> IncrementTokensAsync(string id, int tokens, double cost);
     Task<(int TotalTokens, double TotalCost)> GetFleetTokenTotalsAsync();

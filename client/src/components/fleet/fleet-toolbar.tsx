@@ -12,6 +12,7 @@ import {
 
 export type GroupBy = "directory" | "session-status" | "connection-status" | "source" | "none";
 export type SortBy = "recent" | "name" | "status";
+export type RetentionFilter = "active" | "archived" | "all";
 
 const GROUP_BY_LABELS: Record<GroupBy, string> = {
   directory: "Directory",
@@ -25,6 +26,12 @@ const SORT_BY_LABELS: Record<SortBy, string> = {
   recent: "Recent",
   name: "Name",
   status: "Status",
+};
+
+const RETENTION_FILTER_LABELS: Record<RetentionFilter, string> = {
+  active: "Active",
+  archived: "Archived",
+  all: "All",
 };
 
 const PREFS_KEY = "weave:fleet:prefs";
@@ -69,18 +76,22 @@ function savePrefs(prefs: FleetPrefs) {
 interface FleetToolbarProps {
   groupBy: GroupBy;
   sortBy: SortBy;
+  retentionFilter: RetentionFilter;
   search: string;
   onGroupByChange: (groupBy: GroupBy) => void;
   onSortByChange: (sortBy: SortBy) => void;
+  onRetentionFilterChange: (retentionFilter: RetentionFilter) => void;
   onSearchChange: (search: string) => void;
 }
 
 export function FleetToolbar({
   groupBy,
   sortBy,
+  retentionFilter,
   search,
   onGroupByChange,
   onSortByChange,
+  onRetentionFilterChange,
   onSearchChange,
 }: FleetToolbarProps) {
   // Persist preferences when they change
@@ -144,6 +155,29 @@ export function FleetToolbar({
                 {sortBy === key && <Check className="h-3.5 w-3.5" />}
                 {sortBy !== key && <span className="w-3.5" />}
                 {SORT_BY_LABELS[key]}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button data-testid="retention-filter-trigger" variant="outline" size="sm" className="h-8 gap-1.5 text-xs flex-1 sm:flex-none">
+              <span className="hidden xs:inline">Show: {RETENTION_FILTER_LABELS[retentionFilter]}</span>
+              <span className="xs:hidden">Show</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {(Object.keys(RETENTION_FILTER_LABELS) as RetentionFilter[]).map((key) => (
+              <DropdownMenuItem
+                key={key}
+                data-testid={`retention-filter-option-${key}`}
+                onClick={() => onRetentionFilterChange(key)}
+                className="text-xs gap-2"
+              >
+                {retentionFilter === key && <Check className="h-3.5 w-3.5" />}
+                {retentionFilter !== key && <span className="w-3.5" />}
+                {RETENTION_FILTER_LABELS[key]}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>

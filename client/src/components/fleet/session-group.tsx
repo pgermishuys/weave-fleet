@@ -36,13 +36,15 @@ interface SessionGroupProps {
   onNewSession?: (workspaceDirectory: string) => void;
   onResume?: (sessionId: string) => void;
   onDelete?: (sessionId: string, instanceId: string) => void;
+  onArchive?: (sessionId: string) => void;
+  onUnarchive?: (sessionId: string) => void;
   onAbort?: (sessionId: string, instanceId: string) => void;
   onOpen?: (directory: string, tool: OpenTool) => void;
   resumingSessionId?: string | null;
   refetch: () => void;
 }
 
-export const SessionGroup = React.memo(function SessionGroup({ group, onTerminate, onNewSession, onResume, onDelete, onAbort, onOpen, resumingSessionId, refetch }: SessionGroupProps) {
+export const SessionGroup = React.memo(function SessionGroup({ group, onTerminate, onNewSession, onResume, onDelete, onArchive, onUnarchive, onAbort, onOpen, resumingSessionId, refetch }: SessionGroupProps) {
   const { renameWorkspace } = useRenameWorkspace();
   const { patchWorkspaceDisplayName } = useSessionsContext();
   const { terminateSession } = useTerminateSession();
@@ -186,6 +188,8 @@ export const SessionGroup = React.memo(function SessionGroup({ group, onTerminat
                   onTerminate={onTerminate}
                   onResume={onResume}
                   onDelete={onDelete}
+                  onArchive={onArchive}
+                  onUnarchive={onUnarchive}
                   onAbort={onAbort}
                   onOpen={onOpen}
                   isResuming={resumingSessionId === item.session.id}
@@ -200,6 +204,8 @@ export const SessionGroup = React.memo(function SessionGroup({ group, onTerminat
                         onTerminate={onTerminate}
                         onResume={onResume}
                         onDelete={onDelete}
+                        onArchive={onArchive}
+                        onUnarchive={onUnarchive}
                         onAbort={onAbort}
                         onOpen={onOpen}
                         isResuming={resumingSessionId === child.session.id}

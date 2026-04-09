@@ -9,6 +9,8 @@ import type { SessionActivityStatus } from "@/lib/types";
 
 export interface SessionsContextValue {
   sessions: SessionListItem[];
+  retentionFilter: "active" | "archived" | "all";
+  setRetentionFilter: (retentionFilter: "active" | "archived" | "all") => void;
   isLoading: boolean;
   error?: string;
   refetch: () => void;
@@ -21,6 +23,8 @@ export interface SessionsContextValue {
 
 const defaultValue: SessionsContextValue = {
   sessions: [],
+  retentionFilter: "active",
+  setRetentionFilter: () => {},
   isLoading: true,
   error: undefined,
   refetch: () => {},
@@ -124,7 +128,8 @@ export function patchTokenData(
 }
 
 export function SessionsProvider({ children }: { children: React.ReactNode }) {
-  const { sessions: polledSessions, isLoading, error, refetch } = useSessions(15000);
+  const [retentionFilter, setRetentionFilter] = useState<"active" | "archived" | "all">("active");
+  const { sessions: polledSessions, isLoading, error, refetch } = useSessions(retentionFilter, 15000);
   const { summary } = useFleetSummary(30000);
 
   // SSE patches stored in a ref to avoid setState-in-effect lint violations.
@@ -190,17 +195,25 @@ export function SessionsProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    function handleSessionCreated() {
+    function handleSessionLifecycleChanged() {
       void refetch();
     }
 
     sse.on("activity_status", handleActivityStatus);
     sse.on("token_update", handleTokenUpdate);
-    sse.on("session_created", handleSessionCreated);
+    sse.on("session_created", handleSessionLifecycleChanged);
+    sse.on("session_stopped", handleSessionLifecycleChanged);
+    sse.on("session_archived", handleSessionLifecycleChanged);
+    sse.on("session_unarchived", handleSessionLifecycleChanged);
+    sse.on("session_deleted", handleSessionLifecycleChanged);
     return () => {
       sse.off("activity_status", handleActivityStatus);
       sse.off("token_update", handleTokenUpdate);
-      sse.off("session_created", handleSessionCreated);
+      sse.off("session_created", handleSessionLifecycleChanged);
+      sse.off("session_stopped", handleSessionLifecycleChanged);
+      sse.off("session_archived", handleSessionLifecycleChanged);
+      sse.off("session_unarchived", handleSessionLifecycleChanged);
+      sse.off("session_deleted", handleSessionLifecycleChanged);
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
@@ -291,8 +304,18 @@ export function SessionsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const contextValue = useMemo(
-    () => ({ sessions, isLoading, error, refetch, summary, patchSessionTitle, patchWorkspaceDisplayName }),
-    [sessions, isLoading, error, refetch, summary, patchSessionTitle, patchWorkspaceDisplayName]
+    () => ({
+      sessions,
+      retentionFilter,
+      setRetentionFilter,
+      isLoading,
+      error,
+      refetch,
+      summary,
+      patchSessionTitle,
+      patchWorkspaceDisplayName,
+    }),
+    [sessions, retentionFilter, setRetentionFilter, isLoading, error, refetch, summary, patchSessionTitle, patchWorkspaceDisplayName]
   );
 
   return (

@@ -17,6 +17,8 @@ public sealed record SessionListResponse(
     string? Branch,
     string? ActivityStatus,
     string LifecycleStatus,
+    string RetentionStatus,
+    string? ArchivedAt,
     string TypedInstanceStatus,
     bool IsHidden,
     int? TotalTokens,
@@ -40,3 +42,6 @@ public sealed record MoveSessionRequest(string? ProjectId);
 
 /// <summary>Request DTO for renaming a session.</summary>
 public sealed record UpdateSessionTitleRequest(string Title);
+
+/// <summary>Request DTO for changing a session's retention state.</summary>
+public sealed record UpdateSessionRetentionRequest(string RetentionStatus);

@@ -374,7 +374,21 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
         _status = HarnessInstanceStatus.Stopping;
         LogStop(_logger, InstanceId, null);
 
-        // Best-effort: delete OpenCode session
+        await _processManager.StopAsync(_shutdownTimeout).ConfigureAwait(false);
+        _status = HarnessInstanceStatus.Stopped;
+
+        if (_allocatedPort > 0)
+        {
+            _portAllocator.ReleasePort(_allocatedPort);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task DeleteAsync(CancellationToken ct)
+    {
+        _status = HarnessInstanceStatus.Stopping;
+        LogStop(_logger, InstanceId, null);
+
         if (_openCodeSessionId is not null)
         {
             try
@@ -384,7 +398,6 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Best effort — don't let this block shutdown
                 _ = ex;
             }
         }

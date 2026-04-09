@@ -274,6 +274,9 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
     }
 
     /// <inheritdoc />
+    public Task DeleteAsync(CancellationToken ct) => StopAsync(ct);
+
+    /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return;

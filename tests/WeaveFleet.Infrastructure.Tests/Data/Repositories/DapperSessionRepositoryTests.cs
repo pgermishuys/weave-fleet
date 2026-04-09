@@ -68,6 +68,8 @@ public sealed class DapperSessionRepositoryTests
         retrieved.ShouldNotBeNull();
         retrieved.Title.ShouldBe(session.Title);
         retrieved.Status.ShouldBe("active");
+        retrieved.RetentionStatus.ShouldBe("active");
+        retrieved.ArchivedAt.ShouldBeNull();
     }
 
     [Fact]
@@ -148,6 +150,189 @@ public sealed class DapperSessionRepositoryTests
 
         var list = await repo.ListAsync();
         list.Count.ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task ListAsync_WithRetentionFilter_ReturnsMatchingSessions()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var (ws, inst) = await InsertDependenciesAsync(factory);
+        var archivedSessionId = Guid.NewGuid().ToString();
+        await repo.InsertAsync(new Session
+        {
+            Id = archivedSessionId,
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-archived",
+            Title = "Archived Session",
+            Status = "stopped",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        await repo.InsertAsync(new Session
+        {
+            Id = Guid.NewGuid().ToString(),
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-active",
+            Title = "Active Session",
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        await repo.ArchiveAsync(archivedSessionId, DateTime.UtcNow.ToString("O"));
+
+        var archived = await repo.ListAsync(100, 0, statuses: null, projectId: null, retentionStatuses: ["archived"]);
+        var active = await repo.ListAsync(100, 0, statuses: null, projectId: null, retentionStatuses: ["active"]);
+
+        archived.Select(session => session.Id).ShouldBe([archivedSessionId]);
+        active.Count.ShouldBe(1);
+        active[0].RetentionStatus.ShouldBe("active");
+    }
+
+    [Fact]
+    public async Task ListAsync_WithNoRetentionFilter_ReturnsActiveAndArchivedSessions()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var (ws, inst) = await InsertDependenciesAsync(factory);
+        var archivedSessionId = Guid.NewGuid().ToString();
+
+        await repo.InsertAsync(new Session
+        {
+            Id = archivedSessionId,
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-all-archived",
+            Title = "Archived Session",
+            Status = "stopped",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        await repo.InsertAsync(new Session
+        {
+            Id = Guid.NewGuid().ToString(),
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-all-active",
+            Title = "Active Session",
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        await repo.ArchiveAsync(archivedSessionId, DateTime.UtcNow.ToString("O"));
+
+        var allSessions = await repo.ListAsync(100, 0, statuses: null, projectId: null, retentionStatuses: null);
+
+        allSessions.Count.ShouldBe(2);
+        allSessions.Select(session => session.RetentionStatus).OrderBy(status => status).ShouldBe(["active", "archived"]);
+    }
+
+    [Fact]
+    public async Task ArchiveAsync_UpdatesRetentionFields()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var (ws, inst) = await InsertDependenciesAsync(factory);
+        var session = new Session
+        {
+            Id = Guid.NewGuid().ToString(),
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-archive",
+            Title = "Archive Test",
+            Status = "stopped",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        };
+        await repo.InsertAsync(session);
+
+        var archivedAt = DateTime.UtcNow.ToString("O");
+        await repo.ArchiveAsync(session.Id, archivedAt);
+
+        var updated = await repo.GetByIdAsync(session.Id);
+        updated.ShouldNotBeNull();
+        updated.RetentionStatus.ShouldBe("archived");
+        updated.ArchivedAt.ShouldBe(archivedAt);
+    }
+
+    [Fact]
+    public async Task UnarchiveAsync_RestoresActiveRetentionAndClearsArchivedAt()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var (ws, inst) = await InsertDependenciesAsync(factory);
+        var session = new Session
+        {
+            Id = Guid.NewGuid().ToString(),
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-unarchive",
+            Title = "Unarchive Test",
+            Status = "stopped",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        };
+        await repo.InsertAsync(session);
+
+        await repo.ArchiveAsync(session.Id, DateTime.UtcNow.ToString("O"));
+        await repo.UnarchiveAsync(session.Id);
+
+        var updated = await repo.GetByIdAsync(session.Id);
+        updated.ShouldNotBeNull();
+        updated.RetentionStatus.ShouldBe("active");
+        updated.ArchivedAt.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task CountAsync_WithRetentionFilter_ReturnsMatchingCount()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var (ws, inst) = await InsertDependenciesAsync(factory);
+        var archivedSessionId = Guid.NewGuid().ToString();
+
+        await repo.InsertAsync(new Session
+        {
+            Id = archivedSessionId,
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-count-archived",
+            Title = "Archived Count",
+            Status = "stopped",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        await repo.InsertAsync(new Session
+        {
+            Id = Guid.NewGuid().ToString(),
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-count-active",
+            Title = "Active Count",
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        await repo.ArchiveAsync(archivedSessionId, DateTime.UtcNow.ToString("O"));
+
+        var archivedCount = await repo.CountAsync(statuses: null, retentionStatuses: ["archived"]);
+        var activeCount = await repo.CountAsync(statuses: null, retentionStatuses: ["active"]);
+
+        archivedCount.ShouldBe(1);
+        activeCount.ShouldBe(1);
     }
 
     [Fact]

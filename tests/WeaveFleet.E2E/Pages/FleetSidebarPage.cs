@@ -1,0 +1,31 @@
+using Microsoft.Playwright;
+
+namespace WeaveFleet.E2E.Pages;
+
+/// <summary>
+/// Page object for Fleet sidebar session interactions.
+/// </summary>
+public sealed class FleetSidebarPage(IPage page)
+{
+    private readonly IPage _page = page;
+
+    private ILocator SessionLeaves => _page.Locator("[data-tree-leaf]");
+
+    public ILocator GetSessionLeaf(string sessionId)
+        => _page.Locator($"[data-tree-leaf][data-session-id='{sessionId}']");
+
+    public async Task OpenSessionContextMenuAsync(string sessionId)
+        => await GetSessionLeaf(sessionId).ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
+
+    public async Task ClickSessionMenuItemAsync(string sessionId, string menuItem)
+    {
+        await OpenSessionContextMenuAsync(sessionId);
+        await _page.GetByRole(AriaRole.Menuitem, new() { Name = menuItem }).ClickAsync();
+    }
+
+    public Task ExpectSessionVisibleAsync(string sessionId)
+        => Assertions.Expect(GetSessionLeaf(sessionId)).ToBeVisibleAsync();
+
+    public Task ExpectSessionHiddenAsync(string sessionId)
+        => Assertions.Expect(GetSessionLeaf(sessionId)).ToHaveCountAsync(0);
+}

@@ -28,6 +28,8 @@ export const LiveSessionCard = React.memo(function LiveSessionCard({
   onTerminate,
   onResume,
   onDelete,
+  onArchive,
+  onUnarchive,
   onOpen,
   onAbort,
   isResuming = false,
@@ -38,16 +40,19 @@ export const LiveSessionCard = React.memo(function LiveSessionCard({
   onTerminate: (sessionId: string, instanceId: string) => void;
   onResume?: (sessionId: string) => void;
   onDelete?: (sessionId: string, instanceId: string) => void;
+  onArchive?: (sessionId: string) => void;
+  onUnarchive?: (sessionId: string) => void;
   onOpen?: (directory: string, tool: OpenTool) => void;
   onAbort?: (sessionId: string, instanceId: string) => void;
   isResuming?: boolean;
   isParent?: boolean;
   isChild?: boolean;
 }) {
-  const { instanceId, session, isolationStrategy, activityStatus, lifecycleStatus, workspaceDirectory } = item;
+  const { instanceId, session, isolationStrategy, activityStatus, lifecycleStatus, retentionStatus, workspaceDirectory } = item;
   const isDisconnected = lifecycleStatus === "disconnected";
   const isStopped = lifecycleStatus === "stopped";
   const isCompleted = lifecycleStatus === "completed";
+  const isArchived = retentionStatus === "archived";
   const isInactive = isDisconnected || isStopped || isCompleted;
 
   // Session status: purely about agent activity
@@ -70,9 +75,11 @@ export const LiveSessionCard = React.memo(function LiveSessionCard({
     ? "Stopped"
     : null;
 
-  const canTerminate = !isStopped && !isCompleted;
+  const canTerminate = !isArchived && !isStopped && !isCompleted;
   const canDelete = (isStopped || isCompleted || isDisconnected) && !!onDelete;
-  const canAbort = activityStatus === "busy" && !!onAbort;
+  const canAbort = !isArchived && activityStatus === "busy" && !!onAbort;
+  const canArchive = !isArchived && (isStopped || isCompleted || isDisconnected) && !!onArchive;
+  const canUnarchive = isArchived && !!onUnarchive;
 
   const cardContent = (
     <div className={`relative group ${isInactive ? "opacity-60" : ""}`} data-testid="session-card" data-session-id={session.id}>
@@ -96,6 +103,11 @@ export const LiveSessionCard = React.memo(function LiveSessionCard({
                 <span title={connectionTooltip ?? undefined} className="text-muted-foreground">
                   <ConnectionIcon className="h-3 w-3" />
                 </span>
+              )}
+              {isArchived && (
+                <Badge data-testid="session-card-archived-badge" variant="outline" className="text-[10px] px-1.5 py-0">
+                  archived
+                </Badge>
               )}
               {isolationStrategy && isolationStrategy !== "existing" && (
                 <TooltipProvider>
@@ -195,6 +207,38 @@ export const LiveSessionCard = React.memo(function LiveSessionCard({
           title="Permanently delete session"
         >
           <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      )}
+      {canArchive && (
+        <Button
+          variant="ghost"
+          size="icon"
+          data-testid="session-archive-button"
+          className="absolute top-2 right-10 h-8 w-8 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-accent touch-none pointer-coarse:opacity-100 pointer-coarse:h-9 pointer-coarse:w-9"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onArchive!(session.id);
+          }}
+          title="Archive session"
+        >
+          <Square className="h-3.5 w-3.5" />
+        </Button>
+      )}
+      {canUnarchive && (
+        <Button
+          variant="ghost"
+          size="icon"
+          data-testid="session-unarchive-button"
+          className="absolute top-2 right-10 h-8 w-8 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-muted-foreground hover:text-green-500 hover:bg-green-500/10 touch-none pointer-coarse:opacity-100 pointer-coarse:h-9 pointer-coarse:w-9"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onUnarchive!(session.id);
+          }}
+          title="Unarchive session"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
         </Button>
       )}
       {isInactive && onResume && (

@@ -93,6 +93,44 @@ public sealed class FleetDashboardPage(IPage page)
         await card.GetByTestId("session-delete-button").ClickAsync();
     }
 
+    /// <summary>Click the stop/terminate button on a running session card.</summary>
+    public async Task ClickTerminateSessionAsync(string sessionId)
+    {
+        var card = GetSessionCard(sessionId);
+        await card.HoverAsync();
+        await card.GetByTestId("session-terminate-button").ClickAsync();
+    }
+
+    /// <summary>Click the archive button on a session card.</summary>
+    public async Task ClickArchiveSessionAsync(string sessionId)
+    {
+        var card = GetSessionCard(sessionId);
+        await card.HoverAsync();
+        await card.GetByTestId("session-archive-button").ClickAsync();
+    }
+
+    /// <summary>Click the unarchive button on a session card.</summary>
+    public async Task ClickUnarchiveSessionAsync(string sessionId)
+    {
+        var card = GetSessionCard(sessionId);
+        await card.HoverAsync();
+        await card.GetByTestId("session-unarchive-button").ClickAsync();
+    }
+
+    /// <summary>Assert whether a card contains the archived badge text.</summary>
+    public Task ExpectArchivedBadgeAsync(string sessionId)
+        => Assertions.Expect(GetSessionCard(sessionId).GetByTestId("session-card-archived-badge")).ToBeVisibleAsync();
+
+    /// <summary>Change the retention filter through the toolbar.</summary>
+    public async Task SetRetentionFilterAsync(string label)
+    {
+        await _page.GetByTestId("retention-filter-trigger").ClickAsync();
+        var key = label.ToLowerInvariant();
+        var option = _page.GetByTestId($"retention-filter-option-{key}");
+        await Assertions.Expect(option).ToBeVisibleAsync();
+        await option.ClickAsync(new LocatorClickOptions { Force = true });
+    }
+
     /// <summary>Click a session card to navigate to the session detail page.</summary>
     public async Task<SessionDetailPage> ClickSessionCardAsync(string sessionId)
     {

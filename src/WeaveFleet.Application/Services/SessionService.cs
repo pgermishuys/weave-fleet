@@ -16,11 +16,38 @@ public sealed class SessionService(
         int limit = 100,
         int offset = 0,
         IReadOnlyList<string>? statuses = null,
-        string? projectId = null)
+        string? projectId = null,
+        string? retentionStatus = null)
     {
-        var sessions = await sessionRepository.ListAsync(limit, offset, statuses, projectId);
+        IReadOnlyList<string>? retentionStatuses = retentionStatus switch
+        {
+            null or "" => ["active"],
+            "all" => null,
+            _ => [retentionStatus]
+        };
+
+        var sessions = await sessionRepository.ListAsync(limit, offset, statuses, projectId, retentionStatuses);
 
         return Result.Success(sessions);
+    }
+
+    public async Task<Result<Unit>> StopSessionAsync(string id)
+    {
+        var result = await sessionOrchestrator.StopSessionAsync(id);
+        if (result.IsFailure)
+            return result.Error;
+
+        return Unit.Value;
+    }
+
+    public async Task<Result<Unit>> UpdateRetentionAsync(string id, string retentionStatus)
+    {
+        return retentionStatus switch
+        {
+            "archived" => await sessionOrchestrator.ArchiveSessionAsync(id),
+            "active" => await sessionOrchestrator.UnarchiveSessionAsync(id),
+            _ => FleetError.ValidationError("Session.RetentionStatus", $"Unsupported retention status '{retentionStatus}'.")
+        };
     }
 
     public async Task<Result<Session>> GetSessionAsync(string id)

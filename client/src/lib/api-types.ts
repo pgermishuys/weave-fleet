@@ -6,12 +6,13 @@
 import type {
   SessionActivityStatus,
   SessionLifecycleStatus,
+  SessionRetentionStatus,
   InstanceStatus,
 } from "@/lib/types";
 import type { ContextSource } from "@/integrations/types";
 
 // Re-export status types for consumer convenience
-export type { SessionActivityStatus, SessionLifecycleStatus, InstanceStatus };
+export type { SessionActivityStatus, SessionLifecycleStatus, SessionRetentionStatus, InstanceStatus };
 
 /**
  * Fleet-owned session shape — contains only the fields the frontend needs.
@@ -139,6 +140,14 @@ export interface SessionListItem {
    * Lifecycle status — overall terminal/non-terminal state of the session.
    */
   lifecycleStatus: SessionLifecycleStatus;
+  /**
+   * Retention status — whether the session is visible in active lists or archived.
+   */
+  retentionStatus: SessionRetentionStatus;
+  /**
+   * ISO timestamp when the session was archived, or null when active.
+   */
+  archivedAt: string | null;
   /**
    * Instance status — whether the OpenCode process backing this session is healthy.
    */
@@ -545,10 +554,16 @@ export interface HistorySession {
   instanceId: string;
   title: string | null;
   status: string;
+   retentionStatus: SessionRetentionStatus;
   directory: string;
   workspaceDisplayName: string | null;
   createdAt: string;
   stoppedAt: string | null;
+   archivedAt: string | null;
+}
+
+export interface UpdateSessionRetentionRequest {
+  retentionStatus: SessionRetentionStatus;
 }
 
 export interface HistoryResponse {

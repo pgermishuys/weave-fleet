@@ -151,6 +151,9 @@ public sealed class TestHarnessInstance : IHarnessInstance
     }
 
     /// <inheritdoc/>
+    public Task DeleteAsync(CancellationToken ct) => StopAsync(ct);
+
+    /// <inheritdoc/>
     public ValueTask DisposeAsync()
     {
         _promptCts?.Cancel();

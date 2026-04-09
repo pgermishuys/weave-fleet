@@ -23,6 +23,8 @@ import { useTerminateSession } from "@/hooks/use-terminate-session";
 import { useAbortSession } from "@/hooks/use-abort-session";
 import { useDeleteSession } from "@/hooks/use-delete-session";
 import { useResumeSession } from "@/hooks/use-resume-session";
+import { useArchiveSession } from "@/hooks/use-archive-session";
+import { useUnarchiveSession } from "@/hooks/use-unarchive-session";
 import { useOpenDirectory } from "@/hooks/use-open-directory";
 import { useMoveSession } from "@/hooks/use-move-session";
 import type { OpenTool } from "@/hooks/use-open-directory";
@@ -38,7 +40,7 @@ interface SidebarSessionItemProps {
 }
 
 export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item, isActive, isChild = false, refetch, userProjects = [] }: SidebarSessionItemProps) {
-  const { instanceId, session, activityStatus, lifecycleStatus } = item;
+  const { instanceId, session, activityStatus, lifecycleStatus, retentionStatus } = item;
   const navigate = useNavigate();
   const { renameSession } = useRenameSession();
   const { patchSessionTitle } = useSessionsContext();
@@ -46,6 +48,8 @@ export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item,
   const { abortSession } = useAbortSession();
   const { deleteSession, isDeleting } = useDeleteSession();
   const { resumeSession } = useResumeSession();
+  const { archiveSession } = useArchiveSession();
+  const { unarchiveSession } = useUnarchiveSession();
   const { openDirectory } = useOpenDirectory();
   const { moveSession } = useMoveSession();
   const [isRenaming, setIsRenaming] = useState(false);
@@ -56,11 +60,14 @@ export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item,
   const isStopped = lifecycleStatus === "stopped";
   const isCompleted = lifecycleStatus === "completed";
   const isRunning = lifecycleStatus === "running";
+  const isArchived = retentionStatus === "archived";
 
   // Conditional action visibility
-  const canAbort = isRunning && activityStatus === "busy";
-  const canStop = isRunning;
-  const canResume = isStopped || isCompleted || isDisconnected;
+  const canAbort = !isArchived && isRunning && activityStatus === "busy";
+  const canStop = !isArchived && isRunning;
+  const canResume = !isArchived && (isStopped || isCompleted || isDisconnected);
+  const canArchive = !isArchived && !isRunning;
+  const canUnarchive = isArchived;
 
   // Session status: purely about agent activity
   const isBusy = activityStatus === "busy";
@@ -140,6 +147,24 @@ export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item,
     }
   }, [resumeSession, session.id, navigate, refetch]);
 
+  const handleArchive = useCallback(async () => {
+    try {
+      await archiveSession(session.id);
+      refetch();
+    } catch {
+      // error surfaced inside useArchiveSession
+    }
+  }, [archiveSession, session.id, refetch]);
+
+  const handleUnarchive = useCallback(async () => {
+    try {
+      await unarchiveSession(session.id);
+      refetch();
+    } catch {
+      // error surfaced inside useUnarchiveSession
+    }
+  }, [unarchiveSession, session.id, refetch]);
+
   const handleCopyId = useCallback(() => {
     navigator.clipboard.writeText(session.id).catch(() => {});
   }, [session.id]);
@@ -170,6 +195,7 @@ export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item,
           <Link
             to={`/sessions/${encodeURIComponent(session.id)}?instanceId=${encodeURIComponent(instanceId)}`}
             data-tree-leaf
+            data-session-id={session.id}
             tabIndex={0}
             onClick={(e) => {
               if (isRenaming) e.preventDefault();
@@ -196,6 +222,11 @@ export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item,
               onEditingChange={setIsRenaming}
               className="text-xs truncate block"
             />
+            {isArchived && (
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                archived
+              </span>
+            )}
             <button
               data-rename-trigger
               className="sr-only"
@@ -232,6 +263,18 @@ export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item,
             <ContextMenuItem onClick={handleResume} className="gap-2 text-xs">
               <Play className="h-3.5 w-3.5" />
               Resume
+            </ContextMenuItem>
+          )}
+          {canArchive && (
+            <ContextMenuItem onClick={handleArchive} className="gap-2 text-xs">
+              <Square className="h-3.5 w-3.5" />
+              Archive
+            </ContextMenuItem>
+          )}
+          {canUnarchive && (
+            <ContextMenuItem onClick={handleUnarchive} className="gap-2 text-xs">
+              <Play className="h-3.5 w-3.5" />
+              Unarchive
             </ContextMenuItem>
           )}
 
@@ -303,7 +346,7 @@ export const SidebarSessionItem = React.memo(function SidebarSessionItem({ item,
             className="gap-2 text-xs"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            Delete
+            Permanently Delete
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>

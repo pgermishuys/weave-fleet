@@ -59,6 +59,19 @@ public sealed class SessionOrchestratorTests
         _harnessInstance.InstanceId.Returns("inst-1");
         _harnessInstance.HarnessType.Returns("opencode");
         _harnessInstance.Status.Returns(HarnessInstanceStatus.Running);
+        _instanceRepo.GetByIdAsync(Arg.Any<string>()).Returns(callInfo => new Instance
+        {
+            Id = callInfo.Arg<string>(),
+            Port = 0,
+            Directory = "/tmp",
+            Url = string.Empty,
+            Status = "running",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+        _instanceRepo.UpdateStatusAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>()).Returns(Task.CompletedTask);
+        _sessionRepo.UpdateStatusAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>()).Returns(Task.CompletedTask);
+        _sessionRepo.ArchiveAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(Task.CompletedTask);
+        _sessionRepo.UnarchiveAsync(Arg.Any<string>()).Returns(Task.CompletedTask);
     }
 
     // ── CreateSessionAsync ─────────────────────────────────────────────────────
@@ -156,7 +169,7 @@ public sealed class SessionOrchestratorTests
         _sessionRepo.GetByIdAsync("s1").Returns(new Session
         {
             Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active",
-            Directory = "/tmp", CreatedAt = "2026-01-01"
+            Directory = "/tmp", CreatedAt = "2026-01-01", RetentionStatus = "active"
         });
         _tracker.Register("inst-1", _harnessInstance);
 
@@ -164,6 +177,27 @@ public sealed class SessionOrchestratorTests
 
         result.IsSuccess.ShouldBeTrue();
         await _harnessInstance.Received(1).SendPromptAsync("hello", null, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PromptSessionAsync_WhenArchived_ReturnsValidationFailure()
+    {
+        _sessionRepo.GetByIdAsync("s-archived").Returns(new Session
+        {
+            Id = "s-archived",
+            InstanceId = "inst-1",
+            Title = "Archived",
+            Status = "stopped",
+            RetentionStatus = "archived",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        });
+
+        var result = await _sut.PromptSessionAsync("s-archived", "hello");
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe("Validation.Session.RetentionStatus");
+        await _harnessInstance.DidNotReceive().SendPromptAsync(Arg.Any<string>(), Arg.Any<PromptOptions?>(), Arg.Any<CancellationToken>());
     }
 
     // ── GetSessionMessagesAsync ────────────────────────────────────────────────
@@ -407,6 +441,7 @@ public sealed class SessionOrchestratorTests
             HarnessResumeToken = "existing-session-token",
             Title = "T",
             Status = "active",
+            RetentionStatus = "active",
             Directory = "/tmp",
             CreatedAt = "2026-01-01"
         };
@@ -449,6 +484,7 @@ public sealed class SessionOrchestratorTests
             HarnessResumeToken = null,
             Title = "T",
             Status = "active",
+            RetentionStatus = "active",
             Directory = "/tmp",
             CreatedAt = "2026-01-01"
         };
@@ -489,6 +525,7 @@ public sealed class SessionOrchestratorTests
             HarnessResumeToken = "some-token",
             Title = "T",
             Status = "active",
+            RetentionStatus = "active",
             Directory = "/tmp",
             CreatedAt = "2026-01-01"
         };
@@ -514,6 +551,30 @@ public sealed class SessionOrchestratorTests
         result.IsSuccess.ShouldBeTrue();
         await _harness.Received(1).SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
         await _harness.DidNotReceive().ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ResumeSessionAsync_WhenArchived_ReturnsValidationFailure()
+    {
+        var session = new Session
+        {
+            Id = "s-archived-resume",
+            InstanceId = "inst-old",
+            WorkspaceId = "ws-1",
+            HarnessType = "opencode",
+            Title = "Archived",
+            Status = "stopped",
+            RetentionStatus = "archived",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        };
+        _sessionRepo.GetByIdAsync("s-archived-resume").Returns(session);
+
+        var result = await _sut.ResumeSessionAsync("s-archived-resume");
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe("Validation.Session.RetentionStatus");
+        _harnessRegistry.DidNotReceive().GetByType(Arg.Any<string>());
     }
 
     [Fact]
@@ -628,7 +689,8 @@ public sealed class SessionOrchestratorTests
         _delegationRepo.GetByChildSessionIdAsync("child-1").Returns(delegation);
         _delegationRepo.GetByIdAsync("del-1").Returns(delegation);
         _sessionRepo.DeleteAsync("child-1").Returns(true);
-        _instanceRepo.UpdateStatusAsync("inst-1", "stopped", Arg.Any<string>()).Returns(Task.CompletedTask);
+        _harnessInstance.DeleteAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        _tracker.Register("inst-1", _harnessInstance);
 
         var result = await _sut.DeleteSessionAsync("child-1");
 
@@ -644,5 +706,72 @@ public sealed class SessionOrchestratorTests
                 Arg.Any<string>());
             await _sessionRepo.DeleteAsync("child-1");
         });
+        await _harnessInstance.Received(1).DeleteAsync(Arg.Any<CancellationToken>());
+        await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_deleted", Arg.Any<object>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task StopSessionAsync_WhenRunning_StopsInstanceAndBroadcastsStopped()
+    {
+        _sessionRepo.GetByIdAsync("s-stop").Returns(new Session
+        {
+            Id = "s-stop",
+            InstanceId = "inst-1",
+            Title = "Stop",
+            Status = "active",
+            RetentionStatus = "active",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        });
+        _tracker.Register("inst-1", _harnessInstance);
+
+        var result = await _sut.StopSessionAsync("s-stop");
+
+        result.IsSuccess.ShouldBeTrue();
+        await _harnessInstance.Received(1).StopAsync(Arg.Any<CancellationToken>());
+        await _sessionRepo.Received(1).UpdateStatusAsync("s-stop", "stopped", Arg.Any<string>());
+        await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_stopped", Arg.Any<object>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ArchiveSessionAsync_WhenActive_ArchivesAndBroadcasts()
+    {
+        _sessionRepo.GetByIdAsync("s-archive").Returns(new Session
+        {
+            Id = "s-archive",
+            InstanceId = "inst-1",
+            Title = "Archive",
+            Status = "stopped",
+            RetentionStatus = "active",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        });
+
+        var result = await _sut.ArchiveSessionAsync("s-archive");
+
+        result.IsSuccess.ShouldBeTrue();
+        await _sessionRepo.Received(1).ArchiveAsync("s-archive", Arg.Any<string>());
+        await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_archived", Arg.Any<object>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UnarchiveSessionAsync_WhenArchived_UnarchivesAndBroadcasts()
+    {
+        _sessionRepo.GetByIdAsync("s-unarchive").Returns(new Session
+        {
+            Id = "s-unarchive",
+            InstanceId = "inst-1",
+            Title = "Unarchive",
+            Status = "stopped",
+            RetentionStatus = "archived",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        });
+
+        var result = await _sut.UnarchiveSessionAsync("s-unarchive");
+
+        result.IsSuccess.ShouldBeTrue();
+        await _sessionRepo.Received(1).UnarchiveAsync("s-unarchive");
+        await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_unarchived", Arg.Any<object>(), Arg.Any<CancellationToken>());
     }
 }

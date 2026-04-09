@@ -181,6 +181,9 @@ public sealed partial class SessionOrchestrator(
         if (session is null)
             return FleetError.NotFoundFor(nameof(Session), id);
 
+        if (string.Equals(session.RetentionStatus, "archived", StringComparison.Ordinal))
+            return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions must be unarchived before they can be resumed.");
+
         var workspaceResult = await workspaceService.GetWorkspaceDirectoryAsync(session.WorkspaceId);
         if (workspaceResult.IsFailure)
             return workspaceResult.Error;
@@ -365,6 +368,13 @@ public sealed partial class SessionOrchestrator(
         PromptOptions? options = null,
         CancellationToken ct = default)
     {
+        var sessionResult = await GetSessionAsync(id);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        if (string.Equals(sessionResult.Value.RetentionStatus, "archived", StringComparison.Ordinal))
+            return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only. Unarchive before sending prompts.");
+
         var instanceResult = await GetLiveInstanceAsync(id);
         if (instanceResult.IsFailure)
             return instanceResult.Error;
@@ -375,6 +385,13 @@ public sealed partial class SessionOrchestrator(
 
     public async Task<Result<Unit>> AbortSessionAsync(string id, CancellationToken ct = default)
     {
+        var sessionResult = await GetSessionAsync(id);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        if (string.Equals(sessionResult.Value.RetentionStatus, "archived", StringComparison.Ordinal))
+            return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only. Unarchive before aborting.");
+
         var instanceResult = await GetLiveInstanceAsync(id);
         if (instanceResult.IsFailure)
             return instanceResult.Error;
@@ -388,6 +405,13 @@ public sealed partial class SessionOrchestrator(
         CommandOptions options,
         CancellationToken ct = default)
     {
+        var sessionResult = await GetSessionAsync(id);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        if (string.Equals(sessionResult.Value.RetentionStatus, "archived", StringComparison.Ordinal))
+            return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only. Unarchive before sending commands.");
+
         var instanceResult = await GetLiveInstanceAsync(id);
         if (instanceResult.IsFailure)
             return instanceResult.Error;
@@ -450,6 +474,78 @@ public sealed partial class SessionOrchestrator(
 
     // ── Delete ─────────────────────────────────────────────────────────────────
 
+    public async Task<Result<Unit>> StopSessionAsync(string id, CancellationToken ct = default)
+    {
+        var session = await sessionRepository.GetByIdAsync(id);
+        if (session is null)
+            return FleetError.NotFoundFor(nameof(Session), id);
+
+        if (session.Status is "stopped" or "completed" or "error" or "disconnected")
+            return Unit.Value;
+
+        var stoppedAt = DateTime.UtcNow.ToString("O");
+        var liveInstance = instanceTracker.Get(session.InstanceId);
+        if (liveInstance is not null)
+        {
+            await SafeStopAsync(liveInstance, ct);
+            instanceTracker.Remove(session.InstanceId);
+        }
+
+        var instanceUpdateResult = await instanceService.UpdateInstanceStatusAsync(session.InstanceId, "stopped", stoppedAt);
+        if (instanceUpdateResult.IsFailure)
+            return instanceUpdateResult.Error;
+
+        await sessionRepository.UpdateStatusAsync(id, "stopped", stoppedAt);
+
+        await eventBroadcaster.BroadcastAsync("sessions", "session_stopped", new
+        {
+            sessionId = id,
+            stoppedAt
+        }, ct);
+
+        return Unit.Value;
+    }
+
+    public async Task<Result<Unit>> ArchiveSessionAsync(string id, CancellationToken ct = default)
+    {
+        var session = await sessionRepository.GetByIdAsync(id);
+        if (session is null)
+            return FleetError.NotFoundFor(nameof(Session), id);
+
+        if (string.Equals(session.RetentionStatus, "archived", StringComparison.Ordinal))
+            return Unit.Value;
+
+        var archivedAt = DateTime.UtcNow.ToString("O");
+        await sessionRepository.ArchiveAsync(id, archivedAt);
+
+        await eventBroadcaster.BroadcastAsync("sessions", "session_archived", new
+        {
+            sessionId = id,
+            archivedAt
+        }, ct);
+
+        return Unit.Value;
+    }
+
+    public async Task<Result<Unit>> UnarchiveSessionAsync(string id, CancellationToken ct = default)
+    {
+        var session = await sessionRepository.GetByIdAsync(id);
+        if (session is null)
+            return FleetError.NotFoundFor(nameof(Session), id);
+
+        if (!string.Equals(session.RetentionStatus, "archived", StringComparison.Ordinal))
+            return Unit.Value;
+
+        await sessionRepository.UnarchiveAsync(id);
+
+        await eventBroadcaster.BroadcastAsync("sessions", "session_unarchived", new
+        {
+            sessionId = id
+        }, ct);
+
+        return Unit.Value;
+    }
+
     public async Task<Result<Unit>> DeleteSessionAsync(string id, CancellationToken ct = default)
     {
         var session = await sessionRepository.GetByIdAsync(id);
@@ -468,12 +564,15 @@ public sealed partial class SessionOrchestrator(
         var liveInstance = instanceTracker.Get(session.InstanceId);
         if (liveInstance is not null)
         {
-            await SafeStopAsync(liveInstance, ct);
+            await SafeDeleteAsync(liveInstance, ct);
             instanceTracker.Remove(session.InstanceId);
         }
 
-        await instanceService.UpdateInstanceStatusAsync(
-            session.InstanceId, "stopped", DateTime.UtcNow.ToString("O"));
+        var deletedAt = DateTime.UtcNow;
+        var instanceUpdateResult = await instanceService.UpdateInstanceStatusAsync(
+            session.InstanceId, "stopped", deletedAt.ToString("O"));
+        if (instanceUpdateResult.IsFailure)
+            return instanceUpdateResult.Error;
 
         await sessionRepository.DeleteAsync(id);
 
@@ -485,18 +584,17 @@ public sealed partial class SessionOrchestrator(
             ProjectName: null,
             WorkspaceDirectory: session.Directory,
             Title: session.Title,
-            Status: "stopped",
+            Status: "deleted",
             TotalTokens: session.TotalTokens,
             TotalCost: session.TotalCost,
             TotalEstimatedCost: 0,
             MessageCount: 0,
             ModelIds: [],
             CreatedAt: DateTimeOffset.Parse(session.CreatedAt, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind),
-            EndedAt: DateTimeOffset.UtcNow,
+            EndedAt: deletedAt,
             DurationSeconds: null));
 
-        // Broadcast session_stopped event
-        await eventBroadcaster.BroadcastAsync("sessions", "session_stopped", new
+        await eventBroadcaster.BroadcastAsync("sessions", "session_deleted", new
         {
             sessionId = id
         }, ct);
@@ -508,15 +606,26 @@ public sealed partial class SessionOrchestrator(
 
     private async Task<Result<IHarnessInstance>> GetLiveInstanceAsync(string sessionId)
     {
-        var session = await sessionRepository.GetByIdAsync(sessionId);
-        if (session is null)
-            return FleetError.NotFoundFor(nameof(Session), sessionId);
+        var sessionResult = await GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var session = sessionResult.Value;
 
         var instance = instanceTracker.Get(session.InstanceId);
         if (instance is null)
             return FleetError.NotFoundFor("Instance", session.InstanceId);
 
         return Result.Success<IHarnessInstance>(instance);
+    }
+
+    private async Task<Result<Session>> GetSessionAsync(string sessionId)
+    {
+        var session = await sessionRepository.GetByIdAsync(sessionId);
+        if (session is null)
+            return FleetError.NotFoundFor(nameof(Session), sessionId);
+
+        return session;
     }
 
     private async Task<string?> ResolveScratchProjectIdAsync()
@@ -530,6 +639,12 @@ public sealed partial class SessionOrchestrator(
     private async Task SafeStopAsync(IHarnessInstance instance, CancellationToken ct)
     {
         try { await instance.StopAsync(ct); }
+        catch (Exception ex) { LogStopFailed(ex, instance.InstanceId); }
+    }
+
+    private async Task SafeDeleteAsync(IHarnessInstance instance, CancellationToken ct)
+    {
+        try { await instance.DeleteAsync(ct); }
         catch (Exception ex) { LogStopFailed(ex, instance.InstanceId); }
     }
 

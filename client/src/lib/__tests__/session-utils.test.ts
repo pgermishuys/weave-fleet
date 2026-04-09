@@ -21,6 +21,8 @@ function makeItem(overrides: Partial<SessionListItem> & { sessionId?: string } =
     parentSessionId: undefined,
     activityStatus: "busy",
     lifecycleStatus: "running",
+    retentionStatus: "active",
+    archivedAt: null,
     typedInstanceStatus: "running",
     isHidden: false,
     ...overrides,
@@ -247,6 +249,12 @@ describe("sessionsChanged", () => {
   it("returns true when session title changes", () => {
     const a = [makeItem({ sessionId: "s1", session: { id: "s1", title: "Old" } as unknown as SessionListItem["session"] })];
     const b = [makeItem({ sessionId: "s1", session: { id: "s1", title: "New" } as unknown as SessionListItem["session"] })];
+    expect(sessionsChanged(a, b)).toBe(true);
+  });
+
+  it("returns true when retention status changes", () => {
+    const a = [makeItem({ sessionId: "s1", retentionStatus: "active", archivedAt: null })];
+    const b = [makeItem({ sessionId: "s1", retentionStatus: "archived", archivedAt: "2026-01-01T00:00:00Z" })];
     expect(sessionsChanged(a, b)).toBe(true);
   });
 });

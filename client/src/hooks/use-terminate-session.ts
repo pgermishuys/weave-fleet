@@ -25,18 +25,15 @@ export function useTerminateSession(): UseTerminateSessionResult {
     instanceId: string,
     opts?: TerminateSessionOptions
   ): Promise<void> => {
+    void instanceId;
+    void opts;
     setIsTerminating(true);
     setError(undefined);
 
     try {
-      const params = new URLSearchParams({ instanceId });
-      if (opts?.cleanupWorkspace) {
-        params.set("cleanupWorkspace", "true");
-      }
-
       const response = await apiFetch(
-        `/api/sessions/${encodeURIComponent(sessionId)}?${params.toString()}`,
-        { method: "DELETE" }
+        `/api/sessions/${encodeURIComponent(sessionId)}/stop`,
+        { method: "POST" }
       );
 
       if (!response.ok) {

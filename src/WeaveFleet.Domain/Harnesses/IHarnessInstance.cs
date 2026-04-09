@@ -26,6 +26,9 @@ public interface IHarnessInstance : IAsyncDisposable
     /// <summary>Gracefully stop the agent process.</summary>
     Task StopAsync(CancellationToken ct);
 
+    /// <summary>Permanently purge remote session state, then stop the agent process.</summary>
+    Task DeleteAsync(CancellationToken ct);
+
     /// <summary>Send a user prompt to the agent.</summary>
     Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct);
 

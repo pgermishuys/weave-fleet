@@ -43,6 +43,96 @@ public sealed class MigrationRunnerTests
     }
 
     [Fact]
+    public async Task ApplyMigrationsAsync_AddsSessionRetentionColumnsWithDefaults()
+    {
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+        var runner = CreateRunner(factory);
+
+        await runner.ApplyMigrationsAsync(conn);
+
+        var columns = new Dictionary<string, (string Type, int NotNull, string? DefaultValue)>(StringComparer.OrdinalIgnoreCase);
+        using var command = conn.CreateCommand();
+        command.CommandText = "PRAGMA table_info(sessions);";
+        using var reader = await command.ExecuteReaderAsync();
+
+        while (await reader.ReadAsync())
+        {
+            columns[reader.GetString(reader.GetOrdinal("name"))] =
+                (reader.GetString(reader.GetOrdinal("type")), reader.GetInt32(reader.GetOrdinal("notnull")), reader.IsDBNull(reader.GetOrdinal("dflt_value")) ? null : reader.GetString(reader.GetOrdinal("dflt_value")));
+        }
+
+        columns.ShouldContainKey("retention_status");
+        columns["retention_status"].Type.ShouldBe("TEXT");
+        columns["retention_status"].NotNull.ShouldBe(1);
+        columns["retention_status"].DefaultValue.ShouldBe("'active'");
+
+        columns.ShouldContainKey("archived_at");
+        columns["archived_at"].Type.ShouldBe("TEXT");
+    }
+
+    [Fact]
+    public async Task ApplyMigrationsAsync_BackfillsExistingSessionsToActiveRetentionWithoutInferringArchiveState()
+    {
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+
+        // Apply migrations through 007 only to simulate an existing install.
+        var assembly = typeof(MigrationRunner).Assembly;
+        var migrationResources = assembly.GetManifestResourceNames()
+            .Where(name => name.EndsWith(".sql", StringComparison.OrdinalIgnoreCase)
+                && name.Split('.').Contains("Migrations", StringComparer.Ordinal))
+            .OrderBy(name => name)
+            .Where(name => string.CompareOrdinal(ExtractMigrationName(name), "008_add_session_retention_status.sql") < 0)
+            .ToList();
+
+        await conn.ExecuteAsync(
+            """
+            CREATE TABLE IF NOT EXISTS _migrations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+            """);
+
+        foreach (var resource in migrationResources)
+        {
+            var sql = ReadEmbeddedSql(assembly, resource);
+            var migrationName = ExtractMigrationName(resource);
+            await conn.ExecuteAsync(sql);
+            await conn.ExecuteAsync("INSERT INTO _migrations (name) VALUES (@Name)", new { Name = migrationName });
+        }
+
+        await conn.ExecuteAsync(
+            "INSERT INTO projects (id, name, type, position, created_at, updated_at) VALUES ('proj-1', 'Project', 'user', 0, '2026-01-01', '2026-01-01')");
+        await conn.ExecuteAsync(
+            "INSERT INTO workspaces (id, directory, isolation_strategy, created_at) VALUES ('ws-1', '/tmp/proj', 'existing', '2026-01-01')");
+        await conn.ExecuteAsync(
+            "INSERT INTO instances (id, port, directory, url, status, created_at) VALUES ('inst-1', 0, '/tmp/proj', 'http://127.0.0.1:0', 'running', '2026-01-01')");
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO sessions (
+                id, workspace_id, instance_id, project_id, opencode_session_id, title, status,
+                directory, created_at, stopped_at, activity_status, lifecycle_status,
+                total_tokens, total_cost, harness_type, harness_resume_token, is_hidden)
+            VALUES (
+                'sess-1', 'ws-1', 'inst-1', 'proj-1', 'oc-1', 'Legacy stopped session', 'completed',
+                '/tmp/proj', '2026-01-01', '2026-01-02', 'idle', 'completed',
+                0, 0, 'opencode', NULL, 0)
+            """);
+
+        var runner = CreateRunner(factory);
+        await runner.ApplyMigrationsAsync(conn);
+
+        var row = await conn.QuerySingleAsync<(string RetentionStatus, string? ArchivedAt, string LifecycleStatus)>(
+            "SELECT retention_status AS RetentionStatus, archived_at AS ArchivedAt, lifecycle_status AS LifecycleStatus FROM sessions WHERE id = 'sess-1'");
+
+        row.RetentionStatus.ShouldBe("active");
+        row.ArchivedAt.ShouldBeNull();
+        row.LifecycleStatus.ShouldBe("completed");
+    }
+
+    [Fact]
     public async Task ApplyMigrationsAsync_RecordsMigrationInTable()
     {
         using var conn = CreateInMemoryConnection();
@@ -167,5 +257,19 @@ public sealed class MigrationRunnerTests
     private sealed class SingleConnectionFactory(SqliteConnection connection) : IDbConnectionFactory
     {
         public System.Data.IDbConnection CreateConnection() => connection;
+    }
+
+    private static string ReadEmbeddedSql(System.Reflection.Assembly assembly, string resourceName)
+    {
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        stream.ShouldNotBeNull();
+        using var reader = new StreamReader(stream!);
+        return reader.ReadToEnd();
+    }
+
+    private static string ExtractMigrationName(string resourceName)
+    {
+        var parts = resourceName.Split('.');
+        return parts.Length >= 2 ? $"{parts[^2]}.{parts[^1]}" : resourceName;
     }
 }

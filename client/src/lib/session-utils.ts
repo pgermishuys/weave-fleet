@@ -32,6 +32,9 @@ export function sessionsChanged(
       a.sessionStatus !== b.sessionStatus ||
       a.activityStatus !== b.activityStatus ||
       a.lifecycleStatus !== b.lifecycleStatus ||
+      a.retentionStatus !== b.retentionStatus ||
+      a.archivedAt !== b.archivedAt ||
+      a.isHidden !== b.isHidden ||
       a.instanceStatus !== b.instanceStatus ||
       a.session.title !== b.session.title
     ) return true;

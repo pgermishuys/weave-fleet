@@ -23,6 +23,8 @@ import { useTerminateSession } from "@/hooks/use-terminate-session";
 import { useAbortSession } from "@/hooks/use-abort-session";
 import { useResumeSession } from "@/hooks/use-resume-session";
 import { useDeleteSession } from "@/hooks/use-delete-session";
+import { useArchiveSession } from "@/hooks/use-archive-session";
+import { useUnarchiveSession } from "@/hooks/use-unarchive-session";
 import { ConfirmDeleteSessionDialog } from "@/components/fleet/confirm-delete-session-dialog";
 import { ForkSessionDialog } from "@/components/session/fork-session-dialog";
 import { extractLatestTodos } from "@/lib/todo-utils";
@@ -49,6 +51,7 @@ interface AncestorInfo {
 }
 
 interface SessionMetadata {
+  instanceId?: string | null;
   workspaceId: string | null;
   workspaceDirectory: string | null;
   isolationStrategy: string | null;
@@ -56,6 +59,9 @@ interface SessionMetadata {
   createdAt?: number;
   ancestors?: AncestorInfo[];
   harnessType?: string | null;
+  lifecycleStatus?: string | null;
+  retentionStatus?: "active" | "archived" | null;
+  archivedAt?: string | null;
 }
 
 export default function SessionDetailPage() {
@@ -73,7 +79,6 @@ export default function SessionDetailPage() {
     contextSessions.find((s) => s.session.id === sessionId),
     [contextSessions, sessionId]
   );
-  const instanceId = urlInstanceId || contextMatch?.instanceId || "";
   const contextTitle = contextMatch?.session.title;
   const parentSessionId = searchParams.get("parentSessionId") ?? contextMatch?.parentSessionId ?? null;
   const parentContextMatch = useMemo(() =>
@@ -82,6 +87,18 @@ export default function SessionDetailPage() {
   );
 
   const { sendPrompt, error: sendError } = useSendPrompt();
+  const [metadataLoaded, setMetadataLoaded] = useState(false);
+  const [metadata, setMetadata] = useState<SessionMetadata>({
+    instanceId: null,
+    workspaceId: null,
+    workspaceDirectory: null,
+    isolationStrategy: null,
+    harnessType: null,
+    lifecycleStatus: null,
+    retentionStatus: null,
+    archivedAt: null,
+  });
+  const instanceId = urlInstanceId || contextMatch?.instanceId || metadata.instanceId || "";
   const { agents } = useAgents(instanceId);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const { providers } = useModels(instanceId);
@@ -105,6 +122,8 @@ export default function SessionDetailPage() {
   const { abortSession, isAborting } = useAbortSession();
   const { resumeSession, isResuming } = useResumeSession();
   const { deleteSession: permanentDelete, isDeleting } = useDeleteSession();
+  const { archiveSession, isArchiving } = useArchiveSession();
+  const { unarchiveSession, isUnarchiving } = useUnarchiveSession();
   const navigate = useNavigate();
   const { diffs, isLoading: diffsLoading, error: diffsError, fetchDiffs } = useDiffs(sessionId, instanceId);
   const [isStopped, setIsStopped] = useState(false);
@@ -148,7 +167,7 @@ export default function SessionDetailPage() {
       paletteHotkey: bindings["interrupt-session"]?.paletteHotkey ?? undefined,
       globalShortcut: bindings["interrupt-session"]?.globalShortcut ?? undefined,
       keywords: ["abort", "cancel", "stop", "interrupt"],
-      disabled: isStopped || sessionStatus !== "busy",
+      disabled: isStopped || metadata.retentionStatus === "archived" || sessionStatus !== "busy",
       action: () => {
         abortSession(sessionId, instanceId).catch(() => {
           // error surfaced via useAbortSession
@@ -158,7 +177,7 @@ export default function SessionDetailPage() {
     return () => {
       unregisterCommand("interrupt-session");
     };
-  }, [registerCommand, unregisterCommand, bindings, sessionStatus, isStopped, abortSession, sessionId, instanceId]);
+  }, [registerCommand, unregisterCommand, bindings, sessionStatus, isStopped, metadata.retentionStatus, abortSession, sessionId, instanceId]);
 
   // Register additional session-page commands
   useEffect(() => {
@@ -289,12 +308,6 @@ export default function SessionDetailPage() {
     };
   }, [registerCommand, unregisterCommand, sessionId, messages]);
 
-  const [metadata, setMetadata] = useState<SessionMetadata>({
-    workspaceId: null,
-    workspaceDirectory: null,
-    isolationStrategy: null,
-    harnessType: null,
-  });
   // Track whether metadata has been fetched at least once (distinguishes
   // "not yet loaded" from "loaded but empty ancestors").
   const metadataFetchedRef = useRef(false);
@@ -303,24 +316,47 @@ export default function SessionDetailPage() {
   // Used on initial mount and retried when SSE connects but metadata is missing
   // (e.g. subagent session wasn't ready on the first attempt).
   const fetchMetadata = useCallback(() => {
-    if (!sessionId || !instanceId) return;
+    if (!sessionId) return;
     const parentSessionId = searchParams.get("parentSessionId");
-    let url = `/api/sessions/${encodeURIComponent(sessionId)}?instanceId=${encodeURIComponent(instanceId)}`;
-    if (parentSessionId) {
-      url += `&parentSessionId=${encodeURIComponent(parentSessionId)}`;
+    const query = new URLSearchParams();
+    if (instanceId) {
+      query.set("instanceId", instanceId);
     }
+    if (parentSessionId) {
+      query.set("parentSessionId", parentSessionId);
+    }
+    const url = query.size > 0
+      ? `/api/sessions/${encodeURIComponent(sessionId)}?${query.toString()}`
+      : `/api/sessions/${encodeURIComponent(sessionId)}`;
+
     apiFetch(url)
       .then((r) => {
         if (!r.ok) {
           // Instance dead — show resume banner
+          setMetadataLoaded(true);
           setIsResumable(true);
           return null;
         }
         return r.json();
       })
-      .then((data: { workspaceId?: string; workspaceDirectory?: string; isolationStrategy?: string; session?: { title?: string; time?: { created?: number } }; ancestors?: AncestorInfo[]; dbTitle?: string; harnessType?: string; lifecycleStatus?: string } | null) => {
+      .then((data: {
+        instanceId?: string;
+        workspaceId?: string;
+        workspaceDirectory?: string;
+        isolationStrategy?: string;
+        title?: string;
+        createdAt?: string;
+        session?: { title?: string; time?: { created?: number } };
+        ancestors?: AncestorInfo[];
+        dbTitle?: string;
+        harnessType?: string;
+        lifecycleStatus?: string;
+        retentionStatus?: "active" | "archived";
+        archivedAt?: string | null;
+      } | null) => {
         if (!data) return;
         metadataFetchedRef.current = true;
+        setMetadataLoaded(true);
         // Check lifecycle status from DB — if stopped/completed the session is
         // resumable regardless of whether the harness instance is reachable.
         const isSessionStopped = data.lifecycleStatus === "stopped" || data.lifecycleStatus === "completed";
@@ -332,16 +368,21 @@ export default function SessionDetailPage() {
           setIsResumable(false);
         }
         setMetadata({
+          instanceId: data.instanceId ?? null,
           workspaceId: data.workspaceId ?? null,
           workspaceDirectory: data.workspaceDirectory ?? null,
           isolationStrategy: data.isolationStrategy ?? null,
-          title: data.dbTitle ?? data.session?.title,
-          createdAt: data.session?.time?.created,
+          title: data.dbTitle ?? data.session?.title ?? data.title,
+          createdAt: data.session?.time?.created ?? (data.createdAt ? Date.parse(data.createdAt) : undefined),
           ancestors: data.ancestors,
           harnessType: data.harnessType ?? null,
+          lifecycleStatus: data.lifecycleStatus ?? null,
+          retentionStatus: data.retentionStatus ?? null,
+          archivedAt: data.archivedAt ?? null,
         });
       })
       .catch(() => {
+        setMetadataLoaded(true);
         setIsResumable(true);
       });
   }, [sessionId, instanceId, searchParams]);
@@ -352,11 +393,16 @@ export default function SessionDetailPage() {
   // stale ancestors from the parent session linger.
   useEffect(() => {
     metadataFetchedRef.current = false;
+    setMetadataLoaded(false);
     setMetadata({
+      instanceId: null,
       workspaceId: null,
       workspaceDirectory: null,
       isolationStrategy: null,
       harnessType: null,
+      lifecycleStatus: null,
+      retentionStatus: null,
+      archivedAt: null,
     });
   }, [sessionId]);
 
@@ -496,6 +542,9 @@ export default function SessionDetailPage() {
   );
 
   const handleStop = useCallback(async () => {
+    if (metadata.retentionStatus === "archived") {
+      return;
+    }
     if (!stopConfirm) {
       setStopConfirm(true);
       return;
@@ -511,6 +560,9 @@ export default function SessionDetailPage() {
   }, [stopConfirm, terminateSession, sessionId, instanceId]);
 
   const handleAbort = useCallback(async () => {
+    if (metadata.retentionStatus === "archived") {
+      return;
+    }
     if (!abortConfirm) {
       setAbortConfirm(true);
       return;
@@ -523,7 +575,7 @@ export default function SessionDetailPage() {
     } finally {
       setAbortConfirm(false);
     }
-  }, [abortConfirm, abortSession, sessionId, instanceId, forceIdle]);
+  }, [abortConfirm, abortSession, sessionId, instanceId, forceIdle, metadata.retentionStatus]);
 
   // Reset abort confirmation when session leaves busy state
   useEffect(() => {
@@ -533,6 +585,9 @@ export default function SessionDetailPage() {
   }, [sessionStatus]);
 
   const handleResume = useCallback(async () => {
+    if (metadata.retentionStatus === "archived") {
+      return;
+    }
     try {
       const result = await resumeSession(sessionId);
       // Immediately reset stopped/resumable state so the UI reflects the
@@ -550,7 +605,34 @@ export default function SessionDetailPage() {
     } catch {
       // error surfaced via useResumeSession
     }
-  }, [resumeSession, navigate, sessionId]);
+  }, [resumeSession, navigate, sessionId, metadata.retentionStatus]);
+
+  const handleArchive = useCallback(async () => {
+    try {
+      await archiveSession(sessionId);
+      setMetadata((current) => ({
+        ...current,
+        retentionStatus: "archived",
+        archivedAt: new Date().toISOString(),
+      }));
+    } catch {
+      // error surfaced via useArchiveSession
+    }
+  }, [archiveSession, sessionId]);
+
+  const handleUnarchive = useCallback(async () => {
+    try {
+      await unarchiveSession(sessionId);
+      setMetadata((current) => ({
+        ...current,
+        retentionStatus: "active",
+        archivedAt: null,
+      }));
+      fetchMetadata();
+    } catch {
+      // error surfaced via useUnarchiveSession
+    }
+  }, [unarchiveSession, sessionId, fetchMetadata]);
 
   const handlePermanentDelete = useCallback(async () => {
     try {
@@ -561,11 +643,26 @@ export default function SessionDetailPage() {
     }
   }, [permanentDelete, navigate, sessionId, instanceId]);
 
+  const isArchived = metadata.retentionStatus === "archived";
+  const isReadOnly = isArchived || isStopped || isResumable || status === "error";
+  const canArchive = !isArchived && (isStopped || isResumable);
+  const promptDisabledMessage = isArchived
+    ? "Archived sessions are read-only. Unarchive to send prompts."
+    : isStopped
+      ? "Session stopped — resume or start a new context window."
+      : isResumable
+        ? "Session disconnected — resume to continue."
+        : status === "error"
+          ? "Session unavailable right now."
+          : undefined;
+
   if (!instanceId) {
     return (
       <div className="flex h-full items-center justify-center">
         <p className="text-muted-foreground">
-          Missing instanceId — navigate here via the fleet page.
+          {metadataLoaded
+            ? "Missing instanceId — navigate here via the fleet page."
+            : "Loading session metadata…"}
         </p>
       </div>
     );
@@ -589,6 +686,11 @@ export default function SessionDetailPage() {
             <Badge variant="secondary" className="text-xs">
               {sessionStatus === "busy" ? "Working" : "Idle"}
             </Badge>
+            {isArchived && (
+              <Badge variant="outline" className="text-xs" data-testid="session-archived-badge">
+                Archived
+              </Badge>
+            )}
             {activeAgentName && (
               <Badge variant="outline" className="hidden xs:inline-flex text-xs gap-1">
                 <span
@@ -599,6 +701,19 @@ export default function SessionDetailPage() {
               </Badge>
             )}
             {/* Session Info trigger — mobile only */}
+            {isArchived && (
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="session-unarchive-button"
+                className="hidden sm:inline-flex h-7 px-2 text-xs gap-1"
+                onClick={handleUnarchive}
+                disabled={isUnarchiving}
+              >
+                <RotateCcw className="h-3 w-3" />
+                {isUnarchiving ? "Unarchiving…" : "Unarchive"}
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -613,6 +728,7 @@ export default function SessionDetailPage() {
             <Button
               variant="ghost"
               size="sm"
+              data-testid="session-detail-fork-button"
               className="hidden sm:inline-flex h-7 px-2 text-xs gap-1"
               onClick={() => setShowForkDialog(true)}
               title="New context window — start a fresh session in the same workspace"
@@ -620,7 +736,7 @@ export default function SessionDetailPage() {
               <GitFork className="h-3 w-3" />
               New context window
             </Button>
-            {!isStopped && sessionStatus === "busy" && (
+            {!isArchived && !isStopped && sessionStatus === "busy" && (
               <Button
                 variant={abortConfirm ? "destructive" : "outline"}
                 size="sm"
@@ -644,10 +760,11 @@ export default function SessionDetailPage() {
                 Cancel
               </Button>
             )}
-            {!isStopped && (
+            {!isArchived && !isStopped && (
               <Button
                 variant={stopConfirm ? "destructive" : "ghost"}
                 size="sm"
+                data-testid={stopConfirm ? "session-stop-confirm-button" : "session-stop-button"}
                 className="hidden sm:inline-flex h-7 px-2 text-xs gap-1"
                 onClick={handleStop}
                 disabled={isTerminating}
@@ -667,15 +784,29 @@ export default function SessionDetailPage() {
                 Cancel
               </Button>
             )}
-            {(isStopped || isResumable) && (
+            {canArchive && (
               <Button
                 variant="ghost"
                 size="sm"
+                data-testid="session-archive-button"
+                className="hidden sm:inline-flex h-7 px-2 text-xs gap-1"
+                onClick={handleArchive}
+                disabled={isArchiving}
+              >
+                <Square className="h-3 w-3" />
+                {isArchiving ? "Archiving…" : "Archive"}
+              </Button>
+            )}
+            {(isStopped || isResumable || isArchived) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                data-testid="session-delete-button"
                 className="hidden sm:inline-flex h-7 px-2 text-xs gap-1 text-red-600 dark:text-red-400 hover:text-red-500 hover:bg-red-500/10"
                 onClick={() => setShowDeleteConfirm(true)}
               >
                 <Trash2 className="h-3 w-3" />
-                Delete
+                Permanently Delete
               </Button>
             )}
             {/* Mobile overflow menu */}
@@ -691,8 +822,20 @@ export default function SessionDetailPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {!isStopped && sessionStatus === "busy" && (
+                {isArchived && (
                   <DropdownMenuItem
+                    onClick={handleUnarchive}
+                    disabled={isUnarchiving}
+                    className="gap-2"
+                    data-testid="session-unarchive-menu-item"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    {isUnarchiving ? "Unarchiving…" : "Unarchive"}
+                  </DropdownMenuItem>
+                )}
+                {!isArchived && !isStopped && sessionStatus === "busy" && (
+                  <DropdownMenuItem
+                    data-testid="session-abort-menu-item"
                     onClick={handleAbort}
                     disabled={isAborting}
                     className="gap-2 text-destructive focus:text-destructive"
@@ -701,8 +844,9 @@ export default function SessionDetailPage() {
                     {abortConfirm ? "Confirm interrupt?" : "Interrupt"}
                   </DropdownMenuItem>
                 )}
-                {!isStopped && (
+                {!isArchived && !isStopped && (
                   <DropdownMenuItem
+                    data-testid={stopConfirm ? "session-stop-confirm-menu-item" : "session-stop-menu-item"}
                     onClick={handleStop}
                     disabled={isTerminating}
                     className="gap-2"
@@ -711,22 +855,35 @@ export default function SessionDetailPage() {
                     {stopConfirm ? "Confirm stop?" : "Stop"}
                   </DropdownMenuItem>
                 )}
+                {canArchive && (
+                  <DropdownMenuItem
+                    onClick={handleArchive}
+                    disabled={isArchiving}
+                    className="gap-2"
+                    data-testid="session-archive-menu-item"
+                  >
+                    <Square className="h-3.5 w-3.5" />
+                    {isArchiving ? "Archiving…" : "Archive"}
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
+                  data-testid="session-fork-menu-item"
                   onClick={() => setShowForkDialog(true)}
                   className="gap-2"
                 >
                   <GitFork className="h-3.5 w-3.5" />
                   New context window
                 </DropdownMenuItem>
-                {(isStopped || isResumable) && (
+                {(isStopped || isResumable || isArchived) && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
+                      data-testid="session-delete-menu-item"
                       onClick={() => setShowDeleteConfirm(true)}
                       className="gap-2 text-destructive focus:text-destructive"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
-                      Delete session
+                      Permanently delete session
                     </DropdownMenuItem>
                   </>
                 )}
@@ -738,30 +895,95 @@ export default function SessionDetailPage() {
       <div className={`flex flex-1 overflow-hidden${isFolded ? " fold-gap" : ""}`}>
         {/* Main content with tabs */}
         <div className={`flex flex-1 flex-col overflow-hidden${isFolded ? " fold-left" : ""}`}>
-          {isStopped && (
-            <div className="px-4 py-2 bg-muted/50 border-b border-border text-sm text-muted-foreground flex items-center justify-between">
-              <span>Session stopped — conversation history preserved above.</span>
-              <Button variant="outline" size="sm" onClick={handleResume} disabled={isResuming} className="gap-1.5">
-                <RotateCcw className="h-3.5 w-3.5" />
-                {isResuming ? "Resuming…" : "Resume Session"}
-              </Button>
+          {isArchived && (
+            <div
+              className="px-4 py-3 bg-muted/50 border-b border-border text-sm text-muted-foreground flex items-center justify-between gap-3"
+              data-testid="session-archived-banner"
+            >
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[10px] uppercase tracking-wide">Archived</Badge>
+                  {metadata.archivedAt && (
+                    <span className="text-xs text-muted-foreground/80">
+                      {new Date(metadata.archivedAt).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                <span>
+                  {isStopped || isResumable
+                    ? "This session is archived and read-only. Unarchive before resuming or sending prompts."
+                    : "This session is archived and read-only. Unarchive to continue working in this context."}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button data-testid="session-archived-fork-button" variant="outline" size="sm" onClick={() => setShowForkDialog(true)} className="gap-1.5">
+                  <GitFork className="h-3.5 w-3.5" />
+                  New context window
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid="session-unarchive-banner-button"
+                  onClick={handleUnarchive}
+                  disabled={isUnarchiving}
+                  className="gap-1.5"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  {isUnarchiving ? "Unarchiving…" : "Unarchive"}
+                </Button>
+              </div>
             </div>
           )}
-          {isResumable && !isStopped && (
+          {isStopped && !isArchived && (
+            <div data-testid="session-stopped-banner" className="px-4 py-2 bg-muted/50 border-b border-border text-sm text-muted-foreground flex items-center justify-between">
+              <span>Session stopped — conversation history preserved above.</span>
+              <div className="flex items-center gap-2">
+                <Button data-testid="session-resume-button" variant="outline" size="sm" onClick={handleResume} disabled={isResuming} className="gap-1.5">
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  {isResuming ? "Resuming…" : "Resume Session"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-testid="session-archive-banner-button"
+                  onClick={handleArchive}
+                  disabled={isArchiving}
+                  className="gap-1.5"
+                >
+                  <Square className="h-3.5 w-3.5" />
+                  {isArchiving ? "Archiving…" : "Archive"}
+                </Button>
+              </div>
+            </div>
+          )}
+          {isResumable && !isStopped && !isArchived && (
             <div className="px-4 py-3 bg-amber-500/10 border-b border-amber-500/20 flex items-center justify-between">
               <span className="text-sm text-amber-600 dark:text-amber-400">
                 Session disconnected — the backing process is no longer running.
               </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleResume}
-                disabled={isResuming}
-                className="gap-1.5"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                {isResuming ? "Resuming…" : "Resume Session"}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResume}
+                  disabled={isResuming}
+                  className="gap-1.5"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  {isResuming ? "Resuming…" : "Resume Session"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-testid="session-archive-banner-button"
+                  onClick={handleArchive}
+                  disabled={isArchiving}
+                  className="gap-1.5"
+                >
+                  <Square className="h-3.5 w-3.5" />
+                  {isArchiving ? "Archiving…" : "Archive"}
+                </Button>
+              </div>
             </div>
           )}
           {(metadata.ancestors && metadata.ancestors.length > 0) || parentSessionId ? (
@@ -828,7 +1050,7 @@ export default function SessionDetailPage() {
                 <SlashCommandProvider
                   sessionId={sessionId}
                   instanceId={instanceId}
-                  disabled={isStopped || isResumable || status === "error"}
+                  disabled={isReadOnly}
                 >
                   <ActivityStreamV1
                     messages={messages}
@@ -852,13 +1074,14 @@ export default function SessionDetailPage() {
                   />
                 </SlashCommandProvider>
               </div>
-              <PromptInput
-                sessionId={sessionId}
-                instanceId={instanceId}
-                onSend={handleSend}
-                disabled={isStopped || isResumable || status === "error"}
-                sendError={sendError}
-                agents={agents}
+                <PromptInput
+                  sessionId={sessionId}
+                  instanceId={instanceId}
+                  onSend={handleSend}
+                  disabled={isReadOnly}
+                  disabledMessage={promptDisabledMessage}
+                  sendError={sendError}
+                  agents={agents}
                 selectedAgent={selectedAgent}
                 onAgentChange={setSelectedAgent}
                 providers={providers}

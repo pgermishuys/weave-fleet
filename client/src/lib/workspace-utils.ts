@@ -24,6 +24,17 @@ export interface ProjectGroup {
   workspaces: WorkspaceGroup[];
 }
 
+export function filterSessionsByRetention(
+  sessions: SessionListItem[],
+  retentionFilter: "active" | "archived" | "all"
+): SessionListItem[] {
+  if (retentionFilter === "all") {
+    return sessions;
+  }
+
+  return sessions.filter((session) => session.retentionStatus === retentionFilter);
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 /** Derive a display name from the session's workspace metadata. */

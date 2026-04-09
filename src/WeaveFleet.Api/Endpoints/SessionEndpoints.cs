@@ -17,13 +17,14 @@ public static class SessionEndpoints
             int limit = 100,
             int offset = 0,
             string? status = null,
+            string? retentionStatus = null,
             string? projectId = null) =>
         {
             IReadOnlyList<string>? statuses = status is not null
                 ? [status]
                 : null;
 
-            var result = await sessionService.ListSessionsAsync(limit, offset, statuses, projectId);
+            var result = await sessionService.ListSessionsAsync(limit, offset, statuses, projectId, retentionStatus);
             return result.Match(
                 sessions => Results.Ok(sessions.Select(ToListResponse).ToList()),
                 error => Results.Problem(error.Description));
@@ -113,6 +114,14 @@ public static class SessionEndpoints
         })
         .WithName("ResumeSession");
 
+        // POST /api/sessions/{id}/stop
+        group.MapPost("/{id}/stop", async (string id, SessionService sessionService) =>
+        {
+            var result = await sessionService.StopSessionAsync(id);
+            return result.ToNoContentResult();
+        })
+        .WithName("StopSession");
+
         // POST /api/sessions/{id}/fork
         group.MapPost("/{id}/fork", async (string id, ForkSessionApiRequest req, SessionOrchestrator orchestrator) =>
         {
@@ -169,7 +178,9 @@ public static class SessionEndpoints
                 {
                     status = session.Status,
                     activityStatus = session.ActivityStatus,
-                    lifecycleStatus = session.LifecycleStatus
+                    lifecycleStatus = session.LifecycleStatus,
+                    retentionStatus = session.RetentionStatus,
+                    archivedAt = session.ArchivedAt
                 }),
                 err => err.Code switch
                 {
@@ -212,6 +223,14 @@ public static class SessionEndpoints
                 });
         })
         .WithName("DeleteSession");
+
+        // PATCH /api/sessions/{id}/retention
+        group.MapPatch("/{id}/retention", async (string id, UpdateSessionRetentionRequest req, SessionService sessionService) =>
+        {
+            var result = await sessionService.UpdateRetentionAsync(id, req.RetentionStatus);
+            return result.ToNoContentResult();
+        })
+        .WithName("UpdateSessionRetention");
 
         // PATCH /api/sessions/{id} — rename
         group.MapPatch("/{id}", async (string id, UpdateSessionTitleRequest req, SessionService sessionService) =>
@@ -263,6 +282,8 @@ public static class SessionEndpoints
             Branch: null,                     // enriched in Phase 4
             ActivityStatus: activityStatus,
             LifecycleStatus: lifecycleStatus,
+            RetentionStatus: s.RetentionStatus,
+            ArchivedAt: s.ArchivedAt,
             TypedInstanceStatus: "running",   // enriched in Phase 4
             IsHidden: s.IsHidden,
             TotalTokens: s.TotalTokens > 0 ? s.TotalTokens : null,

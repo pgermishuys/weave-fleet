@@ -14,6 +14,7 @@ export interface UseSessionsResult {
 const DEFAULT_POLL_INTERVAL_MS = 15_000;
 
 export function useSessions(
+  retentionStatus: "active" | "archived" | "all" = "active",
   pollIntervalMs: number = DEFAULT_POLL_INTERVAL_MS
 ): UseSessionsResult {
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
@@ -27,7 +28,10 @@ export function useSessions(
       return;
     }
     try {
-      const response = await apiFetch("/api/sessions");
+      const query = retentionStatus === "active"
+        ? "/api/sessions"
+        : `/api/sessions?retentionStatus=${encodeURIComponent(retentionStatus)}`;
+      const response = await apiFetch(query);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -45,7 +49,7 @@ export function useSessions(
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [retentionStatus]);
 
   useEffect(() => {
     isMounted.current = true;

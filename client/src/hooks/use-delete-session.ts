@@ -16,14 +16,13 @@ export function useDeleteSession(): UseDeleteSessionResult {
     sessionId: string,
     instanceId: string
   ): Promise<void> => {
+    void instanceId;
     setIsDeleting(true);
     setError(undefined);
 
     try {
-      const params = new URLSearchParams({ instanceId, permanent: "true" });
-
       const response = await apiFetch(
-        `/api/sessions/${encodeURIComponent(sessionId)}?${params.toString()}`,
+        `/api/sessions/${encodeURIComponent(sessionId)}`,
         { method: "DELETE" }
       );
 

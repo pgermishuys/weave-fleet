@@ -41,6 +41,11 @@ export type SessionLifecycleStatus =
   | "disconnected";
 
 /**
+ * Retention status — controls visibility and mutability, independent of execution.
+ */
+export type SessionRetentionStatus = "active" | "archived";
+
+/**
  * Instance (harness process) status.
  */
 export type InstanceStatus = "running" | "stopped";

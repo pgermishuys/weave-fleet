@@ -30,7 +30,7 @@ export function ConfirmDeleteSessionDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete Session</AlertDialogTitle>
+          <AlertDialogTitle>Permanently Delete Session</AlertDialogTitle>
           <AlertDialogDescription>
             Are you sure you want to permanently delete &ldquo;{sessionTitle}&rdquo;? This will
             remove the session and all related data. This action cannot be undone.
@@ -53,7 +53,7 @@ export function ConfirmDeleteSessionDialog({
                 Deleting…
               </>
             ) : (
-              "Delete"
+              "Permanently Delete"
             )}
           </AlertDialogAction>
         </AlertDialogFooter>

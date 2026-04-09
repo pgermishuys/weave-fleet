@@ -18,6 +18,8 @@ public sealed class Session
     public string? ParentSessionId { get; set; }
     public string? ActivityStatus { get; set; }
     public string? LifecycleStatus { get; set; }
+    public string RetentionStatus { get; set; } = "active";
+    public string? ArchivedAt { get; set; }
     public bool IsHidden { get; set; }
     public int TotalTokens { get; set; }
     public double TotalCost { get; set; }

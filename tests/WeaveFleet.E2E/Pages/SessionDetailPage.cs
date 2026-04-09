@@ -17,6 +17,22 @@ public sealed class SessionDetailPage(IPage page)
     private ILocator StatusIndicator => _page.GetByTestId("session-status-indicator");
     private ILocator AbortButton => _page.GetByTestId("abort-button");
     private ILocator MessageItems => _page.GetByTestId("message-item");
+    private ILocator ArchivedBanner => _page.GetByTestId("session-archived-banner");
+    private ILocator ArchivedBadge => _page.GetByTestId("session-archived-badge");
+    private ILocator UnarchiveButton => _page.GetByTestId("session-unarchive-button");
+    private ILocator UnarchiveBannerButton => _page.GetByTestId("session-unarchive-banner-button");
+    private ILocator ArchiveBannerButton => _page.GetByTestId("session-archive-banner-button");
+    private ILocator StoppedBanner => _page.GetByTestId("session-stopped-banner");
+    private ILocator StopButton => _page.GetByTestId("session-stop-button");
+    private ILocator StopConfirmButton => _page.GetByTestId("session-stop-confirm-button");
+    private ILocator ResumeButton => _page.GetByTestId("session-resume-button");
+    private ILocator DeleteButton => _page.GetByTestId("session-delete-button");
+    private ILocator ArchivedForkButton => _page.GetByTestId("session-archived-fork-button");
+    private ILocator DeleteDialogConfirm => _page.GetByTestId("delete-dialog-confirm");
+    private ILocator ForkDialog => _page.GetByTestId("fork-session-dialog");
+    private ILocator ForkDialogTitle => _page.GetByTestId("fork-session-dialog-title");
+    private ILocator ForkSourceTitle => _page.GetByTestId("fork-session-source-title");
+    private ILocator ForkSubmitButton => _page.GetByTestId("fork-session-submit");
 
     // ── Navigation ───────────────────────────────────────────────────────────
 
@@ -104,6 +120,73 @@ public sealed class SessionDetailPage(IPage page)
     public Task WaitForSendEnabledAsync(int timeoutMs = 5_000)
         => Assertions.Expect(SendButton).ToBeEnabledAsync(
             new LocatorAssertionsToBeEnabledOptions { Timeout = timeoutMs });
+
+    /// <summary>Wait for the prompt input to become disabled.</summary>
+    public Task WaitForPromptDisabledAsync(int timeoutMs = 5_000)
+        => Assertions.Expect(PromptInput).ToBeDisabledAsync(
+            new LocatorAssertionsToBeDisabledOptions { Timeout = timeoutMs });
+
+    /// <summary>Wait for the archived banner to be visible.</summary>
+    public Task WaitForArchivedBannerAsync(int timeoutMs = 5_000)
+        => ArchivedBanner.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = timeoutMs
+        });
+
+    /// <summary>Check whether the archived badge is visible in the header.</summary>
+    public Task<bool> IsArchivedBadgeVisibleAsync() => ArchivedBadge.IsVisibleAsync();
+
+    /// <summary>Click the unarchive action on the detail page.</summary>
+    public Task ClickUnarchiveAsync() => UnarchiveButton.ClickAsync();
+
+    /// <summary>Click the archive action shown on stopped/disconnected banners.</summary>
+    public Task ClickArchiveAsync() => ArchiveBannerButton.ClickAsync();
+
+    /// <summary>Click the stop button in detail header.</summary>
+    public Task ClickStopAsync() => StopButton.ClickAsync();
+
+    /// <summary>Confirm the stop action in detail header.</summary>
+    public Task ConfirmStopAsync() => StopConfirmButton.ClickAsync();
+
+    /// <summary>Wait for the stopped-session banner text.</summary>
+    public Task WaitForStoppedBannerAsync()
+        => StoppedBanner.WaitForAsync();
+
+    /// <summary>Click the resume button from the stopped banner.</summary>
+    public Task ClickResumeAsync() => ResumeButton.ClickAsync();
+
+    /// <summary>Click permanent delete on the detail page.</summary>
+    public Task ClickPermanentDeleteAsync() => DeleteButton.ClickAsync();
+
+    /// <summary>Confirm the delete dialog.</summary>
+    public Task ConfirmDeleteAsync() => DeleteDialogConfirm.ClickAsync();
+
+    /// <summary>Click New context window from the detail page.</summary>
+    public Task ClickNewContextWindowAsync() => ArchivedForkButton.ClickAsync();
+
+    /// <summary>Wait for the fork/new context dialog to appear.</summary>
+    public Task WaitForForkDialogAsync()
+        => ForkDialogTitle.WaitForAsync();
+
+    /// <summary>Wait for the unarchive banner action to be visible.</summary>
+    public Task WaitForUnarchiveBannerButtonAsync() => UnarchiveBannerButton.WaitForAsync();
+
+    /// <summary>Get the source-session title shown in the fork dialog.</summary>
+    public Task<string?> GetForkSourceTitleAsync() => ForkSourceTitle.TextContentAsync();
+
+    /// <summary>Fill the fork title field.</summary>
+    public Task SetForkTitleAsync(string title) => _page.GetByTestId("fork-session-title-input").FillAsync(title);
+
+    /// <summary>Submit the fork/new context dialog and wait for session navigation.</summary>
+    public async Task SubmitForkAsync()
+    {
+        await ForkSubmitButton.ClickAsync();
+        await _page.WaitForURLAsync(url => url.Contains("/sessions/"), new PageWaitForURLOptions { Timeout = 5_000 });
+    }
+
+    /// <summary>Get the archived banner text.</summary>
+    public Task<string?> GetArchivedBannerTextAsync() => ArchivedBanner.TextContentAsync();
 
     // ── Abort ─────────────────────────────────────────────────────────────────
 

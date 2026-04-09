@@ -17,10 +17,12 @@ public sealed class DapperSessionRepository(IDbConnectionFactory connectionFacto
             """
             INSERT INTO sessions (id, workspace_id, instance_id, project_id, opencode_session_id, title,
                 status, directory, created_at, stopped_at, parent_session_id, activity_status,
-                lifecycle_status, is_hidden, total_tokens, total_cost, harness_type, harness_resume_token)
+                lifecycle_status, retention_status, archived_at, is_hidden, total_tokens, total_cost,
+                harness_type, harness_resume_token)
             VALUES (@Id, @WorkspaceId, @InstanceId, @ProjectId, @OpencodeSessionId, @Title,
                 @Status, @Directory, @CreatedAt, @StoppedAt, @ParentSessionId, @ActivityStatus,
-                @LifecycleStatus, @IsHidden, @TotalTokens, @TotalCost, @HarnessType, @HarnessResumeToken)
+                @LifecycleStatus, @RetentionStatus, @ArchivedAt, @IsHidden, @TotalTokens, @TotalCost,
+                @HarnessType, @HarnessResumeToken)
             """, session);
     }
 
@@ -44,6 +46,14 @@ public sealed class DapperSessionRepository(IDbConnectionFactory connectionFacto
         int offset = 0,
         IReadOnlyList<string>? statuses = null,
         string? projectId = null)
+        => await ListAsync(limit, offset, statuses, projectId, retentionStatuses: null);
+
+    public async Task<IReadOnlyList<Session>> ListAsync(
+        int limit,
+        int offset,
+        IReadOnlyList<string>? statuses,
+        string? projectId,
+        IReadOnlyList<string>? retentionStatuses)
     {
         using var conn = connectionFactory.CreateConnection();
 
@@ -54,6 +64,8 @@ public sealed class DapperSessionRepository(IDbConnectionFactory connectionFacto
             conditions.Add("status IN @Statuses");
         if (projectId is not null)
             conditions.Add("project_id = @ProjectId");
+        if (retentionStatuses is { Count: > 0 })
+            conditions.Add("retention_status IN @RetentionStatuses");
 
         if (conditions.Count > 0)
             sql.Append(" WHERE ").Append(string.Join(" AND ", conditions));
@@ -64,6 +76,7 @@ public sealed class DapperSessionRepository(IDbConnectionFactory connectionFacto
         {
             Statuses = statuses,
             ProjectId = projectId,
+            RetentionStatuses = retentionStatuses,
             Limit = limit,
             Offset = offset
         };
@@ -81,17 +94,28 @@ public sealed class DapperSessionRepository(IDbConnectionFactory connectionFacto
     }
 
     public async Task<int> CountAsync(IReadOnlyList<string>? statuses = null)
+        => await CountAsync(statuses, retentionStatuses: null);
+
+    public async Task<int> CountAsync(
+        IReadOnlyList<string>? statuses,
+        IReadOnlyList<string>? retentionStatuses)
     {
         using var conn = connectionFactory.CreateConnection();
 
-        if (statuses is { Count: > 0 })
-        {
-            return await conn.ExecuteScalarAsync<int>(
-                "SELECT COUNT(*) FROM sessions WHERE status IN @Statuses",
-                new { Statuses = statuses });
-        }
+        var sql = new StringBuilder("SELECT COUNT(*) FROM sessions");
+        var conditions = new List<string>();
 
-        return await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM sessions");
+        if (statuses is { Count: > 0 })
+            conditions.Add("status IN @Statuses");
+        if (retentionStatuses is { Count: > 0 })
+            conditions.Add("retention_status IN @RetentionStatuses");
+
+        if (conditions.Count > 0)
+            sql.Append(" WHERE ").Append(string.Join(" AND ", conditions));
+
+        return await conn.ExecuteScalarAsync<int>(
+            sql.ToString(),
+            new { Statuses = statuses, RetentionStatuses = retentionStatuses });
     }
 
     public async Task<(int Active, int Idle)> GetStatusCountsAsync()
@@ -119,10 +143,20 @@ public sealed class DapperSessionRepository(IDbConnectionFactory connectionFacto
     }
 
     public async Task<IReadOnlyList<Session>> ListActiveAsync()
+        => await ListActiveAsync(retentionStatuses: null);
+
+    public async Task<IReadOnlyList<Session>> ListActiveAsync(IReadOnlyList<string>? retentionStatuses)
     {
         using var conn = connectionFactory.CreateConnection();
+        var sql = new StringBuilder("SELECT * FROM sessions WHERE status = 'active'");
+        if (retentionStatuses is { Count: > 0 })
+            sql.Append(" AND retention_status IN @RetentionStatuses");
+
+        sql.Append(" ORDER BY created_at DESC");
+
         var results = await conn.QueryAsync<Session>(
-            "SELECT * FROM sessions WHERE status = 'active' ORDER BY created_at DESC");
+            sql.ToString(),
+            new { RetentionStatuses = retentionStatuses });
         return results.AsList();
     }
 
@@ -138,6 +172,22 @@ public sealed class DapperSessionRepository(IDbConnectionFactory connectionFacto
         await conn.ExecuteAsync(
             "UPDATE sessions SET status = @Status, stopped_at = @StoppedAt, lifecycle_status = @LifecycleStatus WHERE id = @Id",
             new { Id = id, Status = status, StoppedAt = stoppedAt, LifecycleStatus = lifecycleStatus });
+    }
+
+    public async Task ArchiveAsync(string id, string archivedAt)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteAsync(
+            "UPDATE sessions SET retention_status = 'archived', archived_at = @ArchivedAt WHERE id = @Id",
+            new { Id = id, ArchivedAt = archivedAt });
+    }
+
+    public async Task UnarchiveAsync(string id)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteAsync(
+            "UPDATE sessions SET retention_status = 'active', archived_at = NULL WHERE id = @Id",
+            new { Id = id });
     }
 
     public async Task<IReadOnlyList<Session>> GetForInstanceAsync(string instanceId)
@@ -212,11 +262,22 @@ public sealed class DapperSessionRepository(IDbConnectionFactory connectionFacto
     }
 
     public async Task<IReadOnlyList<Session>> GetForWorkspaceAsync(string workspaceId)
+        => await GetForWorkspaceAsync(workspaceId, retentionStatuses: null);
+
+    public async Task<IReadOnlyList<Session>> GetForWorkspaceAsync(
+        string workspaceId,
+        IReadOnlyList<string>? retentionStatuses)
     {
         using var conn = connectionFactory.CreateConnection();
+        var sql = new StringBuilder("SELECT * FROM sessions WHERE workspace_id = @WorkspaceId");
+        if (retentionStatuses is { Count: > 0 })
+            sql.Append(" AND retention_status IN @RetentionStatuses");
+
+        sql.Append(" ORDER BY created_at DESC");
+
         var results = await conn.QueryAsync<Session>(
-            "SELECT * FROM sessions WHERE workspace_id = @WorkspaceId ORDER BY created_at DESC",
-            new { WorkspaceId = workspaceId });
+            sql.ToString(),
+            new { WorkspaceId = workspaceId, RetentionStatuses = retentionStatuses });
         return results.AsList();
     }
 

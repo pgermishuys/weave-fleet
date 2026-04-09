@@ -36,6 +36,7 @@ interface PromptInputProps {
     attachments?: ImageAttachment[]
   ) => Promise<void>;
   disabled?: boolean;
+  disabledMessage?: string;
   sendError?: string;
   sessionId?: string;
   instanceId?: string;
@@ -55,6 +56,7 @@ let nextAttachmentId = 0;
 export function PromptInput({
   onSend,
   disabled,
+  disabledMessage,
   sendError,
   sessionId = "",
   instanceId = "",
@@ -436,10 +438,10 @@ export function PromptInput({
         </div>
       )}
 
-      {(sendError || pasteError) && (
+      {(disabledMessage || sendError || pasteError) && (
         <div className="flex items-center gap-2 rounded-md bg-red-500/10 border border-red-500/20 px-3 py-1.5 text-xs text-red-600 dark:text-red-400">
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-          <span>{pasteError ?? sendError}</span>
+          <span>{disabledMessage ?? pasteError ?? sendError}</span>
         </div>
       )}
 
@@ -492,7 +494,7 @@ export function PromptInput({
               autocomplete.onClose();
             }, 150);
           }}
-          placeholder={sessionStatus === "busy" ? "Queue a follow-up message…" : "Send a message to this session…"}
+          placeholder={disabledMessage ?? (sessionStatus === "busy" ? "Queue a follow-up message…" : "Send a message to this session…")}
           className="text-sm"
           disabled={isDisabled}
           style={{ overflowY: "hidden" }}

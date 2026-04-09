@@ -63,6 +63,7 @@ export function ForkSessionDialog({
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
+        data-testid="fork-session-dialog"
         className="sm:max-w-sm top-[10%] translate-y-0 max-h-[85vh] overflow-y-auto"
         onOpenAutoFocus={(e) => {
           // Prevent Radix from focusing the first focusable element (the close
@@ -74,7 +75,7 @@ export function ForkSessionDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <GitFork className="h-4 w-4" />
-            New Context Window
+            <span data-testid="fork-session-dialog-title">New Context Window</span>
           </DialogTitle>
         </DialogHeader>
 
@@ -82,9 +83,9 @@ export function ForkSessionDialog({
           {sourceSessionTitle && (
             <p className="text-sm text-muted-foreground">
               Creates a fresh session in the same workspace as{" "}
-              <span className="font-medium text-foreground">
-                {sourceSessionTitle}
-              </span>
+                <span className="font-medium text-foreground">
+                  <span data-testid="fork-session-source-title">{sourceSessionTitle}</span>
+                </span>
               .
             </p>
           )}
@@ -96,6 +97,7 @@ export function ForkSessionDialog({
             </label>
             <Input
               ref={inputRef}
+              data-testid="fork-session-title-input"
               id="fork-session-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -123,6 +125,7 @@ export function ForkSessionDialog({
             </Button>
             <Button
               type="submit"
+              data-testid="fork-session-submit"
               size="sm"
               className="weave-gradient-bg hover:opacity-90 border-0"
               disabled={isForking}

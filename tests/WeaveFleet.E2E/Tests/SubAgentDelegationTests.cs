@@ -122,6 +122,18 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                 var detail = new SessionDetailPage(Page);
                 await detail.GotoAsync(parentSessionId, parentInstanceId);
 
+                await Page.GotoAsync("/");
+                await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
+                await Microsoft.Playwright.Assertions.Expect(Page.GetByTestId("session-card")).ToHaveCountAsync(1);
+                await Microsoft.Playwright.Assertions.Expect(Page.GetByTestId("session-title")).ToContainTextAsync("Parent Session");
+
+                await Page.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Show: Active" }).ClickAsync();
+                await Page.GetByRole(Microsoft.Playwright.AriaRole.Menuitem, new() { Name = "All" }).ClickAsync();
+                await Microsoft.Playwright.Assertions.Expect(Page.GetByTestId("session-card")).ToHaveCountAsync(1);
+                await Microsoft.Playwright.Assertions.Expect(Page.GetByTestId("session-title")).ToContainTextAsync("Parent Session");
+
+                await detail.GotoAsync(parentSessionId, parentInstanceId);
+
                 var delegationLink = Page.Locator(
                     $"a[href=\"/sessions/{Uri.EscapeDataString(childSession.Id)}?instanceId={Uri.EscapeDataString(childSession.InstanceId)}&parentSessionId={Uri.EscapeDataString(parentSessionId)}\"]");
 

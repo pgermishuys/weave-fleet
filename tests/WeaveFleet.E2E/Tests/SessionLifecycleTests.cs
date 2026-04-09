@@ -133,30 +133,20 @@ public sealed class SessionLifecycleTests : E2ETestBase,
             await dialog.SetTitleAsync("Delete Me");
 
             // Submit and go to session detail
-            await dialog.SubmitAsync();
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+
+            var sessionId = new Uri(Page.Url).AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+
+            await detail.ClickStopAsync();
+            await detail.ConfirmStopAsync();
+            await detail.WaitForStoppedBannerAsync();
 
             // Navigate back to dashboard
             await Page.GotoAsync("/");
             await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
 
-            // Get session cards
-            var cards = await dashboard.GetSessionCardsAsync();
-            if (cards.Count == 0)
-            {
-                // No stopped sessions to delete — skip remaining assertions
-                return;
-            }
-
-            // Find a card with a delete button (only stopped/completed sessions have delete)
-            var deleteButton = Page.GetByTestId("session-delete-button").First;
-            var isDeleteVisible = await deleteButton.IsVisibleAsync();
-            if (!isDeleteVisible)
-            {
-                // Session may still be running (terminate vs delete) — skip
-                return;
-            }
-
-            await deleteButton.ClickAsync();
+            await dashboard.ClickDeleteSessionAsync(sessionId);
 
             // Confirmation dialog should appear
             var confirmButton = Page.GetByTestId("delete-dialog-confirm");
@@ -191,6 +181,338 @@ public sealed class SessionLifecycleTests : E2ETestBase,
             // The header should show the session title (or at least the session ID)
             var header = Page.Locator("header h2");
             await Microsoft.Playwright.Assertions.Expect(header).ToBeVisibleAsync();
+        });
+    }
+
+    /// <summary>
+    /// Task 22: Archived sessions remain readable via direct URL but are read-only until unarchived.
+    /// </summary>
+    [Fact]
+    public async Task ArchivedSessionDetail_DirectUrlIsReadableButNotWritableUntilUnarchived()
+    {
+        await WithFailureCapture(async () =>
+        {
+            ConfigureScenario(b =>
+                b.WithSimpleTextResponse("_placeholder_", "msg-archive-1", "Archive test"));
+
+            var dashboard = new FleetDashboardPage(Page);
+            await dashboard.GotoAsync();
+
+            var dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+            await dialog.SetTitleAsync("Archived Detail Session");
+
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+
+            var sessionUrl = new Uri(Page.Url);
+            var sessionId = sessionUrl.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+            var instanceId = System.Web.HttpUtility.ParseQueryString(sessionUrl.Query)["instanceId"];
+
+            instanceId.ShouldNotBeNullOrWhiteSpace();
+
+            await detail.ClickStopAsync();
+            await detail.ConfirmStopAsync();
+            await detail.WaitForStoppedBannerAsync();
+
+            await Page.GetByTestId("session-archive-banner-button").ClickAsync();
+            await detail.WaitForArchivedBannerAsync();
+            await detail.WaitForPromptDisabledAsync();
+
+            var directUrl = $"/sessions/{Uri.EscapeDataString(sessionId)}";
+            await Page.GotoAsync(directUrl);
+            await detail.WaitForLoadedAsync();
+            await detail.WaitForArchivedBannerAsync();
+            await detail.WaitForPromptDisabledAsync();
+
+            (await detail.IsArchivedBadgeVisibleAsync()).ShouldBeTrue();
+            var archivedBannerText = await detail.GetArchivedBannerTextAsync();
+            archivedBannerText.ShouldNotBeNull();
+            archivedBannerText.ShouldContain("Unarchive before resuming or sending prompts");
+
+            await detail.ClickUnarchiveAsync();
+            await Microsoft.Playwright.Assertions.Expect(Page.GetByTestId("session-archived-banner")).ToHaveCountAsync(0);
+            await detail.WaitForStoppedBannerAsync();
+            await detail.WaitForPromptDisabledAsync();
+        });
+    }
+
+    [Fact]
+    public async Task StoppedSession_CanBeArchivedUnarchivedAndResumed()
+    {
+        await WithFailureCapture(async () =>
+        {
+            ConfigureScenario(b =>
+                b.WithSimpleTextResponse("_placeholder_", "msg-resume-1", "Resume test"));
+
+            var dashboard = new FleetDashboardPage(Page);
+            await dashboard.GotoAsync();
+
+            var dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+            await dialog.SetTitleAsync("Resume After Unarchive");
+
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+
+            await detail.ClickStopAsync();
+            await detail.ConfirmStopAsync();
+            await detail.WaitForStoppedBannerAsync();
+
+            await detail.ClickArchiveAsync();
+            await detail.WaitForArchivedBannerAsync();
+
+            await detail.ClickUnarchiveAsync();
+            await Microsoft.Playwright.Assertions.Expect(Page.GetByTestId("session-archived-banner")).ToHaveCountAsync(0);
+            await detail.WaitForStoppedBannerAsync();
+
+            await detail.ClickResumeAsync();
+            await detail.WaitForLoadedAsync();
+            await detail.WaitForIdleAsync();
+        });
+    }
+
+    [Fact]
+    public async Task ArchivedSession_CanBePermanentlyDeletedFromArchivedView()
+    {
+        await WithFailureCapture(async () =>
+        {
+            ConfigureScenario(b =>
+                b.WithSimpleTextResponse("_placeholder_", "msg-delete-archived-1", "Delete archived"));
+
+            var dashboard = new FleetDashboardPage(Page);
+            await dashboard.GotoAsync();
+
+            var dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+            await dialog.SetTitleAsync("Archived Delete Session");
+
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+
+            var sessionUrl = new Uri(Page.Url);
+            var sessionId = sessionUrl.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+
+            await detail.ClickStopAsync();
+            await detail.ConfirmStopAsync();
+            await detail.WaitForStoppedBannerAsync();
+
+            await detail.ClickArchiveAsync();
+            await detail.WaitForArchivedBannerAsync();
+
+            await detail.ClickPermanentDeleteAsync();
+            await detail.ConfirmDeleteAsync();
+
+            await Page.WaitForURLAsync(new System.Text.RegularExpressions.Regex("/$"));
+            await dashboard.SetRetentionFilterAsync("Archived");
+            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToHaveCountAsync(0);
+        });
+    }
+
+    [Fact]
+    public async Task Detail_StopWithoutArchive_RemainsVisibleInActiveFleetAndSidebar()
+    {
+        await WithFailureCapture(async () =>
+        {
+            ConfigureScenario(b =>
+                b.WithSimpleTextResponse("_placeholder_", "msg-stop-only-1", "Stop only"));
+
+            var dashboard = new FleetDashboardPage(Page);
+            var sidebar = new FleetSidebarPage(Page);
+            await dashboard.GotoAsync();
+
+            var dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+            await dialog.SetTitleAsync("Stop Without Archive");
+
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+
+            var sessionId = new Uri(Page.Url).AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+
+            await detail.ClickStopAsync();
+            await detail.ConfirmStopAsync();
+            await detail.WaitForStoppedBannerAsync();
+            await Microsoft.Playwright.Assertions.Expect(Page.GetByTestId("session-archived-banner")).ToHaveCountAsync(0);
+
+            await Page.GotoAsync("/");
+            await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
+            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToBeVisibleAsync();
+            await sidebar.ExpectSessionVisibleAsync(sessionId);
+        });
+    }
+
+    [Fact]
+    public async Task ArchivedSession_IsHiddenFromActiveAndVisibleInArchivedAndAllFleetAndSidebar()
+    {
+        await WithFailureCapture(async () =>
+        {
+            ConfigureScenario(b =>
+                b.WithSimpleTextResponse("_placeholder_", "msg-filter-1", "Filter test"));
+
+            var dashboard = new FleetDashboardPage(Page);
+            var sidebar = new FleetSidebarPage(Page);
+            await dashboard.GotoAsync();
+
+            var dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+            await dialog.SetTitleAsync("Archive Visibility Session");
+
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+
+            var sessionId = new Uri(Page.Url).AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+
+            await detail.ClickStopAsync();
+            await detail.ConfirmStopAsync();
+            await detail.WaitForStoppedBannerAsync();
+            await detail.ClickArchiveAsync();
+            await detail.WaitForArchivedBannerAsync();
+
+            await Page.GotoAsync("/");
+            await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
+
+            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToHaveCountAsync(0);
+            await sidebar.ExpectSessionHiddenAsync(sessionId);
+
+            await dashboard.SetRetentionFilterAsync("Active");
+            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToHaveCountAsync(0);
+            await sidebar.ExpectSessionHiddenAsync(sessionId);
+
+            await dashboard.SetRetentionFilterAsync("Archived");
+            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToBeVisibleAsync();
+            await dashboard.ExpectArchivedBadgeAsync(sessionId);
+            await sidebar.ExpectSessionVisibleAsync(sessionId);
+
+            await dashboard.SetRetentionFilterAsync("All");
+            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToBeVisibleAsync();
+            await sidebar.ExpectSessionVisibleAsync(sessionId);
+        });
+    }
+
+    [Fact]
+    public async Task StoppedActiveSession_CanBeDeletedFromFleetActiveView()
+    {
+        await WithFailureCapture(async () =>
+        {
+            ConfigureScenario(b =>
+                b.WithSimpleTextResponse("_placeholder_", "msg-delete-active-1", "Delete active stopped"));
+
+            var dashboard = new FleetDashboardPage(Page);
+            var sidebar = new FleetSidebarPage(Page);
+            await dashboard.GotoAsync();
+
+            var dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+            await dialog.SetTitleAsync("Delete Active Stopped");
+
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+
+            var sessionId = new Uri(Page.Url).AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+
+            await detail.ClickStopAsync();
+            await detail.ConfirmStopAsync();
+            await detail.WaitForStoppedBannerAsync();
+
+            await Page.GotoAsync("/");
+            await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
+            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToBeVisibleAsync();
+
+            await dashboard.ClickDeleteSessionAsync(sessionId);
+            await detail.ConfirmDeleteAsync();
+
+            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToHaveCountAsync(0);
+            await sidebar.ExpectSessionHiddenAsync(sessionId);
+
+            await dashboard.SetRetentionFilterAsync("All");
+            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToHaveCountAsync(0);
+        });
+    }
+
+    [Fact]
+    public async Task Sidebar_ArchiveUnarchiveDelete_Flows()
+    {
+        await WithFailureCapture(async () =>
+        {
+            ConfigureScenario(b =>
+                b.WithSimpleTextResponse("_placeholder_", "msg-sidebar-1", "Sidebar flow"));
+
+            var dashboard = new FleetDashboardPage(Page);
+            var sidebar = new FleetSidebarPage(Page);
+            await dashboard.GotoAsync();
+
+            var dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+            await dialog.SetTitleAsync("Sidebar Lifecycle Session");
+
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+
+            var sessionId = new Uri(Page.Url).AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+
+            await detail.ClickStopAsync();
+            await detail.ConfirmStopAsync();
+            await detail.WaitForStoppedBannerAsync();
+
+            await Page.GotoAsync("/");
+            await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
+
+            await sidebar.ClickSessionMenuItemAsync(sessionId, "Archive");
+            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToHaveCountAsync(0);
+
+            await dashboard.SetRetentionFilterAsync("Archived");
+            await sidebar.ExpectSessionVisibleAsync(sessionId);
+
+            await sidebar.ClickSessionMenuItemAsync(sessionId, "Unarchive");
+            await dashboard.SetRetentionFilterAsync("Active");
+            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToBeVisibleAsync();
+
+            await sidebar.ClickSessionMenuItemAsync(sessionId, "Permanently Delete");
+            await detail.ConfirmDeleteAsync();
+
+            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToHaveCountAsync(0);
+            await sidebar.ExpectSessionHiddenAsync(sessionId);
+        });
+    }
+
+    [Fact]
+    public async Task ArchivedDetail_NewContextWindow_OpensForkDialogAndNavigatesToFreshSession()
+    {
+        await WithFailureCapture(async () =>
+        {
+            ConfigureScenario(b =>
+                b.WithSimpleTextResponse("_placeholder_", "msg-fork-1", "Fork path"));
+
+            var dashboard = new FleetDashboardPage(Page);
+            await dashboard.GotoAsync();
+
+            var dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+            await dialog.SetTitleAsync("Fork Source Session");
+
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+
+            var originalSessionId = new Uri(Page.Url).AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+
+            await detail.ClickStopAsync();
+            await detail.ConfirmStopAsync();
+            await detail.WaitForStoppedBannerAsync();
+            await detail.ClickArchiveAsync();
+            await detail.WaitForArchivedBannerAsync();
+
+            await detail.ClickNewContextWindowAsync();
+            await detail.WaitForForkDialogAsync();
+            (await detail.GetForkSourceTitleAsync()).ShouldBe("Fork Source Session");
+            await detail.SetForkTitleAsync("Forked Follow-up Session");
+            await detail.SubmitForkAsync();
+            await detail.WaitForLoadedAsync();
+
+            var newSessionId = new Uri(Page.Url).AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+            newSessionId.ShouldNotBe(originalSessionId);
+            await Microsoft.Playwright.Assertions.Expect(Page.GetByTestId("session-archived-banner")).ToHaveCountAsync(0);
+            await Microsoft.Playwright.Assertions.Expect(Page.GetByTestId("prompt-input")).ToBeEnabledAsync();
         });
     }
 }
