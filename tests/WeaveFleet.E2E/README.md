@@ -60,8 +60,24 @@ dotnet test tests/WeaveFleet.E2E/ --filter "Category=E2E&FullyQualifiedName~Gold
 ### 4. Run only unit tests (skip E2E)
 
 ```bash
-dotnet test --filter "Category!=E2E"
+dotnet test --filter "Category!=E2E&Category!=Benchmark"
 ```
+
+### 5. Run performance benchmarks
+
+Benchmark tests are tagged with `[Trait("Category", "Benchmark")]` and are **excluded** from normal E2E runs.
+
+```bash
+# Run benchmarks only
+dotnet test tests/WeaveFleet.E2E/ --filter "Category=Benchmark"
+
+# Run benchmarks with detailed output (shows metrics table)
+dotnet test tests/WeaveFleet.E2E/ --filter "Category=Benchmark" --logger "console;verbosity=detailed"
+```
+
+Benchmark tests create ~10 synthetic sessions and measure UI interaction latencies under load. They take longer than regular E2E tests and should be run separately.
+
+> **Note**: To exclude benchmarks from E2E runs, use `--filter "Category=E2E&Category!=Benchmark"` if needed (benchmarks inherit the `E2E` trait from `E2ETestBase`, but their `Benchmark` trait allows precise filtering).
 
 ## Writing New E2E Tests
 

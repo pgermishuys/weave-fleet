@@ -35,7 +35,7 @@ public abstract class E2ETestBase : IAsyncLifetime
 
     // ── IAsyncLifetime ───────────────────────────────────────────────────────
 
-    public async Task InitializeAsync()
+    public virtual async Task InitializeAsync()
     {
         // Ensure the Kestrel server is started (idempotent).
         // We use EnsureStartedAsync() instead of accessing factory.Services directly,
@@ -77,7 +77,7 @@ public abstract class E2ETestBase : IAsyncLifetime
         Page.SetDefaultNavigationTimeout(5_000);
     }
 
-    public async Task DisposeAsync()
+    public virtual async Task DisposeAsync()
     {
         if (_context is null)
             return;

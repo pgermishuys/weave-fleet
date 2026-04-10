@@ -199,7 +199,7 @@ jobs:
         run: >
           dotnet test tests/WeaveFleet.E2E/
           --configuration Release
-          --filter "Category=E2E"
+          --filter "Category=E2E&Category!=Benchmark"
           --logger "trx;LogFileName=e2e-results.trx"
           --results-directory test-results/
           --no-build
@@ -225,3 +225,131 @@ jobs:
           name: Playwright E2E Results
           path: test-results/**/*.trx
           reporter: dotnet-trx
+
+  # ── UI responsiveness benchmarks ──────────────────────────────────────────
+  benchmarks:
+    name: UI Responsiveness Benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+        working-directory: client
+
+      - name: Build frontend SPA
+        run: bun run build
+        working-directory: client
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Build solution
+        run: dotnet build WeaveFleet.slnx --configuration Release
+
+      - name: Get installed Playwright version
+        shell: pwsh
+        run: |
+          $version = (Select-Xml -Path "Directory.Packages.props" -XPath "//PackageVersion[@Include='Microsoft.Playwright']/@Version").Node.Value
+          "PLAYWRIGHT_VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache-benchmarks
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ env.PLAYWRIGHT_VERSION }}
+          restore-keys: playwright-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache-benchmarks.outputs.cache-hit != 'true'
+        run: pwsh tests/WeaveFleet.E2E/bin/Release/net10.0/playwright.ps1 install chromium
+
+      - name: Install Playwright OS dependencies
+        run: pwsh tests/WeaveFleet.E2E/bin/Release/net10.0/playwright.ps1 install-deps chromium
+
+      - name: Run benchmark tests
+        run: >
+          dotnet test tests/WeaveFleet.E2E/
+          --configuration Release
+          --filter "Category=Benchmark"
+          --logger "trx;LogFileName=benchmark-results.trx"
+          --results-directory test-results/
+          --no-build
+        env:
+          ASPNETCORE_ENVIRONMENT: Test
+
+      - name: Upload benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.run_id }}
+          path: |
+            test-results/
+            tests/WeaveFleet.E2E/bin/Release/net10.0/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Report benchmark test results
+        if: success() || failure()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Benchmark Results
+          path: test-results/**/*.trx
+          reporter: dotnet-trx
+
+      - name: Summarize benchmark metrics
+        if: always()
+        shell: pwsh
+        run: |
+          $metricsFiles = Get-ChildItem "tests/WeaveFleet.E2E/bin/Release/net10.0/test-results/*-metrics.json" -ErrorAction SilentlyContinue | Sort-Object Name
+          if (-not $metricsFiles) {
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## Benchmark Metrics`n`nNo benchmark metrics files were produced.`n"
+            exit 0
+          }
+
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## Benchmark Metrics`n"
+
+          foreach ($file in $metricsFiles) {
+            $payload = Get-Content $file.FullName -Raw | ConvertFrom-Json
+            $meta = $payload.Metadata
+
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### $($meta.Scenario)`n"
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Test: ``$($meta.TestClass).$($meta.TestMethod)``"
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Run ID: ``$($meta.BenchmarkRunId)``"
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "- Captured: ``$($meta.CapturedAtUtc)``"
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| Metric | Count | P50 | P95 | Max | Mean |"
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "|---|---:|---:|---:|---:|---:|"
+
+            foreach ($metric in $payload.Metrics.PSObject.Properties | Sort-Object Name) {
+              $value = $metric.Value
+              $line = "| $($metric.Name) | $($value.Count) | $([string]::Format([System.Globalization.CultureInfo]::InvariantCulture, '{0:F1}', $value.P50)) | $([string]::Format([System.Globalization.CultureInfo]::InvariantCulture, '{0:F1}', $value.P95)) | $([string]::Format([System.Globalization.CultureInfo]::InvariantCulture, '{0:F1}', $value.Max)) | $([string]::Format([System.Globalization.CultureInfo]::InvariantCulture, '{0:F1}', $value.Mean)) |"
+              Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $line
+            }
+
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+          }
