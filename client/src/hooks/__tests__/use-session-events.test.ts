@@ -113,6 +113,7 @@ describe("handleEvent delegation events", () => {
         childSessionId: null,
         title: "reviewer",
         status: "pending",
+        createdAt: "2026-04-10T12:00:00.000Z",
       },
     } as WebSocketEvent);
 
@@ -123,6 +124,7 @@ describe("handleEvent delegation events", () => {
         childSessionId: null,
         title: "reviewer",
         status: "pending",
+        createdAt: "2026-04-10T12:00:00.000Z",
       },
     ]);
   });
@@ -138,6 +140,7 @@ describe("handleEvent delegation events", () => {
         childSessionId: null,
         title: "reviewer",
         status: "pending",
+        createdAt: "2026-04-10T12:00:00.000Z",
       },
     } as WebSocketEvent);
 
@@ -157,6 +160,7 @@ describe("handleEvent delegation events", () => {
         childSessionId: "child-1",
         title: "reviewer",
         status: "running",
+        createdAt: "2026-04-10T12:00:00.000Z",
       },
     ]);
   });

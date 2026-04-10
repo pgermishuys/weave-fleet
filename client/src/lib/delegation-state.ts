@@ -6,6 +6,7 @@ type DelegationEvent = {
   childSessionId?: string | null;
   title?: string;
   status?: DelegationDto["status"];
+  createdAt?: string | null;
 };
 
 export function applyDelegationCreated(
@@ -19,6 +20,7 @@ export function applyDelegationCreated(
     childSessionId: event.childSessionId ?? null,
     title: event.title ?? "",
     status: event.status ?? "pending",
+    createdAt: event.createdAt ?? null,
   };
 
   if (existingIndex === -1) {
@@ -46,6 +48,7 @@ export function applyDelegationUpdated(
     childSessionId: event.childSessionId ?? existing.childSessionId,
     title: event.title ?? existing.title,
     status: event.status ?? existing.status,
+    createdAt: event.createdAt ?? existing.createdAt ?? null,
   };
 
   if (JSON.stringify(existing) === JSON.stringify(nextItem)) {

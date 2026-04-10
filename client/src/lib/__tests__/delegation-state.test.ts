@@ -19,6 +19,7 @@ describe("delegation-state", () => {
         childSessionId: null,
         title: "reviewer",
         status: "pending",
+        createdAt: null,
       },
     ]);
   });
@@ -31,6 +32,7 @@ describe("delegation-state", () => {
         childSessionId: null,
         title: "reviewer",
         status: "pending",
+        createdAt: null,
       },
     ];
 
@@ -69,8 +71,29 @@ describe("delegation-state", () => {
         childSessionId: "child-1",
         title: "reviewer",
         status: "running",
+        createdAt: null,
       },
     ]);
+  });
+
+  it("applyDelegationUpdated preserves createdAt when omitted from update", () => {
+    const prev: DelegationDto[] = [
+      {
+        delegationId: "del-1",
+        parentToolCallId: "tool-1",
+        childSessionId: null,
+        title: "reviewer",
+        status: "pending",
+        createdAt: "2026-04-10T12:00:00.000Z",
+      },
+    ];
+
+    const result = applyDelegationUpdated(prev, {
+      delegationId: "del-1",
+      status: "running",
+    });
+
+    expect(result[0]?.createdAt).toBe("2026-04-10T12:00:00.000Z");
   });
 
   it("applyDelegationUpdated ignores unknown delegations", () => {

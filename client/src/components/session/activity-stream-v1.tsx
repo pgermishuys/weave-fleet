@@ -95,7 +95,8 @@ function isCollapsibleMessage(message: AccumulatedMessage): boolean {
 type ActivityStreamEntry =
   | { type: "message"; message: AccumulatedMessage }
   | { type: "inference-summary"; messages: AccumulatedMessage[] }
-  | { type: "thinking"; message: AccumulatedMessage };
+  | { type: "thinking"; message: AccumulatedMessage }
+  | { type: "delegation"; delegation: DelegationDto };
 
 /**
  * A message is "effectively completed" if it has an explicit completedAt
@@ -166,7 +167,42 @@ function groupMessages(
 function getEntryDebugKey(entry: ActivityStreamEntry): string {
   if (entry.type === "message") return `message:${entry.message.messageId}`;
   if (entry.type === "thinking") return `thinking:${entry.message.messageId}`;
+  if (entry.type === "delegation") return `delegation:${entry.delegation.delegationId}`;
   return `summary:${entry.messages.map((message) => message.messageId).join(",")}`;
+}
+
+function getDelegationCreatedAtMs(delegation: DelegationDto): number | null {
+  if (!delegation.createdAt) return null;
+  const parsed = Date.parse(delegation.createdAt);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getEntryStartTimeMs(entry: ActivityStreamEntry): number | null {
+  switch (entry.type) {
+    case "message":
+      return entry.message.createdAt ?? null;
+    case "thinking":
+      return entry.message.createdAt ?? null;
+    case "inference-summary":
+      return entry.messages[0]?.createdAt ?? null;
+    case "delegation":
+      return getDelegationCreatedAtMs(entry.delegation);
+  }
+}
+
+function getEntryEndTimeMs(entry: ActivityStreamEntry): number | null {
+  switch (entry.type) {
+    case "message":
+      return entry.message.completedAt ?? entry.message.createdAt ?? null;
+    case "thinking":
+      return entry.message.completedAt ?? entry.message.createdAt ?? null;
+    case "inference-summary": {
+      const lastMessage = entry.messages[entry.messages.length - 1];
+      return lastMessage?.completedAt ?? lastMessage?.createdAt ?? null;
+    }
+    case "delegation":
+      return getDelegationCreatedAtMs(entry.delegation);
+  }
 }
 
 const InferenceStepsSummary = memo(function InferenceStepsSummary({
@@ -595,19 +631,87 @@ export function ActivityStreamV1({
     [anchoredToolCallIds, delegations],
   );
 
+  const { timelineEntries, fallbackDelegations } = useMemo(() => {
+    const timestampedDelegations = unanchoredDelegations
+      .map((delegation) => ({ delegation, timestamp: getDelegationCreatedAtMs(delegation) }))
+      .filter((item): item is { delegation: DelegationDto; timestamp: number } => item.timestamp != null)
+      .sort((left, right) => left.timestamp - right.timestamp);
+
+    const untimedDelegations = unanchoredDelegations.filter((delegation) => getDelegationCreatedAtMs(delegation) == null);
+
+    if (timestampedDelegations.length === 0) {
+      return {
+        timelineEntries: groupedEntries,
+        fallbackDelegations: untimedDelegations,
+      };
+    }
+
+    const mergedEntries: ActivityStreamEntry[] = [];
+    let entryIndex = 0;
+    let delegationIndex = 0;
+
+    while (entryIndex < groupedEntries.length || delegationIndex < timestampedDelegations.length) {
+      const nextEntry = entryIndex < groupedEntries.length ? groupedEntries[entryIndex] : null;
+      const nextEntryTimestamp = nextEntry ? (getEntryStartTimeMs(nextEntry) ?? Number.POSITIVE_INFINITY) : Number.POSITIVE_INFINITY;
+      const nextDelegation = delegationIndex < timestampedDelegations.length ? timestampedDelegations[delegationIndex] : null;
+      const nextDelegationTimestamp = nextDelegation?.timestamp ?? Number.POSITIVE_INFINITY;
+
+      if (nextDelegation && nextDelegationTimestamp <= nextEntryTimestamp) {
+        mergedEntries.push({ type: "delegation", delegation: nextDelegation.delegation });
+        delegationIndex += 1;
+        continue;
+      }
+
+      if (nextEntry) {
+        mergedEntries.push(nextEntry);
+        entryIndex += 1;
+      }
+    }
+
+    return {
+      timelineEntries: mergedEntries,
+      fallbackDelegations: untimedDelegations,
+    };
+  }, [groupedEntries, unanchoredDelegations]);
+
+  const hasActivityContent = timelineEntries.length > 0 || fallbackDelegations.length > 0;
+
   // ── Virtualizer for the message list ──────────────────────────────────────
   // Only renders items visible in the viewport plus an overscan buffer,
   // keeping DOM node count ~30 regardless of session length.
   const virtualizer = useVirtualizer({
-    count: groupedEntries.length,
+    count: timelineEntries.length,
     getScrollElement: () => viewportElement,
-    getItemKey: (index) => getEntryDebugKey(groupedEntries[index]),
+    getItemKey: (index) => getEntryDebugKey(timelineEntries[index]),
     estimateSize: () => 120,
     overscan: 10,
   });
   const renderEntry = useCallback((entry: ActivityStreamEntry, index: number, virtualStart: number) => {
     const wrapperStyle = { position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${virtualStart}px)` } as const;
     const measurementRef = virtualizer.measureElement;
+    const prevEntry = index > 0 ? timelineEntries[index - 1] : null;
+    const prevEntryEnd = prevEntry ? getEntryEndTimeMs(prevEntry) : null;
+    const entryStart = getEntryStartTimeMs(entry);
+    const gap = prevEntryEnd != null && entryStart != null ? entryStart - prevEntryEnd : 0;
+
+    if (entry.type === "delegation") {
+      return (
+        <div
+          key={`delegation-${entry.delegation.delegationId}`}
+          data-index={index}
+          ref={measurementRef}
+          style={wrapperStyle}
+        >
+          {gap > 30_000 && <DurationSeparator durationMs={gap} />}
+          <div className="px-4 py-2 border-b border-border/40">
+            <DelegationCard
+              delegation={entry.delegation}
+              currentSessionId={currentSessionId}
+            />
+          </div>
+        </div>
+      );
+    }
 
     if (entry.type === "inference-summary") {
       return (
@@ -636,19 +740,6 @@ export function ActivityStreamV1({
     }
 
     const message = entry.message;
-    const prevEntry = index > 0 ? groupedEntries[index - 1] : null;
-    const prevMessage = prevEntry
-      ? prevEntry.type === "message"
-        ? prevEntry.message
-        : prevEntry.type === "inference-summary"
-        ? prevEntry.messages[prevEntry.messages.length - 1]
-        : prevEntry.type === "thinking"
-        ? prevEntry.message
-        : null
-      : null;
-    const gap = prevMessage && message.createdAt && (prevMessage.completedAt ?? prevMessage.createdAt)
-      ? message.createdAt - (prevMessage.completedAt ?? prevMessage.createdAt!)
-      : 0;
 
     const isMatchingMessage = isFiltering &&
       message.parts.some((part) => matchingPartIds.has(part.partId));
@@ -672,7 +763,7 @@ export function ActivityStreamV1({
         />
       </div>
     );
-  }, [agents, createdAtByMessageId, currentSessionId, delegations, groupedEntries, isFiltering, matchingPartIds, searchQuery, virtualizer.measureElement]);
+  }, [agents, createdAtByMessageId, currentSessionId, delegations, isFiltering, matchingPartIds, searchQuery, timelineEntries, virtualizer.measureElement]);
 
   return (
     <div data-testid="activity-stream" className="flex flex-col h-full">
@@ -743,7 +834,7 @@ export function ActivityStreamV1({
               </div>
             )}
 
-            {messages.length === 0 && (
+            {!hasActivityContent && (
               <div className="flex flex-col items-center justify-center h-48 text-muted-foreground text-sm gap-2">
                 {status === "connecting" ? (
                   <>
@@ -757,20 +848,20 @@ export function ActivityStreamV1({
             )}
 
             {/* Virtualized message list — only ~30 DOM nodes at a time */}
-            {groupedEntries.length > 0 && (
+            {timelineEntries.length > 0 && (
               <div
                 style={{ position: "relative", height: `${virtualizer.getTotalSize()}px` }}
               >
-                {virtualizer.getVirtualItems().map((virtualItem) => renderEntry(groupedEntries[virtualItem.index], virtualItem.index, virtualItem.start))}
+                {virtualizer.getVirtualItems().map((virtualItem) => renderEntry(timelineEntries[virtualItem.index], virtualItem.index, virtualItem.start))}
               </div>
             )}
 
-            {unanchoredDelegations.length > 0 && (
+            {fallbackDelegations.length > 0 && (
               <div className="border-t border-border/40 px-4 py-3 space-y-1.5">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                   Delegations
                 </div>
-                {unanchoredDelegations.map((delegation) => (
+                {fallbackDelegations.map((delegation) => (
                   <DelegationCard
                     key={delegation.delegationId}
                     delegation={delegation}

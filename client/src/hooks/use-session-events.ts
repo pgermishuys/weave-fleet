@@ -69,6 +69,7 @@ export interface UseSessionEventsResult {
 
 /** Maximum messages held in memory — oldest are evicted when exceeded. */
 const MAX_MESSAGES = 500;
+
 export function useSessionEvents(
   sessionId: string,
   instanceId: string,
@@ -410,6 +411,7 @@ export function handleEvent(
   const childSessionId = properties?.childSessionId ?? properties?.ChildSessionId;
   const delegationTitle = properties?.title ?? properties?.Title;
   const delegationStatus = properties?.status ?? properties?.Status;
+  const delegationCreatedAt = properties?.createdAt ?? properties?.CreatedAt;
 
   if (type === "server.connected") {
     setStatus("connected");
@@ -456,6 +458,7 @@ export function handleEvent(
       childSessionId,
       title: delegationTitle,
       status: delegationStatus,
+      createdAt: delegationCreatedAt,
     }));
     return;
   }
@@ -468,6 +471,7 @@ export function handleEvent(
       childSessionId,
       title: delegationTitle,
       status: delegationStatus,
+      createdAt: delegationCreatedAt,
     }));
     return;
   }

@@ -274,6 +274,7 @@ export interface DelegationDto {
   childSessionId: string | null;
   title: string;
   status: "pending" | "running" | "completed" | "error" | "cancelled";
+  createdAt?: string | null;
 }
 
 // ─── Accumulated Message (for useSessionEvents) ────────────────────────────

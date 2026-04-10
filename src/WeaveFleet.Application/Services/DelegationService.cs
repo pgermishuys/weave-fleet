@@ -146,7 +146,8 @@ public sealed class DelegationService(
                 delegation.ParentToolCallId,
                 delegation.ChildSessionId,
                 delegation.Title,
-                delegation.Status));
+                delegation.Status,
+                delegation.CreatedAt));
     }
 
     private static DelegationDto ToDto(Delegation delegation) => new(
@@ -154,5 +155,6 @@ public sealed class DelegationService(
         delegation.ParentToolCallId,
         delegation.ChildSessionId,
         delegation.Title,
-        delegation.Status);
+        delegation.Status,
+        delegation.CreatedAt);
 }

@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { ActivityStreamV1 } from "@/components/session/activity-stream-v1";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { AccumulatedMessage, DelegationDto } from "@/lib/api-types";
 import { SessionsContext } from "@/contexts/sessions-context";
 
@@ -64,13 +65,15 @@ function renderActivityStream(messages: AccumulatedMessage[], delegations: Deleg
       }}
     >
       <MemoryRouter initialEntries={["/sessions/parent?instanceId=inst-1"]}>
-        <ActivityStreamV1
-          messages={messages}
-          delegations={delegations}
-          status="connected"
-          sessionStatus="idle"
-          currentSessionId="parent"
-        />
+        <TooltipProvider>
+          <ActivityStreamV1
+            messages={messages}
+            delegations={delegations}
+            status="connected"
+            sessionStatus="idle"
+            currentSessionId="parent"
+          />
+        </TooltipProvider>
       </MemoryRouter>
     </SessionsContext.Provider>,
   );
@@ -105,6 +108,7 @@ describe("ActivityStreamV1 delegations", () => {
         childSessionId: "child-1",
         title: "Reviewer Task",
         status: "running",
+        createdAt: "2026-04-10T12:00:00.000Z",
       },
     ];
 
@@ -114,7 +118,58 @@ describe("ActivityStreamV1 delegations", () => {
     expect(screen.queryByText("legacy description")).toBeNull();
   });
 
-  it("renders unanchored delegations after the message stream", () => {
+  it("renders timestamped unanchored delegations in chronological order", () => {
+    const messages: AccumulatedMessage[] = [
+      {
+        messageId: "msg-1",
+        sessionId: "parent",
+        role: "assistant",
+        createdAt: Date.parse("2026-04-10T12:00:00.000Z"),
+        parts: [
+          {
+            partId: "part-1",
+            type: "text",
+            text: "hello",
+          },
+        ],
+      },
+      {
+        messageId: "msg-2",
+        sessionId: "parent",
+        role: "assistant",
+        createdAt: Date.parse("2026-04-10T12:02:00.000Z"),
+        parts: [
+          {
+            partId: "part-2",
+            type: "text",
+            text: "goodbye",
+          },
+        ],
+      },
+    ];
+
+    const delegations: DelegationDto[] = [
+      {
+        delegationId: "del-2",
+        parentToolCallId: "missing-call",
+        childSessionId: null,
+        title: "Code Review",
+        status: "pending",
+        createdAt: "2026-04-10T12:01:00.000Z",
+      },
+    ];
+
+    const { container } = renderActivityStream(messages, delegations);
+
+    expect(screen.getByText("Code Review")).toBeTruthy();
+    expect(screen.queryByText("Delegations")).toBeNull();
+
+    const textContent = container.textContent ?? "";
+    expect(textContent.indexOf("hello")).toBeLessThan(textContent.indexOf("Code Review"));
+    expect(textContent.indexOf("Code Review")).toBeLessThan(textContent.indexOf("goodbye"));
+  });
+
+  it("keeps untimed unanchored delegations in the fallback section", () => {
     const messages: AccumulatedMessage[] = [
       {
         messageId: "msg-1",

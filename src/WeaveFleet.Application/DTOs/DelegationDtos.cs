@@ -5,7 +5,8 @@ public sealed record DelegationDto(
     string? ParentToolCallId,
     string? ChildSessionId,
     string Title,
-    string Status);
+    string Status,
+    string CreatedAt);
 
 public sealed record DelegationEventDto(
     string DelegationId,
@@ -13,4 +14,5 @@ public sealed record DelegationEventDto(
     string? ParentToolCallId,
     string? ChildSessionId,
     string Title,
-    string Status);
+    string Status,
+    string CreatedAt);
