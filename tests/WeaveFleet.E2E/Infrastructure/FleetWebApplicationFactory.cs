@@ -99,9 +99,9 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
                 services.Remove(d);
         });
 
-        // Override configuration to use isolated DB paths and disable analytics
+        // Override configuration to use isolated DB paths for E2E.
         builder.UseSetting("Fleet:DatabasePath", _dbPath);
-        builder.UseSetting("Fleet:AnalyticsEnabled", "false");
+        builder.UseSetting("Fleet:AnalyticsEnabled", "true");
         builder.UseSetting("Fleet:Port", "0");
 
         // Use environment-based configuration to override FleetOptions singleton
@@ -124,7 +124,7 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
             var testOptions = new FleetOptions
             {
                 DatabasePath = _dbPath,
-                AnalyticsEnabled = false,
+                AnalyticsEnabled = true,
                 Port = 0,
                 Host = "127.0.0.1"
             };

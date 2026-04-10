@@ -181,8 +181,11 @@ public sealed class SessionDetailPage(IPage page)
     /// <summary>Submit the fork/new context dialog and wait for session navigation.</summary>
     public async Task SubmitForkAsync()
     {
+        var previousUrl = _page.Url;
         await ForkSubmitButton.ClickAsync();
-        await _page.WaitForURLAsync(url => url.Contains("/sessions/"), new PageWaitForURLOptions { Timeout = 5_000 });
+        await _page.WaitForURLAsync(
+            url => url.Contains("/sessions/") && !string.Equals(url, previousUrl, StringComparison.Ordinal),
+            new PageWaitForURLOptions { Timeout = 5_000 });
     }
 
     /// <summary>Get the archived banner text.</summary>

@@ -25,7 +25,7 @@ public sealed class AnalyticsPage(IPage page)
 
     /// <summary>Wait for the analytics page heading to appear.</summary>
     public Task WaitForLoadedAsync()
-        => _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        => PageHeading.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
 
     // ── Queries ───────────────────────────────────────────────────────────────
 

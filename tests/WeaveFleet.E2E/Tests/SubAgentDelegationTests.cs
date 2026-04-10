@@ -124,10 +124,11 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                 var childHarness = tracker.Get(childSession.InstanceId).ShouldBeOfType<TestHarnessInstance>();
 
                 var detail = new SessionDetailPage(Page);
+                var dashboard = new FleetDashboardPage(Page);
                 await detail.GotoAsync(parentSessionId, parentInstanceId);
 
                 await Page.GotoAsync("/");
-                await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
+                await dashboard.WaitForLoadedAsync();
                 await Microsoft.Playwright.Assertions.Expect(Page.GetByTestId("session-card")).ToHaveCountAsync(1);
                 await Microsoft.Playwright.Assertions.Expect(Page.GetByTestId("session-title")).ToContainTextAsync("Parent Session");
 

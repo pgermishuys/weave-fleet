@@ -23,8 +23,14 @@ public sealed class FleetDashboardPage(IPage page)
     public async Task GotoAsync()
     {
         await _page.GotoAsync("/");
-        // Wait for either the empty state or a session card to appear
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        await WaitForLoadedAsync();
+    }
+
+    /// <summary>Wait for the dashboard shell to become interactive.</summary>
+    public async Task WaitForLoadedAsync()
+    {
+        await Assertions.Expect(NewSessionButton).ToBeVisibleAsync();
+        await Assertions.Expect(_page.GetByTestId("summary-bar")).ToBeVisibleAsync();
     }
 
     // ── Queries ───────────────────────────────────────────────────────────────
