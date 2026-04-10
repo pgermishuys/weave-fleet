@@ -12,8 +12,10 @@ namespace WeaveFleet.E2E.Tests;
 /// <summary>
 /// UI responsiveness benchmark tests.
 /// Measures user-perceived interaction latencies under idle and loaded conditions.
-/// Tagged with [Trait("Category", "Benchmark")] — excluded from normal "Category=E2E" runs.
+/// Tagged with both [Trait("Category", "E2E")] and [Trait("Category", "Benchmark")]
+/// so benchmark coverage remains identifiable as E2E while normal CI filters can exclude it.
 /// </summary>
+[Trait("Category", "E2E")]
 [Trait("Category", "Benchmark")]
 public sealed class UiResponsivenessBenchmarkTests : BenchmarkTestBase,
     IClassFixture<FleetWebApplicationFactory>,

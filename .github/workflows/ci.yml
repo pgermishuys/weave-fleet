@@ -3,8 +3,14 @@ name: CI
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - '.weave/**'
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - '.weave/**'
   workflow_dispatch:
 
 permissions:
@@ -45,7 +51,7 @@ jobs:
         run: >
           dotnet test WeaveFleet.slnx
           --configuration Release
-          --filter "Category!=E2E"
+          --filter "Category!=E2E&Category!=Benchmark"
           --logger "trx;LogFileName=test-results.trx"
           --results-directory test-results/
           --no-build
