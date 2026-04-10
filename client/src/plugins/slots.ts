@@ -3,6 +3,7 @@ import type {
   FleetPluginContextResolver,
   FleetPluginManifest,
   FleetPluginRoute,
+  FleetPluginSessionSourceContribution,
   FleetPluginSettingsSection,
   FleetPluginSidebarItem,
   FleetPluginSidebarPanel,
@@ -15,6 +16,7 @@ export type RegisteredRoute = FleetPluginRoute & { pluginId: string };
 export type RegisteredSettingsSection = FleetPluginSettingsSection & { pluginId: string };
 export type RegisteredStartupHook = FleetPluginStartupHook & { pluginId: string };
 export type RegisteredContextResolver = FleetPluginContextResolver & { pluginId: string };
+export type RegisteredSessionSourceContribution = FleetPluginSessionSourceContribution & { pluginId: string };
 
 function sortByOrder<T>(items: readonly T[], getOrder: (item: T) => number | undefined): T[] {
   return [...items].sort((left, right) => (getOrder(left) ?? 0) - (getOrder(right) ?? 0));
@@ -87,5 +89,17 @@ export function getContextResolvers(manifests?: readonly FleetPluginManifest[]):
       ...resolver,
       pluginId: manifest.descriptor.id,
     }))
+  );
+}
+
+export function getSessionSourceContributions(manifests?: readonly FleetPluginManifest[]): RegisteredSessionSourceContribution[] {
+  return sortByOrder(
+    getSourceManifests(manifests).flatMap((manifest) =>
+      (manifest.contributions?.sessionSources ?? []).map((source) => ({
+        ...source,
+        pluginId: manifest.descriptor.id,
+      }))
+    ),
+    (source) => source.order
   );
 }

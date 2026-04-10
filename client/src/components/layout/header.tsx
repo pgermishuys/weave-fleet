@@ -47,7 +47,7 @@ export function NewSessionButton() {
   const currentDirectory = useCurrentSessionDirectory();
   return (
     <NewSessionDialog
-      defaultDirectory={currentDirectory}
+      defaultDirectory={currentDirectory ?? undefined}
       trigger={
         <Button size="sm" data-testid="new-session-button" className="gap-1.5 weave-gradient-bg hover:opacity-90 border-0">
           <Plus className="h-3.5 w-3.5" />

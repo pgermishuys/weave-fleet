@@ -1,4 +1,6 @@
+using System.Text.Json.Serialization;
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
@@ -66,6 +68,7 @@ public static class SessionEndpoints
                 Branch = req.Branch,
                 HarnessType = req.HarnessType,
                 InitialPrompt = req.InitialPrompt,
+                Source = req.Source,
                 OnCompleteTargetSessionId = req.OnComplete?.NotifySessionId,
                 OnCompleteTargetInstanceId = req.OnComplete?.NotifyInstanceId,
                 ProjectId = req.ProjectId
@@ -80,6 +83,31 @@ public static class SessionEndpoints
                 err => err.ToSessionApiResult());
         })
         .WithName("CreateSession");
+
+        group.MapPost("/{id}/source-preview", async (string id, PreviewSessionSourceApiRequest req, SessionOrchestrator orchestrator) =>
+        {
+            var result = await orchestrator.PreviewAddSourceToSessionAsync(id, req.Source);
+            return result.Match(
+                envelope => Results.Ok(new
+                {
+                    preview = new
+                    {
+                        originLabel = envelope.OriginLabel,
+                        content = envelope.Content,
+                        isTruncated = envelope.IsTruncated,
+                        characterCount = envelope.CharacterCount
+                    }
+                }),
+                err => err.ToSessionApiResult());
+        })
+        .WithName("PreviewSessionSource");
+
+        group.MapPost("/{id}/sources", async (string id, AddSessionSourceApiRequest req, SessionOrchestrator orchestrator) =>
+        {
+            var result = await orchestrator.AddSourceToSessionAsync(id, req.Source, req.Confirm);
+            return result.Match(_ => Results.Ok(), err => err.ToSessionApiResult());
+        })
+        .WithName("AddSessionSource");
 
         // POST /api/sessions/{id}/prompt
         group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionOrchestrator orchestrator) =>
@@ -316,17 +344,26 @@ public static class SessionEndpoints
 
 // ── Request record types ────────────────────────────────────────────────────
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record CreateSessionApiRequest(
-    string Directory,
+    string? Directory,
     string? Title,
     string? IsolationStrategy,
     string? Branch,
     string? HarnessType,
     string? InitialPrompt,
+    SessionSourceSelection? Source,
     OnCompleteInfo? OnComplete,
     string? ProjectId);
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record OnCompleteInfo(string NotifySessionId, string NotifyInstanceId);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record PreviewSessionSourceApiRequest(SessionSourceSelection Source);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record AddSessionSourceApiRequest(SessionSourceSelection Source, bool Confirm);
 
 internal sealed record SendPromptApiRequest(string Text, string? Agent, string? Model);
 

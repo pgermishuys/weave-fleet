@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import type { FleetPluginTrustLevel } from "@/plugins/types";
+import type { SessionSourceSelection } from "@/lib/api-types";
 
 /**
  * Transitional compatibility types.
@@ -11,11 +12,11 @@ import type { FleetPluginTrustLevel } from "@/plugins/types";
 
 /** The boundary type between integrations and core Fleet */
 export interface ContextSource {
-  type: string; // "github-issue", "github-pr"
+  type: string; // display-only source label
   url: string; // canonical URL
   title: string; // display title
-  body: string; // markdown content → becomes initial prompt context
-  metadata: Record<string, unknown>; // source-specific data (labels, comments, diff stats, etc.)
+  source: SessionSourceSelection;
+  metadata: Record<string, unknown>; // presentation-only source metadata
 }
 
 /** Each integration registers a manifest */

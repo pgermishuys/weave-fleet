@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { Github } from "lucide-react";
 import type { FleetPluginManifest } from "@/plugins/types";
 import {
+  getContextResolvers,
   getRoutes,
+  getSessionSourceContributions,
   getSettingsSections,
   getSidebarPanels,
   getSidebarViews,
@@ -58,6 +60,24 @@ function makeManifest(id: string, order: number): FleetPluginManifest {
           order,
         },
       ],
+      contextResolvers: [
+        {
+          id: `${id}-context`,
+          resolveContext: async () => null,
+        },
+      ],
+      sessionSources: [
+        {
+          id: `${id}-source`,
+          sourceKey: {
+            providerId: id,
+            sourceType: "custom",
+          },
+          label: `${id} source`,
+          order,
+          formComponent: () => null,
+        },
+      ],
     },
   };
 }
@@ -77,5 +97,10 @@ describe("plugin slots", () => {
   it("orders settings sections and startup hooks", () => {
     expect(getSettingsSections(manifests).map((item) => item.pluginId)).toEqual(["alpha", "beta"]);
     expect(getStartupHooks(manifests).map((item) => item.pluginId)).toEqual(["alpha", "beta"]);
+  });
+
+  it("returns context resolvers and orders session source contributions", () => {
+    expect(getContextResolvers(manifests).map((item) => item.pluginId)).toEqual(["beta", "alpha"]);
+    expect(getSessionSourceContributions(manifests).map((item) => item.pluginId)).toEqual(["alpha", "beta"]);
   });
 });

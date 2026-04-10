@@ -9,7 +9,6 @@ import type {
   SessionRetentionStatus,
   InstanceStatus,
 } from "@/lib/types";
-import type { ContextSource } from "@/integrations/types";
 import type {
   FleetPluginDescriptor,
   FleetPluginStatus,
@@ -35,15 +34,68 @@ export interface FleetSession {
 
 // ─── Request/Response Shapes ───────────────────────────────────────────────
 
+export interface SessionSourceKey {
+  providerId: string;
+  sourceType: string;
+  actionId: string;
+  contractVersion: number;
+}
+
+export interface SessionSourceSelection {
+  key: SessionSourceKey;
+  input: Record<string, unknown>;
+}
+
+export interface SessionSourceInputField {
+  name: string;
+  valueType: string;
+  required: boolean;
+  allowedValues: string[] | null;
+  description: string | null;
+}
+
+export interface SessionSourceDescriptor {
+  key: SessionSourceKey;
+  displayName: string;
+  kind: "workspace" | "context" | "hybrid";
+  inputFields: SessionSourceInputField[];
+  producesWorkspace: boolean;
+  producesContext: boolean;
+  requiresConfirmation: boolean;
+}
+
+export interface SessionSourceCatalogResponse {
+  sources: SessionSourceDescriptor[];
+}
+
+export interface SessionSourcePreview {
+  originLabel: string;
+  content: string;
+  isTruncated: boolean;
+  characterCount: number;
+}
+
+export interface PreviewSessionSourceResponse {
+  preview: SessionSourcePreview;
+}
+
+export interface PreviewSessionSourceRequest {
+  source: SessionSourceSelection;
+}
+
+export interface AddSessionSourceRequest {
+  source: SessionSourceSelection;
+  confirm: boolean;
+}
+
 export interface CreateSessionRequest {
-  directory: string;
+  directory?: string;
   title?: string;
   isolationStrategy?: "existing" | "worktree" | "clone";
   branch?: string;
-  /** Optional integration context to inject as the initial prompt */
-  context?: ContextSource;
   /** Optional pre-formatted initial prompt text (takes precedence over context) */
   initialPrompt?: string;
+  source?: SessionSourceSelection;
   /** Harness type to use for this session (e.g. "opencode", "claude"). Defaults to "opencode" on backend. */
   harnessType?: string;
   /** Optional project to assign this session to at creation time */

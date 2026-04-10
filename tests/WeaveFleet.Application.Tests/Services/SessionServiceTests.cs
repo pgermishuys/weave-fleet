@@ -1,4 +1,6 @@
 using NSubstitute;
+using Shouldly;
+using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
@@ -9,10 +11,12 @@ namespace WeaveFleet.Application.Tests.Services;
 public sealed class SessionServiceTests
 {
     private readonly ISessionRepository _sessionRepo = Substitute.For<ISessionRepository>();
+    private readonly ISessionSourceUsageRepository _sessionSourceUsageRepo = Substitute.For<ISessionSourceUsageRepository>();
     private readonly ISessionCallbackRepository _callbackRepo = Substitute.For<ISessionCallbackRepository>();
     private readonly IDelegationRepository _delegationRepo = Substitute.For<IDelegationRepository>();
     private readonly IProjectRepository _projectRepo = Substitute.For<IProjectRepository>();
     private readonly IWorkspaceRepository _workspaceRepo = Substitute.For<IWorkspaceRepository>();
+    private readonly IWorkspaceRootRepository _workspaceRootRepo = Substitute.For<IWorkspaceRootRepository>();
     private readonly IInstanceRepository _instanceRepo = Substitute.For<IInstanceRepository>();
     private readonly IEventBroadcaster _eventBroadcaster = Substitute.For<IEventBroadcaster>();
     private readonly WeaveFleet.Application.Analytics.IAnalyticsCollector _analyticsCollector =
@@ -23,17 +27,26 @@ public sealed class SessionServiceTests
 
     public SessionServiceTests()
     {
+        _workspaceRootRepo.ListAsync().Returns([
+            new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
+        ]);
+        var workspaceRootService = new WorkspaceRootService(_workspaceRootRepo);
         var workspaceService = new WorkspaceService(
             _workspaceRepo,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceService>.Instance);
         var instanceService = new InstanceService(_instanceRepo, _sessionRepo);
+        var sessionSourceResolutionService = new SessionSourceResolutionService([
+            new LocalDirectorySessionSourceProvider(workspaceRootService)
+        ]);
         var delegationService = new DelegationService(_delegationRepo, _eventBroadcaster);
         _sessionOrchestrator = new SessionOrchestrator(
             workspaceService,
             instanceService,
+            sessionSourceResolutionService,
             Substitute.For<WeaveFleet.Application.Harnesses.IHarnessRegistry>(),
             new InstanceTracker(),
             _sessionRepo,
+            _sessionSourceUsageRepo,
             _callbackRepo,
             _delegationRepo,
             _projectRepo,

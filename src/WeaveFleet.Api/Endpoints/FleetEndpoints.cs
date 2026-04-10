@@ -45,18 +45,18 @@ public static class FleetEndpoints
         // GET /api/repositories — scanned repos from workspace roots
         group.MapGet("/repositories", async (
             RepositoryService repoService,
+            WorkspaceRootService workspaceRootService,
             CancellationToken ct) =>
         {
             var repos = await repoService.ScanRepositoriesAsync(ct);
+            var allowedRoots = await workspaceRootService.GetAllowedRootsAsync();
             return Results.Ok(new
             {
                 repositories = repos.Select(r => new
                 {
                     path = r.Path,
                     name = r.Name,
-                    currentBranch = r.CurrentBranch,
-                    remoteUrl = r.RemoteUrl,
-                    lastCommitMessage = r.LastCommitMessage
+                    parentRoot = FindParentRoot(r.Path, allowedRoots)
                 }),
                 scannedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             });
@@ -67,25 +67,39 @@ public static class FleetEndpoints
         group.MapGet("/repositories/info", async (
             string path,
             RepositoryService repoService,
-            WorkspaceRootService workspaceRootService,
             CancellationToken ct) =>
         {
-            var normalised = Path.GetFullPath(path);
-            var allowedRoots = await workspaceRootService.GetAllowedRootsAsync();
-            if (!OpenDirectoryEndpoints.IsUnderAllowedRoot(normalised, allowedRoots))
-                return Results.BadRequest(new { error = "Path is outside allowed workspace roots." });
+            var resolvedPath = await repoService.ResolveRepositoryPathAsync(path, ct);
+            if (resolvedPath.IsFailure)
+                return Results.BadRequest(new { error = resolvedPath.Error.Description });
 
-            var info = await repoService.GetRepositoryInfoAsync(normalised, ct);
+            var info = await repoService.GetRepositoryInfoAsync(resolvedPath.Value, ct);
             if (info is null)
                 return Results.NotFound(new { error = "Not a git repository." });
 
             return Results.Ok(new
             {
-                path = info.Path,
-                name = info.Name,
-                currentBranch = info.CurrentBranch,
-                remoteUrl = info.RemoteUrl,
-                lastCommitMessage = info.LastCommitMessage
+                repository = new
+                {
+                    name = info.Name,
+                    path = info.Path,
+                    branch = string.IsNullOrWhiteSpace(info.CurrentBranch) ? null : info.CurrentBranch,
+                    lastCommit = string.IsNullOrWhiteSpace(info.LastCommitMessage)
+                        ? null
+                        : new
+                        {
+                            hash = string.Empty,
+                            message = info.LastCommitMessage,
+                            author = string.Empty,
+                            date = string.Empty
+                        },
+                    remotes = string.IsNullOrWhiteSpace(info.RemoteUrl)
+                        ? Array.Empty<object>()
+                        : new object[]
+                        {
+                            new { name = "origin", url = info.RemoteUrl }
+                        }
+                }
             });
         })
         .WithName("GetRepositoryInfo");
@@ -94,28 +108,57 @@ public static class FleetEndpoints
         group.MapGet("/repositories/detail", async (
             string path,
             RepositoryService repoService,
-            WorkspaceRootService workspaceRootService,
             CancellationToken ct) =>
         {
-            var normalised = Path.GetFullPath(path);
-            var allowedRoots = await workspaceRootService.GetAllowedRootsAsync();
-            if (!OpenDirectoryEndpoints.IsUnderAllowedRoot(normalised, allowedRoots))
-                return Results.BadRequest(new { error = "Path is outside allowed workspace roots." });
+            var resolvedPath = await repoService.ResolveRepositoryPathAsync(path, ct);
+            if (resolvedPath.IsFailure)
+                return Results.BadRequest(new { error = resolvedPath.Error.Description });
 
-            var detail = await repoService.GetRepositoryDetailAsync(normalised, ct);
+            var detail = await repoService.GetRepositoryDetailAsync(resolvedPath.Value, ct);
             if (detail is null)
                 return Results.NotFound(new { error = "Not a git repository." });
 
             return Results.Ok(new
             {
-                path = detail.Info.Path,
-                name = detail.Info.Name,
-                currentBranch = detail.Info.CurrentBranch,
-                remoteUrl = detail.Info.RemoteUrl,
-                lastCommitMessage = detail.Info.LastCommitMessage,
-                branches = detail.Branches,
-                remotes = detail.Remotes,
-                recentCommits = detail.RecentCommits
+                repository = new
+                {
+                    name = detail.Info.Name,
+                    path = detail.Info.Path,
+                    branch = string.IsNullOrWhiteSpace(detail.Info.CurrentBranch) ? null : detail.Info.CurrentBranch,
+                    uncommittedCount = 0,
+                    totalCommitCount = 0,
+                    firstCommitDate = (string?)null,
+                    lastCommitDate = (string?)null,
+                    branches = detail.Branches.Select(branch => new
+                    {
+                        name = branch,
+                        shortHash = string.Empty,
+                        message = string.Empty,
+                        author = string.Empty,
+                        authorEmail = string.Empty,
+                        date = string.Empty,
+                        isCurrent = string.Equals(branch.TrimStart('*', ' '), detail.Info.CurrentBranch, StringComparison.Ordinal),
+                        isRemote = branch.Contains("remotes/", StringComparison.Ordinal)
+                    }),
+                    tags = Array.Empty<object>(),
+                    recentCommits = detail.RecentCommits.Select(commit => new
+                    {
+                        hash = string.Empty,
+                        shortHash = commit.Split(' ', 2, StringSplitOptions.TrimEntries)[0],
+                        message = commit.Contains(' ') ? commit[(commit.IndexOf(' ') + 1)..] : commit,
+                        author = string.Empty,
+                        authorEmail = string.Empty,
+                        date = string.Empty
+                    }),
+                    remotes = detail.Remotes.Select(remote => new
+                    {
+                        name = ParseRemoteName(remote),
+                        url = ParseRemoteUrl(remote),
+                        github = (object?)null
+                    }),
+                    readmeContent = (string?)null,
+                    readmeFilename = (string?)null
+                }
             });
         })
         .WithName("GetRepositoryDetail");
@@ -123,10 +166,22 @@ public static class FleetEndpoints
         // POST /api/repositories/refresh — invalidate cache
         group.MapPost("/repositories/refresh", async (
             RepositoryService repoService,
+            WorkspaceRootService workspaceRootService,
             CancellationToken ct) =>
         {
             await repoService.RefreshScanAsync(ct);
-            return Results.NoContent();
+            var repos = await repoService.ScanRepositoriesAsync(ct);
+            var allowedRoots = await workspaceRootService.GetAllowedRootsAsync();
+            return Results.Ok(new
+            {
+                repositories = repos.Select(r => new
+                {
+                    path = r.Path,
+                    name = r.Name,
+                    parentRoot = FindParentRoot(r.Path, allowedRoots)
+                }),
+                scannedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            });
         })
         .WithName("RefreshRepositories");
 
@@ -169,5 +224,27 @@ public static class FleetEndpoints
         .WithName("GetAvailableTools");
 
         return app;
+    }
+
+    private static string FindParentRoot(string repositoryPath, IReadOnlyList<string> allowedRoots)
+    {
+        var normalizedRepositoryPath = Path.GetFullPath(repositoryPath);
+        return allowedRoots
+            .Select(Path.GetFullPath)
+            .Where(root => WorkspaceRootService.IsPathWithinRoots(normalizedRepositoryPath, [root]))
+            .OrderByDescending(root => root.Length)
+            .FirstOrDefault() ?? Path.GetDirectoryName(normalizedRepositoryPath) ?? normalizedRepositoryPath;
+    }
+
+    private static string ParseRemoteName(string remote)
+    {
+        var parts = remote.Split(['\t', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return parts.Length > 0 ? parts[0] : string.Empty;
+    }
+
+    private static string ParseRemoteUrl(string remote)
+    {
+        var parts = remote.Split(['\t', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return parts.Length > 1 ? parts[1] : string.Empty;
     }
 }

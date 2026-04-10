@@ -1,4 +1,6 @@
 using Microsoft.Playwright;
+using Microsoft.Extensions.DependencyInjection;
+using WeaveFleet.Application.Services;
 using WeaveFleet.TestHarness;
 
 namespace WeaveFleet.E2E.Infrastructure;
@@ -39,6 +41,19 @@ public abstract class E2ETestBase : IAsyncLifetime
         // We use EnsureStartedAsync() instead of accessing factory.Services directly,
         // because the base Services getter casts the server to TestServer which fails with Kestrel.
         await _factory.EnsureStartedAsync();
+
+        await using (var scope = _factory.KestrelServices.CreateAsyncScope())
+        {
+            var workspaceRootService = scope.ServiceProvider.GetRequiredService<WorkspaceRootService>();
+            var tempRoot = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
+            var addRootResult = await workspaceRootService.AddRootAsync(tempRoot);
+            if (addRootResult.IsFailure &&
+                !addRootResult.Error.Description.Contains("already registered", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Failed to register E2E workspace root '{tempRoot}': {addRootResult.Error.Description}");
+            }
+        }
 
         // Create a fresh isolated browser context per test
         _context = await _playwright.Browser.NewContextAsync(new BrowserNewContextOptions

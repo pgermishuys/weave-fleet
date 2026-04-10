@@ -224,7 +224,7 @@ export const SidebarWorkspaceItem = React.memo(function SidebarWorkspaceItem({
     <NewSessionDialog
       open={newSessionOpen}
       onOpenChange={setNewSessionOpen}
-      defaultDirectory={group.sessions[0]?.workspaceDirectory ?? group.workspaceDirectory}
+      defaultDirectory={group.sessions[0]?.workspaceDirectory ?? group.workspaceDirectory ?? undefined}
       userProjects={userProjects}
     />
     </>

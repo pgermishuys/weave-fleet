@@ -1,14 +1,13 @@
 
 import { useState, useCallback } from "react";
-import type { CreateSessionRequest, CreateSessionResponse } from "@/lib/api-types";
-import type { ContextSource } from "@/integrations/types";
+import type { CreateSessionRequest, CreateSessionResponse, SessionSourceSelection } from "@/lib/api-types";
 import { apiFetch } from "@/lib/api-client";
 
 export interface CreateSessionOptions {
   title?: string;
   isolationStrategy?: "existing" | "worktree" | "clone";
   branch?: string;
-  context?: ContextSource;
+  source?: SessionSourceSelection;
   /** Harness type to use for this session (e.g. "opencode", "claude"). */
   harnessType?: string;
   /** Optional project to assign this session to at creation time */
@@ -38,7 +37,7 @@ export function useCreateSession(): UseCreateSessionResult {
           title: opts?.title,
           isolationStrategy: opts?.isolationStrategy,
           branch: opts?.branch,
-          context: opts?.context,
+          source: opts?.source,
           harnessType: opts?.harnessType,
           projectId: opts?.projectId,
         };

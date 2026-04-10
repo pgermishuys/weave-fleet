@@ -48,7 +48,19 @@ export function IssueRow({ issue, owner, repo }: IssueRowProps) {
     type: "github-issue",
     url: issue.html_url,
     title: `Issue #${issue.number}: ${issue.title}`,
-    body: issue.body ?? "",
+    source: {
+      key: {
+        providerId: "builtin.github",
+        sourceType: "github-issue",
+        actionId: "add-to-session",
+        contractVersion: 1,
+      },
+      input: {
+        owner,
+        repo,
+        number: issue.number,
+      },
+    },
     metadata: {
       owner,
       repo,

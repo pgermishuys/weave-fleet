@@ -48,7 +48,19 @@ export function PrRow({ pr, owner, repo }: PrRowProps) {
     type: "github-pr",
     url: pr.html_url,
     title: `PR #${pr.number}: ${pr.title}`,
-    body: pr.body ?? "",
+    source: {
+      key: {
+        providerId: "builtin.github",
+        sourceType: "github-pull-request",
+        actionId: "add-to-session",
+        contractVersion: 1,
+      },
+      input: {
+        owner,
+        repo,
+        number: pr.number,
+      },
+    },
     metadata: {
       owner,
       repo,

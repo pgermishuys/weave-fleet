@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using NSubstitute;
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
@@ -94,22 +95,33 @@ public sealed class SessionDelegationsEndpointTests
     {
         var sessionRepository = Substitute.For<ISessionRepository>();
         var workspaceRepository = Substitute.For<IWorkspaceRepository>();
+        var workspaceRootRepository = Substitute.For<IWorkspaceRootRepository>();
         var instanceRepository = Substitute.For<IInstanceRepository>();
         var projectRepository = Substitute.For<IProjectRepository>();
         var callbackRepository = Substitute.For<ISessionCallbackRepository>();
         var delegationRepository = Substitute.For<IDelegationRepository>();
+        var sessionSourceUsageRepository = Substitute.For<ISessionSourceUsageRepository>();
         var eventBroadcaster = Substitute.For<IEventBroadcaster>();
         var analyticsCollector = Substitute.For<WeaveFleet.Application.Analytics.IAnalyticsCollector>();
         var messageRepository = Substitute.For<IMessageRepository>();
+        workspaceRootRepository.ListAsync().Returns([
+            new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
+        ]);
+        var workspaceRootService = new WorkspaceRootService(workspaceRootRepository);
+        var sessionSourceResolutionService = new SessionSourceResolutionService([
+            new LocalDirectorySessionSourceProvider(workspaceRootService)
+        ]);
 
         return new SessionOrchestrator(
             new WorkspaceService(
                 workspaceRepository,
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceService>.Instance),
             new InstanceService(instanceRepository, sessionRepository),
+            sessionSourceResolutionService,
             Substitute.For<WeaveFleet.Application.Harnesses.IHarnessRegistry>(),
             new InstanceTracker(),
             sessionRepository,
+            sessionSourceUsageRepository,
             callbackRepository,
             delegationRepository,
             projectRepository,

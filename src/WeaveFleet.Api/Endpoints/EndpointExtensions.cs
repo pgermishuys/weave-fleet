@@ -16,6 +16,7 @@ public static class EndpointExtensions
         app.MapSessionEndpoints();
         app.MapProjectEndpoints();
         app.MapFleetSummaryEndpoints();
+        app.MapSessionSourceEndpoints();
         app.MapConfigEndpoints();
         app.MapDirectoryEndpoints();
         app.MapOpenDirectoryEndpoints();

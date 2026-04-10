@@ -5,6 +5,7 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Plugins;
+using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Analytics;
@@ -15,6 +16,7 @@ using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 using WeaveFleet.Infrastructure.Plugins;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
+using WeaveFleet.Infrastructure.SessionSources;
 using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure;
@@ -54,6 +56,7 @@ public static class DependencyInjection
         // Repositories (scoped — one per request)
         services.AddScoped<IProjectRepository, DapperProjectRepository>();
         services.AddScoped<IWorkspaceRepository, DapperWorkspaceRepository>();
+        services.AddScoped<ISessionSourceUsageRepository, DapperSessionSourceUsageRepository>();
         services.AddScoped<IInstanceRepository, DapperInstanceRepository>();
         services.AddScoped<ISessionRepository, DapperSessionRepository>();
         services.AddScoped<ISessionCallbackRepository, DapperSessionCallbackRepository>();
@@ -67,9 +70,13 @@ public static class DependencyInjection
         services.AddScoped<WorkspaceService>();
         services.AddScoped<WorkspaceRootService>();
         services.AddScoped<InstanceService>();
+        services.AddScoped<SessionSourceResolutionService>();
         services.AddScoped<SessionOrchestrator>();
         services.AddScoped<SessionCallbackService>();
         services.AddScoped<DelegationService>();
+        services.AddScoped<ISessionSourceProvider, LocalDirectorySessionSourceProvider>();
+        services.AddSingleton<ISessionSourceProvider, RepositorySessionSourceProvider>();
+        services.AddSingleton<ISessionSourceProvider, GitHubSessionSourceProvider>();
 
         // ConfigService — singleton, no DB dependency, file-based
         services.AddSingleton<ConfigService>();

@@ -12,7 +12,7 @@ import type {
   AddWorkspaceRootResponse,
 } from "@/lib/api-types";
 
-export function RepositoriesTab() {
+export function WorkspaceRootsTab() {
   const [roots, setRoots] = useState<WorkspaceRootItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [newPath, setNewPath] = useState("");
@@ -94,17 +94,23 @@ export function RepositoriesTab() {
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
+        <h2 className="text-base font-semibold">Local workspace roots</h2>
         <p className="text-sm text-muted-foreground">
-          Configure parent directories to scan for git repositories. Immediate
-          child folders of each directory are checked for a{" "}
+          Workspace roots define the local directories Fleet is allowed to browse
+          for directory-based work and repository discovery. Integrations and
+          non-filesystem session sources are configured separately in the{" "}
+          <span className="font-medium text-foreground">Integrations</span> tab.
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Fleet scans the immediate child folders of each root for a{" "}
           <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">.git</code>{" "}
-          folder.
+          folder when populating repository-based source pickers.
         </p>
       </div>
 
       {/* Current roots */}
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold">Configured directories</h3>
+        <h3 className="text-sm font-semibold">Configured roots</h3>
 
         {isLoading ? (
           <div className="flex items-center gap-2 text-muted-foreground py-4">
@@ -114,7 +120,7 @@ export function RepositoriesTab() {
         ) : roots.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
             <FolderGit2 className="h-8 w-8 mb-2 opacity-40" />
-            <p className="text-sm">No directories configured.</p>
+            <p className="text-sm">No workspace roots configured.</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -166,21 +172,21 @@ export function RepositoriesTab() {
 
       {/* Add directory */}
       <div className="space-y-2">
-        <h3 className="text-sm font-semibold">Add directory</h3>
+        <h3 className="text-sm font-semibold">Add workspace root</h3>
         <div
           className="flex gap-2 items-start"
           onKeyDown={handleKeyDown}
         >
           <div className="flex-1">
-            <DirectoryPicker
-              value={newPath}
-              onChange={(path) => {
-                setNewPath(path);
-                setAddError(null);
-              }}
-              placeholder="/home/user/repos"
-              disabled={isAdding}
-            />
+              <DirectoryPicker
+                value={newPath}
+                onChange={(path) => {
+                  setNewPath(path);
+                  setAddError(null);
+                }}
+                placeholder="/home/user/workspaces"
+                disabled={isAdding}
+              />
           </div>
           <Button
             onClick={() => void handleAdd()}

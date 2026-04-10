@@ -1,6 +1,7 @@
 import { lazy } from "react";
 import { Github } from "lucide-react";
 import type { IntegrationManifest, ContextSource } from "@/integrations/types";
+import type { SessionSourceSelection } from "@/lib/api-types";
 import type {
   GitHubIssue,
   GitHubPullRequest,
@@ -54,28 +55,13 @@ async function resolveContext(url: string): Promise<ContextSource | null> {
 
     if (isPR) {
       const pr = item as GitHubPullRequest;
-      const commentsSummary = comments
-        .map(
-          (c) =>
-            `**@${c.user.login}**: ${c.body}`
-        )
-        .join("\n\n");
-
-      const body = [
-        `# ${pr.title}`,
-        "",
-        pr.body ?? "_No description_",
-        "",
-        comments.length > 0 ? "## Comments\n\n" + commentsSummary : "",
-      ]
-        .join("\n")
-        .trim();
+      const source = buildGitHubSource("github-pull-request", owner, repo, pr.number);
 
       return {
         type: "github-pr",
         url,
         title: pr.title,
-        body,
+        source,
         metadata: {
           owner,
           repo,
@@ -93,28 +79,13 @@ async function resolveContext(url: string): Promise<ContextSource | null> {
       };
     } else {
       const issue = item as GitHubIssue;
-      const commentsSummary = comments
-        .map(
-          (c) =>
-            `**@${c.user.login}**: ${c.body}`
-        )
-        .join("\n\n");
-
-      const body = [
-        `# ${issue.title}`,
-        "",
-        issue.body ?? "_No description_",
-        "",
-        comments.length > 0 ? "## Comments\n\n" + commentsSummary : "",
-      ]
-        .join("\n")
-        .trim();
+      const source = buildGitHubSource("github-issue", owner, repo, issue.number);
 
       return {
         type: "github-issue",
         url,
         title: issue.title,
-        body,
+        source,
         metadata: {
           owner,
           repo,
@@ -128,6 +99,22 @@ async function resolveContext(url: string): Promise<ContextSource | null> {
   } catch {
     return null;
   }
+}
+
+function buildGitHubSource(sourceType: "github-issue" | "github-pull-request", owner: string, repo: string, number: number): SessionSourceSelection {
+  return {
+    key: {
+      providerId: "builtin.github",
+      sourceType,
+      actionId: "add-to-session",
+      contractVersion: 1,
+    },
+    input: {
+      owner,
+      repo,
+      number,
+    },
+  };
 }
 
 export const githubManifest: IntegrationManifest = {

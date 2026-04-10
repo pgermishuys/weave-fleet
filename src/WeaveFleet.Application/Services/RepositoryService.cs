@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Domain.Common;
 
 namespace WeaveFleet.Application.Services;
 
@@ -33,7 +34,7 @@ public sealed partial class RepositoryService(
     /// <summary>Returns metadata for a single repository path.</summary>
     public async Task<RepositoryInfo?> GetRepositoryInfoAsync(string path, CancellationToken ct = default)
     {
-        var normalised = Path.GetFullPath(path);
+        var normalised = WorkspaceRootService.CanonicalizePath(path);
         if (_cache.TryGetValue(normalised, out var cached))
             return cached;
 
@@ -48,19 +49,51 @@ public sealed partial class RepositoryService(
     /// <summary>Returns enriched detail for a single repository (includes branch list, remotes, etc.).</summary>
     public async Task<RepositoryDetail?> GetRepositoryDetailAsync(string path, CancellationToken ct = default)
     {
-        var info = await GetRepositoryInfoAsync(path, ct).ConfigureAwait(false);
+        var normalizedPath = WorkspaceRootService.CanonicalizePath(path);
+        var info = await GetRepositoryInfoAsync(normalizedPath, ct).ConfigureAwait(false);
         if (info is null)
             return null;
 
-        var branches = await RunGitAsync(path, ["branch", "--list", "--sort=-committerdate"], ct).ConfigureAwait(false);
-        var remotes = await RunGitAsync(path, ["remote", "-v"], ct).ConfigureAwait(false);
-        var log = await RunGitAsync(path, ["log", "--oneline", "-10"], ct).ConfigureAwait(false);
+        var branches = await RunGitAsync(normalizedPath, ["branch", "--list", "--sort=-committerdate"], ct).ConfigureAwait(false);
+        var remotes = await RunGitAsync(normalizedPath, ["remote", "-v"], ct).ConfigureAwait(false);
+        var log = await RunGitAsync(normalizedPath, ["log", "--oneline", "-10"], ct).ConfigureAwait(false);
 
         return new RepositoryDetail(
             Info: info,
             Branches: ParseLines(branches),
             Remotes: ParseLines(remotes),
             RecentCommits: ParseLines(log));
+    }
+
+    public async Task<Result<string>> ResolveRepositoryPathAsync(string path, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return FleetError.ValidationError("Repository.Path", "Repository path is required.");
+
+        IReadOnlyList<string> roots;
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var workspaceRootService = scope.ServiceProvider.GetRequiredService<WorkspaceRootService>();
+            roots = await workspaceRootService.GetAllowedRootsAsync().ConfigureAwait(false);
+        }
+
+        string normalizedPath;
+        try
+        {
+            normalizedPath = WorkspaceRootService.CanonicalizePath(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return FleetError.ValidationError("Repository.Path", "Unable to resolve repository path.");
+        }
+
+        if (!WorkspaceRootService.IsPathWithinRoots(normalizedPath, roots))
+            return FleetError.ValidationError("Repository.Path", "Repository path is outside allowed workspace roots.");
+
+        if (!IsGitRepo(normalizedPath))
+            return FleetError.ValidationError("Repository.Path", "Path is not a git repository.");
+
+        return normalizedPath;
     }
 
     /// <summary>Clears the cache and re-scans all workspace roots.</summary>
@@ -82,7 +115,7 @@ public sealed partial class RepositoryService(
                 if (!Directory.Exists(root))
                     continue;
 
-                await ScanDirectoryAsync(root, maxDepth: 3, ct).ConfigureAwait(false);
+                await ScanDirectoryAsync(root, root, maxDepth: 3, ct).ConfigureAwait(false);
             }
 
             _scanned = true;
@@ -96,27 +129,31 @@ public sealed partial class RepositoryService(
 
     // ── Private helpers ────────────────────────────────────────────────────────
 
-    private async Task ScanDirectoryAsync(string directory, int maxDepth, CancellationToken ct)
+    private async Task ScanDirectoryAsync(string directory, string allowedRoot, int maxDepth, CancellationToken ct)
     {
         if (maxDepth <= 0 || ct.IsCancellationRequested)
             return;
 
-        if (IsGitRepo(directory))
+        var canonicalDirectory = WorkspaceRootService.CanonicalizePath(directory);
+        if (!WorkspaceRootService.IsPathWithinRoots(canonicalDirectory, [allowedRoot]))
+            return;
+
+        if (IsGitRepo(canonicalDirectory))
         {
-            var info = await BuildRepositoryInfoAsync(directory, ct).ConfigureAwait(false);
-            _cache[directory] = info;
+            var info = await BuildRepositoryInfoAsync(canonicalDirectory, ct).ConfigureAwait(false);
+            _cache[canonicalDirectory] = info;
             return; // don't recurse into git repos
         }
 
         try
         {
-            foreach (var sub in Directory.EnumerateDirectories(directory))
+            foreach (var sub in Directory.EnumerateDirectories(canonicalDirectory))
             {
                 var name = Path.GetFileName(sub);
                 if (name.StartsWith('.') || name.Equals("node_modules", StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                await ScanDirectoryAsync(sub, maxDepth - 1, ct).ConfigureAwait(false);
+                await ScanDirectoryAsync(sub, allowedRoot, maxDepth - 1, ct).ConfigureAwait(false);
             }
         }
         catch (UnauthorizedAccessException)

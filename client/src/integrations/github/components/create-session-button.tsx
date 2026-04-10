@@ -1,375 +1,187 @@
-
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { useNavigate } from "react-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router";
+import { AlertCircle, Loader2, PlusSquare, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { DirectoryPicker } from "@/components/session/directory-picker";
-import { Loader2, AlertCircle, Rocket, FolderOpen, GitBranch, Copy } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useCreateSession } from "@/hooks/use-create-session";
+import { useAddSourceToSession } from "@/hooks/use-add-source-to-session";
 import { useSessionsContext } from "@/contexts/sessions-context";
-import { usePersistedState } from "@/hooks/use-persisted-state";
-import { useRepositories } from "@/hooks/use-repositories";
+import { NewSessionDialog } from "@/components/session/new-session-dialog";
 import type { ContextSource } from "@/integrations/types";
-import type { ScannedRepository } from "@/lib/api-types";
-
-// ─── Source mode ──────────────────────────────────────────────────────────────
-
-type SourceMode = "repository" | "directory";
-
-const SOURCE_MODE_ORDER: SourceMode[] = ["repository", "directory"];
-
-// ─── Isolation strategies ─────────────────────────────────────────────────────
-
-type RepoIsolationStrategy = "worktree" | "existing";
-
-const REPO_STRATEGY_ORDER: RepoIsolationStrategy[] = ["worktree", "existing"];
-const REPO_STRATEGY_LABELS: Record<RepoIsolationStrategy, string> = {
-  worktree: "Worktree",
-  existing: "Directory",
-};
-const REPO_STRATEGY_DESCRIPTIONS: Record<RepoIsolationStrategy, string> = {
-  worktree: "Creates a git worktree — ideal for parallel work on the same repo.",
-  existing: "Use the repository directory as-is. Simple, no copy or branch.",
-};
-const REPO_STRATEGY_ICONS: Record<RepoIsolationStrategy, typeof FolderOpen> = {
-  worktree: GitBranch,
-  existing: FolderOpen,
-};
-
-type DirIsolationStrategy = "existing" | "clone";
-
-const DIR_STRATEGY_ORDER: DirIsolationStrategy[] = ["existing", "clone"];
-const DIR_STRATEGY_LABELS: Record<DirIsolationStrategy, string> = {
-  existing: "Directory",
-  clone: "Clone",
-};
-const DIR_STRATEGY_DESCRIPTIONS: Record<DirIsolationStrategy, string> = {
-  existing: "Use the directory as-is. Simple, no copy or branch.",
-  clone: "Clones the GitHub repository into a new directory.",
-};
-const DIR_STRATEGY_ICONS: Record<DirIsolationStrategy, typeof FolderOpen> = {
-  existing: FolderOpen,
-  clone: Copy,
-};
-
-// ─── Branch name generation ───────────────────────────────────────────────────
-
-function generateBranchName(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-// ─── Component ────────────────────────────────────────────────────────────────
+import type { SessionListItem, SessionSourcePreview } from "@/lib/api-types";
 
 interface CreateSessionButtonProps {
   contextSource: ContextSource;
   directory?: string;
 }
 
-export function CreateSessionButton({ contextSource, directory: defaultDir }: CreateSessionButtonProps) {
+function getContextLabel(contextSource: ContextSource): string {
+  return contextSource.type === "github-issue" ? "GitHub Issue" : "GitHub PR";
+}
+
+function buildSessionLocation(session: SessionListItem): string {
+  return `/sessions/${encodeURIComponent(session.session.id)}?instanceId=${encodeURIComponent(session.instanceId)}`;
+}
+
+export function CreateSessionButton({ contextSource, directory }: CreateSessionButtonProps) {
+  const { id: currentSessionIdParam } = useParams();
   const navigate = useNavigate();
+  const { sessions, refetch } = useSessionsContext();
+  const { createSession, isLoading: isCreatingSession, error: createError } = useCreateSession();
+  const {
+    previewSource,
+    addSourceToSession,
+    isLoading: isUpdatingSession,
+    error: addError,
+  } = useAddSourceToSession();
   const [open, setOpen] = useState(false);
-  const [directory, setDirectory] = usePersistedState("weave:new-session:lastDirectory", defaultDir ?? "");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>("");
+  const [preview, setPreview] = useState<SessionSourcePreview | null>(null);
+  const [previewedSessionId, setPreviewedSessionId] = useState<string | null>(null);
 
-  // Title — pre-filled from context, user can override
-  const [titleOverride, setTitleOverride] = useState<string | null>(null);
-  const title = titleOverride ?? contextSource.title;
+  const availableSessions = useMemo(
+    () => sessions.filter((session) =>
+      session.retentionStatus !== "archived"
+      && session.typedInstanceStatus === "running"
+      && session.lifecycleStatus === "running"
+    ),
+    [sessions]
+  );
 
-  // Load scanned repositories
-  const { repositories, isLoading: reposLoading, refresh: refreshRepos } = useRepositories();
-  const hasRepos = repositories.length > 0;
+  const currentSessionId = currentSessionIdParam ? decodeURIComponent(currentSessionIdParam) : "";
+  const selectedSession = useMemo(
+    () => availableSessions.find((session) => session.session.id === selectedSessionId) ?? null,
+    [availableSessions, selectedSessionId]
+  );
+  const preferredSession = useMemo(
+    () => availableSessions.find((session) => session.session.id === currentSessionId) ?? availableSessions[0] ?? null,
+    [availableSessions, currentSessionId]
+  );
 
-  // Re-fetch repositories each time the dialog opens
   useEffect(() => {
-    if (open) {
-      void refreshRepos();
-    }
-  }, [open, refreshRepos]);
-
-  // Source mode
-  const [sourceMode, setSourceMode] = useState<SourceMode>("directory");
-
-  // Repository-mode state
-  const [selectedRepo, setSelectedRepo] = useState<ScannedRepository | null>(null);
-  const [repoSearch, setRepoSearch] = useState("");
-  const [repoDropdownOpen, setRepoDropdownOpen] = useState(false);
-  const [repoHighlightIdx, setRepoHighlightIdx] = useState(0);
-  const repoInputRef = useRef<HTMLInputElement>(null);
-  const repoListRef = useRef<HTMLDivElement>(null);
-  const [repoStrategy, setRepoStrategy] = useState<RepoIsolationStrategy>("worktree");
-
-  // Directory-mode state
-  const [dirStrategy, setDirStrategy] = useState<DirIsolationStrategy>("existing");
-
-  // Branch
-  const [branch, setBranch] = useState("");
-  const [branchManuallyEdited, setBranchManuallyEdited] = useState(false);
-
-  const { createSession, isLoading, error } = useCreateSession();
-  const { refetch } = useSessionsContext();
-
-  // ── Auto-matching: set initial source mode + repo once repos load ────────
-
-  const sourceModeInitialized = useRef(false);
-  useEffect(() => {
-    if (!open) return;
-    if (reposLoading) return;
-    if (sourceModeInitialized.current) return;
-    sourceModeInitialized.current = true;
-
-    const ghRepo = contextSource.metadata.repo as string | undefined;
-
-    if (defaultDir) {
-      // Explicit directory prop → directory mode
-      queueMicrotask(() => setSourceMode("directory"));
+    if (!open) {
       return;
     }
 
-    if (!hasRepos) {
-      queueMicrotask(() => setSourceMode("directory"));
+    if (selectedSessionId && availableSessions.some((session) => session.session.id === selectedSessionId)) {
       return;
     }
 
-    // Try to find a matching scanned repo by name
-    const matchedRepo = ghRepo
-      ? repositories.find((r) => r.name.toLowerCase() === ghRepo.toLowerCase())
-      : null;
+    setSelectedSessionId(preferredSession?.session.id ?? "");
+  }, [availableSessions, open, preferredSession, selectedSessionId]);
 
-    queueMicrotask(() => {
-      setSourceMode("repository");
-      if (matchedRepo) {
-        setSelectedRepo(matchedRepo);
-        setRepoSearch(matchedRepo.name);
-      }
-    });
-  }, [open, reposLoading, hasRepos, repositories, contextSource.metadata, defaultDir]);
-
-  // Auto-generate initial branch from context title
   useEffect(() => {
-    if (open && !branchManuallyEdited) {
-      queueMicrotask(() => setBranch(generateBranchName(contextSource.title)));
+    if (!open || !selectedSessionId) {
+      return;
     }
-  }, [open, contextSource.title, branchManuallyEdited]);
 
-  // ── Filtered repos ──────────────────────────────────────────────────────
-
-  const filteredRepos = useMemo(() => {
-    if (!repoSearch.trim()) return repositories;
-    const q = repoSearch.toLowerCase();
-    return repositories.filter(
-      (r) => r.name.toLowerCase().includes(q) || r.path.toLowerCase().includes(q)
-    );
-  }, [repositories, repoSearch]);
-
-  // Scroll highlighted item into view
-  useEffect(() => {
-    if (repoDropdownOpen && repoListRef.current) {
-      const items = repoListRef.current.children;
-      const highlighted = items[repoHighlightIdx] as HTMLElement | undefined;
-      highlighted?.scrollIntoView({ block: "nearest" });
+    if (previewedSessionId === selectedSessionId) {
+      return;
     }
-  }, [repoHighlightIdx, repoDropdownOpen]);
 
-  // ── Repo selector callbacks ─────────────────────────────────────────────
+    let cancelled = false;
+    setPreview(null);
 
-  const selectRepo = useCallback((repo: ScannedRepository) => {
-    setSelectedRepo(repo);
-    setRepoSearch(repo.name);
-    setRepoDropdownOpen(false);
-  }, []);
-
-  const handleRepoBlur = useCallback(() => {
-    setTimeout(() => {
-      if (filteredRepos.length === 1) {
-        selectRepo(filteredRepos[0]);
-      } else if (selectedRepo && repoSearch !== selectedRepo.name) {
-        const stillMatches = filteredRepos.find((r) => r.path === selectedRepo.path);
-        if (stillMatches) {
-          setRepoSearch(selectedRepo.name);
-        } else {
-          setSelectedRepo(null);
+    void previewSource(selectedSessionId, contextSource.source)
+      .then((nextPreview) => {
+        if (cancelled) {
+          return;
         }
-      } else if (!selectedRepo && filteredRepos.length > 0) {
-        const highlighted = filteredRepos[repoHighlightIdx];
-        if (highlighted) selectRepo(highlighted);
-      }
-      setRepoDropdownOpen(false);
-    }, 150);
-  }, [filteredRepos, selectedRepo, repoSearch, repoHighlightIdx, selectRepo]);
 
-  const handleRepoKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (!repoDropdownOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-        setRepoDropdownOpen(true);
-        e.preventDefault();
-        return;
-      }
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setRepoHighlightIdx((i) => Math.min(i + 1, filteredRepos.length - 1));
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setRepoHighlightIdx((i) => Math.max(i - 1, 0));
-      } else if (e.key === "Enter" && repoDropdownOpen) {
-        e.preventDefault();
-        const highlighted = filteredRepos[repoHighlightIdx];
-        if (highlighted) selectRepo(highlighted);
-      } else if (e.key === "Escape") {
-        setRepoDropdownOpen(false);
-      } else if (e.key === "Tab" && repoDropdownOpen) {
-        const highlighted = filteredRepos[repoHighlightIdx];
-        if (highlighted) selectRepo(highlighted);
-      }
-    },
-    [repoDropdownOpen, filteredRepos, repoHighlightIdx, selectRepo]
-  );
+        setPreview(nextPreview);
+        setPreviewedSessionId(selectedSessionId);
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
 
-  // ── Title + branch change handlers ──────────────────────────────────────
+        setPreviewedSessionId(null);
+      });
 
-  const handleTitleChange = (value: string) => {
-    setTitleOverride(value);
-    if (sourceMode === "repository" && repoStrategy === "worktree" && !branchManuallyEdited) {
-      setBranch(generateBranchName(value));
+    return () => {
+      cancelled = true;
+    };
+  }, [contextSource.source, open, previewSource, previewedSessionId, selectedSessionId]);
+
+  const error = createError ?? addError;
+  const isBusy = isCreatingSession || isUpdatingSession;
+
+  const resetState = useCallback((nextOpen: boolean) => {
+    setOpen(nextOpen);
+
+    if (!nextOpen) {
+      setPreview(null);
+      setPreviewedSessionId(null);
     }
-  };
-
-  const handleBranchChange = (value: string) => {
-    setBranch(value);
-    setBranchManuallyEdited(true);
-  };
-
-  // ── Keyboard handlers for radio groups ──────────────────────────────────
-
-  const handleSourceModeKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      const idx = SOURCE_MODE_ORDER.indexOf(sourceMode);
-      let next: number | null = null;
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
-        next = (idx + 1) % SOURCE_MODE_ORDER.length;
-      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-        next = (idx - 1 + SOURCE_MODE_ORDER.length) % SOURCE_MODE_ORDER.length;
-      }
-      if (next !== null) {
-        const nextMode = SOURCE_MODE_ORDER[next];
-        if (nextMode === "repository" && !hasRepos) return;
-        e.preventDefault();
-        setSourceMode(nextMode);
-        const container = e.currentTarget;
-        const buttons = container.querySelectorAll<HTMLButtonElement>("[role=radio]");
-        buttons[next]?.focus();
-      }
-    },
-    [sourceMode, hasRepos]
-  );
-
-  const handleRepoStrategyKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      const idx = REPO_STRATEGY_ORDER.indexOf(repoStrategy);
-      let next: number | null = null;
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
-        next = (idx + 1) % REPO_STRATEGY_ORDER.length;
-      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-        next = (idx - 1 + REPO_STRATEGY_ORDER.length) % REPO_STRATEGY_ORDER.length;
-      }
-      if (next !== null) {
-        e.preventDefault();
-        setRepoStrategy(REPO_STRATEGY_ORDER[next]);
-        const container = e.currentTarget;
-        const buttons = container.querySelectorAll<HTMLButtonElement>("[role=radio]");
-        buttons[next]?.focus();
-      }
-    },
-    [repoStrategy]
-  );
-
-  const handleDirStrategyKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      const idx = DIR_STRATEGY_ORDER.indexOf(dirStrategy);
-      let next: number | null = null;
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
-        next = (idx + 1) % DIR_STRATEGY_ORDER.length;
-      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-        next = (idx - 1 + DIR_STRATEGY_ORDER.length) % DIR_STRATEGY_ORDER.length;
-      }
-      if (next !== null) {
-        e.preventDefault();
-        setDirStrategy(DIR_STRATEGY_ORDER[next]);
-        const container = e.currentTarget;
-        const buttons = container.querySelectorAll<HTMLButtonElement>("[role=radio]");
-        buttons[next]?.focus();
-      }
-    },
-    [dirStrategy]
-  );
-
-  // ── Effective values for submission ─────────────────────────────────────
-
-  const effectiveDirectory = sourceMode === "repository"
-    ? selectedRepo?.path ?? ""
-    : directory.trim();
-
-  const effectiveIsolation = sourceMode === "repository" ? repoStrategy : dirStrategy;
-
-  const effectiveBranch =
-    sourceMode === "repository" && repoStrategy === "worktree" && branch.trim()
-      ? branch.trim()
-      : undefined;
-
-  // ── Submit ──────────────────────────────────────────────────────────────
-
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!effectiveDirectory || isLoading) return;
-      try {
-        const { instanceId, session } = await createSession(effectiveDirectory, {
-          title: title.trim() || contextSource.title,
-          isolationStrategy: effectiveIsolation,
-          branch: effectiveBranch,
-          context: contextSource,
-        });
-        setOpen(false);
-        refetch();
-        navigate(
-          `/sessions/${encodeURIComponent(session.id)}?instanceId=${encodeURIComponent(instanceId)}`
-        );
-      } catch {
-        // error is set by useCreateSession
-      }
-    },
-    [effectiveDirectory, isLoading, title, effectiveIsolation, effectiveBranch, contextSource, createSession, refetch, navigate]
-  );
-
-  // ── Open/close management ───────────────────────────────────────────────
-
-  const handleOpenChange = useCallback((value: boolean) => {
-    if (!value) {
-      setTitleOverride(null);
-      setSelectedRepo(null);
-      setRepoSearch("");
-      setRepoDropdownOpen(false);
-      setRepoStrategy("worktree");
-      setDirStrategy("existing");
-      setBranch("");
-      setBranchManuallyEdited(false);
-      sourceModeInitialized.current = false;
-    }
-    setOpen(value);
   }, []);
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  const handleStartFromSource = useCallback(async () => {
+    if (!directory || isBusy) {
+      setPickerOpen(true);
+      return;
+    }
+
+    try {
+      const { instanceId, session } = await createSession(directory, {
+        title: contextSource.title,
+      });
+
+      await addSourceToSession(session.id, contextSource.source, true);
+
+      resetState(false);
+      refetch();
+      navigate(`/sessions/${encodeURIComponent(session.id)}?instanceId=${encodeURIComponent(instanceId)}`);
+    } catch {
+      // handled by hook state
+    }
+  }, [addSourceToSession, contextSource.source, contextSource.title, createSession, directory, isBusy, navigate, refetch, resetState]);
+
+  const handleAddToSession = useCallback(async () => {
+    if (!selectedSessionId || !preview || isBusy) {
+      return;
+    }
+
+    try {
+      await addSourceToSession(selectedSessionId, contextSource.source, true);
+      refetch();
+      if (selectedSession) {
+        navigate(buildSessionLocation(selectedSession));
+      }
+      resetState(false);
+    } catch {
+      // handled by hook state
+    }
+  }, [addSourceToSession, contextSource.source, isBusy, navigate, preview, refetch, resetState, selectedSession, selectedSessionId]);
+
+  const handleRetryPreview = useCallback(async () => {
+    if (!selectedSessionId || isBusy) {
+      return;
+    }
+
+    try {
+      const nextPreview = await previewSource(selectedSessionId, contextSource.source);
+      setPreview(nextPreview);
+      setPreviewedSessionId(selectedSessionId);
+    } catch {
+      setPreviewedSessionId(null);
+    }
+  }, [contextSource.source, isBusy, previewSource, selectedSessionId]);
 
   return (
     <>
@@ -377,302 +189,173 @@ export function CreateSessionButton({ contextSource, directory: defaultDir }: Cr
         size="xs"
         variant="outline"
         className="gap-1"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen(true);
+        onClick={(event) => {
+          event.stopPropagation();
+          resetState(true);
         }}
       >
         <Rocket className="h-3 w-3" />
         Create Session
       </Button>
 
-      <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="sm:max-w-md top-[10%] translate-y-0">
+      <Dialog open={open} onOpenChange={resetState}>
+        <DialogContent className="sm:max-w-xl top-[10%] translate-y-0">
           <DialogHeader>
             <DialogTitle>Create Session From Context</DialogTitle>
+            <DialogDescription>
+              Launch a new session through the shared source flow or preview this GitHub context before adding it to an existing session.
+            </DialogDescription>
           </DialogHeader>
 
-          {/* Context badge */}
           <div className="mb-2">
-            <Badge variant="secondary" className="text-xs gap-1">
-              {contextSource.type === "github-issue" ? "GitHub Issue" : "GitHub PR"}
+            <Badge variant="secondary" className="gap-1 text-xs">
+              {getContextLabel(contextSource)}
             </Badge>
-            <p className="text-xs text-muted-foreground mt-1 truncate">
-              {contextSource.url}
-            </p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">{contextSource.url}</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Source Mode: Repository or Directory */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" id="ctx-source-mode-label">
-                Source
-              </label>
-              <div
-                className="flex gap-1"
-                role="radiogroup"
-                aria-labelledby="ctx-source-mode-label"
-                onKeyDown={handleSourceModeKeyDown}
-              >
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={sourceMode === "repository"}
-                  tabIndex={sourceMode === "repository" ? 0 : -1}
-                  onClick={() => hasRepos && setSourceMode("repository")}
-                  disabled={isLoading || !hasRepos}
-                  title={!hasRepos ? "No repositories scanned — configure workspace roots in Settings" : undefined}
-                  className={`flex-1 flex flex-col items-center justify-center rounded-md border px-3 py-2 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                    sourceMode === "repository"
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-input bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  }`}
-                >
-                  <GitBranch className="h-4 w-4" />
-                  <span className="text-xs mt-1">Repository</span>
-                </button>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={sourceMode === "directory"}
-                  tabIndex={sourceMode === "directory" ? 0 : -1}
-                  onClick={() => setSourceMode("directory")}
-                  disabled={isLoading}
-                  className={`flex-1 flex flex-col items-center justify-center rounded-md border px-3 py-2 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                    sourceMode === "directory"
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-input bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  }`}
-                >
-                  <FolderOpen className="h-4 w-4" />
-                  <span className="text-xs mt-1">Directory</span>
-                </button>
-              </div>
-            </div>
-
-            {/* ── Repository mode fields ──────────────────────────────── */}
-            {sourceMode === "repository" && (
-              <>
-                {/* Repository selector — type-ahead filter */}
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium" htmlFor="ctx-repo-select">
-                    Repository
-                  </label>
-                  <div className="relative">
-                    <Input
-                      ref={repoInputRef}
-                      id="ctx-repo-select"
-                      value={repoSearch}
-                      onChange={(e) => {
-                        setRepoSearch(e.target.value);
-                        setRepoDropdownOpen(true);
-                        setRepoHighlightIdx(0);
-                        if (selectedRepo && e.target.value !== selectedRepo.name) {
-                          setSelectedRepo(null);
-                        }
-                      }}
-                      onFocus={() => setRepoDropdownOpen(true)}
-                      onBlur={handleRepoBlur}
-                      onKeyDown={handleRepoKeyDown}
-                      placeholder="Type to filter repositories…"
-                      disabled={isLoading}
-                      autoComplete="off"
-                    />
-                    {repoDropdownOpen && filteredRepos.length > 0 && (
-                      <div
-                        ref={repoListRef}
-                        className="absolute z-50 mt-1 w-full max-h-48 overflow-auto rounded-md border border-input bg-popover shadow-md thin-scrollbar"
-                      >
-                        {filteredRepos.map((repo, idx) => (
-                          <button
-                            key={repo.path}
-                            type="button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              selectRepo(repo);
-                            }}
-                            onMouseEnter={() => setRepoHighlightIdx(idx)}
-                            className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-                              idx === repoHighlightIdx
-                                ? "bg-accent text-accent-foreground"
-                                : "text-popover-foreground hover:bg-accent/50"
-                            } ${selectedRepo?.path === repo.path ? "font-medium" : ""}`}
-                          >
-                            <div className="font-mono text-xs">{repo.name}</div>
-                            <div className="text-[10px] text-muted-foreground truncate">{repo.path}</div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {repoDropdownOpen && repoSearch.trim() && filteredRepos.length === 0 && (
-                      <div className="absolute z-50 mt-1 w-full rounded-md border border-input bg-popover shadow-md px-3 py-2">
-                        <p className="text-xs text-muted-foreground">No matching repositories.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Isolation Strategy — repo mode */}
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium" id="ctx-repo-strategy-label">
-                    Isolation Strategy
-                  </label>
-                  <div
-                    className="flex gap-1"
-                    role="radiogroup"
-                    aria-labelledby="ctx-repo-strategy-label"
-                    onKeyDown={handleRepoStrategyKeyDown}
-                  >
-                    {REPO_STRATEGY_ORDER.map((s) => {
-                      const Icon = REPO_STRATEGY_ICONS[s];
-                      const isActive = repoStrategy === s;
-                      return (
-                        <button
-                          key={s}
-                          type="button"
-                          role="radio"
-                          aria-checked={isActive}
-                          tabIndex={isActive ? 0 : -1}
-                          onClick={() => setRepoStrategy(s)}
-                          disabled={isLoading}
-                          className={`flex-1 flex flex-col items-center justify-center rounded-md border px-3 py-2 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                            isActive
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-input bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                          }`}
-                        >
-                          <Icon className="h-4 w-4" />
-                          <span className="text-xs mt-1">{REPO_STRATEGY_LABELS[s]}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {REPO_STRATEGY_DESCRIPTIONS[repoStrategy]}
-                  </p>
-                </div>
-              </>
-            )}
-
-            {/* ── Directory mode fields ──────────────────────────────── */}
-            {sourceMode === "directory" && (
-              <>
-                {/* Isolation Strategy — directory mode */}
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium" id="ctx-dir-strategy-label">
-                    Isolation Strategy
-                  </label>
-                  <div
-                    className="flex gap-1"
-                    role="radiogroup"
-                    aria-labelledby="ctx-dir-strategy-label"
-                    onKeyDown={handleDirStrategyKeyDown}
-                  >
-                    {DIR_STRATEGY_ORDER.map((s) => {
-                      const Icon = DIR_STRATEGY_ICONS[s];
-                      const isActive = dirStrategy === s;
-                      return (
-                        <button
-                          key={s}
-                          type="button"
-                          role="radio"
-                          aria-checked={isActive}
-                          tabIndex={isActive ? 0 : -1}
-                          onClick={() => setDirStrategy(s)}
-                          disabled={isLoading}
-                          className={`flex-1 flex flex-col items-center justify-center rounded-md border px-3 py-2 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                            isActive
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-input bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                          }`}
-                        >
-                          <Icon className="h-4 w-4" />
-                          <span className="text-xs mt-1">{DIR_STRATEGY_LABELS[s]}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {DIR_STRATEGY_DESCRIPTIONS[dirStrategy]}
-                  </p>
-                </div>
-
-                {/* Directory picker */}
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium" htmlFor="ctx-directory">
-                    Project Directory
-                  </label>
-                  <DirectoryPicker
-                    id="ctx-directory"
-                    value={directory}
-                    onChange={setDirectory}
-                    placeholder="/path/to/project"
-                    disabled={isLoading}
-                  />
-                </div>
-              </>
-            )}
-
-            {/* Title — always shown */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium" htmlFor="ctx-title">
-                Title
-              </label>
-              <Input
-                id="ctx-title"
-                value={title}
-                onChange={(e) => handleTitleChange(e.target.value)}
-                placeholder={contextSource.title}
-                disabled={isLoading}
-              />
-            </div>
-
-            {/* Branch name — only for repository + worktree */}
-            {sourceMode === "repository" && repoStrategy === "worktree" && (
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium" htmlFor="ctx-branch">
-                  Branch{" "}
-                  <span className="text-muted-foreground font-normal">(optional)</span>
-                </label>
-                <Input
-                  id="ctx-branch"
-                  value={branch}
-                  onChange={(e) => handleBranchChange(e.target.value)}
-                  placeholder="feature/my-branch"
-                  disabled={isLoading}
-                />
+          <div className="space-y-4">
+            <div className="space-y-2 rounded-md border px-3 py-3">
+              <div>
+                <p className="text-sm font-medium">Start a new session</p>
                 <p className="text-xs text-muted-foreground">
-                  {branchManuallyEdited
-                    ? "A unique branch name will be generated if left blank."
-                    : "Auto-generated from title. Edit to override."}
+                  Use the shared workspace source host. GitHub stays context-only; Fleet chooses the workspace source.
                 </p>
               </div>
-            )}
 
-            {error && (
-              <div className="flex items-start gap-2 rounded-md bg-red-500/10 border border-red-500/20 px-3 py-2 text-xs text-red-600 dark:text-red-400">
-                <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button onClick={() => setPickerOpen(true)} variant="outline" className="sm:flex-1" disabled={isBusy}>
+                  <PlusSquare className="mr-2 h-4 w-4" />
+                  Choose Workspace Source
+                </Button>
+                <Button
+                  onClick={() => void handleStartFromSource()}
+                  disabled={isBusy}
+                  className="weave-gradient-bg hover:opacity-90 border-0 sm:flex-1"
+                >
+                  {isCreatingSession ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating…
+                    </>
+                  ) : directory ? (
+                    "Use Current Directory"
+                  ) : (
+                    "Quick Start Unavailable"
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-md border px-3 py-3">
+              <div>
+                <p className="text-sm font-medium">Add to existing session</p>
+                <p className="text-xs text-muted-foreground">
+                  Fleet previews backend-resolved content before it is added to a session.
+                </p>
+              </div>
+
+              {availableSessions.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium" htmlFor="github-target-session">
+                      Target session
+                    </label>
+                    <Select
+                      value={selectedSessionId}
+                      onValueChange={(value) => {
+                        setSelectedSessionId(value);
+                        setPreview(null);
+                        setPreviewedSessionId(null);
+                      }}
+                      disabled={isBusy}
+                    >
+                      <SelectTrigger id="github-target-session" className="w-full">
+                        <SelectValue placeholder="Choose a session" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableSessions.map((session) => (
+                          <SelectItem key={session.session.id} value={session.session.id}>
+                            {session.session.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2 rounded-md bg-muted/40 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Preview
+                      </p>
+                      {isUpdatingSession && !preview ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Loading preview…
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {preview ? (
+                      <>
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <Badge variant="outline">{preview.originLabel}</Badge>
+                          <span>{preview.characterCount.toLocaleString()} chars</span>
+                          {preview.isTruncated ? <span>Truncated before add</span> : null}
+                        </div>
+                        <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded border bg-background p-3 text-xs">
+                          {preview.content}
+                        </pre>
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {selectedSessionId
+                          ? "Preview will load before confirmation."
+                          : "Choose a target session to preview this source."}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <Button variant="outline" onClick={() => void handleRetryPreview()} disabled={!selectedSessionId || isBusy}>
+                      Retry Preview
+                    </Button>
+                    <Button onClick={() => void handleAddToSession()} disabled={!preview || isBusy}>
+                      {isUpdatingSession && preview ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Adding…
+                        </>
+                      ) : (
+                        "Add to Session"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No running sessions available. Start or resume a session first, then add this GitHub context.
+                </p>
+              )}
+            </div>
+
+            {error ? (
+              <div className="flex items-start gap-2 rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>{error}</span>
               </div>
-            )}
-
-            <Button
-              type="submit"
-              className="w-full weave-gradient-bg hover:opacity-90 border-0"
-              disabled={!effectiveDirectory || isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Creating…
-                </>
-              ) : (
-                "Create Session"
-              )}
-            </Button>
-          </form>
+            ) : null}
+          </div>
         </DialogContent>
       </Dialog>
+
+      <NewSessionDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        defaultDirectory={directory}
+        initialSource={contextSource.source}
+        initialTitle={contextSource.title}
+      />
     </>
   );
 }

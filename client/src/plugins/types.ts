@@ -68,6 +68,26 @@ export interface FleetPluginContextResolver {
   resolveContext: (url: string) => Promise<ContextSource | null>;
 }
 
+export interface FleetPluginSessionSourceKey {
+  providerId: string;
+  sourceType: string;
+}
+
+export interface FleetPluginSessionSourceFormProps {
+  providerId: string;
+  sourceType: string;
+}
+
+export interface FleetPluginSessionSourceContribution {
+  id: string;
+  sourceKey: FleetPluginSessionSourceKey;
+  label?: string;
+  description?: string;
+  icon?: ComponentType<{ className?: string; size?: number }>;
+  order?: number;
+  formComponent?: ComponentType<FleetPluginSessionSourceFormProps>;
+}
+
 export interface FleetPluginContributions {
   sidebarItems?: readonly FleetPluginSidebarItem[];
   sidebarPanels?: readonly FleetPluginSidebarPanel[];
@@ -75,6 +95,7 @@ export interface FleetPluginContributions {
   settingsSections?: readonly FleetPluginSettingsSection[];
   startupHooks?: readonly FleetPluginStartupHook[];
   contextResolvers?: readonly FleetPluginContextResolver[];
+  sessionSources?: readonly FleetPluginSessionSourceContribution[];
 }
 
 export interface FleetPluginManifest {

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
@@ -20,6 +21,13 @@ public sealed partial class WorkspaceService(
         string sourceDirectory,
         string strategy = "existing",
         string? branch = null)
+        => await CreateWorkspaceAsync(sourceDirectory, strategy, branch, provenance: null);
+
+    public async Task<Result<Workspace>> CreateWorkspaceAsync(
+        string sourceDirectory,
+        string strategy,
+        string? branch,
+        ProvenanceRecord? provenance)
     {
         string workingDirectory;
 
@@ -45,7 +53,14 @@ public sealed partial class WorkspaceService(
             SourceDirectory = strategy == "existing" ? null : sourceDirectory,
             IsolationStrategy = strategy,
             Branch = branch,
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            SourceProviderId = provenance?.ProviderId,
+            SourceType = provenance?.SourceType,
+            SourceResourceId = provenance?.ResourceId,
+            SourceResourceUrl = provenance?.ResourceUrl,
+            SourceTitle = provenance?.Title,
+            SourceSummary = provenance?.Summary,
+            SourceResolvedAt = provenance?.ResolvedAt
         };
 
         await workspaceRepository.InsertAsync(workspace);

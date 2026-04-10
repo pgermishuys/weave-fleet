@@ -8,6 +8,8 @@ public static class WorkspaceRootEndpoints
     {
         var group = app.MapGroup("/api").WithTags("WorkspaceRoots");
 
+        // Workspace roots are local allowed-root inputs used for directory browsing and
+        // repository discovery. Integration-backed session sources are configured elsewhere.
         group.MapGet("/workspace-roots", async (WorkspaceRootService svc) =>
         {
             var roots = await svc.ListRootsAsync();

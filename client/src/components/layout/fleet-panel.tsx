@@ -155,7 +155,7 @@ export function FleetPanel() {
           <TooltipTrigger asChild>
             <span className="shrink-0">
               <NewSessionDialog
-                defaultDirectory={currentDirectory}
+                defaultDirectory={currentDirectory ?? undefined}
                 userProjects={userProjects}
                 trigger={
                   <button

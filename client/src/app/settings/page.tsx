@@ -8,13 +8,13 @@ import { AboutTab } from "@/components/settings/about-tab";
 import { KeybindingsTab } from "@/components/settings/keybindings-tab";
 import { AppearanceTab } from "@/components/settings/appearance-tab";
 import { IntegrationsTab } from "@/components/settings/integrations-tab";
-import { RepositoriesTab } from "@/components/settings/repositories-tab";
+import { WorkspaceRootsTab } from "@/components/settings/repositories-tab";
 import { HarnessesTab } from "@/components/settings/harnesses-tab";
 
 export default function SettingsPage() {
   return (
     <div className="flex flex-col h-full">
-      <Header title="Settings" subtitle="Manage skills, agents, providers, keybindings, and configuration" />
+      <Header title="Settings" subtitle="Manage skills, agents, providers, workspace roots, integrations, and configuration" />
       <div className="flex-1 overflow-auto p-3 sm:p-4 lg:p-6">
         <Tabs defaultValue="skills">
           <TabsList variant="line">
@@ -25,7 +25,7 @@ export default function SettingsPage() {
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
             <TabsTrigger value="harnesses">Harnesses</TabsTrigger>
             <TabsTrigger value="integrations">Integrations</TabsTrigger>
-            <TabsTrigger value="repositories">Repositories</TabsTrigger>
+            <TabsTrigger value="repositories">Workspace Roots</TabsTrigger>
             <TabsTrigger value="about">About</TabsTrigger>
           </TabsList>
           <TabsContent value="skills" className="mt-4">
@@ -50,7 +50,7 @@ export default function SettingsPage() {
             <IntegrationsTab />
           </TabsContent>
           <TabsContent value="repositories" className="mt-4">
-            <RepositoriesTab />
+            <WorkspaceRootsTab />
           </TabsContent>
           <TabsContent value="about" className="mt-4">
             <AboutTab />

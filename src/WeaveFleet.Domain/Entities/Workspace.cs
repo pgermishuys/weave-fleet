@@ -13,4 +13,11 @@ public sealed class Workspace
     public string CreatedAt { get; set; } = string.Empty;
     public string? CleanedUpAt { get; set; }
     public string? DisplayName { get; set; }
+    public string? SourceProviderId { get; set; }
+    public string? SourceType { get; set; }
+    public string? SourceResourceId { get; set; }
+    public string? SourceResourceUrl { get; set; }
+    public string? SourceTitle { get; set; }
+    public string? SourceSummary { get; set; }
+    public string? SourceResolvedAt { get; set; }
 }

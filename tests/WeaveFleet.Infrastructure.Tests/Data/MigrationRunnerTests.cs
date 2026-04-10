@@ -38,6 +38,7 @@ public sealed class MigrationRunnerTests
         tables.ShouldContain("instances");
         tables.ShouldContain("sessions");
         tables.ShouldContain("session_callbacks");
+        tables.ShouldContain("session_source_usages");
         tables.ShouldContain("workspace_roots");
         tables.ShouldContain("_migrations");
     }
@@ -69,6 +70,49 @@ public sealed class MigrationRunnerTests
 
         columns.ShouldContainKey("archived_at");
         columns["archived_at"].Type.ShouldBe("TEXT");
+    }
+
+    [Fact]
+    public async Task ApplyMigrationsAsync_AddsWorkspaceSourceMetadataAndUsageTable()
+    {
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+        var runner = CreateRunner(factory);
+
+        await runner.ApplyMigrationsAsync(conn);
+
+        var workspaceColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var command = conn.CreateCommand())
+        {
+            command.CommandText = "PRAGMA table_info(workspaces);";
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                workspaceColumns.Add(reader.GetString(reader.GetOrdinal("name")));
+        }
+
+        workspaceColumns.ShouldContain("source_provider_id");
+        workspaceColumns.ShouldContain("source_type");
+        workspaceColumns.ShouldContain("source_resource_id");
+        workspaceColumns.ShouldContain("source_resource_url");
+        workspaceColumns.ShouldContain("source_title");
+        workspaceColumns.ShouldContain("source_summary");
+        workspaceColumns.ShouldContain("source_resolved_at");
+
+        var usageColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var command = conn.CreateCommand())
+        {
+            command.CommandText = "PRAGMA table_info(session_source_usages);";
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                usageColumns.Add(reader.GetString(reader.GetOrdinal("name")));
+        }
+
+        usageColumns.ShouldContain("session_id");
+        usageColumns.ShouldContain("workspace_id");
+        usageColumns.ShouldContain("provider_id");
+        usageColumns.ShouldContain("source_type");
+        usageColumns.ShouldContain("action_id");
+        usageColumns.ShouldContain("summary");
     }
 
     [Fact]

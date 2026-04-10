@@ -5,7 +5,7 @@ using WeaveFleet.Domain.Repositories;
 namespace WeaveFleet.Application.Services;
 
 /// <summary>
-/// Manages user-configurable workspace root directories.
+/// Manages user-configurable workspace roots for local browsing and repository discovery.
 /// Combines DB-persisted roots with those supplied via the FLEET_WORKSPACE_ROOTS env var.
 /// </summary>
 public sealed class WorkspaceRootService(IWorkspaceRootRepository workspaceRootRepository)
@@ -13,7 +13,7 @@ public sealed class WorkspaceRootService(IWorkspaceRootRepository workspaceRootR
     private const string EnvVar = "FLEET_WORKSPACE_ROOTS";
 
     /// <summary>
-    /// Returns all workspace roots: DB-persisted roots merged with env-var roots.
+    /// Returns all workspace roots used for local source discovery: DB-persisted roots merged with env-var roots.
     /// Each root is augmented with an <c>exists</c> flag checked at call time.
     /// </summary>
     public async Task<IReadOnlyList<WorkspaceRoot>> ListRootsAsync()
@@ -47,17 +47,20 @@ public sealed class WorkspaceRootService(IWorkspaceRootRepository workspaceRootR
     /// </summary>
     public async Task<Result<WorkspaceRoot>> AddRootAsync(string path)
     {
-        if (!Directory.Exists(path))
-            return FleetError.ValidationError("Path", $"Path does not exist: {path}");
+        var normalizedResult = NormalizeExistingDirectory(path);
+        if (normalizedResult.IsFailure)
+            return normalizedResult.Error;
 
-        var existing = await workspaceRootRepository.GetByPathAsync(path);
+        var normalizedPath = normalizedResult.Value;
+
+        var existing = await workspaceRootRepository.GetByPathAsync(normalizedPath);
         if (existing is not null)
-            return FleetError.ValidationError("Path", $"Path is already registered: {path}");
+            return FleetError.ValidationError("Path", $"Path is already registered: {normalizedPath}");
 
         var root = new WorkspaceRoot
         {
             Id = Guid.NewGuid().ToString(),
-            Path = path,
+            Path = normalizedPath,
             CreatedAt = DateTime.UtcNow.ToString("O")
         };
 
@@ -82,15 +85,95 @@ public sealed class WorkspaceRootService(IWorkspaceRootRepository workspaceRootR
     }
 
     /// <summary>
-    /// Returns all allowed root paths (union of DB + env) for path-validation purposes.
+    /// Returns all allowed local source roots (union of DB + env) for path-validation purposes.
     /// </summary>
     public async Task<IReadOnlyList<string>> GetAllowedRootsAsync()
     {
         var roots = await ListRootsAsync();
-        return roots.Select(r => r.Path).ToList();
+        return roots
+            .Select(root => CanonicalizePath(root.Path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public async Task<Result<string>> ResolvePathWithinAllowedRootsAsync(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return FleetError.ValidationError("Path", "Path is required.");
+
+        var normalizedResult = NormalizeExistingDirectory(path);
+        if (normalizedResult.IsFailure)
+            return normalizedResult.Error;
+
+        var normalizedPath = normalizedResult.Value;
+        var allowedRoots = await GetAllowedRootsAsync();
+        if (!IsPathWithinRoots(normalizedPath, allowedRoots))
+            return FleetError.ValidationError("Path", "Path is outside allowed workspace roots.");
+
+        return normalizedPath;
+    }
+
+    public static bool IsPathWithinRoots(string path, IReadOnlyList<string> roots)
+    {
+        var normalizedPath = CanonicalizePath(path);
+
+        foreach (var root in roots)
+        {
+            var normalizedRoot = CanonicalizePath(root);
+            if (string.Equals(normalizedPath, normalizedRoot, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            var rootWithSeparator = normalizedRoot.EndsWith(Path.DirectorySeparatorChar)
+                ? normalizedRoot
+                : normalizedRoot + Path.DirectorySeparatorChar;
+
+            if (normalizedPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     // ── private helpers ────────────────────────────────────────────────────────
+
+    private static Result<string> NormalizeExistingDirectory(string path)
+    {
+        if (!Directory.Exists(path))
+            return FleetError.ValidationError("Path", $"Path does not exist: {path}");
+
+        try
+        {
+            return CanonicalizePath(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return FleetError.ValidationError("Path", $"Unable to access path: {path}");
+        }
+    }
+
+    public static string CanonicalizePath(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var root = Path.GetPathRoot(fullPath);
+        if (string.IsNullOrWhiteSpace(root))
+            return fullPath;
+
+        var currentPath = root;
+        var relativeSegments = fullPath[root.Length..]
+            .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var segment in relativeSegments)
+        {
+            currentPath = Path.Combine(currentPath, segment);
+
+            var directoryInfo = new DirectoryInfo(currentPath);
+            var resolvedTarget = directoryInfo.ResolveLinkTarget(true);
+            if (resolvedTarget is not null)
+                currentPath = Path.GetFullPath(resolvedTarget.FullName);
+        }
+
+        return Path.GetFullPath(currentPath);
+    }
 
     private static string[] GetEnvRoots()
     {

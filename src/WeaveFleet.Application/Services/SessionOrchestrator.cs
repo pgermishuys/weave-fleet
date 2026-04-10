@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
@@ -16,9 +17,11 @@ namespace WeaveFleet.Application.Services;
 public sealed partial class SessionOrchestrator(
     WorkspaceService workspaceService,
     InstanceService instanceService,
+    SessionSourceResolutionService sessionSourceResolutionService,
     IHarnessRegistry harnessRegistry,
     InstanceTracker instanceTracker,
     ISessionRepository sessionRepository,
+    ISessionSourceUsageRepository sessionSourceUsageRepository,
     ISessionCallbackRepository sessionCallbackRepository,
     IDelegationRepository delegationRepository,
     IProjectRepository projectRepository,
@@ -45,6 +48,16 @@ public sealed partial class SessionOrchestrator(
         CreateSessionRequest request,
         CancellationToken ct = default)
     {
+        var sourceResolutionResult = await sessionSourceResolutionService.ResolveCreateRequestAsync(request, ct);
+        if (sourceResolutionResult.IsFailure)
+            return sourceResolutionResult.Error;
+
+        var workspaceIntent = sourceResolutionResult.Value.Input.WorkspaceIntent;
+        if (workspaceIntent is null)
+            return FleetError.ValidationError(
+                "SessionSource.WorkspaceIntent",
+                "The selected session source cannot start a workspace-backed session.");
+
         // Resolve harness
         var harnessType = request.HarnessType ?? DefaultHarnessType;
         var harness = harnessRegistry.GetByType(harnessType);
@@ -64,9 +77,10 @@ public sealed partial class SessionOrchestrator(
 
         // 1. Create workspace
         var workspaceResult = await workspaceService.CreateWorkspaceAsync(
-            request.Directory,
-            request.IsolationStrategy ?? "existing",
-            request.Branch);
+            workspaceIntent.Directory,
+            workspaceIntent.IsolationStrategy,
+            workspaceIntent.Branch,
+            sourceResolutionResult.Value.Input.Provenance);
         if (workspaceResult.IsFailure)
             return workspaceResult.Error;
 
@@ -82,7 +96,7 @@ public sealed partial class SessionOrchestrator(
                 SessionId = sessionId,
                 WorkingDirectory = workspace.Directory,
                 InitialPrompt = request.InitialPrompt,
-                Branch = request.Branch,
+                Branch = workspaceIntent.Branch,
                 ProjectId = projectId,
                 ProjectName = projectName
             }, ct);
@@ -125,6 +139,20 @@ public sealed partial class SessionOrchestrator(
         };
 
         await sessionRepository.InsertAsync(session);
+        await sessionSourceUsageRepository.InsertAsync(new SessionSourceUsage
+        {
+            Id = Guid.NewGuid().ToString(),
+            SessionId = session.Id,
+            WorkspaceId = workspace.Id,
+            ProviderId = sourceResolutionResult.Value.Input.Provenance.ProviderId,
+            SourceType = sourceResolutionResult.Value.Input.Provenance.SourceType,
+            ActionId = sourceResolutionResult.Value.Input.Provenance.ActionId,
+            ResourceId = sourceResolutionResult.Value.Input.Provenance.ResourceId,
+            ResourceUrl = sourceResolutionResult.Value.Input.Provenance.ResourceUrl,
+            Title = sourceResolutionResult.Value.Input.Provenance.Title,
+            Summary = sourceResolutionResult.Value.Input.Provenance.Summary,
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
         LogSessionCreated(session.Id, workspace.Id, harnessInstance.InstanceId);
 
         // Emit analytics snapshot for the new session
@@ -380,6 +408,104 @@ public sealed partial class SessionOrchestrator(
             return instanceResult.Error;
 
         await instanceResult.Value.SendPromptAsync(text, options, ct);
+        return Unit.Value;
+    }
+
+    public async Task<Result<ContextEnvelope>> PreviewAddSourceToSessionAsync(
+        string sessionId,
+        SessionSourceSelection source,
+        CancellationToken ct = default)
+    {
+        var session = await sessionRepository.GetByIdAsync(sessionId);
+        if (session is null)
+            return FleetError.NotFoundFor(nameof(Session), sessionId);
+
+        if (string.Equals(session.RetentionStatus, "archived", StringComparison.Ordinal))
+        {
+            return FleetError.ValidationError(
+                "Session.RetentionStatus",
+                "Archived sessions are read-only. Unarchive before adding source context.");
+        }
+
+        var resolutionResult = await sessionSourceResolutionService.ResolveForSessionActionAsync(
+            sessionId,
+            source,
+            SessionSourceActions.AddToSession,
+            ct);
+        if (resolutionResult.IsFailure)
+            return resolutionResult.Error;
+
+        var envelope = resolutionResult.Value.Input.ContextEnvelope;
+        if (envelope is null)
+        {
+            return FleetError.ValidationError(
+                "SessionSource.ContextEnvelope",
+                "The selected session source did not resolve any previewable context.");
+        }
+
+        return envelope;
+    }
+
+    public async Task<Result<Unit>> AddSourceToSessionAsync(
+        string sessionId,
+        SessionSourceSelection source,
+        bool confirm,
+        CancellationToken ct = default)
+    {
+        if (!confirm)
+        {
+            return FleetError.ValidationError(
+                "SessionSource.Confirm",
+                "Source context must be explicitly confirmed before it can be added to a session.");
+        }
+
+        var session = await sessionRepository.GetByIdAsync(sessionId);
+        if (session is null)
+            return FleetError.NotFoundFor(nameof(Session), sessionId);
+
+        if (string.Equals(session.RetentionStatus, "archived", StringComparison.Ordinal))
+        {
+            return FleetError.ValidationError(
+                "Session.RetentionStatus",
+                "Archived sessions are read-only. Unarchive before adding source context.");
+        }
+
+        var resolutionResult = await sessionSourceResolutionService.ResolveForSessionActionAsync(
+            sessionId,
+            source,
+            SessionSourceActions.AddToSession,
+            ct);
+        if (resolutionResult.IsFailure)
+            return resolutionResult.Error;
+
+        var envelope = resolutionResult.Value.Input.ContextEnvelope;
+        if (envelope is null)
+        {
+            return FleetError.ValidationError(
+                "SessionSource.ContextEnvelope",
+                "The selected session source did not resolve any context.");
+        }
+
+        var prompt = $"[Source: {envelope.OriginLabel}]\n\n{envelope.Content}";
+        var promptResult = await PromptSessionAsync(sessionId, prompt, null, ct);
+        if (promptResult.IsFailure)
+            return promptResult.Error;
+
+        await sessionSourceUsageRepository.InsertAsync(new SessionSourceUsage
+        {
+            Id = Guid.NewGuid().ToString(),
+            SessionId = sessionId,
+            WorkspaceId = session.WorkspaceId,
+            ProviderId = resolutionResult.Value.Input.Provenance.ProviderId,
+            SourceType = resolutionResult.Value.Input.Provenance.SourceType,
+            ActionId = resolutionResult.Value.Input.Provenance.ActionId,
+            ResourceId = resolutionResult.Value.Input.Provenance.ResourceId,
+            ResourceUrl = resolutionResult.Value.Input.Provenance.ResourceUrl,
+            Title = resolutionResult.Value.Input.Provenance.Title,
+            Summary = resolutionResult.Value.Input.Provenance.Summary,
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
         return Unit.Value;
     }
 
@@ -683,13 +809,14 @@ public sealed partial class SessionOrchestrator(
 /// <summary>Input for creating a new session.</summary>
 public sealed record CreateSessionRequest
 {
-    public required string Directory { get; init; }
+    public string? Directory { get; init; }
     public string? Title { get; init; }
     public string? IsolationStrategy { get; init; }
     public string? Branch { get; init; }
     public string? HarnessType { get; init; }
     public string? ProjectId { get; init; }
     public string? InitialPrompt { get; init; }
+    public SessionSourceSelection? Source { get; init; }
     /// <summary>If set, registers a completion callback to resume this target session.</summary>
     public string? OnCompleteTargetSessionId { get; init; }
     public string? OnCompleteTargetInstanceId { get; init; }

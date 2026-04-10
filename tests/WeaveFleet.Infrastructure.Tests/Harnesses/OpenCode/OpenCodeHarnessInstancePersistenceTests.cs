@@ -8,6 +8,7 @@ using Shouldly;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
@@ -637,7 +638,13 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         projectRepo.ListAsync().Returns(new List<Project>());
         var callbackRepo = Substitute.For<ISessionCallbackRepository>();
         var workspaceRepo = Substitute.For<IWorkspaceRepository>();
+        var workspaceRootRepo = Substitute.For<IWorkspaceRootRepository>();
         var analyticsCollector = Substitute.For<IAnalyticsCollector>();
+        var sessionSourceUsageRepo = Substitute.For<ISessionSourceUsageRepository>();
+        workspaceRootRepo.ListAsync().Returns([
+            new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
+        ]);
+        var workspaceRootService = new WorkspaceRootService(workspaceRootRepo);
 
         var services = new ServiceCollection();
         services.AddSingleton(messageRepo);
@@ -648,17 +655,25 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         services.AddSingleton(projectRepo);
         services.AddSingleton(callbackRepo);
         services.AddSingleton(workspaceRepo);
+        services.AddSingleton(sessionSourceUsageRepo);
         services.AddSingleton<IHarnessRegistry>(harnessRegistry);
         services.AddSingleton(analyticsCollector);
         services.AddSingleton(new InstanceTracker());
         services.AddSingleton(new InstanceService(instanceRepo, sessionRepo));
         services.AddSingleton(new DelegationService(delegationRepo, eventBroadcaster));
+        services.AddSingleton(new SessionSourceResolutionService([
+            new LocalDirectorySessionSourceProvider(workspaceRootService)
+        ]));
         services.AddSingleton(new SessionOrchestrator(
             new WorkspaceService(workspaceRepo, NullLogger<WorkspaceService>.Instance),
             new InstanceService(instanceRepo, sessionRepo),
+            new SessionSourceResolutionService([
+                new LocalDirectorySessionSourceProvider(workspaceRootService)
+            ]),
             harnessRegistry,
             new InstanceTracker(),
             sessionRepo,
+            sessionSourceUsageRepo,
             callbackRepo,
             delegationRepo,
             projectRepo,
@@ -815,6 +830,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         var callbackRepo = Substitute.For<ISessionCallbackRepository>();
         var workspaceRepo = Substitute.For<IWorkspaceRepository>();
         var analyticsCollector = Substitute.For<IAnalyticsCollector>();
+        var sessionSourceUsageRepo = Substitute.For<ISessionSourceUsageRepository>();
 
         delegationRepo.GetByParentToolCallIdAsync("fleet-delegation-1", "tool-1")
             .Returns(
@@ -838,17 +854,30 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         services.AddSingleton(projectRepo);
         services.AddSingleton(callbackRepo);
         services.AddSingleton(workspaceRepo);
+        services.AddSingleton(sessionSourceUsageRepo);
         services.AddSingleton<IHarnessRegistry>(harnessRegistry);
         services.AddSingleton(analyticsCollector);
         services.AddSingleton(new InstanceTracker());
         services.AddSingleton(new InstanceService(instanceRepo, sessionRepo));
         services.AddSingleton(new DelegationService(delegationRepo, eventBroadcaster));
+        var workspaceRootRepo = Substitute.For<IWorkspaceRootRepository>();
+        workspaceRootRepo.ListAsync().Returns([
+            new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
+        ]);
+        var workspaceRootService = new WorkspaceRootService(workspaceRootRepo);
+        services.AddSingleton(new SessionSourceResolutionService([
+            new LocalDirectorySessionSourceProvider(workspaceRootService)
+        ]));
         services.AddSingleton(new SessionOrchestrator(
             new WorkspaceService(workspaceRepo, NullLogger<WorkspaceService>.Instance),
             new InstanceService(instanceRepo, sessionRepo),
+            new SessionSourceResolutionService([
+                new LocalDirectorySessionSourceProvider(workspaceRootService)
+            ]),
             harnessRegistry,
             new InstanceTracker(),
             sessionRepo,
+            sessionSourceUsageRepo,
             callbackRepo,
             delegationRepo,
             projectRepo,

@@ -54,5 +54,27 @@ export const githubPluginManifest: FleetPluginManifest = {
         resolveContext: githubManifest.resolveContext,
       },
     ],
+    sessionSources: [
+      {
+        id: "github-issue-source",
+        sourceKey: {
+          providerId: "builtin.github",
+          sourceType: "github-issue",
+        },
+        label: "GitHub Issue",
+        description: "Attach issue context to a session using backend-resolved GitHub data.",
+        order: 100,
+      },
+      {
+        id: "github-pr-source",
+        sourceKey: {
+          providerId: "builtin.github",
+          sourceType: "github-pull-request",
+        },
+        label: "GitHub Pull Request",
+        description: "Attach pull request context to a session using backend-resolved GitHub data.",
+        order: 110,
+      },
+    ],
   },
 };

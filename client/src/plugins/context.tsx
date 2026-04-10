@@ -5,10 +5,13 @@ import { loadBuiltInPlugins } from "./loader";
 import { createPluginRuntime } from "./runtime";
 import type { FleetPluginRuntime } from "./runtime";
 import type { PluginConnectionStatus } from "./types";
+import type { RegisteredSessionSourceContribution } from "./slots";
+import { getSessionSourceContributions } from "./slots";
 
 export interface PluginRuntimeContextValue extends FleetPluginRuntime {
   isLoading: boolean;
   error?: string;
+  sessionSources: readonly RegisteredSessionSourceContribution[];
   connect: (id: string, config: Record<string, unknown>) => Promise<void>;
   disconnect: (id: string) => Promise<void>;
   refetch: () => void;
@@ -18,6 +21,7 @@ const defaultValue: PluginRuntimeContextValue = {
   manifests: [],
   descriptors: [],
   statuses: [],
+  sessionSources: [],
   isLoading: true,
   error: undefined,
   connect: async () => {},
@@ -51,6 +55,7 @@ export function PluginRuntimeProvider({ children }: { children: ReactNode }) {
     );
   }, [manifests, pluginStatuses]);
   const runtime = useMemo(() => createPluginRuntime(manifests, statuses), [manifests, statuses]);
+  const sessionSources = useMemo(() => getSessionSourceContributions(manifests), [manifests]);
 
   useEffect(() => {
     const isGitHubConnected = statuses.some(
@@ -62,13 +67,14 @@ export function PluginRuntimeProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       ...runtime,
+      sessionSources,
       isLoading,
       error,
       connect,
       disconnect,
       refetch,
     }),
-    [connect, disconnect, error, isLoading, refetch, runtime]
+    [connect, disconnect, error, isLoading, refetch, runtime, sessionSources]
   );
 
   return (

@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using Shouldly;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
@@ -18,10 +20,12 @@ public sealed class SessionOrchestratorTests
     private readonly IHarness _harness = Substitute.For<IHarness>();
     private readonly IHarnessInstance _harnessInstance = Substitute.For<IHarnessInstance>();
     private readonly ISessionRepository _sessionRepo = Substitute.For<ISessionRepository>();
+    private readonly ISessionSourceUsageRepository _sessionSourceUsageRepo = Substitute.For<ISessionSourceUsageRepository>();
     private readonly ISessionCallbackRepository _callbackRepo = Substitute.For<ISessionCallbackRepository>();
     private readonly IDelegationRepository _delegationRepo = Substitute.For<IDelegationRepository>();
     private readonly IProjectRepository _projectRepo = Substitute.For<IProjectRepository>();
     private readonly IWorkspaceRepository _workspaceRepo = Substitute.For<IWorkspaceRepository>();
+    private readonly IWorkspaceRootRepository _workspaceRootRepo = Substitute.For<IWorkspaceRootRepository>();
     private readonly IInstanceRepository _instanceRepo = Substitute.For<IInstanceRepository>();
     private readonly IEventBroadcaster _eventBroadcaster = Substitute.For<IEventBroadcaster>();
     private readonly IAnalyticsCollector _analyticsCollector = Substitute.For<IAnalyticsCollector>();
@@ -32,19 +36,28 @@ public sealed class SessionOrchestratorTests
 
     public SessionOrchestratorTests()
     {
+        _workspaceRootRepo.ListAsync().Returns([
+            new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
+        ]);
+        var workspaceRootService = new WorkspaceRootService(_workspaceRootRepo);
         var workspaceService = new WorkspaceService(
             _workspaceRepo,
             NullLogger<WorkspaceService>.Instance);
 
         var instanceService = new InstanceService(_instanceRepo, _sessionRepo);
+        var sessionSourceResolutionService = new SessionSourceResolutionService([
+            new LocalDirectorySessionSourceProvider(workspaceRootService)
+        ]);
         _delegationService = new DelegationService(_delegationRepo, _eventBroadcaster);
 
         _sut = new SessionOrchestrator(
             workspaceService,
             instanceService,
+            sessionSourceResolutionService,
             _harnessRegistry,
             _tracker,
             _sessionRepo,
+            _sessionSourceUsageRepo,
             _callbackRepo,
             _delegationRepo,
             _projectRepo,
@@ -74,16 +87,31 @@ public sealed class SessionOrchestratorTests
         _sessionRepo.UnarchiveAsync(Arg.Any<string>()).Returns(Task.CompletedTask);
     }
 
+    private void ConfigureHarnessAndScratchProject()
+    {
+        _harnessRegistry.GetByType("opencode").Returns(_harness);
+        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
+            .Returns(_harnessInstance);
+        _projectRepo.ListAsync().Returns(new List<Project>
+        {
+            new() { Id = "scratch-1", Name = "Scratch", Type = "scratch", Position = 0,
+                CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01" }
+        });
+        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
+        _sessionRepo.InsertAsync(Arg.Any<Session>()).Returns(Task.CompletedTask);
+    }
+
     // ── CreateSessionAsync ─────────────────────────────────────────────────────
 
     [Fact]
     public async Task CreateSessionAsync_WhenHarnessNotFound_ReturnsFailure()
     {
         _harnessRegistry.GetByType("opencode").Returns((IHarness?)null);
+        using var tempDirectory = new TempDirectory();
 
         var result = await _sut.CreateSessionAsync(new CreateSessionRequest
         {
-            Directory = "/tmp/project"
+            Directory = tempDirectory.Path
         });
 
         result.IsFailure.ShouldBeTrue();
@@ -93,21 +121,12 @@ public sealed class SessionOrchestratorTests
     [Fact]
     public async Task CreateSessionAsync_HappyPath_InsertsSessionAndReturnsResult()
     {
-        // Arrange
-        _harnessRegistry.GetByType("opencode").Returns(_harness);
-        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
-            .Returns(_harnessInstance);
-        _projectRepo.ListAsync().Returns(new List<Project>
-        {
-            new() { Id = "scratch-1", Name = "Scratch", Type = "scratch", Position = 0,
-                    CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01" }
-        });
-        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
-        _sessionRepo.InsertAsync(Arg.Any<Session>()).Returns(Task.CompletedTask);
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
 
         var result = await _sut.CreateSessionAsync(new CreateSessionRequest
         {
-            Directory = "/tmp/project",
+            Directory = tempDirectory.Path,
             Title = "My Session"
         });
 
@@ -125,14 +144,95 @@ public sealed class SessionOrchestratorTests
         _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("process failed"));
         _projectRepo.ListAsync().Returns(new List<Project>());
+        using var tempDirectory = new TempDirectory();
 
         var result = await _sut.CreateSessionAsync(new CreateSessionRequest
         {
-            Directory = "/tmp/project"
+            Directory = tempDirectory.Path
         });
 
         result.IsFailure.ShouldBeTrue();
         result.Error.Code.ShouldBe(FleetError.Unexpected.Code);
+    }
+
+    [Fact]
+    public async Task PreviewAddSourceToSessionAsync_WhenSourceResolves_ReturnsEnvelope()
+    {
+        var sessionId = "session-1";
+        _sessionRepo.GetByIdAsync(sessionId).Returns(new Session
+        {
+            Id = sessionId,
+            InstanceId = "inst-1",
+            WorkspaceId = "ws-1",
+            Title = "T",
+            Status = "active",
+            RetentionStatus = "active",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        });
+
+        var result = await _sut.PreviewAddSourceToSessionAsync(sessionId, new SessionSourceSelection
+        {
+            Key = new SessionSourceKey
+            {
+                ProviderId = SessionSourceProviderIds.Local,
+                SourceType = SessionSourceTypeNames.ExternalDocument,
+                ActionId = SessionSourceActions.AddToSession,
+                ContractVersion = 1
+            },
+            Input = System.Text.Json.JsonSerializer.SerializeToElement(new
+            {
+                resourceId = "doc-1",
+                selection = "summary"
+            })
+        });
+
+        result.IsFailure.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task AddSourceToSessionAsync_WhenConfirmFalse_ReturnsValidationFailure()
+    {
+        var result = await _sut.AddSourceToSessionAsync("session-1", new SessionSourceSelection
+        {
+            Key = SessionSourceCatalog.ExternalDocumentAddToSession.Key,
+            Input = System.Text.Json.JsonSerializer.SerializeToElement(new
+            {
+                resourceId = "doc-1"
+            })
+        }, confirm: false);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe("Validation.SessionSource.Confirm");
+    }
+
+    [Fact]
+    public async Task AddSourceToSessionAsync_WhenSessionArchived_ReturnsValidationFailure()
+    {
+        _sessionRepo.GetByIdAsync("session-archived").Returns(new Session
+        {
+            Id = "session-archived",
+            InstanceId = "inst-1",
+            WorkspaceId = "ws-1",
+            Title = "Archived",
+            Status = "stopped",
+            RetentionStatus = "archived",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        });
+
+        var result = await _sut.AddSourceToSessionAsync("session-archived", new SessionSourceSelection
+        {
+            Key = SessionSourceCatalog.ExternalDocumentAddToSession.Key,
+            Input = System.Text.Json.JsonSerializer.SerializeToElement(new
+            {
+                resourceId = "doc-1"
+            })
+        }, confirm: true);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe("Validation.Session.RetentionStatus");
+        await _sessionSourceUsageRepo.DidNotReceive().InsertAsync(Arg.Any<SessionSourceUsage>());
     }
 
     // ── PromptSessionAsync ────────────────────────────────────────────────────
@@ -351,11 +451,12 @@ public sealed class SessionOrchestratorTests
         _projectRepo.ListAsync().Returns(new List<Project>());
         _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
         _sessionRepo.InsertAsync(Arg.Any<Session>()).Returns(Task.CompletedTask);
+        using var tempDirectory = new TempDirectory();
 
         // Act
         var result = await _sut.CreateSessionAsync(new CreateSessionRequest
         {
-            Directory = "/tmp/project",
+            Directory = tempDirectory.Path,
             HarnessType = "claude-code"
         });
 
@@ -375,11 +476,12 @@ public sealed class SessionOrchestratorTests
         _projectRepo.ListAsync().Returns(new List<Project>());
         _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
         _sessionRepo.InsertAsync(Arg.Any<Session>()).Returns(Task.CompletedTask);
+        using var tempDirectory = new TempDirectory();
 
         // Act
         var result = await _sut.CreateSessionAsync(new CreateSessionRequest
         {
-            Directory = "/tmp/project"
+            Directory = tempDirectory.Path
             // HarnessType omitted → should default to "opencode"
         });
 
@@ -580,6 +682,8 @@ public sealed class SessionOrchestratorTests
     [Fact]
     public async Task ForkSessionAsync_InheritsParentHarnessType()
     {
+        using var tempDirectory = new TempDirectory();
+
         // Arrange — parent has "claude-code"
         var parent = new Session
         {
@@ -588,7 +692,7 @@ public sealed class SessionOrchestratorTests
             HarnessType = "claude-code",
             Title = "Parent",
             Status = "active",
-            Directory = "/tmp/parent",
+            Directory = tempDirectory.Path,
             ProjectId = null,
             CreatedAt = "2026-01-01"
         };
@@ -773,5 +877,22 @@ public sealed class SessionOrchestratorTests
         result.IsSuccess.ShouldBeTrue();
         await _sessionRepo.Received(1).UnarchiveAsync("s-unarchive");
         await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_unarchived", Arg.Any<object>(), Arg.Any<CancellationToken>());
+    }
+
+    private sealed class TempDirectory : IDisposable
+    {
+        public TempDirectory()
+        {
+            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"weave-fleet-session-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(Path);
+        }
+
+        public string Path { get; }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+                Directory.Delete(Path, recursive: true);
+        }
     }
 }

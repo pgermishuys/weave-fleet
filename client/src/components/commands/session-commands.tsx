@@ -69,6 +69,6 @@ export function SessionCommands() {
   }, [registerCommand, unregisterCommand, bindings, openNewSession, refreshSessions, interruptAllSessions, sessions]);
 
   return (
-    <NewSessionDialog open={dialogOpen} onOpenChange={setDialogOpen} defaultDirectory={currentDirectory} />
+    <NewSessionDialog open={dialogOpen} onOpenChange={setDialogOpen} defaultDirectory={currentDirectory ?? undefined} />
   );
 }

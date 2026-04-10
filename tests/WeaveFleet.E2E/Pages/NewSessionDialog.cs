@@ -16,6 +16,7 @@ public sealed class NewSessionDialog(IPage page)
     private ILocator TitleInput => Dialog.Locator("#session-title");
     private ILocator SubmitButton => _page.GetByTestId("create-session-submit");
     private ILocator DirectoryModeButton => _page.GetByRole(AriaRole.Radio, new PageGetByRoleOptions { Name = "Directory" });
+    private ILocator RepositoryModeButton => _page.GetByRole(AriaRole.Radio, new PageGetByRoleOptions { Name = "Repository" });
 
     // ── Waits ─────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,18 @@ public sealed class NewSessionDialog(IPage page)
         if (await DirectoryModeButton.IsVisibleAsync())
             await DirectoryModeButton.ClickAsync();
         await DirectoryInput.FillAsync(directory);
+    }
+
+    public async Task SelectRepositorySourceAsync()
+    {
+        if (await RepositoryModeButton.IsVisibleAsync())
+            await RepositoryModeButton.ClickAsync();
+    }
+
+    public async Task SelectDirectorySourceAsync()
+    {
+        if (await DirectoryModeButton.IsVisibleAsync())
+            await DirectoryModeButton.ClickAsync();
     }
 
     /// <summary>Fill in the optional title field.</summary>

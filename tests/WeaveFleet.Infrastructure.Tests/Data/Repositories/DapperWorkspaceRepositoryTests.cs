@@ -99,4 +99,75 @@ public sealed class DapperWorkspaceRepositoryTests
         retrieved.ShouldNotBeNull();
         retrieved.DisplayName.ShouldBe("My Project");
     }
+
+    [Fact]
+    public async Task InsertAndGetById_PersistsSourceMetadata()
+    {
+        var (conn, repo) = await CreateAsync();
+        using var _ = conn;
+
+        var ws = new Workspace
+        {
+            Id = Guid.NewGuid().ToString(),
+            Directory = "/tmp/source-meta",
+            IsolationStrategy = "existing",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            SourceProviderId = "builtin.local",
+            SourceType = "directory",
+            SourceResourceId = "/tmp/source-meta",
+            SourceResourceUrl = "file:///tmp/source-meta",
+            SourceTitle = "source-meta",
+            SourceSummary = "redacted summary",
+            SourceResolvedAt = DateTime.UtcNow.ToString("O")
+        };
+
+        await repo.InsertAsync(ws);
+        var retrieved = await repo.GetByIdAsync(ws.Id);
+
+        retrieved.ShouldNotBeNull();
+        retrieved.SourceProviderId.ShouldBe("builtin.local");
+        retrieved.SourceType.ShouldBe("directory");
+        retrieved.SourceResourceId.ShouldBe("/tmp/source-meta");
+        retrieved.SourceResourceUrl.ShouldBe("file:///tmp/source-meta");
+        retrieved.SourceTitle.ShouldBe("source-meta");
+        retrieved.SourceSummary.ShouldBe("redacted summary");
+        retrieved.SourceResolvedAt.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task UpdateSourceMetadataAsync_ChangesSourceFields()
+    {
+        var (conn, repo) = await CreateAsync();
+        using var _ = conn;
+
+        var ws = new Workspace
+        {
+            Id = Guid.NewGuid().ToString(),
+            Directory = "/tmp/update-source",
+            IsolationStrategy = "existing",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        };
+
+        await repo.InsertAsync(ws);
+        await repo.UpdateSourceMetadataAsync(
+            ws.Id,
+            "builtin.repository",
+            "repository",
+            "repo-1",
+            "https://example.test/repo-1",
+            "Repo 1",
+            "summary",
+            "2026-01-01T00:00:00.0000000Z");
+
+        var retrieved = await repo.GetByIdAsync(ws.Id);
+
+        retrieved.ShouldNotBeNull();
+        retrieved.SourceProviderId.ShouldBe("builtin.repository");
+        retrieved.SourceType.ShouldBe("repository");
+        retrieved.SourceResourceId.ShouldBe("repo-1");
+        retrieved.SourceResourceUrl.ShouldBe("https://example.test/repo-1");
+        retrieved.SourceTitle.ShouldBe("Repo 1");
+        retrieved.SourceSummary.ShouldBe("summary");
+        retrieved.SourceResolvedAt.ShouldBe("2026-01-01T00:00:00.0000000Z");
+    }
 }
