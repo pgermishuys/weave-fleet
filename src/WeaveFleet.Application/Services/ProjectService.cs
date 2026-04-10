@@ -7,7 +7,10 @@ namespace WeaveFleet.Application.Services;
 /// <summary>
 /// Encapsulates business logic for project management.
 /// </summary>
-public sealed class ProjectService(IProjectRepository projectRepository, ISessionRepository sessionRepository)
+public sealed class ProjectService(
+    IProjectRepository projectRepository,
+    ISessionRepository sessionRepository,
+    IUserContext userContext)
 {
     public async Task<Result<Project>> CreateProjectAsync(string name, string? description = null)
     {
@@ -22,7 +25,8 @@ public sealed class ProjectService(IProjectRepository projectRepository, ISessio
             Type = "user",
             Position = nextPosition,
             CreatedAt = DateTime.UtcNow.ToString("O"),
-            UpdatedAt = DateTime.UtcNow.ToString("O")
+            UpdatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = userContext.UserId
         };
 
         await projectRepository.InsertAsync(project);
@@ -111,7 +115,8 @@ public sealed class ProjectService(IProjectRepository projectRepository, ISessio
             Type = "scratch",
             Position = 0,
             CreatedAt = DateTime.UtcNow.ToString("O"),
-            UpdatedAt = DateTime.UtcNow.ToString("O")
+            UpdatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = userContext.UserId
         };
 
         await projectRepository.InsertAsync(scratch);

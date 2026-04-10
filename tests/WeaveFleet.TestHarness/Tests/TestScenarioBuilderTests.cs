@@ -177,7 +177,8 @@ public sealed class TestScenarioBuilderTests
             new WeaveFleet.Application.Harnesses.HarnessSpawnOptions
             {
                 SessionId = "sess-1",
-                WorkingDirectory = "/tmp"
+                WorkingDirectory = "/tmp",
+                OwnerUserId = "test-user"
             },
             CancellationToken.None);
 
@@ -197,7 +198,8 @@ public sealed class TestScenarioBuilderTests
                 new WeaveFleet.Application.Harnesses.HarnessSpawnOptions
                 {
                     SessionId = "sess-1",
-                    WorkingDirectory = "/tmp"
+                    WorkingDirectory = "/tmp",
+                    OwnerUserId = "test-user"
                 },
                 CancellationToken.None));
     }

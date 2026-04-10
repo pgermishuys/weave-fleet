@@ -22,6 +22,7 @@ public sealed class SessionServiceTests
     private readonly WeaveFleet.Application.Analytics.IAnalyticsCollector _analyticsCollector =
         Substitute.For<WeaveFleet.Application.Analytics.IAnalyticsCollector>();
     private readonly IMessageRepository _messageRepo = Substitute.For<IMessageRepository>();
+    private readonly IUserContext _userContext = new TestUserContext("user-1");
     private readonly SessionOrchestrator _sessionOrchestrator;
     private readonly SessionService _sut;
 
@@ -30,15 +31,18 @@ public sealed class SessionServiceTests
         _workspaceRootRepo.ListAsync().Returns([
             new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
         ]);
-        var workspaceRootService = new WorkspaceRootService(_workspaceRootRepo);
+        var workspaceRootService = new WorkspaceRootService(_workspaceRootRepo, _userContext);
+        var options = new WeaveFleet.Application.Configuration.FleetOptions();
         var workspaceService = new WorkspaceService(
             _workspaceRepo,
+            _userContext,
+            options,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceService>.Instance);
-        var instanceService = new InstanceService(_instanceRepo, _sessionRepo);
+        var instanceService = new InstanceService(_instanceRepo, _sessionRepo, _userContext);
         var sessionSourceResolutionService = new SessionSourceResolutionService([
             new LocalDirectorySessionSourceProvider(workspaceRootService)
         ]);
-        var delegationService = new DelegationService(_delegationRepo, _eventBroadcaster);
+        var delegationService = new DelegationService(_delegationRepo, _eventBroadcaster, _userContext);
         _sessionOrchestrator = new SessionOrchestrator(
             workspaceService,
             instanceService,
@@ -54,7 +58,8 @@ public sealed class SessionServiceTests
             _analyticsCollector,
             _messageRepo,
             delegationService,
-            new WeaveFleet.Application.Configuration.FleetOptions(),
+            _userContext,
+            options,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance);
         _sut = new SessionService(_sessionRepo, _projectRepo, _sessionOrchestrator);
         _instanceRepo.GetByIdAsync(Arg.Any<string>()).Returns(callInfo => new Instance

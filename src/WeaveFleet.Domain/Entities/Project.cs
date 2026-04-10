@@ -13,4 +13,6 @@ public sealed class Project
     public int Position { get; set; }
     public string CreatedAt { get; set; } = string.Empty;
     public string UpdatedAt { get; set; } = string.Empty;
+    /// <summary>Owner's user identifier.</summary>
+    public string UserId { get; set; } = string.Empty;
 }

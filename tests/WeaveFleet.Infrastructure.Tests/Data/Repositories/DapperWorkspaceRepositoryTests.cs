@@ -6,17 +6,17 @@ namespace WeaveFleet.Infrastructure.Tests.Data.Repositories;
 
 public sealed class DapperWorkspaceRepositoryTests
 {
-    private static async Task<(SqliteConnection Keeper, DapperWorkspaceRepository Repo)> CreateAsync()
+    private static async Task<(SqliteConnection Keeper, DapperWorkspaceRepository Repo, WeaveFleet.Application.Data.IDbConnectionFactory Factory)> CreateAsync()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        var repo = new DapperWorkspaceRepository(factory);
-        return (keeper, repo);
+        var repo = new DapperWorkspaceRepository(factory, new TestUserContext());
+        return (keeper, repo, factory);
     }
 
     [Fact]
     public async Task InsertAndGetById_ReturnsWorkspace()
     {
-        var (conn, repo) = await CreateAsync();
+        var (conn, repo, _) = await CreateAsync();
         using var _ = conn;
 
         var ws = new Workspace
@@ -24,7 +24,8 @@ public sealed class DapperWorkspaceRepositoryTests
             Id = Guid.NewGuid().ToString(),
             Directory = "/tmp/test",
             IsolationStrategy = "existing",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
 
         await repo.InsertAsync(ws);
@@ -38,7 +39,7 @@ public sealed class DapperWorkspaceRepositoryTests
     [Fact]
     public async Task GetByDirectoryAsync_FindsMatchingWorkspace()
     {
-        var (conn, repo) = await CreateAsync();
+        var (conn, repo, _) = await CreateAsync();
         using var _ = conn;
 
         var ws = new Workspace
@@ -46,7 +47,8 @@ public sealed class DapperWorkspaceRepositoryTests
             Id = Guid.NewGuid().ToString(),
             Directory = "/home/user/project",
             IsolationStrategy = "worktree",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
         await repo.InsertAsync(ws);
 
@@ -59,7 +61,7 @@ public sealed class DapperWorkspaceRepositoryTests
     [Fact]
     public async Task MarkCleanedAsync_SetsCleanedUpAt()
     {
-        var (conn, repo) = await CreateAsync();
+        var (conn, repo, _) = await CreateAsync();
         using var _ = conn;
 
         var ws = new Workspace
@@ -67,7 +69,8 @@ public sealed class DapperWorkspaceRepositoryTests
             Id = Guid.NewGuid().ToString(),
             Directory = "/tmp/cleanup",
             IsolationStrategy = "existing",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
         await repo.InsertAsync(ws);
 
@@ -81,7 +84,7 @@ public sealed class DapperWorkspaceRepositoryTests
     [Fact]
     public async Task UpdateDisplayNameAsync_ChangesName()
     {
-        var (conn, repo) = await CreateAsync();
+        var (conn, repo, _) = await CreateAsync();
         using var _ = conn;
 
         var ws = new Workspace
@@ -89,7 +92,8 @@ public sealed class DapperWorkspaceRepositoryTests
             Id = Guid.NewGuid().ToString(),
             Directory = "/tmp/named",
             IsolationStrategy = "existing",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
         await repo.InsertAsync(ws);
 
@@ -103,7 +107,7 @@ public sealed class DapperWorkspaceRepositoryTests
     [Fact]
     public async Task InsertAndGetById_PersistsSourceMetadata()
     {
-        var (conn, repo) = await CreateAsync();
+        var (conn, repo, _) = await CreateAsync();
         using var _ = conn;
 
         var ws = new Workspace
@@ -118,7 +122,8 @@ public sealed class DapperWorkspaceRepositoryTests
             SourceResourceUrl = "file:///tmp/source-meta",
             SourceTitle = "source-meta",
             SourceSummary = "redacted summary",
-            SourceResolvedAt = DateTime.UtcNow.ToString("O")
+            SourceResolvedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
 
         await repo.InsertAsync(ws);
@@ -137,7 +142,7 @@ public sealed class DapperWorkspaceRepositoryTests
     [Fact]
     public async Task UpdateSourceMetadataAsync_ChangesSourceFields()
     {
-        var (conn, repo) = await CreateAsync();
+        var (conn, repo, _) = await CreateAsync();
         using var _ = conn;
 
         var ws = new Workspace
@@ -145,7 +150,8 @@ public sealed class DapperWorkspaceRepositoryTests
             Id = Guid.NewGuid().ToString(),
             Directory = "/tmp/update-source",
             IsolationStrategy = "existing",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
 
         await repo.InsertAsync(ws);
@@ -169,5 +175,22 @@ public sealed class DapperWorkspaceRepositoryTests
         retrieved.SourceTitle.ShouldBe("Repo 1");
         retrieved.SourceSummary.ShouldBe("summary");
         retrieved.SourceResolvedAt.ShouldBe("2026-01-01T00:00:00.0000000Z");
+    }
+
+    [Fact]
+    public async Task UpdateDisplayNameAsync_DoesNotUpdateOtherUsersWorkspace()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
+        var repo = new DapperWorkspaceRepository(factory, new TestUserContext());
+
+        await repo.UpdateDisplayNameAsync(ownerGraph.Workspace.Id, "Hijacked");
+
+        var ownerRepo = new DapperWorkspaceRepository(factory, new TestUserContext("owner-user"));
+        var workspace = await ownerRepo.GetByIdAsync(ownerGraph.Workspace.Id);
+        workspace.ShouldNotBeNull();
+        workspace.DisplayName.ShouldBeNull();
     }
 }

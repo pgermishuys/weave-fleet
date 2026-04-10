@@ -85,6 +85,7 @@ public sealed class ClaudeCodeHarnessInstancePersistenceTests
             scopeFactory: scopeFactory,
             logger: NullLogger<ClaudeCodeHarnessInstance>.Instance,
             loggerFactory: NullLoggerFactory.Instance,
+            ownerUserId: TestUserContext.DefaultUserId,
             analyticsCollector: null,
             projectId: null,
             projectName: null,

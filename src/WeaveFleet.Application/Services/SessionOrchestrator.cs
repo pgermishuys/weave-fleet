@@ -29,6 +29,7 @@ public sealed partial class SessionOrchestrator(
     IAnalyticsCollector analyticsCollector,
     IMessageRepository messageRepository,
     DelegationService delegationService,
+    IUserContext userContext,
     FleetOptions options,
     ILogger<SessionOrchestrator> logger)
 {
@@ -48,6 +49,15 @@ public sealed partial class SessionOrchestrator(
         CreateSessionRequest request,
         CancellationToken ct = default)
     {
+        // Cloud mode: reject caller-supplied Directory to prevent arbitrary path traversal.
+        // Internal requests (e.g. fork) are exempt since their Directory comes from a trusted managed path.
+        if (options.Cloud.Enabled && !request.IsInternalRequest && !string.IsNullOrWhiteSpace(request.Directory))
+        {
+            return FleetError.ValidationError(
+                nameof(CreateSessionRequest.Directory),
+                "Arbitrary directory paths are not allowed in cloud mode. Managed workspaces are created automatically.");
+        }
+
         var sourceResolutionResult = await sessionSourceResolutionService.ResolveCreateRequestAsync(request, ct);
         if (sourceResolutionResult.IsFailure)
             return sourceResolutionResult.Error;
@@ -95,6 +105,7 @@ public sealed partial class SessionOrchestrator(
             {
                 SessionId = sessionId,
                 WorkingDirectory = workspace.Directory,
+                OwnerUserId = userContext.UserId,
                 InitialPrompt = request.InitialPrompt,
                 Branch = workspaceIntent.Branch,
                 ProjectId = projectId,
@@ -135,7 +146,8 @@ public sealed partial class SessionOrchestrator(
             Status = "active",
             Directory = workspace.Directory,
             CreatedAt = DateTime.UtcNow.ToString("O"),
-            HarnessType = harnessType
+            HarnessType = harnessType,
+            UserId = userContext.UserId
         };
 
         await sessionRepository.InsertAsync(session);
@@ -173,7 +185,7 @@ public sealed partial class SessionOrchestrator(
             EndedAt: null,
             DurationSeconds: null));
 
-        // Broadcast session_created event
+        // Broadcast session_created event (scoped to the owning user)
         await eventBroadcaster.BroadcastAsync("sessions", "session_created", new
         {
             sessionId = session.Id,
@@ -181,11 +193,19 @@ public sealed partial class SessionOrchestrator(
             workspaceId = workspace.Id,
             title = session.Title,
             projectId = session.ProjectId
-        }, ct);
+        }, userContext.UserId, ct);
 
         // 5. Register callback (optional)
         if (request.OnCompleteTargetSessionId is not null && request.OnCompleteTargetInstanceId is not null)
         {
+            // Ownership guard: target session must belong to the same user
+            var targetSession = await sessionRepository.GetByIdAsync(request.OnCompleteTargetSessionId);
+            if (targetSession is null)
+                return FleetError.NotFoundFor(nameof(Session), request.OnCompleteTargetSessionId);
+
+            if (!string.Equals(targetSession.UserId, userContext.UserId, StringComparison.Ordinal))
+                return FleetError.Unauthorized;
+
             var callback = new SessionCallback
             {
                 Id = Guid.NewGuid().ToString(),
@@ -229,6 +249,7 @@ public sealed partial class SessionOrchestrator(
                 {
                     SessionId = session.Id,
                     WorkingDirectory = workspaceResult.Value,
+                    OwnerUserId = session.UserId,
                     ResumeToken = session.HarnessResumeToken
                 }, ct);
             }
@@ -237,7 +258,8 @@ public sealed partial class SessionOrchestrator(
                 harnessInstance = await harness.SpawnAsync(new HarnessSpawnOptions
                 {
                     SessionId = session.Id,
-                    WorkingDirectory = workspaceResult.Value
+                    WorkingDirectory = workspaceResult.Value,
+                    OwnerUserId = session.UserId
                 }, ct);
             }
         }
@@ -279,7 +301,8 @@ public sealed partial class SessionOrchestrator(
             Title = title ?? $"Fork of {parent.Title}",
             ProjectId = parent.ProjectId,
             HarnessType = parent.HarnessType,
-            IsolationStrategy = "existing"
+            IsolationStrategy = "existing",
+            IsInternalRequest = true
         }, ct);
     }
 
@@ -312,6 +335,7 @@ public sealed partial class SessionOrchestrator(
             {
                 SessionId = childSessionId,
                 WorkingDirectory = parent.Directory,
+                OwnerUserId = parent.UserId,
                 ResumeToken = childHarnessSessionId,
                 ProjectId = parent.ProjectId,
                 ProjectName = await ResolveProjectNameAsync(parent.ProjectId)
@@ -350,7 +374,8 @@ public sealed partial class SessionOrchestrator(
             LifecycleStatus = "running",
             HarnessType = parent.HarnessType,
             HarnessResumeToken = childHarnessSessionId,
-            IsHidden = true
+            IsHidden = true,
+            UserId = userContext.UserId
         };
 
         await sessionRepository.InsertAsync(session);
@@ -383,7 +408,7 @@ public sealed partial class SessionOrchestrator(
             projectId = session.ProjectId,
             parentSessionId = session.ParentSessionId,
             isHidden = true
-        }, ct);
+        }, userContext.UserId, ct);
 
         return session;
     }
@@ -627,7 +652,7 @@ public sealed partial class SessionOrchestrator(
         {
             sessionId = id,
             stoppedAt
-        }, ct);
+        }, session.UserId, ct);
 
         return Unit.Value;
     }
@@ -648,7 +673,7 @@ public sealed partial class SessionOrchestrator(
         {
             sessionId = id,
             archivedAt
-        }, ct);
+        }, session.UserId, ct);
 
         return Unit.Value;
     }
@@ -667,7 +692,7 @@ public sealed partial class SessionOrchestrator(
         await eventBroadcaster.BroadcastAsync("sessions", "session_unarchived", new
         {
             sessionId = id
-        }, ct);
+        }, session.UserId, ct);
 
         return Unit.Value;
     }
@@ -723,7 +748,7 @@ public sealed partial class SessionOrchestrator(
         await eventBroadcaster.BroadcastAsync("sessions", "session_deleted", new
         {
             sessionId = id
-        }, ct);
+        }, session.UserId, ct);
 
         return Unit.Value;
     }
@@ -820,6 +845,11 @@ public sealed record CreateSessionRequest
     /// <summary>If set, registers a completion callback to resume this target session.</summary>
     public string? OnCompleteTargetSessionId { get; init; }
     public string? OnCompleteTargetInstanceId { get; init; }
+    /// <summary>
+    /// When true, the request originates from an internal orchestrator operation (e.g. fork)
+    /// and directory-path validation is bypassed. Must not be set from external API requests.
+    /// </summary>
+    internal bool IsInternalRequest { get; init; }
 }
 
 /// <summary>Result of a successful <see cref="SessionOrchestrator.CreateSessionAsync"/> call.</summary>

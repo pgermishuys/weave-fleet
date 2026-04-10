@@ -31,6 +31,8 @@ public sealed class SessionOrchestratorTests
     private readonly IAnalyticsCollector _analyticsCollector = Substitute.For<IAnalyticsCollector>();
     private readonly IMessageRepository _messageRepo = Substitute.For<IMessageRepository>();
     private readonly InstanceTracker _tracker = new();
+    private readonly IUserContext _userContext = new TestUserContext("user-1");
+    private readonly FleetOptions _options = new();
     private readonly DelegationService _delegationService;
     private readonly SessionOrchestrator _sut;
 
@@ -39,16 +41,18 @@ public sealed class SessionOrchestratorTests
         _workspaceRootRepo.ListAsync().Returns([
             new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
         ]);
-        var workspaceRootService = new WorkspaceRootService(_workspaceRootRepo);
+        var workspaceRootService = new WorkspaceRootService(_workspaceRootRepo, _userContext);
         var workspaceService = new WorkspaceService(
             _workspaceRepo,
+            _userContext,
+            _options,
             NullLogger<WorkspaceService>.Instance);
 
-        var instanceService = new InstanceService(_instanceRepo, _sessionRepo);
+        var instanceService = new InstanceService(_instanceRepo, _sessionRepo, _userContext);
         var sessionSourceResolutionService = new SessionSourceResolutionService([
             new LocalDirectorySessionSourceProvider(workspaceRootService)
         ]);
-        _delegationService = new DelegationService(_delegationRepo, _eventBroadcaster);
+        _delegationService = new DelegationService(_delegationRepo, _eventBroadcaster, _userContext);
 
         _sut = new SessionOrchestrator(
             workspaceService,
@@ -65,7 +69,8 @@ public sealed class SessionOrchestratorTests
             _analyticsCollector,
             _messageRepo,
             _delegationService,
-            new FleetOptions(),
+            _userContext,
+            _options,
             NullLogger<SessionOrchestrator>.Instance);
 
         // Default harness instance id
@@ -133,8 +138,9 @@ public sealed class SessionOrchestratorTests
         result.IsSuccess.ShouldBeTrue();
         result.Value.Session.Title.ShouldBe("My Session");
         result.Value.InstanceId.ShouldBe("inst-1");
+        result.Value.Session.UserId.ShouldBe("user-1");
         await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(s =>
-            s.Title == "My Session" && s.ProjectId == "scratch-1"));
+            s.Title == "My Session" && s.ProjectId == "scratch-1" && s.UserId == "user-1"));
     }
 
     [Fact]
@@ -753,6 +759,7 @@ public sealed class SessionOrchestratorTests
         result.Value.ParentSessionId.ShouldBe("parent-1");
         result.Value.HarnessResumeToken.ShouldBe("oc-child-1");
         result.Value.OpencodeSessionId.ShouldBe("oc-child-1");
+        result.Value.UserId.ShouldBe("user-1");
 
         await _harness.Received(1).ResumeAsync(
             Arg.Is<HarnessResumeOptions>(o => o.ResumeToken == "oc-child-1" && o.SessionId == result.Value.Id),
@@ -761,7 +768,8 @@ public sealed class SessionOrchestratorTests
             s.IsHidden &&
             s.ParentSessionId == "parent-1" &&
             s.InstanceId == "inst-child" &&
-            s.HarnessResumeToken == "oc-child-1"));
+            s.HarnessResumeToken == "oc-child-1" &&
+            s.UserId == "user-1"));
     }
 
     [Fact]
@@ -811,7 +819,7 @@ public sealed class SessionOrchestratorTests
             await _sessionRepo.DeleteAsync("child-1");
         });
         await _harnessInstance.Received(1).DeleteAsync(Arg.Any<CancellationToken>());
-        await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_deleted", Arg.Any<object>(), Arg.Any<CancellationToken>());
+        await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_deleted", Arg.Any<object>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -834,7 +842,7 @@ public sealed class SessionOrchestratorTests
         result.IsSuccess.ShouldBeTrue();
         await _harnessInstance.Received(1).StopAsync(Arg.Any<CancellationToken>());
         await _sessionRepo.Received(1).UpdateStatusAsync("s-stop", "stopped", Arg.Any<string>());
-        await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_stopped", Arg.Any<object>(), Arg.Any<CancellationToken>());
+        await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_stopped", Arg.Any<object>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -855,7 +863,7 @@ public sealed class SessionOrchestratorTests
 
         result.IsSuccess.ShouldBeTrue();
         await _sessionRepo.Received(1).ArchiveAsync("s-archive", Arg.Any<string>());
-        await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_archived", Arg.Any<object>(), Arg.Any<CancellationToken>());
+        await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_archived", Arg.Any<object>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -876,7 +884,7 @@ public sealed class SessionOrchestratorTests
 
         result.IsSuccess.ShouldBeTrue();
         await _sessionRepo.Received(1).UnarchiveAsync("s-unarchive");
-        await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_unarchived", Arg.Any<object>(), Arg.Any<CancellationToken>());
+        await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_unarchived", Arg.Any<object>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     private sealed class TempDirectory : IDisposable

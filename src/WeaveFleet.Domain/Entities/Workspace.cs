@@ -20,4 +20,6 @@ public sealed class Workspace
     public string? SourceTitle { get; set; }
     public string? SourceSummary { get; set; }
     public string? SourceResolvedAt { get; set; }
+    /// <summary>Owner's user identifier.</summary>
+    public string UserId { get; set; } = string.Empty;
 }

@@ -96,6 +96,7 @@ public sealed class HarnessEventRelay : BackgroundService
         // Look up fleet session ID with retry to handle the race condition where
         // InstanceTracker.Register() fires before ISessionRepository.InsertAsync() completes.
         string? fleetSessionId = null;
+        string? sessionUserId = null;
         for (int attempt = 0; attempt < 10 && !ct.IsCancellationRequested; attempt++)
         {
             using var scope = _scopeFactory.CreateScope();
@@ -104,6 +105,7 @@ public sealed class HarnessEventRelay : BackgroundService
             if (session is not null)
             {
                 fleetSessionId = session.Id;
+                sessionUserId = session.UserId;
                 break;
             }
 
@@ -140,7 +142,7 @@ public sealed class HarnessEventRelay : BackgroundService
                 object payload = evt.Payload.HasValue
                     ? evt.Payload.Value
                     : JsonSerializer.SerializeToElement(new { });
-                await _broadcaster.BroadcastAsync(targetTopic, evt.Type, payload, ct).ConfigureAwait(false);
+                await _broadcaster.BroadcastAsync(targetTopic, evt.Type, payload, sessionUserId, ct).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)

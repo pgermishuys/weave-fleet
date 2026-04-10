@@ -9,7 +9,7 @@ namespace WeaveFleet.Api.Endpoints;
 
 public static class SessionEndpoints
 {
-    public static WebApplication MapSessionEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapSessionEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/sessions").WithTags("Sessions");
 

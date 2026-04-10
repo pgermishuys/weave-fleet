@@ -6,6 +6,7 @@ using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
@@ -60,6 +61,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
     private readonly string? _projectName;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly string _fleetSessionId;
+    private readonly string _ownerUserId;
 
     private string? _openCodeSessionId;
     private HarnessInstanceStatus _status = HarnessInstanceStatus.Starting;
@@ -77,6 +79,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
         TimeSpan shutdownTimeout,
         IServiceScopeFactory scopeFactory,
         ILogger<OpenCodeHarnessInstance> logger,
+        string ownerUserId,
         IAnalyticsCollector? analyticsCollector = null,
         string? projectId = null,
         string? projectName = null,
@@ -92,6 +95,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
         _shutdownTimeout = shutdownTimeout;
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _ownerUserId = ownerUserId;
         _analyticsCollector = analyticsCollector;
         _projectId = projectId;
         _projectName = projectName;
@@ -280,6 +284,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
 
     private async Task<string?> TryResolveChildFleetSessionIdAsync(string openCodeSessionId)
     {
+        using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
         var session = await repo.GetByHarnessIdAsync(openCodeSessionId).ConfigureAwait(false);
@@ -474,6 +479,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
     {
         try
         {
+            using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
             using var scope = _scopeFactory.CreateScope();
             var repo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
             await repo.UpdateResumeTokenAsync(_fleetSessionId, token).ConfigureAwait(false);
@@ -526,6 +532,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
             var openCodeMessage = new OpenCodeMessageWithParts { Info = info, Parts = parts };
             var harnessMessage = OpenCodeMapper.ToHarnessMessage(openCodeMessage);
 
+            using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
             using var scope = _scopeFactory.CreateScope();
             var messageRepo = scope.ServiceProvider.GetRequiredService<IMessageRepository>();
 
@@ -608,6 +615,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
             if (fleetPart is null)
                 return; // Mapper returned null (e.g. text part with null Text)
 
+            using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
             using var scope = _scopeFactory.CreateScope();
             var messageRepo = scope.ServiceProvider.GetRequiredService<IMessageRepository>();
 
@@ -665,6 +673,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
             if (extraction is null)
                 return;
 
+            using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
             using var scope = _scopeFactory.CreateScope();
             var delegationService = scope.ServiceProvider.GetRequiredService<DelegationService>();
 

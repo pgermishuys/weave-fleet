@@ -11,7 +11,7 @@ namespace WeaveFleet.Api.Endpoints;
 /// </summary>
 public static class AnalyticsEndpoints
 {
-    public static WebApplication MapAnalyticsEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapAnalyticsEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/analytics").WithTags("Analytics");
 

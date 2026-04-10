@@ -59,6 +59,21 @@ public sealed partial class SessionCallbackService(
         var fired = 0;
         foreach (var cb in pending)
         {
+            // Ownership guard: target session must belong to the same user as the source session
+            if (source is not null)
+            {
+                // Fetch target session without user-scope (system-level check for cross-user guard)
+                // GetAnyForInstanceAsync is not applicable here; we use GetByIdAsync which is user-scoped.
+                // Since the repository is user-scoped, if target returns null it is either missing or
+                // cross-user — either way, skip.
+                var targetSession = await sessionRepository.GetByIdAsync(cb.TargetSessionId);
+                if (targetSession is null || !string.Equals(targetSession.UserId, source.UserId, StringComparison.Ordinal))
+                {
+                    LogOwnershipGuardRejected(cb.Id, cb.TargetSessionId);
+                    continue;
+                }
+            }
+
             // Try to claim the callback atomically to avoid duplicate firing
             var claimed = await callbackRepository.ClaimPendingAsync(cb.Id);
             if (!claimed)
@@ -110,6 +125,10 @@ public sealed partial class SessionCallbackService(
 
         return fired;
     }
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Callback {CallbackId}: target session {TargetSessionId} ownership guard rejected (cross-user reference).")]
+    private partial void LogOwnershipGuardRejected(string callbackId, string targetSessionId);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Callback {CallbackId}: target instance {InstanceId} is not live; skipping.")]

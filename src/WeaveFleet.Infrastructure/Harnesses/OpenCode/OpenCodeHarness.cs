@@ -207,6 +207,7 @@ public sealed class OpenCodeHarness : IHarness
                 shutdownTimeout: TimeSpan.FromSeconds(_options.HarnessShutdownTimeoutSeconds),
                 scopeFactory: _scopeFactory,
                 logger: _loggerFactory.CreateLogger<OpenCodeHarnessInstance>(),
+                ownerUserId: options.OwnerUserId,
                 analyticsCollector: _analyticsCollector,
                 projectId: options.ProjectId,
                 projectName: options.ProjectName);
@@ -309,13 +310,14 @@ public sealed class OpenCodeHarness : IHarness
                 processManager: processManager,
                 portAllocator: _portAllocator,
                 allocatedPort: allocatedPort,
-                workingDirectory: options.WorkingDirectory,
-                shutdownTimeout: TimeSpan.FromSeconds(_options.HarnessShutdownTimeoutSeconds),
-                scopeFactory: _scopeFactory,
-                logger: _loggerFactory.CreateLogger<OpenCodeHarnessInstance>(),
-                analyticsCollector: _analyticsCollector,
-                projectId: options.ProjectId,
-                projectName: options.ProjectName,
+            workingDirectory: options.WorkingDirectory,
+            shutdownTimeout: TimeSpan.FromSeconds(_options.HarnessShutdownTimeoutSeconds),
+            scopeFactory: _scopeFactory,
+            logger: _loggerFactory.CreateLogger<OpenCodeHarnessInstance>(),
+            ownerUserId: options.OwnerUserId,
+            analyticsCollector: _analyticsCollector,
+            projectId: options.ProjectId,
+            projectName: options.ProjectName,
                 openCodeSessionId: options.ResumeToken);
 
             LogSpawned(_logger, instanceId, null);

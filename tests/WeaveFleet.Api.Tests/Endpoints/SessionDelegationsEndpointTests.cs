@@ -45,7 +45,8 @@ public sealed class SessionDelegationsEndpointTests
         ]);
         var delegationService = new DelegationService(
             delegationRepository,
-            Substitute.For<IEventBroadcaster>());
+            Substitute.For<IEventBroadcaster>(),
+            new TestUserContext("user-1"));
 
         var result = await InvokeGetSessionDelegations("session-1", sessionService, delegationService);
 
@@ -65,7 +66,8 @@ public sealed class SessionDelegationsEndpointTests
 
         var delegationService = new DelegationService(
             Substitute.For<IDelegationRepository>(),
-            Substitute.For<IEventBroadcaster>());
+            Substitute.For<IEventBroadcaster>(),
+            new TestUserContext("user-1"));
 
         var result = await InvokeGetSessionDelegations("missing", sessionService, delegationService);
 
@@ -93,6 +95,8 @@ public sealed class SessionDelegationsEndpointTests
 
     private static SessionOrchestrator BuildSessionOrchestrator()
     {
+        var userContext = new TestUserContext("user-1");
+        var options = new WeaveFleet.Application.Configuration.FleetOptions();
         var sessionRepository = Substitute.For<ISessionRepository>();
         var workspaceRepository = Substitute.For<IWorkspaceRepository>();
         var workspaceRootRepository = Substitute.For<IWorkspaceRootRepository>();
@@ -107,7 +111,7 @@ public sealed class SessionDelegationsEndpointTests
         workspaceRootRepository.ListAsync().Returns([
             new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
         ]);
-        var workspaceRootService = new WorkspaceRootService(workspaceRootRepository);
+        var workspaceRootService = new WorkspaceRootService(workspaceRootRepository, userContext);
         var sessionSourceResolutionService = new SessionSourceResolutionService([
             new LocalDirectorySessionSourceProvider(workspaceRootService)
         ]);
@@ -115,8 +119,10 @@ public sealed class SessionDelegationsEndpointTests
         return new SessionOrchestrator(
             new WorkspaceService(
                 workspaceRepository,
+                userContext,
+                options,
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceService>.Instance),
-            new InstanceService(instanceRepository, sessionRepository),
+            new InstanceService(instanceRepository, sessionRepository, userContext),
             sessionSourceResolutionService,
             Substitute.For<WeaveFleet.Application.Harnesses.IHarnessRegistry>(),
             new InstanceTracker(),
@@ -128,8 +134,9 @@ public sealed class SessionDelegationsEndpointTests
             eventBroadcaster,
             analyticsCollector,
             messageRepository,
-            new DelegationService(delegationRepository, eventBroadcaster),
-            new WeaveFleet.Application.Configuration.FleetOptions(),
+            new DelegationService(delegationRepository, eventBroadcaster, userContext),
+            userContext,
+            options,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance);
     }
 

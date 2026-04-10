@@ -8,7 +8,7 @@ namespace WeaveFleet.Api.Endpoints;
 
 public static class FleetEndpoints
 {
-    public static WebApplication MapFleetSummaryEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapFleetSummaryEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api").WithTags("Fleet");
 

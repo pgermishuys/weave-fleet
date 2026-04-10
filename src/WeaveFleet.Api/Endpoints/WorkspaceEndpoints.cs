@@ -4,7 +4,7 @@ namespace WeaveFleet.Api.Endpoints;
 
 public static class WorkspaceEndpoints
 {
-    public static WebApplication MapWorkspaceEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapWorkspaceEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/workspaces").WithTags("Workspaces");
 

@@ -15,53 +15,15 @@ public sealed class DapperMessageRepositoryTests
     private static async Task<(SqliteConnection Keeper, DapperMessageRepository Repo, IDbConnectionFactory Factory)> CreateAsync()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        var repo = new DapperMessageRepository(factory);
+        var repo = new DapperMessageRepository(factory, new TestUserContext());
         return (keeper, repo, factory);
     }
 
     /// <summary>
     /// Inserts a session row so foreign-key constraints on messages are satisfied.
     /// </summary>
-    private static async Task<string> SeedSessionAsync(IDbConnectionFactory factory, string? sessionId = null)
-    {
-        var wsRepo = new DapperWorkspaceRepository(factory);
-        var instRepo = new DapperInstanceRepository(factory);
-        var sessionRepo = new DapperSessionRepository(factory);
-
-        var ws = new Workspace
-        {
-            Id = Guid.NewGuid().ToString(),
-            Directory = "/tmp/ws",
-            IsolationStrategy = "existing",
-            CreatedAt = DateTime.UtcNow.ToString("O")
-        };
-        var inst = new Instance
-        {
-            Id = Guid.NewGuid().ToString(),
-            Port = 9001,
-            Directory = "/tmp/ws",
-            Url = "http://localhost:9001",
-            Status = "running",
-            CreatedAt = DateTime.UtcNow.ToString("O")
-        };
-        var session = new Session
-        {
-            Id = sessionId ?? Guid.NewGuid().ToString(),
-            WorkspaceId = ws.Id,
-            InstanceId = inst.Id,
-            OpencodeSessionId = "oc-" + Guid.NewGuid().ToString("N")[..8],
-            Title = "Test Session",
-            Status = "active",
-            Directory = "/tmp/ws",
-            CreatedAt = DateTime.UtcNow.ToString("O")
-        };
-
-        await wsRepo.InsertAsync(ws);
-        await instRepo.InsertAsync(inst);
-        await sessionRepo.InsertAsync(session);
-
-        return session.Id;
-    }
+    private static async Task<string> SeedSessionAsync(IDbConnectionFactory factory, string? sessionId = null, string userId = TestUserContext.DefaultUserId)
+        => (await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, userId, sessionId: sessionId)).Session.Id;
 
     private static PersistedMessage MakeMessage(string sessionId, string? id = null, string? timestamp = null) =>
         new()
@@ -312,5 +274,55 @@ public sealed class DapperMessageRepositoryTests
         var result = await repo.GetByIdAsync("non-existent-id", sessionId);
 
         result.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task GetBySessionAsync_DoesNotReturnOtherUsersMessages()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var otherSessionId = await SeedSessionAsync(factory, userId: "other-user");
+        var otherRepo = new DapperMessageRepository(factory, new TestUserContext("other-user"));
+        await otherRepo.UpsertAsync(MakeMessage(otherSessionId));
+
+        var repo = new DapperMessageRepository(factory, new TestUserContext());
+        var messages = await repo.GetBySessionAsync(otherSessionId, 10, null);
+
+        messages.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task UpsertAsync_DoesNotWriteToOtherUsersSession()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var otherSessionId = await SeedSessionAsync(factory, userId: "other-user");
+        var countBefore = await new DapperMessageRepository(factory, new TestUserContext("other-user")).CountBySessionAsync(otherSessionId);
+        var repo = new DapperMessageRepository(factory, new TestUserContext());
+
+        await repo.UpsertAsync(MakeMessage(otherSessionId));
+
+        var otherRepo = new DapperMessageRepository(factory, new TestUserContext("other-user"));
+        var count = await otherRepo.CountBySessionAsync(otherSessionId);
+        count.ShouldBe(countBefore);
+    }
+
+    [Fact]
+    public async Task DeleteBySessionAsync_DoesNotDeleteOtherUsersMessages()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var otherSessionId = await SeedSessionAsync(factory, userId: "other-user");
+        var otherRepo = new DapperMessageRepository(factory, new TestUserContext("other-user"));
+        await otherRepo.UpsertAsync(MakeMessage(otherSessionId));
+
+        var repo = new DapperMessageRepository(factory, new TestUserContext());
+        await repo.DeleteBySessionAsync(otherSessionId);
+
+        var count = await otherRepo.CountBySessionAsync(otherSessionId);
+        count.ShouldBe(1);
     }
 }

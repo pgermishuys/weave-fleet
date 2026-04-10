@@ -8,7 +8,7 @@ public static class SkillEndpoints
     private static readonly string SkillsDir =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".weave", "skills");
 
-    public static WebApplication MapSkillEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapSkillEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/skills").WithTags("Skills");
 

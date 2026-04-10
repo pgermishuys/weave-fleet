@@ -8,4 +8,6 @@ public sealed class WorkspaceRoot
     public string Id { get; set; } = string.Empty;
     public string Path { get; set; } = string.Empty;
     public string CreatedAt { get; set; } = string.Empty;
+    /// <summary>Owner's user identifier.</summary>
+    public string UserId { get; set; } = string.Empty;
 }

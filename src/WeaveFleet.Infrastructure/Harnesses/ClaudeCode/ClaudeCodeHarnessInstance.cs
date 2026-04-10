@@ -6,6 +6,7 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 
@@ -42,6 +43,7 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
     private readonly TimeSpan _shutdownTimeout;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly string _fleetSessionId;
+    private readonly string _ownerUserId;
     private readonly ILogger<ClaudeCodeHarnessInstance> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IAnalyticsCollector? _analyticsCollector;
@@ -76,6 +78,7 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
         IServiceScopeFactory scopeFactory,
         ILogger<ClaudeCodeHarnessInstance> logger,
         ILoggerFactory loggerFactory,
+        string ownerUserId,
         IAnalyticsCollector? analyticsCollector = null,
         string? projectId = null,
         string? projectName = null,
@@ -90,6 +93,7 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
         _scopeFactory = scopeFactory;
         _logger = logger;
         _loggerFactory = loggerFactory;
+        _ownerUserId = ownerUserId;
         _analyticsCollector = analyticsCollector;
         _projectId = projectId;
         _projectName = projectName;
@@ -196,6 +200,7 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
     public async Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct)
     {
         // Claude Code has no "get messages" API — always read from database
+        using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
         using var scope = _scopeFactory.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<IMessageRepository>();
 
@@ -393,6 +398,7 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
     {
         try
         {
+            using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
             using var scope = _scopeFactory.CreateScope();
             var repo = scope.ServiceProvider.GetRequiredService<IMessageRepository>();
             var persisted = MessagePersistenceService.ToPersistedMessage(_fleetSessionId, message);
@@ -409,6 +415,7 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
     {
         try
         {
+            using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
             using var scope = _scopeFactory.CreateScope();
             var repo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
             await repo.UpdateResumeTokenAsync(_fleetSessionId, token).ConfigureAwait(false);

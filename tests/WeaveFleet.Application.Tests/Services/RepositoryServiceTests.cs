@@ -10,6 +10,38 @@ namespace WeaveFleet.Application.Tests.Services;
 
 public sealed class RepositoryServiceTests
 {
+    private static bool CanCreateDirectorySymlink()
+    {
+        using var target = new TempDirectory();
+        using var parent = new TempDirectory();
+        var symlinkPath = System.IO.Path.Combine(parent.Path, "symlink-check");
+
+        try
+        {
+            Directory.CreateSymbolicLink(symlinkPath, target.Path);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(symlinkPath))
+                    Directory.Delete(symlinkPath);
+            }
+            catch
+            {
+            }
+        }
+    }
+
     [Fact]
     public async Task ResolveRepositoryPathAsync_ReturnsFailureWhenOutsideAllowedRoots()
     {
@@ -26,7 +58,9 @@ public sealed class RepositoryServiceTests
 
         var services = new ServiceCollection();
         services.AddSingleton(workspaceRootRepository);
-        services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository));
+        var userContext = new TestUserContext();
+        services.AddSingleton<IUserContext>(userContext);
+        services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository, userContext));
 
         var serviceProvider = services.BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
@@ -55,7 +89,9 @@ public sealed class RepositoryServiceTests
 
         var services = new ServiceCollection();
         services.AddSingleton(workspaceRootRepository);
-        services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository));
+        var userContext = new TestUserContext();
+        services.AddSingleton<IUserContext>(userContext);
+        services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository, userContext));
 
         var serviceProvider = services.BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
@@ -70,6 +106,9 @@ public sealed class RepositoryServiceTests
     [Fact]
     public async Task ResolveRepositoryPathAsync_ReturnsFailureWhenSymlinkEscapesAllowedRoots()
     {
+        if (!CanCreateDirectorySymlink())
+            return;
+
         using var allowedRoot = new TempDirectory();
         using var outsideRepository = new TempDirectory(createGitDirectory: true);
         var symlinkPath = System.IO.Path.Combine(allowedRoot.Path, "repo-link");
@@ -88,7 +127,9 @@ public sealed class RepositoryServiceTests
 
         var services = new ServiceCollection();
         services.AddSingleton(workspaceRootRepository);
-        services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository));
+        var userContext = new TestUserContext();
+        services.AddSingleton<IUserContext>(userContext);
+        services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository, userContext));
 
         var serviceProvider = services.BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
@@ -103,6 +144,9 @@ public sealed class RepositoryServiceTests
     [Fact]
     public async Task ResolveRepositoryPathAsync_ReturnsFailureWhenNestedSymlinkEscapesAllowedRoots()
     {
+        if (!CanCreateDirectorySymlink())
+            return;
+
         using var allowedRoot = new TempDirectory();
         using var outsideParent = new TempDirectory();
         var outsideRepositoryPath = System.IO.Path.Combine(outsideParent.Path, "nested-repo");
@@ -124,7 +168,9 @@ public sealed class RepositoryServiceTests
 
         var services = new ServiceCollection();
         services.AddSingleton(workspaceRootRepository);
-        services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository));
+        var userContext = new TestUserContext();
+        services.AddSingleton<IUserContext>(userContext);
+        services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository, userContext));
 
         var serviceProvider = services.BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();

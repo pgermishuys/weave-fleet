@@ -39,12 +39,14 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         var messageRepo = Substitute.For<IMessageRepository>();
         var delegationRepo = Substitute.For<IDelegationRepository>();
         var eventBroadcaster = Substitute.For<IEventBroadcaster>();
-        var delegationService = new DelegationService(delegationRepo, eventBroadcaster);
+        var userContext = new TestUserContext("user-1");
+        var delegationService = new DelegationService(delegationRepo, eventBroadcaster, userContext);
 
         var services = new ServiceCollection();
         services.AddSingleton(messageRepo);
         services.AddSingleton(delegationRepo);
         services.AddSingleton(eventBroadcaster);
+        services.AddSingleton<IUserContext>(userContext);
         services.AddSingleton(delegationService);
         var rootProvider = services.BuildServiceProvider();
         var scopeFactory = rootProvider.GetRequiredService<IServiceScopeFactory>();
@@ -153,7 +155,8 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             workingDirectory: "/tmp",
             shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
-            logger: NullLogger<OpenCodeHarnessInstance>.Instance);
+            logger: NullLogger<OpenCodeHarnessInstance>.Instance,
+            ownerUserId: TestUserContext.DefaultUserId);
 
         return (instance, messageRepo);
     }
@@ -509,7 +512,8 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         services.AddSingleton(messageRepo);
         services.AddSingleton(delegationRepo);
         services.AddSingleton(eventBroadcaster);
-        services.AddSingleton(new DelegationService(delegationRepo, eventBroadcaster));
+        services.AddSingleton<IUserContext>(new TestUserContext("user-1"));
+        services.AddSingleton(new DelegationService(delegationRepo, eventBroadcaster, new TestUserContext("user-1")));
         var rootProvider = services.BuildServiceProvider();
         var scopeFactory = rootProvider.GetRequiredService<IServiceScopeFactory>();
 
@@ -558,7 +562,8 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             workingDirectory: "/tmp",
             shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
-            logger: NullLogger<OpenCodeHarnessInstance>.Instance);
+            logger: NullLogger<OpenCodeHarnessInstance>.Instance,
+            ownerUserId: "user-1");
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var consumeTask = ConsumeEventsAsync(instance, cts.Token);
@@ -577,6 +582,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             "session:fleet-delegation-1",
             "delegation.created",
             Arg.Any<object>(),
+            Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
 
         await instance.DisposeAsync();
@@ -613,7 +619,8 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             Title = "Parent",
             Status = "active",
             Directory = "/tmp",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = "user-1"
         });
         Session? persistedChildSession = null;
         sessionRepo.GetByHarnessIdAsync("child-1").Returns(_ => persistedChildSession);
@@ -644,7 +651,9 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         workspaceRootRepo.ListAsync().Returns([
             new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
         ]);
-        var workspaceRootService = new WorkspaceRootService(workspaceRootRepo);
+        var userContext = new TestUserContext("user-1");
+        var workspaceRootService = new WorkspaceRootService(workspaceRootRepo, userContext);
+        var options = new FleetOptions();
 
         var services = new ServiceCollection();
         services.AddSingleton(messageRepo);
@@ -659,14 +668,15 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         services.AddSingleton<IHarnessRegistry>(harnessRegistry);
         services.AddSingleton(analyticsCollector);
         services.AddSingleton(new InstanceTracker());
-        services.AddSingleton(new InstanceService(instanceRepo, sessionRepo));
-        services.AddSingleton(new DelegationService(delegationRepo, eventBroadcaster));
+        services.AddSingleton<IUserContext>(userContext);
+        services.AddSingleton(new InstanceService(instanceRepo, sessionRepo, userContext));
+        services.AddSingleton(new DelegationService(delegationRepo, eventBroadcaster, userContext));
         services.AddSingleton(new SessionSourceResolutionService([
             new LocalDirectorySessionSourceProvider(workspaceRootService)
         ]));
         services.AddSingleton(new SessionOrchestrator(
-            new WorkspaceService(workspaceRepo, NullLogger<WorkspaceService>.Instance),
-            new InstanceService(instanceRepo, sessionRepo),
+            new WorkspaceService(workspaceRepo, userContext, options, NullLogger<WorkspaceService>.Instance),
+            new InstanceService(instanceRepo, sessionRepo, userContext),
             new SessionSourceResolutionService([
                 new LocalDirectorySessionSourceProvider(workspaceRootService)
             ]),
@@ -680,8 +690,9 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             eventBroadcaster,
             analyticsCollector,
             messageRepo,
-            new DelegationService(delegationRepo, eventBroadcaster),
-            new FleetOptions(),
+            new DelegationService(delegationRepo, eventBroadcaster, userContext),
+            userContext,
+            options,
             NullLogger<SessionOrchestrator>.Instance));
         var rootProvider = services.BuildServiceProvider();
         var scopeFactory = rootProvider.GetRequiredService<IServiceScopeFactory>();
@@ -765,7 +776,8 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             workingDirectory: "/tmp",
             shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
-            logger: NullLogger<OpenCodeHarnessInstance>.Instance);
+            logger: NullLogger<OpenCodeHarnessInstance>.Instance,
+            ownerUserId: "user-1");
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var consumeTask = ConsumeEventsAsync(instance, cts.Token);
@@ -783,6 +795,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             "session:fleet-delegation-1",
             "delegation.updated",
             Arg.Any<object>(),
+            Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
 
         await instance.DisposeAsync();
@@ -804,7 +817,8 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             Title = "Parent",
             Status = "active",
             Directory = "/tmp",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = "user-1"
         });
         Session? persistedChildSession = null;
         sessionRepo.GetByHarnessIdAsync("child-1").Returns(_ => persistedChildSession);
@@ -858,19 +872,22 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         services.AddSingleton<IHarnessRegistry>(harnessRegistry);
         services.AddSingleton(analyticsCollector);
         services.AddSingleton(new InstanceTracker());
-        services.AddSingleton(new InstanceService(instanceRepo, sessionRepo));
-        services.AddSingleton(new DelegationService(delegationRepo, eventBroadcaster));
+        var userContext = new TestUserContext("user-1");
+        var options = new FleetOptions();
+        services.AddSingleton<IUserContext>(userContext);
+        services.AddSingleton(new InstanceService(instanceRepo, sessionRepo, userContext));
+        services.AddSingleton(new DelegationService(delegationRepo, eventBroadcaster, userContext));
         var workspaceRootRepo = Substitute.For<IWorkspaceRootRepository>();
         workspaceRootRepo.ListAsync().Returns([
             new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
         ]);
-        var workspaceRootService = new WorkspaceRootService(workspaceRootRepo);
+        var workspaceRootService = new WorkspaceRootService(workspaceRootRepo, userContext);
         services.AddSingleton(new SessionSourceResolutionService([
             new LocalDirectorySessionSourceProvider(workspaceRootService)
         ]));
         services.AddSingleton(new SessionOrchestrator(
-            new WorkspaceService(workspaceRepo, NullLogger<WorkspaceService>.Instance),
-            new InstanceService(instanceRepo, sessionRepo),
+            new WorkspaceService(workspaceRepo, userContext, options, NullLogger<WorkspaceService>.Instance),
+            new InstanceService(instanceRepo, sessionRepo, userContext),
             new SessionSourceResolutionService([
                 new LocalDirectorySessionSourceProvider(workspaceRootService)
             ]),
@@ -884,8 +901,9 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             eventBroadcaster,
             analyticsCollector,
             messageRepo,
-            new DelegationService(delegationRepo, eventBroadcaster),
-            new FleetOptions(),
+            new DelegationService(delegationRepo, eventBroadcaster, userContext),
+            userContext,
+            options,
             NullLogger<SessionOrchestrator>.Instance));
         var rootProvider = services.BuildServiceProvider();
         var scopeFactory = rootProvider.GetRequiredService<IServiceScopeFactory>();
@@ -934,7 +952,8 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             workingDirectory: "/tmp",
             shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
-            logger: NullLogger<OpenCodeHarnessInstance>.Instance);
+            logger: NullLogger<OpenCodeHarnessInstance>.Instance,
+            ownerUserId: "user-1");
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var consumeTask = ConsumeEventsAsync(instance, cts.Token);
@@ -952,6 +971,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             "session:fleet-delegation-1",
             "delegation.updated",
             Arg.Any<object>(),
+            Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
 
         await instance.DisposeAsync();
@@ -977,7 +997,8 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         services.AddSingleton(delegationRepo);
         services.AddSingleton(eventBroadcaster);
         services.AddSingleton(sessionRepo);
-        services.AddSingleton(new DelegationService(delegationRepo, eventBroadcaster));
+        services.AddSingleton<IUserContext>(new TestUserContext("user-1"));
+        services.AddSingleton(new DelegationService(delegationRepo, eventBroadcaster, new TestUserContext("user-1")));
         var rootProvider = services.BuildServiceProvider();
         var scopeFactory = rootProvider.GetRequiredService<IServiceScopeFactory>();
 
@@ -1002,6 +1023,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
             logger: NullLogger<OpenCodeHarnessInstance>.Instance,
+            ownerUserId: "user-1",
             openCodeSessionId: "oc-parent");
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));

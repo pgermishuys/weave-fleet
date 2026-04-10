@@ -13,4 +13,6 @@ public sealed class Instance
     public string Status { get; set; } = "running";
     public string CreatedAt { get; set; } = string.Empty;
     public string? StoppedAt { get; set; }
+    /// <summary>Owner's user identifier.</summary>
+    public string UserId { get; set; } = string.Empty;
 }

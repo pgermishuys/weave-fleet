@@ -6,7 +6,7 @@ namespace WeaveFleet.Api.Endpoints;
 
 public static class ProjectEndpoints
 {
-    public static WebApplication MapProjectEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapProjectEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/projects").WithTags("Projects");
 

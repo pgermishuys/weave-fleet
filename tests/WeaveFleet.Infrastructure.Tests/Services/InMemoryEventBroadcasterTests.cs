@@ -18,7 +18,7 @@ public sealed class InMemoryEventBroadcasterTests
         var received = new List<string>();
         var subscribeTask = Task.Run(async () =>
         {
-            await foreach (var evt in broadcaster.SubscribeAsync(["*"], cts.Token))
+            await foreach (var evt in broadcaster.SubscribeAsync(["*"], subscriberUserId: null, cts.Token))
             {
                 received.Add(evt.Topic);
                 break; // stop after first event
@@ -46,7 +46,7 @@ public sealed class InMemoryEventBroadcasterTests
         var received = new List<string>();
         var subscribeTask = Task.Run(async () =>
         {
-            await foreach (var evt in broadcaster.SubscribeAsync(["*"], cts.Token))
+            await foreach (var evt in broadcaster.SubscribeAsync(["*"], subscriberUserId: null, cts.Token))
             {
                 received.Add(evt.Topic);
                 break;
@@ -80,7 +80,7 @@ public sealed class InMemoryEventBroadcasterTests
         {
             try
             {
-                await foreach (var evt in broadcaster.SubscribeAsync(["sessions"], cts.Token))
+                await foreach (var evt in broadcaster.SubscribeAsync(["sessions"], subscriberUserId: null, cts.Token))
                     received.Add(evt.Topic);
             }
             catch (OperationCanceledException)
@@ -114,7 +114,7 @@ public sealed class InMemoryEventBroadcasterTests
         var received = new List<string>();
         var subscribeTask = Task.Run(async () =>
         {
-            await foreach (var evt in broadcaster.SubscribeAsync(["sessions"], cts.Token))
+            await foreach (var evt in broadcaster.SubscribeAsync(["sessions"], subscriberUserId: null, cts.Token))
             {
                 received.Add(evt.Topic);
                 break;
@@ -151,7 +151,7 @@ public sealed class InMemoryEventBroadcasterTests
 
         _ = Task.Run(async () =>
         {
-            await foreach (var evt in broadcaster.SubscribeAsync(["*"], cts.Token))
+            await foreach (var evt in broadcaster.SubscribeAsync(["*"], subscriberUserId: null, cts.Token))
             {
                 wildcardReceived.Add(evt.Topic);
                 wildcardDone.TrySetResult();
@@ -161,7 +161,7 @@ public sealed class InMemoryEventBroadcasterTests
 
         _ = Task.Run(async () =>
         {
-            await foreach (var evt in broadcaster.SubscribeAsync(["sessions"], cts.Token))
+            await foreach (var evt in broadcaster.SubscribeAsync(["sessions"], subscriberUserId: null, cts.Token))
             {
                 specificReceived.Add(evt.Topic);
                 specificDone.TrySetResult();

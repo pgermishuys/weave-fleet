@@ -149,6 +149,8 @@ public sealed class SessionLifecycleEndpointTests
     private static SessionService BuildSessionService(ISessionRepository sessionRepository)
     {
         sessionRepository.DeleteAsync(Arg.Any<string>()).Returns(true);
+        var userContext = new TestUserContext("user-1");
+        var options = new WeaveFleet.Application.Configuration.FleetOptions();
 
         var instanceRepository = Substitute.For<IInstanceRepository>();
         instanceRepository.GetByIdAsync(Arg.Any<string>()).Returns(new Instance
@@ -174,7 +176,7 @@ public sealed class SessionLifecycleEndpointTests
         workspaceRootRepository.ListAsync().Returns([
             new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
         ]);
-        var workspaceRootService = new WorkspaceRootService(workspaceRootRepository);
+        var workspaceRootService = new WorkspaceRootService(workspaceRootRepository, userContext);
         var sessionSourceResolutionService = new SessionSourceResolutionService([
             new LocalDirectorySessionSourceProvider(workspaceRootService)
         ]);
@@ -182,8 +184,10 @@ public sealed class SessionLifecycleEndpointTests
         var orchestrator = new SessionOrchestrator(
             new WorkspaceService(
                 workspaceRepository,
+                userContext,
+                options,
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceService>.Instance),
-            new InstanceService(instanceRepository, sessionRepository),
+            new InstanceService(instanceRepository, sessionRepository, userContext),
             sessionSourceResolutionService,
             Substitute.For<WeaveFleet.Application.Harnesses.IHarnessRegistry>(),
             new InstanceTracker(),
@@ -195,8 +199,9 @@ public sealed class SessionLifecycleEndpointTests
             eventBroadcaster,
             analyticsCollector,
             messageRepository,
-            new DelegationService(delegationRepository, eventBroadcaster),
-            new WeaveFleet.Application.Configuration.FleetOptions(),
+            new DelegationService(delegationRepository, eventBroadcaster, userContext),
+            userContext,
+            options,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance);
 
         return new SessionService(sessionRepository, projectRepository, orchestrator);

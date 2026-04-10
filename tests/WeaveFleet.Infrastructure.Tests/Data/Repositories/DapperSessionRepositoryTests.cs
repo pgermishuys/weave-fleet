@@ -10,21 +10,23 @@ public sealed class DapperSessionRepositoryTests
     private static async Task<(SqliteConnection Keeper, DapperSessionRepository Repo, IDbConnectionFactory Factory)> CreateAsync()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        var repo = new DapperSessionRepository(factory);
+        var repo = new DapperSessionRepository(factory, new TestUserContext());
         return (keeper, repo, factory);
     }
 
     private static async Task<(Workspace W, Instance I)> InsertDependenciesAsync(IDbConnectionFactory factory)
     {
-        var wsRepo = new DapperWorkspaceRepository(factory);
-        var instRepo = new DapperInstanceRepository(factory);
+        var userContext = new TestUserContext();
+        var wsRepo = new DapperWorkspaceRepository(factory, userContext);
+        var instRepo = new DapperInstanceRepository(factory, userContext);
 
         var ws = new Workspace
         {
             Id = Guid.NewGuid().ToString(),
             Directory = "/tmp/ws",
             IsolationStrategy = "existing",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
         var inst = new Instance
         {
@@ -33,7 +35,8 @@ public sealed class DapperSessionRepositoryTests
             Directory = "/tmp/ws",
             Url = "http://localhost:9000",
             Status = "running",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
 
         await wsRepo.InsertAsync(ws);
@@ -59,6 +62,7 @@ public sealed class DapperSessionRepositoryTests
             Directory = "/tmp/ws",
             CreatedAt = DateTime.UtcNow.ToString("O"),
             TotalTokens = 0,
+            UserId = TestUserContext.DefaultUserId,
             TotalCost = 0
         };
 
@@ -88,7 +92,8 @@ public sealed class DapperSessionRepositoryTests
             Title = "Harness Session",
             Status = "active",
             Directory = "/tmp/ws",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
         await repo.InsertAsync(session);
 
@@ -115,7 +120,8 @@ public sealed class DapperSessionRepositoryTests
             Status = "active",
             Directory = "/tmp/ws",
             CreatedAt = DateTime.UtcNow.ToString("O"),
-            IsHidden = true
+            IsHidden = true,
+            UserId = TestUserContext.DefaultUserId
         };
 
         await repo.InsertAsync(session);
@@ -144,7 +150,8 @@ public sealed class DapperSessionRepositoryTests
                 Title = $"Session {i}",
                 Status = "active",
                 Directory = "/tmp/ws",
-                CreatedAt = DateTime.UtcNow.ToString("O")
+                CreatedAt = DateTime.UtcNow.ToString("O"),
+                UserId = TestUserContext.DefaultUserId
             });
         }
 
@@ -169,7 +176,8 @@ public sealed class DapperSessionRepositoryTests
             Title = "Archived Session",
             Status = "stopped",
             Directory = "/tmp/ws",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         });
 
         await repo.InsertAsync(new Session
@@ -181,7 +189,8 @@ public sealed class DapperSessionRepositoryTests
             Title = "Active Session",
             Status = "active",
             Directory = "/tmp/ws",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         });
 
         await repo.ArchiveAsync(archivedSessionId, DateTime.UtcNow.ToString("O"));
@@ -212,7 +221,8 @@ public sealed class DapperSessionRepositoryTests
             Title = "Archived Session",
             Status = "stopped",
             Directory = "/tmp/ws",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         });
 
         await repo.InsertAsync(new Session
@@ -224,7 +234,8 @@ public sealed class DapperSessionRepositoryTests
             Title = "Active Session",
             Status = "active",
             Directory = "/tmp/ws",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         });
 
         await repo.ArchiveAsync(archivedSessionId, DateTime.UtcNow.ToString("O"));
@@ -251,7 +262,8 @@ public sealed class DapperSessionRepositoryTests
             Title = "Archive Test",
             Status = "stopped",
             Directory = "/tmp/ws",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
         await repo.InsertAsync(session);
 
@@ -280,7 +292,8 @@ public sealed class DapperSessionRepositoryTests
             Title = "Unarchive Test",
             Status = "stopped",
             Directory = "/tmp/ws",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
         await repo.InsertAsync(session);
 
@@ -311,7 +324,8 @@ public sealed class DapperSessionRepositoryTests
             Title = "Archived Count",
             Status = "stopped",
             Directory = "/tmp/ws",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         });
 
         await repo.InsertAsync(new Session
@@ -323,7 +337,8 @@ public sealed class DapperSessionRepositoryTests
             Title = "Active Count",
             Status = "active",
             Directory = "/tmp/ws",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         });
 
         await repo.ArchiveAsync(archivedSessionId, DateTime.UtcNow.ToString("O"));
@@ -351,7 +366,8 @@ public sealed class DapperSessionRepositoryTests
             Title = "Status Test",
             Status = "active",
             Directory = "/tmp/ws",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
         await repo.InsertAsync(session);
 
@@ -379,7 +395,8 @@ public sealed class DapperSessionRepositoryTests
             Title = "Token Test",
             Status = "active",
             Directory = "/tmp/ws",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
         await repo.InsertAsync(session);
 
@@ -398,12 +415,57 @@ public sealed class DapperSessionRepositoryTests
         using var _ = conn;
 
         var (ws, inst) = await InsertDependenciesAsync(factory);
-        await repo.InsertAsync(new Session { Id = Guid.NewGuid().ToString(), WorkspaceId = ws.Id, InstanceId = inst.Id, OpencodeSessionId = "oc-t1", Title = "T1", Status = "active", Directory = "/tmp", CreatedAt = DateTime.UtcNow.ToString("O"), TotalTokens = 50, TotalCost = 0.05 });
-        await repo.InsertAsync(new Session { Id = Guid.NewGuid().ToString(), WorkspaceId = ws.Id, InstanceId = inst.Id, OpencodeSessionId = "oc-t2", Title = "T2", Status = "active", Directory = "/tmp", CreatedAt = DateTime.UtcNow.ToString("O"), TotalTokens = 150, TotalCost = 0.15 });
+        await repo.InsertAsync(new Session { Id = Guid.NewGuid().ToString(), WorkspaceId = ws.Id, InstanceId = inst.Id, OpencodeSessionId = "oc-t1", Title = "T1", Status = "active", Directory = "/tmp", CreatedAt = DateTime.UtcNow.ToString("O"), TotalTokens = 50, TotalCost = 0.05, UserId = TestUserContext.DefaultUserId });
+        await repo.InsertAsync(new Session { Id = Guid.NewGuid().ToString(), WorkspaceId = ws.Id, InstanceId = inst.Id, OpencodeSessionId = "oc-t2", Title = "T2", Status = "active", Directory = "/tmp", CreatedAt = DateTime.UtcNow.ToString("O"), TotalTokens = 150, TotalCost = 0.15, UserId = TestUserContext.DefaultUserId });
 
         var (totalTokens, totalCost) = await repo.GetFleetTokenTotalsAsync();
 
         totalTokens.ShouldBe(200);
         totalCost.ShouldBe(0.20, 0.00001);
+    }
+
+    [Fact]
+    public async Task UpdateStatusAsync_DoesNotUpdateOtherUsersSession()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
+        var repo = new DapperSessionRepository(factory, new TestUserContext());
+
+        await repo.UpdateStatusAsync(ownerGraph.Session.Id, "stopped", DateTime.UtcNow.ToString("O"));
+
+        var ownerRepo = new DapperSessionRepository(factory, new TestUserContext("owner-user"));
+        var session = await ownerRepo.GetByIdAsync(ownerGraph.Session.Id);
+        session.ShouldNotBeNull();
+        session.Status.ShouldBe("active");
+    }
+
+    [Fact]
+    public async Task IncrementTokensAsync_ReturnsNullForOtherUsersSession()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
+        var repo = new DapperSessionRepository(factory, new TestUserContext());
+
+        var result = await repo.IncrementTokensAsync(ownerGraph.Session.Id, 50, 1.25);
+
+        result.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task GetForInstanceAsync_DoesNotReturnOtherUsersSessions()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
+        var repo = new DapperSessionRepository(factory, new TestUserContext());
+
+        var sessions = await repo.GetForInstanceAsync(ownerGraph.Instance.Id);
+
+        sessions.ShouldBeEmpty();
     }
 }

@@ -28,7 +28,9 @@ public sealed class RepositorySessionSourceProviderTests
 
         var services = new ServiceCollection();
         services.AddSingleton(workspaceRootRepository);
-        services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository));
+        var userContext = new TestUserContext();
+        services.AddSingleton<IUserContext>(userContext);
+        services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository, userContext));
         var serviceProvider = services.BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
 
@@ -71,7 +73,9 @@ public sealed class RepositorySessionSourceProviderTests
 
         var services = new ServiceCollection();
         services.AddSingleton(workspaceRootRepository);
-        services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository));
+        var userContext = new TestUserContext();
+        services.AddSingleton<IUserContext>(userContext);
+        services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository, userContext));
         var serviceProvider = services.BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
 

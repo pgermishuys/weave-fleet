@@ -9,12 +9,16 @@ namespace WeaveFleet.Infrastructure.Services;
 /// <summary>
 /// In-memory fan-out event broadcaster using System.Threading.Channels.
 /// One channel per subscriber; topics are filtered on delivery.
+/// Events are scoped to the owning user when a <c>userId</c> is provided —
+/// only subscribers with the matching <c>subscriberUserId</c> receive those events.
 /// </summary>
 public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
 {
     private sealed record Subscription(
         string SubscriberId,
         IReadOnlyList<string> Topics,
+        /// <summary>Only events matching this userId (or system events with null userId) are delivered.</summary>
+        string? SubscriberUserId,
         Channel<BroadcastEvent> Channel);
 
     private readonly ConcurrentDictionary<string, Subscription> _subscriptions = new();
@@ -23,15 +27,32 @@ public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
     internal int SubscriberCount => _subscriptions.Count;
 
     /// <inheritdoc />
-    public Task BroadcastAsync(string topic, string type, object payload, CancellationToken ct = default)
+    public Task BroadcastAsync(
+        string topic,
+        string type,
+        object payload,
+        string? userId = null,
+        CancellationToken ct = default)
     {
         var json = JsonSerializer.SerializeToElement(payload);
-        var evt = new BroadcastEvent(topic, type, json, DateTimeOffset.UtcNow);
+        var evt = new BroadcastEvent(topic, type, json, DateTimeOffset.UtcNow, userId);
 
         foreach (var sub in _subscriptions.Values)
         {
+            // Topic filter
             if (!sub.Topics.Contains("*") && !sub.Topics.Contains(topic))
                 continue;
+
+            // User-scope filter: deliver only if
+            //   • the event has no owner (system event), OR
+            //   • the subscriber has no user filter (system subscriber), OR
+            //   • the subscriber's userId matches the event's userId
+            if (userId is not null
+                && sub.SubscriberUserId is not null
+                && !string.Equals(userId, sub.SubscriberUserId, StringComparison.Ordinal))
+            {
+                continue;
+            }
 
             // TryWrite is fine — unbounded channel; drop if disposed
             sub.Channel.Writer.TryWrite(evt);
@@ -43,6 +64,7 @@ public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
     /// <inheritdoc />
     public async IAsyncEnumerable<BroadcastEvent> SubscribeAsync(
         IReadOnlyList<string> topics,
+        string? subscriberUserId,
         [EnumeratorCancellation] CancellationToken ct)
     {
         var id = Guid.NewGuid().ToString();
@@ -52,7 +74,7 @@ public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
             SingleWriter = false
         });
 
-        var sub = new Subscription(id, topics, channel);
+        var sub = new Subscription(id, topics, subscriberUserId, channel);
         _subscriptions[id] = sub;
 
         try

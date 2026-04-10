@@ -1,9 +1,10 @@
 import { Routes, Route } from "react-router";
 import { ClientLayout } from "./app/client-layout";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { usePluginRuntime } from "@/plugins/context";
 import { getRoutes } from "@/plugins/slots";
+import { apiFetch, apiUrl } from "@/lib/api-client";
 
 // Lazy-load all pages for code splitting (same behavior as Next.js)
 const FleetPage = lazy(() => import("./app/page"));
@@ -26,6 +27,67 @@ function PageFallback() {
       Loading...
     </div>
   );
+}
+
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const [status, setStatus] = useState<"checking" | "ready" | "error">("checking");
+  const loginUrl = useMemo(() => {
+    if (typeof window === "undefined") {
+      return "/auth/login";
+    }
+
+    const returnUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    return apiUrl(`/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    void (async () => {
+      try {
+        const response = await apiFetch("/api/user/me");
+
+        if (response.ok) {
+          if (active) {
+            setStatus("ready");
+          }
+
+          return;
+        }
+
+        if (response.status === 401) {
+          window.location.assign(loginUrl);
+          return;
+        }
+
+        if (active) {
+          setStatus("error");
+        }
+      } catch {
+        if (active) {
+          setStatus("error");
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [loginUrl]);
+
+  if (status === "checking") {
+    return <PageFallback />;
+  }
+
+  if (status === "error") {
+    return (
+      <div className="flex h-screen items-center justify-center text-sm text-muted-foreground">
+        Unable to verify sign-in status.
+      </div>
+    );
+  }
+
+  return <>{children}</>;
 }
 
 function AppRoutes() {
@@ -59,10 +121,12 @@ function AppRoutes() {
 
 export function App() {
   return (
-    <ClientLayout>
-      <Suspense fallback={<PageFallback />}>
-        <AppRoutes />
-      </Suspense>
-    </ClientLayout>
+    <AuthGate>
+      <ClientLayout>
+        <Suspense fallback={<PageFallback />}>
+          <AppRoutes />
+        </Suspense>
+      </ClientLayout>
+    </AuthGate>
   );
 }

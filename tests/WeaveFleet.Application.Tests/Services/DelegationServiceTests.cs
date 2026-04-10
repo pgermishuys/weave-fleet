@@ -10,11 +10,12 @@ public sealed class DelegationServiceTests
 {
     private readonly IDelegationRepository _delegationRepository = Substitute.For<IDelegationRepository>();
     private readonly IEventBroadcaster _eventBroadcaster = Substitute.For<IEventBroadcaster>();
+    private readonly IUserContext _userContext = new TestUserContext("user-1");
     private readonly DelegationService _sut;
 
     public DelegationServiceTests()
     {
-        _sut = new DelegationService(_delegationRepository, _eventBroadcaster);
+        _sut = new DelegationService(_delegationRepository, _eventBroadcaster, _userContext);
     }
 
     [Fact]
@@ -45,6 +46,7 @@ public sealed class DelegationServiceTests
                 e.ParentToolCallId == "tool-1" &&
                 e.Title == "Code Review" &&
                 e.Status == "pending"),
+            "user-1",
             Arg.Any<CancellationToken>());
     }
 
@@ -74,6 +76,7 @@ public sealed class DelegationServiceTests
             Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<object>(),
+            Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -115,6 +118,7 @@ public sealed class DelegationServiceTests
                 e.DelegationId == "del-1" &&
                 e.ChildSessionId == "child-1" &&
                 e.Status == "running"),
+            "user-1",
             Arg.Any<CancellationToken>());
     }
 
@@ -151,6 +155,7 @@ public sealed class DelegationServiceTests
                 e.DelegationId == "del-1" &&
                 e.Status == "completed" &&
                 e.ChildSessionId == "child-1"),
+            "user-1",
             Arg.Any<CancellationToken>());
     }
 

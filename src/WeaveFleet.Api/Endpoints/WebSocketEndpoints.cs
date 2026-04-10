@@ -19,7 +19,7 @@ public static class WebSocketEndpoints
         LoggerMessage.Define(LogLevel.Debug, new EventId(3, "WsDisconnected"),
             "WebSocket connection closed");
 
-    public static WebApplication MapWebSocketEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapWebSocketEndpoints(this IEndpointRouteBuilder app)
     {
         app.Map("/ws", HandleWebSocketAsync);
         return app;
@@ -27,6 +27,14 @@ public static class WebSocketEndpoints
 
     private static async Task HandleWebSocketAsync(HttpContext context)
     {
+        var fleetOptions = context.RequestServices.GetRequiredService<WeaveFleet.Application.Configuration.FleetOptions>();
+
+        if (!IsOriginAllowed(context, fleetOptions))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+
         if (!context.WebSockets.IsWebSocketRequest)
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
@@ -36,6 +44,7 @@ public static class WebSocketEndpoints
         using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
         var logger = context.RequestServices.GetRequiredService<ILogger<WebApplication>>();
         var broadcaster = context.RequestServices.GetRequiredService<IEventBroadcaster>();
+        var userContext = context.RequestServices.GetRequiredService<WeaveFleet.Application.Services.IUserContext>();
 
         if (logger.IsEnabled(LogLevel.Debug))
             LogConnected(logger, context.Connection.RemoteIpAddress?.ToString(), null);
@@ -44,8 +53,8 @@ public static class WebSocketEndpoints
         var subscribedTopics = new List<string>();
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
 
-        // Pump events to the WebSocket while it is open
-        var sendTask = PumpEventsAsync(webSocket, broadcaster, subscribedTopics, cts.Token);
+        // Pump events to the WebSocket while it is open — scoped to the authenticated user
+        var sendTask = PumpEventsAsync(webSocket, broadcaster, subscribedTopics, userContext.UserId, cts.Token);
 
         var buffer = new byte[4096];
 
@@ -143,14 +152,13 @@ public static class WebSocketEndpoints
         WebSocket webSocket,
         IEventBroadcaster broadcaster,
         List<string> subscribedTopics,
+        string? subscriberUserId,
         CancellationToken ct)
     {
-        // Subscribe to all topics — we filter on the topic list at broadcast time
-        // Use a wildcard "fleet.*" subscription by subscribing to all topics
-        // The broadcaster delivers only what was published; we re-check topics here
+        // Subscribe to all topics with user scope — broadcaster delivers only matching events
         var allTopics = new[] { "*" };
 
-        await foreach (var evt in broadcaster.SubscribeAsync(allTopics, ct))
+        await foreach (var evt in broadcaster.SubscribeAsync(allTopics, subscriberUserId, ct))
         {
             bool inScope;
             lock (subscribedTopics)
@@ -188,5 +196,20 @@ public static class WebSocketEndpoints
                 break;
             }
         }
+    }
+
+    private static bool IsOriginAllowed(HttpContext context, WeaveFleet.Application.Configuration.FleetOptions fleetOptions)
+    {
+        if (!fleetOptions.Auth.Enabled)
+            return true;
+
+        var origin = context.Request.Headers.Origin.ToString();
+        if (string.IsNullOrWhiteSpace(origin))
+            return false;
+
+        if (fleetOptions.Auth.AllowedOrigins.Length == 0)
+            return false;
+
+        return fleetOptions.Auth.AllowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
     }
 }

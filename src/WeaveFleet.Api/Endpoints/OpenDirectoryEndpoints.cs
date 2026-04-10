@@ -5,7 +5,7 @@ namespace WeaveFleet.Api.Endpoints;
 
 public static class OpenDirectoryEndpoints
 {
-    public static WebApplication MapOpenDirectoryEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapOpenDirectoryEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api").WithTags("Directories");
 

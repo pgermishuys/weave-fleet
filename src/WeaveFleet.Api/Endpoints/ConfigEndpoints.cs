@@ -1,11 +1,13 @@
 using System.Text.Json.Nodes;
+using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Endpoints;
 
 public static class ConfigEndpoints
 {
-    public static WebApplication MapConfigEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapConfigEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api").WithTags("Config");
 
@@ -46,4 +48,34 @@ public static class ConfigEndpoints
 
         return app;
     }
+
+    public static IEndpointRouteBuilder MapClientConfigEndpoints(this IEndpointRouteBuilder app, FleetOptions fleetOptions)
+    {
+        var group = app.MapGroup("/api/config").WithTags("Config");
+
+        group.MapGet("/client", async (
+            IHarnessRegistry harnessRegistry,
+            CancellationToken ct) =>
+        {
+            var harnesses = await harnessRegistry.GetAvailabilityAsync(ct);
+            var availableHarnesses = harnesses
+                .Where(harness => harness.Available)
+                .Select(harness => harness.Type)
+                .ToArray();
+
+            return Results.Ok(new ClientConfigResponse(
+                fleetOptions.Cloud.Enabled,
+                fleetOptions.Auth.Enabled,
+                availableHarnesses));
+        })
+        .Produces<ClientConfigResponse>(StatusCodes.Status200OK)
+        .WithName("GetClientConfig");
+
+        return app;
+    }
 }
+
+internal sealed record ClientConfigResponse(
+    bool CloudMode,
+    bool AuthEnabled,
+    IReadOnlyList<string> AvailableHarnesses);

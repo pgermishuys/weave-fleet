@@ -4,7 +4,7 @@ namespace WeaveFleet.Api.Endpoints;
 
 public static class SessionSourceEndpoints
 {
-    public static WebApplication MapSessionSourceEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapSessionSourceEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/session-sources").WithTags("SessionSources");
 

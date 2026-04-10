@@ -10,6 +10,7 @@ describe("api-client", () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   describe("when VITE_API_BASE_URL is unset", () => {
@@ -29,8 +30,10 @@ describe("api-client", () => {
       const { apiFetch } = await import("../api-client");
       await apiFetch("/api/sessions");
 
-      expect(mockFetch).toHaveBeenCalledWith("/api/sessions", undefined);
-      vi.unstubAllGlobals();
+      expect(mockFetch).toHaveBeenCalledWith("/api/sessions", {
+        credentials: "include",
+        headers: new Headers(),
+      });
     });
   });
 
@@ -55,10 +58,33 @@ describe("api-client", () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         "http://localhost:3000/api/sessions",
-        { method: "POST" }
+        {
+          method: "POST",
+          credentials: "include",
+          headers: new Headers(),
+        }
       );
-      vi.unstubAllGlobals();
     });
+  });
+
+  it("apiFetch adds csrf header for state-changing requests", async () => {
+    vi.stubEnv("VITE_API_BASE_URL", "");
+    Object.defineProperty(document, "cookie", {
+      value: ".WeaveFleet.CSRF=test-token",
+      configurable: true,
+    });
+
+    const mockFetch = vi.fn().mockResolvedValue(new Response("ok"));
+    vi.stubGlobal("fetch", mockFetch);
+
+    const { apiFetch } = await import("../api-client");
+    await apiFetch("/api/config", { method: "PUT" });
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const headers = new Headers(init.headers);
+    expect(init.credentials).toBe("include");
+    expect(headers.get("X-CSRF-Token")).toBe("test-token");
   });
 
   describe("when VITE_API_BASE_URL has a trailing slash", () => {

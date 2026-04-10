@@ -4,7 +4,7 @@ namespace WeaveFleet.Api.Endpoints;
 
 public static class HarnessEndpoints
 {
-    public static WebApplication MapHarnessEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapHarnessEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api").WithTags("Harnesses");
 

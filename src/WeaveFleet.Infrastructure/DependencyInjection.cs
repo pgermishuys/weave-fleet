@@ -63,6 +63,7 @@ public static class DependencyInjection
         services.AddScoped<IDelegationRepository, DapperDelegationRepository>();
         services.AddScoped<IWorkspaceRootRepository, DapperWorkspaceRootRepository>();
         services.AddScoped<IMessageRepository, DapperMessageRepository>();
+        services.AddScoped<IUserRepository, DapperUserRepository>();
 
         // Application services (scoped)
         services.AddScoped<ProjectService>();
@@ -74,9 +75,11 @@ public static class DependencyInjection
         services.AddScoped<SessionOrchestrator>();
         services.AddScoped<SessionCallbackService>();
         services.AddScoped<DelegationService>();
+        services.AddScoped<UserService>();
         services.AddScoped<ISessionSourceProvider, LocalDirectorySessionSourceProvider>();
         services.AddSingleton<ISessionSourceProvider, RepositorySessionSourceProvider>();
         services.AddSingleton<ISessionSourceProvider, GitHubSessionSourceProvider>();
+        services.AddScoped<SystemUserContext>();
 
         // ConfigService — singleton, no DB dependency, file-based
         services.AddSingleton<ConfigService>();

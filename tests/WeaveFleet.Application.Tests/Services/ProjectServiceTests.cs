@@ -10,11 +10,12 @@ public sealed class ProjectServiceTests
 {
     private readonly IProjectRepository _projectRepo = Substitute.For<IProjectRepository>();
     private readonly ISessionRepository _sessionRepo = Substitute.For<ISessionRepository>();
+    private readonly IUserContext _userContext = new TestUserContext();
     private readonly ProjectService _sut;
 
     public ProjectServiceTests()
     {
-        _sut = new ProjectService(_projectRepo, _sessionRepo);
+        _sut = new ProjectService(_projectRepo, _sessionRepo, _userContext);
     }
 
     [Fact]
@@ -31,6 +32,7 @@ public sealed class ProjectServiceTests
         result.IsSuccess.ShouldBeTrue();
         result.Value.Name.ShouldBe("New Project");
         result.Value.Position.ShouldBe(6); // 5 + 1
+        result.Value.UserId.ShouldBe(TestUserContext.DefaultUserId);
         await _projectRepo.Received(1).InsertAsync(Arg.Is<Project>(p => p.Position == 6));
     }
 
@@ -104,6 +106,7 @@ public sealed class ProjectServiceTests
 
         result.IsSuccess.ShouldBeTrue();
         result.Value.Type.ShouldBe("scratch");
+        result.Value.UserId.ShouldBe(TestUserContext.DefaultUserId);
         await _projectRepo.Received(1).InsertAsync(Arg.Is<Project>(p => p.Type == "scratch"));
     }
 

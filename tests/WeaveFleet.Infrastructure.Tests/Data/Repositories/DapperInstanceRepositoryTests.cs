@@ -6,11 +6,11 @@ namespace WeaveFleet.Infrastructure.Tests.Data.Repositories;
 
 public sealed class DapperInstanceRepositoryTests
 {
-    private static async Task<(SqliteConnection Keeper, DapperInstanceRepository Repo)> CreateAsync()
+    private static async Task<(SqliteConnection Keeper, DapperInstanceRepository Repo, WeaveFleet.Application.Data.IDbConnectionFactory Factory)> CreateAsync()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        var repo = new DapperInstanceRepository(factory);
-        return (keeper, repo);
+        var repo = new DapperInstanceRepository(factory, new TestUserContext());
+        return (keeper, repo, factory);
     }
 
     private static Instance MakeInstance(int port = 8080) => new()
@@ -20,13 +20,14 @@ public sealed class DapperInstanceRepositoryTests
         Directory = "/tmp/inst",
         Url = $"http://localhost:{port}",
         Status = "running",
-        CreatedAt = DateTime.UtcNow.ToString("O")
+        CreatedAt = DateTime.UtcNow.ToString("O"),
+        UserId = TestUserContext.DefaultUserId
     };
 
     [Fact]
     public async Task InsertAndGetById_ReturnsInstance()
     {
-        var (conn, repo) = await CreateAsync();
+        var (conn, repo, _) = await CreateAsync();
         using var _ = conn;
 
         var inst = MakeInstance();
@@ -41,7 +42,7 @@ public sealed class DapperInstanceRepositoryTests
     [Fact]
     public async Task GetRunningAsync_OnlyReturnsRunning()
     {
-        var (conn, repo) = await CreateAsync();
+        var (conn, repo, _) = await CreateAsync();
         using var _ = conn;
 
         var running = MakeInstance(8001);
@@ -60,7 +61,7 @@ public sealed class DapperInstanceRepositoryTests
     [Fact]
     public async Task MarkAllStoppedAsync_StopsAllRunning()
     {
-        var (conn, repo) = await CreateAsync();
+        var (conn, repo, _) = await CreateAsync();
         using var _ = conn;
 
         await repo.InsertAsync(MakeInstance(9001));
@@ -76,7 +77,7 @@ public sealed class DapperInstanceRepositoryTests
     [Fact]
     public async Task UpdateStatusAsync_ChangesStatus()
     {
-        var (conn, repo) = await CreateAsync();
+        var (conn, repo, _) = await CreateAsync();
         using var _ = conn;
 
         var inst = MakeInstance();
@@ -88,5 +89,22 @@ public sealed class DapperInstanceRepositoryTests
         retrieved.ShouldNotBeNull();
         retrieved.Status.ShouldBe("stopped");
         retrieved.StoppedAt.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task UpdateStatusAsync_DoesNotUpdateOtherUsersInstance()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
+        var repo = new DapperInstanceRepository(factory, new TestUserContext());
+
+        await repo.UpdateStatusAsync(ownerGraph.Instance.Id, "stopped", DateTime.UtcNow.ToString("O"));
+
+        var ownerRepo = new DapperInstanceRepository(factory, new TestUserContext("owner-user"));
+        var instance = await ownerRepo.GetByIdAsync(ownerGraph.Instance.Id);
+        instance.ShouldNotBeNull();
+        instance.Status.ShouldBe("running");
     }
 }

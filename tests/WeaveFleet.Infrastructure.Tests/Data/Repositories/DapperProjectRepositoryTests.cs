@@ -9,7 +9,7 @@ public sealed class DapperProjectRepositoryTests
     private static async Task<(SqliteConnection Keeper, DapperProjectRepository Repo)> CreateAsync()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        var repo = new DapperProjectRepository(factory);
+        var repo = new DapperProjectRepository(factory, new TestUserContext());
         return (keeper, repo);
     }
 
@@ -27,7 +27,8 @@ public sealed class DapperProjectRepositoryTests
             Type = "user",
             Position = 1,
             CreatedAt = DateTime.UtcNow.ToString("O"),
-            UpdatedAt = DateTime.UtcNow.ToString("O")
+            UpdatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
 
         await repo.InsertAsync(project);
@@ -52,7 +53,8 @@ public sealed class DapperProjectRepositoryTests
             Type = "scratch",
             Position = 0,
             CreatedAt = DateTime.UtcNow.ToString("O"),
-            UpdatedAt = DateTime.UtcNow.ToString("O")
+            UpdatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
         await repo.InsertAsync(scratch);
 
@@ -68,8 +70,8 @@ public sealed class DapperProjectRepositoryTests
         var (conn, repo) = await CreateAsync();
         using var _ = conn;
 
-        await repo.InsertAsync(new Project { Id = Guid.NewGuid().ToString(), Name = "B", Position = 2, Type = "user", CreatedAt = DateTime.UtcNow.ToString("O"), UpdatedAt = DateTime.UtcNow.ToString("O") });
-        await repo.InsertAsync(new Project { Id = Guid.NewGuid().ToString(), Name = "A", Position = 1, Type = "user", CreatedAt = DateTime.UtcNow.ToString("O"), UpdatedAt = DateTime.UtcNow.ToString("O") });
+        await repo.InsertAsync(new Project { Id = Guid.NewGuid().ToString(), Name = "B", Position = 2, Type = "user", CreatedAt = DateTime.UtcNow.ToString("O"), UpdatedAt = DateTime.UtcNow.ToString("O"), UserId = TestUserContext.DefaultUserId });
+        await repo.InsertAsync(new Project { Id = Guid.NewGuid().ToString(), Name = "A", Position = 1, Type = "user", CreatedAt = DateTime.UtcNow.ToString("O"), UpdatedAt = DateTime.UtcNow.ToString("O"), UserId = TestUserContext.DefaultUserId });
 
         var list = await repo.ListAsync();
 
@@ -84,7 +86,7 @@ public sealed class DapperProjectRepositoryTests
         var (conn, repo) = await CreateAsync();
         using var _ = conn;
 
-        var project = new Project { Id = Guid.NewGuid().ToString(), Name = "ToDelete", Position = 0, Type = "user", CreatedAt = DateTime.UtcNow.ToString("O"), UpdatedAt = DateTime.UtcNow.ToString("O") };
+        var project = new Project { Id = Guid.NewGuid().ToString(), Name = "ToDelete", Position = 0, Type = "user", CreatedAt = DateTime.UtcNow.ToString("O"), UpdatedAt = DateTime.UtcNow.ToString("O"), UserId = TestUserContext.DefaultUserId };
         await repo.InsertAsync(project);
 
         await repo.DeleteAsync(project.Id);
@@ -99,7 +101,7 @@ public sealed class DapperProjectRepositoryTests
         var (keeper, repo) = await CreateAsync();
         using var _ = keeper;
 
-        var project = new Project { Id = Guid.NewGuid().ToString(), Name = "P", Position = 0, Type = "user", CreatedAt = DateTime.UtcNow.ToString("O"), UpdatedAt = DateTime.UtcNow.ToString("O") };
+        var project = new Project { Id = Guid.NewGuid().ToString(), Name = "P", Position = 0, Type = "user", CreatedAt = DateTime.UtcNow.ToString("O"), UpdatedAt = DateTime.UtcNow.ToString("O"), UserId = TestUserContext.DefaultUserId };
         await repo.InsertAsync(project);
 
         var count = await repo.GetSessionCountAsync(project.Id);

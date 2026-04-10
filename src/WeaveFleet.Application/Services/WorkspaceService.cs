@@ -1,4 +1,6 @@
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
@@ -12,10 +14,14 @@ namespace WeaveFleet.Application.Services;
 /// </summary>
 public sealed partial class WorkspaceService(
     IWorkspaceRepository workspaceRepository,
+    IUserContext userContext,
+    FleetOptions options,
     ILogger<WorkspaceService> logger)
 {
     /// <summary>
     /// Creates a new workspace, applying the specified isolation strategy.
+    /// In cloud mode, the strategy is overridden to "managed" and the directory is computed
+    /// under <see cref="CloudOptions.WorkspaceRoot"/>.
     /// </summary>
     public async Task<Result<Workspace>> CreateWorkspaceAsync(
         string sourceDirectory,
@@ -31,19 +37,42 @@ public sealed partial class WorkspaceService(
     {
         string workingDirectory;
 
-        try
+        // Cloud mode: override strategy to "managed" and derive path under WorkspaceRoot
+        if (options.Cloud.Enabled)
         {
-            workingDirectory = strategy switch
+            var managedResult = CreateManagedWorkspacePath();
+            if (managedResult.IsFailure)
+                return managedResult.Error;
+
+            workingDirectory = managedResult.Value;
+            strategy = "managed";
+
+            try
             {
-                "worktree" => await CreateWorktreeAsync(sourceDirectory, branch),
-                "clone" => await CreateCloneAsync(sourceDirectory, branch),
-                _ => sourceDirectory
-            };
+                System.IO.Directory.CreateDirectory(workingDirectory);
+            }
+            catch (Exception ex)
+            {
+                LogWorkspaceCreateFailed(ex, strategy, workingDirectory);
+                return FleetError.Unexpected;
+            }
         }
-        catch (Exception ex)
+        else
         {
-            LogWorkspaceCreateFailed(ex, strategy, sourceDirectory);
-            return FleetError.Unexpected;
+            try
+            {
+                workingDirectory = strategy switch
+                {
+                    "worktree" => await CreateWorktreeAsync(sourceDirectory, branch),
+                    "clone" => await CreateCloneAsync(sourceDirectory, branch),
+                    _ => sourceDirectory
+                };
+            }
+            catch (Exception ex)
+            {
+                LogWorkspaceCreateFailed(ex, strategy, sourceDirectory);
+                return FleetError.Unexpected;
+            }
         }
 
         var workspace = new Workspace
@@ -60,12 +89,60 @@ public sealed partial class WorkspaceService(
             SourceResourceUrl = provenance?.ResourceUrl,
             SourceTitle = provenance?.Title,
             SourceSummary = provenance?.Summary,
-            SourceResolvedAt = provenance?.ResolvedAt
+            SourceResolvedAt = provenance?.ResolvedAt,
+            UserId = userContext.UserId
         };
 
         await workspaceRepository.InsertAsync(workspace);
         return workspace;
     }
+
+    /// <summary>
+    /// Derives a fully-qualified managed workspace path under the configured <see cref="CloudOptions.WorkspaceRoot"/>.
+    /// Path: <c>{WorkspaceRoot}/{userStorageKey}/{workspaceId}</c>
+    /// The <c>userStorageKey</c> is a filesystem-safe representation of the user ID.
+    /// The path is canonicalized and verified to be under the workspace root.
+    /// </summary>
+    private Result<string> CreateManagedWorkspacePath()
+    {
+        var workspaceRoot = options.Cloud.WorkspaceRoot;
+        if (string.IsNullOrWhiteSpace(workspaceRoot))
+            return FleetError.ValidationError("Cloud.WorkspaceRoot", "Cloud.WorkspaceRoot must be configured when Cloud.Enabled is true.");
+
+        var userStorageKey = ToPathSafeKey(userContext.UserId);
+        var workspaceId = Guid.NewGuid().ToString("N");
+        var candidatePath = Path.Combine(workspaceRoot, userStorageKey, workspaceId);
+        var canonicalPath = Path.GetFullPath(candidatePath);
+        var canonicalRoot = Path.GetFullPath(workspaceRoot);
+
+        // Guard: ensure the resolved path stays under the workspace root
+        if (!canonicalPath.StartsWith(canonicalRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+            && !canonicalPath.StartsWith(canonicalRoot + Path.AltDirectorySeparatorChar, StringComparison.Ordinal)
+            && canonicalPath != canonicalRoot)
+        {
+            return FleetError.ValidationError("WorkspacePath",
+                "Resolved workspace path escapes the configured workspace root.");
+        }
+
+        return canonicalPath;
+    }
+
+    /// <summary>
+    /// Converts a user ID to a filesystem-safe storage key.
+    /// Strips unsafe characters; uses first 64 chars to bound length.
+    /// Example: "user_abc|org:123" → "user_abcorg123"
+    /// </summary>
+    private static string ToPathSafeKey(string userId)
+    {
+        // Allow alphanumeric, hyphen, underscore only
+        var safe = PathUnsafeChars().Replace(userId, "");
+        if (string.IsNullOrEmpty(safe))
+            safe = "user";
+        return safe.Length > 64 ? safe[..64] : safe;
+    }
+
+    [GeneratedRegex(@"[^a-zA-Z0-9_\-]")]
+    private static partial Regex PathUnsafeChars();
 
     public async Task<Result<Unit>> CleanupWorkspaceAsync(string id)
     {
@@ -78,11 +155,11 @@ public sealed partial class WorkspaceService(
             await RunGitAsync(workspace.SourceDirectory ?? workspace.Directory,
                 "worktree", "remove", "--force", workspace.Directory);
         }
-        else if (workspace.IsolationStrategy == "clone" && workspace.Directory is not null)
+        else if (workspace.IsolationStrategy is "clone" or "managed" && workspace.Directory is not null)
         {
             try
             {
-                Directory.Delete(workspace.Directory, recursive: true);
+                System.IO.Directory.Delete(workspace.Directory, recursive: true);
             }
             catch (Exception ex)
             {
@@ -176,6 +253,6 @@ public sealed partial class WorkspaceService(
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to create workspace with strategy {Strategy} for {Dir}")]
     private partial void LogWorkspaceCreateFailed(Exception ex, string strategy, string dir);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to delete clone directory: {Dir}")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to delete clone/managed directory: {Dir}")]
     private partial void LogCloneDeleteFailed(Exception ex, string dir);
 }

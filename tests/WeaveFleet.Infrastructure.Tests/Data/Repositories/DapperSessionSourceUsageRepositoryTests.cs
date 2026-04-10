@@ -10,7 +10,7 @@ public sealed class DapperSessionSourceUsageRepositoryTests
     private static async Task<(SqliteConnection Keeper, DapperSessionSourceUsageRepository Repo, IDbConnectionFactory Factory)> CreateAsync()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        var repo = new DapperSessionSourceUsageRepository(factory);
+        var repo = new DapperSessionSourceUsageRepository(factory, new TestUserContext());
         return (keeper, repo, factory);
     }
 
@@ -20,10 +20,11 @@ public sealed class DapperSessionSourceUsageRepositoryTests
         var (conn, repo, factory) = await CreateAsync();
         using var _ = conn;
 
-        var projectRepo = new DapperProjectRepository(factory);
-        var workspaceRepo = new DapperWorkspaceRepository(factory);
-        var instanceRepo = new DapperInstanceRepository(factory);
-        var sessionRepo = new DapperSessionRepository(factory);
+        var userContext = new TestUserContext();
+        var projectRepo = new DapperProjectRepository(factory, userContext);
+        var workspaceRepo = new DapperWorkspaceRepository(factory, userContext);
+        var instanceRepo = new DapperInstanceRepository(factory, userContext);
+        var sessionRepo = new DapperSessionRepository(factory, userContext);
 
         var project = new Project
         {
@@ -32,7 +33,8 @@ public sealed class DapperSessionSourceUsageRepositoryTests
             Type = "user",
             Position = 0,
             CreatedAt = DateTime.UtcNow.ToString("O"),
-            UpdatedAt = DateTime.UtcNow.ToString("O")
+            UpdatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
         await projectRepo.InsertAsync(project);
 
@@ -41,7 +43,8 @@ public sealed class DapperSessionSourceUsageRepositoryTests
             Id = Guid.NewGuid().ToString(),
             Directory = "/tmp/usage-workspace",
             IsolationStrategy = "existing",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
         await workspaceRepo.InsertAsync(workspace);
 
@@ -52,7 +55,8 @@ public sealed class DapperSessionSourceUsageRepositoryTests
             Directory = "/tmp/usage-workspace",
             Url = "http://localhost",
             Status = "running",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
         await instanceRepo.InsertAsync(instance);
 
@@ -66,7 +70,8 @@ public sealed class DapperSessionSourceUsageRepositoryTests
             Title = "Usage Session",
             Status = "active",
             Directory = workspace.Directory,
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
         };
         await sessionRepo.InsertAsync(session);
 
@@ -92,5 +97,55 @@ public sealed class DapperSessionSourceUsageRepositoryTests
         usages[0].SourceType.ShouldBe("directory");
         usages[0].ActionId.ShouldBe("start-session");
         usages[0].Summary.ShouldBe("redacted");
+    }
+
+    [Fact]
+    public async Task ListBySessionIdAsync_DoesNotReturnOtherUsersUsage()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
+        var ownerRepo = new DapperSessionSourceUsageRepository(factory, new TestUserContext("owner-user"));
+        await ownerRepo.InsertAsync(new SessionSourceUsage
+        {
+            Id = Guid.NewGuid().ToString(),
+            SessionId = ownerGraph.Session.Id,
+            WorkspaceId = ownerGraph.Workspace.Id,
+            ProviderId = "provider",
+            SourceType = "repository",
+            ActionId = "attach",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        var repo = new DapperSessionSourceUsageRepository(factory, new TestUserContext());
+        var usages = await repo.ListBySessionIdAsync(ownerGraph.Session.Id);
+
+        usages.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task InsertAsync_DoesNotWriteToOtherUsersSession()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
+        var repo = new DapperSessionSourceUsageRepository(factory, new TestUserContext());
+
+        await repo.InsertAsync(new SessionSourceUsage
+        {
+            Id = Guid.NewGuid().ToString(),
+            SessionId = ownerGraph.Session.Id,
+            WorkspaceId = ownerGraph.Workspace.Id,
+            ProviderId = "provider",
+            SourceType = "repository",
+            ActionId = "attach",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        var ownerRepo = new DapperSessionSourceUsageRepository(factory, new TestUserContext("owner-user"));
+        var usages = await ownerRepo.ListBySessionIdAsync(ownerGraph.Session.Id);
+        usages.ShouldBeEmpty();
     }
 }

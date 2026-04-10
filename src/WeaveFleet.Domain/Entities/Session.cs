@@ -25,4 +25,6 @@ public sealed class Session
     public double TotalCost { get; set; }
     public string HarnessType { get; set; } = "opencode";
     public string? HarnessResumeToken { get; set; }
+    /// <summary>Owner's user identifier.</summary>
+    public string UserId { get; set; } = string.Empty;
 }

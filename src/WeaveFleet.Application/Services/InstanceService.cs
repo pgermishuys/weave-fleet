@@ -10,7 +10,8 @@ namespace WeaveFleet.Application.Services;
 /// </summary>
 public sealed class InstanceService(
     IInstanceRepository instanceRepository,
-    ISessionRepository sessionRepository)
+    ISessionRepository sessionRepository,
+    IUserContext userContext)
 {
     public async Task<Result<Instance>> RegisterInstanceAsync(
         string id,
@@ -27,7 +28,8 @@ public sealed class InstanceService(
             Directory = directory,
             Url = url,
             Status = "running",
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = userContext.UserId
         };
 
         await instanceRepository.InsertAsync(instance);

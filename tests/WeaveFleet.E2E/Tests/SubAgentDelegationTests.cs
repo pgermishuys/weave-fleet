@@ -40,17 +40,19 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
 
             var connFactory = _factory.KestrelServices.GetRequiredService<IDbConnectionFactory>();
             var tracker = _factory.KestrelServices.GetRequiredService<InstanceTracker>();
+            var userContext = new TestUserContext();
 
-            var workspaceRepo = new DapperWorkspaceRepository(connFactory);
+            var workspaceRepo = new DapperWorkspaceRepository(connFactory, userContext);
             await workspaceRepo.InsertAsync(new Workspace
             {
                 Id = workspaceId,
                 Directory = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar),
                 IsolationStrategy = "existing",
                 CreatedAt = now.ToString("O"),
+                UserId = userContext.UserId,
             });
 
-            var instanceRepo = new DapperInstanceRepository(connFactory);
+            var instanceRepo = new DapperInstanceRepository(connFactory, userContext);
             await instanceRepo.InsertAsync(new Instance
             {
                 Id = parentInstanceId,
@@ -59,8 +61,9 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                 Url = "http://127.0.0.1:0",
                 Status = "running",
                 CreatedAt = now.ToString("O"),
+                UserId = userContext.UserId,
             });
-            var sessionRepo = new DapperSessionRepository(connFactory);
+            var sessionRepo = new DapperSessionRepository(connFactory, userContext);
             await sessionRepo.InsertAsync(new Session
             {
                 Id = parentSessionId,
@@ -74,9 +77,10 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                 LifecycleStatus = "running",
                 ActivityStatus = "busy",
                 HarnessType = "opencode",
+                UserId = userContext.UserId,
             });
 
-            var messageRepo = new DapperMessageRepository(connFactory);
+            var messageRepo = new DapperMessageRepository(connFactory, userContext);
             await messageRepo.UpsertAsync(
                 MessagePersistenceService.ToPersistedMessage(
                     parentSessionId,

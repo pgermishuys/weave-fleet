@@ -11,6 +11,8 @@
 // Runtime-configurable base URL (overrides all other sources when set)
 let runtimeBase: string | null = null;
 
+const csrfCookieName = ".WeaveFleet.CSRF";
+
 /**
  * Override the API base URL at runtime.
  * Useful for multi-backend scenarios or testing.
@@ -68,5 +70,35 @@ export function apiFetch(
   path: string,
   init?: RequestInit
 ): Promise<Response> {
-  return fetch(apiUrl(path), init);
+  const headers = new Headers(init?.headers);
+  const method = (init?.method ?? "GET").toUpperCase();
+
+  if (!["GET", "HEAD", "OPTIONS", "TRACE"].includes(method)) {
+    const csrfToken = getCookieValue(csrfCookieName);
+    if (csrfToken) {
+      headers.set("X-CSRF-Token", csrfToken);
+    }
+  }
+
+  return fetch(apiUrl(path), {
+    ...init,
+    credentials: init?.credentials ?? "include",
+    headers,
+  });
+}
+
+function getCookieValue(name: string): string | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const cookies = document.cookie.split(";");
+  for (const cookie of cookies) {
+    const [rawName, ...rawValue] = cookie.trim().split("=");
+    if (rawName === name) {
+      return decodeURIComponent(rawValue.join("="));
+    }
+  }
+
+  return null;
 }

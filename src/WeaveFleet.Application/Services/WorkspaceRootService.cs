@@ -8,7 +8,9 @@ namespace WeaveFleet.Application.Services;
 /// Manages user-configurable workspace roots for local browsing and repository discovery.
 /// Combines DB-persisted roots with those supplied via the FLEET_WORKSPACE_ROOTS env var.
 /// </summary>
-public sealed class WorkspaceRootService(IWorkspaceRootRepository workspaceRootRepository)
+public sealed class WorkspaceRootService(
+    IWorkspaceRootRepository workspaceRootRepository,
+    IUserContext userContext)
 {
     private const string EnvVar = "FLEET_WORKSPACE_ROOTS";
 
@@ -61,7 +63,8 @@ public sealed class WorkspaceRootService(IWorkspaceRootRepository workspaceRootR
         {
             Id = Guid.NewGuid().ToString(),
             Path = normalizedPath,
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = userContext.UserId
         };
 
         await workspaceRootRepository.InsertAsync(root);

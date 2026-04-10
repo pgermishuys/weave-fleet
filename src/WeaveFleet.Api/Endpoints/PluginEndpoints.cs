@@ -4,7 +4,7 @@ namespace WeaveFleet.Api.Endpoints;
 
 public static class PluginEndpoints
 {
-    public static WebApplication MapPluginEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapPluginEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api").WithTags("Plugins");
 

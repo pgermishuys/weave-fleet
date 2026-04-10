@@ -173,6 +173,7 @@ public sealed class ClaudeCodeHarness : IHarness
             scopeFactory: _scopeFactory,
             logger: _loggerFactory.CreateLogger<ClaudeCodeHarnessInstance>(),
             loggerFactory: _loggerFactory,
+            ownerUserId: options.OwnerUserId,
             analyticsCollector: _analyticsCollector,
             projectId: options.ProjectId,
             projectName: options.ProjectName);
@@ -213,6 +214,7 @@ public sealed class ClaudeCodeHarness : IHarness
             scopeFactory: _scopeFactory,
             logger: _loggerFactory.CreateLogger<ClaudeCodeHarnessInstance>(),
             loggerFactory: _loggerFactory,
+            ownerUserId: options.OwnerUserId,
             analyticsCollector: _analyticsCollector,
             projectId: options.ProjectId,
             projectName: options.ProjectName,

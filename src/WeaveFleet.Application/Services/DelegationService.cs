@@ -6,7 +6,8 @@ namespace WeaveFleet.Application.Services;
 
 public sealed class DelegationService(
     IDelegationRepository delegationRepository,
-    IEventBroadcaster eventBroadcaster)
+    IEventBroadcaster eventBroadcaster,
+    IUserContext userContext)
 {
     private static readonly HashSet<string> TerminalStatuses = new(StringComparer.Ordinal)
     {
@@ -147,7 +148,8 @@ public sealed class DelegationService(
                 delegation.ChildSessionId,
                 delegation.Title,
                 delegation.Status,
-                delegation.CreatedAt));
+                delegation.CreatedAt),
+            userContext.UserId);
     }
 
     private static DelegationDto ToDto(Delegation delegation) => new(

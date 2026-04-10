@@ -11,13 +11,14 @@ namespace WeaveFleet.Api.Endpoints;
 public static class SessionEventEndpoints
 {
     private static readonly string[] ActivityStreamTopics = ["sessions", "instances", "activity"];
-    public static WebApplication MapSessionEventEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapSessionEventEndpoints(this IEndpointRouteBuilder app)
     {
         // GET /api/sessions/{id}/events — SSE stream of harness events for one session
         app.MapGet("/api/sessions/{id}/events", async (
             string id,
             ISessionRepository sessionRepo,
             IEventBroadcaster broadcaster,
+            IUserContext userContext,
             HttpContext context,
             CancellationToken ct) =>
         {
@@ -37,7 +38,8 @@ public static class SessionEventEndpoints
                 return Results.Empty;
             }
 
-            await foreach (var evt in broadcaster.SubscribeAsync([$"session:{id}"], ct))
+            // Subscribe with user scope so only events owned by this user are delivered
+            await foreach (var evt in broadcaster.SubscribeAsync([$"session:{id}"], userContext.UserId, ct))
             {
                 var data = JsonSerializer.Serialize(new
                 {
@@ -57,6 +59,7 @@ public static class SessionEventEndpoints
         // GET /api/activity-stream — global SSE stream for dashboard events
         app.MapGet("/api/activity-stream", async (
             IEventBroadcaster broadcaster,
+            IUserContext userContext,
             HttpContext context,
             CancellationToken ct) =>
         {
@@ -64,8 +67,8 @@ public static class SessionEventEndpoints
             context.Response.Headers.CacheControl = "no-cache";
             context.Response.Headers.Connection = "keep-alive";
 
-            var topics = ActivityStreamTopics;
-            await foreach (var evt in broadcaster.SubscribeAsync(topics, ct))
+            // Subscribe with user scope — only events for this user are delivered
+            await foreach (var evt in broadcaster.SubscribeAsync(ActivityStreamTopics, userContext.UserId, ct))
             {
                 var data = JsonSerializer.Serialize(new
                 {

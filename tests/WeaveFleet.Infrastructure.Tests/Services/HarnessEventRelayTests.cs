@@ -38,7 +38,7 @@ public sealed class HarnessEventRelayTests
         broadcaster
             .When(b => b.BroadcastAsync(
                 Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<object>(), Arg.Any<CancellationToken>()))
+                Arg.Any<object>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()))
             .Do(call => broadcastSignal.TrySetResult(
                 (call.ArgAt<string>(0), call.ArgAt<string>(1))));
 
@@ -129,7 +129,7 @@ public sealed class HarnessEventRelayTests
 
         await broadcaster.DidNotReceive().BroadcastAsync(
             Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<object>(), Arg.Any<CancellationToken>());
+            Arg.Any<object>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);
@@ -174,7 +174,7 @@ public sealed class HarnessEventRelayTests
         // No events should have been broadcast
         await broadcaster.DidNotReceive().BroadcastAsync(
             Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<object>(), Arg.Any<CancellationToken>());
+            Arg.Any<object>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     // -----------------------------------------------------------------------
@@ -300,7 +300,7 @@ public sealed class HarnessEventRelayTests
         var payloadSignal = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         broadcaster
             .When(b => b.BroadcastAsync(Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<object>(), Arg.Any<CancellationToken>()))
+                Arg.Any<object>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()))
             .Do(call =>
             {
                 capturedPayload = call.ArgAt<object>(2);

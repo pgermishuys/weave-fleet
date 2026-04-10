@@ -80,6 +80,57 @@ public sealed class FleetOptions
 
     /// <summary>Claude Code harness configuration.</summary>
     public ClaudeCodeOptions ClaudeCode { get; set; } = new();
+
+    // ─── Auth ──────────────────────────────────────────────────────────────────
+
+    /// <summary>Authentication configuration (Clerk/OIDC).</summary>
+    public AuthOptions Auth { get; set; } = new();
+
+    // ─── Cloud ─────────────────────────────────────────────────────────────────
+
+    /// <summary>Cloud-mode configuration.</summary>
+    public CloudOptions Cloud { get; set; } = new();
+}
+
+/// <summary>Authentication / OIDC configuration.</summary>
+public sealed class AuthOptions
+{
+    /// <summary>Enable cookie + OIDC authentication. Default: false (local mode).</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>OIDC authority URL (e.g. Clerk issuer). Required when <see cref="Enabled"/> is true.</summary>
+    public string Authority { get; set; } = string.Empty;
+
+    /// <summary>OIDC client ID. Required when <see cref="Enabled"/> is true.</summary>
+    public string ClientId { get; set; } = string.Empty;
+
+    /// <summary>OIDC client secret. Should be provided via environment variable.</summary>
+    public string ClientSecret { get; set; } = string.Empty;
+
+    /// <summary>Callback path for the OIDC redirect. Default: /auth/callback.</summary>
+    public string CallbackPath { get; set; } = "/auth/callback";
+
+    /// <summary>Callback path after sign-out. Default: /auth/signed-out.</summary>
+    public string SignedOutCallbackPath { get; set; } = "/auth/signed-out";
+
+    /// <summary>Origins allowed for CORS when auth is enabled.</summary>
+    public string[] AllowedOrigins { get; set; } = [];
+
+    /// <summary>Cookie name for the auth session. Default: .WeaveFleet.Auth.</summary>
+    public string CookieName { get; set; } = ".WeaveFleet.Auth";
+
+    /// <summary>Auth cookie expiry in minutes. Default: 1440 (24 h).</summary>
+    public int CookieExpirationMinutes { get; set; } = 1440;
+}
+
+/// <summary>Cloud-mode configuration.</summary>
+public sealed class CloudOptions
+{
+    /// <summary>Enable cloud mode. Default: false.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>Root directory under which all user workspace directories are created. Required when <see cref="Enabled"/> is true.</summary>
+    public string WorkspaceRoot { get; set; } = string.Empty;
 }
 
 /// <summary>Configuration for the Claude Code harness.</summary>

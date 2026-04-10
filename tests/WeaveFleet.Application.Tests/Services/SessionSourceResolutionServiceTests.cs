@@ -10,6 +10,7 @@ namespace WeaveFleet.Application.Tests.Services;
 public sealed class SessionSourceResolutionServiceTests
 {
     private readonly IWorkspaceRootRepository _workspaceRootRepository = Substitute.For<IWorkspaceRootRepository>();
+    private readonly IUserContext _userContext = new TestUserContext();
     private readonly SessionSourceResolutionService _sut;
 
     public SessionSourceResolutionServiceTests()
@@ -19,8 +20,40 @@ public sealed class SessionSourceResolutionServiceTests
         ]);
 
         _sut = new SessionSourceResolutionService([
-            new LocalDirectorySessionSourceProvider(new WorkspaceRootService(_workspaceRootRepository))
+            new LocalDirectorySessionSourceProvider(new WorkspaceRootService(_workspaceRootRepository, _userContext))
         ]);
+    }
+
+    private static bool CanCreateDirectorySymlink()
+    {
+        using var target = new TempDirectory();
+        using var parent = new TempDirectory();
+        var symlinkPath = Path.Combine(parent.Path, "symlink-check");
+
+        try
+        {
+            Directory.CreateSymbolicLink(symlinkPath, target.Path);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(symlinkPath))
+                    Directory.Delete(symlinkPath);
+            }
+            catch
+            {
+            }
+        }
     }
 
     [Fact]
@@ -93,6 +126,9 @@ public sealed class SessionSourceResolutionServiceTests
     [Fact]
     public async Task ResolveCreateRequestAsync_RejectsDirectoryWhenNestedSymlinkEscapesAllowedRoots()
     {
+        if (!CanCreateDirectorySymlink())
+            return;
+
         using var allowedRoot = new TempDirectory();
         using var outsideParent = new TempDirectory();
         var nestedDirectory = Path.Combine(outsideParent.Path, "nested-dir");

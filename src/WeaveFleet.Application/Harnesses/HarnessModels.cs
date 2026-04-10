@@ -8,6 +8,7 @@ public sealed record HarnessResumeOptions
     public required string SessionId { get; init; }
     public required string WorkingDirectory { get; init; }
     public required string ResumeToken { get; init; }
+    public required string OwnerUserId { get; init; }
     public string? ProjectId { get; init; }
     public string? ProjectName { get; init; }
     public IReadOnlyDictionary<string, string> Environment { get; init; }
@@ -19,6 +20,7 @@ public sealed record HarnessSpawnOptions
 {
     public required string SessionId { get; init; }
     public required string WorkingDirectory { get; init; }
+    public required string OwnerUserId { get; init; }
     public string? InitialPrompt { get; init; }
     public string? Branch { get; init; }
     public string? ProjectId { get; init; }
