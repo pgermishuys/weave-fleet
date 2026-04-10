@@ -163,6 +163,12 @@ function groupMessages(
   return entries;
 }
 
+function getEntryDebugKey(entry: ActivityStreamEntry): string {
+  if (entry.type === "message") return `message:${entry.message.messageId}`;
+  if (entry.type === "thinking") return `thinking:${entry.message.messageId}`;
+  return `summary:${entry.messages.map((message) => message.messageId).join(",")}`;
+}
+
 const InferenceStepsSummary = memo(function InferenceStepsSummary({
   messages,
 }: {
@@ -595,9 +601,78 @@ export function ActivityStreamV1({
   const virtualizer = useVirtualizer({
     count: groupedEntries.length,
     getScrollElement: () => viewportElement,
+    getItemKey: (index) => getEntryDebugKey(groupedEntries[index]),
     estimateSize: () => 120,
     overscan: 10,
   });
+  const renderEntry = useCallback((entry: ActivityStreamEntry, index: number, virtualStart: number) => {
+    const wrapperStyle = { position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${virtualStart}px)` } as const;
+    const measurementRef = virtualizer.measureElement;
+
+    if (entry.type === "inference-summary") {
+      return (
+        <div
+          key={`summary-${entry.messages[0].messageId}`}
+          data-index={index}
+          ref={measurementRef}
+          style={wrapperStyle}
+        >
+          <InferenceStepsSummary messages={entry.messages} />
+        </div>
+      );
+    }
+
+    if (entry.type === "thinking") {
+      return (
+        <div
+          key={`thinking-${entry.message.messageId}`}
+          data-index={index}
+          ref={measurementRef}
+          style={wrapperStyle}
+        >
+          <CollapsedThinkingIndicator message={entry.message} />
+        </div>
+      );
+    }
+
+    const message = entry.message;
+    const prevEntry = index > 0 ? groupedEntries[index - 1] : null;
+    const prevMessage = prevEntry
+      ? prevEntry.type === "message"
+        ? prevEntry.message
+        : prevEntry.type === "inference-summary"
+        ? prevEntry.messages[prevEntry.messages.length - 1]
+        : prevEntry.type === "thinking"
+        ? prevEntry.message
+        : null
+      : null;
+    const gap = prevMessage && message.createdAt && (prevMessage.completedAt ?? prevMessage.createdAt)
+      ? message.createdAt - (prevMessage.completedAt ?? prevMessage.createdAt!)
+      : 0;
+
+    const isMatchingMessage = isFiltering &&
+      message.parts.some((part) => matchingPartIds.has(part.partId));
+
+    return (
+      <div
+        key={message.messageId}
+        data-index={index}
+        ref={measurementRef}
+        style={wrapperStyle}
+      >
+        {gap > 30_000 && <DurationSeparator durationMs={gap} />}
+        <MessageItem
+          message={message}
+          delegations={delegations}
+          agents={agents}
+          parentCreatedAt={message.parentID ? createdAtByMessageId.get(message.parentID) : undefined}
+          highlightQuery={isFiltering ? searchQuery : undefined}
+          isMatchingMessage={isMatchingMessage}
+          currentSessionId={currentSessionId}
+        />
+      </div>
+    );
+  }, [agents, createdAtByMessageId, currentSessionId, delegations, groupedEntries, isFiltering, matchingPartIds, searchQuery, virtualizer.measureElement]);
 
   return (
     <div data-testid="activity-stream" className="flex flex-col h-full">
@@ -686,77 +761,7 @@ export function ActivityStreamV1({
               <div
                 style={{ position: "relative", height: `${virtualizer.getTotalSize()}px` }}
               >
-                {virtualizer.getVirtualItems().map((virtualItem) => {
-                  const entry = groupedEntries[virtualItem.index];
-
-                  if (entry.type === "inference-summary") {
-                    return (
-                      <div
-                        key={`summary-${entry.messages[0].messageId}`}
-                        data-index={virtualItem.index}
-                        ref={virtualizer.measureElement}
-                        style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${virtualItem.start}px)` }}
-                      >
-                        <InferenceStepsSummary messages={entry.messages} />
-                      </div>
-                    );
-                  }
-
-                  if (entry.type === "thinking") {
-                    return (
-                      <div
-                        key={`thinking-${entry.message.messageId}`}
-                        data-index={virtualItem.index}
-                        ref={virtualizer.measureElement}
-                        style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${virtualItem.start}px)` }}
-                      >
-                        <CollapsedThinkingIndicator message={entry.message} />
-                      </div>
-                    );
-                  }
-
-                  // entry.type === "message"
-                  const message = entry.message;
-                  const index = virtualItem.index;
-
-                  // DurationSeparator: find the previous entry for gap calculation
-                  const prevEntry = index > 0 ? groupedEntries[index - 1] : null;
-                  const prevMessage = prevEntry
-                    ? prevEntry.type === "message"
-                      ? prevEntry.message
-                      : prevEntry.type === "inference-summary"
-                      ? prevEntry.messages[prevEntry.messages.length - 1]
-                      : prevEntry.type === "thinking"
-                      ? prevEntry.message
-                      : null
-                    : null;
-                  const gap = prevMessage && message.createdAt && (prevMessage.completedAt ?? prevMessage.createdAt)
-                    ? message.createdAt - (prevMessage.completedAt ?? prevMessage.createdAt!)
-                    : 0;
-
-                  const isMatchingMessage = isFiltering &&
-                    message.parts.some((p) => matchingPartIds.has(p.partId));
-
-                  return (
-                    <div
-                      key={message.messageId}
-                      data-index={virtualItem.index}
-                      ref={virtualizer.measureElement}
-                      style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${virtualItem.start}px)` }}
-                    >
-                      {gap > 30_000 && <DurationSeparator durationMs={gap} />}
-                      <MessageItem
-                        message={message}
-                        delegations={delegations}
-                        agents={agents}
-                        parentCreatedAt={message.parentID ? createdAtByMessageId.get(message.parentID) : undefined}
-                        highlightQuery={isFiltering ? searchQuery : undefined}
-                        isMatchingMessage={isMatchingMessage}
-                        currentSessionId={currentSessionId}
-                      />
-                    </div>
-                  );
-                })}
+                {virtualizer.getVirtualItems().map((virtualItem) => renderEntry(groupedEntries[virtualItem.index], virtualItem.index, virtualItem.start))}
               </div>
             )}
 
