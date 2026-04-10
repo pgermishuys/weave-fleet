@@ -112,6 +112,22 @@ export function useScrollAnchor({
   const [newMessageCount, setNewMessageCount] = useState(0);
   const [viewportElement, setViewportElement] = useState<HTMLElement | null>(null);
 
+  const scrollViewportToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const el = viewportRef.current;
+    if (!el) return;
+
+    isProgrammaticScrollRef.current = true;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+    lastScrollHeightRef.current = el.scrollHeight;
+    isAtBottomRef.current = true;
+    setIsAtBottom(true);
+    setNewMessageCount(0);
+
+    setTimeout(() => {
+      isProgrammaticScrollRef.current = false;
+    }, behavior === "smooth" ? 300 : 0);
+  }, []);
+
   // —— Detect whether the viewport is scrolled to the bottom ——————
   const checkIsAtBottom = useCallback((el: HTMLElement): boolean => {
     const { scrollTop, scrollHeight, clientHeight } = el;
@@ -209,23 +225,25 @@ export function useScrollAnchor({
           });
           mutationObserverRef.current = observer;
         }
+
+        if (viewport && messageCount > 0 && !suppressAutoScroll.current) {
+          requestAnimationFrame(() => {
+            if (viewportRef.current !== viewport || suppressAutoScroll.current) return;
+            scrollViewportToBottom("auto");
+          });
+        }
       } else {
         viewportRef.current = null;
         setViewportElement(null);
       }
     },
-    [handleScroll],
+    [handleScroll, messageCount, scrollViewportToBottom, suppressAutoScroll],
   );
 
   // —— Programmatic scroll-to-bottom ——————————————————————————————
   const scrollToBottom = useCallback(() => {
-    const el = viewportRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-    isAtBottomRef.current = true;
-    setIsAtBottom(true);
-    setNewMessageCount(0);
-  }, []);
+    scrollViewportToBottom("smooth");
+  }, [scrollViewportToBottom]);
 
   // —— Auto-scroll / unseen counter on message count changes ——————
   useEffect(() => {
@@ -240,26 +258,14 @@ export function useScrollAnchor({
 
     if (isAtBottomRef.current) {
       // User is at the bottom → auto-scroll to keep them there.
-      const el = viewportRef.current;
-      if (el) {
-        // Guard against false disengagement during smooth scroll.
-        isProgrammaticScrollRef.current = true;
-        // Use requestAnimationFrame so the DOM has a chance to lay out the
-        // new content before we scroll.
-        requestAnimationFrame(() => {
-          el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-          // Clear the guard after the smooth scroll has had time to settle.
-          // 300ms covers the typical smooth-scroll duration.
-          setTimeout(() => {
-            isProgrammaticScrollRef.current = false;
-          }, 300);
-        });
-      }
+      requestAnimationFrame(() => {
+        scrollViewportToBottom("smooth");
+      });
     } else {
       // User is scrolled up → increment the unseen badge counter.
       setNewMessageCount((prev) => prev + delta);
     }
-  }, [messageCount, suppressAutoScroll]);
+  }, [messageCount, scrollViewportToBottom, suppressAutoScroll]);
 
   // —— Cleanup on unmount ——————————————————————————————————————————
   useEffect(() => {

@@ -113,6 +113,22 @@ export function PromptInput({
     }
   }, [isDisabled]);
 
+  // Focus the prompt whenever the user navigates into a different session.
+  useEffect(() => {
+    if (!sessionId || isDisabled) return;
+
+    const rafId = requestAnimationFrame(() => {
+      const input = inputRef.current;
+      if (!input) return;
+
+      input.focus();
+      const cursor = input.value.length;
+      input.setSelectionRange(cursor, cursor);
+    });
+
+    return () => cancelAnimationFrame(rafId);
+  }, [sessionId, isDisabled]);
+
   // Expose a focus callback via onFocusRequest
   useEffect(() => {
     onFocusRequest?.(() => inputRef.current?.focus());

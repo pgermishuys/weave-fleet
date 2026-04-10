@@ -447,7 +447,7 @@ export function ActivityStreamV1({
   initialScrollPosition,
   suppressAutoScrollRef,
 }: ActivityStreamV1Props) {
-  const { scrollRef, isAtBottom, isNearTop, newMessageCount, scrollToBottom, preserveScrollPosition, getScrollPosition, restoreScrollPosition, suppressAutoScroll: suppressAutoScrollLocalRef, viewportElement } =
+  const { scrollRef, isAtBottom, isNearTop, newMessageCount, scrollToBottom, preserveScrollPosition, getScrollPosition, suppressAutoScroll: suppressAutoScrollLocalRef, viewportElement } =
     useScrollAnchor({ messageCount: messages.length, externalSuppressAutoScroll: suppressAutoScrollRef });
 
   // Guard against double-firing onLoadOlder while isNearTop stays true
@@ -473,29 +473,26 @@ export function ActivityStreamV1({
     }
   }, [isNearTop, hasMoreMessages, isLoadingOlder, onLoadOlder, preserveScrollPosition]);
 
-  // ── Cache scroll restore: suppress auto-scroll and restore position ───────
-  // Set suppressAutoScroll before the first render that delivers cached messages,
-  // then restore the scroll position after mount.
+  // ── Cache hydration: keep cached content from jittering, but always
+  // open the session anchored to the latest message instead of restoring an
+  // older scroll position.
   const scrollRestoreAttemptedRef = useRef(false);
   useEffect(() => {
     if (!cacheHit || scrollRestoreAttemptedRef.current) return;
     scrollRestoreAttemptedRef.current = true;
 
-    // Suppress auto-scroll triggered by the initial batch of cached messages.
-    suppressAutoScrollLocalRef.current = true;
-
     if (initialScrollPosition) {
-      // Defer to let the DOM render the cached messages before scrolling.
+      // Suppress auto-scroll triggered by the cached hydration itself, then
+      // immediately anchor to the live bottom once the DOM is ready.
+      suppressAutoScrollLocalRef.current = true;
       requestAnimationFrame(() => {
-        restoreScrollPosition(initialScrollPosition);
+        scrollToBottom();
         suppressAutoScrollLocalRef.current = false;
       });
     } else {
-      // Cache was invalidated (gap-fill fell back to full reload) — allow
-      // normal auto-scroll-to-bottom behavior.
       suppressAutoScrollLocalRef.current = false;
     }
-  }, [cacheHit, initialScrollPosition, restoreScrollPosition, suppressAutoScrollLocalRef]);
+  }, [cacheHit, initialScrollPosition, scrollToBottom, suppressAutoScrollLocalRef]);
 
   // ── Keep scrollPositionRef up to date with the latest scroll position ─────
   // This ref is read by useSessionEvents on unmount to save to the cache.
