@@ -297,10 +297,15 @@ public sealed class HarnessEventRelayTests
             .Returns(new Session { Id = fleetSessionId, InstanceId = instanceId });
 
         object? capturedPayload = null;
+        var payloadSignal = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         broadcaster
             .When(b => b.BroadcastAsync(Arg.Any<string>(), Arg.Any<string>(),
                 Arg.Any<object>(), Arg.Any<CancellationToken>()))
-            .Do(call => capturedPayload = call.ArgAt<object>(2));
+            .Do(call =>
+            {
+                capturedPayload = call.ArgAt<object>(2);
+                payloadSignal.TrySetResult(capturedPayload);
+            });
 
         var tracker = new InstanceTracker();
         var relay = new HarnessEventRelay(
@@ -335,7 +340,7 @@ public sealed class HarnessEventRelayTests
         });
         instance.Complete();
 
-        await Task.Delay(500);
+        capturedPayload = await payloadSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         capturedPayload.ShouldNotBeNull();
 
