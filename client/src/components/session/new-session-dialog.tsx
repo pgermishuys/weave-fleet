@@ -109,11 +109,17 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
     }
   }, [open, refreshRepositories]);
 
-  useEffect(() => {
-    if (!selectedHarness && harnesses.length > 0) {
-      const defaultAvailable = availableHarnesses.find((harness) => harness.type === defaultHarness);
-      setSelectedHarness(defaultAvailable?.type ?? availableHarnesses[0]?.type ?? "opencode");
+  const resolvedHarness = useMemo(() => {
+    if (selectedHarness && harnesses.some((h) => h.type === selectedHarness)) {
+      return selectedHarness;
     }
+
+    if (harnesses.length === 0) {
+      return "";
+    }
+
+    const defaultAvailable = availableHarnesses.find((harness) => harness.type === defaultHarness);
+    return defaultAvailable?.type ?? availableHarnesses[0]?.type ?? "opencode";
   }, [availableHarnesses, defaultHarness, harnesses, selectedHarness]);
 
   const filteredRepos = useMemo(() => {
@@ -134,68 +140,50 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
     }
   }, [repoDropdownOpen, repoHighlightIdx]);
 
-  useEffect(() => {
-    if (open && defaultDirectory) {
-      setDirectory(defaultDirectory);
-      setSelectedSourceId(DIRECTORY_SOURCE_ID);
-    }
-  }, [defaultDirectory, open, setDirectory]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
+  const resolvedSourceId = useMemo(() => {
+    if (selectedSourceId) {
+      return selectedSourceId;
     }
 
-    if (initialTitle && !title) {
-      setTitle(initialTitle);
-    }
-  }, [initialTitle, open, title]);
-
-  useEffect(() => {
-    if (selectedSourceId !== REPOSITORY_SOURCE_ID || branchManuallyEdited) {
-      return;
-    }
-
-    setBranch(generateBranchName(title));
-  }, [branchManuallyEdited, selectedSourceId, title]);
-
-  useEffect(() => {
-    if (selectedSourceId !== REPOSITORY_SOURCE_ID || repositoriesLoading || selectedRepo || repositories.length === 0) {
-      return;
-    }
-
-    setSelectedRepo(repositories[0]);
-    setRepoSearch(repositories[0].name);
-  }, [repositories, repositoriesLoading, selectedRepo, selectedSourceId]);
-
-  useEffect(() => {
-    if (selectedSourceId || sources.length === 0) {
-      return;
+    if (sources.length === 0) {
+      return null;
     }
 
     const defaultSource = defaultDirectory
       ? sources.find((source) => makeSourceId(source) === DIRECTORY_SOURCE_ID)
       : sources.find((source) => makeSourceId(source) === REPOSITORY_SOURCE_ID) ?? sources[0];
 
-    if (defaultSource) {
-      setSelectedSourceId(makeSourceId(defaultSource));
-    }
+    return defaultSource ? makeSourceId(defaultSource) : null;
   }, [defaultDirectory, selectedSourceId, sources]);
 
+  const resolvedBranch = resolvedSourceId === REPOSITORY_SOURCE_ID && !branchManuallyEdited
+    ? generateBranchName(title)
+    : branch;
+
+  const resolvedRepo = useMemo(() => {
+    if (resolvedSourceId !== REPOSITORY_SOURCE_ID || repositoriesLoading || repositories.length === 0) {
+      return selectedRepo;
+    }
+
+    return selectedRepo ?? repositories[0];
+  }, [repositories, repositoriesLoading, selectedRepo, resolvedSourceId]);
+
+  const resolvedRepoSearch = !selectedRepo && resolvedRepo ? resolvedRepo.name : repoSearch;
+
   const selectedSource = useMemo(
-    () => sources.find((source) => makeSourceId(source) === selectedSourceId) ?? null,
-    [selectedSourceId, sources]
+    () => sources.find((source) => makeSourceId(source) === resolvedSourceId) ?? null,
+    [resolvedSourceId, sources]
   );
 
-  const isRepositorySource = selectedSourceId === REPOSITORY_SOURCE_ID;
-  const isDirectorySource = selectedSourceId === DIRECTORY_SOURCE_ID;
+  const isRepositorySource = resolvedSourceId === REPOSITORY_SOURCE_ID;
+  const isDirectorySource = resolvedSourceId === DIRECTORY_SOURCE_ID;
 
   const effectiveDirectory = isRepositorySource
-    ? selectedRepo?.path ?? ""
-    : directory.trim();
+    ? resolvedRepo?.path ?? ""
+    : (defaultDirectory || directory).trim();
 
   const effectiveSourceSelection = useMemo<SessionSourceSelection | undefined>(() => {
-    if (isRepositorySource && selectedRepo) {
+    if (isRepositorySource && resolvedRepo) {
       return {
         key: {
           providerId: "builtin.repository",
@@ -204,14 +192,14 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
           contractVersion: 1,
         },
         input: {
-          repositoryPath: selectedRepo.path,
+          repositoryPath: resolvedRepo.path,
           isolationStrategy: repoStrategy,
-          ...(repoStrategy === "worktree" && branch.trim() ? { branch: branch.trim() } : {}),
+          ...(repoStrategy === "worktree" && resolvedBranch.trim() ? { branch: resolvedBranch.trim() } : {}),
         },
       };
     }
 
-    if (isDirectorySource && directory.trim()) {
+    if (isDirectorySource && (defaultDirectory || directory).trim()) {
       return {
         key: {
           providerId: "builtin.local",
@@ -220,14 +208,14 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
           contractVersion: 1,
         },
         input: {
-          directory: directory.trim(),
+          directory: (defaultDirectory || directory).trim(),
           isolationStrategy: "existing",
         },
       };
     }
 
     return undefined;
-  }, [branch, directory, isDirectorySource, isRepositorySource, repoStrategy, selectedRepo]);
+  }, [resolvedBranch, defaultDirectory, directory, isDirectorySource, isRepositorySource, repoStrategy, resolvedRepo]);
 
   const handleRepoSelect = useCallback((repo: ScannedRepository) => {
     setSelectedRepo(repo);
@@ -304,9 +292,9 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
 
     try {
       const { instanceId, session } = await createSession(effectiveDirectory, {
-        title: title.trim() || undefined,
+        title: (title || initialTitle || "").trim() || undefined,
         source: effectiveSourceSelection,
-        harnessType: showHarnessPicker ? selectedHarness : undefined,
+        harnessType: showHarnessPicker ? resolvedHarness : undefined,
         projectId: selectedProjectId !== UNGROUPED_VALUE ? selectedProjectId : undefined,
       });
 
@@ -328,11 +316,12 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
     navigate,
     refetch,
     addSourceToSession,
-    selectedHarness,
+    resolvedHarness,
     selectedProjectId,
     setOpen,
     showHarnessPicker,
     title,
+    initialTitle,
     initialSource,
     isAddingSource,
   ]);
@@ -353,7 +342,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
               const sourceId = makeSourceId(source);
               return sourceId === REPOSITORY_SOURCE_ID || sourceId === DIRECTORY_SOURCE_ID;
             })}
-            selectedSourceId={selectedSourceId}
+            selectedSourceId={resolvedSourceId}
             isLoading={isLoading || sourcesLoading}
             isSourceDisabled={(source) => makeSourceId(source) === REPOSITORY_SOURCE_ID && repositories.length === 0}
             onSelect={setSelectedSourceId}
@@ -364,14 +353,14 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
               isLoading={isLoading}
               repositories={repositories}
               filteredRepositories={filteredRepos}
-              selectedRepository={selectedRepo}
-              repositorySearch={repoSearch}
+              selectedRepository={resolvedRepo}
+              repositorySearch={resolvedRepoSearch}
               repositoryDropdownOpen={repoDropdownOpen}
               repositoryHighlightIndex={repoHighlightIdx}
               repositoryInputRef={repoInputRef}
               repositoryListRef={repoListRef}
               strategy={repoStrategy}
-              branch={branch}
+              branch={resolvedBranch}
               branchManuallyEdited={branchManuallyEdited}
               onRepositorySearchChange={(value) => {
                 setRepoSearch(value);
@@ -396,7 +385,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
 
           {isDirectorySource ? (
             <DirectorySourceForm
-              directory={directory}
+              directory={defaultDirectory || directory}
               isLoading={isLoading}
               onDirectoryChange={setDirectory}
             />
@@ -441,7 +430,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
               <label className="text-sm font-medium" htmlFor="harness-select">
                 Harness
               </label>
-              <Select value={selectedHarness} onValueChange={setSelectedHarness} disabled={isLoading || harnessesLoading}>
+              <Select value={resolvedHarness} onValueChange={setSelectedHarness} disabled={isLoading || harnessesLoading}>
                 <SelectTrigger id="harness-select" className="w-full">
                   <SelectValue placeholder="Select harness" />
                 </SelectTrigger>

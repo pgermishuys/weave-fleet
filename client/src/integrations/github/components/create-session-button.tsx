@@ -64,47 +64,47 @@ export function CreateSessionButton({ contextSource, directory }: CreateSessionB
   );
 
   const currentSessionId = currentSessionIdParam ? decodeURIComponent(currentSessionIdParam) : "";
-  const selectedSession = useMemo(
-    () => availableSessions.find((session) => session.session.id === selectedSessionId) ?? null,
-    [availableSessions, selectedSessionId]
-  );
   const preferredSession = useMemo(
     () => availableSessions.find((session) => session.session.id === currentSessionId) ?? availableSessions[0] ?? null,
     [availableSessions, currentSessionId]
   );
 
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
+  const resolvedSessionId = useMemo(() => {
     if (selectedSessionId && availableSessions.some((session) => session.session.id === selectedSessionId)) {
-      return;
+      return selectedSessionId;
     }
 
-    setSelectedSessionId(preferredSession?.session.id ?? "");
+    if (!open) {
+      return selectedSessionId;
+    }
+
+    return preferredSession?.session.id ?? "";
   }, [availableSessions, open, preferredSession, selectedSessionId]);
 
+  const selectedSession = useMemo(
+    () => availableSessions.find((session) => session.session.id === resolvedSessionId) ?? null,
+    [availableSessions, resolvedSessionId]
+  );
+
   useEffect(() => {
-    if (!open || !selectedSessionId) {
+    if (!open || !resolvedSessionId) {
       return;
     }
 
-    if (previewedSessionId === selectedSessionId) {
+    if (previewedSessionId === resolvedSessionId) {
       return;
     }
 
     let cancelled = false;
-    setPreview(null);
 
-    void previewSource(selectedSessionId, contextSource.source)
+    void previewSource(resolvedSessionId, contextSource.source)
       .then((nextPreview) => {
         if (cancelled) {
           return;
         }
 
         setPreview(nextPreview);
-        setPreviewedSessionId(selectedSessionId);
+        setPreviewedSessionId(resolvedSessionId);
       })
       .catch(() => {
         if (cancelled) {
@@ -117,7 +117,7 @@ export function CreateSessionButton({ contextSource, directory }: CreateSessionB
     return () => {
       cancelled = true;
     };
-  }, [contextSource.source, open, previewSource, previewedSessionId, selectedSessionId]);
+  }, [contextSource.source, open, previewSource, previewedSessionId, resolvedSessionId]);
 
   const error = createError ?? addError;
   const isBusy = isCreatingSession || isUpdatingSession;
@@ -153,12 +153,12 @@ export function CreateSessionButton({ contextSource, directory }: CreateSessionB
   }, [addSourceToSession, contextSource.source, contextSource.title, createSession, directory, isBusy, navigate, refetch, resetState]);
 
   const handleAddToSession = useCallback(async () => {
-    if (!selectedSessionId || !preview || isBusy) {
+    if (!resolvedSessionId || !preview || isBusy) {
       return;
     }
 
     try {
-      await addSourceToSession(selectedSessionId, contextSource.source, true);
+      await addSourceToSession(resolvedSessionId, contextSource.source, true);
       refetch();
       if (selectedSession) {
         navigate(buildSessionLocation(selectedSession));
@@ -167,21 +167,21 @@ export function CreateSessionButton({ contextSource, directory }: CreateSessionB
     } catch {
       // handled by hook state
     }
-  }, [addSourceToSession, contextSource.source, isBusy, navigate, preview, refetch, resetState, selectedSession, selectedSessionId]);
+  }, [addSourceToSession, contextSource.source, isBusy, navigate, preview, refetch, resetState, selectedSession, resolvedSessionId]);
 
   const handleRetryPreview = useCallback(async () => {
-    if (!selectedSessionId || isBusy) {
+    if (!resolvedSessionId || isBusy) {
       return;
     }
 
     try {
-      const nextPreview = await previewSource(selectedSessionId, contextSource.source);
+      const nextPreview = await previewSource(resolvedSessionId, contextSource.source);
       setPreview(nextPreview);
-      setPreviewedSessionId(selectedSessionId);
+      setPreviewedSessionId(resolvedSessionId);
     } catch {
       setPreviewedSessionId(null);
     }
-  }, [contextSource.source, isBusy, previewSource, selectedSessionId]);
+  }, [contextSource.source, isBusy, previewSource, resolvedSessionId]);
 
   return (
     <>
@@ -262,7 +262,7 @@ export function CreateSessionButton({ contextSource, directory }: CreateSessionB
                       Target session
                     </label>
                     <Select
-                      value={selectedSessionId}
+                      value={resolvedSessionId}
                       onValueChange={(value) => {
                         setSelectedSessionId(value);
                         setPreview(null);
@@ -309,7 +309,7 @@ export function CreateSessionButton({ contextSource, directory }: CreateSessionB
                       </>
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        {selectedSessionId
+                        {resolvedSessionId
                           ? "Preview will load before confirmation."
                           : "Choose a target session to preview this source."}
                       </p>
@@ -317,7 +317,7 @@ export function CreateSessionButton({ contextSource, directory }: CreateSessionB
                   </div>
 
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <Button variant="outline" onClick={() => void handleRetryPreview()} disabled={!selectedSessionId || isBusy}>
+                    <Button variant="outline" onClick={() => void handleRetryPreview()} disabled={!resolvedSessionId || isBusy}>
                       Retry Preview
                     </Button>
                     <Button onClick={() => void handleAddToSession()} disabled={!preview || isBusy}>
