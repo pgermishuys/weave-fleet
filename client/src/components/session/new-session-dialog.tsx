@@ -33,6 +33,7 @@ import { useRepositories } from "@/hooks/use-repositories";
 import { useProjects } from "@/hooks/use-projects";
 import { useSessionSources } from "@/session-sources/use-session-sources";
 import { DEFAULT_HARNESS_KEY } from "@/components/settings/harnesses-tab";
+import { useAppShell } from "@/contexts/app-shell-context";
 import type {
   ProjectResponse,
   ScannedRepository,
@@ -43,6 +44,7 @@ import type { RegisteredSessionSource } from "@/session-sources/types";
 const UNGROUPED_VALUE = "__ungrouped__";
 const REPOSITORY_SOURCE_ID = "builtin.repository:repository";
 const DIRECTORY_SOURCE_ID = "builtin.local:directory";
+const MANAGED_SOURCE_ID = "builtin.managed:managed-workspace";
 
 interface NewSessionDialogProps {
   trigger?: ReactNode;
@@ -70,6 +72,7 @@ function generateBranchName(text: string): string {
 
 export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, defaultDirectory, userProjects: userProjectsProp, initialSource, initialTitle }: NewSessionDialogProps) {
   const navigate = useNavigate();
+  const { clientConfig } = useAppShell();
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
 
@@ -102,6 +105,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
   const showProjectPicker = userProjects.length > 0;
   const showHarnessPicker = harnesses.length >= 2;
   const availableHarnesses = harnesses.filter((harness) => harness.available);
+  const isCloudMode = clientConfig.cloudMode;
 
   useEffect(() => {
     if (open) {
@@ -149,12 +153,16 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
       return null;
     }
 
-    const defaultSource = defaultDirectory
-      ? sources.find((source) => makeSourceId(source) === DIRECTORY_SOURCE_ID)
-      : sources.find((source) => makeSourceId(source) === REPOSITORY_SOURCE_ID) ?? sources[0];
+    const defaultSource = isCloudMode
+      ? sources.find((source) => makeSourceId(source) === MANAGED_SOURCE_ID)
+        ?? sources.find((source) => makeSourceId(source) === REPOSITORY_SOURCE_ID)
+        ?? sources[0]
+      : defaultDirectory
+        ? sources.find((source) => makeSourceId(source) === DIRECTORY_SOURCE_ID)
+        : sources.find((source) => makeSourceId(source) === REPOSITORY_SOURCE_ID) ?? sources[0];
 
     return defaultSource ? makeSourceId(defaultSource) : null;
-  }, [defaultDirectory, selectedSourceId, sources]);
+  }, [defaultDirectory, isCloudMode, selectedSourceId, sources]);
 
   const resolvedBranch = resolvedSourceId === REPOSITORY_SOURCE_ID && !branchManuallyEdited
     ? generateBranchName(title)
@@ -177,6 +185,19 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
 
   const isRepositorySource = resolvedSourceId === REPOSITORY_SOURCE_ID;
   const isDirectorySource = resolvedSourceId === DIRECTORY_SOURCE_ID;
+  const isManagedSource = resolvedSourceId === MANAGED_SOURCE_ID;
+  const visibleSources = useMemo(() => sources.filter((source) => {
+    const sourceId = makeSourceId(source);
+    if (sourceId === REPOSITORY_SOURCE_ID || sourceId === MANAGED_SOURCE_ID) {
+      return true;
+    }
+
+    if (sourceId === DIRECTORY_SOURCE_ID) {
+      return !isCloudMode;
+    }
+
+    return false;
+  }), [isCloudMode, sources]);
 
   const effectiveDirectory = isRepositorySource
     ? resolvedRepo?.path ?? ""
@@ -214,8 +235,22 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
       };
     }
 
+    if (isCloudMode && isManagedSource) {
+      return {
+        key: {
+          providerId: "builtin.managed",
+          sourceType: "managed-workspace",
+          actionId: "start-session",
+          contractVersion: 1,
+        },
+        input: {},
+      };
+    }
+
     return undefined;
-  }, [resolvedBranch, defaultDirectory, directory, isDirectorySource, isRepositorySource, repoStrategy, resolvedRepo]);
+  }, [resolvedBranch, defaultDirectory, directory, isCloudMode, isDirectorySource, isManagedSource, isRepositorySource, repoStrategy, resolvedRepo]);
+
+  const canSubmit = Boolean((isCloudMode || effectiveDirectory) && selectedSource && effectiveSourceSelection) && !isLoading && !isAddingSource;
 
   const handleRepoSelect = useCallback((repo: ScannedRepository) => {
     setSelectedRepo(repo);
@@ -272,8 +307,8 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
     setRepoStrategy("worktree");
     setSelectedHarness("");
     setSelectedProjectId(UNGROUPED_VALUE);
-    setSelectedSourceId(defaultDirectory ? DIRECTORY_SOURCE_ID : null);
-  }, [defaultDirectory]);
+    setSelectedSourceId(defaultDirectory && !isCloudMode ? DIRECTORY_SOURCE_ID : null);
+  }, [defaultDirectory, isCloudMode]);
 
   const setOpen = useCallback((value: boolean) => {
     if (!value) {
@@ -286,12 +321,12 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
 
   const handleSubmit = useCallback(async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!effectiveDirectory || !effectiveSourceSelection || isLoading || isAddingSource) {
+    if (!effectiveSourceSelection || isLoading || isAddingSource || (!isCloudMode && !effectiveDirectory)) {
       return;
     }
 
     try {
-      const { instanceId, session } = await createSession(effectiveDirectory, {
+      const { instanceId, session } = await createSession(isCloudMode ? undefined : effectiveDirectory, {
         title: (title || initialTitle || "").trim() || undefined,
         source: effectiveSourceSelection,
         harnessType: showHarnessPicker ? resolvedHarness : undefined,
@@ -324,6 +359,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
     initialTitle,
     initialSource,
     isAddingSource,
+    isCloudMode,
   ]);
 
   const sourceError = error ?? addSourceError ?? sourcesError;
@@ -338,13 +374,11 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <SourcePicker
-            sources={sources.filter((source) => {
-              const sourceId = makeSourceId(source);
-              return sourceId === REPOSITORY_SOURCE_ID || sourceId === DIRECTORY_SOURCE_ID;
-            })}
+            sources={visibleSources}
             selectedSourceId={resolvedSourceId}
             isLoading={isLoading || sourcesLoading}
             isSourceDisabled={(source) => makeSourceId(source) === REPOSITORY_SOURCE_ID && repositories.length === 0}
+            helperText={isCloudMode ? "Cloud mode uses managed workspaces automatically. Local directories are unavailable." : undefined}
             onSelect={setSelectedSourceId}
           />
 
@@ -389,6 +423,12 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
               isLoading={isLoading}
               onDirectoryChange={setDirectory}
             />
+          ) : null}
+
+          {isCloudMode && isManagedSource ? (
+            <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              Managed workspaces are created automatically in cloud mode. Start a basic session without entering a local directory.
+            </div>
           ) : null}
 
           <div className="space-y-1.5">
@@ -459,7 +499,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
             </div>
           ) : null}
 
-          <Button type="submit" data-testid="create-session-submit" className="w-full weave-gradient-bg hover:opacity-90 border-0" disabled={!effectiveDirectory || !selectedSource || isLoading || isAddingSource}>
+          <Button type="submit" data-testid="create-session-submit" className="w-full weave-gradient-bg hover:opacity-90 border-0" disabled={!canSubmit}>
             {isLoading || isAddingSource ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

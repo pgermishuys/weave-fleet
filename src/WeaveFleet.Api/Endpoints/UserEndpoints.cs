@@ -14,7 +14,7 @@ public static class UserEndpoints
             UserService userService,
             FleetOptions fleetOptions) =>
         {
-            if (!userContext.IsAuthenticated)
+            if (fleetOptions.Auth.Enabled && !userContext.IsAuthenticated)
                 return Results.Unauthorized();
 
             var user = fleetOptions.Auth.Enabled

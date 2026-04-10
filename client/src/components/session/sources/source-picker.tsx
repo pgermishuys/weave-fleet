@@ -5,6 +5,7 @@ interface SourcePickerProps {
   selectedSourceId: string | null;
   isLoading: boolean;
   isSourceDisabled: (source: RegisteredSessionSource) => boolean;
+  helperText?: string;
   onSelect: (sourceId: string) => void;
 }
 
@@ -13,6 +14,7 @@ export function SourcePicker({
   selectedSourceId,
   isLoading,
   isSourceDisabled,
+  helperText,
   onSelect,
 }: SourcePickerProps) {
   return (
@@ -47,6 +49,9 @@ export function SourcePicker({
           );
         })}
       </div>
+      {helperText ? (
+        <p className="text-xs text-muted-foreground">{helperText}</p>
+      ) : null}
     </div>
   );
 }

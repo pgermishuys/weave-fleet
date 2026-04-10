@@ -5,6 +5,8 @@ import { Loader2 } from "lucide-react";
 import { usePluginRuntime } from "@/plugins/context";
 import { getRoutes } from "@/plugins/slots";
 import { apiFetch, apiUrl } from "@/lib/api-client";
+import type { ClientConfigResponse, UserMeResponse } from "@/lib/api-types";
+import { AppShellProvider } from "@/contexts/app-shell-context";
 
 // Lazy-load all pages for code splitting (same behavior as Next.js)
 const FleetPage = lazy(() => import("./app/page"));
@@ -31,6 +33,8 @@ function PageFallback() {
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<"checking" | "ready" | "error">("checking");
+  const [clientConfig, setClientConfig] = useState<ClientConfigResponse | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserMeResponse | null>(null);
   const loginUrl = useMemo(() => {
     if (typeof window === "undefined") {
       return "/auth/login";
@@ -45,17 +49,35 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
     void (async () => {
       try {
+        const configResponse = await apiFetch("/api/config/client");
+
+        if (configResponse.status === 401) {
+          window.location.assign(loginUrl);
+          return;
+        }
+
+        if (!configResponse.ok) {
+          if (active) {
+            setStatus("error");
+          }
+
+          return;
+        }
+
+        const config = (await configResponse.json()) as ClientConfigResponse;
         const response = await apiFetch("/api/user/me");
 
         if (response.ok) {
           if (active) {
+            setClientConfig(config);
+            setCurrentUser((await response.json()) as UserMeResponse);
             setStatus("ready");
           }
 
           return;
         }
 
-        if (response.status === 401) {
+        if (response.status === 401 && config.authEnabled) {
           window.location.assign(loginUrl);
           return;
         }
@@ -87,7 +109,15 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  if (!clientConfig) {
+    return null;
+  }
+
+  return (
+    <AppShellProvider clientConfig={clientConfig} currentUser={currentUser}>
+      {children}
+    </AppShellProvider>
+  );
 }
 
 function AppRoutes() {

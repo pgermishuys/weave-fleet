@@ -77,6 +77,7 @@ public static class DependencyInjection
         services.AddScoped<DelegationService>();
         services.AddScoped<UserService>();
         services.AddScoped<ISessionSourceProvider, LocalDirectorySessionSourceProvider>();
+        services.AddSingleton<ISessionSourceProvider, ManagedWorkspaceSessionSourceProvider>();
         services.AddSingleton<ISessionSourceProvider, RepositorySessionSourceProvider>();
         services.AddSingleton<ISessionSourceProvider, GitHubSessionSourceProvider>();
         services.AddScoped<SystemUserContext>();

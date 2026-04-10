@@ -102,6 +102,7 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
         // Override configuration to use isolated DB paths for E2E.
         builder.UseSetting("Fleet:DatabasePath", _dbPath);
         builder.UseSetting("Fleet:AnalyticsEnabled", "true");
+        builder.UseSetting("Fleet:Auth:Enabled", "false");
         builder.UseSetting("Fleet:Port", "0");
 
         // Use environment-based configuration to override FleetOptions singleton

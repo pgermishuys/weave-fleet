@@ -178,8 +178,9 @@ public sealed class SessionLifecycleEndpointTests
         ]);
         var workspaceRootService = new WorkspaceRootService(workspaceRootRepository, userContext);
         var sessionSourceResolutionService = new SessionSourceResolutionService([
-            new LocalDirectorySessionSourceProvider(workspaceRootService)
-        ]);
+            new LocalDirectorySessionSourceProvider(workspaceRootService),
+            new ManagedWorkspaceSessionSourceProvider(options)
+        ], options);
 
         var orchestrator = new SessionOrchestrator(
             new WorkspaceService(

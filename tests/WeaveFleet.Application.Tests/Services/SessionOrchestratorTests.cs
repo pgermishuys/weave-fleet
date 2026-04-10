@@ -50,8 +50,9 @@ public sealed class SessionOrchestratorTests
 
         var instanceService = new InstanceService(_instanceRepo, _sessionRepo, _userContext);
         var sessionSourceResolutionService = new SessionSourceResolutionService([
-            new LocalDirectorySessionSourceProvider(workspaceRootService)
-        ]);
+            new LocalDirectorySessionSourceProvider(workspaceRootService),
+            new ManagedWorkspaceSessionSourceProvider(_options)
+        ], _options);
         _delegationService = new DelegationService(_delegationRepo, _eventBroadcaster, _userContext);
 
         _sut = new SessionOrchestrator(
@@ -159,6 +160,27 @@ public sealed class SessionOrchestratorTests
 
         result.IsFailure.ShouldBeTrue();
         result.Error.Code.ShouldBe(FleetError.Unexpected.Code);
+    }
+
+    [Fact]
+    public async Task CreateSessionAsync_InCloudModeWithoutDirectory_CreatesManagedWorkspaceSession()
+    {
+        ConfigureHarnessAndScratchProject();
+        using var workspaceRoot = new TempDirectory();
+        _options.Cloud = new CloudOptions
+        {
+            Enabled = true,
+            WorkspaceRoot = workspaceRoot.Path
+        };
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest());
+
+        result.IsSuccess.ShouldBeTrue();
+        await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(session =>
+            session.Directory.StartsWith(workspaceRoot.Path, StringComparison.OrdinalIgnoreCase)));
+        await _sessionSourceUsageRepo.Received(1).InsertAsync(Arg.Is<SessionSourceUsage>(usage =>
+            usage.ProviderId == SessionSourceProviderIds.Managed &&
+            usage.SourceType == SessionSourceTypeNames.ManagedWorkspace));
     }
 
     [Fact]

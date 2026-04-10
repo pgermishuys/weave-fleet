@@ -40,8 +40,9 @@ public sealed class SessionServiceTests
             Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceService>.Instance);
         var instanceService = new InstanceService(_instanceRepo, _sessionRepo, _userContext);
         var sessionSourceResolutionService = new SessionSourceResolutionService([
-            new LocalDirectorySessionSourceProvider(workspaceRootService)
-        ]);
+            new LocalDirectorySessionSourceProvider(workspaceRootService),
+            new ManagedWorkspaceSessionSourceProvider(options)
+        ], options);
         var delegationService = new DelegationService(_delegationRepo, _eventBroadcaster, _userContext);
         _sessionOrchestrator = new SessionOrchestrator(
             workspaceService,

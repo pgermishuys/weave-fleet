@@ -68,6 +68,20 @@ export interface SessionSourceCatalogResponse {
   sources: SessionSourceDescriptor[];
 }
 
+export interface ClientConfigResponse {
+  cloudMode: boolean;
+  authEnabled: boolean;
+  availableHarnesses: string[];
+}
+
+export interface UserMeResponse {
+  userId: string;
+  email: string | null;
+  displayName: string | null;
+  onboardingCompleted: boolean;
+  createdAt: string;
+}
+
 export interface SessionSourcePreview {
   originLabel: string;
   content: string;

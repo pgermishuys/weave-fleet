@@ -16,7 +16,7 @@ export interface CreateSessionOptions {
 
 export interface UseCreateSessionResult {
   createSession: (
-    directory: string,
+    directory: string | undefined,
     opts?: CreateSessionOptions
   ) => Promise<CreateSessionResponse>;
   isLoading: boolean;
@@ -28,7 +28,7 @@ export function useCreateSession(): UseCreateSessionResult {
   const [error, setError] = useState<string | undefined>();
 
   const createSession = useCallback(
-    async (directory: string, opts?: CreateSessionOptions): Promise<CreateSessionResponse> => {
+    async (directory: string | undefined, opts?: CreateSessionOptions): Promise<CreateSessionResponse> => {
       setIsLoading(true);
       setError(undefined);
       try {

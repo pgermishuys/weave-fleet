@@ -106,6 +106,42 @@ public sealed class UserAuthEndpointTests
     }
 
     [Fact]
+    public async Task GetClientConfig_WhenAuthDisabled_ReturnsClientFlags()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        var response = await client.GetAsync("/api/config/client");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var payload = await response.Content.ReadFromJsonAsync<ClientConfigPayload>();
+        payload.ShouldNotBeNull();
+        payload.AuthEnabled.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task GetUserMe_WhenAuthDisabled_ReturnsLocalUser()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        var response = await client.GetAsync("/api/user/me");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var payload = await response.Content.ReadFromJsonAsync<UserMePayload>();
+        payload.ShouldNotBeNull();
+        payload.UserId.ShouldBe("local-user");
+    }
+
+    [Fact]
     public async Task Login_WithExternalReturnUrl_FallsBackToRoot()
     {
         await using var factory = new ApiWebApplicationFactory(authEnabled: false);
@@ -139,4 +175,5 @@ public sealed class UserAuthEndpointTests
     }
 
     private sealed record UserMePayload(string UserId, string? Email, string? DisplayName, bool OnboardingCompleted, string CreatedAt);
+    private sealed record ClientConfigPayload(bool CloudMode, bool AuthEnabled, IReadOnlyList<string> AvailableHarnesses);
 }
