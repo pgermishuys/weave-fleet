@@ -134,12 +134,9 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
     currentUser.onboardingStatus !== undefined &&
     !currentUser.onboardingStatus.completed;
 
-  // Credentials are optional (wizard skippable) when a harness that supports
-  // built-in authentication is available. We use the presence of "claude-code"
-  // in availableHarnesses as the proxy for "built-in access available".
-  // If no harness info is present, default to not skippable to be safe.
-  const credentialsOptional =
-    clientConfig.availableHarnesses.includes("claude-code");
+  // Credentials are always optional during onboarding.
+  // Users can configure API keys later in Settings if needed.
+  const credentialsOptional = true;
 
   const handleComplete = useCallback(() => {
     setDismissed(true);

@@ -78,7 +78,7 @@ public sealed class OnboardingWizardPage(IPage page)
         await ContinueButton.ClickAsync();
     }
 
-    /// <summary>Click "Skip for now" on the credential step (only visible when credentials are optional).</summary>
+    /// <summary>Click "Skip for now" on the credential step.</summary>
     public async Task ClickSkipForNowAsync()
     {
         await SkipForNowButton.ClickAsync();
@@ -108,7 +108,7 @@ public sealed class OnboardingWizardPage(IPage page)
     // ── Composite helpers ────────────────────────────────────────────────────
 
     /// <summary>
-    /// Walk through the entire onboarding wizard: Welcome → Credential (save a dummy key) → Ready → Start.
+    /// Walk through the entire onboarding wizard: Welcome → Credential (skip) → Ready → Start.
     /// </summary>
     public async Task CompleteFullWizardAsync()
     {
@@ -116,8 +116,7 @@ public sealed class OnboardingWizardPage(IPage page)
         await ClickGetStartedAsync();
 
         await WaitForCredentialStepAsync();
-        await SaveApiKeyAsync("sk-ant-test-dummy-key-for-e2e");
-        await ClickContinueAsync();
+        await ClickSkipForNowAsync();
 
         await WaitForReadyStepAsync();
         await ClickStartSessionAsync();

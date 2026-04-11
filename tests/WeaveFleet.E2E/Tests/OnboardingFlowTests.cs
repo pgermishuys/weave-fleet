@@ -44,7 +44,7 @@ public sealed class OnboardingFlowTests : AuthE2ETestBase,
     }
 
     /// <summary>
-    /// Wizard step progression: Welcome → Get Started → Credential → save key → Continue → Ready → Start a Session
+    /// Wizard step progression: Welcome → Get Started → Credential → Skip for now → Ready → Start a Session
     /// → wizard closes → complete-onboarding has been POSTed.
     /// </summary>
     [Fact]

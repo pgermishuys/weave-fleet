@@ -42,14 +42,13 @@
        Running as an InitialTarget guarantees this executes before MSBuild
        resolves project references (i.e. before WeaveFleet.Api is built).
 
-       Incremental: skipped when client/dist/index.html already exists.
+       Incremental: always rebuild to keep E2E assets in sync with source.
        Opt-out:     dotnet build -p:SkipFrontendBuild=true
        ─────────────────────────────────────────────────────────────────────── -->
   <Target Name="EnsureFrontendBuilt"
-          Condition="'$(SkipFrontendBuild)' != 'true'
-                     AND !Exists('$(MSBuildThisFileDirectory)..\..\client\dist\index.html')">
+          Condition="'$(SkipFrontendBuild)' != 'true'">
     <Message Importance="high"
-             Text="E2E: Frontend SPA not found at client/dist/ — running 'bun run build'..." />
+             Text="E2E: Building frontend SPA for current test run..." />
     <Exec Command="bun run build"
           WorkingDirectory="$(MSBuildThisFileDirectory)..\..\client" />
   </Target>
