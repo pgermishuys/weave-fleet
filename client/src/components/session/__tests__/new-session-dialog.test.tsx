@@ -106,13 +106,6 @@ vi.mock("@/session-sources/use-session-sources", () => ({
   }),
 }));
 
-vi.mock("@/hooks/use-harnesses", () => ({
-  useHarnesses: () => ({
-    harnesses: [{ type: "opencode", displayName: "OpenCode", available: true }],
-    isLoading: false,
-  }),
-}));
-
 vi.mock("@/hooks/use-projects", () => ({
   useProjects: () => ({
     projects: [],
@@ -123,7 +116,7 @@ vi.mock("@/hooks/use-persisted-state", () => ({
   usePersistedState: (_key: string, initialValue: unknown) => [initialValue, vi.fn()],
 }));
 
-function renderDialog(props?: Partial<ComponentProps<typeof NewSessionDialog>> & { cloudMode?: boolean }) {
+function renderDialog(props?: Partial<ComponentProps<typeof NewSessionDialog>> & { cloudMode?: boolean; availableHarnesses?: string[] }) {
   const sessionsContextValue: SessionsContextValue = {
     sessions: [],
     retentionFilter: "active",
@@ -138,7 +131,7 @@ function renderDialog(props?: Partial<ComponentProps<typeof NewSessionDialog>> &
 
   return render(
     <AppShellProvider
-      clientConfig={{ cloudMode: props?.cloudMode ?? false, authEnabled: false, availableHarnesses: ["opencode"] }}
+      clientConfig={{ cloudMode: props?.cloudMode ?? false, authEnabled: false, availableHarnesses: props?.availableHarnesses ?? ["opencode"] }}
       currentUser={null}
     >
       <SessionsContext.Provider value={sessionsContextValue}>
@@ -192,5 +185,11 @@ describe("NewSessionDialog", () => {
         key: expect.objectContaining({ providerId: "builtin.managed", sourceType: "managed-workspace" }),
       }),
     }));
+  });
+
+  it("shows harness picker from app shell config without live harness fetches", async () => {
+    renderDialog({ availableHarnesses: ["opencode", "claude-code"] });
+
+    expect(screen.getByText("Harness")).toBeTruthy();
   });
 });

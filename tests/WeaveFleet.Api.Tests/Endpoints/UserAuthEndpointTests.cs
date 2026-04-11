@@ -128,6 +128,8 @@ public sealed class UserAuthEndpointTests
         var payload = await response.Content.ReadFromJsonAsync<ClientConfigPayload>();
         payload.ShouldNotBeNull();
         payload.AuthEnabled.ShouldBeFalse();
+        payload.AvailableHarnesses.ShouldContain("opencode");
+        payload.AvailableHarnesses.ShouldContain("claude-code");
     }
 
     [Fact]

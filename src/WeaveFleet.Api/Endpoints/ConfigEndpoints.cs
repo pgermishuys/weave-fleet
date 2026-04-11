@@ -53,13 +53,10 @@ public static class ConfigEndpoints
     {
         var group = app.MapGroup("/api/config").WithTags("Config");
 
-        group.MapGet("/client", async (
-            IHarnessRegistry harnessRegistry,
-            CancellationToken ct) =>
+        group.MapGet("/client", (
+            IHarnessRegistry harnessRegistry) =>
         {
-            var harnesses = await harnessRegistry.GetAvailabilityAsync(ct);
-            var availableHarnesses = harnesses
-                .Where(harness => harness.Available)
+            var availableHarnesses = harnessRegistry.GetAll()
                 .Select(harness => harness.Type)
                 .ToArray();
 

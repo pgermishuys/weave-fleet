@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
-import { AlertCircle, CheckCircle2, ExternalLink, Loader2, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -27,7 +27,6 @@ import { DirectorySourceForm } from "@/components/session/sources/directory-sour
 import { useCreateSession } from "@/hooks/use-create-session";
 import { useAddSourceToSession } from "@/hooks/use-add-source-to-session";
 import { useSessionsContext } from "@/contexts/sessions-context";
-import { useHarnesses } from "@/hooks/use-harnesses";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { useRepositories } from "@/hooks/use-repositories";
 import { useProjects } from "@/hooks/use-projects";
@@ -45,6 +44,11 @@ const UNGROUPED_VALUE = "__ungrouped__";
 const REPOSITORY_SOURCE_ID = "builtin.repository:repository";
 const DIRECTORY_SOURCE_ID = "builtin.local:directory";
 const MANAGED_SOURCE_ID = "builtin.managed:managed-workspace";
+
+const HARNESS_DISPLAY_NAMES: Record<string, string> = {
+  "opencode": "OpenCode",
+  "claude-code": "Claude Code",
+};
 
 interface NewSessionDialogProps {
   trigger?: ReactNode;
@@ -97,14 +101,16 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
   const { createSession, isLoading, error } = useCreateSession();
   const { addSourceToSession, isLoading: isAddingSource, error: addSourceError } = useAddSourceToSession();
   const { refetch } = useSessionsContext();
-  const { harnesses, isLoading: harnessesLoading } = useHarnesses();
   const [defaultHarness] = usePersistedState<string>(DEFAULT_HARNESS_KEY, "opencode");
 
   const { projects } = useProjects({ enabled: !userProjectsProp });
   const userProjects = userProjectsProp ?? projects.filter((project) => project.type !== "scratch");
+  const harnesses = useMemo(() => clientConfig.availableHarnesses.map((type) => ({
+    type,
+    displayName: HARNESS_DISPLAY_NAMES[type] ?? type,
+  })), [clientConfig.availableHarnesses]);
   const showProjectPicker = userProjects.length > 0;
   const showHarnessPicker = harnesses.length >= 2;
-  const availableHarnesses = harnesses.filter((harness) => harness.available);
   const isCloudMode = clientConfig.cloudMode;
 
   useEffect(() => {
@@ -122,9 +128,9 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
       return "";
     }
 
-    const defaultAvailable = availableHarnesses.find((harness) => harness.type === defaultHarness);
-    return defaultAvailable?.type ?? availableHarnesses[0]?.type ?? "opencode";
-  }, [availableHarnesses, defaultHarness, harnesses, selectedHarness]);
+    const defaultAvailable = harnesses.find((harness) => harness.type === defaultHarness);
+    return defaultAvailable?.type ?? harnesses[0]?.type ?? "opencode";
+  }, [defaultHarness, harnesses, selectedHarness]);
 
   const filteredRepos = useMemo(() => {
     if (!repoSearch.trim()) {
@@ -470,19 +476,15 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
               <label className="text-sm font-medium" htmlFor="harness-select">
                 Harness
               </label>
-              <Select value={resolvedHarness} onValueChange={setSelectedHarness} disabled={isLoading || harnessesLoading}>
+              <Select value={resolvedHarness} onValueChange={setSelectedHarness} disabled={isLoading}>
                 <SelectTrigger id="harness-select" className="w-full">
                   <SelectValue placeholder="Select harness" />
                 </SelectTrigger>
                 <SelectContent>
                   {harnesses.map((harness) => (
-                    <SelectItem key={harness.type} value={harness.type} disabled={!harness.available}>
+                    <SelectItem key={harness.type} value={harness.type}>
                       <span className="flex items-center gap-2">
-                        {harness.available ? (
-                          <CheckCircle2 className="h-3 w-3 text-green-500" />
-                        ) : (
-                          <XCircle className="h-3 w-3 text-muted-foreground" />
-                        )}
+                        <CheckCircle2 className="h-3 w-3 text-green-500" />
                         {harness.displayName}
                       </span>
                     </SelectItem>
