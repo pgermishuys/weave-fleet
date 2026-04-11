@@ -152,7 +152,12 @@ Each deploy creates a timestamped release directory:
 
 The `current` symlink is atomically swapped on each deploy. The last 3 releases are kept; older releases are pruned automatically.
 
-**On health check failure**: `deploy.sh` auto-rolls back to the previous release and dumps the last 50 journal lines for debugging.
+`deploy.sh` verifies release readiness in two phases:
+
+1. **Local app health** on the host via `http://127.0.0.1:8080/healthz`
+2. **External HTTPS health** via `https://<domain>/healthz`
+
+**On health check failure**: `deploy.sh` auto-rolls back to the previous release and dumps the last 50 journal lines for debugging. External health failures also dump the last 50 Caddy journal lines to help diagnose TLS / reverse-proxy readiness issues.
 
 ---
 
@@ -160,7 +165,7 @@ The `current` symlink is atomically swapped on each deploy. The last 3 releases 
 
 ### Automatic (on failed deploy)
 
-If the health check fails, `deploy.sh` automatically repoints the symlink to the previous release and restarts the service.
+If the local app health check or the external HTTPS health check fails, `deploy.sh` automatically repoints the symlink to the previous release and restarts the service.
 
 ### Manual rollback
 
@@ -305,7 +310,7 @@ After every deploy:
 
 ## Troubleshooting
 
-**TLS cert delay**: Caddy provisioning takes up to 60s after DNS propagates. The health check in `deploy.sh` retries for 60s. If TLS is still not ready, wait and retry.
+**TLS cert delay**: Caddy provisioning can take time after DNS propagates. `deploy.sh` now verifies local app health first, then retries the external HTTPS health check for up to 120s. If TLS is still not ready, wait and retry.
 
 **Service won't start**: Check `sudo journalctl -u fleet -n 50`. Common causes: missing `fleet.env`, wrong binary path (symlink issue), or missing .NET runtime.
 

@@ -19,6 +19,10 @@ public static class WebSocketEndpoints
         LoggerMessage.Define(LogLevel.Debug, new EventId(3, "WsDisconnected"),
             "WebSocket connection closed");
 
+    private static readonly Action<ILogger, Exception?> LogPumpCancelled =
+        LoggerMessage.Define(LogLevel.Debug, new EventId(4, "WsPumpCancelled"),
+            "WebSocket event pump cancelled");
+
     public static IEndpointRouteBuilder MapWebSocketEndpoints(this IEndpointRouteBuilder app)
     {
         app.Map("/ws", HandleWebSocketAsync);
@@ -142,7 +146,16 @@ public static class WebSocketEndpoints
         }
 
         await cts.CancelAsync();
-        await sendTask.ConfigureAwait(false);
+
+        try
+        {
+            await sendTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            if (logger.IsEnabled(LogLevel.Debug))
+                LogPumpCancelled(logger, null);
+        }
 
         if (logger.IsEnabled(LogLevel.Debug))
             LogDisconnected(logger, null);
@@ -158,43 +171,50 @@ public static class WebSocketEndpoints
         // Subscribe to all topics with user scope — broadcaster delivers only matching events
         var allTopics = new[] { "*" };
 
-        await foreach (var evt in broadcaster.SubscribeAsync(allTopics, subscriberUserId, ct))
+        try
         {
-            bool inScope;
-            lock (subscribedTopics)
-                inScope = subscribedTopics.Contains(evt.Topic);
-
-            if (!inScope)
-                continue;
-
-            if (webSocket.State != WebSocketState.Open)
-                break;
-
-            var json = JsonSerializer.Serialize(new
+            await foreach (var evt in broadcaster.SubscribeAsync(allTopics, subscriberUserId, ct))
             {
-                type = "event",
-                topic = evt.Topic,
-                data = new
+                bool inScope;
+                lock (subscribedTopics)
+                    inScope = subscribedTopics.Contains(evt.Topic);
+
+                if (!inScope)
+                    continue;
+
+                if (webSocket.State != WebSocketState.Open)
+                    break;
+
+                var json = JsonSerializer.Serialize(new
                 {
-                    type = evt.Type,
-                    properties = evt.Payload
-                }
-            });
+                    type = "event",
+                    topic = evt.Topic,
+                    data = new
+                    {
+                        type = evt.Type,
+                        properties = evt.Payload
+                    }
+                });
 
-            var bytes = Encoding.UTF8.GetBytes(json);
-            try
-            {
-                await webSocket.SendAsync(new ArraySegment<byte>(bytes),
-                    WebSocketMessageType.Text, endOfMessage: true, ct);
+                var bytes = Encoding.UTF8.GetBytes(json);
+                try
+                {
+                    await webSocket.SendAsync(new ArraySegment<byte>(bytes),
+                        WebSocketMessageType.Text, endOfMessage: true, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (WebSocketException)
+                {
+                    break;
+                }
             }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch (WebSocketException)
-            {
-                break;
-            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return;
         }
     }
 

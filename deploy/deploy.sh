@@ -42,6 +42,7 @@ RELEASES_DIR="/opt/fleet/releases"
 APP_LINK="/opt/fleet/app"
 SERVICE_NAME="fleet"
 HEALTH_URL="${FLEET_DOMAIN:+https://$FLEET_DOMAIN/healthz}"
+LOCAL_HEALTH_URL="http://127.0.0.1:8080/healthz"
 SSH_OPTS="${SSH_OPTS:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -75,6 +76,46 @@ dump_journal() {
   log "--- Last 50 lines of fleet journal ---"
   ssh_remote "sudo journalctl -u $SERVICE_NAME -n 50 --no-pager" || true
   log "--- End journal ---"
+}
+
+dump_caddy_journal() {
+  log "--- Last 50 lines of caddy journal ---"
+  ssh_remote "sudo journalctl -u caddy -n 50 --no-pager" || true
+  log "--- End journal ---"
+}
+
+wait_for_remote_health() {
+  local url="$1"
+  local timeout_seconds="$2"
+  local wait=0
+
+  while [ "$wait" -lt "$timeout_seconds" ]; do
+    if ssh_remote "curl -sf --max-time 5 '$url' >/dev/null" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    sleep 3
+    wait=$((wait + 3))
+  done
+
+  return 1
+}
+
+wait_for_external_health() {
+  local url="$1"
+  local timeout_seconds="$2"
+  local wait=0
+
+  while [ "$wait" -lt "$timeout_seconds" ]; do
+    if curl -sf --max-time 5 "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    sleep 5
+    wait=$((wait + 5))
+  done
+
+  return 1
 }
 
 # ── Rollback mode ─────────────────────────────────────────────────────────────
@@ -196,23 +237,30 @@ if ! ssh_remote "systemctl is-active $SERVICE_NAME" >/dev/null 2>&1; then
   err "Service failed to start within 30s."
 fi
 
-# ── 10. Health check ──────────────────────────────────────────────────────────
-if [ -n "$HEALTH_URL" ]; then
-  log "Running health check: $HEALTH_URL"
-  WAIT=0
-  HEALTH_PASSED=0
-  while [ "$WAIT" -lt 60 ]; do
-    if curl -sf --max-time 5 "$HEALTH_URL" >/dev/null 2>&1; then
-      HEALTH_PASSED=1
-      break
-    fi
-    sleep 3
-    WAIT=$((WAIT + 3))
-  done
+# ── 10. Health checks ─────────────────────────────────────────────────────────
+log "Running local health check on remote host: $LOCAL_HEALTH_URL"
+if ! wait_for_remote_health "$LOCAL_HEALTH_URL" 30; then
+  log "Local health check failed after 30s."
+  dump_journal
+  # Auto-rollback to previous release
+  if [ -n "$PREV_RELEASE" ] && [ "$PREV_RELEASE" != "$RELEASE_DIR" ] && [ "$PREV_RELEASE" != "$APP_LINK" ]; then
+    log "Auto-rolling back to $PREV_RELEASE ..."
+    ssh_remote "sudo systemctl stop $SERVICE_NAME || true"
+    ssh_remote "if test -d $PREV_RELEASE; then sudo ln -sTfn $PREV_RELEASE $APP_LINK; fi"
+    ssh_remote "sudo systemctl start $SERVICE_NAME || true"
+    log "Rollback complete. Previous release is now active."
+  fi
+  err "Local health check failed: $LOCAL_HEALTH_URL"
+fi
 
-  if [ "$HEALTH_PASSED" = "0" ]; then
-    log "Health check failed after 60s."
+log "Local health check passed."
+
+if [ -n "$HEALTH_URL" ]; then
+  log "Running external health check: $HEALTH_URL"
+  if ! wait_for_external_health "$HEALTH_URL" 120; then
+    log "External health check failed after 120s."
     dump_journal
+    dump_caddy_journal
     # Auto-rollback to previous release
     if [ -n "$PREV_RELEASE" ] && [ "$PREV_RELEASE" != "$RELEASE_DIR" ] && [ "$PREV_RELEASE" != "$APP_LINK" ]; then
       log "Auto-rolling back to $PREV_RELEASE ..."
@@ -221,12 +269,12 @@ if [ -n "$HEALTH_URL" ]; then
       ssh_remote "sudo systemctl start $SERVICE_NAME || true"
       log "Rollback complete. Previous release is now active."
     fi
-    err "Health check failed: $HEALTH_URL"
+    err "External health check failed: $HEALTH_URL"
   fi
 
-  log "Health check passed."
+  log "External health check passed."
 else
-  log "No FLEET_DOMAIN set — skipping HTTP health check."
+  log "No FLEET_DOMAIN set — skipping external HTTP health check."
   log "Manually verify: curl https://<your-domain>/healthz"
 fi
 
