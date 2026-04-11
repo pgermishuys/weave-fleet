@@ -15,9 +15,12 @@ public sealed class IdpLoginPage(IPage page)
 
     public async Task WaitForVisibleAsync()
     {
-        await Assertions.Expect(UsernameInput).ToBeVisibleAsync();
-        await Assertions.Expect(PasswordInput).ToBeVisibleAsync();
-        await Assertions.Expect(SubmitButton).ToBeVisibleAsync();
+        // Use a generous timeout for the first login — the OIDC middleware's initial
+        // backchannel discovery call to the IdP can be slow on CI cold starts.
+        var options = new LocatorAssertionsToBeVisibleOptions { Timeout = 15_000 };
+        await Assertions.Expect(UsernameInput).ToBeVisibleAsync(options);
+        await Assertions.Expect(PasswordInput).ToBeVisibleAsync(options);
+        await Assertions.Expect(SubmitButton).ToBeVisibleAsync(options);
     }
 
     public Task FillUsernameAsync(string username)
