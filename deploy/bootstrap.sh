@@ -95,7 +95,7 @@ FLEET_DOMAIN="$FLEET_DOMAIN" envsubst '${FLEET_DOMAIN}' \
 
 log "Uploading rendered Caddyfile..."
 scp_to_remote "$CADDY_RENDERED" "~/Caddyfile.tmp"
-ssh_remote "sudo install -m 644 -o root -g root ~/Caddyfile.tmp /etc/caddy/Caddyfile && rm -f ~/Caddyfile.tmp"
+ssh_remote "sudo install -m 644 -o root -g root ~/Caddyfile.tmp /etc/caddy/Caddyfile && rm -f ~/Caddyfile.tmp && sudo caddy validate --config /etc/caddy/Caddyfile"
 log "Caddyfile installed at /etc/caddy/Caddyfile"
 
 # ── Step 3: Install fleet.service ────────────────────────────────────────────
@@ -156,8 +156,8 @@ log "Reloading systemd and enabling fleet service..."
 ssh_remote "sudo systemctl daemon-reload && sudo systemctl enable fleet"
 log "fleet service enabled (not started — run deploy.sh to deliver app and start service)"
 
-log "Starting Caddy (TLS provisioning begins now — DNS must already point to this host)..."
-ssh_remote "sudo systemctl enable --now caddy"
+log "Starting or reloading Caddy (TLS provisioning begins now — DNS must already point to this host)..."
+ssh_remote "sudo systemctl enable caddy && sudo systemctl restart caddy"
 
 # ── Step 7: Infrastructure validation ────────────────────────────────────────
 

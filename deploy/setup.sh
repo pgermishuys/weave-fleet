@@ -24,6 +24,7 @@ FLEET_DIR="/opt/fleet"
 FLEET_DATA_DIR="/opt/fleet/data"
 FLEET_KEYS_DIR="/opt/fleet/data/keys"
 WORKSPACES_DIR="/data/workspaces"
+CADDY_LOG_DIR="/var/log/caddy"
 DOTNET_VERSION="10.0"
 DOTNET_INSTALL_DIR="/usr/share/dotnet"
 SWAPFILE_PATH="/swapfile"
@@ -145,10 +146,18 @@ mkdir -p "$FLEET_DIR"
 mkdir -p "$FLEET_DATA_DIR"
 mkdir -p "$FLEET_KEYS_DIR"
 mkdir -p "$WORKSPACES_DIR"
+mkdir -p "$CADDY_LOG_DIR"
 
 # Ownership: fleet service account owns /opt/fleet and /data/workspaces
 chown -R "$FLEET_USER:$FLEET_USER" "$FLEET_DIR"
 chown -R "$FLEET_USER:$FLEET_USER" "$WORKSPACES_DIR"
+
+# Caddy access log directory must be writable by the caddy service account.
+chown -R caddy:caddy "$CADDY_LOG_DIR"
+chmod 755 "$CADDY_LOG_DIR"
+touch "$CADDY_LOG_DIR/fleet-access.log"
+chown caddy:caddy "$CADDY_LOG_DIR/fleet-access.log"
+chmod 644 "$CADDY_LOG_DIR/fleet-access.log"
 
 # Key ring: only fleet service account can read keys
 chmod 700 "$FLEET_KEYS_DIR"
