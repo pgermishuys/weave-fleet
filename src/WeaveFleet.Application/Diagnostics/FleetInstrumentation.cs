@@ -20,6 +20,9 @@ public static class FleetInstrumentation
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
             ?.InformationalVersion ?? "0.0.0";
 
+    /// <summary>Commit SHA parsed from the assembly informational version when available.</summary>
+    public static readonly string ServiceCommit = GetServiceCommit(ServiceVersion);
+
     /// <summary>ActivitySource for creating distributed trace spans.</summary>
     public static readonly ActivitySource ActivitySource = new(ServiceName, ServiceVersion);
 
@@ -57,5 +60,13 @@ public static class FleetInstrumentation
     public static readonly Histogram<long> MessageTokens =
         Meter.CreateHistogram<long>("weave_fleet.message.tokens", "tokens",
             "Distribution of per-message token counts");
-}
 
+    private static string GetServiceCommit(string serviceVersion)
+    {
+        var separatorIndex = serviceVersion.IndexOf('+', StringComparison.Ordinal);
+        if (separatorIndex < 0 || separatorIndex == serviceVersion.Length - 1)
+            return "unknown";
+
+        return serviceVersion[(separatorIndex + 1)..];
+    }
+}

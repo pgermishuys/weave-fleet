@@ -27,11 +27,11 @@ public static class FleetEndpoints
         .Produces<FleetSummaryResponse>(200)
         .WithName("GetFleetSummary");
 
-        // GET /api/version — assembly version + service version from telemetry
+        // GET /api/version — assembly version + embedded source revision
         group.MapGet("/version", () => Results.Ok(new
         {
             version = FleetInstrumentation.ServiceVersion,
-            commit = "dev"
+            commit = FleetInstrumentation.ServiceCommit
         }))
         .WithName("GetVersion");
 

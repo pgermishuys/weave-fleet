@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Api.Telemetry;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Data;
@@ -274,6 +275,11 @@ app.UseWebSockets();
 // Health checks (registered before SPA fallback)
 app.MapHealthChecks("/healthz");
 app.MapHealthChecks("/readyz");
+app.MapGet("/version", () => Results.Ok(new
+{
+    version = FleetInstrumentation.ServiceVersion,
+    commit = FleetInstrumentation.ServiceCommit
+}));
 app.MapAuthEndpoints(fleetOptions);
 
 // API endpoints (registered before SPA fallback)

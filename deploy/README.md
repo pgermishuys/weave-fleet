@@ -152,12 +152,16 @@ Each deploy creates a timestamped release directory:
 
 The `current` symlink is atomically swapped on each deploy. The last 3 releases are kept; older releases are pruned automatically.
 
-`deploy.sh` verifies release readiness in two phases:
+`deploy.sh` verifies release readiness with a **local app health** check on the host via `http://127.0.0.1:8080/healthz`.
 
-1. **Local app health** on the host via `http://127.0.0.1:8080/healthz`
-2. **External HTTPS health** via `https://<domain>/healthz` (forced over IPv4 from the deploy runner)
+**On health check failure**: `deploy.sh` auto-rolls back to the previous release and dumps the last 50 journal lines for debugging.
 
-**On health check failure**: `deploy.sh` auto-rolls back to the previous release and dumps the last 50 journal lines for debugging. External health failures also dump the last 50 Caddy journal lines to help diagnose TLS / reverse-proxy readiness issues.
+For now, the external HTTPS health check is skipped during deploy. Verify it manually after rollout with:
+
+```bash
+curl -4 https://<domain>/healthz
+curl -4 https://<domain>/version
+```
 
 ---
 
@@ -165,7 +169,7 @@ The `current` symlink is atomically swapped on each deploy. The last 3 releases 
 
 ### Automatic (on failed deploy)
 
-If the local app health check or the external HTTPS health check fails, `deploy.sh` automatically repoints the symlink to the previous release and restarts the service.
+If the local app health check fails, `deploy.sh` automatically repoints the symlink to the previous release and restarts the service.
 
 ### Manual rollback
 
@@ -310,7 +314,7 @@ After every deploy:
 
 ## Troubleshooting
 
-**TLS cert delay / IPv6 mismatch**: Caddy provisioning can take time after DNS propagates. `deploy.sh` now verifies local app health first, then retries the external HTTPS health check for up to 120s. The deploy runner forces IPv4 for the external health probe, which avoids false negatives when an `AAAA` record is present but unusable. If TLS is still not ready, wait and retry.
+**TLS cert delay / IPv6 mismatch**: Caddy provisioning can take time after DNS propagates, and external checks may still be affected by DNS or IPv6 routing. `deploy.sh` currently gates deploys only on the local health check. Manually verify public readiness with `curl -4 https://<domain>/healthz` after deploy.
 
 **Service won't start**: Check `sudo journalctl -u fleet -n 50`. Common causes: missing `fleet.env`, wrong binary path (symlink issue), or missing .NET runtime.
 

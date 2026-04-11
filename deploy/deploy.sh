@@ -78,12 +78,6 @@ dump_journal() {
   log "--- End journal ---"
 }
 
-dump_caddy_journal() {
-  log "--- Last 50 lines of caddy journal ---"
-  ssh_remote "sudo journalctl -u caddy -n 50 --no-pager" || true
-  log "--- End journal ---"
-}
-
 wait_for_remote_health() {
   local url="$1"
   local timeout_seconds="$2"
@@ -96,23 +90,6 @@ wait_for_remote_health() {
 
     sleep 3
     wait=$((wait + 3))
-  done
-
-  return 1
-}
-
-wait_for_external_health() {
-  local url="$1"
-  local timeout_seconds="$2"
-  local wait=0
-
-  while [ "$wait" -lt "$timeout_seconds" ]; do
-    if curl -4 -sf --max-time 5 "$url" >/dev/null 2>&1; then
-      return 0
-    fi
-
-    sleep 5
-    wait=$((wait + 5))
   done
 
   return 1
@@ -254,27 +231,11 @@ if ! wait_for_remote_health "$LOCAL_HEALTH_URL" 30; then
 fi
 
 log "Local health check passed."
-
 if [ -n "$HEALTH_URL" ]; then
-  log "Running external health check: $HEALTH_URL"
-  if ! wait_for_external_health "$HEALTH_URL" 120; then
-    log "External health check failed after 120s."
-    dump_journal
-    dump_caddy_journal
-    # Auto-rollback to previous release
-    if [ -n "$PREV_RELEASE" ] && [ "$PREV_RELEASE" != "$RELEASE_DIR" ] && [ "$PREV_RELEASE" != "$APP_LINK" ]; then
-      log "Auto-rolling back to $PREV_RELEASE ..."
-      ssh_remote "sudo systemctl stop $SERVICE_NAME || true"
-      ssh_remote "if test -d $PREV_RELEASE; then sudo ln -sTfn $PREV_RELEASE $APP_LINK; fi"
-      ssh_remote "sudo systemctl start $SERVICE_NAME || true"
-      log "Rollback complete. Previous release is now active."
-    fi
-    err "External health check failed: $HEALTH_URL"
-  fi
-
-  log "External health check passed."
+  log "Skipping external health check for now: $HEALTH_URL"
+  log "Manually verify after deploy: curl -4 https://$FLEET_DOMAIN/healthz"
 else
-  log "No FLEET_DOMAIN set — skipping external HTTP health check."
+  log "No FLEET_DOMAIN set — external HTTP health check not configured."
   log "Manually verify: curl https://<your-domain>/healthz"
 fi
 
