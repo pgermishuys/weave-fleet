@@ -201,8 +201,13 @@ jobs:
         run: pwsh tests/WeaveFleet.E2E/bin/Release/net10.0/playwright.ps1 install-deps chromium
 
       # ── Trust the .NET dev certificate (auth E2E tests) ──────────────────
-      - name: Trust .NET dev certificate
-        run: dotnet dev-certs https --trust
+      - name: Trust dev certs
+        run: |
+          dotnet dev-certs https --clean
+          dotnet dev-certs https --trust || [ $? -eq 4 ]
+          DEV_CERTS_TRUST="$HOME/.aspnet/dev-certs/trust"
+          EXISTING="${SSL_CERT_DIR:-/usr/lib/ssl/certs}"
+          echo "SSL_CERT_DIR=${DEV_CERTS_TRUST}:${EXISTING}" >> $GITHUB_ENV
 
       # ── Run E2E tests ─────────────────────────────────────────────────────
       - name: Run E2E tests
