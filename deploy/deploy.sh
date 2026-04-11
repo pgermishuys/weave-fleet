@@ -115,7 +115,8 @@ else
     npm run build
     # Copy built SPA into publish/wwwroot
     rm -rf "$REPO_ROOT/publish/wwwroot"
-    cp -r "$REPO_ROOT/client/out" "$REPO_ROOT/publish/wwwroot"
+    mkdir -p "$REPO_ROOT/publish/wwwroot"
+    cp -r "$REPO_ROOT/client/dist/." "$REPO_ROOT/publish/wwwroot/"
     cd "$REPO_ROOT"
   else
     log "WARNING: client/ directory not found — skipping SPA build"
