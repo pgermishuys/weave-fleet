@@ -1,0 +1,72 @@
+name: Setup SSH
+description: >
+  Sets up SSH authentication with a pinned host public key.
+  Writes the private key and known_hosts entry, then exposes
+  SSH_OPTS for use in subsequent steps.
+
+  IMPORTANT: This action does NOT clean up the key — it intentionally
+  leaves ~/.ssh/fleet-deploy-key present so downstream job steps can use
+  it. Add a cleanup step at the end of your job:
+
+    - name: Cleanup SSH key
+      if: always()
+      shell: bash
+      run: |
+        rm -f ~/.ssh/fleet-deploy-key
+        ssh-keygen -R "<host>" 2>/dev/null || true
+
+inputs:
+  ssh-key:
+    description: Private SSH key content (from GitHub Secret)
+    required: true
+  ssh-host:
+    description: Hostname or IP to connect to
+    required: true
+  ssh-host-public-key:
+    description: >
+      Pinned server public key line as it appears in known_hosts
+      (e.g. "1.2.3.4 ecdsa-sha2-nistp256 AAAA...").
+      Obtain once via: ssh-keyscan <host>
+    required: true
+
+outputs:
+  ssh-opts:
+    description: SSH options string to pass as SSH_OPTS
+    value: ${{ steps.write-key.outputs.ssh-opts }}
+
+runs:
+  using: composite
+  steps:
+    - name: Write SSH key and known_hosts
+      id: write-key
+      shell: bash
+      env:
+        SSH_PRIVATE_KEY: ${{ inputs.ssh-key }}
+        SSH_HOST: ${{ inputs.ssh-host }}
+        SSH_HOST_PUBLIC_KEY: ${{ inputs.ssh-host-public-key }}
+      run: |
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+
+        # Write private key — never echo the key value
+        printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/fleet-deploy-key
+        chmod 600 ~/.ssh/fleet-deploy-key
+
+        # Write pinned host public key — pre-pinned, no TOFU
+        printf '%s\n' "$SSH_HOST_PUBLIC_KEY" >> ~/.ssh/known_hosts
+        chmod 600 ~/.ssh/known_hosts
+
+        echo "ssh-opts=-i ~/.ssh/fleet-deploy-key -o StrictHostKeyChecking=yes" >> "$GITHUB_OUTPUT"
+
+    - name: Verify SSH connectivity
+      shell: bash
+      env:
+        SSH_HOST: ${{ inputs.ssh-host }}
+      run: |
+        # shellcheck disable=SC2086
+        ssh -i ~/.ssh/fleet-deploy-key \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=10 \
+            -o BatchMode=yes \
+            "$SSH_HOST" \
+            "echo 'SSH connectivity verified'"

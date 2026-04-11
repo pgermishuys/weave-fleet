@@ -1,0 +1,60 @@
+[Unit]
+Description=Weave Fleet AI coding agent service
+Documentation=https://github.com/weave-fleet
+After=network.target
+
+[Service]
+# ── Identity ──────────────────────────────────────────────────────────────────
+User=fleet
+Group=fleet
+
+# ── Working directory and binary ──────────────────────────────────────────────
+WorkingDirectory=/opt/fleet/app
+ExecStart=/usr/bin/dotnet /opt/fleet/app/WeaveFleet.Api.dll
+
+# ── Environment ───────────────────────────────────────────────────────────────
+# Kestrel listens on port 8080 (Caddy reverse-proxies from 443)
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://127.0.0.1:8080
+# Configuration overrides — sensitive values should be in /opt/fleet/data/fleet.env (EnvironmentFile)
+EnvironmentFile=-/opt/fleet/data/fleet.env
+
+# ── Restart policy ────────────────────────────────────────────────────────────
+Restart=on-failure
+RestartSec=5s
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fleet
+
+# ── Security hardening ────────────────────────────────────────────────────────
+# Prevent privilege escalation
+NoNewPrivileges=yes
+
+# Disable core dumps (prevent credential leakage)
+LimitCORE=0
+
+# Read-only root filesystem except for explicitly writable paths
+# (adjust if your application needs additional writable paths)
+#ProtectSystem=strict  # Enable once tested — requires all writes to go through WorkspaceRoot
+
+# Limit open files
+LimitNOFILE=65535
+
+# Restrict network namespaces
+#PrivateNetwork=yes    # Uncomment if harness processes use loopback only
+
+# ── Resource limits ───────────────────────────────────────────────────────────
+# Memory limit (adjust based on expected load)
+MemoryMax=1G
+# CPU weight (lower = less priority)
+CPUWeight=512
+
+# ── Capabilities ─────────────────────────────────────────────────────────────
+# Drop all capabilities (the service runs as a non-root user and needs none)
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

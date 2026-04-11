@@ -1,0 +1,43 @@
+# Caddyfile.template — TLS reverse proxy configuration for Weave Fleet
+#
+# This is a template. Use envsubst to render it before deploying:
+#   envsubst '${FLEET_DOMAIN}' < Caddyfile.template > Caddyfile.rendered
+#
+# The only variable substituted is ${FLEET_DOMAIN}.
+# All other $ references in this file use Caddy's own syntax and are NOT substituted.
+#
+# Contract: TLS reverse proxy
+#   - HTTPS termination with auto-renewable certificate
+#   - Proxy https://${FLEET_DOMAIN} → http://127.0.0.1:8080
+#
+# Reference implementation: Caddy with automatic HTTPS
+#
+# Prerequisites:
+#   - Domain DNS must point to this server's IP before Caddy can issue a certificate
+#   - Port 80 and 443 must be open in the security group / firewall
+#   - Caddy must be installed (see setup.sh)
+
+${FLEET_DOMAIN} {
+    # Reverse proxy all traffic to the Fleet backend (Kestrel on port 8080)
+    reverse_proxy 127.0.0.1:8080
+
+    # Security headers
+    header {
+        # Prevent clickjacking
+        X-Frame-Options DENY
+        # Enable XSS protection
+        X-XSS-Protection "1; mode=block"
+        # Prevent MIME type sniffing
+        X-Content-Type-Options nosniff
+        # Strict-Transport-Security (HSTS) — 1 year
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        # Remove Server header
+        -Server
+    }
+
+    # Access logging
+    log {
+        output file /var/log/caddy/fleet-access.log
+        format json
+    }
+}

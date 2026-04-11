@@ -1,0 +1,43 @@
+# Caddyfile — TLS reverse proxy configuration for Weave Fleet
+#
+# Contract: TLS reverse proxy
+#   - HTTPS termination with auto-renewable certificate
+#   - Proxy https://<domain> → http://127.0.0.1:8080
+#
+# Reference implementation: Caddy with automatic HTTPS
+#
+# Prerequisites:
+#   - Domain DNS must point to this server's IP before Caddy can issue a certificate
+#   - Port 80 and 443 must be open in the security group / firewall
+#   - Caddy must be installed (see setup.sh)
+#
+# Usage:
+#   1. Replace fleet.example.com with your actual domain
+#   2. Copy this file to /etc/caddy/Caddyfile
+#   3. sudo systemctl reload caddy
+#
+# Replace this placeholder with your actual domain name:
+fleet.tryweave.io {
+    # Reverse proxy all traffic to the Fleet backend (Kestrel on port 8080)
+    reverse_proxy 127.0.0.1:8080
+
+    # Security headers
+    header {
+        # Prevent clickjacking
+        X-Frame-Options DENY
+        # Enable XSS protection
+        X-XSS-Protection "1; mode=block"
+        # Prevent MIME type sniffing
+        X-Content-Type-Options nosniff
+        # Strict-Transport-Security (HSTS) — 1 year
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        # Remove Server header
+        -Server
+    }
+
+    # Access logging
+    log {
+        output file /var/log/caddy/fleet-access.log
+        format json
+    }
+}

@@ -1,0 +1,103 @@
+name: Bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: "SSH target (e.g. ubuntu@1.2.3.4)"
+        required: true
+      domain:
+        description: "Domain name (e.g. fleet.tryweave.io)"
+        required: true
+      host_public_key:
+        description: >
+          Server SSH host public key line (obtain via: ssh-keyscan <host>).
+          Save this to the FLEET_SSH_HOST_PUBLIC_KEY secret for future deploys.
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    name: Bootstrap + first deploy
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup SSH
+        id: ssh
+        uses: ./.github/actions/setup-ssh
+        with:
+          ssh-key: ${{ secrets.FLEET_SSH_KEY }}
+          ssh-host: ${{ inputs.host }}
+          ssh-host-public-key: ${{ inputs.host_public_key }}
+
+      - name: Bootstrap infrastructure
+        env:
+          FLEET_HOST: ${{ inputs.host }}
+          FLEET_DOMAIN: ${{ inputs.domain }}
+          Fleet__Auth__Authority: ${{ secrets.FLEET_AUTH_AUTHORITY }}
+          Fleet__Auth__ClientId: ${{ secrets.FLEET_AUTH_CLIENT_ID }}
+          Fleet__Auth__ClientSecret: ${{ secrets.FLEET_AUTH_CLIENT_SECRET }}
+          SSH_OPTS: ${{ steps.ssh.outputs.ssh-opts }}
+        run: bash deploy/bootstrap.sh
+
+      - name: First deploy
+        env:
+          FLEET_HOST: ${{ inputs.host }}
+          FLEET_DOMAIN: ${{ inputs.domain }}
+          SSH_OPTS: ${{ steps.ssh.outputs.ssh-opts }}
+        run: bash deploy/deploy.sh
+
+      - name: Post-deploy validation
+        env:
+          FLEET_HOST: ${{ inputs.host }}
+          SSH_OPTS: ${{ steps.ssh.outputs.ssh-opts }}
+        run: |
+          SSH_TARGET="${FLEET_HOST}"
+          # shellcheck disable=SC2086
+          FLEET_ACTIVE="$(ssh $SSH_OPTS "$SSH_TARGET" "systemctl is-active fleet")"
+          if [ "$FLEET_ACTIVE" != "active" ]; then
+            echo "ERROR: fleet service is not active (status: $FLEET_ACTIVE)" >&2
+            ssh $SSH_OPTS "$SSH_TARGET" "sudo journalctl -u fleet -n 50 --no-pager" || true
+            exit 1
+          fi
+          echo "fleet service: active"
+
+          HEALTH="$(ssh $SSH_OPTS "$SSH_TARGET" "curl -sf --max-time 10 http://127.0.0.1:8080/healthz && echo OK || echo FAIL")"
+          if [ "$HEALTH" != "OK" ]; then
+            echo "ERROR: /healthz did not return 200 (got: $HEALTH)" >&2
+            exit 1
+          fi
+          echo "/healthz: 200 OK"
+
+          AUTH_CODE="$(ssh $SSH_OPTS "$SSH_TARGET" "curl -so /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:8080/api/config/client")"
+          if [ "$AUTH_CODE" != "401" ]; then
+            echo "ERROR: /api/config/client returned $AUTH_CODE, expected 401 (auth not enforced?)" >&2
+            exit 1
+          fi
+          echo "/api/config/client: 401 (auth enforced)"
+
+          echo "Post-deploy validation passed."
+
+      - name: Cleanup SSH key
+        if: always()
+        env:
+          FLEET_HOST: ${{ inputs.host }}
+        run: |
+          rm -f ~/.ssh/fleet-deploy-key
+          ssh-keygen -R "$FLEET_HOST" 2>/dev/null || true
