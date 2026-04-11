@@ -648,6 +648,10 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         var workspaceRootRepo = Substitute.For<IWorkspaceRootRepository>();
         var analyticsCollector = Substitute.For<IAnalyticsCollector>();
         var sessionSourceUsageRepo = Substitute.For<ISessionSourceUsageRepository>();
+        var credentialStore = Substitute.For<ICredentialStore>();
+        credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
+        harness.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts())));
         workspaceRootRepo.ListAsync().Returns([
             new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
         ]);
@@ -691,6 +695,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             analyticsCollector,
             messageRepo,
             new DelegationService(delegationRepo, eventBroadcaster, userContext),
+            credentialStore,
             userContext,
             options,
             NullLogger<SessionOrchestrator>.Instance));
@@ -845,6 +850,10 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         var workspaceRepo = Substitute.For<IWorkspaceRepository>();
         var analyticsCollector = Substitute.For<IAnalyticsCollector>();
         var sessionSourceUsageRepo = Substitute.For<ISessionSourceUsageRepository>();
+        var credentialStore = Substitute.For<ICredentialStore>();
+        credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
+        harness.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts())));
 
         delegationRepo.GetByParentToolCallIdAsync("fleet-delegation-1", "tool-1")
             .Returns(
@@ -902,6 +911,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             analyticsCollector,
             messageRepo,
             new DelegationService(delegationRepo, eventBroadcaster, userContext),
+            credentialStore,
             userContext,
             options,
             NullLogger<SessionOrchestrator>.Instance));
@@ -1058,4 +1068,6 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             return Task.FromResult(response);
         }
     }
+
+    private sealed record StubLaunchArtifacts : RuntimeLaunchArtifacts;
 }

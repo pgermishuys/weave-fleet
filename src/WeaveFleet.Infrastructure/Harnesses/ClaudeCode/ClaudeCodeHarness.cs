@@ -68,6 +68,10 @@ public sealed class ClaudeCodeHarness : IHarness
     };
 
     /// <inheritdoc />
+    public Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
+        => Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new ClaudeCodeLaunchArtifacts()));
+
+    /// <inheritdoc />
     public async Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
     {
         var binaryPath = _options.ClaudeCode.BinaryPath;
@@ -168,7 +172,7 @@ public sealed class ClaudeCodeHarness : IHarness
             fleetSessionId: options.SessionId,
             workingDirectory: options.WorkingDirectory,
             config: _options.ClaudeCode,
-            environmentVariables: options.Environment,
+            environmentVariables: new Dictionary<string, string>(),
             shutdownTimeout: TimeSpan.FromSeconds(_options.HarnessShutdownTimeoutSeconds),
             scopeFactory: _scopeFactory,
             logger: _loggerFactory.CreateLogger<ClaudeCodeHarnessInstance>(),
@@ -209,7 +213,7 @@ public sealed class ClaudeCodeHarness : IHarness
             fleetSessionId: options.SessionId,
             workingDirectory: options.WorkingDirectory,
             config: _options.ClaudeCode,
-            environmentVariables: options.Environment,
+            environmentVariables: new Dictionary<string, string>(),
             shutdownTimeout: TimeSpan.FromSeconds(_options.HarnessShutdownTimeoutSeconds),
             scopeFactory: _scopeFactory,
             logger: _loggerFactory.CreateLogger<ClaudeCodeHarnessInstance>(),

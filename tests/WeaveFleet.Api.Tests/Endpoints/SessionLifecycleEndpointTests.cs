@@ -171,8 +171,10 @@ public sealed class SessionLifecycleEndpointTests
         var eventBroadcaster = Substitute.For<IEventBroadcaster>();
         var analyticsCollector = Substitute.For<WeaveFleet.Application.Analytics.IAnalyticsCollector>();
         var messageRepository = Substitute.For<IMessageRepository>();
+        var credentialStore = Substitute.For<ICredentialStore>();
         var workspaceRepository = Substitute.For<IWorkspaceRepository>();
         var workspaceRootRepository = Substitute.For<IWorkspaceRootRepository>();
+        credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
         workspaceRootRepository.ListAsync().Returns([
             new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
         ]);
@@ -201,6 +203,7 @@ public sealed class SessionLifecycleEndpointTests
             analyticsCollector,
             messageRepository,
             new DelegationService(delegationRepository, eventBroadcaster, userContext),
+            credentialStore,
             userContext,
             options,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance);

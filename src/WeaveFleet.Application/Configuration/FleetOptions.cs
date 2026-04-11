@@ -90,6 +90,11 @@ public sealed class FleetOptions
 
     /// <summary>Cloud-mode configuration.</summary>
     public CloudOptions Cloud { get; set; } = new();
+
+    // ─── Data Protection ──────────────────────────────────────────────────────
+
+    /// <summary>Data Protection key persistence configuration.</summary>
+    public DataProtectionOptions DataProtection { get; set; } = new();
 }
 
 /// <summary>Authentication / OIDC configuration.</summary>
@@ -131,6 +136,17 @@ public sealed class CloudOptions
 
     /// <summary>Root directory under which all user workspace directories are created. Required when <see cref="Enabled"/> is true.</summary>
     public string WorkspaceRoot { get; set; } = string.Empty;
+}
+
+/// <summary>ASP.NET Core Data Protection key persistence configuration.</summary>
+public sealed class DataProtectionOptions
+{
+    /// <summary>
+    /// File system path where Data Protection XML keys are persisted.
+    /// When empty, keys are stored in memory only (not suitable for production).
+    /// Default: "" (in-memory only — override in cloud/production config).
+    /// </summary>
+    public string KeyPath { get; set; } = string.Empty;
 }
 
 /// <summary>Configuration for the Claude Code harness.</summary>

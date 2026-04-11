@@ -53,6 +53,7 @@ public sealed class MultiTenancyTests
         var eventBroadcaster = Substitute.For<IEventBroadcaster>();
         var analyticsCollector = Substitute.For<IAnalyticsCollector>();
         var messageRepository = Substitute.For<IMessageRepository>();
+        var credentialStore = Substitute.For<ICredentialStore>();
         var userContext = new TestUserContext("owner-1");
 
         workspaceRootRepository.ListAsync().Returns([
@@ -64,6 +65,9 @@ public sealed class MultiTenancyTests
         harnessInstance.HarnessType.Returns("opencode");
         harnessInstance.Status.Returns(HarnessInstanceStatus.Running);
         harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>()).Returns(harnessInstance);
+        harness.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts())));
+        credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
         projectRepository.ListAsync().Returns([
             new Project
             {
@@ -110,6 +114,7 @@ public sealed class MultiTenancyTests
             analyticsCollector,
             messageRepository,
             delegationService,
+            credentialStore,
             userContext,
             options,
             NullLogger<SessionOrchestrator>.Instance);
@@ -152,6 +157,7 @@ public sealed class MultiTenancyTests
         var eventBroadcaster = Substitute.For<IEventBroadcaster>();
         var analyticsCollector = Substitute.For<IAnalyticsCollector>();
         var messageRepository = Substitute.For<IMessageRepository>();
+        var credentialStore = Substitute.For<ICredentialStore>();
         var userContext = new TestUserContext("owner-1");
 
         workspaceRootRepository.ListAsync().Returns([
@@ -163,6 +169,9 @@ public sealed class MultiTenancyTests
         harnessInstance.HarnessType.Returns("opencode");
         harnessInstance.Status.Returns(HarnessInstanceStatus.Running);
         harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>()).Returns(harnessInstance);
+        harness.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts())));
+        credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
         projectRepository.ListAsync().Returns([
             new Project
             {
@@ -220,6 +229,7 @@ public sealed class MultiTenancyTests
             analyticsCollector,
             messageRepository,
             delegationService,
+            credentialStore,
             userContext,
             options,
             NullLogger<SessionOrchestrator>.Instance);
@@ -254,4 +264,6 @@ public sealed class MultiTenancyTests
                 Directory.Delete(Path, recursive: true);
         }
     }
+
+    private sealed record StubLaunchArtifacts : RuntimeLaunchArtifacts;
 }

@@ -22,6 +22,7 @@ public sealed class SessionServiceTests
     private readonly WeaveFleet.Application.Analytics.IAnalyticsCollector _analyticsCollector =
         Substitute.For<WeaveFleet.Application.Analytics.IAnalyticsCollector>();
     private readonly IMessageRepository _messageRepo = Substitute.For<IMessageRepository>();
+    private readonly ICredentialStore _credentialStore = Substitute.For<ICredentialStore>();
     private readonly IUserContext _userContext = new TestUserContext("user-1");
     private readonly SessionOrchestrator _sessionOrchestrator;
     private readonly SessionService _sut;
@@ -44,6 +45,7 @@ public sealed class SessionServiceTests
             new ManagedWorkspaceSessionSourceProvider(options)
         ], options);
         var delegationService = new DelegationService(_delegationRepo, _eventBroadcaster, _userContext);
+        _credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
         _sessionOrchestrator = new SessionOrchestrator(
             workspaceService,
             instanceService,
@@ -59,6 +61,7 @@ public sealed class SessionServiceTests
             _analyticsCollector,
             _messageRepo,
             delegationService,
+            _credentialStore,
             _userContext,
             options,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance);

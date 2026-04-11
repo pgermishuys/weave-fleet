@@ -57,6 +57,10 @@ public sealed class TestHarness : IHarness
         => Task.FromResult(new HarnessAvailability(Available: true, Reason: null));
 
     /// <inheritdoc/>
+    public Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
+        => Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new TestLaunchArtifacts()));
+
+    /// <inheritdoc/>
     public Task<IHarnessInstance> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct)
     {
         if (_scenario.ThrowOnSpawn)

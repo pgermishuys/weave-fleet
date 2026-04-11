@@ -10,8 +10,12 @@ import { AppearanceTab } from "@/components/settings/appearance-tab";
 import { IntegrationsTab } from "@/components/settings/integrations-tab";
 import { WorkspaceRootsTab } from "@/components/settings/repositories-tab";
 import { HarnessesTab } from "@/components/settings/harnesses-tab";
+import { CredentialsTab } from "@/app/settings/credentials/page";
+import { useAppShell } from "@/contexts/app-shell-context";
 
 export default function SettingsPage() {
+  const { clientConfig } = useAppShell();
+
   return (
     <div className="flex flex-col h-full">
       <Header title="Settings" subtitle="Manage skills, agents, providers, workspace roots, integrations, and configuration" />
@@ -26,6 +30,9 @@ export default function SettingsPage() {
             <TabsTrigger value="harnesses">Harnesses</TabsTrigger>
             <TabsTrigger value="integrations">Integrations</TabsTrigger>
             <TabsTrigger value="repositories">Workspace Roots</TabsTrigger>
+            {clientConfig.authEnabled ? (
+              <TabsTrigger value="api-keys">API Keys</TabsTrigger>
+            ) : null}
             <TabsTrigger value="about">About</TabsTrigger>
           </TabsList>
           <TabsContent value="skills" className="mt-4">
@@ -52,6 +59,11 @@ export default function SettingsPage() {
           <TabsContent value="repositories" className="mt-4">
             <WorkspaceRootsTab />
           </TabsContent>
+          {clientConfig.authEnabled ? (
+            <TabsContent value="api-keys" className="mt-4">
+              <CredentialsTab />
+            </TabsContent>
+          ) : null}
           <TabsContent value="about" className="mt-4">
             <AboutTab />
           </TabsContent>

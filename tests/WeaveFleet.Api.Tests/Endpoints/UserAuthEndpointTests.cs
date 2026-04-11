@@ -1,8 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using Dapper;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Tests.Infrastructure;
+using WeaveFleet.Application.Data;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
@@ -26,6 +29,10 @@ public sealed class UserAuthEndpointTests
         payload.UserId.ShouldBe("test-user");
         payload.Email.ShouldBe("test@example.com");
         payload.DisplayName.ShouldBe("Test User");
+        payload.OnboardingCompleted.ShouldBeFalse();
+        payload.OnboardingStatus.Completed.ShouldBeFalse();
+        payload.OnboardingStatus.HasStoredCredentials.ShouldBeFalse();
+        payload.OnboardingStatus.HasCreatedSession.ShouldBeFalse();
     }
 
     [Fact]
@@ -139,6 +146,32 @@ public sealed class UserAuthEndpointTests
         var payload = await response.Content.ReadFromJsonAsync<UserMePayload>();
         payload.ShouldNotBeNull();
         payload.UserId.ShouldBe("local-user");
+        payload.OnboardingStatus.Completed.ShouldBeFalse();
+        payload.OnboardingStatus.HasStoredCredentials.ShouldBeFalse();
+        payload.OnboardingStatus.HasCreatedSession.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task GetUserMe_WhenUserHasCredentialsAndSessions_ReturnsOnboardingStatus()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
+        await SeedAuthenticatedUserOnboardingDataAsync(factory.Services);
+
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        var response = await client.GetAsync("/api/user/me");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var payload = await response.Content.ReadFromJsonAsync<UserMePayload>();
+        payload.ShouldNotBeNull();
+        payload.OnboardingCompleted.ShouldBeTrue();
+        payload.OnboardingStatus.Completed.ShouldBeTrue();
+        payload.OnboardingStatus.HasStoredCredentials.ShouldBeTrue();
+        payload.OnboardingStatus.HasCreatedSession.ShouldBeTrue();
     }
 
     [Fact]
@@ -174,6 +207,108 @@ public sealed class UserAuthEndpointTests
         return null;
     }
 
-    private sealed record UserMePayload(string UserId, string? Email, string? DisplayName, bool OnboardingCompleted, string CreatedAt);
+    private static async Task SeedAuthenticatedUserOnboardingDataAsync(IServiceProvider services)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var connectionFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
+        using var connection = connectionFactory.CreateConnection();
+
+        const string userId = "test-user";
+        const string createdAt = "2026-01-01T00:00:00.0000000Z";
+        const string completedAt = "2026-01-02T00:00:00.0000000Z";
+
+        await connection.ExecuteAsync(
+            "INSERT INTO users (id, email, display_name, status, created_at, last_login_at, onboarding_completed_at) VALUES (@Id, @Email, @DisplayName, @Status, @CreatedAt, @LastLoginAt, @OnboardingCompletedAt)",
+            new
+            {
+                Id = userId,
+                Email = "test@example.com",
+                DisplayName = "Test User",
+                Status = "active",
+                CreatedAt = createdAt,
+                LastLoginAt = createdAt,
+                OnboardingCompletedAt = completedAt
+            });
+
+        await connection.ExecuteAsync(
+            "UPDATE users SET onboarding_completed_at = @CompletedAt WHERE id = @Id",
+            new { Id = userId, CompletedAt = completedAt });
+
+        await connection.ExecuteAsync(
+            "INSERT INTO user_credentials (id, user_id, namespace, kind, label, encrypted_value, display_hint, metadata, created_at, updated_at) VALUES (@Id, @UserId, @Namespace, @Kind, @Label, @EncryptedValue, @DisplayHint, @Metadata, @CreatedAt, @UpdatedAt)",
+            new
+            {
+                Id = "cred-1",
+                UserId = userId,
+                Namespace = "anthropic",
+                Kind = "api-key",
+                Label = "Work Key",
+                EncryptedValue = "ciphertext",
+                DisplayHint = "1234",
+                Metadata = (string?)null,
+                CreatedAt = createdAt,
+                UpdatedAt = createdAt
+            });
+
+        await connection.ExecuteAsync(
+            "INSERT INTO workspaces (id, directory, source_directory, isolation_strategy, branch, created_at, cleaned_up_at, display_name, user_id) VALUES (@Id, @Directory, @SourceDirectory, @IsolationStrategy, @Branch, @CreatedAt, @CleanedUpAt, @DisplayName, @UserId)",
+            new
+            {
+                Id = "workspace-1",
+                Directory = "/tmp/workspace-1",
+                SourceDirectory = (string?)null,
+                IsolationStrategy = "existing",
+                Branch = (string?)null,
+                CreatedAt = createdAt,
+                CleanedUpAt = (string?)null,
+                DisplayName = (string?)null,
+                UserId = userId
+            });
+
+        await connection.ExecuteAsync(
+            "INSERT INTO instances (id, port, pid, directory, url, status, created_at, stopped_at, user_id) VALUES (@Id, @Port, @Pid, @Directory, @Url, @Status, @CreatedAt, @StoppedAt, @UserId)",
+            new
+            {
+                Id = "instance-1",
+                Port = 0,
+                Pid = (int?)null,
+                Directory = "/tmp/workspace-1",
+                Url = string.Empty,
+                Status = "running",
+                CreatedAt = createdAt,
+                StoppedAt = (string?)null,
+                UserId = userId
+            });
+
+        await connection.ExecuteAsync(
+            "INSERT INTO sessions (id, workspace_id, instance_id, project_id, opencode_session_id, title, status, directory, created_at, stopped_at, parent_session_id, activity_status, lifecycle_status, total_tokens, total_cost, harness_type, harness_resume_token, is_hidden, retention_status, archived_at, user_id) VALUES (@Id, @WorkspaceId, @InstanceId, @ProjectId, @OpencodeSessionId, @Title, @Status, @Directory, @CreatedAt, @StoppedAt, @ParentSessionId, @ActivityStatus, @LifecycleStatus, @TotalTokens, @TotalCost, @HarnessType, @HarnessResumeToken, @IsHidden, @RetentionStatus, @ArchivedAt, @UserId)",
+            new
+            {
+                Id = "session-1",
+                WorkspaceId = "workspace-1",
+                InstanceId = "instance-1",
+                ProjectId = (string?)null,
+                OpencodeSessionId = "opencode-1",
+                Title = "Started Session",
+                Status = "active",
+                Directory = "/tmp/workspace-1",
+                CreatedAt = createdAt,
+                StoppedAt = (string?)null,
+                ParentSessionId = (string?)null,
+                ActivityStatus = (string?)null,
+                LifecycleStatus = (string?)null,
+                TotalTokens = 0,
+                TotalCost = 0d,
+                HarnessType = "opencode",
+                HarnessResumeToken = (string?)null,
+                IsHidden = false,
+                RetentionStatus = "active",
+                ArchivedAt = (string?)null,
+                UserId = userId
+            });
+    }
+
+    private sealed record UserMePayload(string UserId, string? Email, string? DisplayName, bool OnboardingCompleted, OnboardingStatusPayload OnboardingStatus, string CreatedAt);
+    private sealed record OnboardingStatusPayload(bool Completed, bool HasStoredCredentials, bool HasCreatedSession);
     private sealed record ClientConfigPayload(bool CloudMode, bool AuthEnabled, IReadOnlyList<string> AvailableHarnesses);
 }

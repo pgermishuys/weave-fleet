@@ -77,6 +77,88 @@ public sealed class OpenCodeHarness : IHarness
     };
 
     /// <inheritdoc />
+    public Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
+    {
+        // Step 1: resolve credential requirements for the requested model.
+        var requirements = ResolveRequirements(context.ModelId);
+
+        // Step 2: validate that all required credentials are present in the user's credential bag.
+        var errors = new List<RuntimePreparationError>();
+        var envVars = new Dictionary<string, string>();
+
+        foreach (var requirement in requirements)
+        {
+            // First-match selection by creation order (credentials are already ordered by created_at ASC).
+            var match = context.UserCredentials
+                .FirstOrDefault(c =>
+                    string.Equals(c.Namespace, requirement.Namespace, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(c.Kind, requirement.Kind, StringComparison.OrdinalIgnoreCase));
+
+            if (match is null)
+            {
+                errors.Add(new RuntimePreparationError(
+                    Code: "MissingCredential",
+                    Message: requirement.UserFacingMessage,
+                    Guidance: "Add an API key in Settings → Credentials"));
+            }
+            else
+            {
+                // Materialise: map the matched credential to its runtime env var name.
+                envVars[requirement.EnvironmentVariableName] = match.EncryptedValue;
+            }
+        }
+
+        if (errors.Count > 0)
+            return Task.FromResult<RuntimePreparation>(new RuntimePreparation.NotReady(errors));
+
+        return Task.FromResult<RuntimePreparation>(
+            new RuntimePreparation.Ready(new OpenCodeLaunchArtifacts(envVars)));
+    }
+
+    /// <summary>
+    /// Resolves credential requirements for the given model ID.
+    /// Returns an empty list when the model is unknown or null (no requirements → always ready).
+    /// This is a harness-internal concern — not exposed via the IHarness interface.
+    /// </summary>
+    private static IReadOnlyList<CredentialRequirement> ResolveRequirements(string? modelId)
+    {
+        if (string.IsNullOrEmpty(modelId))
+            return [];
+
+        // Model ID format: "<provider>/<model-name>" or just "<provider>"
+        var provider = modelId.Contains('/')
+            ? modelId[..modelId.IndexOf('/')]
+            : modelId;
+
+        return provider.ToLowerInvariant() switch
+        {
+            "anthropic" => [new CredentialRequirement(
+                Namespace: "anthropic",
+                Kind: "api-key",
+                EnvironmentVariableName: "ANTHROPIC_API_KEY",
+                UserFacingMessage: "An Anthropic API key is required to use this model.")],
+
+            "openai" => [new CredentialRequirement(
+                Namespace: "openai",
+                Kind: "api-key",
+                EnvironmentVariableName: "OPENAI_API_KEY",
+                UserFacingMessage: "An OpenAI API key is required to use this model.")],
+
+            _ => []
+        };
+    }
+
+    /// <summary>
+    /// Harness-internal credential requirement — not exposed via the IHarness interface.
+    /// Maps a domain credential (namespace + kind) to its runtime environment variable name.
+    /// </summary>
+    private sealed record CredentialRequirement(
+        string Namespace,
+        string Kind,
+        string EnvironmentVariableName,
+        string UserFacingMessage);
+
+    /// <inheritdoc />
     public async Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
     {
         try
@@ -149,7 +231,9 @@ public sealed class OpenCodeHarness : IHarness
                     WorkingDirectory = options.WorkingDirectory,
                     Password = password,
                     Username = username,
-                    EnvironmentVariables = options.Environment,
+                    EnvironmentVariables = options.LaunchArtifacts is OpenCodeLaunchArtifacts spawnArtifacts
+                        ? spawnArtifacts.EnvironmentVariables
+                        : new Dictionary<string, string>(),
                     StartupTimeout = startupTimeout,
                 },
                 ct).ConfigureAwait(false);
@@ -259,7 +343,9 @@ public sealed class OpenCodeHarness : IHarness
                     WorkingDirectory = options.WorkingDirectory,
                     Password = password,
                     Username = username,
-                    EnvironmentVariables = options.Environment,
+                    EnvironmentVariables = options.LaunchArtifacts is OpenCodeLaunchArtifacts resumeArtifacts
+                        ? resumeArtifacts.EnvironmentVariables
+                        : new Dictionary<string, string>(),
                     StartupTimeout = startupTimeout,
                 },
                 ct).ConfigureAwait(false);

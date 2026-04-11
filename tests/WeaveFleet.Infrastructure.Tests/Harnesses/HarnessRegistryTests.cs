@@ -72,10 +72,15 @@ public sealed class HarnessRegistryTests
         public Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
             => Task.FromResult(new HarnessAvailability(available, reason));
 
+        public Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
+            => Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new FakeLaunchArtifacts()));
+
         public Task<IHarnessInstance> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct)
             => throw new NotSupportedException("FakeHarness cannot spawn.");
 
         public Task<IHarnessInstance> ResumeAsync(HarnessResumeOptions options, CancellationToken ct)
             => throw new NotSupportedException("FakeHarness cannot resume.");
     }
+
+    private sealed record FakeLaunchArtifacts : RuntimeLaunchArtifacts;
 }

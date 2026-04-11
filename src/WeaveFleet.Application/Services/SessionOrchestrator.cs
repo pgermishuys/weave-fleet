@@ -29,6 +29,7 @@ public sealed partial class SessionOrchestrator(
     IAnalyticsCollector analyticsCollector,
     IMessageRepository messageRepository,
     DelegationService delegationService,
+    ICredentialStore credentialStore,
     IUserContext userContext,
     FleetOptions options,
     ILogger<SessionOrchestrator> logger)
@@ -74,6 +75,26 @@ public sealed partial class SessionOrchestrator(
         if (harness is null)
             return FleetError.NotFoundFor("Harness", harnessType);
 
+        // Prepare runtime: load user credentials and call harness preparation pipeline.
+        // The orchestrator passes the opaque credential bag to the harness — it does not
+        // inspect, interpret, or filter the credentials itself.
+        var userCredentials = await credentialStore.GetDecryptedCredentialsAsync(userContext.UserId);
+        var preparation = await harness.PrepareRuntimeAsync(new RuntimePreparationContext
+        {
+            UserId = userContext.UserId,
+            UserCredentials = userCredentials,
+            ModelId = null, // model selection happens inside the session, not at creation time
+            WorkingDirectory = workspaceIntent.Directory
+        }, ct);
+
+        if (preparation is RuntimePreparation.NotReady notReady)
+        {
+            var message = string.Join(" ", notReady.Errors.Select(e => e.Message));
+            return FleetError.ValidationError("Session.NotReady", message);
+        }
+
+        var launchArtifacts = ((RuntimePreparation.Ready)preparation).Artifacts;
+
         // Resolve or default project
         var projectId = request.ProjectId ?? await ResolveScratchProjectIdAsync();
 
@@ -109,7 +130,8 @@ public sealed partial class SessionOrchestrator(
                 InitialPrompt = request.InitialPrompt,
                 Branch = workspaceIntent.Branch,
                 ProjectId = projectId,
-                ProjectName = projectName
+                ProjectName = projectName,
+                LaunchArtifacts = launchArtifacts
             }, ct);
         }
         catch (Exception ex)
@@ -240,6 +262,25 @@ public sealed partial class SessionOrchestrator(
         if (harness is null)
             return FleetError.NotFoundFor("Harness", session.HarnessType);
 
+        // Load credentials using the session OWNER's userId.
+        // The orchestrator never inspects credential contents — it passes them opaquely to the harness.
+        var ownerCredentials = await credentialStore.GetDecryptedCredentialsAsync(session.UserId);
+        var preparation = await harness.PrepareRuntimeAsync(new RuntimePreparationContext
+        {
+            UserId = session.UserId,
+            UserCredentials = ownerCredentials,
+            ModelId = null,
+            WorkingDirectory = workspaceResult.Value
+        }, ct);
+
+        if (preparation is RuntimePreparation.NotReady notReadyResume)
+        {
+            var message = string.Join(" ", notReadyResume.Errors.Select(e => e.Message));
+            return FleetError.ValidationError("Session.NotReady", message);
+        }
+
+        var resumeLaunchArtifacts = ((RuntimePreparation.Ready)preparation).Artifacts;
+
         IHarnessInstance harnessInstance;
         try
         {
@@ -250,7 +291,8 @@ public sealed partial class SessionOrchestrator(
                     SessionId = session.Id,
                     WorkingDirectory = workspaceResult.Value,
                     OwnerUserId = session.UserId,
-                    ResumeToken = session.HarnessResumeToken
+                    ResumeToken = session.HarnessResumeToken,
+                    LaunchArtifacts = resumeLaunchArtifacts
                 }, ct);
             }
             else
@@ -259,7 +301,8 @@ public sealed partial class SessionOrchestrator(
                 {
                     SessionId = session.Id,
                     WorkingDirectory = workspaceResult.Value,
-                    OwnerUserId = session.UserId
+                    OwnerUserId = session.UserId,
+                    LaunchArtifacts = resumeLaunchArtifacts
                 }, ct);
             }
         }

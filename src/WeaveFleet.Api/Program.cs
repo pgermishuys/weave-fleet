@@ -14,6 +14,7 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Api.Telemetry;
@@ -36,6 +37,16 @@ builder.Services.Configure<FleetOptions>(
 builder.Services.AddFleetInfrastructure(fleetOptions);
 builder.AddFleetTelemetry();
 builder.Services.AddHealthChecks();
+
+// ── Data Protection ───────────────────────────────────────────────────────────
+var dataProtectionBuilder = builder.Services.AddDataProtection()
+    .SetApplicationName("WeaveFleet");
+
+if (!string.IsNullOrWhiteSpace(fleetOptions.DataProtection.KeyPath))
+{
+    dataProtectionBuilder.PersistKeysToFileSystem(
+        new System.IO.DirectoryInfo(fleetOptions.DataProtection.KeyPath));
+}
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
 builder.Services.AddCors(options =>

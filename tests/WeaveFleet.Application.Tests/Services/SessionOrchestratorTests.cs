@@ -30,6 +30,7 @@ public sealed class SessionOrchestratorTests
     private readonly IEventBroadcaster _eventBroadcaster = Substitute.For<IEventBroadcaster>();
     private readonly IAnalyticsCollector _analyticsCollector = Substitute.For<IAnalyticsCollector>();
     private readonly IMessageRepository _messageRepo = Substitute.For<IMessageRepository>();
+    private readonly ICredentialStore _credentialStore = Substitute.For<ICredentialStore>();
     private readonly InstanceTracker _tracker = new();
     private readonly IUserContext _userContext = new TestUserContext("user-1");
     private readonly FleetOptions _options = new();
@@ -55,6 +56,11 @@ public sealed class SessionOrchestratorTests
         ], _options);
         _delegationService = new DelegationService(_delegationRepo, _eventBroadcaster, _userContext);
 
+        // Default: credential store returns empty bag; harness always reports Ready.
+        _credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
+        _harness.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts())));
+
         _sut = new SessionOrchestrator(
             workspaceService,
             instanceService,
@@ -70,6 +76,7 @@ public sealed class SessionOrchestratorTests
             _analyticsCollector,
             _messageRepo,
             _delegationService,
+            _credentialStore,
             _userContext,
             _options,
             NullLogger<SessionOrchestrator>.Instance);
@@ -925,4 +932,7 @@ public sealed class SessionOrchestratorTests
                 Directory.Delete(Path, recursive: true);
         }
     }
+
+    /// <summary>Minimal stub for RuntimeLaunchArtifacts (opaque pass-through in tests).</summary>
+    private sealed record StubLaunchArtifacts : RuntimeLaunchArtifacts;
 }

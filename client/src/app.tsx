@@ -1,12 +1,14 @@
 import { Routes, Route } from "react-router";
 import { ClientLayout } from "./app/client-layout";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import { usePluginRuntime } from "@/plugins/context";
 import { getRoutes } from "@/plugins/slots";
 import { apiFetch, apiUrl } from "@/lib/api-client";
 import type { ClientConfigResponse, UserMeResponse } from "@/lib/api-types";
 import { AppShellProvider } from "@/contexts/app-shell-context";
+import { useAppShell } from "@/contexts/app-shell-context";
+import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 
 // Lazy-load all pages for code splitting (same behavior as Next.js)
 const FleetPage = lazy(() => import("./app/page"));
@@ -120,6 +122,42 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   );
 }
 
+function OnboardingGate({ children }: { children: React.ReactNode }) {
+  const { clientConfig, currentUser } = useAppShell();
+  const [dismissed, setDismissed] = useState(false);
+
+  const showWizard =
+    clientConfig.authEnabled &&
+    clientConfig.cloudMode &&
+    !dismissed &&
+    currentUser !== null &&
+    currentUser.onboardingStatus !== undefined &&
+    !currentUser.onboardingStatus.completed;
+
+  // Credentials are optional (wizard skippable) when a harness that supports
+  // built-in authentication is available. We use the presence of "claude-code"
+  // in availableHarnesses as the proxy for "built-in access available".
+  // If no harness info is present, default to not skippable to be safe.
+  const credentialsOptional =
+    clientConfig.availableHarnesses.includes("claude-code");
+
+  const handleComplete = useCallback(() => {
+    setDismissed(true);
+  }, []);
+
+  return (
+    <>
+      {showWizard ? (
+        <OnboardingWizard
+          credentialsOptional={credentialsOptional}
+          onComplete={handleComplete}
+        />
+      ) : null}
+      {children}
+    </>
+  );
+}
+
 function AppRoutes() {
   const { manifests } = usePluginRuntime();
   const pluginRoutes = getRoutes(manifests);
@@ -153,9 +191,11 @@ export function App() {
   return (
     <AuthGate>
       <ClientLayout>
-        <Suspense fallback={<PageFallback />}>
-          <AppRoutes />
-        </Suspense>
+        <OnboardingGate>
+          <Suspense fallback={<PageFallback />}>
+            <AppRoutes />
+          </Suspense>
+        </OnboardingGate>
       </ClientLayout>
     </AuthGate>
   );

@@ -6,7 +6,10 @@ namespace WeaveFleet.Application.Services;
 /// <summary>
 /// Synchronizes authenticated principals into shadow <see cref="User"/> records.
 /// </summary>
-public sealed class UserService(IUserRepository userRepository)
+public sealed class UserService(
+    IUserRepository userRepository,
+    ICredentialStore credentialStore,
+    ISessionRepository sessionRepository)
 {
     public async Task<User?> EnsureUserAsync(IUserContext userContext)
     {
@@ -39,4 +42,41 @@ public sealed class UserService(IUserRepository userRepository)
         await userRepository.UpsertAsync(existingUser);
         return existingUser;
     }
+
+    public async Task CompleteOnboardingAsync(IUserContext userContext)
+    {
+        var user = await userRepository.GetByIdAsync(userContext.UserId);
+        if (user is null)
+            return;
+
+        if (user.OnboardingCompletedAt is null)
+        {
+            user.OnboardingCompletedAt = DateTime.UtcNow.ToString("O");
+            await userRepository.UpsertAsync(user);
+        }
+    }
+
+    public async Task<UserOnboardingStatus> GetOnboardingStatusAsync(User? user)
+    {
+        if (user is null)
+        {
+            return new UserOnboardingStatus(
+                Completed: false,
+                HasStoredCredentials: false,
+                HasCreatedSession: false);
+        }
+
+        var credentials = await credentialStore.ListCredentialsAsync();
+        var sessions = await sessionRepository.ListAsync(limit: 1, offset: 0);
+
+        return new UserOnboardingStatus(
+            Completed: user.OnboardingCompletedAt is not null,
+            HasStoredCredentials: credentials.Count > 0,
+            HasCreatedSession: sessions.Count > 0);
+    }
 }
+
+public sealed record UserOnboardingStatus(
+    bool Completed,
+    bool HasStoredCredentials,
+    bool HasCreatedSession);

@@ -79,6 +79,11 @@ export interface UserMeResponse {
   email: string | null;
   displayName: string | null;
   onboardingCompleted: boolean;
+  onboardingStatus: {
+    completed: boolean;
+    hasStoredCredentials: boolean;
+    hasCreatedSession: boolean;
+  };
   createdAt: string;
 }
 
@@ -654,6 +659,28 @@ export interface IntegrationStatusInfo {
 export interface PluginCatalogResponse {
   plugins: FleetPluginDescriptor[];
   statuses: FleetPluginStatus[];
+}
+
+// ─── Credential Types ────────────────────────────────────────────────────────
+
+/** A stored credential summary (no value exposed). */
+export interface CredentialSummary {
+  id: string;
+  label: string;
+  namespace: string;
+  kind: string;
+  displayHint: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Request body for PUT /api/credentials (new) or PUT /api/credentials/{id} (update) */
+export interface StoreCredentialRequest {
+  label: string;
+  namespace: string;
+  kind: string;
+  value: string;
+  metadata?: Record<string, string>;
 }
 
 // ─── GitHub Device Authorization Flow Types (RFC 8628) ─────────────────────

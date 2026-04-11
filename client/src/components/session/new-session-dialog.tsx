@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
-import { AlertCircle, CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, ExternalLink, Loader2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -495,7 +495,21 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
           {sourceError ? (
             <div className="flex items-start gap-2 rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>{sourceError}</span>
+              <span>
+                {sourceError}
+                {isCloudMode && (error ?? addSourceError) ? (
+                  <>
+                    {" "}
+                    <a
+                      href="/settings"
+                      className="underline underline-offset-2 hover:text-red-700 dark:hover:text-red-300 inline-flex items-center gap-0.5"
+                      onClick={() => setOpen(false)}
+                    >
+                      Add an API key in Settings <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </>
+                ) : null}
+              </span>
             </div>
           ) : null}
 

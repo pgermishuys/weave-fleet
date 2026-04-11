@@ -56,6 +56,7 @@ public static class EndpointExtensions
         apiScope.MapWebSocketEndpoints();
         apiScope.MapAnalyticsEndpoints();
         apiScope.MapUserEndpoints();
+        apiScope.MapCredentialEndpoints();
         apiScope.MapClientConfigEndpoints(fleetOptions);
         app.MapBackendPluginEndpoints();
 
