@@ -13,8 +13,9 @@ WorkingDirectory=/opt/fleet/app
 ExecStart=/usr/bin/dotnet /opt/fleet/app/WeaveFleet.Api.dll
 
 # ── Environment ───────────────────────────────────────────────────────────────
-# Kestrel listens on port 8080 (Caddy reverse-proxies from 443)
-Environment=ASPNETCORE_ENVIRONMENT=Production
+# Cloud deploys load appsettings.Cloud.json so Kestrel and cloud settings
+# match the reverse proxy and host layout.
+Environment=ASPNETCORE_ENVIRONMENT=Cloud
 Environment=ASPNETCORE_URLS=http://127.0.0.1:8080
 # Configuration overrides — sensitive values should be in /opt/fleet/data/fleet.env (EnvironmentFile)
 EnvironmentFile=-/opt/fleet/data/fleet.env
