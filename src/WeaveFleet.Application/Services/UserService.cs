@@ -51,8 +51,9 @@ public sealed class UserService(
 
         if (user.OnboardingCompletedAt is null)
         {
-            user.OnboardingCompletedAt = DateTime.UtcNow.ToString("O");
-            await userRepository.UpsertAsync(user);
+            var completedAt = DateTime.UtcNow.ToString("O");
+            user.OnboardingCompletedAt = completedAt;
+            await userRepository.UpdateOnboardingCompletedAsync(userContext.UserId, completedAt);
         }
     }
 

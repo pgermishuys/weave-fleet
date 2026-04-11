@@ -3,13 +3,13 @@
 // Mode A — Integrated (backend serves built SPA):
 //   Terminal 1: cd client && npm run build
 //   Terminal 2: dotnet run --project src/WeaveFleet.Api
-//   → http://localhost:3000 (API + SPA)
+//   → http://localhost:5001 (API + SPA)
 //
 // Mode B — Split (frontend dev server + backend API):
 //   Terminal 1: dotnet run --project src/WeaveFleet.Api
 //   Terminal 2: cd client && npm run dev:split
 //   → Frontend: http://localhost:3001 (hot reload)
-//   → Backend:  http://localhost:3000 (API only)
+//   → Backend:  http://localhost:5001 (API only)
 
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;

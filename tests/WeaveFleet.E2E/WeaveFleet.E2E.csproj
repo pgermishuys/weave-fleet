@@ -27,6 +27,10 @@
     <ProjectReference Include="..\..\src\WeaveFleet.Domain\WeaveFleet.Domain.csproj" />
     <ProjectReference Include="..\..\src\WeaveFleet.Infrastructure\WeaveFleet.Infrastructure.csproj" />
     <ProjectReference Include="..\WeaveFleet.TestHarness\WeaveFleet.TestHarness.csproj" />
+    <ProjectReference Include="..\WeaveFleet.IdP\WeaveFleet.IdP.csproj">
+      <!-- Alias prevents the IdP's 'Program' top-level class from conflicting with WeaveFleet.Api's 'Program' -->
+      <Aliases>IdpHost</Aliases>
+    </ProjectReference>
   </ItemGroup>
 
   <!-- ── Frontend SPA build ──────────────────────────────────────────────────

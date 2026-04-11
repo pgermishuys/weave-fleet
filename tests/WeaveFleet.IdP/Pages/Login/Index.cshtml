@@ -1,0 +1,56 @@
+@page
+@model WeaveFleet.IdP.Pages.Login.IndexModel
+@{
+    ViewData["Title"] = "Sign In";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign In — WeaveFleet Test IdP</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
+        .login-box { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); min-width: 320px; }
+        h1 { margin-top: 0; font-size: 1.4rem; }
+        label { display: block; margin-top: 1rem; font-weight: 600; font-size: 0.9rem; }
+        input[type=text], input[type=password] { display: block; width: 100%; margin-top: 0.25rem; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; box-sizing: border-box; }
+        button { margin-top: 1.5rem; width: 100%; padding: 0.6rem; background: #2563eb; color: white; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; }
+        button:hover { background: #1d4ed8; }
+        .error { color: #dc2626; margin-top: 0.75rem; font-size: 0.9rem; }
+        .hint { color: #6b7280; font-size: 0.8rem; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h1>Sign in</h1>
+        <p style="color:#6b7280;font-size:0.9rem;">WeaveFleet Test Identity Provider</p>
+
+        <form method="post">
+            <input type="hidden" asp-for="Input.ReturnUrl" />
+
+            @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+            {
+                <div class="error" data-testid="login-error">@Model.ErrorMessage</div>
+            }
+
+            <label asp-for="Input.Username">Username</label>
+            <input type="text"
+                   asp-for="Input.Username"
+                   autofocus
+                   autocomplete="username"
+                   data-testid="login-username" />
+
+            <label asp-for="Input.Password">Password</label>
+            <input type="password"
+                   asp-for="Input.Password"
+                   autocomplete="current-password"
+                   data-testid="login-password" />
+
+            <button type="submit" data-testid="login-submit">Sign in</button>
+
+            <p class="hint">Test users: <strong>testuser</strong> / <strong>newuser</strong> — password: <strong>password</strong></p>
+        </form>
+    </div>
+</body>
+</html>

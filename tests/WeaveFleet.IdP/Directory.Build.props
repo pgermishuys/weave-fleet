@@ -1,0 +1,9 @@
+<Project>
+  <!-- Import the tests-level Directory.Build.props (which imports the root one) -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!-- Override: remove Shouldly global using — this is a web host, not a test project -->
+  <ItemGroup>
+    <Using Remove="Shouldly" />
+  </ItemGroup>
+</Project>

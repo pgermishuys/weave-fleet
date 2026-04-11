@@ -200,6 +200,10 @@ jobs:
       - name: Install Playwright OS dependencies
         run: pwsh tests/WeaveFleet.E2E/bin/Release/net10.0/playwright.ps1 install-deps chromium
 
+      # ── Trust the .NET dev certificate (auth E2E tests) ──────────────────
+      - name: Trust .NET dev certificate
+        run: dotnet dev-certs https --trust
+
       # ── Run E2E tests ─────────────────────────────────────────────────────
       - name: Run E2E tests
         run: >
