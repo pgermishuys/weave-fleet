@@ -136,9 +136,13 @@ opencode --version || true
 
 # ── 6. Create service account ─────────────────────────────────────────────────
 log "Creating service account '$FLEET_USER'..."
+FLEET_HOME="/home/$FLEET_USER"
 if ! id "$FLEET_USER" &>/dev/null; then
-  useradd --system --no-create-home --shell /bin/false "$FLEET_USER"
+  useradd --system --create-home --home-dir "$FLEET_HOME" --shell /bin/false "$FLEET_USER"
 fi
+mkdir -p "$FLEET_HOME"
+chown "$FLEET_USER:$FLEET_USER" "$FLEET_HOME"
+chmod 700 "$FLEET_HOME"
 
 # ── 7. Create directory structure ─────────────────────────────────────────────
 log "Creating directory structure..."
@@ -172,6 +176,10 @@ dotnet --list-runtimes
 caddy version
 git --version
 opencode --version || echo "WARNING: opencode not found on PATH"
+if id "$FLEET_USER" &>/dev/null; then
+  su -s /bin/sh -c 'HOME="$1" opencode --version' "$FLEET_USER" -- "$FLEET_HOME" \
+    || echo "WARNING: opencode failed for fleet service account"
+fi
 
 log "Setup complete."
 log "Next steps (automated via bootstrap.sh):"

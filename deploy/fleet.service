@@ -17,6 +17,8 @@ ExecStart=/usr/bin/dotnet /opt/fleet/app/WeaveFleet.Api.dll
 # match the reverse proxy and host layout.
 Environment=ASPNETCORE_ENVIRONMENT=Cloud
 Environment=ASPNETCORE_URLS=http://127.0.0.1:8080
+Environment=HOME=/home/fleet
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
 # Configuration overrides — sensitive values should be in /opt/fleet/data/fleet.env (EnvironmentFile)
 EnvironmentFile=-/opt/fleet/data/fleet.env
 
