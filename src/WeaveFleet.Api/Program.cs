@@ -63,10 +63,11 @@ builder.Services.AddCors(options =>
         }
         else if (builder.Environment.IsDevelopment())
         {
-            // Allow frontend dev server at :3001 during split-mode development
-            policy.AllowAnyOrigin()
+            // Allow localhost frontend dev servers during split-mode development
+            policy.WithOrigins("http://localhost:3001", "https://localhost:3001")
                   .AllowAnyMethod()
-                  .AllowAnyHeader();
+                  .AllowAnyHeader()
+                  .AllowCredentials();
         }
         else
         {
