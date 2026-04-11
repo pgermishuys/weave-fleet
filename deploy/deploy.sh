@@ -107,7 +107,7 @@ wait_for_external_health() {
   local wait=0
 
   while [ "$wait" -lt "$timeout_seconds" ]; do
-    if curl -sf --max-time 5 "$url" >/dev/null 2>&1; then
+    if curl -4 -sf --max-time 5 "$url" >/dev/null 2>&1; then
       return 0
     fi
 
