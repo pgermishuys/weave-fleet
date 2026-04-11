@@ -68,16 +68,17 @@ public sealed partial class AnalyticsRollupService : BackgroundService
                     new { Today = today, Yesterday = yesterday },
                     transaction: tx);
 
-                // Recompute per-project, per-model, per-provider rollups
+                // Recompute per-project, per-model, per-provider rollups (partitioned by user_id)
                 await conn.ExecuteAsync(
                     """
                     INSERT INTO daily_rollups (
-                        date, project_id, model_id, provider_id,
+                        date, user_id, project_id, model_id, provider_id,
                         total_tokens, total_cost, total_estimated_cost,
                         session_count, message_count
                     )
                     SELECT
                         date(created_at) AS date,
+                        COALESCE(user_id, '') AS user_id,
                         COALESCE(project_id, '') AS project_id,
                         COALESCE(model_id, '') AS model_id,
                         COALESCE(provider_id, '') AS provider_id,
@@ -88,21 +89,22 @@ public sealed partial class AnalyticsRollupService : BackgroundService
                         COUNT(*) AS message_count
                     FROM token_events
                     WHERE date(created_at) IN (@Today, @Yesterday)
-                    GROUP BY date(created_at), project_id, model_id, provider_id
+                    GROUP BY date(created_at), user_id, project_id, model_id, provider_id
                     """,
                     new { Today = today, Yesterday = yesterday },
                     transaction: tx);
 
-                // Also insert fleet-wide summary rows (all empty strings = fleet-wide aggregate)
+                // Also insert per-user fleet-wide summary rows (project/model/provider all empty = fleet-wide per user)
                 await conn.ExecuteAsync(
                     """
                     INSERT OR REPLACE INTO daily_rollups (
-                        date, project_id, model_id, provider_id,
+                        date, user_id, project_id, model_id, provider_id,
                         total_tokens, total_cost, total_estimated_cost,
                         session_count, message_count
                     )
                     SELECT
                         date(created_at) AS date,
+                        COALESCE(user_id, '') AS user_id,
                         '' AS project_id,
                         '' AS model_id,
                         '' AS provider_id,
@@ -113,7 +115,7 @@ public sealed partial class AnalyticsRollupService : BackgroundService
                         COUNT(*) AS message_count
                     FROM token_events
                     WHERE date(created_at) IN (@Today, @Yesterday)
-                    GROUP BY date(created_at)
+                    GROUP BY date(created_at), user_id
                     """,
                     new { Today = today, Yesterday = yesterday },
                     transaction: tx);

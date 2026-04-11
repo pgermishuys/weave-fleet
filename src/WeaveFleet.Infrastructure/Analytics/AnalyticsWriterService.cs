@@ -139,13 +139,13 @@ public sealed partial class AnalyticsWriterService : BackgroundService
                         model_id, provider_id,
                         tokens_input, tokens_output, tokens_reasoning,
                         tokens_cache_read, tokens_cache_write, tokens_total,
-                        cost, estimated_cost, created_at
+                        cost, estimated_cost, created_at, user_id
                     ) VALUES (
                         @EventId, @SessionId, @ProjectId, @ProjectName, @WorkspaceDirectory,
                         @ModelId, @ProviderId,
                         @TokensInput, @TokensOutput, @TokensReasoning,
                         @TokensCacheRead, @TokensCacheWrite, @TokensTotal,
-                        @Cost, @EstimatedCost, @CreatedAt
+                        @Cost, @EstimatedCost, @CreatedAt, @UserId
                     )
                     ON CONFLICT(event_id) DO UPDATE SET
                         tokens_input     = CASE WHEN excluded.tokens_total > token_events.tokens_total THEN excluded.tokens_input     ELSE token_events.tokens_input     END,
@@ -164,7 +164,8 @@ public sealed partial class AnalyticsWriterService : BackgroundService
                         evt.TokensInput, evt.TokensOutput, evt.TokensReasoning,
                         evt.TokensCacheRead, evt.TokensCacheWrite, evt.TokensTotal,
                         evt.Cost, evt.EstimatedCost,
-                        CreatedAt = evt.CreatedAt.ToString("O")
+                        CreatedAt = evt.CreatedAt.ToString("O"),
+                        evt.UserId
                     },
                     transaction: tx);
             }
@@ -177,12 +178,14 @@ public sealed partial class AnalyticsWriterService : BackgroundService
                         session_id, parent_session_id, project_id, project_name,
                         workspace_directory, title, status,
                         total_tokens, total_cost, total_estimated_cost,
-                        message_count, model_ids, created_at, ended_at, duration_seconds
+                        message_count, model_ids, created_at, ended_at, duration_seconds,
+                        user_id
                     ) VALUES (
                         @SessionId, @ParentSessionId, @ProjectId, @ProjectName,
                         @WorkspaceDirectory, @Title, @Status,
                         @TotalTokens, @TotalCost, @TotalEstimatedCost,
-                        @MessageCount, @ModelIds, @CreatedAt, @EndedAt, @DurationSeconds
+                        @MessageCount, @ModelIds, @CreatedAt, @EndedAt, @DurationSeconds,
+                        @UserId
                     )
                     """,
                     new
@@ -193,7 +196,8 @@ public sealed partial class AnalyticsWriterService : BackgroundService
                         snap.MessageCount, ModelIds = modelIdsJson,
                         CreatedAt = snap.CreatedAt.ToString("O"),
                         EndedAt = snap.EndedAt?.ToString("O"),
-                        snap.DurationSeconds
+                        snap.DurationSeconds,
+                        snap.UserId
                     },
                     transaction: tx);
             }

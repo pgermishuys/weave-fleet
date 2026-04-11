@@ -17,7 +17,8 @@ public sealed record TokenEventData(
     double TokensTotal,
     double Cost,
     double? EstimatedCost,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    string UserId = "local-user");
 
 /// <summary>Session-level snapshot data emitted on session create and stop.</summary>
 public sealed record SessionSnapshotData(
@@ -35,7 +36,8 @@ public sealed record SessionSnapshotData(
     List<string> ModelIds,
     DateTimeOffset CreatedAt,
     DateTimeOffset? EndedAt,
-    double? DurationSeconds);
+    double? DurationSeconds,
+    string UserId = "local-user");
 
 /// <summary>Discriminated union envelope for the analytics channel.</summary>
 public abstract record AnalyticsEventEnvelope;

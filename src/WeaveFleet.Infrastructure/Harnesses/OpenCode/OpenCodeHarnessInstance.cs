@@ -266,7 +266,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
             if (_analyticsCollector is not null)
             {
                 var tokenEvent = OpenCodeMapper.TryExtractTokenEvent(
-                    sseEvt, _fleetSessionId, _projectId, _projectName, _workingDirectory);
+                    sseEvt, _fleetSessionId, _projectId, _projectName, _workingDirectory, _ownerUserId);
                 if (tokenEvent is not null)
                     _analyticsCollector.AcceptTokenEvent(tokenEvent);
             }

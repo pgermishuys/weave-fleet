@@ -191,7 +191,8 @@ internal static class OpenCodeMapper
         string? sessionId,
         string? projectId,
         string? projectName,
-        string? workspaceDirectory)
+        string? workspaceDirectory,
+        string userId = "local-user")
     {
         // Only process message.updated events
         if (evt.Type is not "message.updated")
@@ -253,7 +254,8 @@ internal static class OpenCodeMapper
                 TokensTotal: tokensTotal,
                 Cost: cost,
                 EstimatedCost: estimatedCost,
-                CreatedAt: DateTimeOffset.FromUnixTimeMilliseconds(assistant.Time.Created));
+                CreatedAt: DateTimeOffset.FromUnixTimeMilliseconds(assistant.Time.Created),
+                UserId: userId);
         }
         catch
         {

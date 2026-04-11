@@ -354,7 +354,8 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
                             _projectId,
                             _projectName,
                             _workingDirectory,
-                            _modelId);
+                            _modelId,
+                            _ownerUserId);
                         if (tokenEvent is not null)
                             _analyticsCollector.AcceptTokenEvent(tokenEvent);
                     }

@@ -252,7 +252,8 @@ internal static class ClaudeCodeMapper
         string? projectId,
         string? projectName,
         string? workspaceDirectory,
-        string? modelId)
+        string? modelId,
+        string userId = "local-user")
     {
         try
         {
@@ -293,7 +294,8 @@ internal static class ClaudeCodeMapper
                 TokensTotal: inputTokens + outputTokens,
                 Cost: totalCostUsd,
                 EstimatedCost: estimatedCost,
-                CreatedAt: DateTimeOffset.UtcNow);
+                CreatedAt: DateTimeOffset.UtcNow,
+                UserId: userId);
         }
         catch
         {

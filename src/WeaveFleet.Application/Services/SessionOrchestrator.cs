@@ -205,7 +205,8 @@ public sealed partial class SessionOrchestrator(
             ModelIds: [],
             CreatedAt: DateTimeOffset.UtcNow,
             EndedAt: null,
-            DurationSeconds: null));
+            DurationSeconds: null,
+            UserId: userContext.UserId));
 
         // Broadcast session_created event (scoped to the owning user)
         await eventBroadcaster.BroadcastAsync("sessions", "session_created", new
@@ -440,7 +441,8 @@ public sealed partial class SessionOrchestrator(
             ModelIds: [],
             CreatedAt: DateTimeOffset.UtcNow,
             EndedAt: null,
-            DurationSeconds: null));
+            DurationSeconds: null,
+            UserId: userContext.UserId));
 
         await eventBroadcaster.BroadcastAsync("sessions", "session_created", new
         {
@@ -786,7 +788,8 @@ public sealed partial class SessionOrchestrator(
             ModelIds: [],
             CreatedAt: DateTimeOffset.Parse(session.CreatedAt, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind),
             EndedAt: deletedAt,
-            DurationSeconds: null));
+            DurationSeconds: null,
+            UserId: session.UserId));
 
         await eventBroadcaster.BroadcastAsync("sessions", "session_deleted", new
         {

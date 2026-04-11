@@ -1,6 +1,7 @@
 using Dapper;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Data;
+using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Infrastructure.Analytics;
 
@@ -8,8 +9,11 @@ namespace WeaveFleet.Infrastructure.Analytics;
 /// Dapper-based read repository for the analytics database.
 /// Implements <see cref="IAnalyticsReader"/> with parameterized queries.
 /// Date range filtering uses ISO 8601 string comparison (valid for SQLite with UTC timestamps).
+/// All queries are scoped by <see cref="IUserContext.UserId"/> for tenant isolation.
 /// </summary>
-public sealed class AnalyticsRepository(IAnalyticsDbConnectionFactory connectionFactory) : IAnalyticsReader
+public sealed class AnalyticsRepository(
+    IAnalyticsDbConnectionFactory connectionFactory,
+    IUserContext userContext) : IAnalyticsReader
 {
     public async Task<AnalyticsSummary> GetSummaryAsync(
         DateTimeOffset? fromDate,
@@ -21,6 +25,7 @@ public sealed class AnalyticsRepository(IAnalyticsDbConnectionFactory connection
 
         var fromStr = fromDate?.ToString("O");
         var toStr = toDate?.ToString("O");
+        var userId = userContext.UserId;
 
         var whereClause = BuildWhereClause(fromStr, toStr, projectId);
 
@@ -35,7 +40,7 @@ public sealed class AnalyticsRepository(IAnalyticsDbConnectionFactory connection
             FROM token_events
             {whereClause}
             """,
-            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId });
+            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId, UserId = userId });
 
         var sessionCount = await conn.ExecuteScalarAsync<int>(
             $"""
@@ -43,7 +48,7 @@ public sealed class AnalyticsRepository(IAnalyticsDbConnectionFactory connection
             FROM token_events
             {whereClause}
             """,
-            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId });
+            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId, UserId = userId });
 
         // Top 5 models by cost
         var topModels = (await conn.QueryAsync<(string Name, double Tokens, double Cost)>(
@@ -58,7 +63,7 @@ public sealed class AnalyticsRepository(IAnalyticsDbConnectionFactory connection
             ORDER BY Cost DESC
             LIMIT 5
             """,
-            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId }))
+            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId, UserId = userId }))
             .Select(r => new AnalyticsTopItem(r.Name, r.Tokens, r.Cost))
             .ToList();
 
@@ -75,7 +80,7 @@ public sealed class AnalyticsRepository(IAnalyticsDbConnectionFactory connection
             ORDER BY Cost DESC
             LIMIT 5
             """,
-            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId }))
+            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId, UserId = userId }))
             .Select(r => new AnalyticsTopItem(r.Name, r.Tokens, r.Cost))
             .ToList();
 
@@ -95,9 +100,10 @@ public sealed class AnalyticsRepository(IAnalyticsDbConnectionFactory connection
 
         var fromStr = fromDate?.ToString("O");
         var toStr = toDate?.ToString("O");
+        var userId = userContext.UserId;
 
         // Read from daily_rollups — fast path. Falls back to empty if no rollups computed yet.
-        // When no project filter, aggregate all rows (fleet-wide). When project specified, filter.
+        // When no project filter, aggregate all rows (fleet-wide for this user). When project specified, filter.
         var projectFilter = string.IsNullOrEmpty(projectId)
             ? ""
             : "AND project_id = @ProjectId";
@@ -115,12 +121,13 @@ public sealed class AnalyticsRepository(IAnalyticsDbConnectionFactory connection
                 COALESCE(SUM(message_count), 0) AS Messages
             FROM daily_rollups
             WHERE 1=1
+            AND user_id = @UserId
             {dateFilter}
             {projectFilter}
             GROUP BY date
             ORDER BY date
             """,
-            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId ?? "" });
+            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId ?? "", UserId = userId });
 
         return rows
             .Select(r => new DailyAnalytics(r.Date, r.Tokens, r.Cost, r.EstimatedCost, (int)r.Sessions, (int)r.Messages))
@@ -138,15 +145,14 @@ public sealed class AnalyticsRepository(IAnalyticsDbConnectionFactory connection
 
         var fromStr = fromDate?.ToString("O");
         var toStr = toDate?.ToString("O");
+        var userId = userContext.UserId;
 
-        var conditions = new List<string>();
+        var conditions = new List<string> { "ss.user_id = @UserId" };
         if (fromStr is not null) conditions.Add("ss.created_at >= @FromDate");
         if (toStr is not null) conditions.Add("ss.created_at < @ToDate");
         if (!string.IsNullOrEmpty(projectId)) conditions.Add("ss.project_id = @ProjectId");
 
-        var whereClause = conditions.Count > 0
-            ? "WHERE " + string.Join(" AND ", conditions)
-            : "";
+        var whereClause = "WHERE " + string.Join(" AND ", conditions);
 
         // Join token_events to get live token/cost totals instead of relying on
         // the snapshot values which are only set at session creation (0) and deletion.
@@ -161,17 +167,19 @@ public sealed class AnalyticsRepository(IAnalyticsDbConnectionFactory connection
             FROM session_snapshots ss
             LEFT JOIN (
                 SELECT session_id,
+                       user_id,
                        SUM(tokens_total) AS agg_tokens,
                        SUM(cost) AS agg_cost,
                        SUM(COALESCE(estimated_cost, 0)) AS agg_estimated_cost
                 FROM token_events
-                GROUP BY session_id
-            ) te ON ss.session_id = te.session_id
+                WHERE user_id = @UserId
+                GROUP BY session_id, user_id
+            ) te ON ss.session_id = te.session_id AND ss.user_id = te.user_id
             {whereClause}
             ORDER BY ss.created_at DESC
             LIMIT @Limit
             """,
-            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId, Limit = limit });
+            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId, Limit = limit, UserId = userId });
 
         return rows
             .Select(r => new SessionAnalytics(
@@ -191,6 +199,7 @@ public sealed class AnalyticsRepository(IAnalyticsDbConnectionFactory connection
 
         var fromStr = fromDate?.ToString("O");
         var toStr = toDate?.ToString("O");
+        var userId = userContext.UserId;
 
         var dateFilter = BuildDateFilter(fromStr, toStr);
 
@@ -207,11 +216,11 @@ public sealed class AnalyticsRepository(IAnalyticsDbConnectionFactory connection
                     THEN COALESCE(SUM(cost), 0.0) / COUNT(*)
                     ELSE 0.0 END AS AvgCostPerMessage
             FROM token_events
-            WHERE 1=1 {dateFilter}
+            WHERE 1=1 AND user_id = @UserId {dateFilter}
             GROUP BY model_id, provider_id
             ORDER BY Cost DESC
             """,
-            new { FromDate = fromStr, ToDate = toStr });
+            new { FromDate = fromStr, ToDate = toStr, UserId = userId });
 
         return rows
             .Select(r => new ModelAnalytics(r.ModelId, r.ProviderId, r.Tokens, r.Cost, r.EstimatedCost, (int)r.MessageCount, r.AvgCostPerMessage))
@@ -228,6 +237,7 @@ public sealed class AnalyticsRepository(IAnalyticsDbConnectionFactory connection
 
         var fromStr = fromDate?.ToString("O");
         var toStr = toDate?.ToString("O");
+        var userId = userContext.UserId;
 
         var whereClause = BuildWhereClause(fromStr, toStr, projectId);
 
@@ -255,7 +265,7 @@ public sealed class AnalyticsRepository(IAnalyticsDbConnectionFactory connection
             {whereClause}
             ORDER BY created_at
             """,
-            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId });
+            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId, UserId = userId });
 
         return rows.ToList();
     }
@@ -264,11 +274,11 @@ public sealed class AnalyticsRepository(IAnalyticsDbConnectionFactory connection
 
     private static string BuildWhereClause(string? fromStr, string? toStr, string? projectId)
     {
-        var parts = new List<string>();
+        var parts = new List<string> { "user_id = @UserId" };
         if (fromStr is not null) parts.Add("created_at >= @FromDate");
         if (toStr is not null) parts.Add("created_at < @ToDate");
         if (!string.IsNullOrEmpty(projectId)) parts.Add("project_id = @ProjectId");
-        return parts.Count > 0 ? "WHERE " + string.Join(" AND ", parts) : "";
+        return "WHERE " + string.Join(" AND ", parts);
     }
 
     private static string BuildDateFilter(string? fromStr, string? toStr)
