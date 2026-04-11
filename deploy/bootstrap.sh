@@ -125,6 +125,7 @@ Fleet__Cloud__Enabled=true
 Fleet__Cloud__WorkspaceRoot=/data/workspaces
 Fleet__DataProtection__KeyPath=/opt/fleet/data/keys
 Fleet__DatabasePath=/opt/fleet/data/weave-fleet.db
+Fleet__AnalyticsDatabasePath=/opt/fleet/data/weave-fleet-analytics.db
 ENVEOF
 
 # Append secrets using printf with explicit format string — avoids injection
