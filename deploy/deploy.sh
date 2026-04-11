@@ -67,6 +67,10 @@ rsync_remote() {
   fi
 }
 
+read_current_release() {
+  ssh_remote "if test -L \"$APP_LINK\"; then target=\$(readlink \"$APP_LINK\"); if test -n \"\$target\" && test \"\$target\" != \"$APP_LINK\" && test -d \"\$target\"; then printf '%s' \"\$target\"; fi; fi" 2>/dev/null || true
+}
+
 dump_journal() {
   log "--- Last 50 lines of fleet journal ---"
   ssh_remote "sudo journalctl -u $SERVICE_NAME -n 50 --no-pager" || true
@@ -76,15 +80,19 @@ dump_journal() {
 # ── Rollback mode ─────────────────────────────────────────────────────────────
 if [ "$ROLLBACK" = "1" ]; then
   log "ROLLBACK mode: finding previous release..."
-  CURRENT_TARGET="$(ssh_remote "readlink -f $APP_LINK" 2>/dev/null || true)"
+  CURRENT_TARGET="$(read_current_release)"
   # List all timestamped release dirs, sorted descending; pick the one before current
-  PREV_RELEASE="$(ssh_remote "ls -dt ${RELEASES_DIR}/[0-9]*/ 2>/dev/null | grep -v '${CURRENT_TARGET}/' | head -n 1 | sed 's|/$||'" 2>/dev/null || true)"
+  if [ -n "$CURRENT_TARGET" ]; then
+    PREV_RELEASE="$(ssh_remote "ls -dt ${RELEASES_DIR}/[0-9]*/ 2>/dev/null | grep -vxF '${CURRENT_TARGET}' | head -n 1" 2>/dev/null | tr -d '\r' | sed 's|/$||' || true)"
+  else
+    PREV_RELEASE="$(ssh_remote "ls -dt ${RELEASES_DIR}/[0-9]*/ 2>/dev/null | head -n 1" 2>/dev/null | tr -d '\r' | sed 's|/$||' || true)"
+  fi
   if [ -z "$PREV_RELEASE" ]; then
     err "No previous release found to roll back to."
   fi
   log "Rolling back to: $PREV_RELEASE"
   ssh_remote "sudo systemctl stop $SERVICE_NAME || true"
-  ssh_remote "sudo ln -sfn $PREV_RELEASE $APP_LINK"
+  ssh_remote "sudo ln -sTfn $PREV_RELEASE $APP_LINK"
   ssh_remote "sudo systemctl start $SERVICE_NAME"
   log "Rollback complete. Current release: $PREV_RELEASE"
   exit 0
@@ -160,8 +168,8 @@ ssh_remote "sudo rsync -a --delete $REMOTE_STAGING_DIR/ $RELEASE_DIR/ && sudo ch
 # ── 8. Atomic symlink swap ────────────────────────────────────────────────────
 log "Pointing $APP_LINK → $RELEASE_DIR ..."
 # Capture previous release for rollback reference
-PREV_RELEASE="$(ssh_remote "readlink -f $APP_LINK 2>/dev/null || true" || true)"
-ssh_remote "sudo ln -sfn $RELEASE_DIR $APP_LINK"
+PREV_RELEASE="$(read_current_release)"
+ssh_remote "sudo ln -sTfn $RELEASE_DIR $APP_LINK"
 
 # ── 9. Start service ──────────────────────────────────────────────────────────
 log "Starting service..."
@@ -181,9 +189,9 @@ done
 if ! ssh_remote "systemctl is-active $SERVICE_NAME" >/dev/null 2>&1; then
   dump_journal
   # Roll back if we have a previous release
-  if [ -n "$PREV_RELEASE" ] && [ "$PREV_RELEASE" != "$RELEASE_DIR" ]; then
+  if [ -n "$PREV_RELEASE" ] && [ "$PREV_RELEASE" != "$RELEASE_DIR" ] && [ "$PREV_RELEASE" != "$APP_LINK" ]; then
     log "Rolling back to $PREV_RELEASE ..."
-    ssh_remote "sudo ln -sfn $PREV_RELEASE $APP_LINK && sudo systemctl start $SERVICE_NAME || true"
+    ssh_remote "if test -d $PREV_RELEASE; then sudo ln -sTfn $PREV_RELEASE $APP_LINK && sudo systemctl start $SERVICE_NAME; fi" || true
   fi
   err "Service failed to start within 30s."
 fi
@@ -206,10 +214,10 @@ if [ -n "$HEALTH_URL" ]; then
     log "Health check failed after 60s."
     dump_journal
     # Auto-rollback to previous release
-    if [ -n "$PREV_RELEASE" ] && [ "$PREV_RELEASE" != "$RELEASE_DIR" ]; then
+    if [ -n "$PREV_RELEASE" ] && [ "$PREV_RELEASE" != "$RELEASE_DIR" ] && [ "$PREV_RELEASE" != "$APP_LINK" ]; then
       log "Auto-rolling back to $PREV_RELEASE ..."
       ssh_remote "sudo systemctl stop $SERVICE_NAME || true"
-      ssh_remote "sudo ln -sfn $PREV_RELEASE $APP_LINK"
+      ssh_remote "if test -d $PREV_RELEASE; then sudo ln -sTfn $PREV_RELEASE $APP_LINK; fi"
       ssh_remote "sudo systemctl start $SERVICE_NAME || true"
       log "Rollback complete. Previous release is now active."
     fi
