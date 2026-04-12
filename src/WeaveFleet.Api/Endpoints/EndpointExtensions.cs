@@ -58,19 +58,19 @@ public static class EndpointExtensions
         apiScope.MapUserEndpoints();
         apiScope.MapCredentialEndpoints();
         apiScope.MapClientConfigEndpoints(fleetOptions);
-        app.MapBackendPluginEndpoints();
+        apiScope.MapBackendPluginEndpoints();
 
         return app;
     }
 
-    public static WebApplication MapBackendPluginEndpoints(this WebApplication app)
+    public static IEndpointRouteBuilder MapBackendPluginEndpoints(this IEndpointRouteBuilder builder)
     {
-        foreach (var plugin in app.Services.GetServices<IBackendPlugin>())
+        foreach (var plugin in builder.ServiceProvider.GetServices<IBackendPlugin>())
         {
-            plugin.MapEndpoints(app);
+            plugin.MapEndpoints(builder);
         }
 
-        return app;
+        return builder;
     }
 
     /// <summary>

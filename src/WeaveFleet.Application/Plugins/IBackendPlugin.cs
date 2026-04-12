@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Routing;
 
 namespace WeaveFleet.Application.Plugins;
 
@@ -8,5 +8,5 @@ public interface IBackendPlugin
 
     Task<PluginStatus> GetStatusAsync(CancellationToken cancellationToken);
 
-    void MapEndpoints(WebApplication app);
+    void MapEndpoints(IEndpointRouteBuilder builder);
 }

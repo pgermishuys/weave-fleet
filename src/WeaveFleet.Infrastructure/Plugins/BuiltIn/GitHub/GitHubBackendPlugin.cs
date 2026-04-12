@@ -1,8 +1,7 @@
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
-using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
-using WeaveFleet.Application.Configuration;
 using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
@@ -54,10 +53,9 @@ public sealed class GitHubBackendPlugin(
             actions);
     }
 
-    public void MapEndpoints(WebApplication app)
+    public void MapEndpoints(IEndpointRouteBuilder builder)
     {
-        var fleetOptions = app.Services.GetRequiredService<FleetOptions>();
-        GitHubEndpointMappings.MapAuthEndpoints(app, fleetOptions);
-        GitHubEndpointMappings.MapDataEndpoints(app, fleetOptions);
+        GitHubEndpointMappings.MapAuthEndpoints(builder);
+        GitHubEndpointMappings.MapDataEndpoints(builder);
     }
 }

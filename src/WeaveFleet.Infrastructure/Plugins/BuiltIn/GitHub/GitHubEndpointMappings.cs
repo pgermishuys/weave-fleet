@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using WeaveFleet.Application.Configuration;
+using Microsoft.AspNetCore.Routing;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Infrastructure.Services;
@@ -11,12 +11,9 @@ namespace WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 
 internal static class GitHubEndpointMappings
 {
-    public static void MapAuthEndpoints(WebApplication app, FleetOptions fleetOptions)
+    public static void MapAuthEndpoints(IEndpointRouteBuilder builder)
     {
-        var group = app.MapGroup("/api/integrations/github/auth").WithTags("GitHub");
-
-        if (fleetOptions.Auth.Enabled)
-            group.RequireAuthorization("FleetUser");
+        var group = builder.MapGroup("/api/integrations/github/auth").WithTags("GitHub");
 
         group.MapPost("/device-code", async (GitHubService gitHubService, CancellationToken ct) =>
         {
@@ -95,12 +92,9 @@ internal static class GitHubEndpointMappings
         .WithName("GitHubConnectionStatus");
     }
 
-    public static void MapDataEndpoints(WebApplication app, FleetOptions fleetOptions)
+    public static void MapDataEndpoints(IEndpointRouteBuilder builder)
     {
-        var group = app.MapGroup("/api/integrations/github").WithTags("GitHub");
-
-        if (fleetOptions.Auth.Enabled)
-            group.RequireAuthorization("FleetUser");
+        var group = builder.MapGroup("/api/integrations/github").WithTags("GitHub");
 
         group.MapGet("/repos", async (
             int? page,

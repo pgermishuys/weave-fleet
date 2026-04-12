@@ -39,10 +39,10 @@ public sealed class GitHubPluginRegistrationTests
             return Task.FromResult(new PluginStatus("github", PluginConnectionStatus.Disconnected, null, []));
         }
 
-        public void MapEndpoints(Microsoft.AspNetCore.Builder.WebApplication app)
+        public void MapEndpoints(IEndpointRouteBuilder builder)
         {
-            app.MapGet("/api/integrations/github/auth/status", () => Results.Ok());
-            app.MapGet("/api/integrations/github/repos", () => Results.Ok());
+            builder.MapGet("/api/integrations/github/auth/status", () => Results.Ok());
+            builder.MapGet("/api/integrations/github/repos", () => Results.Ok());
         }
     }
 }

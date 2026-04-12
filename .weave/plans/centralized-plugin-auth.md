@@ -46,34 +46,34 @@ Make plugin endpoint auth centralized and secure by default — plugins receive 
 
 ## TODOs
 
-- [ ] 1. Change `IBackendPlugin.MapEndpoints` signature
+- [x] 1. Change `IBackendPlugin.MapEndpoints` signature
   **What**: Change the parameter from `WebApplication app` to `IEndpointRouteBuilder builder`. Update the `using` directive from `Microsoft.AspNetCore.Builder` to `Microsoft.AspNetCore.Routing` (since `IEndpointRouteBuilder` lives in `Microsoft.AspNetCore.Routing`). Keep `Microsoft.AspNetCore.Builder` too if needed for other usages, but `IEndpointRouteBuilder` requires `Microsoft.AspNetCore.Routing`.
   **Files**: `src/WeaveFleet.Application/Plugins/IBackendPlugin.cs`
   **Acceptance**: Interface compiles with the new signature. The `using` directives include `Microsoft.AspNetCore.Routing`.
 
-- [ ] 2. Move plugin endpoint mapping into the authenticated scope
+- [x] 2. Move plugin endpoint mapping into the authenticated scope
   **What**: In `EndpointExtensions.cs`, make two changes:
   (a) Move `app.MapBackendPluginEndpoints()` (line 61) up into the `apiScope` block, changing it to `apiScope.MapBackendPluginEndpoints()` — so it sits alongside the other `apiScope.Map*()` calls (e.g., after line 58, before the `return`).
   (b) Change the `MapBackendPluginEndpoints` extension method signature from `this WebApplication app` to `this IEndpointRouteBuilder builder`. Update the method body to pass `builder` (the pre-authenticated scope) to each plugin's `MapEndpoints`. Change the return type from `WebApplication` to `IEndpointRouteBuilder`. Update the `GetServices<IBackendPlugin>()` call to use the service provider — since `IEndpointRouteBuilder` exposes `ServiceProvider`, use `builder.ServiceProvider.GetServices<IBackendPlugin>()`.
   **Files**: `src/WeaveFleet.Api/Endpoints/EndpointExtensions.cs`
   **Acceptance**: `MapBackendPluginEndpoints` accepts `IEndpointRouteBuilder`, resolves plugins from `builder.ServiceProvider`, and passes the builder to each plugin. Plugin endpoints are now mapped inside `apiScope` and inherit its auth policy automatically.
 
-- [ ] 3. Clean up `GitHubEndpointMappings` — remove manual auth
+- [x] 3. Clean up `GitHubEndpointMappings` — remove manual auth
   **What**: Change both `MapAuthEndpoints` and `MapDataEndpoints` to accept `IEndpointRouteBuilder builder` instead of `WebApplication app, FleetOptions fleetOptions`. Remove the `FleetOptions` parameter entirely. Remove the `if (fleetOptions.Auth.Enabled) group.RequireAuthorization("FleetUser")` blocks from both methods. Change `app.MapGroup(...)` to `builder.MapGroup(...)`. Remove the `using WeaveFleet.Application.Configuration;` import (no longer needed since `FleetOptions` is no longer referenced). Keep all endpoint definitions, route paths, handler logic, and `WithName`/`WithTags` calls exactly as-is.
   **Files**: `src/WeaveFleet.Infrastructure/Plugins/BuiltIn/GitHub/GitHubEndpointMappings.cs`
   **Acceptance**: Both methods accept `IEndpointRouteBuilder` only. No reference to `FleetOptions` or `RequireAuthorization` in this file. All route paths unchanged.
 
-- [ ] 4. Clean up `GitHubBackendPlugin.MapEndpoints` — remove FleetOptions resolution
+- [x] 4. Clean up `GitHubBackendPlugin.MapEndpoints` — remove FleetOptions resolution
   **What**: Update `MapEndpoints` to accept `IEndpointRouteBuilder builder` (matching the new interface). Remove the line `var fleetOptions = app.Services.GetRequiredService<FleetOptions>();`. Update calls to `GitHubEndpointMappings.MapAuthEndpoints(builder)` and `GitHubEndpointMappings.MapDataEndpoints(builder)` — passing just the builder. Remove the `using WeaveFleet.Application.Configuration;` import. Remove `using Microsoft.Extensions.DependencyInjection;` if no longer needed (check: `GetRequiredService` was the only usage — `serviceProvider.GetRequiredService<IUserContext>()` in `GetStatusAsync` also uses it, so keep it). Remove `using Microsoft.AspNetCore.Builder;` if no longer needed (check: no `WebApplication` reference remains, but `MapEndpoints` is the only usage — the parameter is now `IEndpointRouteBuilder` from `Microsoft.AspNetCore.Routing`, so add that using if needed).
   **Files**: `src/WeaveFleet.Infrastructure/Plugins/BuiltIn/GitHub/GitHubBackendPlugin.cs`
   **Acceptance**: `MapEndpoints` takes `IEndpointRouteBuilder`. No `FleetOptions` resolution. No `RequireAuthorization` call. Compiles cleanly.
 
-- [ ] 5. Update `GitHubPluginRegistrationTests` — fix StubBackendPlugin and test setup
+- [x] 5. Update `GitHubPluginRegistrationTests` — fix StubBackendPlugin and test setup
   **What**: Update `StubBackendPlugin.MapEndpoints` to accept `IEndpointRouteBuilder builder` instead of `WebApplication app`. Change `app.MapGet(...)` calls inside the stub to `builder.MapGet(...)`. Update the test method: instead of calling `app.MapBackendPluginEndpoints()` directly on the `WebApplication`, the test needs to call it on an `IEndpointRouteBuilder`. Since `WebApplication` implements `IEndpointRouteBuilder`, the simplest fix is to just call `((IEndpointRouteBuilder)app).MapBackendPluginEndpoints()` or cast implicitly. Actually, since the extension method now extends `IEndpointRouteBuilder` and `WebApplication` implements it, `app.MapBackendPluginEndpoints()` will still compile and work — no change needed to the call site, only to the stub's `MapEndpoints` signature.
   **Files**: `tests/WeaveFleet.Api.Tests/Endpoints/GitHubPluginRegistrationTests.cs`
   **Acceptance**: Test compiles and passes. `StubBackendPlugin.MapEndpoints` takes `IEndpointRouteBuilder`. Routes are still discoverable in the test assertions.
 
-- [ ] 6. Verify all tests pass and no auth regressions
+- [x] 6. Verify all tests pass and no auth regressions
   **What**: Run the full test suite to confirm no regressions. The `GitHubEndpointAuthTests` are the critical ones — they verify that GitHub endpoints return 401 when auth is enabled and unauthenticated, and succeed when authenticated. These tests use `ApiWebApplicationFactory` which calls `MapFleetEndpoints()` → `MapBackendPluginEndpoints()` → plugin endpoints. Since the plugin endpoints are now mapped inside the authenticated `apiScope`, auth should work identically (or better — it's now centralized instead of plugin-managed).
   **Acceptance**: `dotnet test tests/WeaveFleet.Api.Tests` passes all tests. `dotnet build` succeeds for the entire solution.
 
