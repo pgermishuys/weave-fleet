@@ -15,7 +15,7 @@ import { NewSessionDialog } from "@/components/session/new-session-dialog";
 import { useCurrentSessionDirectory } from "@/hooks/use-current-session-directory";
 import { useSidebar } from "@/contexts/sidebar-context";
 import { useAppShell } from "@/contexts/app-shell-context";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 interface HeaderProps {
   title: string;
@@ -92,13 +92,6 @@ function getUserInitials(currentUser: UserMenuProps["currentUser"]): string {
 
 function UserMenu({ authEnabled, currentUser }: UserMenuProps) {
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const returnUrl = useMemo(() => {
-    if (typeof window === "undefined") {
-      return "/";
-    }
-
-    return `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  }, []);
 
   const userLabel = getUserLabel(currentUser);
   const secondaryLabel = getUserSecondaryLabel(currentUser);
@@ -113,7 +106,7 @@ function UserMenu({ authEnabled, currentUser }: UserMenuProps) {
     try {
       const form = document.createElement("form");
       form.method = "POST";
-      form.action = apiUrl(`/auth/logout?returnUrl=${encodeURIComponent(returnUrl)}`);
+      form.action = apiUrl(`/auth/logout?returnUrl=${encodeURIComponent("/login")}`);
       form.style.display = "none";
 
       const csrfMatch = document.cookie

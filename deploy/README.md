@@ -43,9 +43,11 @@ Go to **Settings → Secrets and variables → Actions** and add:
 | `FLEET_SSH_HOST_PUBLIC_KEY` | Server's SSH host public key line | `ssh-keyscan <host>` output |
 | `FLEET_HOST` | SSH target | `ubuntu@<static-ip>` |
 | `FLEET_DOMAIN` | Domain name | `fleet.example.com` |
-| `FLEET_AUTH_AUTHORITY` | OIDC issuer URL | From your OIDC provider (e.g. Clerk) |
-| `FLEET_AUTH_CLIENT_ID` | OIDC client ID | From your OIDC provider |
-| `FLEET_AUTH_CLIENT_SECRET` | OIDC client secret | From your OIDC provider |
+| `FLEET_AUTH_AUTHORITY` | Auth0 issuer URL | `https://<tenant>.us.auth0.com/` |
+| `FLEET_AUTH_CLIENT_ID` | Auth0 client ID | Auth0 Dashboard → Applications → Settings |
+| `FLEET_AUTH_CLIENT_SECRET` | Auth0 client secret | Auth0 Dashboard → Applications → Settings |
+
+> **Auth0 Application URLs**: In the Auth0 Dashboard, ensure the application's "Allowed Callback URLs" includes `https://<FLEET_DOMAIN>/auth/callback` and "Allowed Logout URLs" includes `https://<FLEET_DOMAIN>/login`.
 
 ### 4. Run the Bootstrap Workflow
 

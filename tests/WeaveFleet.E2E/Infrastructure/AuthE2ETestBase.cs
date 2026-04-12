@@ -124,8 +124,17 @@ public abstract class AuthE2ETestBase : IAsyncLifetime
     /// <param name="returnUrl">The Fleet URL to start the flow from.</param>
     protected async Task LoginAsync(string username, string password, string returnUrl)
     {
-        // Navigate to the protected page — Fleet will redirect to /auth/login → IdP
+        // Navigate to the protected page — Fleet will redirect to /login (branded landing page)
         await Page.GotoAsync(returnUrl);
+
+        // If navigating directly to /auth/login (backend OIDC challenge), we skip the
+        // Fleet landing page and go straight to the IdP. Otherwise, click "Sign in" first.
+        if (!returnUrl.StartsWith("/auth/login", StringComparison.OrdinalIgnoreCase))
+        {
+            var fleetLoginPage = new FleetLoginPage(Page);
+            await fleetLoginPage.WaitForVisibleAsync();
+            await fleetLoginPage.ClickSignInAsync();
+        }
 
         // Wait for the IdP login page to appear
         var loginPage = new IdpLoginPage(Page);

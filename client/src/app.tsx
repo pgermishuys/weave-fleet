@@ -4,13 +4,14 @@ import { lazy, Suspense, useEffect, useMemo, useState, useCallback } from "react
 import { Loader2 } from "lucide-react";
 import { usePluginRuntime } from "@/plugins/context";
 import { getRoutes } from "@/plugins/slots";
-import { apiFetch, apiUrl } from "@/lib/api-client";
+import { apiFetch } from "@/lib/api-client";
 import type { ClientConfigResponse, UserMeResponse } from "@/lib/api-types";
 import { AppShellProvider } from "@/contexts/app-shell-context";
 import { useAppShell } from "@/contexts/app-shell-context";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 
 // Lazy-load all pages for code splitting (same behavior as Next.js)
+const LoginPage = lazy(() => import("./pages/login-page"));
 const FleetPage = lazy(() => import("./app/page"));
 const AnalyticsPage = lazy(() => import("./app/analytics/page"));
 const IntegrationsPage = lazy(() => import("./app/integrations/page"));
@@ -39,11 +40,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<UserMeResponse | null>(null);
   const loginUrl = useMemo(() => {
     if (typeof window === "undefined") {
-      return "/auth/login";
+      return "/login";
     }
 
     const returnUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    return apiUrl(`/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`);
+    return `/login?returnUrl=${encodeURIComponent(returnUrl)}`;
   }, []);
 
   useEffect(() => {
@@ -186,14 +187,23 @@ function AppRoutes() {
 
 export function App() {
   return (
-    <AuthGate>
-      <ClientLayout>
-        <OnboardingGate>
-          <Suspense fallback={<PageFallback />}>
-            <AppRoutes />
-          </Suspense>
-        </OnboardingGate>
-      </ClientLayout>
-    </AuthGate>
+    <Routes>
+      <Route path="/login" element={
+        <Suspense fallback={<PageFallback />}>
+          <LoginPage />
+        </Suspense>
+      } />
+      <Route path="/*" element={
+        <AuthGate>
+          <ClientLayout>
+            <OnboardingGate>
+              <Suspense fallback={<PageFallback />}>
+                <AppRoutes />
+              </Suspense>
+            </OnboardingGate>
+          </ClientLayout>
+        </AuthGate>
+      } />
+    </Routes>
   );
 }
