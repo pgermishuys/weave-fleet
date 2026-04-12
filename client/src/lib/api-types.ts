@@ -155,7 +155,7 @@ export interface SendPromptRequest {
   instanceId: string;
   text: string;
   agent?: string;
-  model?: { providerID: string; modelID: string };
+  model?: string;
   attachments?: ImageAttachment[];
 }
 
@@ -172,9 +172,9 @@ export interface ImageAttachment {
 export interface SendCommandRequest {
   instanceId: string;
   command: string;
-  args?: string;
+  arguments?: string;
   agent?: string;
-  model?: { providerID: string; modelID: string };
+  model?: string;
 }
 
 export interface SendCommandResponse {

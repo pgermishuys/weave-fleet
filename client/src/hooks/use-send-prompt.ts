@@ -48,9 +48,9 @@ export function useSendPrompt(): UseSendPromptResult {
               body: JSON.stringify({
                 instanceId,
                 command: parsed.command,
-                ...(parsed.args ? { args: parsed.args } : {}),
+                ...(parsed.args ? { arguments: parsed.args } : {}),
                 ...(agent ? { agent } : {}),
-                ...(model ? { model } : {}),
+                ...(model ? { model: `${model.providerID}/${model.modelID}` } : {}),
               }),
             }
           );
