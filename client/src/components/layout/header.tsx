@@ -51,7 +51,9 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {actions}
-        <UserMenu authEnabled={clientConfig.authEnabled} currentUser={currentUser} />
+        {clientConfig.authEnabled && currentUser ? (
+          <UserMenu authEnabled={clientConfig.authEnabled} currentUser={currentUser} />
+        ) : null}
       </div>
     </header>
   );
