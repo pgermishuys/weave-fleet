@@ -36,12 +36,12 @@ public sealed class HarnessTypesTests
     }
 
     [Fact]
-    public void HarnessInstanceStatus_HasExpectedValues()
+    public void HarnessSessionStatus_HasExpectedValues()
     {
-        var values = Enum.GetValues<HarnessInstanceStatus>();
+        var values = Enum.GetValues<HarnessSessionStatus>();
         values.Length.ShouldBe(6);
-        values.ShouldContain(HarnessInstanceStatus.Starting);
-        values.ShouldContain(HarnessInstanceStatus.Error);
+        values.ShouldContain(HarnessSessionStatus.Starting);
+        values.ShouldContain(HarnessSessionStatus.Error);
     }
 
     [Fact]
@@ -66,3 +66,4 @@ public sealed class HarnessTypesTests
         msg.TextContent.ShouldBe("Hello");
     }
 }
+

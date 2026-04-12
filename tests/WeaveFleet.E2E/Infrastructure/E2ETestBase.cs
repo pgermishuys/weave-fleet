@@ -116,7 +116,7 @@ public abstract class E2ETestBase : IAsyncLifetime
     /// Call this before any page navigation to ensure the harness is set up.
     /// </summary>
     protected void ConfigureScenario(Action<TestScenarioBuilder> configure)
-        => _factory.TestHarness.Configure(configure);
+        => _factory.TestHarnessRuntime.Configure(configure);
 
     /// <summary>
     /// Mark the test as failed so artifacts are captured on disposal.

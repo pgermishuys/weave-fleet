@@ -121,7 +121,7 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                     childSession.Id);
                 linkedDelegation.ShouldNotBeNull();
 
-                var childHarness = tracker.Get(childSession.InstanceId).ShouldBeOfType<TestHarnessInstance>();
+                var childHarness = tracker.Get(childSession.InstanceId).ShouldBeOfType<TestHarnessSession>();
 
                 var detail = new SessionDetailPage(Page);
                 var dashboard = new FleetDashboardPage(Page);
@@ -218,3 +218,4 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
         });
     }
 }
+

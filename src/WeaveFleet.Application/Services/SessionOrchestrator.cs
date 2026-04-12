@@ -75,11 +75,15 @@ public sealed partial class SessionOrchestrator(
         if (harness is null)
             return FleetError.NotFoundFor("Harness", harnessType);
 
+        var harnessRuntime = harnessRegistry.GetRuntimeByType(harnessType);
+        if (harnessRuntime is null)
+            return FleetError.NotFoundFor("HarnessRuntime", harnessType);
+
         // Prepare runtime: load user credentials and call harness preparation pipeline.
         // The orchestrator passes the opaque credential bag to the harness — it does not
         // inspect, interpret, or filter the credentials itself.
         var userCredentials = await credentialStore.GetDecryptedCredentialsAsync(userContext.UserId);
-        var preparation = await harness.PrepareRuntimeAsync(new RuntimePreparationContext
+        var preparation = await harnessRuntime.PrepareRuntimeAsync(new RuntimePreparationContext
         {
             UserId = userContext.UserId,
             UserCredentials = userCredentials,
@@ -119,10 +123,10 @@ public sealed partial class SessionOrchestrator(
 
         // 2. Spawn harness instance
         var sessionId = Guid.NewGuid().ToString();
-        IHarnessInstance harnessInstance;
+        IHarnessSession harnessInstance;
         try
         {
-            harnessInstance = await harness.SpawnAsync(new HarnessSpawnOptions
+            harnessInstance = await harnessRuntime.SpawnAsync(new HarnessSpawnOptions
             {
                 SessionId = sessionId,
                 WorkingDirectory = workspace.Directory,
@@ -263,10 +267,14 @@ public sealed partial class SessionOrchestrator(
         if (harness is null)
             return FleetError.NotFoundFor("Harness", session.HarnessType);
 
+        var harnessRuntime = harnessRegistry.GetRuntimeByType(session.HarnessType);
+        if (harnessRuntime is null)
+            return FleetError.NotFoundFor("HarnessRuntime", session.HarnessType);
+
         // Load credentials using the session OWNER's userId.
         // The orchestrator never inspects credential contents — it passes them opaquely to the harness.
         var ownerCredentials = await credentialStore.GetDecryptedCredentialsAsync(session.UserId);
-        var preparation = await harness.PrepareRuntimeAsync(new RuntimePreparationContext
+        var preparation = await harnessRuntime.PrepareRuntimeAsync(new RuntimePreparationContext
         {
             UserId = session.UserId,
             UserCredentials = ownerCredentials,
@@ -282,12 +290,12 @@ public sealed partial class SessionOrchestrator(
 
         var resumeLaunchArtifacts = ((RuntimePreparation.Ready)preparation).Artifacts;
 
-        IHarnessInstance harnessInstance;
+        IHarnessSession harnessInstance;
         try
         {
             if (session.HarnessResumeToken is not null && harness.Capabilities.SupportsResume)
             {
-                harnessInstance = await harness.ResumeAsync(new HarnessResumeOptions
+                harnessInstance = await harnessRuntime.ResumeAsync(new HarnessResumeOptions
                 {
                     SessionId = session.Id,
                     WorkingDirectory = workspaceResult.Value,
@@ -298,7 +306,7 @@ public sealed partial class SessionOrchestrator(
             }
             else
             {
-                harnessInstance = await harness.SpawnAsync(new HarnessSpawnOptions
+                harnessInstance = await harnessRuntime.SpawnAsync(new HarnessSpawnOptions
                 {
                     SessionId = session.Id,
                     WorkingDirectory = workspaceResult.Value,
@@ -371,11 +379,15 @@ public sealed partial class SessionOrchestrator(
         if (!harness.Capabilities.SupportsResume)
             return FleetError.ValidationError("Session.ResumeUnsupported", $"Harness '{parent.HarnessType}' does not support delegated child resume.");
 
+        var delegationRuntime = harnessRegistry.GetRuntimeByType(parent.HarnessType);
+        if (delegationRuntime is null)
+            return FleetError.NotFoundFor("HarnessRuntime", parent.HarnessType);
+
         var childSessionId = Guid.NewGuid().ToString();
-        IHarnessInstance harnessInstance;
+        IHarnessSession harnessInstance;
         try
         {
-            harnessInstance = await harness.ResumeAsync(new HarnessResumeOptions
+            harnessInstance = await delegationRuntime.ResumeAsync(new HarnessResumeOptions
             {
                 SessionId = childSessionId,
                 WorkingDirectory = parent.Directory,
@@ -801,7 +813,7 @@ public sealed partial class SessionOrchestrator(
 
     // ── Private helpers ────────────────────────────────────────────────────────
 
-    private async Task<Result<IHarnessInstance>> GetLiveInstanceAsync(string sessionId)
+    private async Task<Result<IHarnessSession>> GetLiveInstanceAsync(string sessionId)
     {
         var sessionResult = await GetSessionAsync(sessionId);
         if (sessionResult.IsFailure)
@@ -813,7 +825,7 @@ public sealed partial class SessionOrchestrator(
         if (instance is null)
             return FleetError.NotFoundFor("Instance", session.InstanceId);
 
-        return Result.Success<IHarnessInstance>(instance);
+        return Result.Success<IHarnessSession>(instance);
     }
 
     private async Task<Result<Session>> GetSessionAsync(string sessionId)
@@ -833,13 +845,13 @@ public sealed partial class SessionOrchestrator(
             p.Name.Equals(ScratchProjectName, StringComparison.OrdinalIgnoreCase))?.Id;
     }
 
-    private async Task SafeStopAsync(IHarnessInstance instance, CancellationToken ct)
+    private async Task SafeStopAsync(IHarnessSession instance, CancellationToken ct)
     {
         try { await instance.StopAsync(ct); }
         catch (Exception ex) { LogStopFailed(ex, instance.InstanceId); }
     }
 
-    private async Task SafeDeleteAsync(IHarnessInstance instance, CancellationToken ct)
+    private async Task SafeDeleteAsync(IHarnessSession instance, CancellationToken ct)
     {
         try { await instance.DeleteAsync(ct); }
         catch (Exception ex) { LogStopFailed(ex, instance.InstanceId); }
@@ -900,3 +912,4 @@ public sealed record CreateSessionRequest
 
 /// <summary>Result of a successful <see cref="SessionOrchestrator.CreateSessionAsync"/> call.</summary>
 public sealed record CreateSessionResult(Session Session, string InstanceId, string WorkspaceId);
+

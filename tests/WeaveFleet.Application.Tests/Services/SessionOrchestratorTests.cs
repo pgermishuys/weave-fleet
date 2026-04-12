@@ -18,7 +18,8 @@ public sealed class SessionOrchestratorTests
 {
     private readonly IHarnessRegistry _harnessRegistry = Substitute.For<IHarnessRegistry>();
     private readonly IHarness _harness = Substitute.For<IHarness>();
-    private readonly IHarnessInstance _harnessInstance = Substitute.For<IHarnessInstance>();
+    private readonly IHarnessRuntime _harnessRuntime = Substitute.For<IHarnessRuntime>();
+    private readonly IHarnessSession _harnessInstance = Substitute.For<IHarnessSession>();
     private readonly ISessionRepository _sessionRepo = Substitute.For<ISessionRepository>();
     private readonly ISessionSourceUsageRepository _sessionSourceUsageRepo = Substitute.For<ISessionSourceUsageRepository>();
     private readonly ISessionCallbackRepository _callbackRepo = Substitute.For<ISessionCallbackRepository>();
@@ -58,7 +59,7 @@ public sealed class SessionOrchestratorTests
 
         // Default: credential store returns empty bag; harness always reports Ready.
         _credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
-        _harness.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
+        _harnessRuntime.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts())));
 
         _sut = new SessionOrchestrator(
@@ -84,7 +85,7 @@ public sealed class SessionOrchestratorTests
         // Default harness instance id
         _harnessInstance.InstanceId.Returns("inst-1");
         _harnessInstance.HarnessType.Returns("opencode");
-        _harnessInstance.Status.Returns(HarnessInstanceStatus.Running);
+        _harnessInstance.Status.Returns(HarnessSessionStatus.Running);
         _instanceRepo.GetByIdAsync(Arg.Any<string>()).Returns(callInfo => new Instance
         {
             Id = callInfo.Arg<string>(),
@@ -103,7 +104,8 @@ public sealed class SessionOrchestratorTests
     private void ConfigureHarnessAndScratchProject()
     {
         _harnessRegistry.GetByType("opencode").Returns(_harness);
-        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
+        _harnessRegistry.GetRuntimeByType("opencode").Returns(_harnessRuntime);
+        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
             .Returns(_harnessInstance);
         _projectRepo.ListAsync().Returns(new List<Project>
         {
@@ -155,7 +157,8 @@ public sealed class SessionOrchestratorTests
     public async Task CreateSessionAsync_WhenSpawnThrows_ReturnsUnexpectedError()
     {
         _harnessRegistry.GetByType("opencode").Returns(_harness);
-        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
+        _harnessRegistry.GetRuntimeByType("opencode").Returns(_harnessRuntime);
+        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("process failed"));
         _projectRepo.ListAsync().Returns(new List<Project>());
         using var tempDirectory = new TempDirectory();
@@ -481,7 +484,8 @@ public sealed class SessionOrchestratorTests
     {
         // Arrange — request specifies "claude-code"
         _harnessRegistry.GetByType("claude-code").Returns(_harness);
-        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
+        _harnessRegistry.GetRuntimeByType("claude-code").Returns(_harnessRuntime);
+        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
             .Returns(_harnessInstance);
         _projectRepo.ListAsync().Returns(new List<Project>());
         _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
@@ -506,7 +510,8 @@ public sealed class SessionOrchestratorTests
     {
         // Arrange — no HarnessType in request
         _harnessRegistry.GetByType("opencode").Returns(_harness);
-        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
+        _harnessRegistry.GetRuntimeByType("opencode").Returns(_harnessRuntime);
+        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
             .Returns(_harnessInstance);
         _projectRepo.ListAsync().Returns(new List<Project>());
         _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
@@ -549,8 +554,9 @@ public sealed class SessionOrchestratorTests
             CreatedAt = "2026-01-01"
         });
         _harnessRegistry.GetByType("claude-code").Returns(_harness);
+        _harnessRegistry.GetRuntimeByType("claude-code").Returns(_harnessRuntime);
         _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = false });
-        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
+        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
             .Returns(_harnessInstance);
         _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
         _sessionRepo.UpdateForResumeAsync(Arg.Any<string>(), Arg.Any<string>())
@@ -590,8 +596,9 @@ public sealed class SessionOrchestratorTests
             CreatedAt = "2026-01-01"
         });
         _harnessRegistry.GetByType("opencode").Returns(_harness);
+        _harnessRegistry.GetRuntimeByType("opencode").Returns(_harnessRuntime);
         _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = true });
-        _harness.ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>())
+        _harnessRuntime.ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>())
             .Returns(_harnessInstance);
         _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
         _sessionRepo.UpdateForResumeAsync(Arg.Any<string>(), Arg.Any<string>())
@@ -602,10 +609,10 @@ public sealed class SessionOrchestratorTests
 
         // Assert — ResumeAsync called with correct token; SpawnAsync NOT called
         result.IsSuccess.ShouldBeTrue();
-        await _harness.Received(1).ResumeAsync(
+        await _harnessRuntime.Received(1).ResumeAsync(
             Arg.Is<HarnessResumeOptions>(o => o.ResumeToken == "existing-session-token"),
             Arg.Any<CancellationToken>());
-        await _harness.DidNotReceive().SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
+        await _harnessRuntime.DidNotReceive().SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -633,8 +640,9 @@ public sealed class SessionOrchestratorTests
             CreatedAt = "2026-01-01"
         });
         _harnessRegistry.GetByType("opencode").Returns(_harness);
+        _harnessRegistry.GetRuntimeByType("opencode").Returns(_harnessRuntime);
         _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = true });
-        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
+        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
             .Returns(_harnessInstance);
         _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
         _sessionRepo.UpdateForResumeAsync(Arg.Any<string>(), Arg.Any<string>())
@@ -645,8 +653,8 @@ public sealed class SessionOrchestratorTests
 
         // Assert — SpawnAsync used as fallback; ResumeAsync NOT called
         result.IsSuccess.ShouldBeTrue();
-        await _harness.Received(1).SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
-        await _harness.DidNotReceive().ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>());
+        await _harnessRuntime.Received(1).SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
+        await _harnessRuntime.DidNotReceive().ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -674,8 +682,9 @@ public sealed class SessionOrchestratorTests
             CreatedAt = "2026-01-01"
         });
         _harnessRegistry.GetByType("opencode").Returns(_harness);
+        _harnessRegistry.GetRuntimeByType("opencode").Returns(_harnessRuntime);
         _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = false });
-        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
+        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
             .Returns(_harnessInstance);
         _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
         _sessionRepo.UpdateForResumeAsync(Arg.Any<string>(), Arg.Any<string>())
@@ -686,8 +695,8 @@ public sealed class SessionOrchestratorTests
 
         // Assert — SpawnAsync used (SupportsResume = false overrides token)
         result.IsSuccess.ShouldBeTrue();
-        await _harness.Received(1).SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
-        await _harness.DidNotReceive().ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>());
+        await _harnessRuntime.Received(1).SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
+        await _harnessRuntime.DidNotReceive().ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -733,7 +742,8 @@ public sealed class SessionOrchestratorTests
         };
         _sessionRepo.GetByIdAsync("s-parent").Returns(parent);
         _harnessRegistry.GetByType("claude-code").Returns(_harness);
-        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
+        _harnessRegistry.GetRuntimeByType("claude-code").Returns(_harnessRuntime);
+        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
             .Returns(_harnessInstance);
         _projectRepo.ListAsync().Returns(new List<Project>());
         _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
@@ -770,13 +780,14 @@ public sealed class SessionOrchestratorTests
             new Project { Id = "proj-1", Name = "Project One", Type = "user", Position = 0, CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01" },
         ]);
         _harnessRegistry.GetByType("opencode").Returns(_harness);
+        _harnessRegistry.GetRuntimeByType("opencode").Returns(_harnessRuntime);
         _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = true });
 
-        var childInstance = Substitute.For<IHarnessInstance>();
+        var childInstance = Substitute.For<IHarnessSession>();
         childInstance.InstanceId.Returns("inst-child");
         childInstance.HarnessType.Returns("opencode");
-        childInstance.Status.Returns(HarnessInstanceStatus.Running);
-        _harness.ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>())
+        childInstance.Status.Returns(HarnessSessionStatus.Running);
+        _harnessRuntime.ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>())
             .Returns(childInstance);
         _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
         _sessionRepo.InsertAsync(Arg.Any<Session>()).Returns(Task.CompletedTask);
@@ -790,7 +801,7 @@ public sealed class SessionOrchestratorTests
         result.Value.OpencodeSessionId.ShouldBe("oc-child-1");
         result.Value.UserId.ShouldBe("user-1");
 
-        await _harness.Received(1).ResumeAsync(
+        await _harnessRuntime.Received(1).ResumeAsync(
             Arg.Is<HarnessResumeOptions>(o => o.ResumeToken == "oc-child-1" && o.SessionId == result.Value.Id),
             Arg.Any<CancellationToken>());
         await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(s =>
@@ -936,3 +947,4 @@ public sealed class SessionOrchestratorTests
     /// <summary>Minimal stub for RuntimeLaunchArtifacts (opaque pass-through in tests).</summary>
     private sealed record StubLaunchArtifacts : RuntimeLaunchArtifacts;
 }
+

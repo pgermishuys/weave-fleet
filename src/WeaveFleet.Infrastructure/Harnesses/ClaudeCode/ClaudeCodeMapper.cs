@@ -243,7 +243,7 @@ internal static class ClaudeCodeMapper
     /// <summary>
     /// Extracts token/cost analytics from a result message.
     /// Equivalent to <c>OpenCodeMapper.TryExtractTokenEvent</c>.
-    /// Called from <c>ClaudeCodeHarnessInstance</c> when a result message arrives.
+    /// Called from <c>ClaudeCodeHarnessSession</c> when a result message arrives.
     /// Returns null if no cost/usage data or on any parse failure.
     /// </summary>
     internal static TokenEventData? TryExtractTokenEvent(

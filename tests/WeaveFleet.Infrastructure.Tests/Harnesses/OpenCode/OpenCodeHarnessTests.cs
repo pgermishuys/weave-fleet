@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
-using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
@@ -11,13 +10,15 @@ namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
 
 public sealed class OpenCodeHarnessTests
 {
-    private static OpenCodeHarness CreateHarness() =>
+    private static OpenCodeHarness CreateHarness() => new();
+
+    private static OpenCodeHarnessRuntime CreateRuntime() =>
         new(
             httpClientFactory: new TestHttpClientFactory(),
             portAllocator: new PortAllocator(10000, 10099),
             options: new FleetOptions(),
             scopeFactory: Substitute.For<IServiceScopeFactory>(),
-            logger: NullLogger<OpenCodeHarness>.Instance,
+            logger: NullLogger<OpenCodeHarnessRuntime>.Instance,
             loggerFactory: NullLoggerFactory.Instance);
 
     [Fact]
@@ -114,9 +115,9 @@ public sealed class OpenCodeHarnessTests
     {
         // This test relies on "opencode" NOT being on the PATH (expected in CI / dev without OpenCode).
         // If opencode IS installed, the test is skipped.
-        var harness = CreateHarness();
+        var runtime = CreateRuntime();
 
-        var result = await harness.CheckAvailabilityAsync(CancellationToken.None);
+        var result = await runtime.CheckAvailabilityAsync(CancellationToken.None);
 
         // We can only assert the shape — whether it's available depends on the environment.
         result.ShouldNotBeNull();

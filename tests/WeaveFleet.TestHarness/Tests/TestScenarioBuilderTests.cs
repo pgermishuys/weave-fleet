@@ -13,7 +13,7 @@ public sealed class TestScenarioBuilderTests
         scenario.PromptResponses.ShouldBeEmpty();
         scenario.ThrowOnSpawn.ShouldBeFalse();
         scenario.ThrowOnSendPrompt.ShouldBeFalse();
-        scenario.InitialStatus.ShouldBe(HarnessInstanceStatus.Idle);
+        scenario.InitialStatus.ShouldBe(HarnessSessionStatus.Idle);
     }
 
     [Fact]
@@ -159,21 +159,21 @@ public sealed class TestScenarioBuilderTests
     public void WithInitialStatus_sets_status()
     {
         var scenario = new TestScenarioBuilder()
-            .WithInitialStatus(HarnessInstanceStatus.Running)
+            .WithInitialStatus(HarnessSessionStatus.Running)
             .Build();
 
-        scenario.InitialStatus.ShouldBe(HarnessInstanceStatus.Running);
+        scenario.InitialStatus.ShouldBe(HarnessSessionStatus.Running);
     }
 
-    // ── TestHarness integration ──────────────────────────────────────────────
+    // ── TestHarnessRuntime integration ──────────────────────────────────────────
 
     [Fact]
     public async Task TestHarness_Configure_fluent_sets_scenario()
     {
-        var harness = new TestHarness();
+        var harness = new TestHarnessRuntime();
         harness.Configure(b => b.WithUserMessage("msg-1", "Test message"));
 
-        var instance = (TestHarnessInstance)await harness.SpawnAsync(
+        var instance = (TestHarnessSession)await harness.SpawnAsync(
             new WeaveFleet.Application.Harnesses.HarnessSpawnOptions
             {
                 SessionId = "sess-1",
@@ -190,7 +190,7 @@ public sealed class TestScenarioBuilderTests
     [Fact]
     public async Task TestHarness_SpawnAsync_throws_when_configured()
     {
-        var harness = new TestHarness();
+        var harness = new TestHarnessRuntime();
         harness.Configure(b => b.WithSpawnFailure());
 
         await Should.ThrowAsync<InvalidOperationException>(() =>
@@ -207,7 +207,7 @@ public sealed class TestScenarioBuilderTests
     [Fact]
     public async Task TestHarness_CheckAvailabilityAsync_always_available()
     {
-        var harness = new TestHarness();
+        var harness = new TestHarnessRuntime();
         var result = await harness.CheckAvailabilityAsync(CancellationToken.None);
 
         result.Available.ShouldBeTrue();
@@ -221,3 +221,4 @@ public sealed class TestScenarioBuilderTests
         harness.Type.ShouldBe("opencode");
     }
 }
+

@@ -9,12 +9,7 @@ namespace WeaveFleet.Infrastructure.Tests.Harnesses.ClaudeCode;
 
 public sealed class ClaudeCodeHarnessTests
 {
-    private static ClaudeCodeHarness CreateHarness() =>
-        new(
-            options: new FleetOptions(),
-            scopeFactory: Substitute.For<IServiceScopeFactory>(),
-            logger: NullLogger<ClaudeCodeHarness>.Instance,
-            loggerFactory: NullLoggerFactory.Instance);
+    private static ClaudeCodeHarness CreateHarness() => new();
 
     [Fact]
     public void Type_ReturnsClaudeCode()
@@ -110,13 +105,13 @@ public sealed class ClaudeCodeHarnessTests
         // Use a non-existent binary path to simulate missing claude
         var options = new FleetOptions();
         options.ClaudeCode.BinaryPath = "/nonexistent/path/to/claude-definitely-not-here";
-        var harness = new ClaudeCodeHarness(
+        var runtime = new ClaudeCodeHarnessRuntime(
             options: options,
             scopeFactory: Substitute.For<IServiceScopeFactory>(),
-            logger: NullLogger<ClaudeCodeHarness>.Instance,
+            logger: NullLogger<ClaudeCodeHarnessRuntime>.Instance,
             loggerFactory: NullLoggerFactory.Instance);
 
-        var result = await harness.CheckAvailabilityAsync(CancellationToken.None);
+        var result = await runtime.CheckAvailabilityAsync(CancellationToken.None);
 
         result.Available.ShouldBeFalse();
         result.Reason.ShouldNotBeNull();

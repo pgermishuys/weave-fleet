@@ -32,6 +32,9 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
     /// <summary>The <see cref="TestHarness.TestHarness"/> singleton registered in this factory's DI container.</summary>
     public TestHarness.TestHarness TestHarness { get; } = new();
 
+    /// <summary>The <see cref="TestHarness.TestHarnessRuntime"/> singleton registered in this factory's DI container.</summary>
+    public TestHarness.TestHarnessRuntime TestHarnessRuntime { get; } = new();
+
     /// <summary>
     /// The base URL the Kestrel server listens on (e.g. "http://127.0.0.1:54321").
     /// Only available after the host has been started (triggered by calling <see cref="EnsureStartedAsync"/>).
@@ -88,8 +91,16 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
             foreach (var d in harnessDescriptors)
                 services.Remove(d);
 
-            // ── Register the TestHarness singleton ────────────────────────────
+            // ── Remove all production IHarnessRuntime registrations ──────────
+            var harnessRuntimeDescriptors = services
+                .Where(d => d.ServiceType == typeof(IHarnessRuntime))
+                .ToList();
+            foreach (var d in harnessRuntimeDescriptors)
+                services.Remove(d);
+
+            // ── Register the TestHarness singleton for both interfaces ────────
             services.AddSingleton<IHarness>(TestHarness);
+            services.AddSingleton<IHarnessRuntime>(TestHarnessRuntime);
 
             // ── Remove PortAllocator (not needed without OpenCode) ────────────
             var portAllocatorDescriptors = services

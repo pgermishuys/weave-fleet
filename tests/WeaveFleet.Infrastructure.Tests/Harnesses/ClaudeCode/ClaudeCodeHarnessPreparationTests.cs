@@ -54,12 +54,12 @@ public sealed class ClaudeCodeHarnessPreparationTests
         secondResult.ShouldBeOfType<RuntimePreparation.Ready>().Artifacts.GetType().Name.ShouldBe("ClaudeCodeLaunchArtifacts");
     }
 
-    private static ClaudeCodeHarness CreateHarness()
+    private static ClaudeCodeHarnessRuntime CreateHarness()
     {
-        return new ClaudeCodeHarness(
+        return new ClaudeCodeHarnessRuntime(
             options: new FleetOptions(),
             scopeFactory: Substitute.For<IServiceScopeFactory>(),
-            logger: NullLogger<ClaudeCodeHarness>.Instance,
+            logger: NullLogger<ClaudeCodeHarnessRuntime>.Instance,
             loggerFactory: NullLoggerFactory.Instance);
     }
 

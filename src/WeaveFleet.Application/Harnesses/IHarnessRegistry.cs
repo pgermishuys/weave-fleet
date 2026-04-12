@@ -12,6 +12,9 @@ public interface IHarnessRegistry
     /// <summary>Find a harness by its type identifier, or null if not registered.</summary>
     IHarness? GetByType(string harnessType);
 
+    /// <summary>Find the runtime for a harness type, or null if not registered.</summary>
+    IHarnessRuntime? GetRuntimeByType(string harnessType);
+
     /// <summary>Check availability of all harnesses (for API response).</summary>
     Task<IReadOnlyList<HarnessInfo>> GetAvailabilityAsync(CancellationToken ct);
 }

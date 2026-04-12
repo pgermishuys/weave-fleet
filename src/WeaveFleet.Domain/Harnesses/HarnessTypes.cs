@@ -3,8 +3,8 @@ using System.Text.Json.Serialization;
 
 namespace WeaveFleet.Domain.Harnesses;
 
-/// <summary>Lifecycle status of a running harness instance.</summary>
-public enum HarnessInstanceStatus
+/// <summary>Lifecycle status of a running harness session.</summary>
+public enum HarnessSessionStatus
 {
     Starting,
     Running,

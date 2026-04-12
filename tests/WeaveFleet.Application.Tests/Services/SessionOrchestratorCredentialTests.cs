@@ -16,7 +16,8 @@ public sealed class SessionOrchestratorCredentialTests
 {
     private readonly IHarnessRegistry _harnessRegistry = Substitute.For<IHarnessRegistry>();
     private readonly IHarness _harness = Substitute.For<IHarness>();
-    private readonly IHarnessInstance _harnessInstance = Substitute.For<IHarnessInstance>();
+    private readonly IHarnessRuntime _harnessRuntime = Substitute.For<IHarnessRuntime>();
+    private readonly IHarnessSession _harnessInstance = Substitute.For<IHarnessSession>();
     private readonly ISessionRepository _sessionRepository = Substitute.For<ISessionRepository>();
     private readonly ISessionSourceUsageRepository _sessionSourceUsageRepository = Substitute.For<ISessionSourceUsageRepository>();
     private readonly ISessionCallbackRepository _sessionCallbackRepository = Substitute.For<ISessionCallbackRepository>();
@@ -61,12 +62,13 @@ public sealed class SessionOrchestratorCredentialTests
 
         _credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
         _harnessRegistry.GetByType("opencode").Returns(_harness);
+        _harnessRegistry.GetRuntimeByType("opencode").Returns(_harnessRuntime);
         _harnessInstance.InstanceId.Returns("inst-1");
         _harnessInstance.HarnessType.Returns("opencode");
-        _harnessInstance.Status.Returns(HarnessInstanceStatus.Running);
+        _harnessInstance.Status.Returns(HarnessSessionStatus.Running);
         _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = true });
-        _harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>()).Returns(_harnessInstance);
-        _harness.ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>()).Returns(_harnessInstance);
+        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>()).Returns(_harnessInstance);
+        _harnessRuntime.ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>()).Returns(_harnessInstance);
         _projectRepository.ListAsync().Returns([
             new Project
             {
@@ -114,7 +116,7 @@ public sealed class SessionOrchestratorCredentialTests
         RuntimePreparationContext? capturedContext = null;
 
         _credentialStore.GetDecryptedCredentialsAsync("participant-1").Returns(credentials);
-        _harness.PrepareRuntimeAsync(Arg.Do<RuntimePreparationContext>(context => capturedContext = context), Arg.Any<CancellationToken>())
+        _harnessRuntime.PrepareRuntimeAsync(Arg.Do<RuntimePreparationContext>(context => capturedContext = context), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts())));
 
         var result = await _sut.CreateSessionAsync(new CreateSessionRequest
@@ -129,7 +131,7 @@ public sealed class SessionOrchestratorCredentialTests
         capturedContext.UserId.ShouldBe("participant-1");
         capturedContext.UserCredentials.ShouldBeSameAs(credentials);
         capturedContext.ModelId.ShouldBeNull();
-        capturedContext.WorkingDirectory.ShouldBe(tempDirectory.Path);
+        capturedContext.WorkingDirectory.ShouldBe(WorkspaceRootService.CanonicalizePath(tempDirectory.Path));
     }
 
     [Fact]
@@ -137,7 +139,7 @@ public sealed class SessionOrchestratorCredentialTests
     {
         using var tempDirectory = new TempDirectory();
 
-        _harness.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
+        _harnessRuntime.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<RuntimePreparation>(
                 new RuntimePreparation.NotReady([
                     new RuntimePreparationError(
@@ -154,7 +156,7 @@ public sealed class SessionOrchestratorCredentialTests
         result.IsFailure.ShouldBeTrue();
         result.Error.Code.ShouldBe("Validation.Session.NotReady");
         result.Error.Description.ShouldBe("An Anthropic API key is required to use this model.");
-        await _harness.DidNotReceive().SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
+        await _harnessRuntime.DidNotReceive().SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
         await _sessionRepository.DidNotReceive().InsertAsync(Arg.Any<Session>());
     }
 
@@ -164,7 +166,7 @@ public sealed class SessionOrchestratorCredentialTests
         using var tempDirectory = new TempDirectory();
         var artifacts = new StubLaunchArtifacts();
 
-        _harness.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
+        _harnessRuntime.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(artifacts)));
 
         var result = await _sut.CreateSessionAsync(new CreateSessionRequest
@@ -173,7 +175,7 @@ public sealed class SessionOrchestratorCredentialTests
         });
 
         result.IsSuccess.ShouldBeTrue();
-        await _harness.Received(1).SpawnAsync(
+        await _harnessRuntime.Received(1).SpawnAsync(
             Arg.Is<HarnessSpawnOptions>(options => ReferenceEquals(options.LaunchArtifacts, artifacts)),
             Arg.Any<CancellationToken>());
     }
@@ -210,7 +212,7 @@ public sealed class SessionOrchestratorCredentialTests
             UserId = "owner-1"
         });
         _credentialStore.GetDecryptedCredentialsAsync("owner-1").Returns(ownerCredentials);
-        _harness.PrepareRuntimeAsync(Arg.Do<RuntimePreparationContext>(context => capturedContext = context), Arg.Any<CancellationToken>())
+        _harnessRuntime.PrepareRuntimeAsync(Arg.Do<RuntimePreparationContext>(context => capturedContext = context), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(artifacts)));
 
         var result = await _sut.ResumeSessionAsync("session-1");
@@ -221,13 +223,13 @@ public sealed class SessionOrchestratorCredentialTests
         capturedContext.UserId.ShouldBe("owner-1");
         capturedContext.UserCredentials.ShouldBeSameAs(ownerCredentials);
         capturedContext.WorkingDirectory.ShouldBe("/tmp/workspace");
-        await _harness.Received(1).ResumeAsync(
+        await _harnessRuntime.Received(1).ResumeAsync(
             Arg.Is<HarnessResumeOptions>(options =>
                 options.OwnerUserId == "owner-1" &&
                 options.ResumeToken == "resume-token-1" &&
                 ReferenceEquals(options.LaunchArtifacts, artifacts)),
             Arg.Any<CancellationToken>());
-        await _harness.DidNotReceive().SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
+        await _harnessRuntime.DidNotReceive().SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -254,7 +256,7 @@ public sealed class SessionOrchestratorCredentialTests
             CreatedAt = "2026-01-01",
             UserId = "owner-2"
         });
-        _harness.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
+        _harnessRuntime.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<RuntimePreparation>(
                 new RuntimePreparation.NotReady([
                     new RuntimePreparationError("MissingCredential", "Add credentials before resuming.")
@@ -265,8 +267,8 @@ public sealed class SessionOrchestratorCredentialTests
         result.IsFailure.ShouldBeTrue();
         result.Error.Code.ShouldBe("Validation.Session.NotReady");
         result.Error.Description.ShouldBe("Add credentials before resuming.");
-        await _harness.DidNotReceive().ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>());
-        await _harness.DidNotReceive().SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
+        await _harnessRuntime.DidNotReceive().ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>());
+        await _harnessRuntime.DidNotReceive().SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -296,18 +298,18 @@ public sealed class SessionOrchestratorCredentialTests
             UserId = "owner-3"
         });
         _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = false });
-        _harness.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
+        _harnessRuntime.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(artifacts)));
 
         var result = await _sut.ResumeSessionAsync("session-3");
 
         result.IsSuccess.ShouldBeTrue();
-        await _harness.Received(1).SpawnAsync(
+        await _harnessRuntime.Received(1).SpawnAsync(
             Arg.Is<HarnessSpawnOptions>(options =>
                 options.OwnerUserId == "owner-3" &&
                 ReferenceEquals(options.LaunchArtifacts, artifacts)),
             Arg.Any<CancellationToken>());
-        await _harness.DidNotReceive().ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>());
+        await _harnessRuntime.DidNotReceive().ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>());
     }
 
     private static UserCredential CreateCredential(string userId, string credentialNamespace, string kind, string decryptedValue)
@@ -348,3 +350,4 @@ public sealed class SessionOrchestratorCredentialTests
 
     private sealed record StubLaunchArtifacts : RuntimeLaunchArtifacts;
 }
+

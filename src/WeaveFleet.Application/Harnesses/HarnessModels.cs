@@ -14,7 +14,7 @@ public sealed record HarnessResumeOptions
     public string? ProjectName { get; init; }
 
     /// <summary>
-    /// Opaque launch artifacts produced by <see cref="IHarness.PrepareRuntimeAsync"/>.
+    /// Opaque launch artifacts produced by <see cref="IHarnessRuntime.PrepareRuntimeAsync"/>.
     /// Passed through from the orchestrator without inspection.
     /// Each harness implementation casts this to its own internal subclass in <c>ResumeAsync</c>.
     /// Null in local mode (no cloud credentials required).
@@ -34,7 +34,7 @@ public sealed record HarnessSpawnOptions
     public string? ProjectName { get; init; }
 
     /// <summary>
-    /// Opaque launch artifacts produced by <see cref="IHarness.PrepareRuntimeAsync"/>.
+    /// Opaque launch artifacts produced by <see cref="IHarnessRuntime.PrepareRuntimeAsync"/>.
     /// Passed through from the orchestrator without inspection.
     /// Each harness implementation casts this to its own internal subclass in <c>SpawnAsync</c>.
     /// Null in local mode (no cloud credentials required).
@@ -65,7 +65,7 @@ public sealed record HarnessModel(string Id, string Name);
 // ── Runtime preparation ─────────────────────────────────────────────────────
 
 /// <summary>
-/// Input context provided to <see cref="IHarness.PrepareRuntimeAsync"/>.
+/// Input context provided to <see cref="IHarnessRuntime.PrepareRuntimeAsync"/>.
 /// The harness uses this to internally resolve, validate, and materialise credentials
 /// into runtime launch artifacts. The orchestrator never inspects the contents.
 /// </summary>
@@ -88,7 +88,7 @@ public sealed record RuntimePreparationContext
 }
 
 /// <summary>
-/// Opaque launch artifacts produced by a successful <see cref="IHarness.PrepareRuntimeAsync"/>.
+/// Opaque launch artifacts produced by a successful <see cref="IHarnessRuntime.PrepareRuntimeAsync"/>.
 /// The orchestrator passes this through to <see cref="HarnessSpawnOptions"/>/<see cref="HarnessResumeOptions"/>
 /// without reading or interpreting its contents.
 /// Each harness implementation subclasses this to carry its own runtime data (env vars, config file paths, etc.).
@@ -108,7 +108,7 @@ public sealed record RuntimePreparationError(
     string? Guidance = null);
 
 /// <summary>
-/// Discriminated result of <see cref="IHarness.PrepareRuntimeAsync"/>.
+/// Discriminated result of <see cref="IHarnessRuntime.PrepareRuntimeAsync"/>.
 /// Either <see cref="Ready"/> (with opaque launch artifacts) or <see cref="NotReady"/> (with product-level errors).
 /// </summary>
 public abstract record RuntimePreparation

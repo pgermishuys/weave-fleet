@@ -18,12 +18,12 @@ using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
 
 /// <summary>
-/// Tests that <see cref="OpenCodeHarnessInstance"/> persists messages to the database
+/// Tests that <see cref="OpenCodeHarnessSession"/> persists messages to the database
 /// via <see cref="IMessageRepository"/> when processing SSE events in SubscribeAsync.
 /// These tests were relocated from HarnessEventRelayTests after the persistence logic
 /// was moved from the relay into the instance (instance-owned persistence pattern).
 /// </summary>
-public sealed class OpenCodeHarnessInstancePersistenceTests
+public sealed class OpenCodeHarnessSessionPersistenceTests
 {
     // -----------------------------------------------------------------------
     // Helpers
@@ -118,10 +118,10 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         });
 
     /// <summary>
-    /// Creates an <see cref="OpenCodeHarnessInstance"/> backed by a fake SSE HTTP handler
+    /// Creates an <see cref="OpenCodeHarnessSession"/> backed by a fake SSE HTTP handler
     /// that streams the provided SSE lines.
     /// </summary>
-    private static async Task<(OpenCodeHarnessInstance Instance, IMessageRepository MessageRepo)>
+    private static async Task<(OpenCodeHarnessSession Instance, IMessageRepository MessageRepo)>
         CreateInstanceWithSseLines(
             string fleetSessionId,
             IEnumerable<string> sseLines,
@@ -145,7 +145,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
         const int allocatedPort = 0; // not used in these tests
 
-        var instance = new OpenCodeHarnessInstance(
+        var instance = new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: fleetSessionId,
             httpClient: ocHttpClient,
@@ -155,7 +155,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             workingDirectory: "/tmp",
             shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
-            logger: NullLogger<OpenCodeHarnessInstance>.Instance,
+            logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: TestUserContext.DefaultUserId);
 
         return (instance, messageRepo);
@@ -171,7 +171,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
     /// OperationCanceledException from the CT is expected and silently ignored.
     /// </summary>
     private static async Task<List<HarnessEvent>> ConsumeEventsAsync(
-        OpenCodeHarnessInstance instance,
+        OpenCodeHarnessSession instance,
         CancellationToken ct)
     {
         var events = new List<HarnessEvent>();
@@ -552,7 +552,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         var ocHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
         var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
 
-        var instance = new OpenCodeHarnessInstance(
+        var instance = new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: "fleet-delegation-1",
             httpClient: ocHttpClient,
@@ -562,7 +562,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             workingDirectory: "/tmp",
             shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
-            logger: NullLogger<OpenCodeHarnessInstance>.Instance,
+            logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: "user-1");
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -626,13 +626,15 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         sessionRepo.GetByHarnessIdAsync("child-1").Returns(_ => persistedChildSession);
         var harnessRegistry = Substitute.For<IHarnessRegistry>();
         var harness = Substitute.For<IHarness>();
+        var harnessRuntime = Substitute.For<IHarnessRuntime>();
         harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = true });
-        var childHarnessInstance = Substitute.For<IHarnessInstance>();
+        var childHarnessInstance = Substitute.For<IHarnessSession>();
         childHarnessInstance.InstanceId.Returns("inst-child");
         childHarnessInstance.HarnessType.Returns("opencode");
-        childHarnessInstance.Status.Returns(HarnessInstanceStatus.Running);
-        harness.ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>()).Returns(childHarnessInstance);
+        childHarnessInstance.Status.Returns(HarnessSessionStatus.Running);
+        harnessRuntime.ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>()).Returns(childHarnessInstance);
         harnessRegistry.GetByType("opencode").Returns(harness);
+        harnessRegistry.GetRuntimeByType("opencode").Returns(harnessRuntime);
         var instanceRepo = Substitute.For<IInstanceRepository>();
         instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
         sessionRepo.InsertAsync(Arg.Any<Session>())
@@ -650,7 +652,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         var sessionSourceUsageRepo = Substitute.For<ISessionSourceUsageRepository>();
         var credentialStore = Substitute.For<ICredentialStore>();
         credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
-        harness.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
+        harnessRuntime.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts())));
         workspaceRootRepo.ListAsync().Returns([
             new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
@@ -771,7 +773,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         var ocHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
         var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
 
-        var instance = new OpenCodeHarnessInstance(
+        var instance = new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: "fleet-delegation-1",
             httpClient: ocHttpClient,
@@ -781,7 +783,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             workingDirectory: "/tmp",
             shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
-            logger: NullLogger<OpenCodeHarnessInstance>.Instance,
+            logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: "user-1");
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -829,13 +831,15 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         sessionRepo.GetByHarnessIdAsync("child-1").Returns(_ => persistedChildSession);
         var harnessRegistry = Substitute.For<IHarnessRegistry>();
         var harness = Substitute.For<IHarness>();
+        var harnessRuntime = Substitute.For<IHarnessRuntime>();
         harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = true });
-        var childHarnessInstance = Substitute.For<IHarnessInstance>();
+        var childHarnessInstance = Substitute.For<IHarnessSession>();
         childHarnessInstance.InstanceId.Returns("inst-child");
         childHarnessInstance.HarnessType.Returns("opencode");
-        childHarnessInstance.Status.Returns(HarnessInstanceStatus.Running);
-        harness.ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>()).Returns(childHarnessInstance);
+        childHarnessInstance.Status.Returns(HarnessSessionStatus.Running);
+        harnessRuntime.ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>()).Returns(childHarnessInstance);
         harnessRegistry.GetByType("opencode").Returns(harness);
+        harnessRegistry.GetRuntimeByType("opencode").Returns(harnessRuntime);
         var instanceRepo = Substitute.For<IInstanceRepository>();
         instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
         sessionRepo.InsertAsync(Arg.Any<Session>())
@@ -852,7 +856,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         var sessionSourceUsageRepo = Substitute.For<ISessionSourceUsageRepository>();
         var credentialStore = Substitute.For<ICredentialStore>();
         credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
-        harness.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
+        harnessRuntime.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts())));
 
         delegationRepo.GetByParentToolCallIdAsync("fleet-delegation-1", "tool-1")
@@ -952,7 +956,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         var ocHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
         var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
 
-        var instance = new OpenCodeHarnessInstance(
+        var instance = new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: "fleet-delegation-1",
             httpClient: ocHttpClient,
@@ -962,7 +966,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             workingDirectory: "/tmp",
             shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
-            logger: NullLogger<OpenCodeHarnessInstance>.Instance,
+            logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: "user-1");
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -1022,7 +1026,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
         var ocHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
         var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
 
-        var instance = new OpenCodeHarnessInstance(
+        var instance = new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: fleetSessionId,
             httpClient: ocHttpClient,
@@ -1032,7 +1036,7 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
             workingDirectory: "/tmp",
             shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
-            logger: NullLogger<OpenCodeHarnessInstance>.Instance,
+            logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: "user-1",
             openCodeSessionId: "oc-parent");
 
@@ -1071,3 +1075,4 @@ public sealed class OpenCodeHarnessInstancePersistenceTests
 
     private sealed record StubLaunchArtifacts : RuntimeLaunchArtifacts;
 }
+

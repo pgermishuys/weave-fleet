@@ -140,14 +140,14 @@ public sealed class OpenCodeHarnessPreparationTests
         environmentVariables["ANTHROPIC_API_KEY"].ShouldBe("first-secret");
     }
 
-    private static OpenCodeHarness CreateHarness()
+    private static OpenCodeHarnessRuntime CreateHarness()
     {
-        return new OpenCodeHarness(
+        return new OpenCodeHarnessRuntime(
             httpClientFactory: new TestHttpClientFactory(),
             portAllocator: new PortAllocator(10000, 10099),
             options: new FleetOptions(),
             scopeFactory: Substitute.For<IServiceScopeFactory>(),
-            logger: NullLogger<OpenCodeHarness>.Instance,
+            logger: NullLogger<OpenCodeHarnessRuntime>.Instance,
             loggerFactory: NullLoggerFactory.Instance);
     }
 

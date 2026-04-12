@@ -167,7 +167,7 @@ internal sealed class OpenCodeHttpClient
     /// first property in the OpenCode API response, which causes STJ to fall back to the base
     /// type (Role = "unknown") instead of the concrete <see cref="OpenCodeUserMessage"/> or
     /// <see cref="OpenCodeAssistantMessage"/> subtypes. This mirrors the workaround in
-    /// <see cref="OpenCodeHarnessInstance.TryPersistMessageAsync"/>.
+    /// <see cref="OpenCodeHarnessSession.TryPersistMessageAsync"/>.
     /// </remarks>
     public async Task<IReadOnlyList<OpenCodeMessageWithParts>> GetMessagesAsync(
         string sessionId,
@@ -247,7 +247,7 @@ internal sealed class OpenCodeHttpClient
     /// <summary>
     /// Deserializes an array of message parts, manually dispatching on the <c>type</c>
     /// discriminator to avoid STJ polymorphism ordering issues.
-    /// Mirrors the pattern in <see cref="OpenCodeHarnessInstance.TryPersistPartAsync"/>.
+    /// Mirrors the pattern in <see cref="OpenCodeHarnessSession.TryPersistPartAsync"/>.
     /// </summary>
     internal static List<OpenCodeMessagePart> DeserializeParts(JsonElement partsArray)
     {

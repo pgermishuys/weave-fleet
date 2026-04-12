@@ -169,7 +169,7 @@ public abstract class BenchmarkTestBase : E2ETestBase
             _ = Task.Run(async () =>
             {
                 var partCounter = 0;
-                var harnessInstance = (TestHarnessInstance)tracker.Get(capturedInstanceId)!;
+                var harnessInstance = (TestHarnessSession)tracker.Get(capturedInstanceId)!;
 
                 while (!cts.Token.IsCancellationRequested)
                 {
@@ -224,7 +224,7 @@ public abstract class BenchmarkTestBase : E2ETestBase
 
         foreach (var (sessionId, instanceId) in sessions)
         {
-            var harnessInstance = (TestHarnessInstance)tracker.Get(instanceId)!;
+            var harnessInstance = (TestHarnessSession)tracker.Get(instanceId)!;
 
             for (var j = 0; j < eventsPerSession; j++)
             {
@@ -303,3 +303,4 @@ public abstract class BenchmarkTestBase : E2ETestBase
         return string.IsNullOrWhiteSpace(sanitized) ? "unknown" : sanitized;
     }
 }
+

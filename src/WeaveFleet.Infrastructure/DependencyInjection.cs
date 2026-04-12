@@ -154,15 +154,20 @@ public static class DependencyInjection
         // PortAllocator is a standalone singleton seeded from FleetOptions.
         services.AddSingleton(new PortAllocator(options.HarnessPortRangeStart, options.HarnessPortRangeEnd));
 
-        // Named HttpClient used by OpenCodeHarness.SpawnAsync to create per-instance clients.
+        // Named HttpClient used by OpenCodeHarnessRuntime.SpawnAsync to create per-instance clients.
         services.AddHttpClient("OpenCode");
 
-        // IHarness registration — OpenCodeHarness is resolved as IHarness by HarnessRegistry.
-        services.AddSingleton<IHarness, OpenCodeHarness>();
+        // Register OpenCodeHarness (descriptor) and OpenCodeHarnessRuntime (provisioning) as separate singletons.
+        services.AddSingleton<OpenCodeHarness>();
+        services.AddSingleton<IHarness>(sp => sp.GetRequiredService<OpenCodeHarness>());
+        services.AddSingleton<OpenCodeHarnessRuntime>();
+        services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<OpenCodeHarnessRuntime>());
 
-        // Claude Code harness — singleton to match HarnessRegistry lifetime.
-        // No port allocator or named HttpClient needed (stdio-based).
-        services.AddSingleton<IHarness, ClaudeCodeHarness>();
+        // Register ClaudeCodeHarness (descriptor) and ClaudeCodeHarnessRuntime (provisioning) as separate singletons.
+        services.AddSingleton<ClaudeCodeHarness>();
+        services.AddSingleton<IHarness>(sp => sp.GetRequiredService<ClaudeCodeHarness>());
+        services.AddSingleton<ClaudeCodeHarnessRuntime>();
+        services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<ClaudeCodeHarnessRuntime>());
 
         return services;
     }

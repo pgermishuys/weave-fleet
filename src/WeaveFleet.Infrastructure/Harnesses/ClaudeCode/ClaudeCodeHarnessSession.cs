@@ -12,10 +12,10 @@ namespace WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 
 /// <summary>
 /// Wraps a Claude Code CLI session for a single Fleet session.
-/// Implements <see cref="IHarnessInstance"/> with full database persistence.
+/// Implements <see cref="IHarnessSession"/> with full database persistence.
 /// Each instance owns its own message persistence — the relay is not involved.
 /// </summary>
-internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
+internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 {
     private static readonly Action<ILogger, string, Exception?> LogSendPrompt =
         LoggerMessage.Define<string>(LogLevel.Debug, new EventId(1, "SendPrompt"),
@@ -44,7 +44,7 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly string _fleetSessionId;
     private readonly string _ownerUserId;
-    private readonly ILogger<ClaudeCodeHarnessInstance> _logger;
+    private readonly ILogger<ClaudeCodeHarnessSession> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IAnalyticsCollector? _analyticsCollector;
     private readonly string? _projectId;
@@ -63,12 +63,12 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
 
     private string? _claudeSessionId;    // captured from init message, used for --resume
     private string? _modelId;             // captured from init or result messages
-    private HarnessInstanceStatus _status = HarnessInstanceStatus.Idle;
+    private HarnessSessionStatus _status = HarnessSessionStatus.Idle;
     private ClaudeCodeProcessManager? _activeProcess;
     private bool _disposed;
 
     /// <summary>Initialises the instance with all required dependencies.</summary>
-    public ClaudeCodeHarnessInstance(
+    public ClaudeCodeHarnessSession(
         string instanceId,
         string fleetSessionId,
         string workingDirectory,
@@ -76,7 +76,7 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
         IReadOnlyDictionary<string, string> environmentVariables,
         TimeSpan shutdownTimeout,
         IServiceScopeFactory scopeFactory,
-        ILogger<ClaudeCodeHarnessInstance> logger,
+        ILogger<ClaudeCodeHarnessSession> logger,
         ILoggerFactory loggerFactory,
         string ownerUserId,
         IAnalyticsCollector? analyticsCollector = null,
@@ -110,10 +110,10 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
     public string? ResumeToken => _claudeSessionId;
 
     /// <inheritdoc />
-    public HarnessInstanceStatus Status => _status;
+    public HarnessSessionStatus Status => _status;
 
     // -----------------------------------------------------------------------
-    // IHarnessInstance
+    // IHarnessSession
     // -----------------------------------------------------------------------
 
     /// <inheritdoc />
@@ -168,7 +168,7 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
             var stdout = await processManager.StartAsync(procOptions, ct).ConfigureAwait(false);
 
             _activeProcess = processManager;
-            _status = HarnessInstanceStatus.Running;
+            _status = HarnessSessionStatus.Running;
 
             // 4. Background pump — fire-and-forget (matches OpenCode pattern)
             _ = Task.Run(() => PumpStdoutAsync(stdout, processManager), CancellationToken.None);
@@ -235,7 +235,7 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
             await _activeProcess.StopAsync(_shutdownTimeout).ConfigureAwait(false);
         }
 
-        _status = HarnessInstanceStatus.Idle;
+        _status = HarnessSessionStatus.Idle;
     }
 
     /// <inheritdoc />
@@ -246,7 +246,7 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
             return Task.FromResult(new HealthCheckResult(true, "Prompt active."));
         }
 
-        return _status is HarnessInstanceStatus.Idle or HarnessInstanceStatus.Stopping
+        return _status is HarnessSessionStatus.Idle or HarnessSessionStatus.Stopping
             ? Task.FromResult(new HealthCheckResult(true, null))
             : Task.FromResult(new HealthCheckResult(false, $"Unexpected status: {_status}"));
     }
@@ -267,7 +267,7 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
     public async Task StopAsync(CancellationToken ct)
     {
         LogStop(_logger, InstanceId, null);
-        _status = HarnessInstanceStatus.Stopping;
+        _status = HarnessSessionStatus.Stopping;
 
         if (_activeProcess is not null)
         {
@@ -275,7 +275,7 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
         }
 
         _eventChannel.Writer.TryComplete();
-        _status = HarnessInstanceStatus.Stopped;
+        _status = HarnessSessionStatus.Stopped;
     }
 
     /// <inheritdoc />
@@ -287,7 +287,7 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
         if (_disposed) return;
         _disposed = true;
 
-        if (_status is not HarnessInstanceStatus.Stopped and not HarnessInstanceStatus.Error)
+        if (_status is not HarnessSessionStatus.Stopped and not HarnessSessionStatus.Error)
         {
             try
             {
@@ -367,7 +367,7 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
                         _ = PersistResumeTokenAsync(result.SessionId);
                     }
 
-                    _status = HarnessInstanceStatus.Idle;
+                    _status = HarnessSessionStatus.Idle;
                 }
 
                 // Emit frontend-compatible events to channel
@@ -380,12 +380,12 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _status = HarnessInstanceStatus.Error;
+            _status = HarnessSessionStatus.Error;
         }
         finally
         {
-            _status = _status is HarnessInstanceStatus.Running
-                ? HarnessInstanceStatus.Idle
+            _status = _status is HarnessSessionStatus.Running
+                ? HarnessSessionStatus.Idle
                 : _status;
 
             await processManager.DisposeAsync().ConfigureAwait(false);
@@ -427,3 +427,4 @@ internal sealed class ClaudeCodeHarnessInstance : IHarnessInstance
         }
     }
 }
+

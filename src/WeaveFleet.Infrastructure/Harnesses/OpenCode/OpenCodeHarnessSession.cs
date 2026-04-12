@@ -12,9 +12,9 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
 /// <summary>
 /// Wraps a running <c>opencode serve</c> process and HTTP client for a single session.
-/// Implements <see cref="IHarnessInstance"/>.
+/// Implements <see cref="IHarnessSession"/>.
 /// </summary>
-internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
+internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 {
     private static readonly Action<ILogger, string, Exception?> LogSendPrompt =
         LoggerMessage.Define<string>(LogLevel.Debug, new EventId(1, "SendPrompt"),
@@ -54,7 +54,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
     private readonly int _allocatedPort;
     private readonly string _workingDirectory;
     private readonly TimeSpan _shutdownTimeout;
-    private readonly ILogger<OpenCodeHarnessInstance> _logger;
+    private readonly ILogger<OpenCodeHarnessSession> _logger;
     private readonly SemaphoreSlim _sessionLock = new(1, 1);
     private readonly IAnalyticsCollector? _analyticsCollector;
     private readonly string? _projectId;
@@ -64,11 +64,11 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
     private readonly string _ownerUserId;
 
     private string? _openCodeSessionId;
-    private HarnessInstanceStatus _status = HarnessInstanceStatus.Starting;
+    private HarnessSessionStatus _status = HarnessSessionStatus.Starting;
     private bool _disposed;
 
     /// <summary>Initialises the instance with all required dependencies.</summary>
-    public OpenCodeHarnessInstance(
+    public OpenCodeHarnessSession(
         string instanceId,
         string fleetSessionId,
         OpenCodeHttpClient httpClient,
@@ -78,7 +78,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
         string workingDirectory,
         TimeSpan shutdownTimeout,
         IServiceScopeFactory scopeFactory,
-        ILogger<OpenCodeHarnessInstance> logger,
+        ILogger<OpenCodeHarnessSession> logger,
         string ownerUserId,
         IAnalyticsCollector? analyticsCollector = null,
         string? projectId = null,
@@ -101,7 +101,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
         _projectName = projectName;
         _openCodeSessionId = openCodeSessionId;
 
-        _status = HarnessInstanceStatus.Idle;
+        _status = HarnessSessionStatus.Idle;
 
         // Subscribe to unexpected process exit
         _processManager.ProcessExited += OnProcessExited;
@@ -117,10 +117,10 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
     public string? ResumeToken => _openCodeSessionId;
 
     /// <inheritdoc />
-    public HarnessInstanceStatus Status => _status;
+    public HarnessSessionStatus Status => _status;
 
     // -----------------------------------------------------------------------
-    // IHarnessInstance
+    // IHarnessSession
     // -----------------------------------------------------------------------
 
     /// <inheritdoc />
@@ -178,7 +178,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
             _workingDirectory,
             ct).ConfigureAwait(false);
 
-        _status = HarnessInstanceStatus.Running;
+        _status = HarnessSessionStatus.Running;
     }
 
     /// <inheritdoc />
@@ -204,7 +204,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
             _workingDirectory,
             ct).ConfigureAwait(false);
 
-        _status = HarnessInstanceStatus.Running;
+        _status = HarnessSessionStatus.Running;
     }
 
     /// <inheritdoc />
@@ -304,7 +304,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
 
         LogAbort(_logger, InstanceId, null);
         await _httpClient.AbortAsync(_openCodeSessionId, _workingDirectory, ct).ConfigureAwait(false);
-        _status = HarnessInstanceStatus.Idle;
+        _status = HarnessSessionStatus.Idle;
     }
 
     /// <inheritdoc />
@@ -376,11 +376,11 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
     /// <inheritdoc />
     public async Task StopAsync(CancellationToken ct)
     {
-        _status = HarnessInstanceStatus.Stopping;
+        _status = HarnessSessionStatus.Stopping;
         LogStop(_logger, InstanceId, null);
 
         await _processManager.StopAsync(_shutdownTimeout).ConfigureAwait(false);
-        _status = HarnessInstanceStatus.Stopped;
+        _status = HarnessSessionStatus.Stopped;
 
         if (_allocatedPort > 0)
         {
@@ -391,7 +391,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
     /// <inheritdoc />
     public async Task DeleteAsync(CancellationToken ct)
     {
-        _status = HarnessInstanceStatus.Stopping;
+        _status = HarnessSessionStatus.Stopping;
         LogStop(_logger, InstanceId, null);
 
         if (_openCodeSessionId is not null)
@@ -408,7 +408,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
         }
 
         await _processManager.StopAsync(_shutdownTimeout).ConfigureAwait(false);
-        _status = HarnessInstanceStatus.Stopped;
+        _status = HarnessSessionStatus.Stopped;
 
         if (_allocatedPort > 0)
         {
@@ -424,7 +424,7 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
 
         _processManager.ProcessExited -= OnProcessExited;
 
-        if (_status is not HarnessInstanceStatus.Stopped and not HarnessInstanceStatus.Error)
+        if (_status is not HarnessSessionStatus.Stopped and not HarnessSessionStatus.Error)
         {
             try
             {
@@ -469,10 +469,10 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
 
     private void OnProcessExited(object? sender, int exitCode)
     {
-        if (_status is HarnessInstanceStatus.Stopping or HarnessInstanceStatus.Stopped) return;
+        if (_status is HarnessSessionStatus.Stopping or HarnessSessionStatus.Stopped) return;
 
         LogProcessExited(_logger, InstanceId, exitCode, null);
-        _status = HarnessInstanceStatus.Error;
+        _status = HarnessSessionStatus.Error;
     }
 
     private async Task PersistResumeTokenAsync(string token)
@@ -714,3 +714,4 @@ internal sealed partial class OpenCodeHarnessInstance : IHarnessInstance
         }
     }
 }
+

@@ -9,7 +9,7 @@ public sealed class HarnessRegistryTests
     [Fact]
     public void GetAll_WhenEmpty_ReturnsEmptyList()
     {
-        var registry = new HarnessRegistry([]);
+        var registry = new HarnessRegistry([], []);
         registry.GetAll().ShouldBeEmpty();
     }
 
@@ -17,7 +17,7 @@ public sealed class HarnessRegistryTests
     public void GetByType_ReturnsMatchingHarness()
     {
         var harness = new FakeHarness("opencode", "OpenCode");
-        var registry = new HarnessRegistry([harness]);
+        var registry = new HarnessRegistry([harness], []);
 
         var found = registry.GetByType("opencode");
         found.ShouldNotBeNull();
@@ -28,7 +28,7 @@ public sealed class HarnessRegistryTests
     public void GetByType_IsCaseInsensitive()
     {
         var harness = new FakeHarness("opencode", "OpenCode");
-        var registry = new HarnessRegistry([harness]);
+        var registry = new HarnessRegistry([harness], []);
 
         registry.GetByType("OpenCode").ShouldNotBeNull();
         registry.GetByType("OPENCODE").ShouldNotBeNull();
@@ -37,16 +37,46 @@ public sealed class HarnessRegistryTests
     [Fact]
     public void GetByType_ReturnsNullWhenNotFound()
     {
-        var registry = new HarnessRegistry([]);
+        var registry = new HarnessRegistry([], []);
         registry.GetByType("nonexistent").ShouldBeNull();
+    }
+
+    [Fact]
+    public void GetRuntimeByType_ReturnsMatchingRuntime()
+    {
+        var runtime = new FakeHarnessRuntime("opencode");
+        var registry = new HarnessRegistry([], [runtime]);
+
+        var found = registry.GetRuntimeByType("opencode");
+        found.ShouldNotBeNull();
+        found.HarnessType.ShouldBe("opencode");
+    }
+
+    [Fact]
+    public void GetRuntimeByType_IsCaseInsensitive()
+    {
+        var runtime = new FakeHarnessRuntime("opencode");
+        var registry = new HarnessRegistry([], [runtime]);
+
+        registry.GetRuntimeByType("OpenCode").ShouldNotBeNull();
+        registry.GetRuntimeByType("OPENCODE").ShouldNotBeNull();
+    }
+
+    [Fact]
+    public void GetRuntimeByType_ReturnsNullWhenNotFound()
+    {
+        var registry = new HarnessRegistry([], []);
+        registry.GetRuntimeByType("nonexistent").ShouldBeNull();
     }
 
     [Fact]
     public async Task GetAvailabilityAsync_AggregatesAllHarnesses()
     {
-        var h1 = new FakeHarness("opencode", "OpenCode", available: true);
-        var h2 = new FakeHarness("claude-code", "Claude Code", available: false, reason: "Binary not found");
-        var registry = new HarnessRegistry([h1, h2]);
+        var h1 = new FakeHarness("opencode", "OpenCode");
+        var h2 = new FakeHarness("claude-code", "Claude Code");
+        var r1 = new FakeHarnessRuntime("opencode", available: true);
+        var r2 = new FakeHarnessRuntime("claude-code", available: false, reason: "Binary not found");
+        var registry = new HarnessRegistry([h1, h2], [r1, r2]);
 
         var results = await registry.GetAvailabilityAsync(CancellationToken.None);
 
@@ -58,16 +88,34 @@ public sealed class HarnessRegistryTests
         results[1].Reason.ShouldBe("Binary not found");
     }
 
-    /// <summary>Minimal fake for testing the registry — NOT a real harness.</summary>
-    private sealed class FakeHarness(
-        string type,
-        string displayName,
-        bool available = true,
-        string? reason = null) : IHarness
+    [Fact]
+    public async Task GetAvailabilityAsync_NoRuntime_ReturnsNotAvailable()
+    {
+        var harness = new FakeHarness("opencode", "OpenCode");
+        var registry = new HarnessRegistry([harness], []);
+
+        var results = await registry.GetAvailabilityAsync(CancellationToken.None);
+
+        results.Count.ShouldBe(1);
+        results[0].Available.ShouldBeFalse();
+        results[0].Reason.ShouldBe("No runtime registered.");
+    }
+
+    /// <summary>Minimal fake descriptor for testing the registry.</summary>
+    private sealed class FakeHarness(string type, string displayName) : IHarness
     {
         public string Type => type;
         public string DisplayName => displayName;
         public HarnessCapabilities Capabilities => new();
+    }
+
+    /// <summary>Minimal fake runtime for testing the registry.</summary>
+    private sealed class FakeHarnessRuntime(
+        string harnessType,
+        bool available = true,
+        string? reason = null) : IHarnessRuntime
+    {
+        public string HarnessType => harnessType;
 
         public Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
             => Task.FromResult(new HarnessAvailability(available, reason));
@@ -75,11 +123,11 @@ public sealed class HarnessRegistryTests
         public Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
             => Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new FakeLaunchArtifacts()));
 
-        public Task<IHarnessInstance> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct)
-            => throw new NotSupportedException("FakeHarness cannot spawn.");
+        public Task<IHarnessSession> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct)
+            => throw new NotSupportedException("FakeHarnessRuntime cannot spawn.");
 
-        public Task<IHarnessInstance> ResumeAsync(HarnessResumeOptions options, CancellationToken ct)
-            => throw new NotSupportedException("FakeHarness cannot resume.");
+        public Task<IHarnessSession> ResumeAsync(HarnessResumeOptions options, CancellationToken ct)
+            => throw new NotSupportedException("FakeHarnessRuntime cannot resume.");
     }
 
     private sealed record FakeLaunchArtifacts : RuntimeLaunchArtifacts;

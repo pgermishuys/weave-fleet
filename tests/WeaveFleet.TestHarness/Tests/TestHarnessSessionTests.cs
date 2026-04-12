@@ -3,7 +3,7 @@ using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.TestHarness.Tests;
 
-public sealed class TestHarnessInstanceTests
+public sealed class TestHarnessSessionTests
 {
     // ── Status transitions ───────────────────────────────────────────────────
 
@@ -11,42 +11,42 @@ public sealed class TestHarnessInstanceTests
     public void Initial_status_is_Idle_by_default()
     {
         var scenario = new TestScenarioBuilder().Build();
-        var instance = new TestHarnessInstance("inst-1", scenario);
+        var instance = new TestHarnessSession("inst-1", scenario);
 
-        instance.Status.ShouldBe(HarnessInstanceStatus.Idle);
+        instance.Status.ShouldBe(HarnessSessionStatus.Idle);
     }
 
     [Fact]
     public void Initial_status_respects_scenario_configuration()
     {
         var scenario = new TestScenarioBuilder()
-            .WithInitialStatus(HarnessInstanceStatus.Starting)
+            .WithInitialStatus(HarnessSessionStatus.Starting)
             .Build();
-        var instance = new TestHarnessInstance("inst-1", scenario);
+        var instance = new TestHarnessSession("inst-1", scenario);
 
-        instance.Status.ShouldBe(HarnessInstanceStatus.Starting);
+        instance.Status.ShouldBe(HarnessSessionStatus.Starting);
     }
 
     [Fact]
     public async Task StopAsync_transitions_to_Stopped()
     {
         var scenario = new TestScenarioBuilder().Build();
-        var instance = new TestHarnessInstance("inst-1", scenario);
+        var instance = new TestHarnessSession("inst-1", scenario);
 
         await instance.StopAsync(CancellationToken.None);
 
-        instance.Status.ShouldBe(HarnessInstanceStatus.Stopped);
+        instance.Status.ShouldBe(HarnessSessionStatus.Stopped);
     }
 
     [Fact]
     public async Task AbortAsync_transitions_to_Idle()
     {
         var scenario = new TestScenarioBuilder().Build();
-        var instance = new TestHarnessInstance("inst-1", scenario);
+        var instance = new TestHarnessSession("inst-1", scenario);
 
         await instance.AbortAsync(CancellationToken.None);
 
-        instance.Status.ShouldBe(HarnessInstanceStatus.Idle);
+        instance.Status.ShouldBe(HarnessSessionStatus.Idle);
     }
 
     // ── SendPromptAsync / SubscribeAsync event flow ──────────────────────────
@@ -59,7 +59,7 @@ public sealed class TestHarnessInstanceTests
             .WithSimpleTextResponse(sessionId, "msg-1", "Hello back!")
             .Build();
 
-        var instance = new TestHarnessInstance(sessionId, scenario);
+        var instance = new TestHarnessSession(sessionId, scenario);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         // Start subscription BEFORE sending prompt so we don't miss events
@@ -81,7 +81,7 @@ public sealed class TestHarnessInstanceTests
     public async Task SendPromptAsync_with_no_configured_response_emits_no_events()
     {
         var scenario = new TestScenarioBuilder().Build(); // no prompt responses
-        var instance = new TestHarnessInstance("sess-1", scenario);
+        var instance = new TestHarnessSession("sess-1", scenario);
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
 
         await instance.SendPromptAsync("Hi", null, CancellationToken.None);
@@ -107,7 +107,7 @@ public sealed class TestHarnessInstanceTests
             .WithSimpleTextResponse(sessionId, "msg-2", "Second response")
             .Build();
 
-        var instance = new TestHarnessInstance(sessionId, scenario);
+        var instance = new TestHarnessSession(sessionId, scenario);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         // Send first prompt and wait for its 6 events to be fully emitted.
@@ -156,7 +156,7 @@ public sealed class TestHarnessInstanceTests
             )
             .Build();
 
-        var instance = new TestHarnessInstance(sessionId, scenario);
+        var instance = new TestHarnessSession(sessionId, scenario);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         // Send prompt (fires in background)
@@ -169,7 +169,7 @@ public sealed class TestHarnessInstanceTests
         await instance.AbortAsync(cts.Token);
 
         // Status should be Idle now (set by AbortAsync)
-        instance.Status.ShouldBe(HarnessInstanceStatus.Idle);
+        instance.Status.ShouldBe(HarnessSessionStatus.Idle);
     }
 
     // ── GetMessagesAsync ─────────────────────────────────────────────────────
@@ -182,7 +182,7 @@ public sealed class TestHarnessInstanceTests
             .WithAssistantMessage("msg-2", "Hi there!")
             .Build();
 
-        var instance = new TestHarnessInstance("sess-1", scenario);
+        var instance = new TestHarnessSession("sess-1", scenario);
         var page = await instance.GetMessagesAsync(null, CancellationToken.None);
 
         page.Messages.Count.ShouldBe(2);
@@ -202,7 +202,7 @@ public sealed class TestHarnessInstanceTests
             .WithUserMessage("msg-3", "C")
             .Build();
 
-        var instance = new TestHarnessInstance("sess-1", scenario);
+        var instance = new TestHarnessSession("sess-1", scenario);
         var page = await instance.GetMessagesAsync(new MessageQuery(Limit: 2), CancellationToken.None);
 
         page.Messages.Count.ShouldBe(2);
@@ -215,7 +215,7 @@ public sealed class TestHarnessInstanceTests
     public async Task CheckHealthAsync_always_returns_healthy()
     {
         var scenario = new TestScenarioBuilder().Build();
-        var instance = new TestHarnessInstance("sess-1", scenario);
+        var instance = new TestHarnessSession("sess-1", scenario);
 
         var result = await instance.CheckHealthAsync(CancellationToken.None);
 
@@ -232,7 +232,7 @@ public sealed class TestHarnessInstanceTests
             .WithSendPromptFailure()
             .Build();
 
-        var instance = new TestHarnessInstance("sess-1", scenario);
+        var instance = new TestHarnessSession("sess-1", scenario);
 
         await Should.ThrowAsync<InvalidOperationException>(() =>
             instance.SendPromptAsync("test", null, CancellationToken.None));
@@ -244,7 +244,7 @@ public sealed class TestHarnessInstanceTests
     public async Task PushEventAsync_delivers_event_to_subscribers()
     {
         var scenario = new TestScenarioBuilder().Build();
-        var instance = new TestHarnessInstance("sess-1", scenario);
+        var instance = new TestHarnessSession("sess-1", scenario);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
 
         var eventsTask = CollectEventsAsync(instance, expectedCount: 1, cts.Token);
@@ -264,7 +264,7 @@ public sealed class TestHarnessInstanceTests
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static async Task<List<HarnessEvent>> CollectEventsAsync(
-        TestHarnessInstance instance,
+        TestHarnessSession instance,
         int expectedCount,
         CancellationToken ct)
     {
@@ -278,3 +278,4 @@ public sealed class TestHarnessInstanceTests
         return events;
     }
 }
+

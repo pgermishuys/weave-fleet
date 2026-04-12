@@ -394,7 +394,7 @@ public sealed class HarnessEventRelayTests
         await relay.StopAsync(CancellationToken.None);
     }
 
-    private sealed class FakeInstance : IHarnessInstance
+    private sealed class FakeInstance : IHarnessSession
     {
         private readonly System.Threading.Channels.Channel<HarnessEvent> _channel =
             System.Threading.Channels.Channel.CreateUnbounded<HarnessEvent>();
@@ -404,7 +404,7 @@ public sealed class HarnessEventRelayTests
         public string InstanceId { get; }
         public string HarnessType => "fake";
         public string? ResumeToken => null;
-        public HarnessInstanceStatus Status => HarnessInstanceStatus.Running;
+        public HarnessSessionStatus Status => HarnessSessionStatus.Running;
 
         public void Emit(HarnessEvent evt) => _channel.Writer.TryWrite(evt);
         public void Complete() => _channel.Writer.Complete();
@@ -435,3 +435,4 @@ public sealed class HarnessEventRelayTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }
+

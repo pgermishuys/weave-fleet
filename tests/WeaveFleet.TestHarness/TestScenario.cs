@@ -28,9 +28,9 @@ public sealed class TestScenario
     public bool ThrowOnSendPrompt { get; init; }
 
     /// <summary>
-    /// Initial lifecycle status of the spawned instance. Defaults to <see cref="HarnessInstanceStatus.Idle"/>.
+    /// Initial lifecycle status of the spawned instance. Defaults to <see cref="HarnessSessionStatus.Idle"/>.
     /// </summary>
-    public HarnessInstanceStatus InitialStatus { get; init; } = HarnessInstanceStatus.Idle;
+    public HarnessSessionStatus InitialStatus { get; init; } = HarnessSessionStatus.Idle;
 }
 
 /// <summary>
@@ -54,7 +54,7 @@ public sealed class TestScenarioBuilder
     private readonly Queue<IReadOnlyList<ScenarioEvent>> _promptResponses = new();
     private bool _throwOnSpawn;
     private bool _throwOnSendPrompt;
-    private HarnessInstanceStatus _initialStatus = HarnessInstanceStatus.Idle;
+    private HarnessSessionStatus _initialStatus = HarnessSessionStatus.Idle;
 
     // ── Pre-loaded messages ──────────────────────────────────────────────────
 
@@ -178,7 +178,7 @@ public sealed class TestScenarioBuilder
     // ── Status ───────────────────────────────────────────────────────────────
 
     /// <summary>Set the initial lifecycle status of the spawned instance.</summary>
-    public TestScenarioBuilder WithInitialStatus(HarnessInstanceStatus status)
+    public TestScenarioBuilder WithInitialStatus(HarnessSessionStatus status)
     {
         _initialStatus = status;
         return this;
@@ -229,3 +229,4 @@ public sealed class PromptResponseBuilder
 
     internal IReadOnlyList<ScenarioEvent> Build() => _events.ToList();
 }
+

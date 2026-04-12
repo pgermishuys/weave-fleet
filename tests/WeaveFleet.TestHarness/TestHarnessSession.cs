@@ -5,19 +5,19 @@ using WeaveFleet.Domain.Harnesses;
 namespace WeaveFleet.TestHarness;
 
 /// <summary>
-/// A mock <see cref="IHarnessInstance"/> that drives test scenarios.
+/// A mock <see cref="IHarnessSession"/> that drives test scenarios.
 /// Pushes pre-configured <see cref="HarnessEvent"/> objects into an internal channel
 /// when <see cref="SendPromptAsync"/> is called; <see cref="SubscribeAsync"/> yields them.
 /// </summary>
-public sealed class TestHarnessInstance : IHarnessInstance
+public sealed class TestHarnessSession : IHarnessSession
 {
     private readonly TestScenario _scenario;
     private readonly Channel<HarnessEvent> _channel;
-    private volatile HarnessInstanceStatus _status;
+    private volatile HarnessSessionStatus _status;
     private CancellationTokenSource? _promptCts;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public TestHarnessInstance(string instanceId, TestScenario scenario)
+    public TestHarnessSession(string instanceId, TestScenario scenario)
     {
         InstanceId = instanceId;
         HarnessType = "opencode";
@@ -29,7 +29,7 @@ public sealed class TestHarnessInstance : IHarnessInstance
             new UnboundedChannelOptions { SingleReader = false, SingleWriter = false });
     }
 
-    // ── IHarnessInstance ────────────────────────────────────────────────────
+    // ── IHarnessSession ────────────────────────────────────────────────────
 
     /// <inheritdoc/>
     public string InstanceId { get; }
@@ -41,7 +41,7 @@ public sealed class TestHarnessInstance : IHarnessInstance
     public string? ResumeToken => null;
 
     /// <inheritdoc/>
-    public HarnessInstanceStatus Status => _status;
+    public HarnessSessionStatus Status => _status;
 
     /// <inheritdoc/>
     public Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct)
@@ -110,7 +110,7 @@ public sealed class TestHarnessInstance : IHarnessInstance
     public Task AbortAsync(CancellationToken ct)
     {
         _promptCts?.Cancel();
-        _status = HarnessInstanceStatus.Idle;
+        _status = HarnessSessionStatus.Idle;
         return Task.CompletedTask;
     }
 
@@ -145,7 +145,7 @@ public sealed class TestHarnessInstance : IHarnessInstance
     /// <inheritdoc/>
     public Task StopAsync(CancellationToken ct)
     {
-        _status = HarnessInstanceStatus.Stopped;
+        _status = HarnessSessionStatus.Stopped;
         _channel.Writer.TryComplete();
         return Task.CompletedTask;
     }
@@ -171,7 +171,7 @@ public sealed class TestHarnessInstance : IHarnessInstance
     /// </summary>
     private async Task EmitEventsAsync(IReadOnlyList<ScenarioEvent> events, CancellationToken ct)
     {
-        _status = HarnessInstanceStatus.Running;
+        _status = HarnessSessionStatus.Running;
         try
         {
             foreach (var scenarioEvent in events)
@@ -191,7 +191,7 @@ public sealed class TestHarnessInstance : IHarnessInstance
         }
         finally
         {
-            _status = HarnessInstanceStatus.Idle;
+            _status = HarnessSessionStatus.Idle;
         }
     }
 
@@ -205,3 +205,4 @@ public sealed class TestHarnessInstance : IHarnessInstance
     /// <summary>Signal the subscription stream is complete (no more events).</summary>
     public void CompleteStream() => _channel.Writer.TryComplete();
 }
+

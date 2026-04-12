@@ -33,7 +33,7 @@ public interface ICredentialStore
 
     /// <summary>
     /// Returns all decrypted <see cref="UserCredential"/> records for the specified user.
-    /// Used by <c>SessionOrchestrator</c> to pass a credential bag to <c>IHarness.PrepareRuntimeAsync()</c>.
+    /// Used by <c>SessionOrchestrator</c> to pass a credential bag to <c>IHarnessRuntime.PrepareRuntimeAsync()</c>.
     /// The returned records include decrypted values — callers must not log them.
     /// </summary>
     Task<IReadOnlyList<UserCredential>> GetDecryptedCredentialsAsync(string userId);

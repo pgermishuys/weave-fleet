@@ -14,7 +14,7 @@ namespace WeaveFleet.Infrastructure.Services;
 /// Subscribes to <see cref="InstanceTracker"/> registration/removal events and maintains
 /// one async-enumerable pump per live instance.
 /// The relay is a pure broadcast service — all message persistence is handled by each
-/// <see cref="IHarnessInstance"/> implementation (instance-owned persistence pattern).
+/// <see cref="IHarnessSession"/> implementation (instance-owned persistence pattern).
 /// </summary>
 public sealed class HarnessEventRelay : BackgroundService
 {
@@ -65,7 +65,7 @@ public sealed class HarnessEventRelay : BackgroundService
             }, TaskScheduler.Default);
     }
 
-    private void OnInstanceRegistered(string instanceId, IHarnessInstance instance)
+    private void OnInstanceRegistered(string instanceId, IHarnessSession instance)
     {
         StartSubscription(instanceId, instance);
     }
@@ -79,7 +79,7 @@ public sealed class HarnessEventRelay : BackgroundService
         }
     }
 
-    private void StartSubscription(string instanceId, IHarnessInstance instance)
+    private void StartSubscription(string instanceId, IHarnessSession instance)
     {
         var cts = CancellationTokenSource.CreateLinkedTokenSource(_stoppingToken);
         if (!_subscriptions.TryAdd(instanceId, cts))
@@ -91,7 +91,7 @@ public sealed class HarnessEventRelay : BackgroundService
         _ = Task.Run(() => PumpAsync(instanceId, instance, cts.Token), cts.Token);
     }
 
-    private async Task PumpAsync(string instanceId, IHarnessInstance instance, CancellationToken ct)
+    private async Task PumpAsync(string instanceId, IHarnessSession instance, CancellationToken ct)
     {
         // Look up fleet session ID with retry to handle the race condition where
         // InstanceTracker.Register() fires before ISessionRepository.InsertAsync() completes.
@@ -163,3 +163,4 @@ public sealed class HarnessEventRelay : BackgroundService
         }
     }
 }
+

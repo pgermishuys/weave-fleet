@@ -41,7 +41,8 @@ public sealed class MultiTenancyTests
     {
         var harnessRegistry = Substitute.For<IHarnessRegistry>();
         var harness = Substitute.For<IHarness>();
-        var harnessInstance = Substitute.For<IHarnessInstance>();
+        var harnessRuntime = Substitute.For<IHarnessRuntime>();
+        var harnessInstance = Substitute.For<IHarnessSession>();
         var sessionRepository = Substitute.For<ISessionRepository>();
         var sessionSourceUsageRepository = Substitute.For<ISessionSourceUsageRepository>();
         var sessionCallbackRepository = Substitute.For<ISessionCallbackRepository>();
@@ -61,11 +62,12 @@ public sealed class MultiTenancyTests
         ]);
 
         harnessRegistry.GetByType("opencode").Returns(harness);
+        harnessRegistry.GetRuntimeByType("opencode").Returns(harnessRuntime);
         harnessInstance.InstanceId.Returns("inst-1");
         harnessInstance.HarnessType.Returns("opencode");
-        harnessInstance.Status.Returns(HarnessInstanceStatus.Running);
-        harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>()).Returns(harnessInstance);
-        harness.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
+        harnessInstance.Status.Returns(HarnessSessionStatus.Running);
+        harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>()).Returns(harnessInstance);
+        harnessRuntime.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts())));
         credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
         projectRepository.ListAsync().Returns([
@@ -145,7 +147,8 @@ public sealed class MultiTenancyTests
     {
         var harnessRegistry = Substitute.For<IHarnessRegistry>();
         var harness = Substitute.For<IHarness>();
-        var harnessInstance = Substitute.For<IHarnessInstance>();
+        var harnessRuntime = Substitute.For<IHarnessRuntime>();
+        var harnessInstance = Substitute.For<IHarnessSession>();
         var sessionRepository = Substitute.For<ISessionRepository>();
         var sessionSourceUsageRepository = Substitute.For<ISessionSourceUsageRepository>();
         var sessionCallbackRepository = Substitute.For<ISessionCallbackRepository>();
@@ -165,11 +168,12 @@ public sealed class MultiTenancyTests
         ]);
 
         harnessRegistry.GetByType("opencode").Returns(harness);
+        harnessRegistry.GetRuntimeByType("opencode").Returns(harnessRuntime);
         harnessInstance.InstanceId.Returns("inst-1");
         harnessInstance.HarnessType.Returns("opencode");
-        harnessInstance.Status.Returns(HarnessInstanceStatus.Running);
-        harness.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>()).Returns(harnessInstance);
-        harness.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
+        harnessInstance.Status.Returns(HarnessSessionStatus.Running);
+        harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>()).Returns(harnessInstance);
+        harnessRuntime.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts())));
         credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
         projectRepository.ListAsync().Returns([
@@ -267,3 +271,4 @@ public sealed class MultiTenancyTests
 
     private sealed record StubLaunchArtifacts : RuntimeLaunchArtifacts;
 }
+

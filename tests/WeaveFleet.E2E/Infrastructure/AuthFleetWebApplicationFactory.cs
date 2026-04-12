@@ -52,6 +52,9 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
     /// <summary>The <see cref="WeaveFleet.TestHarness.TestHarness"/> singleton registered in this factory.</summary>
     public TestHarness.TestHarness TestHarness { get; } = new();
 
+    /// <summary>The <see cref="WeaveFleet.TestHarness.TestHarnessRuntime"/> singleton registered in this factory.</summary>
+    public TestHarness.TestHarnessRuntime TestHarnessRuntime { get; } = new();
+
     /// <summary>
     /// The HTTPS base URL Fleet listens on (e.g. <c>https://127.0.0.1:54321</c>).
     /// Only available after <see cref="EnsureStartedAsync"/> completes.
@@ -117,7 +120,16 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
             foreach (var d in harnessDescriptors)
                 services.Remove(d);
 
+            // ── Remove all production IHarnessRuntime registrations ─────────
+            var harnessRuntimeDescriptors = services
+                .Where(d => d.ServiceType == typeof(IHarnessRuntime))
+                .ToList();
+            foreach (var d in harnessRuntimeDescriptors)
+                services.Remove(d);
+
+            // ── Register TestHarness for both interfaces ────────────────────
             services.AddSingleton<IHarness>(TestHarness);
+            services.AddSingleton<IHarnessRuntime>(TestHarnessRuntime);
 
             // ── Remove PortAllocator ────────────────────────────────────────
             var portAllocatorDescriptors = services

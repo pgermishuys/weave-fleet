@@ -4,9 +4,9 @@ namespace WeaveFleet.Domain.Harnesses;
 
 /// <summary>
 /// A running bridge to an AI agent, one per session.
-/// Implementations are created by <c>IHarness.SpawnAsync</c>.
+/// Implementations are created by <c>IHarnessRuntime.SpawnAsync</c>.
 /// </summary>
-public interface IHarnessInstance : IAsyncDisposable
+public interface IHarnessSession : IAsyncDisposable
 {
     /// <summary>Unique identifier for this running instance.</summary>
     string InstanceId { get; }
@@ -21,7 +21,7 @@ public interface IHarnessInstance : IAsyncDisposable
     string HarnessType { get; }
 
     /// <summary>Current lifecycle status.</summary>
-    HarnessInstanceStatus Status { get; }
+    HarnessSessionStatus Status { get; }
 
     /// <summary>Gracefully stop the agent process.</summary>
     Task StopAsync(CancellationToken ct);

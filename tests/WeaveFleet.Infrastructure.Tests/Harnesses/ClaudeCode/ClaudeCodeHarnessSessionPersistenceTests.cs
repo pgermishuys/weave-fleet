@@ -12,11 +12,11 @@ using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.ClaudeCode;
 
 /// <summary>
-/// Tests that <see cref="ClaudeCodeHarnessInstance"/> persists messages to the database
+/// Tests that <see cref="ClaudeCodeHarnessSession"/> persists messages to the database
 /// via <see cref="IMessageRepository"/> and correctly reads them back through
-/// <see cref="IHarnessInstance.GetMessagesAsync"/>.
+/// <see cref="IHarnessSession.GetMessagesAsync"/>.
 /// </summary>
-public sealed class ClaudeCodeHarnessInstancePersistenceTests
+public sealed class ClaudeCodeHarnessSessionPersistenceTests
 {
     // -----------------------------------------------------------------------
     // Helpers
@@ -58,11 +58,11 @@ public sealed class ClaudeCodeHarnessInstancePersistenceTests
     }
 
     /// <summary>
-    /// Creates a <see cref="ClaudeCodeHarnessInstance"/> wired to the provided scope factory.
+    /// Creates a <see cref="ClaudeCodeHarnessSession"/> wired to the provided scope factory.
     /// Uses a non-existent binary path so that any process-start attempt fails fast;
     /// DB-path tests should not trigger process start.
     /// </summary>
-    private static ClaudeCodeHarnessInstance CreateInstance(
+    private static ClaudeCodeHarnessSession CreateInstance(
         string fleetSessionId,
         IServiceScopeFactory scopeFactory,
         string binaryPath = "/nonexistent/claude-test-binary",
@@ -75,7 +75,7 @@ public sealed class ClaudeCodeHarnessInstancePersistenceTests
             ProcessTimeoutSeconds = 5,
         };
 
-        return new ClaudeCodeHarnessInstance(
+        return new ClaudeCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: fleetSessionId,
             workingDirectory: "/tmp",
@@ -83,7 +83,7 @@ public sealed class ClaudeCodeHarnessInstancePersistenceTests
             environmentVariables: new Dictionary<string, string>(),
             shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
-            logger: NullLogger<ClaudeCodeHarnessInstance>.Instance,
+            logger: NullLogger<ClaudeCodeHarnessSession>.Instance,
             loggerFactory: NullLoggerFactory.Instance,
             ownerUserId: TestUserContext.DefaultUserId,
             analyticsCollector: null,
@@ -425,3 +425,4 @@ public sealed class ClaudeCodeHarnessInstancePersistenceTests
         resolvedRepo.ShouldBeSameAs(sessionRepo);
     }
 }
+

@@ -222,7 +222,7 @@ public sealed class UiResponsivenessBenchmarkTests : BenchmarkTestBase,
         var tracker = GetInstanceTracker();
         foreach (var (sessionId, instanceId) in sessions)
         {
-            var instance = (TestHarnessInstance)tracker.Get(instanceId)!;
+            var instance = (TestHarnessSession)tracker.Get(instanceId)!;
             var msgId = $"seed-msg-{sessionId}";
 
             await instance.PushEventAsync(new HarnessEvent
@@ -261,3 +261,4 @@ public sealed class UiResponsivenessBenchmarkTests : BenchmarkTestBase,
         await Task.Delay(500);
     }
 }
+
