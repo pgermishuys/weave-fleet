@@ -51,6 +51,42 @@ public sealed class UserAuthEndpointTests
     }
 
     [Fact]
+    public async Task WebSocketHandshake_WhenUnauthenticated_ReturnsUnauthorized()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: true);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        using var request = CreateWebSocketHandshakeRequest("http://localhost:3001");
+
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        response.Headers.Location.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task WebSocketHandshake_WhenAuthenticatedWithDisallowedOrigin_ReturnsForbidden()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        using var request = CreateWebSocketHandshakeRequest("https://evil.example");
+
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        response.Headers.Location.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task UpdateConfig_WithoutCsrfToken_IsRejected()
     {
         await using var factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
@@ -207,6 +243,17 @@ public sealed class UserAuthEndpointTests
         }
 
         return null;
+    }
+
+    private static HttpRequestMessage CreateWebSocketHandshakeRequest(string origin)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, "/ws");
+        request.Headers.Add("Connection", "Upgrade");
+        request.Headers.Add("Upgrade", "websocket");
+        request.Headers.Add("Sec-WebSocket-Version", "13");
+        request.Headers.Add("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==");
+        request.Headers.Add("Origin", origin);
+        return request;
     }
 
     private static async Task SeedAuthenticatedUserOnboardingDataAsync(IServiceProvider services)

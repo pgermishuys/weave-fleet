@@ -101,10 +101,12 @@ if (fleetOptions.Auth.Enabled)
         options.SlidingExpiration = true;
         options.LoginPath = "/auth/login";
 
-        // Return 401 for API requests instead of redirecting to IdP
+        // Return 401/403 for API and WebSocket requests instead of redirecting to IdP.
+        // WebSocket handshakes cannot follow HTML login redirects, so redirects surface
+        // in the browser as opaque connection failures rather than actionable auth errors.
         options.Events.OnRedirectToLogin = context =>
         {
-            if (context.Request.Path.StartsWithSegments("/api"))
+            if (IsApiOrWebSocketRequest(context.Request.Path))
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 return Task.CompletedTask;
@@ -114,7 +116,7 @@ if (fleetOptions.Auth.Enabled)
         };
         options.Events.OnRedirectToAccessDenied = context =>
         {
-            if (context.Request.Path.StartsWithSegments("/api"))
+            if (IsApiOrWebSocketRequest(context.Request.Path))
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 return Task.CompletedTask;
@@ -293,6 +295,9 @@ app.UseStaticFiles();    // Serves files from wwwroot/
 app.MapFallbackToFile("index.html");
 
 await app.RunAsync();
+
+static bool IsApiOrWebSocketRequest(PathString path)
+    => path.StartsWithSegments("/api") || path.StartsWithSegments("/ws");
 
 /// <summary>Logger message definitions for startup diagnostics.</summary>
 internal static partial class StartupLog
