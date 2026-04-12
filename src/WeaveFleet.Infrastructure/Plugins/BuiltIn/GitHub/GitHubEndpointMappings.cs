@@ -2,16 +2,21 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Plugins;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 
 internal static class GitHubEndpointMappings
 {
-    public static void MapAuthEndpoints(WebApplication app)
+    public static void MapAuthEndpoints(WebApplication app, FleetOptions fleetOptions)
     {
         var group = app.MapGroup("/api/integrations/github/auth").WithTags("GitHub");
+
+        if (fleetOptions.Auth.Enabled)
+            group.RequireAuthorization("FleetUser");
 
         group.MapPost("/device-code", async (GitHubService gitHubService, CancellationToken ct) =>
         {
@@ -33,12 +38,13 @@ internal static class GitHubEndpointMappings
         group.MapPost("/poll", async (
             PollRequest request,
             GitHubService gitHubService,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.DeviceCode))
                 return Results.BadRequest(new { error = "deviceCode is required." });
 
-            var result = await gitHubService.PollForTokenAsync(request.DeviceCode, ct).ConfigureAwait(false);
+            var result = await gitHubService.PollForTokenAsync(userContext.UserId, request.DeviceCode, ct).ConfigureAwait(false);
 
             return Results.Ok(new
             {
@@ -60,12 +66,13 @@ internal static class GitHubEndpointMappings
         group.MapPost("/token", async (
             ConnectWithTokenRequest request,
             GitHubService gitHubService,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.Token))
                 return Results.BadRequest(new { error = "token is required." });
 
-            var connected = await gitHubService.ConnectWithTokenAsync(request.Token, ct).ConfigureAwait(false);
+            var connected = await gitHubService.ConnectWithTokenAsync(userContext.UserId, request.Token, ct).ConfigureAwait(false);
             if (!connected)
                 return Results.BadRequest(new { error = "Failed to validate GitHub token." });
 
@@ -73,24 +80,27 @@ internal static class GitHubEndpointMappings
         })
         .WithName("GitHubConnectWithToken");
 
-        group.MapDelete("/", async (GitHubService gitHubService, CancellationToken ct) =>
+        group.MapDelete("/", async (GitHubService gitHubService, IUserContext userContext, CancellationToken ct) =>
         {
-            await gitHubService.DisconnectAsync(ct).ConfigureAwait(false);
+            await gitHubService.DisconnectAsync(userContext.UserId, ct).ConfigureAwait(false);
             return Results.NoContent();
         })
         .WithName("GitHubDisconnect");
 
-        group.MapGet("/status", async (GitHubService gitHubService, CancellationToken ct) =>
+        group.MapGet("/status", async (GitHubService gitHubService, IUserContext userContext, CancellationToken ct) =>
         {
-            var connected = await gitHubService.IsConnectedAsync(ct).ConfigureAwait(false);
+            var connected = await gitHubService.IsConnectedAsync(userContext.UserId, ct).ConfigureAwait(false);
             return Results.Ok(new { connected });
         })
         .WithName("GitHubConnectionStatus");
     }
 
-    public static void MapDataEndpoints(WebApplication app)
+    public static void MapDataEndpoints(WebApplication app, FleetOptions fleetOptions)
     {
         var group = app.MapGroup("/api/integrations/github").WithTags("GitHub");
+
+        if (fleetOptions.Auth.Enabled)
+            group.RequireAuthorization("FleetUser");
 
         group.MapGet("/repos", async (
             int? page,
@@ -98,13 +108,14 @@ internal static class GitHubEndpointMappings
             string? sort,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
             var query = BuildQuery(
                 ("page", page?.ToString(CultureInfo.InvariantCulture)),
                 ("per_page", (perPage ?? 100).ToString(CultureInfo.InvariantCulture)),
                 ("sort", sort ?? "updated"));
-            return await ProxyAsync(gitHubService, proxy, $"user/repos{query}", ct: ct).ConfigureAwait(false);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"user/repos{query}", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubListRepos");
 
@@ -117,12 +128,13 @@ internal static class GitHubEndpointMappings
             int? perPage,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
             var pageString = page?.ToString(CultureInfo.InvariantCulture);
             var perPageString = (perPage ?? 30).ToString(CultureInfo.InvariantCulture);
             var query = BuildQuery(("state", state ?? "open"), ("labels", labels), ("page", pageString), ("per_page", perPageString));
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/issues{query}", ct: ct).ConfigureAwait(false);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/issues{query}", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubListIssues");
 
@@ -132,10 +144,11 @@ internal static class GitHubEndpointMappings
             string? q,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
             var query = BuildQuery(("q", q is null ? $"repo:{owner}/{repo}" : $"repo:{owner}/{repo} {q}"), ("type", "issue"));
-            return await ProxyAsync(gitHubService, proxy, $"search/issues{query}", ct: ct).ConfigureAwait(false);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"search/issues{query}", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubSearchIssues");
 
@@ -145,9 +158,10 @@ internal static class GitHubEndpointMappings
             int number,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/issues/{number}", ct: ct).ConfigureAwait(false);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/issues/{number}", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubGetIssue");
 
@@ -157,9 +171,10 @@ internal static class GitHubEndpointMappings
             int number,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/issues/{number}/comments", ct: ct).ConfigureAwait(false);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/issues/{number}/comments", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubListIssueComments");
 
@@ -168,9 +183,10 @@ internal static class GitHubEndpointMappings
             string repo,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/labels?per_page=100", ct: ct).ConfigureAwait(false);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/labels?per_page=100", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubListLabels");
 
@@ -179,9 +195,10 @@ internal static class GitHubEndpointMappings
             string repo,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/milestones?state=open&per_page=100", ct: ct).ConfigureAwait(false);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/milestones?state=open&per_page=100", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubListMilestones");
 
@@ -190,9 +207,10 @@ internal static class GitHubEndpointMappings
             string repo,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/assignees?per_page=100", ct: ct).ConfigureAwait(false);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/assignees?per_page=100", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubListAssignees");
 
@@ -204,12 +222,13 @@ internal static class GitHubEndpointMappings
             int? perPage,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
             var pageString = page?.ToString(CultureInfo.InvariantCulture);
             var perPageString = (perPage ?? 30).ToString(CultureInfo.InvariantCulture);
             var query = BuildQuery(("state", state ?? "open"), ("page", pageString), ("per_page", perPageString));
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/pulls{query}", ct: ct).ConfigureAwait(false);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/pulls{query}", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubListPRs");
 
@@ -219,9 +238,10 @@ internal static class GitHubEndpointMappings
             int number,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/pulls/{number}", ct: ct).ConfigureAwait(false);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/pulls/{number}", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubGetPR");
 
@@ -231,9 +251,10 @@ internal static class GitHubEndpointMappings
             int number,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/pulls/{number}/comments", ct: ct).ConfigureAwait(false);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/pulls/{number}/comments", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubListPRComments");
 
@@ -243,9 +264,10 @@ internal static class GitHubEndpointMappings
             int number,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            var token = await gitHubService.GetTokenAsync(ct).ConfigureAwait(false);
+            var token = await gitHubService.GetTokenAsync(userContext.UserId, ct).ConfigureAwait(false);
             if (token is null)
                 return Results.Unauthorized();
 
@@ -262,9 +284,9 @@ internal static class GitHubEndpointMappings
         })
         .WithName("GitHubGetPRStatus");
 
-        group.MapGet("/bookmarks", async (IPluginStateStore store, CancellationToken ct) =>
+        group.MapGet("/bookmarks", async (IPluginStateStore store, IUserContext userContext, CancellationToken ct) =>
         {
-            var config = await store.GetStateAsync("github_bookmarks", ct).ConfigureAwait(false);
+            var config = await store.GetStateAsync("github_bookmarks", userContext.UserId, ct).ConfigureAwait(false);
             var bookmarks = ToBookmarkedRepos(config?["repos"] as JsonArray);
             return Results.Ok(bookmarks);
         })
@@ -273,6 +295,7 @@ internal static class GitHubEndpointMappings
         group.MapPut("/bookmarks", async (
             BookmarkSyncRequest request,
             IPluginStateStore store,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
             var repos = new JsonArray();
@@ -286,7 +309,7 @@ internal static class GitHubEndpointMappings
                 ["repos"] = repos,
             };
 
-            await store.SetStateAsync("github_bookmarks", config, ct).ConfigureAwait(false);
+            await store.SetStateAsync("github_bookmarks", userContext.UserId, config, ct).ConfigureAwait(false);
             return Results.NoContent();
         })
         .WithName("GitHubSyncBookmarks");
@@ -294,16 +317,17 @@ internal static class GitHubEndpointMappings
         group.MapPost("/bookmarks", async (
             BookmarkRequest request,
             IPluginStateStore store,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            var config = await store.GetStateAsync("github_bookmarks", ct).ConfigureAwait(false) ?? [];
+            var config = await store.GetStateAsync("github_bookmarks", userContext.UserId, ct).ConfigureAwait(false) ?? [];
             var repos = config["repos"] as JsonArray ?? new JsonArray();
             var exists = repos.Any(repo => repo?.GetValue<string>() == request.Repo);
             if (!exists)
                 repos.Add(request.Repo);
 
             config["repos"] = repos;
-            await store.SetStateAsync("github_bookmarks", config, ct).ConfigureAwait(false);
+            await store.SetStateAsync("github_bookmarks", userContext.UserId, config, ct).ConfigureAwait(false);
             return Results.NoContent();
         })
         .WithName("GitHubAddBookmark");
@@ -312,10 +336,11 @@ internal static class GitHubEndpointMappings
             string owner,
             string repo,
             IPluginStateStore store,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
             var fullName = $"{owner}/{repo}";
-            var config = await store.GetStateAsync("github_bookmarks", ct).ConfigureAwait(false);
+            var config = await store.GetStateAsync("github_bookmarks", userContext.UserId, ct).ConfigureAwait(false);
             if (config is null)
                 return Results.NoContent();
 
@@ -328,7 +353,7 @@ internal static class GitHubEndpointMappings
                 repos.Remove(item);
 
             config["repos"] = repos;
-            await store.SetStateAsync("github_bookmarks", config, ct).ConfigureAwait(false);
+            await store.SetStateAsync("github_bookmarks", userContext.UserId, config, ct).ConfigureAwait(false);
             return Results.NoContent();
         })
         .WithName("GitHubRemoveBookmark");
@@ -337,12 +362,13 @@ internal static class GitHubEndpointMappings
     private static async Task<IResult> ProxyAsync(
         GitHubService gitHubService,
         GitHubApiProxy proxy,
+        string userId,
         string path,
         string method = "GET",
         JsonNode? body = null,
         CancellationToken ct = default)
     {
-        var token = await gitHubService.GetTokenAsync(ct).ConfigureAwait(false);
+        var token = await gitHubService.GetTokenAsync(userId, ct).ConfigureAwait(false);
         if (token is null)
             return Results.Unauthorized();
 

@@ -1,3 +1,4 @@
+using WeaveFleet.Application.Services;
 using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -33,12 +34,13 @@ public static class GitHubAuthEndpoints
         group.MapPost("/poll", async (
             PollRequest req,
             GitHubService gitHubService,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(req.DeviceCode))
                 return Results.BadRequest(new { error = "deviceCode is required." });
 
-            var result = await gitHubService.PollForTokenAsync(req.DeviceCode, ct);
+            var result = await gitHubService.PollForTokenAsync(userContext.UserId, req.DeviceCode, ct);
 
             return Results.Ok(new
             {
@@ -58,17 +60,17 @@ public static class GitHubAuthEndpoints
         .WithName("GitHubPollForToken");
 
         // DELETE /api/integrations/github/auth — disconnect (remove stored token)
-        group.MapDelete("/", async (GitHubService gitHubService, CancellationToken ct) =>
+        group.MapDelete("/", async (GitHubService gitHubService, IUserContext userContext, CancellationToken ct) =>
         {
-            await gitHubService.DisconnectAsync(ct);
+            await gitHubService.DisconnectAsync(userContext.UserId, ct);
             return Results.NoContent();
         })
         .WithName("GitHubDisconnect");
 
         // GET /api/integrations/github/auth/status — check connection status
-        group.MapGet("/status", async (GitHubService gitHubService, CancellationToken ct) =>
+        group.MapGet("/status", async (GitHubService gitHubService, IUserContext userContext, CancellationToken ct) =>
         {
-            var connected = await gitHubService.IsConnectedAsync(ct);
+            var connected = await gitHubService.IsConnectedAsync(userContext.UserId, ct);
             return Results.Ok(new { connected });
         })
         .WithName("GitHubConnectionStatus");

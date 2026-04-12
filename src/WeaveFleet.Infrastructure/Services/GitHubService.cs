@@ -42,7 +42,7 @@ public sealed class GitHubService(
     }
 
     /// <summary>Polls GitHub for access token or terminal device-flow status.</summary>
-    public async Task<DeviceFlowPollResult> PollForTokenAsync(string deviceCode, CancellationToken ct = default)
+    public async Task<DeviceFlowPollResult> PollForTokenAsync(string userId, string deviceCode, CancellationToken ct = default)
     {
         using var client = httpClientFactory.CreateClient();
         client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
@@ -63,7 +63,7 @@ public sealed class GitHubService(
         if (json.TryGetPropertyValue("access_token", out var tokenNode) && tokenNode is JsonValue)
         {
             var token = tokenNode.GetValue<string>();
-            await StoreTokenAsync(token, ct).ConfigureAwait(false);
+            await StoreTokenAsync(userId, token, ct).ConfigureAwait(false);
             return new DeviceFlowPollResult(DeviceFlowPollStatus.Complete);
         }
 
@@ -82,17 +82,17 @@ public sealed class GitHubService(
         };
     }
 
-    /// <summary>Returns true if a GitHub token is stored.</summary>
-    public async Task<bool> IsConnectedAsync(CancellationToken ct = default)
+    /// <summary>Returns true if a GitHub token is stored for the given user.</summary>
+    public async Task<bool> IsConnectedAsync(string userId, CancellationToken ct = default)
     {
-        var token = await GetTokenAsync(ct).ConfigureAwait(false);
+        var token = await GetTokenAsync(userId, ct).ConfigureAwait(false);
         return !string.IsNullOrEmpty(token);
     }
 
-    /// <summary>Retrieves the stored GitHub access token.</summary>
-    public async Task<string?> GetTokenAsync(CancellationToken ct = default)
+    /// <summary>Retrieves the stored GitHub access token for the given user.</summary>
+    public async Task<string?> GetTokenAsync(string userId, CancellationToken ct = default)
     {
-        var config = await pluginStateStore.GetStateAsync(IntegrationId, ct).ConfigureAwait(false);
+        var config = await pluginStateStore.GetStateAsync(IntegrationId, userId, ct).ConfigureAwait(false);
         if (config is null)
             return null;
 
@@ -101,7 +101,7 @@ public sealed class GitHubService(
             : null;
     }
 
-    public async Task<bool> ConnectWithTokenAsync(string token, CancellationToken ct = default)
+    public async Task<bool> ConnectWithTokenAsync(string userId, string token, CancellationToken ct = default)
     {
         using var client = httpClientFactory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new("Bearer", token);
@@ -112,17 +112,17 @@ public sealed class GitHubService(
         if (!response.IsSuccessStatusCode)
             return false;
 
-        await StoreTokenAsync(token, ct).ConfigureAwait(false);
+        await StoreTokenAsync(userId, token, ct).ConfigureAwait(false);
         return true;
     }
 
-    /// <summary>Removes stored GitHub token (disconnect).</summary>
-    public async Task DisconnectAsync(CancellationToken ct = default) =>
-        await pluginStateStore.RemoveStateAsync(IntegrationId, ct).ConfigureAwait(false);
+    /// <summary>Removes stored GitHub token (disconnect) for the given user.</summary>
+    public async Task DisconnectAsync(string userId, CancellationToken ct = default) =>
+        await pluginStateStore.RemoveStateAsync(IntegrationId, userId, ct).ConfigureAwait(false);
 
     // ── Private helpers ────────────────────────────────────────────────────────
 
-    private async Task StoreTokenAsync(string token, CancellationToken ct)
+    private async Task StoreTokenAsync(string userId, string token, CancellationToken ct)
     {
         var config = new JsonObject
         {
@@ -130,7 +130,7 @@ public sealed class GitHubService(
             ["connected_at"] = DateTimeOffset.UtcNow,
         };
 
-        await pluginStateStore.SetStateAsync(IntegrationId, config, ct).ConfigureAwait(false);
+        await pluginStateStore.SetStateAsync(IntegrationId, userId, config, ct).ConfigureAwait(false);
     }
 }
 

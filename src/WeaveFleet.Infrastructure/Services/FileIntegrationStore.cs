@@ -8,30 +8,33 @@ namespace WeaveFleet.Infrastructure.Services;
 /// Transitional file-backed store for integration-shaped config data.
 /// Plugin state should flow through <c>IPluginStateStore</c>, which currently
 /// adapts to this implementation during the migration.
+/// Storage is user-scoped: each user gets their own file at ~/.weave/integrations/{userId}.json.
 /// </summary>
 public sealed class FileIntegrationStore : IIntegrationStore
 {
-    private static readonly string StorePath =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".weave", "integrations.json");
+    private static readonly string IntegrationsDir =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".weave", "integrations");
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
     private static readonly SemaphoreSlim FileLock = new(1, 1);
 
-    public async Task<JsonObject?> GetConfigAsync(string id, CancellationToken ct = default)
+    public async Task<JsonObject?> GetConfigAsync(string id, string userId, CancellationToken ct = default)
     {
-        var all = await ReadAllAsync(ct).ConfigureAwait(false);
+        ValidateUserId(userId);
+        var all = await ReadAllAsync(userId, ct).ConfigureAwait(false);
         return all.TryGetPropertyValue(id, out var value) && value is JsonObject obj ? obj : null;
     }
 
-    public async Task SetConfigAsync(string id, JsonObject config, CancellationToken ct = default)
+    public async Task SetConfigAsync(string id, string userId, JsonObject config, CancellationToken ct = default)
     {
+        ValidateUserId(userId);
         await FileLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var all = await ReadAllAsync(ct).ConfigureAwait(false);
+            var all = await ReadAllAsync(userId, ct).ConfigureAwait(false);
             all[id] = config.DeepClone();
-            await WriteAllAsync(all, ct).ConfigureAwait(false);
+            await WriteAllAsync(userId, all, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -39,14 +42,15 @@ public sealed class FileIntegrationStore : IIntegrationStore
         }
     }
 
-    public async Task RemoveConfigAsync(string id, CancellationToken ct = default)
+    public async Task RemoveConfigAsync(string id, string userId, CancellationToken ct = default)
     {
+        ValidateUserId(userId);
         await FileLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var all = await ReadAllAsync(ct).ConfigureAwait(false);
+            var all = await ReadAllAsync(userId, ct).ConfigureAwait(false);
             all.Remove(id);
-            await WriteAllAsync(all, ct).ConfigureAwait(false);
+            await WriteAllAsync(userId, all, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -54,9 +58,10 @@ public sealed class FileIntegrationStore : IIntegrationStore
         }
     }
 
-    public async Task<IReadOnlyDictionary<string, JsonObject>> GetAllConfigsAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyDictionary<string, JsonObject>> GetAllConfigsAsync(string userId, CancellationToken ct = default)
     {
-        var all = await ReadAllAsync(ct).ConfigureAwait(false);
+        ValidateUserId(userId);
+        var all = await ReadAllAsync(userId, ct).ConfigureAwait(false);
         var result = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
         foreach (var (key, value) in all)
         {
@@ -68,12 +73,33 @@ public sealed class FileIntegrationStore : IIntegrationStore
 
     // ── Private helpers ────────────────────────────────────────────────────────
 
-    private static async Task<JsonObject> ReadAllAsync(CancellationToken ct)
+    /// <summary>
+    /// Validates that the userId doesn't contain path separators or other dangerous values.
+    /// </summary>
+    private static void ValidateUserId(string userId)
     {
-        if (!File.Exists(StorePath))
+        if (string.IsNullOrWhiteSpace(userId))
+            throw new ArgumentException("userId cannot be empty.", nameof(userId));
+
+        if (userId.Contains('/', StringComparison.Ordinal) ||
+            userId.Contains('\\', StringComparison.Ordinal) ||
+            userId.Contains('\0', StringComparison.Ordinal) ||
+            userId is "." or "..")
+        {
+            throw new ArgumentException($"userId contains invalid characters: '{userId}'", nameof(userId));
+        }
+    }
+
+    private static string GetStorePath(string userId) =>
+        Path.Combine(IntegrationsDir, $"{userId}.json");
+
+    private static async Task<JsonObject> ReadAllAsync(string userId, CancellationToken ct)
+    {
+        var storePath = GetStorePath(userId);
+        if (!File.Exists(storePath))
             return [];
 
-        var json = await File.ReadAllTextAsync(StorePath, ct).ConfigureAwait(false);
+        var json = await File.ReadAllTextAsync(storePath, ct).ConfigureAwait(false);
         try
         {
             return JsonNode.Parse(json) as JsonObject ?? [];
@@ -84,11 +110,12 @@ public sealed class FileIntegrationStore : IIntegrationStore
         }
     }
 
-    private static async Task WriteAllAsync(JsonObject data, CancellationToken ct)
+    private static async Task WriteAllAsync(string userId, JsonObject data, CancellationToken ct)
     {
-        var dir = Path.GetDirectoryName(StorePath)!;
+        var storePath = GetStorePath(userId);
+        var dir = Path.GetDirectoryName(storePath)!;
         Directory.CreateDirectory(dir);
         var json = data.ToJsonString(Options);
-        await File.WriteAllTextAsync(StorePath, json, ct).ConfigureAwait(false);
+        await File.WriteAllTextAsync(storePath, json, ct).ConfigureAwait(false);
     }
 }

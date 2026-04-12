@@ -22,12 +22,13 @@ public static class GitHubEndpoints
             string? sort,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
             var pageString = page?.ToString(CultureInfo.InvariantCulture);
             var perPageString = (perPage ?? 100).ToString(CultureInfo.InvariantCulture);
             var query = BuildQuery(("page", pageString), ("per_page", perPageString), ("sort", sort ?? "updated"));
-            return await ProxyAsync(gitHubService, proxy, $"user/repos{query}", ct: ct);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"user/repos{query}", ct: ct);
         })
         .WithName("GitHubListRepos");
 
@@ -41,12 +42,13 @@ public static class GitHubEndpoints
             int? perPage,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
             var pageStr = page?.ToString(CultureInfo.InvariantCulture);
             var perPageStr = (perPage ?? 30).ToString(CultureInfo.InvariantCulture);
             var q = BuildQuery(("state", state ?? "open"), ("labels", labels), ("page", pageStr), ("per_page", perPageStr));
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/issues{q}", ct: ct);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/issues{q}", ct: ct);
         })
         .WithName("GitHubListIssues");
 
@@ -57,10 +59,11 @@ public static class GitHubEndpoints
             string? q,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
             var query = BuildQuery(("q", q is null ? $"repo:{owner}/{repo}" : $"repo:{owner}/{repo} {q}"), ("type", "issue"));
-            return await ProxyAsync(gitHubService, proxy, $"search/issues{query}", ct: ct);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"search/issues{query}", ct: ct);
         })
         .WithName("GitHubSearchIssues");
 
@@ -71,9 +74,10 @@ public static class GitHubEndpoints
             int number,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/issues/{number}", ct: ct);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/issues/{number}", ct: ct);
         })
         .WithName("GitHubGetIssue");
 
@@ -84,9 +88,10 @@ public static class GitHubEndpoints
             int number,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/issues/{number}/comments", ct: ct);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/issues/{number}/comments", ct: ct);
         })
         .WithName("GitHubListIssueComments");
 
@@ -96,9 +101,10 @@ public static class GitHubEndpoints
             string repo,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/labels?per_page=100", ct: ct);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/labels?per_page=100", ct: ct);
         })
         .WithName("GitHubListLabels");
 
@@ -108,9 +114,10 @@ public static class GitHubEndpoints
             string repo,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/milestones?state=open&per_page=100", ct: ct);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/milestones?state=open&per_page=100", ct: ct);
         })
         .WithName("GitHubListMilestones");
 
@@ -120,9 +127,10 @@ public static class GitHubEndpoints
             string repo,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/assignees?per_page=100", ct: ct);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/assignees?per_page=100", ct: ct);
         })
         .WithName("GitHubListAssignees");
 
@@ -135,12 +143,13 @@ public static class GitHubEndpoints
             int? perPage,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
             var pageStr = page?.ToString(CultureInfo.InvariantCulture);
             var perPageStr = (perPage ?? 30).ToString(CultureInfo.InvariantCulture);
             var q = BuildQuery(("state", state ?? "open"), ("page", pageStr), ("per_page", perPageStr));
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/pulls{q}", ct: ct);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/pulls{q}", ct: ct);
         })
         .WithName("GitHubListPRs");
 
@@ -151,9 +160,10 @@ public static class GitHubEndpoints
             int number,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/pulls/{number}", ct: ct);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/pulls/{number}", ct: ct);
         })
         .WithName("GitHubGetPR");
 
@@ -164,9 +174,10 @@ public static class GitHubEndpoints
             int number,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            return await ProxyAsync(gitHubService, proxy, $"repos/{owner}/{repo}/pulls/{number}/comments", ct: ct);
+            return await ProxyAsync(gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/pulls/{number}/comments", ct: ct);
         })
         .WithName("GitHubListPRComments");
 
@@ -177,9 +188,10 @@ public static class GitHubEndpoints
             int number,
             GitHubService gitHubService,
             GitHubApiProxy proxy,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            var token = await gitHubService.GetTokenAsync(ct);
+            var token = await gitHubService.GetTokenAsync(userContext.UserId, ct);
             if (token is null)
                 return Results.Unauthorized();
 
@@ -198,9 +210,9 @@ public static class GitHubEndpoints
         .WithName("GitHubGetPRStatus");
 
         // GET /api/integrations/github/bookmarks — stored bookmarked repos
-        group.MapGet("/bookmarks", async (IPluginStateStore store, CancellationToken ct) =>
+        group.MapGet("/bookmarks", async (IPluginStateStore store, IUserContext userContext, CancellationToken ct) =>
         {
-            var config = await store.GetStateAsync("github_bookmarks", ct);
+            var config = await store.GetStateAsync("github_bookmarks", userContext.UserId, ct);
             var bookmarks = ToBookmarkedRepos(config?["repos"] as JsonArray);
             return Results.Ok(bookmarks);
         })
@@ -210,6 +222,7 @@ public static class GitHubEndpoints
         group.MapPut("/bookmarks", async (
             BookmarkSyncRequest req,
             IPluginStateStore store,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
             var repos = new JsonArray();
@@ -221,7 +234,7 @@ public static class GitHubEndpoints
                 ["repos"] = repos,
             };
 
-            await store.SetStateAsync("github_bookmarks", config, ct);
+            await store.SetStateAsync("github_bookmarks", userContext.UserId, config, ct);
             return Results.NoContent();
         })
         .WithName("GitHubSyncBookmarks");
@@ -230,15 +243,16 @@ public static class GitHubEndpoints
         group.MapPost("/bookmarks", async (
             BookmarkRequest req,
             IPluginStateStore store,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
-            var config = await store.GetStateAsync("github_bookmarks", ct) ?? [];
+            var config = await store.GetStateAsync("github_bookmarks", userContext.UserId, ct) ?? [];
             var repos = config["repos"] as JsonArray ?? new JsonArray();
             var exists = repos.Any(r => r?.GetValue<string>() == req.Repo);
             if (!exists)
                 repos.Add(req.Repo);
             config["repos"] = repos;
-            await store.SetStateAsync("github_bookmarks", config, ct);
+            await store.SetStateAsync("github_bookmarks", userContext.UserId, config, ct);
             return Results.NoContent();
         })
         .WithName("GitHubAddBookmark");
@@ -248,10 +262,11 @@ public static class GitHubEndpoints
             string owner,
             string repo,
             IPluginStateStore store,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
             var fullName = $"{owner}/{repo}";
-            var config = await store.GetStateAsync("github_bookmarks", ct);
+            var config = await store.GetStateAsync("github_bookmarks", userContext.UserId, ct);
             if (config is null) return Results.NoContent();
 
             var repos = config["repos"] as JsonArray;
@@ -261,7 +276,7 @@ public static class GitHubEndpoints
             if (item is not null) repos.Remove(item);
 
             config["repos"] = repos;
-            await store.SetStateAsync("github_bookmarks", config, ct);
+            await store.SetStateAsync("github_bookmarks", userContext.UserId, config, ct);
             return Results.NoContent();
         })
         .WithName("GitHubRemoveBookmark");
@@ -274,12 +289,13 @@ public static class GitHubEndpoints
     private static async Task<IResult> ProxyAsync(
         GitHubService gitHubService,
         GitHubApiProxy proxy,
+        string userId,
         string path,
         string method = "GET",
         JsonNode? body = null,
         CancellationToken ct = default)
     {
-        var token = await gitHubService.GetTokenAsync(ct);
+        var token = await gitHubService.GetTokenAsync(userId, ct);
         if (token is null)
             return Results.Unauthorized();
 

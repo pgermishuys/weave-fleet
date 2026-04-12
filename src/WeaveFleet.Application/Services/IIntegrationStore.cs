@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace WeaveFleet.Application.Services;
@@ -10,8 +9,8 @@ namespace WeaveFleet.Application.Services;
 /// </summary>
 public interface IIntegrationStore
 {
-    Task<JsonObject?> GetConfigAsync(string id, CancellationToken ct = default);
-    Task SetConfigAsync(string id, JsonObject config, CancellationToken ct = default);
-    Task RemoveConfigAsync(string id, CancellationToken ct = default);
-    Task<IReadOnlyDictionary<string, JsonObject>> GetAllConfigsAsync(CancellationToken ct = default);
+    Task<JsonObject?> GetConfigAsync(string id, string userId, CancellationToken ct = default);
+    Task SetConfigAsync(string id, string userId, JsonObject config, CancellationToken ct = default);
+    Task RemoveConfigAsync(string id, string userId, CancellationToken ct = default);
+    Task<IReadOnlyDictionary<string, JsonObject>> GetAllConfigsAsync(string userId, CancellationToken ct = default);
 }

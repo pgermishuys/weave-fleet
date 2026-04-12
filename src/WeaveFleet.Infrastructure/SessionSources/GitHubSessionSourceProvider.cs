@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Common;
@@ -12,7 +13,8 @@ namespace WeaveFleet.Infrastructure.SessionSources;
 
 public sealed class GitHubSessionSourceProvider(
     GitHubService gitHubService,
-    GitHubApiProxy gitHubApiProxy) : ISessionSourceProvider
+    GitHubApiProxy gitHubApiProxy,
+    IServiceProvider serviceProvider) : ISessionSourceProvider
 {
     private const int MaxContextCharacters = 12000;
     private static readonly string[] SecretIndicators =
@@ -87,7 +89,9 @@ public sealed class GitHubSessionSourceProvider(
                 "GitHub session sources require owner, repo, and number.");
         }
 
-        var token = await gitHubService.GetTokenAsync(cancellationToken);
+        var token = await gitHubService.GetTokenAsync(
+            serviceProvider.GetRequiredService<IUserContext>().UserId,
+            cancellationToken);
         if (string.IsNullOrWhiteSpace(token))
         {
             return FleetError.ValidationError(

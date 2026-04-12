@@ -13,10 +13,13 @@ public static class InstanceEndpoints
         var group = app.MapGroup("/api/instances/{id}").WithTags("Instances");
 
         // GET /api/instances/{id}/models — harness capabilities (model list)
-        group.MapGet("/models", async (string id, InstanceTracker tracker, CancellationToken ct) =>
+        group.MapGet("/models", async (string id, InstanceTracker tracker, InstanceService instanceService, IUserContext userContext, CancellationToken ct) =>
         {
             var instance = tracker.Get(id);
             if (instance is null)
+                return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
+
+            if (!await IsOwnerAsync(instanceService, userContext, id))
                 return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
 
             var providers = await instance.GetProvidersAsync(ct);
@@ -36,10 +39,13 @@ public static class InstanceEndpoints
         .WithName("GetInstanceModels");
 
         // GET /api/instances/{id}/commands — available slash commands
-        group.MapGet("/commands", async (string id, InstanceTracker tracker, CancellationToken ct) =>
+        group.MapGet("/commands", async (string id, InstanceTracker tracker, InstanceService instanceService, IUserContext userContext, CancellationToken ct) =>
         {
             var instance = tracker.Get(id);
             if (instance is null)
+                return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
+
+            if (!await IsOwnerAsync(instanceService, userContext, id))
                 return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
 
             var commands = await instance.GetCommandsAsync(ct);
@@ -53,10 +59,13 @@ public static class InstanceEndpoints
         .WithName("GetInstanceCommands");
 
         // POST /api/instances/{id}/command — execute a slash command on the instance
-        group.MapPost("/command", async (string id, SendCommandApiRequest req, InstanceTracker tracker, CancellationToken ct) =>
+        group.MapPost("/command", async (string id, SendCommandApiRequest req, InstanceTracker tracker, InstanceService instanceService, IUserContext userContext, CancellationToken ct) =>
         {
             var instance = tracker.Get(id);
             if (instance is null)
+                return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
+
+            if (!await IsOwnerAsync(instanceService, userContext, id))
                 return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
 
             var options = new CommandOptions
@@ -77,10 +86,13 @@ public static class InstanceEndpoints
         .WithName("SendInstanceCommand");
 
         // GET /api/instances/{id}/agents — available agents
-        group.MapGet("/agents", async (string id, InstanceTracker tracker, CancellationToken ct) =>
+        group.MapGet("/agents", async (string id, InstanceTracker tracker, InstanceService instanceService, IUserContext userContext, CancellationToken ct) =>
         {
             var instance = tracker.Get(id);
             if (instance is null)
+                return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
+
+            if (!await IsOwnerAsync(instanceService, userContext, id))
                 return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
 
             var agents = await instance.GetAgentsAsync(ct);
@@ -108,10 +120,14 @@ public static class InstanceEndpoints
             string? q,
             InstanceTracker tracker,
             InstanceService instanceService,
+            IUserContext userContext,
             CancellationToken ct) =>
         {
             var instance = tracker.Get(id);
             if (instance is null)
+                return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
+
+            if (!await IsOwnerAsync(instanceService, userContext, id))
                 return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
 
             var instanceResult = await instanceService.GetInstanceAsync(id);
@@ -134,5 +150,18 @@ public static class InstanceEndpoints
         .WithName("FindInstanceFiles");
 
         return app;
+    }
+
+    /// <summary>
+    /// Verifies the requesting user owns the instance by checking the DB record's UserId.
+    /// Returns false if the instance doesn't exist in the DB or the user doesn't match.
+    /// </summary>
+    private static async Task<bool> IsOwnerAsync(InstanceService instanceService, IUserContext userContext, string instanceId)
+    {
+        var result = await instanceService.GetInstanceAsync(instanceId);
+        if (result.IsFailure)
+            return false;
+
+        return string.Equals(result.Value.UserId, userContext.UserId, StringComparison.Ordinal);
     }
 }

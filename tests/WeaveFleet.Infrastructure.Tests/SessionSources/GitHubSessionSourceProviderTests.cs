@@ -2,9 +2,11 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Shouldly;
 using WeaveFleet.Application.Plugins;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.SessionSources;
@@ -13,19 +15,12 @@ namespace WeaveFleet.Infrastructure.Tests.SessionSources;
 
 public sealed class GitHubSessionSourceProviderTests
 {
+    private const string TestUserId = "test-user";
+
     [Fact]
     public async Task ResolveAsync_TruncatesOversizedContextAndLabelsOrigin()
     {
-        var pluginStateStore = Substitute.For<IPluginStateStore>();
-        pluginStateStore.GetStateAsync("github", Arg.Any<CancellationToken>()).Returns(new JsonObject
-        {
-            ["access_token"] = "token"
-        });
-
-        var httpClientFactory = new TestHttpClientFactory(new FakeGitHubHandler());
-        var gitHubService = new GitHubService(httpClientFactory, pluginStateStore);
-        var gitHubApiProxy = new GitHubApiProxy(httpClientFactory);
-        var provider = new GitHubSessionSourceProvider(gitHubService, gitHubApiProxy);
+        var (provider, _) = CreateProvider();
 
         var result = await provider.ResolveAsync(new SessionSourceSelection
         {
@@ -56,16 +51,7 @@ public sealed class GitHubSessionSourceProviderTests
     [Fact]
     public async Task ResolveAsync_RedactsSecretLikeGitHubBodyAndComments()
     {
-        var pluginStateStore = Substitute.For<IPluginStateStore>();
-        pluginStateStore.GetStateAsync("github", Arg.Any<CancellationToken>()).Returns(new JsonObject
-        {
-            ["access_token"] = "token"
-        });
-
-        var httpClientFactory = new TestHttpClientFactory(new FakeGitHubHandler());
-        var gitHubService = new GitHubService(httpClientFactory, pluginStateStore);
-        var gitHubApiProxy = new GitHubApiProxy(httpClientFactory);
-        var provider = new GitHubSessionSourceProvider(gitHubService, gitHubApiProxy);
+        var (provider, _) = CreateProvider();
 
         var result = await provider.ResolveAsync(new SessionSourceSelection
         {
@@ -94,16 +80,7 @@ public sealed class GitHubSessionSourceProviderTests
     [Fact]
     public async Task ResolveAsync_RedactsSecretLikeGitHubTitleAndPrivateKeyBlocks()
     {
-        var pluginStateStore = Substitute.For<IPluginStateStore>();
-        pluginStateStore.GetStateAsync("github", Arg.Any<CancellationToken>()).Returns(new JsonObject
-        {
-            ["access_token"] = "token"
-        });
-
-        var httpClientFactory = new TestHttpClientFactory(new FakeGitHubHandler());
-        var gitHubService = new GitHubService(httpClientFactory, pluginStateStore);
-        var gitHubApiProxy = new GitHubApiProxy(httpClientFactory);
-        var provider = new GitHubSessionSourceProvider(gitHubService, gitHubApiProxy);
+        var (provider, _) = CreateProvider();
 
         var result = await provider.ResolveAsync(new SessionSourceSelection
         {
@@ -134,16 +111,7 @@ public sealed class GitHubSessionSourceProviderTests
     [Fact]
     public async Task ResolveAsync_RedactsAdditionalPrivateKeyPemVariants()
     {
-        var pluginStateStore = Substitute.For<IPluginStateStore>();
-        pluginStateStore.GetStateAsync("github", Arg.Any<CancellationToken>()).Returns(new JsonObject
-        {
-            ["access_token"] = "token"
-        });
-
-        var httpClientFactory = new TestHttpClientFactory(new FakeGitHubHandler());
-        var gitHubService = new GitHubService(httpClientFactory, pluginStateStore);
-        var gitHubApiProxy = new GitHubApiProxy(httpClientFactory);
-        var provider = new GitHubSessionSourceProvider(gitHubService, gitHubApiProxy);
+        var (provider, _) = CreateProvider();
 
         var result = await provider.ResolveAsync(new SessionSourceSelection
         {
@@ -171,6 +139,29 @@ public sealed class GitHubSessionSourceProviderTests
         result.Value.Input.ContextEnvelope.Content.ShouldNotContain("-----END DSA PRIVATE KEY-----");
         result.Value.Input.ContextEnvelope.Content.ShouldNotContain("encryptedkeymaterial");
         result.Value.Input.ContextEnvelope.Content.ShouldNotContain("dsakeymaterial");
+    }
+
+    private static (GitHubSessionSourceProvider Provider, IPluginStateStore Store) CreateProvider()
+    {
+        var pluginStateStore = Substitute.For<IPluginStateStore>();
+        pluginStateStore.GetStateAsync("github", TestUserId, Arg.Any<CancellationToken>()).Returns(new JsonObject
+        {
+            ["access_token"] = "token"
+        });
+
+        var httpClientFactory = new TestHttpClientFactory(new FakeGitHubHandler());
+        var gitHubService = new GitHubService(httpClientFactory, pluginStateStore);
+        var gitHubApiProxy = new GitHubApiProxy(httpClientFactory);
+
+        var userContext = Substitute.For<IUserContext>();
+        userContext.UserId.Returns(TestUserId);
+
+        var services = new ServiceCollection();
+        services.AddScoped(_ => userContext);
+        var serviceProvider = services.BuildServiceProvider();
+
+        var provider = new GitHubSessionSourceProvider(gitHubService, gitHubApiProxy, serviceProvider);
+        return (provider, pluginStateStore);
     }
 
     private sealed class TestHttpClientFactory(HttpMessageHandler handler) : IHttpClientFactory
