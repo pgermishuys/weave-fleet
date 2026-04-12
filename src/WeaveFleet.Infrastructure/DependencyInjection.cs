@@ -84,7 +84,7 @@ public static class DependencyInjection
         services.AddScoped<ISessionSourceProvider, LocalDirectorySessionSourceProvider>();
         services.AddSingleton<ISessionSourceProvider, ManagedWorkspaceSessionSourceProvider>();
         services.AddSingleton<ISessionSourceProvider, RepositorySessionSourceProvider>();
-        services.AddSingleton<ISessionSourceProvider, GitHubSessionSourceProvider>();
+        services.AddScoped<ISessionSourceProvider, GitHubSessionSourceProvider>();
         services.AddScoped<SystemUserContext>();
 
         // ConfigService — singleton, no DB dependency, file-based
@@ -105,7 +105,7 @@ public static class DependencyInjection
         services.AddHttpClient();
 
         // GitHub services — singleton
-        services.AddSingleton<GitHubService>();
+        services.AddScoped<GitHubService>();
         services.AddSingleton<GitHubApiProxy>();
         services.AddBuiltInPlugin<GitHubBackendPlugin>();
 

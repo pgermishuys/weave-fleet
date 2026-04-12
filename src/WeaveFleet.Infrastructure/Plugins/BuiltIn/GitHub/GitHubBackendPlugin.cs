@@ -1,5 +1,6 @@
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Infrastructure.Services;
@@ -7,9 +8,7 @@ using WeaveFleet.Infrastructure.Services;
 namespace WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 
 public sealed class GitHubBackendPlugin(
-    GitHubService gitHubService,
-    IPluginStateStore pluginStateStore,
-    IServiceProvider serviceProvider) : IBackendPlugin
+    IHttpContextAccessor httpContextAccessor) : IBackendPlugin
 {
     public FleetPluginDescriptor Descriptor { get; } = new(
         "github",
@@ -20,15 +19,13 @@ public sealed class GitHubBackendPlugin(
 
     public async Task<PluginStatus> GetStatusAsync(CancellationToken cancellationToken)
     {
-        // IUserContext is scoped; resolve from current scope via IServiceProvider.
-        // GetStatusAsync is always called within an HTTP request scope.
-        var userContext = serviceProvider.GetRequiredService<IUserContext>();
-        var userId = userContext.UserId;
+        var requestServices = httpContextAccessor.HttpContext?.RequestServices
+            ?? throw new InvalidOperationException("GitHub plugin status requires an active HTTP request scope.");
+        var userContext = requestServices.GetRequiredService<IUserContext>();
+        var gitHubService = requestServices.GetRequiredService<GitHubService>();
 
-        var connected = await gitHubService.IsConnectedAsync(userId, cancellationToken).ConfigureAwait(false);
-        var state = await pluginStateStore.GetStateAsync(Descriptor.Id, userId, cancellationToken).ConfigureAwait(false);
-        var connectedAt = state? ["connected_at"]?.GetValue<DateTimeOffset?>();
-        var actions = connected
+        var connection = await gitHubService.GetConnectionStatusAsync(userContext.UserId, cancellationToken).ConfigureAwait(false);
+        var actions = connection.Connected
             ? new[]
             {
                 new PluginActionDescriptor(
@@ -48,8 +45,8 @@ public sealed class GitHubBackendPlugin(
 
         return new PluginStatus(
             Descriptor.Id,
-            connected ? PluginConnectionStatus.Connected : PluginConnectionStatus.Disconnected,
-            connectedAt,
+            connection.Connected ? PluginConnectionStatus.Connected : PluginConnectionStatus.Disconnected,
+            connection.ConnectedAt,
             actions);
     }
 

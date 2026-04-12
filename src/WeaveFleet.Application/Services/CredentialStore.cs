@@ -14,11 +14,15 @@ public sealed class CredentialStore(
     ICredentialProtector credentialProtector,
     IUserContext userContext) : ICredentialStore
 {
+    private const string InternalGitHubNamespace = "github";
+    private const string InternalGitHubKind = "oauth-access-token";
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<CredentialSummary>> ListCredentialsAsync()
     {
         var credentials = await credentialRepository.ListByUserAsync();
         return credentials
+            .Where(c => !IsInternalCredential(c))
             .Select(c => new CredentialSummary(
                 c.Id,
                 c.Label,
@@ -69,14 +73,9 @@ public sealed class CredentialStore(
     /// <inheritdoc />
     public async Task<IReadOnlyList<UserCredential>> GetDecryptedCredentialsAsync(string userId)
     {
-        // Use the system user context workaround: the repository uses IUserContext.UserId,
-        // but GetDecryptedCredentialsAsync is called by the orchestrator using the session owner's userId.
-        // For now, use a direct query pattern — but since the repo is scoped to IUserContext.UserId,
-        // we accept that in cloud mode the orchestrator calls this within the request scope where
-        // userContext.UserId == session.UserId (own session) or session.UserId (owner credentials for resume).
-        // The userId parameter is kept for future validation.
-        var credentials = await credentialRepository.ListByUserAsync();
+        var credentials = await credentialRepository.ListByUserAsync(userId);
         return credentials
+            .Where(c => !IsInternalCredential(c))
             .Select(c =>
             {
                 c.EncryptedValue = credentialProtector.Decrypt(c.EncryptedValue);
@@ -95,4 +94,8 @@ public sealed class CredentialStore(
             ? new string('*', value.Length)
             : $"...{value[^4..]}";
     }
+
+    private static bool IsInternalCredential(UserCredential credential)
+        => string.Equals(credential.Namespace, InternalGitHubNamespace, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(credential.Kind, InternalGitHubKind, StringComparison.OrdinalIgnoreCase);
 }

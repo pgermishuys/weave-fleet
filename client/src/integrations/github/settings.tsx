@@ -42,6 +42,10 @@ interface GitHubUserResponse {
   login: string;
 }
 
+interface GitHubStatusResponse {
+  connected: boolean;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 /**
@@ -70,6 +74,12 @@ export function GitHubSettings() {
   const isConnected = integrations.some(
     (i) => i.id === "github" && i.status === "connected"
   );
+
+  useEffect(() => {
+    if (isConnected && deviceState.status === "complete") {
+      setDeviceState({ status: "idle" });
+    }
+  }, [deviceState.status, isConnected]);
 
   // ── Cleanup on unmount ──
   useEffect(() => {
@@ -110,8 +120,30 @@ export function GitHubSettings() {
       if (!isMountedRef.current) return;
 
       if (result.status === "complete") {
-        setDeviceState({ status: "complete" });
-        refetch();
+        try {
+          const statusResponse = await apiFetch("/api/integrations/github/auth/status");
+          const status = (await statusResponse.json()) as GitHubStatusResponse;
+
+          if (!isMountedRef.current) return;
+
+          if (!status.connected) {
+            setDeviceState({
+              status: "error",
+              message: "GitHub authorization completed, but the saved connection was not confirmed. Refresh and try again.",
+            });
+            return;
+          }
+
+          setDeviceState({ status: "complete" });
+          void refetch();
+        } catch {
+          if (!isMountedRef.current) return;
+          setDeviceState({
+            status: "error",
+            message: "GitHub authorization completed, but connection status could not be verified.",
+          });
+        }
+
         return;
       }
 

@@ -15,37 +15,49 @@ public sealed class DapperUserCredentialRepository(
     IUserContext userContext) : IUserCredentialRepository
 {
     public async Task<UserCredential?> GetByIdAsync(string id)
+        => await GetByIdAsync(id, userContext.UserId).ConfigureAwait(false);
+
+    public async Task<UserCredential?> GetByIdAsync(string id, string userId)
     {
         using var conn = connectionFactory.CreateConnection();
         return await conn.QueryFirstOrDefaultAsync<UserCredential>(
             "SELECT * FROM user_credentials WHERE id = @Id AND user_id = @UserId",
-            new { Id = id, UserId = userContext.UserId });
+            new { Id = id, UserId = userId }).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<UserCredential>> ListByUserAsync()
+        => await ListByUserAsync(userContext.UserId).ConfigureAwait(false);
+
+    public async Task<IReadOnlyList<UserCredential>> ListByUserAsync(string userId)
     {
         using var conn = connectionFactory.CreateConnection();
         var results = await conn.QueryAsync<UserCredential>(
             "SELECT * FROM user_credentials WHERE user_id = @UserId ORDER BY created_at ASC",
-            new { UserId = userContext.UserId });
+            new { UserId = userId }).ConfigureAwait(false);
         return results.AsList();
     }
 
     public async Task<IReadOnlyList<UserCredential>> ListByUserAndNamespaceAsync(string credentialNamespace)
+        => await ListByUserAndNamespaceAsync(userContext.UserId, credentialNamespace).ConfigureAwait(false);
+
+    public async Task<IReadOnlyList<UserCredential>> ListByUserAndNamespaceAsync(string userId, string credentialNamespace)
     {
         using var conn = connectionFactory.CreateConnection();
         var results = await conn.QueryAsync<UserCredential>(
             "SELECT * FROM user_credentials WHERE user_id = @UserId AND namespace = @Namespace ORDER BY created_at ASC",
-            new { UserId = userContext.UserId, Namespace = credentialNamespace });
+            new { UserId = userId, Namespace = credentialNamespace }).ConfigureAwait(false);
         return results.AsList();
     }
 
     public async Task<IReadOnlyList<UserCredential>> ListByUserNamespaceAndKindAsync(string credentialNamespace, string kind)
+        => await ListByUserNamespaceAndKindAsync(userContext.UserId, credentialNamespace, kind).ConfigureAwait(false);
+
+    public async Task<IReadOnlyList<UserCredential>> ListByUserNamespaceAndKindAsync(string userId, string credentialNamespace, string kind)
     {
         using var conn = connectionFactory.CreateConnection();
         var results = await conn.QueryAsync<UserCredential>(
             "SELECT * FROM user_credentials WHERE user_id = @UserId AND namespace = @Namespace AND kind = @Kind ORDER BY created_at ASC",
-            new { UserId = userContext.UserId, Namespace = credentialNamespace, Kind = kind });
+            new { UserId = userId, Namespace = credentialNamespace, Kind = kind }).ConfigureAwait(false);
         return results.AsList();
     }
 
@@ -65,7 +77,7 @@ public sealed class DapperUserCredentialRepository(
             new
             {
                 credential.Id,
-                UserId = userContext.UserId,
+                UserId = credential.UserId,
                 credential.Namespace,
                 credential.Kind,
                 credential.Label,
@@ -74,14 +86,17 @@ public sealed class DapperUserCredentialRepository(
                 credential.Metadata,
                 credential.CreatedAt,
                 credential.UpdatedAt
-            });
+            }).ConfigureAwait(false);
     }
 
     public async Task DeleteAsync(string id)
+        => await DeleteAsync(id, userContext.UserId).ConfigureAwait(false);
+
+    public async Task DeleteAsync(string id, string userId)
     {
         using var conn = connectionFactory.CreateConnection();
         await conn.ExecuteAsync(
             "DELETE FROM user_credentials WHERE id = @Id AND user_id = @UserId",
-            new { Id = id, UserId = userContext.UserId });
+            new { Id = id, UserId = userId }).ConfigureAwait(false);
     }
 }

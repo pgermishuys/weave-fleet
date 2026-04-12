@@ -1,7 +1,9 @@
 using System.Net.Http.Json;
-using System.Text.Json.Serialization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
+using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
 
@@ -12,9 +14,14 @@ namespace WeaveFleet.Infrastructure.Services;
 /// </summary>
 public sealed class GitHubService(
     IHttpClientFactory httpClientFactory,
-    IPluginStateStore pluginStateStore)
+    IPluginStateStore pluginStateStore,
+    IUserCredentialRepository credentialRepository,
+    ICredentialProtector credentialProtector)
 {
     private const string IntegrationId = "github";
+    private const string CredentialNamespace = "github";
+    private const string CredentialKind = "oauth-access-token";
+    private const string CredentialLabel = "GitHub";
     private const string ClientId = "Ov23liJT2Q0HXHj9xLGM";
     private const string DeviceCodeUrl = "https://github.com/login/device/code";
     private const string TokenUrl = "https://github.com/login/oauth/access_token";
@@ -63,7 +70,7 @@ public sealed class GitHubService(
         if (json.TryGetPropertyValue("access_token", out var tokenNode) && tokenNode is JsonValue)
         {
             var token = tokenNode.GetValue<string>();
-            await StoreTokenAsync(userId, token, ct).ConfigureAwait(false);
+            await StoreTokenAsync(userId, token, "device-flow", ct).ConfigureAwait(false);
             return new DeviceFlowPollResult(DeviceFlowPollStatus.Complete);
         }
 
@@ -89,16 +96,27 @@ public sealed class GitHubService(
         return !string.IsNullOrEmpty(token);
     }
 
+    public async Task<GitHubConnectionStatus> GetConnectionStatusAsync(string userId, CancellationToken ct = default)
+    {
+        var credential = await GetCredentialAsync(userId, ct).ConfigureAwait(false)
+            ?? await MigrateLegacyTokenAsync(userId, ct).ConfigureAwait(false);
+
+        if (credential is null)
+            return new GitHubConnectionStatus(false, null);
+
+        return new GitHubConnectionStatus(true, ReadConnectedAt(credential.Metadata));
+    }
+
     /// <summary>Retrieves the stored GitHub access token for the given user.</summary>
     public async Task<string?> GetTokenAsync(string userId, CancellationToken ct = default)
     {
-        var config = await pluginStateStore.GetStateAsync(IntegrationId, userId, ct).ConfigureAwait(false);
-        if (config is null)
+        var credential = await GetCredentialAsync(userId, ct).ConfigureAwait(false)
+            ?? await MigrateLegacyTokenAsync(userId, ct).ConfigureAwait(false);
+
+        if (credential is null)
             return null;
 
-        return config.TryGetPropertyValue("access_token", out var node) && node is JsonValue
-            ? node.GetValue<string>()
-            : null;
+        return credentialProtector.Decrypt(credential.EncryptedValue);
     }
 
     public async Task<bool> ConnectWithTokenAsync(string userId, string token, CancellationToken ct = default)
@@ -112,27 +130,132 @@ public sealed class GitHubService(
         if (!response.IsSuccessStatusCode)
             return false;
 
-        await StoreTokenAsync(userId, token, ct).ConfigureAwait(false);
+        await StoreTokenAsync(userId, token, "manual-token", ct).ConfigureAwait(false);
         return true;
     }
 
     /// <summary>Removes stored GitHub token (disconnect) for the given user.</summary>
-    public async Task DisconnectAsync(string userId, CancellationToken ct = default) =>
-        await pluginStateStore.RemoveStateAsync(IntegrationId, userId, ct).ConfigureAwait(false);
+    public async Task DisconnectAsync(string userId, CancellationToken ct = default)
+    {
+        var credentials = await credentialRepository.ListByUserNamespaceAndKindAsync(userId, CredentialNamespace, CredentialKind).ConfigureAwait(false);
+        foreach (var credential in credentials.Where(c => string.Equals(c.Label, CredentialLabel, StringComparison.Ordinal)))
+        {
+            await credentialRepository.DeleteAsync(credential.Id, userId).ConfigureAwait(false);
+        }
+
+        await RemoveLegacyStateAsync(userId, ct).ConfigureAwait(false);
+    }
 
     // ── Private helpers ────────────────────────────────────────────────────────
 
-    private async Task StoreTokenAsync(string userId, string token, CancellationToken ct)
+    private async Task StoreTokenAsync(string userId, string token, string source, CancellationToken ct)
     {
-        var config = new JsonObject
+        var now = DateTimeOffset.UtcNow;
+        var credential = new UserCredential
         {
-            ["access_token"] = token,
-            ["connected_at"] = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid().ToString(),
+            UserId = userId,
+            Namespace = CredentialNamespace,
+            Kind = CredentialKind,
+            Label = CredentialLabel,
+            EncryptedValue = credentialProtector.Encrypt(token),
+            DisplayHint = ComputeDisplayHint(token),
+            Metadata = CreateMetadata(now, source),
+            CreatedAt = now.ToString("O"),
+            UpdatedAt = now.ToString("O"),
         };
 
-        await pluginStateStore.SetStateAsync(IntegrationId, userId, config, ct).ConfigureAwait(false);
+        await credentialRepository.UpsertAsync(credential).ConfigureAwait(false);
+        await RemoveLegacyStateAsync(userId, ct).ConfigureAwait(false);
     }
+
+    private async Task<UserCredential?> GetCredentialAsync(string userId, CancellationToken ct)
+    {
+        var credentials = await credentialRepository.ListByUserNamespaceAndKindAsync(userId, CredentialNamespace, CredentialKind).ConfigureAwait(false);
+        return credentials.FirstOrDefault(c => string.Equals(c.Label, CredentialLabel, StringComparison.Ordinal));
+    }
+
+    private async Task<UserCredential?> MigrateLegacyTokenAsync(string userId, CancellationToken ct)
+    {
+        var legacyState = await pluginStateStore.GetStateAsync(IntegrationId, userId, ct).ConfigureAwait(false);
+        if (legacyState is null)
+            return null;
+
+        if (!legacyState.TryGetPropertyValue("access_token", out var tokenNode) || tokenNode is not JsonValue)
+            return null;
+
+        var token = tokenNode.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(token))
+            return null;
+
+        var connectedAt = legacyState["connected_at"]?.GetValue<DateTimeOffset?>() ?? DateTimeOffset.UtcNow;
+        var credential = new UserCredential
+        {
+            Id = Guid.NewGuid().ToString(),
+            UserId = userId,
+            Namespace = CredentialNamespace,
+            Kind = CredentialKind,
+            Label = CredentialLabel,
+            EncryptedValue = credentialProtector.Encrypt(token),
+            DisplayHint = ComputeDisplayHint(token),
+            Metadata = CreateMetadata(connectedAt, "legacy-plugin-state"),
+            CreatedAt = connectedAt.ToString("O"),
+            UpdatedAt = DateTimeOffset.UtcNow.ToString("O"),
+        };
+
+        await credentialRepository.UpsertAsync(credential).ConfigureAwait(false);
+        await RemoveLegacyStateAsync(userId, ct).ConfigureAwait(false);
+        return await GetCredentialAsync(userId, ct).ConfigureAwait(false);
+    }
+
+    private async Task RemoveLegacyStateAsync(string userId, CancellationToken ct)
+    {
+        var legacyState = await pluginStateStore.GetStateAsync(IntegrationId, userId, ct).ConfigureAwait(false);
+        if (legacyState is null)
+            return;
+
+        legacyState.Remove("access_token");
+        legacyState.Remove("connected_at");
+
+        if (legacyState.Count == 0)
+        {
+            await pluginStateStore.RemoveStateAsync(IntegrationId, userId, ct).ConfigureAwait(false);
+            return;
+        }
+
+        await pluginStateStore.SetStateAsync(IntegrationId, userId, legacyState, ct).ConfigureAwait(false);
+    }
+
+    private static string CreateMetadata(DateTimeOffset connectedAt, string source)
+        => new JsonObject
+        {
+            ["connected_at"] = connectedAt,
+            ["source"] = source,
+        }.ToJsonString();
+
+    private static DateTimeOffset? ReadConnectedAt(string? metadata)
+    {
+        if (string.IsNullOrWhiteSpace(metadata))
+            return null;
+
+        try
+        {
+            var node = JsonNode.Parse(metadata) as JsonObject;
+            return node?["connected_at"]?.GetValue<DateTimeOffset?>();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string ComputeDisplayHint(string value)
+        => value.Length <= 4
+            ? new string('*', value.Length)
+            : $"...{value[^4..]}";
 }
+
+public sealed record GitHubConnectionStatus(bool Connected, DateTimeOffset? ConnectedAt);
 
 /// <summary>Response from GitHub's device code endpoint.</summary>
 public sealed record DeviceCodeResponse(

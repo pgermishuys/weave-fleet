@@ -11,21 +11,36 @@ public interface IUserCredentialRepository
     /// <summary>Get a credential by its stable ID. Returns null when not found or when the credential does not belong to the current user.</summary>
     Task<UserCredential?> GetByIdAsync(string id);
 
+    /// <summary>Get a credential by its stable ID for the specified user. Returns null when not found.</summary>
+    Task<UserCredential?> GetByIdAsync(string id, string userId);
+
     /// <summary>List all credentials belonging to the current user.</summary>
     Task<IReadOnlyList<UserCredential>> ListByUserAsync();
+
+    /// <summary>List all credentials for the specified user.</summary>
+    Task<IReadOnlyList<UserCredential>> ListByUserAsync(string userId);
 
     /// <summary>List all credentials for the current user with the given namespace.</summary>
     Task<IReadOnlyList<UserCredential>> ListByUserAndNamespaceAsync(string credentialNamespace);
 
+    /// <summary>List all credentials for the specified user with the given namespace.</summary>
+    Task<IReadOnlyList<UserCredential>> ListByUserAndNamespaceAsync(string userId, string credentialNamespace);
+
     /// <summary>List all credentials for the current user with the given namespace and kind.</summary>
     Task<IReadOnlyList<UserCredential>> ListByUserNamespaceAndKindAsync(string credentialNamespace, string kind);
 
+    /// <summary>List all credentials for the specified user with the given namespace and kind.</summary>
+    Task<IReadOnlyList<UserCredential>> ListByUserNamespaceAndKindAsync(string userId, string credentialNamespace, string kind);
+
     /// <summary>
-    /// Insert or update a credential record.
-    /// On conflict by (user_id, label), updates the encrypted value, display hint, metadata, and updated_at timestamp.
-    /// </summary>
+     /// Insert or update a credential record.
+     /// On conflict by (user_id, label), updates the encrypted value, display hint, metadata, and updated_at timestamp.
+     /// </summary>
     Task UpsertAsync(UserCredential credential);
 
     /// <summary>Delete a credential by its stable ID. User-scoped — silently no-ops if the credential does not belong to the current user.</summary>
     Task DeleteAsync(string id);
+
+    /// <summary>Delete a credential by its stable ID for the specified user. Silently no-ops when not found.</summary>
+    Task DeleteAsync(string id, string userId);
 }
