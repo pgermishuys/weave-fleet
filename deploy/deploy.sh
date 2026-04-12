@@ -175,7 +175,7 @@ ssh_remote "sudo mkdir -p $RELEASE_DIR && sudo chown fleet:fleet $RELEASE_DIR"
 : "${Fleet__Auth__ClientSecret:?Fleet__Auth__ClientSecret must be set}"
 
 log "Refreshing remote fleet.env from deployment environment..."
-"$SCRIPT_DIR/provision-fleet-env.sh"
+bash "$SCRIPT_DIR/provision-fleet-env.sh"
 
 # ── 6. Stop service gracefully ────────────────────────────────────────────────
 log "Stopping service on remote host..."

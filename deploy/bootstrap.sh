@@ -107,7 +107,7 @@ log "fleet.service installed at /etc/systemd/system/fleet.service"
 
 # ── Step 4: Provision fleet.env securely ─────────────────────────────────────
 
-"$SCRIPT_DIR/provision-fleet-env.sh"
+bash "$SCRIPT_DIR/provision-fleet-env.sh"
 
 # ── Step 5: Create release directory structure ────────────────────────────────
 
