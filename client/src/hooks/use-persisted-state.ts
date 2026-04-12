@@ -23,7 +23,18 @@ function subscribeToKey(key: string) {
       keyListeners.set(key, listeners);
     }
     listeners.add(callback);
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.storageArea !== localStorage) return;
+      if (event.key !== key) return;
+      snapshotCache.delete(key);
+      callback();
+    };
+
+    window.addEventListener("storage", handleStorage);
+
     return () => {
+      window.removeEventListener("storage", handleStorage);
       listeners!.delete(callback);
       if (listeners!.size === 0) keyListeners.delete(key);
     };

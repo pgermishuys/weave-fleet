@@ -152,14 +152,17 @@ export function SidebarProvider({ children }: SidebarProviderProps) {
       setMobileDrawerOpen((open) => !open);
       return;
     }
-    if (panelOpen) {
-      // Panel is showing → switch to welcome (hides panel)
-      setActiveViewState("welcome");
-    } else {
-      // Panel is hidden → restore last panel view
+
+    if (!viewHasPanel(activeView, panelViews)) {
+      // On a non-panel view (e.g. welcome), always restore the last panel view
+      // and ensure the sidebar panel becomes visible.
       setActiveViewState(lastPanelViewRef.current);
+      return;
     }
-  }, [isMobileNav, panelOpen, setActiveViewState]);
+
+    // Panel is showing → switch to welcome (hides panel)
+    setActiveViewState("welcome");
+  }, [activeView, isMobileNav, panelViews, setActiveViewState]);
 
   return (
     <SidebarContext.Provider

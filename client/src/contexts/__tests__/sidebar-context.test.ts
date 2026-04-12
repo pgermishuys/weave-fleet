@@ -66,4 +66,27 @@ describe("sidebar context", () => {
     expect(result.current.activeView).toBe("repositories");
     expect(result.current.panelOpen).toBe(true);
   });
+
+  it("restores the last panel view from any non-panel view", () => {
+    localStorage.clear();
+    const { result } = renderHook(() => useSidebar(), { wrapper });
+
+    act(() => {
+      result.current.setActiveView("repositories");
+    });
+    expect(result.current.activeView).toBe("repositories");
+    expect(result.current.panelOpen).toBe(true);
+
+    act(() => {
+      result.current.setActiveView("settings");
+    });
+    expect(result.current.activeView).toBe("settings");
+    expect(result.current.panelOpen).toBe(false);
+
+    act(() => {
+      result.current.toggleSidebar();
+    });
+    expect(result.current.activeView).toBe("repositories");
+    expect(result.current.panelOpen).toBe(true);
+  });
 });
