@@ -60,6 +60,9 @@ jobs:
         env:
           FLEET_HOST: ${{ inputs.host }}
           FLEET_DOMAIN: ${{ inputs.domain }}
+          Fleet__Auth__Authority: ${{ secrets.FLEET_AUTH_AUTHORITY }}
+          Fleet__Auth__ClientId: ${{ secrets.FLEET_AUTH_CLIENT_ID }}
+          Fleet__Auth__ClientSecret: ${{ secrets.FLEET_AUTH_CLIENT_SECRET }}
           SSH_OPTS: ${{ steps.ssh.outputs.ssh-opts }}
         run: bash deploy/deploy.sh
 

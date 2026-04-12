@@ -21,6 +21,9 @@
 #
 # Optional:
 #   FLEET_DOMAIN           — Domain for health check (default: derived from host)
+#   Fleet__Auth__Authority  — OIDC issuer URL (required for fleet.env refresh)
+#   Fleet__Auth__ClientId   — OIDC client ID (required for fleet.env refresh)
+#   Fleet__Auth__ClientSecret — OIDC client secret (required for fleet.env refresh)
 #   DOTNET_CONFIGURATION   — Build configuration (default: Release)
 #   SSH_OPTS               — SSH/SCP options. MUST include:
 #                              -i <key-file>               (private key)
@@ -165,6 +168,14 @@ fi
 # ── 5. Create release directory ───────────────────────────────────────────────
 log "Creating release directory $RELEASE_DIR ..."
 ssh_remote "sudo mkdir -p $RELEASE_DIR && sudo chown fleet:fleet $RELEASE_DIR"
+
+# ── 5.5 Refresh fleet.env from current deployment environment ─────────────────
+: "${Fleet__Auth__Authority:?Fleet__Auth__Authority must be set}"
+: "${Fleet__Auth__ClientId:?Fleet__Auth__ClientId must be set}"
+: "${Fleet__Auth__ClientSecret:?Fleet__Auth__ClientSecret must be set}"
+
+log "Refreshing remote fleet.env from deployment environment..."
+"$SCRIPT_DIR/provision-fleet-env.sh"
 
 # ── 6. Stop service gracefully ────────────────────────────────────────────────
 log "Stopping service on remote host..."
