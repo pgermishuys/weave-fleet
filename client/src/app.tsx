@@ -27,9 +27,16 @@ const NotFoundPage = lazy(() => import("./app/not-found"));
 
 function PageFallback() {
   return (
-    <div className="flex items-center justify-center h-full text-muted-foreground gap-2 text-sm">
-      <Loader2 className="h-4 w-4 animate-spin" />
-      Loading...
+    <div className="flex min-h-screen items-center justify-center px-6 py-10">
+      <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl border border-border/60 bg-background/80 px-8 py-10 text-center shadow-sm backdrop-blur">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Loader2 className="h-7 w-7 animate-spin" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">Loading workspace…</p>
+          <p className="text-xs text-muted-foreground">Just a moment while we get everything ready.</p>
+        </div>
+      </div>
     </div>
   );
 }

@@ -541,9 +541,16 @@ function FleetPageInner() {
         />
 
         {isLoading && sessions.length === 0 && (
-          <div className="flex items-center justify-center h-32 text-muted-foreground gap-2 text-sm">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading sessions…
+          <div className="flex min-h-[40vh] items-center justify-center px-4 py-8">
+            <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-2xl border border-border/60 bg-background/80 px-6 py-8 text-center shadow-sm backdrop-blur">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Loading sessions…</p>
+                <p className="text-xs text-muted-foreground">Fetching the latest agent activity.</p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -578,9 +585,16 @@ export default function FleetPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-full text-muted-foreground gap-2 text-sm">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading…
+        <div className="flex min-h-screen items-center justify-center px-6 py-10">
+          <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl border border-border/60 bg-background/80 px-8 py-10 text-center shadow-sm backdrop-blur">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Loader2 className="h-7 w-7 animate-spin" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">Loading fleet…</p>
+              <p className="text-xs text-muted-foreground">Preparing the latest session overview.</p>
+            </div>
+          </div>
         </div>
       }
     >
