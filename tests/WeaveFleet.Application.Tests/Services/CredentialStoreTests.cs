@@ -154,7 +154,7 @@ public sealed class CredentialStoreTests
     [Fact]
     public async Task GetDecryptedCredentialsAsync_DecryptsValuesBeforeReturning()
     {
-        _repo.ListByUserAsync().Returns([
+        _repo.ListByUserAsync("user-1").Returns([
             new UserCredential
             {
                 Id = "cred-1",
@@ -182,7 +182,7 @@ public sealed class CredentialStoreTests
     [Fact]
     public async Task GetDecryptedCredentialsAsync_ReturnsEmptyListWhenNoCredentials()
     {
-        _repo.ListByUserAsync().Returns([]);
+        _repo.ListByUserAsync("user-1").Returns([]);
 
         var decrypted = await _sut.GetDecryptedCredentialsAsync("user-1");
 

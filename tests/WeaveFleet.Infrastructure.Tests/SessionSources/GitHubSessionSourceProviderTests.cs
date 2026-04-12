@@ -2,12 +2,13 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Shouldly;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
+using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.SessionSources;
 
@@ -150,17 +151,31 @@ public sealed class GitHubSessionSourceProviderTests
         });
 
         var httpClientFactory = new TestHttpClientFactory(new FakeGitHubHandler());
-        var gitHubService = new GitHubService(httpClientFactory, pluginStateStore);
+        var credentialRepository = Substitute.For<IUserCredentialRepository>();
+        var credentialProtector = Substitute.For<ICredentialProtector>();
+        credentialProtector.Decrypt(Arg.Any<string>()).Returns(ci => ci.Arg<string>());
+        credentialRepository.ListByUserNamespaceAndKindAsync(TestUserId, "github", "oauth-access-token").Returns([
+            new UserCredential
+            {
+                Id = "cred-1",
+                UserId = TestUserId,
+                Namespace = "github",
+                Kind = "oauth-access-token",
+                Label = "GitHub",
+                EncryptedValue = "token",
+                DisplayHint = "...oken",
+                CreatedAt = "2026-01-01T00:00:00Z",
+                UpdatedAt = "2026-01-01T00:00:00Z"
+            }
+        ]);
+
+        var gitHubService = new GitHubService(httpClientFactory, pluginStateStore, credentialRepository, credentialProtector);
         var gitHubApiProxy = new GitHubApiProxy(httpClientFactory);
 
         var userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(TestUserId);
 
-        var services = new ServiceCollection();
-        services.AddScoped(_ => userContext);
-        var serviceProvider = services.BuildServiceProvider();
-
-        var provider = new GitHubSessionSourceProvider(gitHubService, gitHubApiProxy, serviceProvider);
+        var provider = new GitHubSessionSourceProvider(gitHubService, gitHubApiProxy, userContext);
         return (provider, pluginStateStore);
     }
 

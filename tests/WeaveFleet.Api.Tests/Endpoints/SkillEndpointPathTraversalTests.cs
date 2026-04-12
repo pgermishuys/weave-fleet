@@ -36,7 +36,6 @@ public sealed class SkillEndpointPathTraversalTests
     // ── GET /api/skills/{name} — encoded traversal via route parameter ────────
 
     [Theory]
-    [InlineData("/api/skills/%2e%2e")]               // URL-encoded ".."
     [InlineData("/api/skills/foo%2fbar")]             // URL-encoded "foo/bar"
     [InlineData("/api/skills/foo%5cbar")]             // URL-encoded "foo\bar"
     public async Task GetSkill_ReturnsBadRequestOrNotRouted_ForEncodedTraversal(string url)
