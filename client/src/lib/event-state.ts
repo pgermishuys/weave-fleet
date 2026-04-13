@@ -5,6 +5,7 @@
 
 import type {
   AccumulatedMessage,
+  AccumulatedReasoningPart,
   AccumulatedTextPart,
   AccumulatedToolPart,
   AccumulatedFilePart,
@@ -117,13 +118,13 @@ export function applyPartUpdate(
     if (part.type === "text") {
       const existingPart = msg.parts.find(
         (p): p is AccumulatedTextPart =>
-          p.type === "text" && p.partId === part.id
+          (p.type === "text" || p.type === "reasoning") && p.partId === part.id
       );
       if (existingPart) {
         return {
           ...msg,
           parts: msg.parts.map((p) =>
-            p.partId === part.id ? { ...p, text: part.text ?? "" } : p
+            p.partId === part.id ? { partId: part.id, type: "text", text: part.text ?? "" } : p
           ),
         };
       }
@@ -132,6 +133,28 @@ export function applyPartUpdate(
         type: "text",
         text: part.text ?? "",
       };
+      return { ...msg, parts: [...msg.parts, newPart] };
+    }
+
+    if (part.type === "reasoning") {
+      const existingPart = msg.parts.find(
+        (p): p is AccumulatedTextPart | AccumulatedReasoningPart =>
+          (p.type === "text" || p.type === "reasoning") && p.partId === part.id
+      );
+      const newPart: AccumulatedReasoningPart = {
+        partId: part.id,
+        type: "reasoning",
+        text: part.text ?? "",
+        summary: part.summary,
+      };
+
+      if (existingPart) {
+        return {
+          ...msg,
+          parts: msg.parts.map((p) => (p.partId === part.id ? newPart : p)),
+        };
+      }
+
       return { ...msg, parts: [...msg.parts, newPart] };
     }
 
@@ -210,12 +233,12 @@ export function applyTextDelta(
 
   const msg = prev[msgIndex];
   const partIndex = msg.parts.findIndex(
-    (p) => p.type === "text" && p.partId === partId
+    (p) => (p.type === "text" || p.type === "reasoning") && p.partId === partId
   );
 
   let updatedMsg: AccumulatedMessage;
   if (partIndex !== -1) {
-    const existingPart = msg.parts[partIndex] as AccumulatedTextPart;
+    const existingPart = msg.parts[partIndex] as AccumulatedTextPart | AccumulatedReasoningPart;
     const newParts = msg.parts.slice();
     newParts[partIndex] = { ...existingPart, text: existingPart.text + delta };
     updatedMsg = { ...msg, parts: newParts };

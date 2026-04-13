@@ -54,6 +54,9 @@ export function getPartSearchableText(part: AccumulatedPart): string {
   if (part.type === "text") {
     return part.text;
   }
+  if (part.type === "reasoning") {
+    return "";
+  }
   if (part.type === "file") {
     return part.filename ?? "";
   }

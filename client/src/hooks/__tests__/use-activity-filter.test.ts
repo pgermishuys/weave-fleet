@@ -20,6 +20,10 @@ function makeTextPart(partId: string, text: string): AccumulatedPart {
   return { partId, type: "text", text };
 }
 
+function makeReasoningPart(partId: string, text: string): AccumulatedPart {
+  return { partId, type: "reasoning", text };
+}
+
 function makeToolPart(
   partId: string,
   tool: string,
@@ -55,6 +59,11 @@ describe("getPartSearchableText", () => {
 
   it("returns empty string for empty text part", () => {
     const part = makeTextPart("p1", "");
+    expect(getPartSearchableText(part)).toBe("");
+  });
+
+  it("does not expose reasoning text to search", () => {
+    const part = makeReasoningPart("p-reason", "internal thought");
     expect(getPartSearchableText(part)).toBe("");
   });
 
@@ -120,6 +129,11 @@ describe("partMatchesQuery", () => {
   it("returns false when neither tool name nor output matches", () => {
     const part = makeToolPart("p4", "bash", "hello");
     expect(partMatchesQuery(part, "xyz")).toBe(false);
+  });
+
+  it("does not match queries against reasoning content", () => {
+    const part = makeReasoningPart("p5", "secret chain of thought");
+    expect(partMatchesQuery(part, "secret")).toBe(false);
   });
 });
 

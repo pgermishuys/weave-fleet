@@ -141,6 +141,66 @@ describe("applyPartUpdate", () => {
 
       expect((result[0].parts[0] as { text: string }).text).toBe("");
     });
+
+    it("stores reasoning parts as structured hidden content", () => {
+      const prev = [makeMessage()];
+      const result = applyPartUpdate(prev, {
+        messageID: "msg-1",
+        sessionID: "sess-1",
+        type: "reasoning",
+        id: "part-r1",
+        text: "Considering greeting response",
+      });
+
+      expect(result[0].parts).toHaveLength(1);
+      expect(result[0].parts[0]).toEqual({
+        partId: "part-r1",
+        type: "reasoning",
+        text: "Considering greeting response",
+      });
+    });
+
+    it("updates existing reasoning parts without converting them to visible text", () => {
+      const prev = [
+        makeMessage({
+          parts: [{ partId: "part-r1", type: "reasoning", text: "old" }],
+        }),
+      ];
+      const result = applyPartUpdate(prev, {
+        messageID: "msg-1",
+        sessionID: "sess-1",
+        type: "reasoning",
+        id: "part-r1",
+        text: "new",
+      });
+
+      expect(result[0].parts).toHaveLength(1);
+      expect(result[0].parts[0]).toEqual({
+        partId: "part-r1",
+        type: "reasoning",
+        text: "new",
+        summary: undefined,
+      });
+    });
+
+    it("promotes a delta-created text part to reasoning when the typed update arrives", () => {
+      const prev = applyTextDelta([], "msg-1", "part-r1", "sess-1", "Thinking");
+      const result = applyPartUpdate(prev, {
+        messageID: "msg-1",
+        sessionID: "sess-1",
+        type: "reasoning",
+        id: "part-r1",
+        text: "Thinking more clearly",
+        summary: "planning",
+      });
+
+      expect(result[0].parts[0]).toEqual({
+        partId: "part-r1",
+        type: "reasoning",
+        text: "Thinking more clearly",
+        summary: "planning",
+      });
+    });
   });
 
   describe("tool parts", () => {
@@ -331,6 +391,21 @@ describe("applyTextDelta", () => {
 
     expect(result[0].parts).toHaveLength(1);
     expect((result[0].parts[0] as { text: string }).text).toBe("first");
+  });
+
+  it("appends deltas to an existing reasoning part", () => {
+    const prev = [
+      makeMessage({
+        parts: [{ partId: "part-r1", type: "reasoning", text: "hello" }],
+      }),
+    ];
+    const result = applyTextDelta(prev, "msg-1", "part-r1", "sess-1", " world");
+
+    expect(result[0].parts[0]).toEqual({
+      partId: "part-r1",
+      type: "reasoning",
+      text: "hello world",
+    });
   });
 
   it("returns a new array (immutability)", () => {

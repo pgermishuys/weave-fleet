@@ -42,17 +42,27 @@ public sealed record HarnessEvent
 }
 
 /// <summary>Discriminator for <see cref="MessagePart"/> subtypes.</summary>
-public enum MessagePartKind { Text, ToolUse, ToolResult }
+public enum MessagePartKind
+{
+    Text = 0,
+    ToolUse = 1,
+    ToolResult = 2,
+    Reasoning = 3,
+}
 
 /// <summary>One logical piece of an agent message.</summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(TextPart), "text")]
 [JsonDerivedType(typeof(ToolUsePart), "tool")]
 [JsonDerivedType(typeof(ToolResultPart), "tool-result")]
+[JsonDerivedType(typeof(ReasoningPart), "reasoning")]
 public abstract record MessagePart(MessagePartKind Kind);
 
 /// <summary>Plain text content.</summary>
 public sealed record TextPart(string Text) : MessagePart(MessagePartKind.Text);
+
+/// <summary>Structured reasoning content that is stored but not shown in the main activity stream.</summary>
+public sealed record ReasoningPart(string Text, string? Summary = null) : MessagePart(MessagePartKind.Reasoning);
 
 /// <summary>The agent invoking a tool.</summary>
 public sealed record ToolUsePart(

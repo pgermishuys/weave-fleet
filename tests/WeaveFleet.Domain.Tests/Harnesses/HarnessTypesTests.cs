@@ -65,5 +65,18 @@ public sealed class HarnessTypesTests
         msg.Role.ShouldBe("assistant");
         msg.TextContent.ShouldBe("Hello");
     }
-}
 
+    [Fact]
+    public void HarnessMessage_TextContent_ExcludesReasoningParts()
+    {
+        var msg = new HarnessMessage
+        {
+            Id = "msg-2",
+            Role = "assistant",
+            Parts = [new ReasoningPart("Private thought"), new TextPart("Visible answer")],
+            Timestamp = DateTimeOffset.UtcNow
+        };
+
+        msg.TextContent.ShouldBe("Visible answer");
+    }
+}

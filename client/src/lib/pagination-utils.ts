@@ -21,10 +21,12 @@ export interface FleetMessage {
 
 /** Polymorphic message part — discriminated by "type" field. */
 export interface FleetMessagePart {
-  type: string;          // "text" | "tool" | "tool-result"
-  kind: number;          // MessagePartKind enum (0=Text, 1=ToolUse, 2=ToolResult) — ignored by frontend
+  type: string;          // "text" | "tool" | "tool-result" | "reasoning"
+  kind: number;          // MessagePartKind enum (0=Text, 1=ToolUse, 2=ToolResult, 3=Reasoning) — ignored by frontend
   // TextPart fields
   text?: string;
+  // ReasoningPart fields
+  summary?: string;
   // ToolUsePart fields
   toolCallId?: string;
   toolName?: string;
@@ -171,6 +173,13 @@ export function convertFleetMessageToAccumulated(msg: FleetMessage): Accumulated
     if (part.type === "text") {
       // Fleet TextPart has no ID — generate a stable one from message ID + index
       parts.push({ partId: `${msg.id}-text-${parts.length}`, type: "text", text: part.text ?? "" });
+    } else if (part.type === "reasoning") {
+      parts.push({
+        partId: `${msg.id}-reasoning-${parts.length}`,
+        type: "reasoning",
+        text: part.text ?? "",
+        summary: part.summary,
+      });
     } else if (part.type === "tool") {
       parts.push({
         partId: part.toolCallId ?? `${msg.id}-tool-${parts.length}`,

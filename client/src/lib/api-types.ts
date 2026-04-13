@@ -304,6 +304,13 @@ export interface AccumulatedTextPart {
   text: string;
 }
 
+export interface AccumulatedReasoningPart {
+  partId: string;
+  type: "reasoning";
+  text: string;
+  summary?: string;
+}
+
 export interface AccumulatedToolPart {
   partId: string;
   type: "tool";
@@ -321,7 +328,7 @@ export interface AccumulatedFilePart {
   url: string;
 }
 
-export type AccumulatedPart = AccumulatedTextPart | AccumulatedToolPart | AccumulatedFilePart;
+export type AccumulatedPart = AccumulatedTextPart | AccumulatedReasoningPart | AccumulatedToolPart | AccumulatedFilePart;
 
 export interface AccumulatedMessage {
   messageId: string;

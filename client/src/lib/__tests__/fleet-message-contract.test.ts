@@ -40,6 +40,9 @@ describe("Fleet API → AccumulatedMessage contract", () => {
         if (expectedPart.type === "text") {
           expect((actualPart as { text: string }).text).toBe(expectedPart.text);
         }
+        if (expectedPart.type === "reasoning") {
+          expect((actualPart as { text: string }).text).toBe(expectedPart.text);
+        }
         if (expectedPart.type === "tool") {
           expect((actualPart as { tool: string }).tool).toBe(expectedPart.tool);
           expect((actualPart as { callId: string }).callId).toBe(

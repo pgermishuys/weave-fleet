@@ -118,6 +118,7 @@ describe("Fleet WebSocket events → AccumulatedMessage state contract", () => {
             partId: string;
             type: string;
             text?: string;
+            summary?: string;
             tool?: string;
             callId?: string;
             state?: unknown;
@@ -134,6 +135,11 @@ describe("Fleet WebSocket events → AccumulatedMessage state contract", () => {
           expect(actual.parts[p].type).toBe(expected.parts[p].type);
 
           if (expected.parts[p].type === "text") {
+            expect((actual.parts[p] as { text: string }).text).toBe(
+              expected.parts[p].text,
+            );
+          }
+          if (expected.parts[p].type === "reasoning") {
             expect((actual.parts[p] as { text: string }).text).toBe(
               expected.parts[p].text,
             );

@@ -185,6 +185,10 @@ public static class WebSocketEndpoints
                 if (webSocket.State != WebSocketState.Open)
                     break;
 
+                var sanitizedPayload = ClientPayloadSanitizer.SanitizeEventPayload(evt.Type, evt.Payload);
+                if (!sanitizedPayload.HasValue)
+                    continue;
+
                 var json = JsonSerializer.Serialize(new
                 {
                     type = "event",
@@ -192,7 +196,7 @@ public static class WebSocketEndpoints
                     data = new
                     {
                         type = evt.Type,
-                        properties = evt.Payload
+                        properties = sanitizedPayload.Value
                     }
                 });
 

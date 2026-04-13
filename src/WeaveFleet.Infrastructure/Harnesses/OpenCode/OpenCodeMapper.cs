@@ -80,7 +80,7 @@ internal static class OpenCodeMapper
                     State: toolState);
 
             case OpenCodeReasoningPart reasoning when reasoning.Text is not null:
-                return new TextPart($"[reasoning] {reasoning.Text}");
+                return new ReasoningPart(reasoning.Text, reasoning.Summary);
 
             default:
                 return null;

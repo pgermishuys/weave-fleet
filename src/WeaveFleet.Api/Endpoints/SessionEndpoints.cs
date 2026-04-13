@@ -176,15 +176,16 @@ public static class SessionEndpoints
             return result.Match(
                 page =>
                 {
+                    var sanitizedMessages = ClientPayloadSanitizer.SanitizeMessages(page.Messages);
                     var oldest = page.Messages.Count > 0 ? page.Messages[0].Id : null;
                     return Results.Ok(new
                     {
-                        messages = page.Messages,
+                        messages = sanitizedMessages,
                         pagination = new
                         {
                             hasMore = page.HasMore,
                             oldestMessageId = oldest,
-                            totalCount = page.Messages.Count
+                            totalCount = sanitizedMessages.Count
                         }
                     });
                 },

@@ -91,6 +91,33 @@ public sealed class OpenCodeMapperTests
         result.TextContent.ShouldBe("Part one. Part two.");
     }
 
+    [Fact]
+    public void ToHarnessMessage_MapsReasoningPart_WithoutAddingToTextContent()
+    {
+        var msg = new OpenCodeMessageWithParts
+        {
+            Info = new OpenCodeAssistantMessage
+            {
+                Id = "msg-reason-1",
+                SessionId = "sess-1",
+                Time = new OpenCodeMessageTime { Created = 0L },
+            },
+            Parts =
+            [
+                new OpenCodeReasoningPart { Text = "Let me think", Summary = "analysis" },
+                new OpenCodeTextPart { Text = "Final answer" },
+            ],
+        };
+
+        var result = OpenCodeMapper.ToHarnessMessage(msg);
+
+        result.Parts.Count.ShouldBe(2);
+        var reasoning = result.Parts[0].ShouldBeOfType<ReasoningPart>();
+        reasoning.Text.ShouldBe("Let me think");
+        reasoning.Summary.ShouldBe("analysis");
+        result.TextContent.ShouldBe("Final answer");
+    }
+
     // ---------------------------------------------------------------------------
     // ToHarnessMessage — ToolPart maps to ToolUsePart
     // ---------------------------------------------------------------------------

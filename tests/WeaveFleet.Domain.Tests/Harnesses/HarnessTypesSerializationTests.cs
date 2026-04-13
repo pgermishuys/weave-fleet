@@ -33,6 +33,17 @@ public sealed class HarnessTypesSerializationTests
     }
 
     [Fact]
+    public void ReasoningPart_Serializes_With_Type_Discriminator_And_Summary()
+    {
+        MessagePart part = new ReasoningPart("Thinking", "short summary");
+        var json = JsonSerializer.Serialize(part, CamelCaseOptions);
+        using var doc = JsonDocument.Parse(json);
+        doc.RootElement.GetProperty("type").GetString().ShouldBe("reasoning");
+        doc.RootElement.GetProperty("text").GetString().ShouldBe("Thinking");
+        doc.RootElement.GetProperty("summary").GetString().ShouldBe("short summary");
+    }
+
+    [Fact]
     public void MessagePage_Serializes_With_Parts_Fully_Populated()
     {
         var page = new MessagePage(

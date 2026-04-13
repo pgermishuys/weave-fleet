@@ -218,6 +218,21 @@ describe("convertFleetMessageToAccumulated", () => {
     expect(result.parts[0].partId).toBe("msg-1-text-0");
   });
 
+  it("converts reasoning parts as structured hidden content", () => {
+    const msg = makeFleetMsg({
+      id: "msg-r1",
+      parts: [{ type: "reasoning", kind: 3, text: "Let me think", summary: "analysis" }],
+    });
+    const result = convertFleetMessageToAccumulated(msg);
+    expect(result.parts).toHaveLength(1);
+    expect(result.parts[0]).toEqual({
+      partId: "msg-r1-reasoning-0",
+      type: "reasoning",
+      text: "Let me think",
+      summary: "analysis",
+    });
+  });
+
   it("converts tool parts with enum state", () => {
     const msg = makeFleetMsg({
       parts: [{ type: "tool", kind: 1, toolCallId: "call-1", toolName: "bash", state: 2 }],

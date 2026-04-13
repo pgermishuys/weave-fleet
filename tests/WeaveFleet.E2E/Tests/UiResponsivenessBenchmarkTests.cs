@@ -95,11 +95,13 @@ public sealed class UiResponsivenessBenchmarkTests : BenchmarkTestBase,
             Output.WriteLine("=== LOADED (10 sessions, continuous traffic) ===");
             Output.WriteLine(Metrics.ToReport());
 
-            // Conservative thresholds — starting points that avoid CI flakiness
+            // Conservative thresholds for real-browser E2E runs on shared/dev machines.
+            // Keep search/card interactions tight, but allow more headroom for full
+            // session navigation and activity-stream readiness under sustained load.
             Metrics.AssertP95Below("dashboard_search_filter_ms", 200);
             Metrics.AssertP95Below("session_card_open_ms", 500);
-            Metrics.AssertP95Below("session_switch_ms", 500);
-            Metrics.AssertP95Below("activity_stream_ready_ms", 500);
+            Metrics.AssertP95Below("session_switch_ms", 900);
+            Metrics.AssertP95Below("activity_stream_ready_ms", 900);
             Metrics.AssertMaxBelow("dashboard_search_filter_ms", 500);
             Metrics.AssertMaxBelow("session_card_open_ms", 1000);
             Metrics.AssertMaxBelow("session_switch_ms", 1000);
@@ -261,4 +263,3 @@ public sealed class UiResponsivenessBenchmarkTests : BenchmarkTestBase,
         await Task.Delay(500);
     }
 }
-

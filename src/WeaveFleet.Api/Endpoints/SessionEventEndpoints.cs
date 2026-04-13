@@ -41,11 +41,15 @@ public static class SessionEventEndpoints
             // Subscribe with user scope so only events owned by this user are delivered
             await foreach (var evt in broadcaster.SubscribeAsync([$"session:{id}"], userContext.UserId, ct))
             {
+                var sanitizedPayload = ClientPayloadSanitizer.SanitizeEventPayload(evt.Type, evt.Payload);
+                if (!sanitizedPayload.HasValue)
+                    continue;
+
                 var data = JsonSerializer.Serialize(new
                 {
                     sessionId = id,
                     type = evt.Type,
-                    payload = evt.Payload,
+                    payload = sanitizedPayload.Value,
                     timestamp = evt.Timestamp.ToUnixTimeMilliseconds()
                 });
                 await WriteSseEventAsync(context.Response, evt.Type, data, ct);
@@ -70,11 +74,15 @@ public static class SessionEventEndpoints
             // Subscribe with user scope — only events for this user are delivered
             await foreach (var evt in broadcaster.SubscribeAsync(ActivityStreamTopics, userContext.UserId, ct))
             {
+                var sanitizedPayload = ClientPayloadSanitizer.SanitizeEventPayload(evt.Type, evt.Payload);
+                if (!sanitizedPayload.HasValue)
+                    continue;
+
                 var data = JsonSerializer.Serialize(new
                 {
                     topic = evt.Topic,
                     type = evt.Type,
-                    payload = evt.Payload,
+                    payload = sanitizedPayload.Value,
                     timestamp = evt.Timestamp.ToUnixTimeMilliseconds()
                 });
                 await WriteSseEventAsync(context.Response, evt.Type, data, ct);
