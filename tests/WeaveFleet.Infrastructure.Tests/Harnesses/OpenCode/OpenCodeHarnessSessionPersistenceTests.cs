@@ -57,7 +57,10 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     /// <summary>
     /// Builds a valid OpenCode message.created event SSE line with the given role and messageId.
     /// </summary>
-    private static string BuildMessageCreatedSseLine(string role = "assistant", string messageId = "msg-1") =>
+    private static string BuildMessageCreatedSseLine(string role, string messageId) =>
+        BuildMessageCreatedSseLine(role, messageId, agent: null);
+
+    private static string BuildMessageCreatedSseLine(string role, string messageId, string? agent) =>
         "data: " + JsonSerializer.Serialize(new
         {
             type = "message.created",
@@ -68,6 +71,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
                     id = messageId,
                     sessionId = "oc-session",
                     role,
+                    agent,
                     time = new { created = 1700000000L }
                 },
                 parts = new[] { new { type = "text", id = "p1", sessionId = "oc-session", messageId, text = "Hello" } }
@@ -77,10 +81,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     /// <summary>
     /// Builds a valid OpenCode message.part.updated event SSE line.
     /// </summary>
-    private static string BuildPartUpdatedSseLine(
-        string messageId = "msg-1",
-        string sessionId = "oc-session",
-        string text = "Hello from part") =>
+    private static string BuildPartUpdatedSseLine(string messageId, string sessionId, string text) =>
         "data: " + JsonSerializer.Serialize(new
         {
             type = "message.part.updated",
@@ -97,10 +98,43 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             }
         });
 
+    private static string BuildPartUpdatedSseLine(
+        string messageId,
+        string sessionId,
+        string text,
+        string role,
+        string? agent) =>
+        "data: " + JsonSerializer.Serialize(new
+        {
+            type = "message.part.updated",
+            properties = new
+            {
+                info = new
+                {
+                    id = messageId,
+                    sessionId,
+                    role,
+                    agent,
+                    time = new { created = 1700000000L }
+                },
+                part = new
+                {
+                    id = "part-1",
+                    sessionID = sessionId,
+                    messageID = messageId,
+                    type = "text",
+                    text
+                }
+            }
+        });
+
     /// <summary>
     /// Builds a valid OpenCode message.updated event SSE line.
     /// </summary>
-    private static string BuildMessageUpdatedSseLine(string role = "assistant", string messageId = "msg-1") =>
+    private static string BuildMessageUpdatedSseLine(string role, string messageId) =>
+        BuildMessageUpdatedSseLine(role, messageId, agent: null);
+
+    private static string BuildMessageUpdatedSseLine(string role, string messageId, string? agent) =>
         "data: " + JsonSerializer.Serialize(new
         {
             type = "message.updated",
@@ -111,6 +145,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
                     id = messageId,
                     sessionId = "oc-session",
                     role,
+                    agent,
                     time = new { created = 1700000000L }
                 },
                 parts = new[] { new { type = "text", id = "p1", sessionId = "oc-session", messageId, text = "Hello" } }
@@ -188,14 +223,14 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     }
 
     [Fact]
-    public async Task SubscribeAsync_MessageUpdatedEvent_DoesNotPersist()
+    public async Task SubscribeAsync_MessageUpdatedEvent_PersistsMessageIdentity()
     {
         var fleetSessionId = "fleet-persist-1";
         var eventDeliveredSignal = new TaskCompletionSource();
 
         var (instance, messageRepo) = await CreateInstanceWithSseLines(
             fleetSessionId,
-            [BuildMessageUpdatedSseLine("assistant")]);
+            [BuildMessageUpdatedSseLine("assistant", "msg-1", "loom")]);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var capturedEvents = new List<HarnessEvent>();
@@ -219,8 +254,12 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         // Give fire-and-forget tasks time to settle before cancelling
         await Task.Delay(200);
 
-        // message.updated must NOT trigger UpsertAsync
-        await messageRepo.DidNotReceive().UpsertAsync(Arg.Any<PersistedMessage>());
+        await messageRepo.Received(1).UpsertAsync(Arg.Is<PersistedMessage>(m =>
+            m.Id == "msg-1"
+            && m.SessionId == fleetSessionId
+            && m.Role == "assistant"
+            && m.AgentName == "loom"
+            && m.PartsJson.Contains("Hello")));
 
         // Assert the first delivered event is message.updated
         capturedEvents.ShouldNotBeEmpty();
@@ -302,7 +341,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
 
         var (instance, messageRepo) = await CreateInstanceWithSseLines(
             fleetSessionId,
-            [BuildMessageCreatedSseLine("assistant")],
+            [BuildMessageCreatedSseLine("assistant", "msg-persist-failure-1")],
             repo =>
             {
                 repo.UpsertAsync(Arg.Any<PersistedMessage>())
@@ -371,6 +410,56 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             m.SessionId == fleetSessionId &&
             m.Role == "assistant" &&
             m.PartsJson.Contains("Hello from part")));
+
+        await instance.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_MessagePartUpdated_WithInfo_BackfillsExistingRoleAndAgent()
+    {
+        var fleetSessionId = "fleet-part-persist-2";
+        var messageId = "msg-part-2";
+
+        PersistedMessage? lastUpserted = new()
+        {
+            Id = messageId,
+            SessionId = fleetSessionId,
+            Role = "assistant",
+            PartsJson = "[]",
+            Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            AgentName = null,
+        };
+
+        var persistSignal = new TaskCompletionSource();
+
+        var (instance, messageRepo) = await CreateInstanceWithSseLines(
+            fleetSessionId,
+            [BuildPartUpdatedSseLine(messageId, "oc-session", "Hello from part", "user", "loom")],
+            repo =>
+            {
+                repo.GetByIdAsync(messageId, fleetSessionId)
+                    .Returns(callInfo => Task.FromResult<PersistedMessage?>(lastUpserted));
+
+                repo.UpsertAsync(Arg.Any<PersistedMessage>()).Returns(callInfo =>
+                {
+                    lastUpserted = callInfo.ArgAt<PersistedMessage>(0);
+                    persistSignal.TrySetResult();
+                    return Task.CompletedTask;
+                });
+            });
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token);
+
+        await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await cts.CancelAsync();
+        await consumeTask;
+
+        lastUpserted.ShouldNotBeNull();
+        lastUpserted.Role.ShouldBe("user");
+        lastUpserted.AgentName.ShouldBe("loom");
+        lastUpserted.PartsJson.ShouldContain("Hello from part");
 
         await instance.DisposeAsync();
     }
@@ -1075,4 +1164,3 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
 
     private sealed record StubLaunchArtifacts : RuntimeLaunchArtifacts;
 }
-

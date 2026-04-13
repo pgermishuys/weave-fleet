@@ -7,6 +7,8 @@ using Microsoft.Extensions.Hosting;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Infrastructure;
+using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
 namespace WeaveFleet.E2E.Infrastructure;
 
@@ -84,6 +86,8 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
     {
         builder.ConfigureServices(services =>
         {
+            RemoveProductionHarnessRegistrations(services);
+
             // ── Remove all production IHarness registrations ─────────────────
             var harnessDescriptors = services
                 .Where(d => d.ServiceType == typeof(IHarness))
@@ -142,6 +146,9 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
             };
 
             services.AddSingleton(testOptions);
+            services.AddSingleton(new PortAllocator(
+                testOptions.HarnessPortRangeStart,
+                testOptions.HarnessPortRangeEnd));
 
             // Re-register the SqliteConnectionFactory with test options
             services.AddSingleton<WeaveFleet.Application.Data.IDbConnectionFactory>(
@@ -152,10 +159,23 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
         builder.UseUrls("http://127.0.0.1:0");
     }
 
+    private static void RemoveProductionHarnessRegistrations(IServiceCollection services)
+    {
+        var concreteDescriptors = services
+            .Where(d => d.ServiceType == typeof(OpenCodeHarness)
+                || d.ServiceType == typeof(OpenCodeHarnessRuntime)
+                || d.ServiceType == typeof(ClaudeCodeHarness)
+                || d.ServiceType == typeof(ClaudeCodeHarnessRuntime))
+            .ToList();
+
+        foreach (var descriptor in concreteDescriptors)
+            services.Remove(descriptor);
+    }
+
     /// <summary>
-    /// Overrides host creation to use a real Kestrel TCP server instead of the in-memory TestServer.
-    /// Playwright (a real browser) cannot connect to TestServer — it needs a real TCP endpoint.
-    /// </summary>
+     /// Overrides host creation to use a real Kestrel TCP server instead of the in-memory TestServer.
+     /// Playwright (a real browser) cannot connect to TestServer — it needs a real TCP endpoint.
+     /// </summary>
     protected override IHost CreateHost(IHostBuilder builder)
     {
         // DO NOT call base.CreateHost — that adds UseTestServer() which replaces Kestrel

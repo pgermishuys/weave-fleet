@@ -492,8 +492,8 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
     private async Task TryPersistMessageAsync(HarnessEvent evt)
     {
-        // Only process message.created events
-        if (evt.Type is not "message.created")
+        // Only process message lifecycle events that carry authoritative message metadata.
+        if (evt.Type is not ("message.created" or "message.updated"))
             return;
 
         try
@@ -537,21 +537,42 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             var messageRepo = scope.ServiceProvider.GetRequiredService<IMessageRepository>();
 
             var persisted = MessagePersistenceService.ToPersistedMessage(_fleetSessionId, harnessMessage);
+            var existing = await messageRepo.GetByIdAsync(persisted.Id, persisted.SessionId).ConfigureAwait(false);
 
-            // Don't overwrite existing message that may already have parts from message.part.updated
+            // Don't overwrite existing message parts with empty lifecycle skeletons.
             if (harnessMessage.Parts.Count == 0)
             {
-                var existing = await messageRepo.GetByIdAsync(persisted.Id, persisted.SessionId).ConfigureAwait(false);
                 if (existing is not null)
                 {
-                    // Still update agent if the skeleton was created without one
-                    if (existing.AgentName is null && persisted.AgentName is not null)
+                    var merged = MessagePersistenceService.MergeMetadata(
+                        existing,
+                        persisted.Role,
+                        persisted.AgentName);
+
+                    if (existing.Role != merged.Role
+                        || existing.AgentName != merged.AgentName)
                     {
-                        existing.AgentName = persisted.AgentName;
-                        await messageRepo.UpsertAsync(existing).ConfigureAwait(false);
+                        await messageRepo.UpsertAsync(merged).ConfigureAwait(false);
                     }
+
                     return;
                 }
+            }
+
+            if (evt.Type == "message.updated" && existing is not null)
+            {
+                var merged = MessagePersistenceService.MergeMetadata(
+                    existing,
+                    persisted.Role,
+                    persisted.AgentName);
+
+                if (existing.Role != merged.Role
+                    || existing.AgentName != merged.AgentName)
+                {
+                    await messageRepo.UpsertAsync(merged).ConfigureAwait(false);
+                }
+
+                return;
             }
 
             await messageRepo.UpsertAsync(persisted).ConfigureAwait(false);
@@ -623,14 +644,14 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
             // Try to extract agent and role from the event info (if present)
             string? agentName = null;
-            string skeletonRole = "assistant"; // default for backwards compat
+            string? role = null;
             if (payload.TryGetProperty("info", out var infoEl))
             {
                 if (infoEl.TryGetProperty("agent", out var agentEl))
                     agentName = agentEl.GetString();
 
-                if (infoEl.TryGetProperty("role", out var roleEl) && roleEl.GetString() is "user")
-                    skeletonRole = "user";
+                if (infoEl.TryGetProperty("role", out var roleEl) && roleEl.GetString() is { } rawRole)
+                    role = rawRole is "user" or "assistant" ? rawRole : null;
             }
 
             PersistedMessage persisted;
@@ -643,7 +664,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 {
                     Id = messageId,
                     SessionId = _fleetSessionId,
-                    Role = skeletonRole,
+                    Role = role ?? "assistant",
                     PartsJson = partsJson,
                     Timestamp = DateTimeOffset.UtcNow.ToString("O"),
                     CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
@@ -652,7 +673,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             }
             else
             {
-                persisted = MessagePersistenceService.MergePart(existing, fleetPart);
+                persisted = MessagePersistenceService.MergePartAndMetadata(existing, fleetPart, role, agentName);
             }
 
             await messageRepo.UpsertAsync(persisted).ConfigureAwait(false);
@@ -714,4 +735,3 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         }
     }
 }
-

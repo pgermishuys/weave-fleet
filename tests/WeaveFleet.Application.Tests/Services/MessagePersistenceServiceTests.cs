@@ -70,6 +70,22 @@ public sealed class MessagePersistenceServiceTests
     }
 
     [Fact]
+    public void RoundTrip_ReasoningPart_PreservesContent()
+    {
+        var original = MakeMessage([
+            new ReasoningPart("Let me think", "summary")
+        ]);
+
+        var persisted = MessagePersistenceService.ToPersistedMessage("session-1", original);
+        var restored = MessagePersistenceService.ToHarnessMessage(persisted);
+
+        restored.Parts.Count.ShouldBe(1);
+        var reasoning = restored.Parts[0].ShouldBeOfType<ReasoningPart>();
+        reasoning.Text.ShouldBe("Let me think");
+        reasoning.Summary.ShouldBe("summary");
+    }
+
+    [Fact]
     public void RoundTrip_MixedParts_PreservesOrder()
     {
         var args = JsonSerializer.SerializeToElement(new { x = 1 });
@@ -230,5 +246,58 @@ public sealed class MessagePersistenceServiceTests
         restored.Parts.Count.ShouldBe(2);
         restored.Parts[0].ShouldBeOfType<ToolUsePart>();
         restored.Parts[1].ShouldBeOfType<TextPart>().Text.ShouldBe("Final answer");
+    }
+
+    [Fact]
+    public void MergePart_ReasoningPart_ReplacesFirstExistingReasoningPart()
+    {
+        var initial = MakeMessage([new ReasoningPart("Old thought", "old")]);
+        var existingMsg = MessagePersistenceService.ToPersistedMessage("session-1", initial);
+
+        var updatedReasoning = new ReasoningPart("New thought", "new");
+
+        var result = MessagePersistenceService.MergePart(existingMsg, updatedReasoning);
+
+        var restored = MessagePersistenceService.ToHarnessMessage(result);
+        restored.Parts.Count.ShouldBe(1);
+        var reasoning = restored.Parts[0].ShouldBeOfType<ReasoningPart>();
+        reasoning.Text.ShouldBe("New thought");
+        reasoning.Summary.ShouldBe("new");
+    }
+
+    [Fact]
+    public void MergePartAndMetadata_BackfillsRoleAndAgent()
+    {
+        var existing = MakePersistedMessage("[]");
+        existing.AgentName = null;
+
+        var result = MessagePersistenceService.MergePartAndMetadata(
+            existing,
+            new TextPart("Hello world"),
+            "user",
+            "loom");
+
+        result.Role.ShouldBe("user");
+        result.AgentName.ShouldBe("loom");
+        MessagePersistenceService.ToHarnessMessage(result)
+            .Parts[0]
+            .ShouldBeOfType<TextPart>()
+            .Text.ShouldBe("Hello world");
+    }
+
+    [Fact]
+    public void MergeMetadata_PreservesPartsWhileUpdatingMessageIdentity()
+    {
+        var existing = MakePersistedMessage("""[{"type":"text","text":"existing content"}]""");
+
+        var result = MessagePersistenceService.MergeMetadata(
+            existing,
+            "user",
+            "loom");
+
+        result.Role.ShouldBe("user");
+        result.AgentName.ShouldBe("loom");
+        result.PartsJson.ShouldContain("existing content");
+        result.Timestamp.ShouldBe(existing.Timestamp);
     }
 }

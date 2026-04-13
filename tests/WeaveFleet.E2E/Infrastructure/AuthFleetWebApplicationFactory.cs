@@ -11,6 +11,8 @@ using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Data;
+using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
 namespace WeaveFleet.E2E.Infrastructure;
 
@@ -113,6 +115,8 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
     {
         builder.ConfigureServices(services =>
         {
+            RemoveProductionHarnessRegistrations(services);
+
             // ── Remove all production IHarness registrations ────────────────
             var harnessDescriptors = services
                 .Where(d => d.ServiceType == typeof(IHarness))
@@ -176,12 +180,28 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
             };
 
             services.AddSingleton(testOptions);
+            services.AddSingleton(new PortAllocator(
+                testOptions.HarnessPortRangeStart,
+                testOptions.HarnessPortRangeEnd));
             services.AddSingleton<IDbConnectionFactory>(
                 _ => new SqliteConnectionFactory(testOptions));
         });
 
         // Auth-enabled mode: bind Fleet to 127.0.0.1 over HTTPS using the .NET dev certificate
         builder.UseUrls();  // Clear default URLs — Kestrel configuration below sets actual bindings
+    }
+
+    private static void RemoveProductionHarnessRegistrations(IServiceCollection services)
+    {
+        var concreteDescriptors = services
+            .Where(d => d.ServiceType == typeof(OpenCodeHarness)
+                || d.ServiceType == typeof(OpenCodeHarnessRuntime)
+                || d.ServiceType == typeof(ClaudeCodeHarness)
+                || d.ServiceType == typeof(ClaudeCodeHarnessRuntime))
+            .ToList();
+
+        foreach (var descriptor in concreteDescriptors)
+            services.Remove(descriptor);
     }
 
     protected override IHost CreateHost(IHostBuilder builder)

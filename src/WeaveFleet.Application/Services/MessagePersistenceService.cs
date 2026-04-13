@@ -77,8 +77,20 @@ public sealed class MessagePersistenceService
     /// Part matching strategy:
     /// - <see cref="ToolUsePart"/>: matched by <c>ToolCallId</c>. Replaced in-place when found, appended otherwise.
     /// - <see cref="TextPart"/>: replaces the first existing <see cref="TextPart"/> if one exists, otherwise appended.
+    /// - <see cref="ReasoningPart"/>: replaces the first existing <see cref="ReasoningPart"/> if one exists, otherwise appended.
     /// </remarks>
     public static PersistedMessage MergePart(PersistedMessage existing, MessagePart newPart)
+        => MergePartAndMetadata(existing, newPart, role: null, agentName: null);
+
+    /// <summary>
+    /// Merges a new <see cref="MessagePart"/> into an existing <see cref="PersistedMessage"/>,
+    /// backfilling message metadata when available.
+    /// </summary>
+    public static PersistedMessage MergePartAndMetadata(
+        PersistedMessage existing,
+        MessagePart newPart,
+        string? role,
+        string? agentName)
     {
         var parts = JsonSerializer.Deserialize<List<MessagePart>>(existing.PartsJson, SerializerOptions) ?? [];
 
@@ -102,6 +114,15 @@ public sealed class MessagePersistenceService
                     parts.Add(textPart);
                 break;
             }
+            case ReasoningPart reasoningPart:
+            {
+                var idx = parts.FindIndex(p => p is ReasoningPart);
+                if (idx >= 0)
+                    parts[idx] = reasoningPart;
+                else
+                    parts.Add(reasoningPart);
+                break;
+            }
             default:
                 parts.Add(newPart);
                 break;
@@ -111,11 +132,31 @@ public sealed class MessagePersistenceService
         {
             Id = existing.Id,
             SessionId = existing.SessionId,
-            Role = existing.Role,
+            Role = role ?? existing.Role,
             PartsJson = JsonSerializer.Serialize(parts, SerializerOptions),
             Timestamp = existing.Timestamp,
             CreatedAt = existing.CreatedAt,
-            AgentName = existing.AgentName,
+            AgentName = agentName ?? existing.AgentName,
+        };
+    }
+
+    /// <summary>
+    /// Merges authoritative message metadata into an existing persisted message without altering parts.
+    /// </summary>
+    public static PersistedMessage MergeMetadata(
+        PersistedMessage existing,
+        string role,
+        string? agentName)
+    {
+        return new PersistedMessage
+        {
+            Id = existing.Id,
+            SessionId = existing.SessionId,
+            Role = role,
+            PartsJson = existing.PartsJson,
+            Timestamp = existing.Timestamp,
+            CreatedAt = existing.CreatedAt,
+            AgentName = agentName ?? existing.AgentName,
         };
     }
 }
