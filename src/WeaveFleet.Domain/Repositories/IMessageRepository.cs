@@ -1,3 +1,4 @@
+using System.Data;
 using WeaveFleet.Domain.Entities;
 
 namespace WeaveFleet.Domain.Repositories;
@@ -11,9 +12,19 @@ public interface IMessageRepository
     Task UpsertAsync(PersistedMessage message);
 
     /// <summary>
+    /// Upsert a message on an existing transaction.
+    /// </summary>
+    Task UpsertAsync(IDbConnection connection, IDbTransaction? transaction, PersistedMessage message);
+
+    /// <summary>
     /// Batch upsert multiple messages in a single transaction.
     /// </summary>
     Task UpsertBatchAsync(IReadOnlyList<PersistedMessage> messages);
+
+    /// <summary>
+    /// Batch upsert multiple messages using an existing transaction.
+    /// </summary>
+    Task UpsertBatchAsync(IDbConnection connection, IDbTransaction transaction, IReadOnlyList<PersistedMessage> messages);
 
     /// <summary>
     /// Retrieve messages for a session with cursor-based pagination.

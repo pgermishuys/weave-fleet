@@ -7,7 +7,8 @@ namespace WeaveFleet.Application.Services;
 public sealed class DelegationService(
     IDelegationRepository delegationRepository,
     IEventBroadcaster eventBroadcaster,
-    IUserContext userContext)
+    IUserContext userContext,
+    SessionActivityWriteService? sessionActivityWriteService)
 {
     private static readonly HashSet<string> TerminalStatuses = new(StringComparer.Ordinal)
     {
@@ -15,6 +16,14 @@ public sealed class DelegationService(
         "error",
         "cancelled"
     };
+
+    public DelegationService(
+        IDelegationRepository delegationRepository,
+        IEventBroadcaster eventBroadcaster,
+        IUserContext userContext)
+        : this(delegationRepository, eventBroadcaster, userContext, sessionActivityWriteService: null)
+    {
+    }
 
     public async Task<DelegationDto> HandleDelegationDetectedAsync(
         string parentSessionId,
@@ -41,8 +50,22 @@ public sealed class DelegationService(
             UpdatedAt = now
         };
 
-        await delegationRepository.InsertAsync(delegation);
-        await BroadcastAsync(parentSessionId, "delegation.created", delegation);
+        if (sessionActivityWriteService is null)
+        {
+            await delegationRepository.InsertAsync(delegation);
+            await BroadcastAsync(parentSessionId, "delegation.created", delegation);
+        }
+        else
+        {
+            await sessionActivityWriteService.WriteAsync(
+                new SessionActivityWriteRequest
+                {
+                    DelegationsToInsert = [delegation],
+                    OutboxMessages = [CreateOutboxMessage(parentSessionId, "delegation.created", delegation, now)]
+                },
+                CancellationToken.None);
+        }
+
         return ToDto(delegation);
     }
 
@@ -69,18 +92,48 @@ public sealed class DelegationService(
             return ToDto(delegation);
 
         var now = DateTime.UtcNow.ToString("O");
-        if (shouldUpdateChild)
-            await delegationRepository.UpdateChildSessionIdAsync(delegation.Id, childSessionId, now);
-
-        if (shouldUpdateStatus)
-            await delegationRepository.UpdateStatusAsync(delegation.Id, "running", now, null);
-
         delegation.ChildSessionId = childSessionId;
         delegation.Status = "running";
         delegation.UpdatedAt = now;
         delegation.CompletedAt = null;
 
-        await BroadcastAsync(parentSessionId, "delegation.updated", delegation);
+        if (sessionActivityWriteService is null)
+        {
+            if (shouldUpdateChild)
+                await delegationRepository.UpdateChildSessionIdAsync(delegation.Id, childSessionId, now);
+
+            if (shouldUpdateStatus)
+                await delegationRepository.UpdateStatusAsync(delegation.Id, "running", now, null);
+
+            await BroadcastAsync(parentSessionId, "delegation.updated", delegation);
+        }
+        else
+        {
+            await sessionActivityWriteService.WriteAsync(
+                new SessionActivityWriteRequest
+                {
+                    DelegationChildSessionUpdates = shouldUpdateChild
+                        ? [new DelegationChildSessionUpdate
+                        {
+                            Id = delegation.Id,
+                            ChildSessionId = childSessionId,
+                            UpdatedAt = now
+                        }]
+                        : [],
+                    DelegationStatusUpdates = shouldUpdateStatus
+                        ? [new DelegationStatusUpdate
+                        {
+                            Id = delegation.Id,
+                            Status = "running",
+                            UpdatedAt = now,
+                            CompletedAt = null
+                        }]
+                        : [],
+                    OutboxMessages = [CreateOutboxMessage(parentSessionId, "delegation.updated", delegation, now)]
+                },
+                CancellationToken.None);
+        }
+
         return ToDto(delegation);
     }
 
@@ -105,13 +158,32 @@ public sealed class DelegationService(
             throw new InvalidOperationException($"Cannot finish delegation from '{delegation.Status}'.");
 
         var now = DateTime.UtcNow.ToString("O");
-        await delegationRepository.UpdateStatusAsync(delegation.Id, status, now, now);
-
         delegation.Status = status;
         delegation.UpdatedAt = now;
         delegation.CompletedAt = now;
 
-        await BroadcastAsync(delegation.ParentSessionId, "delegation.updated", delegation);
+        if (sessionActivityWriteService is null)
+        {
+            await delegationRepository.UpdateStatusAsync(delegation.Id, status, now, now);
+            await BroadcastAsync(delegation.ParentSessionId, "delegation.updated", delegation);
+        }
+        else
+        {
+            await sessionActivityWriteService.WriteAsync(
+                new SessionActivityWriteRequest
+                {
+                    DelegationStatusUpdates = [new DelegationStatusUpdate
+                    {
+                        Id = delegation.Id,
+                        Status = status,
+                        UpdatedAt = now,
+                        CompletedAt = now
+                    }],
+                    OutboxMessages = [CreateOutboxMessage(delegation.ParentSessionId, "delegation.updated", delegation, now)]
+                },
+                CancellationToken.None);
+        }
+
         return ToDto(delegation);
     }
 
@@ -136,6 +208,26 @@ public sealed class DelegationService(
             throw new ArgumentException($"Unsupported terminal status '{status}'.", nameof(status));
     }
 
+    private OutboxMessage CreateOutboxMessage(string parentSessionId, string eventType, Delegation delegation, string createdAt)
+    {
+        return new OutboxMessage
+        {
+            Topic = $"session:{parentSessionId}",
+            Type = eventType,
+            Payload = MessagePersistenceService.SerializePayload(new DelegationEventDto(
+                delegation.Id,
+                delegation.ParentSessionId,
+                delegation.ParentToolCallId,
+                delegation.ChildSessionId,
+                delegation.Title,
+                delegation.Status,
+                delegation.CreatedAt)),
+            UserId = userContext.UserId,
+            CreatedAt = createdAt,
+            AvailableAt = createdAt
+        };
+    }
+
     private async Task BroadcastAsync(string parentSessionId, string eventType, Delegation delegation)
     {
         await eventBroadcaster.BroadcastAsync(
@@ -149,7 +241,8 @@ public sealed class DelegationService(
                 delegation.Title,
                 delegation.Status,
                 delegation.CreatedAt),
-            userContext.UserId);
+            userContext.UserId,
+            CancellationToken.None);
     }
 
     private static DelegationDto ToDto(Delegation delegation) => new(

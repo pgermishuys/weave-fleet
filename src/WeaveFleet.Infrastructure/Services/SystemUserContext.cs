@@ -8,8 +8,8 @@ namespace WeaveFleet.Infrastructure.Services;
 /// </summary>
 public sealed class SystemUserContext : IUserContext
 {
-    public string UserId => "system";
+    public string UserId => BackgroundUserContext.UserId ?? "system";
     public string? Email => null;
-    public string? DisplayName => "System";
+    public string? DisplayName => BackgroundUserContext.UserId ?? "System";
     public bool IsAuthenticated => false;
 }

@@ -28,12 +28,75 @@ public sealed partial class SessionOrchestrator(
     IEventBroadcaster eventBroadcaster,
     IAnalyticsCollector analyticsCollector,
     IMessageRepository messageRepository,
+    IOutboxRepository outboxRepository,
     DelegationService delegationService,
     ICredentialStore credentialStore,
     IUserContext userContext,
     FleetOptions options,
-    ILogger<SessionOrchestrator> logger)
+    ILogger<SessionOrchestrator> logger,
+    SessionActivityWriteService? sessionActivityWriteService = null)
 {
+    private sealed class NoOpOutboxRepository : IOutboxRepository
+    {
+        public Task<long> EnqueueAsync(OutboxMessage message) => Task.FromResult(0L);
+
+        public Task<long> EnqueueAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, OutboxMessage message)
+            => Task.FromResult(0L);
+
+        public Task<IReadOnlyList<OutboxMessage>> GetUndispatchedAsync(int limit)
+            => Task.FromResult<IReadOnlyList<OutboxMessage>>([]);
+
+        public Task<IReadOnlyList<OutboxMessage>> GetByTopicAfterAsync(string topic, long sequenceNumber, int limit)
+            => Task.FromResult<IReadOnlyList<OutboxMessage>>([]);
+
+        public Task MarkDispatchedAsync(IReadOnlyList<long> ids, string dispatchedAt) => Task.CompletedTask;
+
+        public Task<int> DeleteDispatchedBeforeAsync(string dispatchedBefore, int limit) => Task.FromResult(0);
+    }
+
+    public SessionOrchestrator(
+        WorkspaceService workspaceService,
+        InstanceService instanceService,
+        SessionSourceResolutionService sessionSourceResolutionService,
+        IHarnessRegistry harnessRegistry,
+        InstanceTracker instanceTracker,
+        ISessionRepository sessionRepository,
+        ISessionSourceUsageRepository sessionSourceUsageRepository,
+        ISessionCallbackRepository sessionCallbackRepository,
+        IDelegationRepository delegationRepository,
+        IProjectRepository projectRepository,
+        IEventBroadcaster eventBroadcaster,
+        IAnalyticsCollector analyticsCollector,
+        IMessageRepository messageRepository,
+        DelegationService delegationService,
+        ICredentialStore credentialStore,
+        IUserContext userContext,
+        FleetOptions options,
+        ILogger<SessionOrchestrator> logger)
+        : this(
+            workspaceService,
+            instanceService,
+            sessionSourceResolutionService,
+            harnessRegistry,
+            instanceTracker,
+            sessionRepository,
+            sessionSourceUsageRepository,
+            sessionCallbackRepository,
+            delegationRepository,
+            projectRepository,
+            eventBroadcaster,
+            analyticsCollector,
+            messageRepository,
+            new NoOpOutboxRepository(),
+            delegationService,
+            credentialStore,
+            userContext,
+            options,
+            logger,
+            sessionActivityWriteService: null)
+    {
+    }
+
     private const string DefaultHarnessType = "opencode";
     private const string ScratchProjectName = "Scratch";
 
@@ -176,7 +239,45 @@ public sealed partial class SessionOrchestrator(
             UserId = userContext.UserId
         };
 
-        await sessionRepository.InsertAsync(session);
+        var createdAt = DateTime.UtcNow.ToString("O");
+        session.CreatedAt = createdAt;
+        if (sessionActivityWriteService is null)
+        {
+            await sessionRepository.InsertAsync(session);
+            await eventBroadcaster.BroadcastAsync("sessions", "session_created", new
+            {
+                sessionId = session.Id,
+                instanceId = harnessInstance.InstanceId,
+                workspaceId = workspace.Id,
+                title = session.Title,
+                projectId = session.ProjectId
+            }, userContext.UserId, ct);
+        }
+        else
+        {
+            await sessionActivityWriteService.WriteAsync(
+                new SessionActivityWriteRequest
+                {
+                    SessionsToInsert = [session],
+                    OutboxMessages =
+                    [
+                        CreateSessionLifecycleOutboxMessage(
+                            "session_created",
+                            new
+                            {
+                                sessionId = session.Id,
+                                instanceId = harnessInstance.InstanceId,
+                                workspaceId = workspace.Id,
+                                title = session.Title,
+                                projectId = session.ProjectId
+                            },
+                            createdAt,
+                            userContext.UserId)
+                    ]
+                },
+                ct);
+        }
+
         await sessionSourceUsageRepository.InsertAsync(new SessionSourceUsage
         {
             Id = Guid.NewGuid().ToString(),
@@ -189,7 +290,7 @@ public sealed partial class SessionOrchestrator(
             ResourceUrl = sourceResolutionResult.Value.Input.Provenance.ResourceUrl,
             Title = sourceResolutionResult.Value.Input.Provenance.Title,
             Summary = sourceResolutionResult.Value.Input.Provenance.Summary,
-            CreatedAt = DateTime.UtcNow.ToString("O")
+            CreatedAt = createdAt
         });
         LogSessionCreated(session.Id, workspace.Id, harnessInstance.InstanceId);
 
@@ -211,16 +312,6 @@ public sealed partial class SessionOrchestrator(
             EndedAt: null,
             DurationSeconds: null,
             UserId: userContext.UserId));
-
-        // Broadcast session_created event (scoped to the owning user)
-        await eventBroadcaster.BroadcastAsync("sessions", "session_created", new
-        {
-            sessionId = session.Id,
-            instanceId = harnessInstance.InstanceId,
-            workspaceId = workspace.Id,
-            title = session.Title,
-            projectId = session.ProjectId
-        }, userContext.UserId, ct);
 
         // 5. Register callback (optional)
         if (request.OnCompleteTargetSessionId is not null && request.OnCompleteTargetInstanceId is not null)
@@ -434,7 +525,49 @@ public sealed partial class SessionOrchestrator(
             UserId = userContext.UserId
         };
 
-        await sessionRepository.InsertAsync(session);
+        var createdAt = DateTime.UtcNow.ToString("O");
+        session.CreatedAt = createdAt;
+        if (sessionActivityWriteService is null)
+        {
+            await sessionRepository.InsertAsync(session);
+            await eventBroadcaster.BroadcastAsync("sessions", "session_created", new
+            {
+                sessionId = session.Id,
+                instanceId = session.InstanceId,
+                workspaceId = session.WorkspaceId,
+                title = session.Title,
+                projectId = session.ProjectId,
+                parentSessionId = session.ParentSessionId,
+                isHidden = true
+            }, userContext.UserId, ct);
+        }
+        else
+        {
+            await sessionActivityWriteService.WriteAsync(
+                new SessionActivityWriteRequest
+                {
+                    SessionsToInsert = [session],
+                    OutboxMessages =
+                    [
+                        CreateSessionLifecycleOutboxMessage(
+                            "session_created",
+                            new
+                            {
+                                sessionId = session.Id,
+                                instanceId = session.InstanceId,
+                                workspaceId = session.WorkspaceId,
+                                title = session.Title,
+                                projectId = session.ProjectId,
+                                parentSessionId = session.ParentSessionId,
+                                isHidden = true
+                            },
+                            createdAt,
+                            userContext.UserId)
+                    ]
+                },
+                ct);
+        }
+
         instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
         LogSessionCreated(session.Id, session.WorkspaceId, session.InstanceId);
 
@@ -455,17 +588,6 @@ public sealed partial class SessionOrchestrator(
             EndedAt: null,
             DurationSeconds: null,
             UserId: userContext.UserId));
-
-        await eventBroadcaster.BroadcastAsync("sessions", "session_created", new
-        {
-            sessionId = session.Id,
-            instanceId = session.InstanceId,
-            workspaceId = session.WorkspaceId,
-            title = session.Title,
-            projectId = session.ProjectId,
-            parentSessionId = session.ParentSessionId,
-            isHidden = true
-        }, userContext.UserId, ct);
 
         return session;
     }
@@ -640,26 +762,37 @@ public sealed partial class SessionOrchestrator(
         if (session is null)
             return FleetError.NotFoundFor(nameof(Session), id);
 
-        // Try live instance first
-        var instance = instanceTracker.Get(session.InstanceId);
-        if (instance is not null)
-        {
-            try
-            {
-                var liveLimit = query?.Limit ?? options.LiveMessagePageSize;
-                var page = await instance.GetMessagesAsync(
-                    new MessageQuery(liveLimit, query?.Before), ct);
-                return Result.Success(page);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                LogGetMessagesFailed(ex, id);
-                // Fall through to DB — instance might be in a bad state
-            }
-        }
-
-        // Fall back to persisted messages
         return await GetPersistedMessagesAsync(id, query, ct);
+    }
+
+    public async Task<Result<IReadOnlyList<CommittedEvent>>> GetCommittedEventsAsync(
+        string sessionId,
+        long afterSequenceNumber,
+        int? limit,
+        CancellationToken ct = default)
+    {
+        _ = ct;
+
+        var session = await sessionRepository.GetByIdAsync(sessionId);
+        if (session is null)
+            return FleetError.NotFoundFor(nameof(Session), sessionId);
+
+        var topic = $"session:{sessionId}";
+        var rows = await outboxRepository.GetByTopicAfterAsync(
+            topic,
+            Math.Max(0, afterSequenceNumber),
+            Math.Max(1, limit ?? options.Outbox.DispatchBatchSize));
+
+        var events = rows
+            .Select(row => new CommittedEvent(
+                row.Id,
+                row.Topic,
+                row.Type,
+                row.Payload,
+                DateTimeOffset.Parse(row.CreatedAt, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind)))
+            .ToList();
+
+        return Result.Success<IReadOnlyList<CommittedEvent>>(events);
     }
 
     private async Task<Result<MessagePage>> GetPersistedMessagesAsync(
@@ -703,13 +836,32 @@ public sealed partial class SessionOrchestrator(
         if (instanceUpdateResult.IsFailure)
             return instanceUpdateResult.Error;
 
-        await sessionRepository.UpdateStatusAsync(id, "stopped", stoppedAt);
-
-        await eventBroadcaster.BroadcastAsync("sessions", "session_stopped", new
+        if (sessionActivityWriteService is null)
         {
-            sessionId = id,
-            stoppedAt
-        }, session.UserId, ct);
+            await sessionRepository.UpdateStatusAsync(id, "stopped", stoppedAt);
+            await eventBroadcaster.BroadcastAsync("sessions", "session_stopped", new
+            {
+                sessionId = id,
+                stoppedAt
+            }, session.UserId, ct);
+        }
+        else
+        {
+            await sessionActivityWriteService.WriteAsync(
+                new SessionActivityWriteRequest
+                {
+                    SessionStatusUpdates = [new SessionStatusUpdate { Id = id, Status = "stopped", StoppedAt = stoppedAt }],
+                    OutboxMessages =
+                    [
+                        CreateSessionLifecycleOutboxMessage(
+                            "session_stopped",
+                            new { sessionId = id, stoppedAt },
+                            stoppedAt,
+                            session.UserId)
+                    ]
+                },
+                ct);
+        }
 
         return Unit.Value;
     }
@@ -724,13 +876,32 @@ public sealed partial class SessionOrchestrator(
             return Unit.Value;
 
         var archivedAt = DateTime.UtcNow.ToString("O");
-        await sessionRepository.ArchiveAsync(id, archivedAt);
-
-        await eventBroadcaster.BroadcastAsync("sessions", "session_archived", new
+        if (sessionActivityWriteService is null)
         {
-            sessionId = id,
-            archivedAt
-        }, session.UserId, ct);
+            await sessionRepository.ArchiveAsync(id, archivedAt);
+            await eventBroadcaster.BroadcastAsync("sessions", "session_archived", new
+            {
+                sessionId = id,
+                archivedAt
+            }, session.UserId, ct);
+        }
+        else
+        {
+            await sessionActivityWriteService.WriteAsync(
+                new SessionActivityWriteRequest
+                {
+                    SessionArchives = [new SessionArchiveUpdate { SessionId = id, ArchivedAt = archivedAt }],
+                    OutboxMessages =
+                    [
+                        CreateSessionLifecycleOutboxMessage(
+                            "session_archived",
+                            new { sessionId = id, archivedAt },
+                            archivedAt,
+                            session.UserId)
+                    ]
+                },
+                ct);
+        }
 
         return Unit.Value;
     }
@@ -744,12 +915,32 @@ public sealed partial class SessionOrchestrator(
         if (!string.Equals(session.RetentionStatus, "archived", StringComparison.Ordinal))
             return Unit.Value;
 
-        await sessionRepository.UnarchiveAsync(id);
-
-        await eventBroadcaster.BroadcastAsync("sessions", "session_unarchived", new
+        var changedAt = DateTime.UtcNow.ToString("O");
+        if (sessionActivityWriteService is null)
         {
-            sessionId = id
-        }, session.UserId, ct);
+            await sessionRepository.UnarchiveAsync(id);
+            await eventBroadcaster.BroadcastAsync("sessions", "session_unarchived", new
+            {
+                sessionId = id
+            }, session.UserId, ct);
+        }
+        else
+        {
+            await sessionActivityWriteService.WriteAsync(
+                new SessionActivityWriteRequest
+                {
+                    SessionUnarchives = [id],
+                    OutboxMessages =
+                    [
+                        CreateSessionLifecycleOutboxMessage(
+                            "session_unarchived",
+                            new { sessionId = id },
+                            changedAt,
+                            session.UserId)
+                    ]
+                },
+                ct);
+        }
 
         return Unit.Value;
     }
@@ -782,7 +973,32 @@ public sealed partial class SessionOrchestrator(
         if (instanceUpdateResult.IsFailure)
             return instanceUpdateResult.Error;
 
-        await sessionRepository.DeleteAsync(id);
+        var deletedAtText = deletedAt.ToString("O");
+        if (sessionActivityWriteService is null)
+        {
+            await sessionRepository.DeleteAsync(id);
+            await eventBroadcaster.BroadcastAsync("sessions", "session_deleted", new
+            {
+                sessionId = id
+            }, session.UserId, ct);
+        }
+        else
+        {
+            await sessionActivityWriteService.WriteAsync(
+                new SessionActivityWriteRequest
+                {
+                    SessionDeletes = [id],
+                    OutboxMessages =
+                    [
+                        CreateSessionLifecycleOutboxMessage(
+                            "session_deleted",
+                            new { sessionId = id },
+                            deletedAtText,
+                            session.UserId)
+                    ]
+                },
+                ct);
+        }
 
         // Emit analytics snapshot marking session as stopped
         analyticsCollector.AcceptSessionSnapshot(new SessionSnapshotData(
@@ -802,11 +1018,6 @@ public sealed partial class SessionOrchestrator(
             EndedAt: deletedAt,
             DurationSeconds: null,
             UserId: session.UserId));
-
-        await eventBroadcaster.BroadcastAsync("sessions", "session_deleted", new
-        {
-            sessionId = id
-        }, session.UserId, ct);
 
         return Unit.Value;
     }
@@ -885,6 +1096,23 @@ public sealed partial class SessionOrchestrator(
         var projects = await projectRepository.ListAsync();
         return projects.FirstOrDefault(p => p.Id == projectId)?.Name;
     }
+
+    private static OutboxMessage CreateSessionLifecycleOutboxMessage(
+        string eventType,
+        object payload,
+        string createdAt,
+        string userId)
+    {
+        return new OutboxMessage
+        {
+            Topic = "sessions",
+            Type = eventType,
+            Payload = MessagePersistenceService.SerializePayload(payload),
+            UserId = userId,
+            CreatedAt = createdAt,
+            AvailableAt = createdAt
+        };
+    }
 }
 
 // ── Request / Result DTOs ──────────────────────────────────────────────────────
@@ -913,3 +1141,9 @@ public sealed record CreateSessionRequest
 /// <summary>Result of a successful <see cref="SessionOrchestrator.CreateSessionAsync"/> call.</summary>
 public sealed record CreateSessionResult(Session Session, string InstanceId, string WorkspaceId);
 
+public sealed record CommittedEvent(
+    long SequenceNumber,
+    string Topic,
+    string Type,
+    string Payload,
+    DateTimeOffset Timestamp);

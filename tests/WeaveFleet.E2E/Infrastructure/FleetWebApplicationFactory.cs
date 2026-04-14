@@ -104,7 +104,11 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
 
             // ── Register the TestHarness singleton for both interfaces ────────
             services.AddSingleton<IHarness>(TestHarness);
-            services.AddSingleton<IHarnessRuntime>(TestHarnessRuntime);
+            services.AddSingleton<IHarnessRuntime>(sp =>
+            {
+                TestHarnessRuntime.SetScopeFactory(sp.GetRequiredService<IServiceScopeFactory>());
+                return TestHarnessRuntime;
+            });
 
             // ── Remove PortAllocator (not needed without OpenCode) ────────────
             var portAllocatorDescriptors = services

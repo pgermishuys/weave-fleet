@@ -1,3 +1,4 @@
+using System.Data;
 using WeaveFleet.Domain.Entities;
 
 namespace WeaveFleet.Domain.Repositories;
@@ -5,6 +6,7 @@ namespace WeaveFleet.Domain.Repositories;
 public interface ISessionRepository
 {
     Task InsertAsync(Session session);
+    Task InsertAsync(IDbConnection connection, IDbTransaction? transaction, Session session);
     Task<Session?> GetByIdAsync(string id);
     Task<Session?> GetByHarnessIdAsync(string harnessSessionId);
     Task<IReadOnlyList<Session>> ListAsync(int limit = 100, int offset = 0, IReadOnlyList<string>? statuses = null, string? projectId = null);
@@ -16,8 +18,11 @@ public interface ISessionRepository
     Task<IReadOnlyList<Session>> ListActiveAsync();
     Task<IReadOnlyList<Session>> ListActiveAsync(IReadOnlyList<string>? retentionStatuses);
     Task UpdateStatusAsync(string id, string status, string? stoppedAt = null);
+    Task UpdateStatusAsync(IDbConnection connection, IDbTransaction? transaction, string id, string status, string? stoppedAt);
     Task ArchiveAsync(string id, string archivedAt);
+    Task ArchiveAsync(IDbConnection connection, IDbTransaction? transaction, string id, string archivedAt);
     Task UnarchiveAsync(string id);
+    Task UnarchiveAsync(IDbConnection connection, IDbTransaction? transaction, string id);
     Task<IReadOnlyList<Session>> GetForInstanceAsync(string instanceId);
     Task<Session?> GetAnyForInstanceAsync(string instanceId);
     Task<IReadOnlyList<Session>> GetNonTerminalForInstanceAsync(string instanceId);
@@ -29,6 +34,7 @@ public interface ISessionRepository
     Task<IReadOnlyList<Session>> GetForWorkspaceAsync(string workspaceId);
     Task<IReadOnlyList<Session>> GetForWorkspaceAsync(string workspaceId, IReadOnlyList<string>? retentionStatuses);
     Task<bool> DeleteAsync(string id);
+    Task<bool> DeleteAsync(IDbConnection connection, IDbTransaction? transaction, string id);
     Task<(int TotalTokens, double TotalCost)?> IncrementTokensAsync(string id, int tokens, double cost);
     Task<(int TotalTokens, double TotalCost)> GetFleetTokenTotalsAsync();
     Task<int> MarkAllNonTerminalStoppedAsync(string stoppedAt);

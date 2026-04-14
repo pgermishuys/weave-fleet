@@ -15,12 +15,17 @@ public sealed class DapperSessionRepository(
 
     public async Task InsertAsync(Session session)
     {
+        using var conn = connectionFactory.CreateConnection();
+        await InsertAsync(conn, null, session);
+    }
+
+    public async Task InsertAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, Session session)
+    {
         var insertUserId = string.IsNullOrWhiteSpace(session.UserId)
             ? userContext.UserId
             : session.UserId;
 
-        using var conn = connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await connection.ExecuteAsync(
             """
             INSERT INTO sessions (id, workspace_id, instance_id, project_id, opencode_session_id, title,
                 status, directory, created_at, stopped_at, parent_session_id, activity_status,
@@ -65,7 +70,8 @@ public sealed class DapperSessionRepository(
                 session.HarnessType,
                 session.HarnessResumeToken,
                 UserId = insertUserId
-            });
+            },
+            transaction);
     }
 
     public async Task<Session?> GetByIdAsync(string id)
@@ -203,32 +209,50 @@ public sealed class DapperSessionRepository(
 
     public async Task UpdateStatusAsync(string id, string status, string? stoppedAt = null)
     {
+        using var conn = connectionFactory.CreateConnection();
+        await UpdateStatusAsync(conn, null, id, status, stoppedAt);
+    }
+
+    public async Task UpdateStatusAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, string id, string status, string? stoppedAt)
+    {
         var lifecycleStatus = status switch
         {
             "stopped" => "stopped",
             "completed" => "completed",
             _ => "running"
         };
-        using var conn = connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await connection.ExecuteAsync(
             "UPDATE sessions SET status = @Status, stopped_at = @StoppedAt, lifecycle_status = @LifecycleStatus WHERE id = @Id AND user_id = @UserId",
-            new { Id = id, Status = status, StoppedAt = stoppedAt, LifecycleStatus = lifecycleStatus, UserId = userContext.UserId });
+            new { Id = id, Status = status, StoppedAt = stoppedAt, LifecycleStatus = lifecycleStatus, UserId = userContext.UserId },
+            transaction);
     }
 
     public async Task ArchiveAsync(string id, string archivedAt)
     {
         using var conn = connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await ArchiveAsync(conn, null, id, archivedAt);
+    }
+
+    public async Task ArchiveAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, string id, string archivedAt)
+    {
+        await connection.ExecuteAsync(
             "UPDATE sessions SET retention_status = 'archived', archived_at = @ArchivedAt WHERE id = @Id AND user_id = @UserId",
-            new { Id = id, ArchivedAt = archivedAt, UserId = userContext.UserId });
+            new { Id = id, ArchivedAt = archivedAt, UserId = userContext.UserId },
+            transaction);
     }
 
     public async Task UnarchiveAsync(string id)
     {
         using var conn = connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await UnarchiveAsync(conn, null, id);
+    }
+
+    public async Task UnarchiveAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, string id)
+    {
+        await connection.ExecuteAsync(
             "UPDATE sessions SET retention_status = 'active', archived_at = NULL WHERE id = @Id AND user_id = @UserId",
-            new { Id = id, UserId = userContext.UserId });
+            new { Id = id, UserId = userContext.UserId },
+            transaction);
     }
 
     public async Task<IReadOnlyList<Session>> GetForInstanceAsync(string instanceId)
@@ -341,9 +365,15 @@ public sealed class DapperSessionRepository(
     public async Task<bool> DeleteAsync(string id)
     {
         using var conn = connectionFactory.CreateConnection();
-        var rows = await conn.ExecuteAsync(
+        return await DeleteAsync(conn, null, id);
+    }
+
+    public async Task<bool> DeleteAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, string id)
+    {
+        var rows = await connection.ExecuteAsync(
             "DELETE FROM sessions WHERE id = @Id AND user_id = @UserId",
-            new { Id = id, UserId = userContext.UserId });
+            new { Id = id, UserId = userContext.UserId },
+            transaction);
         return rows > 0;
     }
 

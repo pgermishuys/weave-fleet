@@ -31,6 +31,7 @@ public sealed class SessionOrchestratorTests
     private readonly IEventBroadcaster _eventBroadcaster = Substitute.For<IEventBroadcaster>();
     private readonly IAnalyticsCollector _analyticsCollector = Substitute.For<IAnalyticsCollector>();
     private readonly IMessageRepository _messageRepo = Substitute.For<IMessageRepository>();
+    private readonly IOutboxRepository _outboxRepo = Substitute.For<IOutboxRepository>();
     private readonly ICredentialStore _credentialStore = Substitute.For<ICredentialStore>();
     private readonly InstanceTracker _tracker = new();
     private readonly IUserContext _userContext = new TestUserContext("user-1");
@@ -76,11 +77,13 @@ public sealed class SessionOrchestratorTests
             _eventBroadcaster,
             _analyticsCollector,
             _messageRepo,
+            _outboxRepo,
             _delegationService,
             _credentialStore,
             _userContext,
             _options,
-            NullLogger<SessionOrchestrator>.Instance);
+            NullLogger<SessionOrchestrator>.Instance,
+            sessionActivityWriteService: null);
 
         // Default harness instance id
         _harnessInstance.InstanceId.Returns("inst-1");
@@ -360,21 +363,19 @@ public sealed class SessionOrchestratorTests
             .ToList();
 
     [Fact]
-    public async Task GetSessionMessages_LiveInstance_ProxiesToInstance()
+    public async Task GetSessionMessages_LiveInstance_StillReadsFromDb()
     {
         var session = MakeSession("s1", "inst-1");
         _sessionRepo.GetByIdAsync("s1").Returns(session);
         _tracker.Register("inst-1", _harnessInstance);
-        _harnessInstance.GetMessagesAsync(Arg.Any<MessageQuery?>(), Arg.Any<CancellationToken>())
-            .Returns(new MessagePage([
-                new HarnessMessage { Id = "m1", Role = "user", Parts = [], Timestamp = DateTimeOffset.UtcNow }
-            ], false));
+        _messageRepo.GetBySessionAsync("s1", Arg.Any<int>(), null)
+            .Returns(MakePersistedMessages("s1", 1));
 
         var result = await _sut.GetSessionMessagesAsync("s1");
 
         result.IsSuccess.ShouldBeTrue();
         result.Value.Messages.Count.ShouldBe(1);
-        await _messageRepo.DidNotReceive().GetBySessionAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<string?>());
+        await _harnessInstance.DidNotReceive().GetMessagesAsync(Arg.Any<MessageQuery?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -408,7 +409,7 @@ public sealed class SessionOrchestratorTests
     }
 
     [Fact]
-    public async Task GetSessionMessages_LiveInstanceThrows_FallsBackToDb()
+    public async Task GetSessionMessages_LiveInstanceIsIgnoredEvenIfItWouldThrow()
     {
         var session = MakeSession("s1", "inst-1");
         _sessionRepo.GetByIdAsync("s1").Returns(session);
@@ -423,6 +424,7 @@ public sealed class SessionOrchestratorTests
 
         result.IsSuccess.ShouldBeTrue();
         result.Value.Messages.Count.ShouldBe(2);
+        await _harnessInstance.DidNotReceive().GetMessagesAsync(Arg.Any<MessageQuery?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -459,22 +461,57 @@ public sealed class SessionOrchestratorTests
     }
 
     [Fact]
-    public async Task GetSessionMessages_UsesLivePageSizeForLiveInstance()
+    public async Task GetSessionMessages_UsesHistoryPageSizeEvenForLiveInstance()
     {
         var session = MakeSession("s3", "inst-1");
         _sessionRepo.GetByIdAsync("s3").Returns(session);
         _tracker.Register("inst-1", _harnessInstance);
-
-        MessageQuery? capturedQuery = null;
-        _harnessInstance
-            .GetMessagesAsync(Arg.Do<MessageQuery?>(q => capturedQuery = q), Arg.Any<CancellationToken>())
-            .Returns(new MessagePage([], false));
+        _messageRepo.GetBySessionAsync("s3", Arg.Any<int>(), null)
+            .Returns(MakePersistedMessages("s3", 2));
 
         await _sut.GetSessionMessagesAsync("s3");
 
-        // Default LiveMessagePageSize is 10
-        capturedQuery.ShouldNotBeNull();
-        capturedQuery!.Limit.ShouldBe(10);
+        await _messageRepo.Received(1).GetBySessionAsync("s3", 11, null);
+        await _harnessInstance.DidNotReceive().GetMessagesAsync(Arg.Any<MessageQuery?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetCommittedEvents_ReturnsOutboxRowsAsCommittedEvents()
+    {
+        var session = MakeSession("s-committed", "inst-1");
+        _sessionRepo.GetByIdAsync("s-committed").Returns(session);
+        _outboxRepo.GetByTopicAfterAsync("session:s-committed", 5, 20)
+            .Returns([
+                new OutboxMessage
+                {
+                    Id = 6,
+                    Topic = "session:s-committed",
+                    Type = "message.updated",
+                    Payload = "{\"info\":{\"id\":\"msg-1\"}}",
+                    CreatedAt = "2026-01-01T00:00:00.0000000+00:00",
+                    AvailableAt = "2026-01-01T00:00:00.0000000+00:00",
+                    UserId = "user-1"
+                }
+            ]);
+
+        var result = await _sut.GetCommittedEventsAsync("s-committed", 5, 20);
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Count.ShouldBe(1);
+        result.Value[0].SequenceNumber.ShouldBe(6);
+        result.Value[0].Topic.ShouldBe("session:s-committed");
+        result.Value[0].Type.ShouldBe("message.updated");
+    }
+
+    [Fact]
+    public async Task GetCommittedEvents_SessionNotFound_ReturnsNotFound()
+    {
+        _sessionRepo.GetByIdAsync("ghost").Returns((Session?)null);
+
+        var result = await _sut.GetCommittedEventsAsync("ghost", 0, 10);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldContain("Session");
     }
 
     // ── Harness type tracking ─────────────────────────────────────────────────
@@ -947,4 +984,3 @@ public sealed class SessionOrchestratorTests
     /// <summary>Minimal stub for RuntimeLaunchArtifacts (opaque pass-through in tests).</summary>
     private sealed record StubLaunchArtifacts : RuntimeLaunchArtifacts;
 }
-

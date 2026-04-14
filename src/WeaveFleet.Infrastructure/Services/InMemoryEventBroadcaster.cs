@@ -14,6 +14,9 @@ namespace WeaveFleet.Infrastructure.Services;
 /// </summary>
 public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
 {
+    private const string ActivityTopic = "activity";
+    private const string SessionsTopic = "sessions";
+
     private sealed record Subscription(
         string SubscriberId,
         IReadOnlyList<string> Topics,
@@ -27,20 +30,35 @@ public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
     internal int SubscriberCount => _subscriptions.Count;
 
     /// <inheritdoc />
+    public Task BroadcastAsync(string topic, string type, object payload)
+        => BroadcastAsync(topic, type, payload, CancellationToken.None);
+
+    public Task BroadcastAsync(string topic, string type, object payload, CancellationToken ct)
+        => BroadcastAsync(topic, type, payload, sequenceNumber: null, userId: null, ct);
+
     public Task BroadcastAsync(
         string topic,
         string type,
         object payload,
-        string? userId = null,
-        CancellationToken ct = default)
+        string? userId,
+        CancellationToken ct)
+        => BroadcastAsync(topic, type, payload, sequenceNumber: null, userId, ct);
+
+    public Task BroadcastAsync(
+        string topic,
+        string type,
+        object payload,
+        long? sequenceNumber,
+        string? userId,
+        CancellationToken ct)
     {
         var json = JsonSerializer.SerializeToElement(payload);
-        var evt = new BroadcastEvent(topic, type, json, DateTimeOffset.UtcNow, userId);
+        var evt = new BroadcastEvent(topic, type, json, DateTimeOffset.UtcNow, sequenceNumber, userId);
 
         foreach (var sub in _subscriptions.Values)
         {
             // Topic filter
-            if (!sub.Topics.Contains("*") && !sub.Topics.Contains(topic))
+            if (!MatchesTopic(sub.Topics, topic))
                 continue;
 
             // User-scope filter: deliver only if
@@ -59,6 +77,17 @@ public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
         }
 
         return Task.CompletedTask;
+    }
+
+    private static bool MatchesTopic(IReadOnlyList<string> topics, string topic)
+    {
+        if (topics.Contains("*"))
+            return true;
+
+        if (topics.Contains(topic))
+            return true;
+
+        return topic == SessionsTopic && topics.Contains(ActivityTopic);
     }
 
     /// <inheritdoc />

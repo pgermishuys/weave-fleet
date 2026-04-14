@@ -20,6 +20,7 @@ public sealed class WebSocketMessageFormatTests
             data = new
             {
                 type = evt.Type,
+                sequenceNumber = evt.SequenceNumber,
                 properties = evt.Payload
             }
         });
@@ -51,6 +52,22 @@ public sealed class WebSocketMessageFormatTests
             .GetProperty("type")
             .GetString()
             .ShouldBe("message.updated");
+    }
+
+    [Fact]
+    public void Envelope_includes_sequence_number_when_present()
+    {
+        var payload = JsonSerializer.SerializeToElement(new { text = "hello" });
+        var evt = new BroadcastEvent("session:abc", "message.updated", payload, DateTimeOffset.UtcNow, 42);
+
+        var json = SerializeEnvelope(evt);
+        using var doc = JsonDocument.Parse(json);
+
+        doc.RootElement
+            .GetProperty("data")
+            .GetProperty("sequenceNumber")
+            .GetInt64()
+            .ShouldBe(42);
     }
 
     [Fact]

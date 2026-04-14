@@ -19,7 +19,7 @@ function makeEntry(overrides: Partial<CacheEntry> = {}): CacheEntry {
     scrollHeight: 0,
     sessionStatus: "idle",
     delegations: [],
-    lastMessageId: null,
+    lastSequenceNumber: null,
     timestamp: Date.now(),
     pagination: { hasMore: false, oldestMessageId: null, totalCount: null },
     ...overrides,

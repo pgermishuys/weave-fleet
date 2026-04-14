@@ -133,7 +133,11 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
 
             // ── Register TestHarness for both interfaces ────────────────────
             services.AddSingleton<IHarness>(TestHarness);
-            services.AddSingleton<IHarnessRuntime>(TestHarnessRuntime);
+            services.AddSingleton<IHarnessRuntime>(sp =>
+            {
+                TestHarnessRuntime.SetScopeFactory(sp.GetRequiredService<IServiceScopeFactory>());
+                return TestHarnessRuntime;
+            });
 
             // ── Remove PortAllocator ────────────────────────────────────────
             var portAllocatorDescriptors = services

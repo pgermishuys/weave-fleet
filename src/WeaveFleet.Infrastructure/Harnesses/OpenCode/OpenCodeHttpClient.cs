@@ -258,28 +258,7 @@ internal sealed class OpenCodeHttpClient
 
         foreach (var partEl in partsArray.EnumerateArray())
         {
-            if (partEl.ValueKind != JsonValueKind.Object)
-                continue;
-
-            if (!partEl.TryGetProperty("type", out var typeEl))
-                continue;
-
-            OpenCodeMessagePart? part = typeEl.GetString() switch
-            {
-                "text" => partEl.Deserialize<OpenCodeTextPart>(OpenCodeJsonOptions.Default),
-                "tool" => partEl.Deserialize<OpenCodeToolPart>(OpenCodeJsonOptions.Default),
-                "reasoning" => partEl.Deserialize<OpenCodeReasoningPart>(OpenCodeJsonOptions.Default),
-                "step-start" => partEl.Deserialize<OpenCodeStepStartPart>(OpenCodeJsonOptions.Default),
-                "step-finish" => partEl.Deserialize<OpenCodeStepFinishPart>(OpenCodeJsonOptions.Default),
-                "file" => partEl.Deserialize<OpenCodeFilePart>(OpenCodeJsonOptions.Default),
-                "agent" => partEl.Deserialize<OpenCodeAgentPart>(OpenCodeJsonOptions.Default),
-                "subtask" => partEl.Deserialize<OpenCodeSubtaskPart>(OpenCodeJsonOptions.Default),
-                "snapshot" => partEl.Deserialize<OpenCodeSnapshotPart>(OpenCodeJsonOptions.Default),
-                "patch" => partEl.Deserialize<OpenCodePatchPart>(OpenCodeJsonOptions.Default),
-                "retry" => partEl.Deserialize<OpenCodeRetryPart>(OpenCodeJsonOptions.Default),
-                "compaction" => partEl.Deserialize<OpenCodeCompactionPart>(OpenCodeJsonOptions.Default),
-                _ => null,
-            };
+            var part = OpenCodePartDeserializer.DeserializePart(partEl);
 
             if (part is not null)
                 result.Add(part);

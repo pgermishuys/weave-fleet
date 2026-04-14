@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Services;
@@ -130,19 +131,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             var userMsg = ClaudeCodeMapper.ToUserMessage(text, DateTimeOffset.UtcNow);
             await PersistMessageAsync(userMsg).ConfigureAwait(false);
 
-            // 2. Emit frontend-compatible events for the user message
-            var userMsgEvent = ClaudeCodeMapper.CreateMessageUpdatedEvent(userMsg, _fleetSessionId);
-            await _eventChannel.Writer.WriteAsync(userMsgEvent, ct).ConfigureAwait(false);
-
-            for (int i = 0; i < userMsg.Parts.Count; i++)
-            {
-                var partEvent = ClaudeCodeMapper.CreatePartUpdatedEvent(
-                    userMsg.Id, _fleetSessionId, userMsg.Parts[i], i);
-                if (partEvent is not null)
-                    await _eventChannel.Writer.WriteAsync(partEvent, ct).ConfigureAwait(false);
-            }
-
-            // 3. Emit session busy status
+            // 2. Emit session busy status
             var busyEvent = ClaudeCodeMapper.CreateSessionStatusEvent(_fleetSessionId, "busy");
             await _eventChannel.Writer.WriteAsync(busyEvent, ct).ConfigureAwait(false);
 
@@ -338,7 +327,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                     // Persist assistant message
                     var harnessMsg = ClaudeCodeMapper.ToHarnessMessage(
                         assistantMsg, DateTimeOffset.UtcNow);
-                    _ = PersistMessageAsync(harnessMsg);
+                    await PersistMessageAsync(harnessMsg).ConfigureAwait(false);
 
                     if (assistantMsg.Message?.Model is not null)
                         _modelId = assistantMsg.Message.Model;
@@ -369,12 +358,11 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
                     _status = HarnessSessionStatus.Idle;
                 }
-
-                // Emit frontend-compatible events to channel
-                var events = ClaudeCodeMapper.ToFrontendEvents(msg, _fleetSessionId);
-                foreach (var evt in events)
+                if (msg is ClaudeCodeResultMessage)
                 {
-                    await _eventChannel.Writer.WriteAsync(evt, CancellationToken.None).ConfigureAwait(false);
+                    var events = ClaudeCodeMapper.ToFrontendEvents(msg, _fleetSessionId);
+                    foreach (var evt in events)
+                        await _eventChannel.Writer.WriteAsync(evt, CancellationToken.None).ConfigureAwait(false);
                 }
             }
         }
@@ -401,9 +389,28 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         {
             using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
             using var scope = _scopeFactory.CreateScope();
-            var repo = scope.ServiceProvider.GetRequiredService<IMessageRepository>();
+            var sessionActivityWriteService = scope.ServiceProvider.GetRequiredService<SessionActivityWriteService>();
             var persisted = MessagePersistenceService.ToPersistedMessage(_fleetSessionId, message);
-            await repo.UpsertAsync(persisted).ConfigureAwait(false);
+            var outboxMessages = new List<OutboxMessage>();
+            var createdAt = DateTimeOffset.UtcNow.ToString("O");
+
+            var messageUpdatedEvent = ClaudeCodeMapper.CreateMessageUpdatedEvent(message, _fleetSessionId);
+            outboxMessages.Add(CreateOutboxMessage(messageUpdatedEvent, createdAt));
+
+            for (int i = 0; i < message.Parts.Count; i++)
+            {
+                var partEvent = ClaudeCodeMapper.CreatePartUpdatedEvent(message.Id, _fleetSessionId, message.Parts[i], i);
+                if (partEvent is not null)
+                    outboxMessages.Add(CreateOutboxMessage(partEvent, createdAt));
+            }
+
+            await sessionActivityWriteService.WriteAsync(
+                new SessionActivityWriteRequest
+                {
+                    MessagesToUpsert = [persisted],
+                    OutboxMessages = outboxMessages
+                },
+                CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -426,5 +433,17 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             LogPersistFailed(_logger, _fleetSessionId, ex);
         }
     }
-}
 
+    private OutboxMessage CreateOutboxMessage(HarnessEvent harnessEvent, string createdAt)
+    {
+        return new OutboxMessage
+        {
+            Topic = $"session:{_fleetSessionId}",
+            Type = harnessEvent.Type,
+            Payload = MessagePersistenceService.SerializePayload(harnessEvent.Payload!.Value),
+            UserId = _ownerUserId,
+            CreatedAt = createdAt,
+            AvailableAt = createdAt
+        };
+    }
+}

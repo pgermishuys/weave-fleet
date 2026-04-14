@@ -50,6 +50,7 @@ public static class SessionEventEndpoints
                     sessionId = id,
                     type = evt.Type,
                     payload = sanitizedPayload.Value,
+                    sequenceNumber = evt.SequenceNumber,
                     timestamp = evt.Timestamp.ToUnixTimeMilliseconds()
                 });
                 await WriteSseEventAsync(context.Response, evt.Type, data, ct);
@@ -83,6 +84,7 @@ public static class SessionEventEndpoints
                     topic = evt.Topic,
                     type = evt.Type,
                     payload = sanitizedPayload.Value,
+                    sequenceNumber = evt.SequenceNumber,
                     timestamp = evt.Timestamp.ToUnixTimeMilliseconds()
                 });
                 await WriteSseEventAsync(context.Response, evt.Type, data, ct);

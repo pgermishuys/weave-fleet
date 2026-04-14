@@ -50,7 +50,7 @@ public sealed class HarnessEventRelayTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public async Task Events_are_broadcast_on_fleet_session_topic()
+    public async Task Ephemeral_events_are_broadcast_on_fleet_session_topic()
     {
         var (broadcaster, sessionRepo, scopeFactory, broadcastSignal) = BuildDependencies();
         var tracker = new InstanceTracker();
@@ -75,10 +75,10 @@ public sealed class HarnessEventRelayTests
         // Emit an event and complete the stream
         var evt = new HarnessEvent
         {
-            Type = "message.updated",
+            Type = "session.status",
             SessionId = "oc-session-1",
             Timestamp = DateTimeOffset.UtcNow,
-            Payload = JsonSerializer.SerializeToElement(new { text = "hello" })
+            Payload = JsonSerializer.SerializeToElement(new { status = new { type = "busy" } })
         };
         instance.Emit(evt);
         instance.Complete();
@@ -87,7 +87,7 @@ public sealed class HarnessEventRelayTests
         var result = await broadcastSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         result.Topic.ShouldBe($"session:{fleetSessionId}");
-        result.Type.ShouldBe("message.updated");
+        result.Type.ShouldBe("session.status");
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);
@@ -159,7 +159,7 @@ public sealed class HarnessEventRelayTests
         var instance = new FakeInstance(instanceId);
         instance.Emit(new HarnessEvent
         {
-            Type = "message.updated",
+            Type = "session.status",
             SessionId = "oc-1",
             Timestamp = DateTimeOffset.UtcNow
         });
@@ -263,9 +263,10 @@ public sealed class HarnessEventRelayTests
         // Emit an event — relay should have subscribed to the pre-existing instance
         instance.Emit(new HarnessEvent
         {
-            Type = "message.updated",
+            Type = "message.part.delta",
             SessionId = "oc-pre",
-            Timestamp = DateTimeOffset.UtcNow
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { messageID = "m1", partID = "p1", field = "text", delta = "hi" })
         });
         instance.Complete();
 
@@ -278,7 +279,7 @@ public sealed class HarnessEventRelayTests
     }
 
     [Fact]
-    public async Task Event_payload_sessionIds_are_preserved_when_broadcast()
+    public async Task Ephemeral_event_payload_sessionIds_are_preserved_when_broadcast()
     {
         var broadcaster = Substitute.For<IEventBroadcaster>();
         var sessionRepo = Substitute.For<ISessionRepository>();
@@ -333,7 +334,7 @@ public sealed class HarnessEventRelayTests
 
         instance.Emit(new HarnessEvent
         {
-            Type = "message.part.updated",
+            Type = "message.part.delta",
             SessionId = "opencode-session-xyz",
             Timestamp = DateTimeOffset.UtcNow,
             Payload = payload
@@ -349,6 +350,46 @@ public sealed class HarnessEventRelayTests
 
         doc.RootElement.GetProperty("sessionID").GetString().ShouldBe("opencode-session-xyz");
         doc.RootElement.GetProperty("part").GetProperty("sessionID").GetString().ShouldBe("opencode-session-xyz");
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Durable_events_are_not_relayed()
+    {
+        var (broadcaster, sessionRepo, scopeFactory, _) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var relay = new HarnessEventRelay(
+            tracker, broadcaster, scopeFactory, NullLogger<HarnessEventRelay>.Instance);
+
+        var fleetSessionId = "fleet-durable-skip";
+        var instanceId = "instance-durable-skip";
+
+        sessionRepo.GetAnyForInstanceAsync(instanceId)
+            .Returns(new Session { Id = fleetSessionId, InstanceId = instanceId });
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeInstance(instanceId);
+        tracker.Register(instanceId, instance);
+
+        instance.Emit(new HarnessEvent
+        {
+            Type = "message.updated",
+            SessionId = "oc-durable",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { info = new { id = "msg-1" } })
+        });
+        instance.Complete();
+
+        await Task.Delay(200);
+
+        await broadcaster.DidNotReceive().BroadcastAsync(
+            Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<object>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);
@@ -377,18 +418,18 @@ public sealed class HarnessEventRelayTests
 
         instance.Emit(new HarnessEvent
         {
-            Type = "message.part.updated",
+            Type = "message.part.delta",
             SessionId = "oc-child",
             FleetSessionId = "fleet-child",
             Timestamp = DateTimeOffset.UtcNow,
-            Payload = JsonSerializer.SerializeToElement(new { part = new { id = "part-1" } })
+            Payload = JsonSerializer.SerializeToElement(new { messageID = "msg-1", partID = "part-1", field = "text", delta = "child" })
         });
         instance.Complete();
 
         var result = await broadcastSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         result.Topic.ShouldBe("session:fleet-child");
-        result.Type.ShouldBe("message.part.updated");
+        result.Type.ShouldBe("message.part.delta");
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);
@@ -435,4 +476,3 @@ public sealed class HarnessEventRelayTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }
-

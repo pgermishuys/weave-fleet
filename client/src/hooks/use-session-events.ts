@@ -2,6 +2,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import type {
   AccumulatedMessage,
+  CommittedSessionEvent,
   DelegationDto,
   WebSocketEvent,
 } from "@/lib/api-types";
@@ -100,8 +101,7 @@ export function useSessionEvents(
   // Keep onAgentSwitch in a ref to avoid stale closures
   const onAgentSwitchRef = useRef(onAgentSwitch);
   useEffect(() => { onAgentSwitchRef.current = onAgentSwitch; }, [onAgentSwitch]);
-  // Track the last known message ID for gap-fill on reconnect
-  const lastMessageIdRef = useRef<string | null>(null);
+  const lastSequenceNumberRef = useRef<number | null>(null);
   // Cache hit state
   const [cacheHit, setCacheHit] = useState(false);
   const [initialScrollPosition, setInitialScrollPosition] = useState<{ scrollTop: number; scrollHeight: number } | null>(null);
@@ -154,11 +154,37 @@ export function useSessionEvents(
     }
   }, [sessionId, instanceId, resetPagination]);
 
-  const loadMessagesSince = useCallback(async (afterId: string | null, signal?: AbortSignal): Promise<void> => {
+  const applyCommittedEvents = useCallback((events: CommittedSessionEvent[]): void => {
+    if (events.length === 0) return;
+
+    const orderedEvents = [...events].sort((left, right) => left.sequenceNumber - right.sequenceNumber);
+    for (const committedEvent of orderedEvents) {
+      handleEvent(
+        {
+          type: committedEvent.type,
+          sequenceNumber: committedEvent.sequenceNumber,
+          properties: committedEvent.payload,
+        },
+        sessionId,
+        setMessages,
+        setDelegations,
+        setStatus,
+        setSessionStatus,
+        setError,
+        onAgentSwitchRef,
+        lastSequenceNumberRef,
+      );
+    }
+  }, [sessionId]);
+
+  const loadCommittedEventsSince = useCallback(async (afterSequenceNumber: number | null, signal?: AbortSignal): Promise<void> => {
     if (!sessionId || !instanceId) return;
-    if (!afterId) return loadAllMessages(signal);
+    if (afterSequenceNumber == null) return loadAllMessages(signal);
     try {
-      const url = `/api/sessions/${encodeURIComponent(sessionId)}/messages?instanceId=${encodeURIComponent(instanceId)}&after=${encodeURIComponent(afterId)}`;
+      const params = new URLSearchParams({
+        afterSequenceNumber: String(afterSequenceNumber),
+      });
+      const url = `/api/sessions/${encodeURIComponent(sessionId)}/committed-events?${params.toString()}`;
       const response = await apiFetch(url, signal ? { signal } : undefined);
       if (!response.ok) {
         // Gap-fill failed — preserve the current scroll position so the full
@@ -170,29 +196,10 @@ export function useSessionEvents(
         }
         return;
       }
-      const data = await response.json() as { messages?: FleetMessage[] };
-      if (!data.messages?.length) return;
+      const data = await response.json() as { events?: CommittedSessionEvent[] };
+      if (!data.events?.length) return;
       if (signal?.aborted) return;
-      const accumulated = data.messages.map(convertFleetMessageToAccumulated);
-      setMessages(prev => {
-        const incomingById = new Map(accumulated.map((m: AccumulatedMessage) => [m.messageId, m]));
-        // Update existing messages that have richer content in the incoming data,
-        // and append any genuinely new messages.
-        const updated = prev.map((existing: AccumulatedMessage) => {
-          const incoming = incomingById.get(existing.messageId);
-          if (!incoming) return existing;
-          incomingById.delete(existing.messageId);
-          // If the existing message has no renderable parts but the incoming one does, use the incoming version.
-          const existingHasContent = existing.parts.some(
-            (p) => (p.type === "text" && p.text.trim().length > 0) || p.type === "tool" || p.type === "file"
-          );
-          if (!existingHasContent && incoming.parts.length > 0) return incoming;
-          return existing;
-        });
-        const newMessages = Array.from(incomingById.values());
-        const merged = [...updated, ...newMessages];
-        return merged.length > MAX_MESSAGES ? merged.slice(merged.length - MAX_MESSAGES) : merged;
-      });
+      applyCommittedEvents(data.events);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       const savedScroll = scrollPositionRef.current;
@@ -201,7 +208,7 @@ export function useSessionEvents(
         setInitialScrollPosition(savedScroll);
       }
     }
-  }, [sessionId, instanceId, loadAllMessages]);
+  }, [sessionId, instanceId, loadAllMessages, applyCommittedEvents]);
 
   const loadInitialMessages = useCallback(async (signal?: AbortSignal): Promise<void> => {
     if (!sessionId || !instanceId) return;
@@ -259,7 +266,7 @@ export function useSessionEvents(
     setSessionStatus("idle");
     setStatus("connecting");
     setError(undefined);
-    lastMessageIdRef.current = null;
+    lastSequenceNumberRef.current = null;
 
     const cached = sessionCache.get(sessionId, instanceId);
     if (cached) {
@@ -268,11 +275,11 @@ export function useSessionEvents(
       setMessages(cached.messages);
       setDelegations(cached.delegations);
       setSessionStatus(cached.sessionStatus);
-      lastMessageIdRef.current = cached.lastMessageId;
+      lastSequenceNumberRef.current = cached.lastSequenceNumber;
       hydratePagination(cached.pagination);
       setCacheHit(true);
       setInitialScrollPosition({ scrollTop: cached.scrollPosition, scrollHeight: cached.scrollHeight });
-      void Promise.all([loadMessagesSince(cached.lastMessageId, signal), loadSessionStatus(signal), loadDelegations(signal)])
+      void Promise.all([loadCommittedEventsSince(cached.lastSequenceNumber, signal), loadSessionStatus(signal), loadDelegations(signal)])
         .then(() => {
           if (isMounted.current && !signal.aborted) setStatus("connected");
         })
@@ -301,7 +308,7 @@ export function useSessionEvents(
       } catch {
         return;
       }
-      handleEvent(event, sessionId, setMessages, setDelegations, setStatus, setSessionStatus, setError, onAgentSwitchRef, lastMessageIdRef);
+      handleEvent(event, sessionId, setMessages, setDelegations, setStatus, setSessionStatus, setError, onAgentSwitchRef, lastSequenceNumberRef);
     });
 
     // On WebSocket reconnect, gap-fill from the last known message so that
@@ -309,7 +316,7 @@ export function useSessionEvents(
     const unsubReconnect = onReconnect(() => {
       if (!isMounted.current) return;
       void Promise.all([
-        loadMessagesSince(lastMessageIdRef.current),
+        loadCommittedEventsSince(lastSequenceNumberRef.current),
         loadDelegations(),
         loadSessionStatus(),
       ]);
@@ -332,7 +339,7 @@ export function useSessionEvents(
           scrollPosition: scrollPos?.scrollTop ?? 0,
           scrollHeight: scrollPos?.scrollHeight ?? 0,
           sessionStatus: sessionStatusRef.current,
-          lastMessageId: lastMessageIdRef.current,
+          lastSequenceNumber: lastSequenceNumberRef.current,
           pagination: snapshotPaginationRef.current(),
           timestamp: Date.now(),
         });
@@ -355,7 +362,7 @@ export function useSessionEvents(
   const reconnect = useCallback(() => {
     setStatus("recovering");
     void Promise.all([
-      loadMessagesSince(lastMessageIdRef.current),
+      loadCommittedEventsSince(lastSequenceNumberRef.current),
       loadDelegations(),
       loadSessionStatus(),
     ]).then(() => {
@@ -364,7 +371,7 @@ export function useSessionEvents(
         setError(undefined);
       }
     });
-  }, [loadDelegations, loadMessagesSince, loadSessionStatus]);
+  }, [loadCommittedEventsSince, loadDelegations, loadSessionStatus]);
 
   return {
     messages,
@@ -403,9 +410,12 @@ export function handleEvent(
   setSessionStatus: SetSessionStatus,
   setError: SetError,
   onAgentSwitchRef: React.MutableRefObject<((agent: string) => void) | undefined>,
-  lastMessageIdRef: React.MutableRefObject<string | null>,
+  lastSequenceNumberRef: React.MutableRefObject<number | null>,
 ): void {
   const { type, properties } = event;
+  if (typeof event.sequenceNumber === "number") {
+    lastSequenceNumberRef.current = Math.max(lastSequenceNumberRef.current ?? 0, event.sequenceNumber);
+  }
   const delegationId = properties?.delegationId ?? properties?.DelegationId;
   const parentToolCallId = properties?.parentToolCallId ?? properties?.ParentToolCallId;
   const childSessionId = properties?.childSessionId ?? properties?.ChildSessionId;
@@ -439,7 +449,6 @@ export function handleEvent(
   if (type === "message.updated") {
     const info = properties?.info;
     if (!info?.id) return;
-    lastMessageIdRef.current = info.id;
     setMessages((prev) => {
       const next = mergeMessageUpdate(ensureMessage(prev, info), info);
       if (next.length > MAX_MESSAGES) {

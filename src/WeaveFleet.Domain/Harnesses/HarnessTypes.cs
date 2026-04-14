@@ -48,6 +48,8 @@ public enum MessagePartKind
     ToolUse = 1,
     ToolResult = 2,
     Reasoning = 3,
+    File = 4,
+    StepFinish = 5,
 }
 
 /// <summary>One logical piece of an agent message.</summary>
@@ -56,6 +58,8 @@ public enum MessagePartKind
 [JsonDerivedType(typeof(ToolUsePart), "tool")]
 [JsonDerivedType(typeof(ToolResultPart), "tool-result")]
 [JsonDerivedType(typeof(ReasoningPart), "reasoning")]
+[JsonDerivedType(typeof(FilePart), "file")]
+[JsonDerivedType(typeof(StepFinishPart), "step-finish")]
 public abstract record MessagePart(MessagePartKind Kind);
 
 /// <summary>Plain text content.</summary>
@@ -63,6 +67,19 @@ public sealed record TextPart(string Text) : MessagePart(MessagePartKind.Text);
 
 /// <summary>Structured reasoning content that is stored but not shown in the main activity stream.</summary>
 public sealed record ReasoningPart(string Text, string? Summary = null) : MessagePart(MessagePartKind.Reasoning);
+
+/// <summary>A file or image attachment associated with a message.</summary>
+public sealed record FilePart(string PartId, string Mime, string Url, string? Filename) : MessagePart(MessagePartKind.File);
+
+/// <summary>Marks a completed inference step with final token/cost totals.</summary>
+public sealed record StepFinishPart(
+    int Index,
+    string? Reason,
+    double Cost,
+    double TokensInput,
+    double TokensOutput,
+    double TokensReasoning,
+    long? CompletedAt) : MessagePart(MessagePartKind.StepFinish);
 
 /// <summary>The agent invoking a tool.</summary>
 public sealed record ToolUsePart(

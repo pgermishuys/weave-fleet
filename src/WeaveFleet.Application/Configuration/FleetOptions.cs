@@ -95,6 +95,49 @@ public sealed class FleetOptions
 
     /// <summary>Data Protection key persistence configuration.</summary>
     public DataProtectionOptions DataProtection { get; set; } = new();
+
+    /// <summary>Transactional outbox polling and cleanup configuration.</summary>
+    public OutboxOptions Outbox { get; set; } = new();
+}
+
+/// <summary>Transactional outbox polling and retention configuration.</summary>
+public sealed class OutboxOptions
+{
+    /// <summary>
+    /// Dispatcher polling interval in milliseconds while idle.
+    /// Default: 1000.
+    /// </summary>
+    public int PollIntervalMilliseconds { get; set; } = 1000;
+
+    /// <summary>
+    /// Dispatcher sleep interval in milliseconds after an empty poll.
+    /// Default: 250.
+    /// </summary>
+    public int EmptyPollSleepMilliseconds { get; set; } = 250;
+
+    /// <summary>
+    /// Maximum number of outbox rows claimed per dispatch pass.
+    /// Default: 100.
+    /// </summary>
+    public int DispatchBatchSize { get; set; } = 100;
+
+    /// <summary>
+    /// Cleanup scan interval in minutes.
+    /// Default: 15.
+    /// </summary>
+    public int CleanupIntervalMinutes { get; set; } = 15;
+
+    /// <summary>
+    /// Retention window in hours for already-dispatched rows.
+    /// Default: 24.
+    /// </summary>
+    public int RetentionHours { get; set; } = 24;
+
+    /// <summary>
+    /// Maximum number of dispatched rows deleted per cleanup pass.
+    /// Default: 500.
+    /// </summary>
+    public int CleanupBatchSize { get; set; } = 500;
 }
 
 /// <summary>Authentication / OIDC configuration.</summary>

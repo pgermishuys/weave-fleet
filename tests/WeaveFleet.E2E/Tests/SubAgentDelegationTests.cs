@@ -214,8 +214,17 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                 await detail.WaitForMessageTextAsync("Live child websocket output", 5_000);
 
                 Volatile.Read(ref childRequestCount).ShouldBe(baselineRequests);
+
+                var refreshedChildMessagesResponse = Page.WaitForResponseAsync(response =>
+                    response.Url.Contains($"/api/sessions/{childSession.Id}/messages", StringComparison.Ordinal)
+                    && response.Ok,
+                    new Microsoft.Playwright.PageWaitForResponseOptions { Timeout = 10_000 });
+
+                await Page.ReloadAsync();
+                await refreshedChildMessagesResponse;
+                await detail.WaitForLoadedAsync();
+                await detail.WaitForMessageTextAsync("Live child websocket output", 10_000);
             }
         });
     }
 }
-

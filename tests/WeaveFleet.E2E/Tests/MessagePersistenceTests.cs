@@ -1,9 +1,13 @@
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.E2E.Infrastructure;
 using WeaveFleet.E2E.Pages;
 using WeaveFleet.Infrastructure.Data.Repositories;
+using WeaveFleet.TestHarness;
 
 namespace WeaveFleet.E2E.Tests;
 
@@ -191,7 +195,195 @@ public sealed class MessagePersistenceTests : E2ETestBase,
         });
     }
 
+    [Fact]
+    public async Task DirectLoad_RendersPersistedActivityFromDatabase()
+    {
+        await WithFailureCapture(async () =>
+        {
+            var now = DateTimeOffset.UtcNow;
+            var workspaceId = $"ws-db-first-{Guid.NewGuid():N}";
+            var instanceId = $"inst-db-first-{Guid.NewGuid():N}";
+            var sessionId = $"sess-db-first-{Guid.NewGuid():N}";
+
+            var connFactory = _factory.KestrelServices.GetRequiredService<IDbConnectionFactory>();
+            var userContext = new TestUserContext();
+
+            var workspaceRepo = new DapperWorkspaceRepository(connFactory, userContext);
+            await workspaceRepo.InsertAsync(new Workspace
+            {
+                Id = workspaceId,
+                Directory = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar),
+                IsolationStrategy = "existing",
+                CreatedAt = now.ToString("O"),
+                UserId = userContext.UserId,
+            });
+
+            var instanceRepo = new DapperInstanceRepository(connFactory, userContext);
+            await instanceRepo.InsertAsync(new Instance
+            {
+                Id = instanceId,
+                Port = 0,
+                Directory = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar),
+                Url = "http://127.0.0.1:0",
+                Status = "stopped",
+                CreatedAt = now.ToString("O"),
+                UserId = userContext.UserId,
+            });
+
+            var sessionRepo = new DapperSessionRepository(connFactory, userContext);
+            await sessionRepo.InsertAsync(new Session
+            {
+                Id = sessionId,
+                WorkspaceId = workspaceId,
+                InstanceId = instanceId,
+                OpencodeSessionId = $"oc-db-first-{Guid.NewGuid():N}",
+                Title = "DB-first render test",
+                Status = "stopped",
+                Directory = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar),
+                CreatedAt = now.ToString("O"),
+                StoppedAt = now.ToString("O"),
+                HarnessType = "opencode",
+                UserId = userContext.UserId,
+            });
+
+            var messageRepo = new DapperMessageRepository(connFactory, userContext);
+            await messageRepo.UpsertBatchAsync(
+            [
+                MakeMessage("msg-db-user-1", sessionId, "user", "Load from DB after reload", now, agentName: null),
+                MakeMessage("msg-db-assistant-1", sessionId, "assistant", "Persisted response rendered from the database", now.AddSeconds(1), agentName: "loom"),
+            ]);
+
+            await Page.GotoAsync($"/sessions/{Uri.EscapeDataString(sessionId)}?instanceId={Uri.EscapeDataString(instanceId)}");
+            await Page.GetByTestId("activity-stream").WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = 10_000,
+            });
+            var detail = new SessionDetailPage(Page);
+            await detail.WaitForMessageTextAsync("Load from DB after reload", 10_000);
+            await detail.WaitForMessageTextAsync("Persisted response rendered from the database", 10_000);
+        });
+    }
+
+    [Fact]
+    public async Task NavigationBackToSession_ReplaysMissedCommittedEvents_ViaSequenceGapFill()
+    {
+        await WithFailureCapture(async () =>
+        {
+            var dashboard = new FleetDashboardPage(Page);
+            await dashboard.GotoAsync();
+
+            var dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+
+            var sessionUri = new Uri(Page.Url);
+            var sessionId = sessionUri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+            var instanceId = GetRequiredQueryValue(sessionUri, "instanceId");
+
+            var tracker = _factory.KestrelServices.GetRequiredService<InstanceTracker>();
+            var harness = tracker.Get(instanceId).ShouldBeOfType<TestHarnessSession>();
+            var harnessSessionId = harness.InstanceId;
+
+            await PushDurableAssistantMessageAsync(
+                harness,
+                harnessSessionId,
+                sessionId,
+                "msg-online-1",
+                "Initial committed websocket event");
+
+            await detail.WaitForMessageTextAsync("Initial committed websocket event", 10_000);
+
+            await Page.GoBackAsync();
+            await dashboard.WaitForLoadedAsync();
+            await dashboard.GetSessionCard(sessionId)
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+
+            await PushDurableAssistantMessageAsync(
+                harness,
+                harnessSessionId,
+                sessionId,
+                "msg-gapfill-1",
+                "Recovered after reconnect via sequence gap fill");
+
+            var afterSequenceNumberResponse = Page.WaitForResponseAsync(response =>
+                response.Url.Contains($"/api/sessions/{sessionId}/committed-events", StringComparison.Ordinal)
+                && response.Url.Contains("afterSequenceNumber=", StringComparison.Ordinal)
+                && response.Ok,
+                new PageWaitForResponseOptions { Timeout = 10_000 });
+
+            detail = await dashboard.ClickSessionCardAsync(sessionId);
+
+            var gapFillResponse = await afterSequenceNumberResponse;
+            gapFillResponse.Url.ShouldContain("afterSequenceNumber=");
+            await detail.WaitForMessageTextAsync("Recovered after reconnect via sequence gap fill", 10_000);
+        });
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private static async Task PushDurableAssistantMessageAsync(
+        TestHarnessSession harness,
+        string harnessSessionId,
+        string fleetSessionId,
+        string messageId,
+        string text)
+    {
+        await harness.PushEventAsync(new HarnessEvent
+        {
+            Type = "message.updated",
+            SessionId = harnessSessionId,
+            FleetSessionId = fleetSessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                info = new
+                {
+                    id = messageId,
+                    sessionID = harnessSessionId,
+                    role = "assistant",
+                    time = new { created = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() },
+                    agent = "loom",
+                }
+            })
+        });
+
+        await harness.PushEventAsync(new HarnessEvent
+        {
+            Type = "message.part.updated",
+            SessionId = harnessSessionId,
+            FleetSessionId = fleetSessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                part = new
+                {
+                    id = $"part-{messageId}",
+                    messageID = messageId,
+                    sessionID = harnessSessionId,
+                    type = "text",
+                    text,
+                }
+            })
+        });
+    }
+
+    private static string GetRequiredQueryValue(Uri uri, string key)
+    {
+        var query = uri.Query.TrimStart('?');
+        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = pair.Split('=', 2);
+            if (parts.Length == 2 && string.Equals(Uri.UnescapeDataString(parts[0]), key, StringComparison.Ordinal))
+            {
+                return Uri.UnescapeDataString(parts[1]);
+            }
+        }
+
+        throw new InvalidOperationException($"Missing required query parameter '{key}'.");
+    }
 
     private static PersistedMessage MakeMessage(
         string id, string sessionId, string role, string text,

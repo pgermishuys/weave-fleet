@@ -82,6 +82,23 @@ internal static class OpenCodeMapper
             case OpenCodeReasoningPart reasoning when reasoning.Text is not null:
                 return new ReasoningPart(reasoning.Text, reasoning.Summary);
 
+            case OpenCodeFilePart filePart when !string.IsNullOrWhiteSpace(filePart.Url):
+                return new FilePart(
+                    filePart.Id,
+                    filePart.Mime ?? string.Empty,
+                    filePart.Url,
+                    filePart.Filename);
+
+            case OpenCodeStepFinishPart stepFinish:
+                return new StepFinishPart(
+                    stepFinish.Index,
+                    stepFinish.Reason,
+                    Cost: 0,
+                    TokensInput: 0,
+                    TokensOutput: 0,
+                    TokensReasoning: 0,
+                    CompletedAt: null);
+
             default:
                 return null;
         }

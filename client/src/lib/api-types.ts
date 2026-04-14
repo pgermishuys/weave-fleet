@@ -283,8 +283,18 @@ export interface ReorderProjectRequest {
  */
 export interface WebSocketEvent {
   type: string;
+  sequenceNumber?: number | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   properties: Record<string, any>;
+}
+
+export interface CommittedSessionEvent {
+  sequenceNumber: number;
+  topic: string;
+  type: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload: Record<string, any>;
+  timestamp: number;
 }
 
 export interface DelegationDto {

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.Text.Json;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Services;
@@ -192,6 +193,30 @@ public static class SessionEndpoints
                 err => err.ToSessionApiResult());
         })
         .WithName("GetSessionMessages");
+
+        // GET /api/sessions/{id}/committed-events?afterSequenceNumber=N&limit=M
+        group.MapGet("/{id}/committed-events", async (
+            string id,
+            long afterSequenceNumber,
+            int? limit,
+            SessionOrchestrator orchestrator) =>
+        {
+            var result = await orchestrator.GetCommittedEventsAsync(id, afterSequenceNumber, limit);
+            return result.Match(
+                events => Results.Ok(new
+                {
+                    events = events.Select(evt => new
+                    {
+                        sequenceNumber = evt.SequenceNumber,
+                        topic = evt.Topic,
+                        type = evt.Type,
+                        payload = JsonSerializer.Deserialize<JsonElement>(evt.Payload),
+                        timestamp = evt.Timestamp.ToUnixTimeMilliseconds()
+                    })
+                }),
+                err => err.ToSessionApiResult());
+        })
+        .WithName("GetCommittedSessionEvents");
 
         // GET /api/sessions/{id}/diffs — stub (harness diff API not yet defined)
         group.MapGet("/{id}/diffs", (string id) =>

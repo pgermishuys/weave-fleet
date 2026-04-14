@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Harnesses;
 
@@ -10,6 +11,7 @@ namespace WeaveFleet.TestHarness;
 public sealed class TestHarnessRuntime : IHarnessRuntime
 {
     private TestScenario _scenario = new();
+    private IServiceScopeFactory? _scopeFactory;
 
     // ── IHarnessRuntime ──────────────────────────────────────────────────────
 
@@ -32,7 +34,10 @@ public sealed class TestHarnessRuntime : IHarnessRuntime
 
         IHarnessSession instance = new TestHarnessSession(
             instanceId: options.SessionId,
-            scenario: _scenario);
+            scenario: _scenario,
+            fleetSessionId: options.SessionId,
+            scopeFactory: _scopeFactory,
+            ownerUserId: options.OwnerUserId);
 
         return Task.FromResult(instance);
     }
@@ -45,7 +50,10 @@ public sealed class TestHarnessRuntime : IHarnessRuntime
 
         IHarnessSession instance = new TestHarnessSession(
             instanceId: options.SessionId,
-            scenario: _scenario);
+            scenario: _scenario,
+            fleetSessionId: options.SessionId,
+            scopeFactory: _scopeFactory,
+            ownerUserId: options.OwnerUserId);
 
         return Task.FromResult(instance);
     }
@@ -57,6 +65,8 @@ public sealed class TestHarnessRuntime : IHarnessRuntime
     /// Thread-safe via volatile write (scenarios are configured before test action).
     /// </summary>
     public void Configure(TestScenario scenario) => _scenario = scenario;
+
+    public void SetScopeFactory(IServiceScopeFactory scopeFactory) => _scopeFactory = scopeFactory;
 
     /// <summary>Fluent helper: configure via builder and return the built scenario.</summary>
     public TestScenario Configure(Action<TestScenarioBuilder> configure)

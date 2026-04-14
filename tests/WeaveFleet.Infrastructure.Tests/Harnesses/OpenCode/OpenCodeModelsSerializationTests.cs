@@ -162,6 +162,57 @@ public sealed class OpenCodeModelsSerializationTests
     }
 
     [Fact]
+    public void MessageParts_ToolPart_WithStatusAfterInput_DeserializesViaHelper()
+    {
+        using var doc = JsonDocument.Parse(
+            """
+            {
+              "type":"tool",
+              "id":"part-2",
+              "sessionId":"sess-1",
+              "messageId":"msg-2",
+              "callId":"call-1",
+              "tool":"bash",
+              "state":{"input":{"command":"ls"},"metadata":{"durationMs":1},"status":"completed","output":{"result":"file.txt"}}
+            }
+            """);
+
+        var result = OpenCodePartDeserializer.DeserializePart(doc.RootElement);
+
+        result.ShouldNotBeNull();
+        result.ShouldBeOfType<OpenCodeToolPart>();
+        var tool = (OpenCodeToolPart)result;
+        tool.Tool.ShouldBe("bash");
+        tool.CallId.ShouldBe("call-1");
+        tool.State.ShouldBeOfType<OpenCodeToolCompleted>();
+    }
+
+    [Fact]
+    public void DeserializeParts_ToolPart_WithStatusAfterInput_DeserializesViaSharedHelper()
+    {
+        using var doc = JsonDocument.Parse(
+            """
+            [
+              {
+                "type":"tool",
+                "id":"part-2",
+                "sessionId":"sess-1",
+                "messageId":"msg-2",
+                "callId":"call-1",
+                "tool":"bash",
+                "state":{"input":{"command":"ls"},"status":"completed","output":{"result":"file.txt"}}
+              }
+            ]
+            """);
+
+        var result = OpenCodeHttpClient.DeserializeParts(doc.RootElement);
+
+        result.Count.ShouldBe(1);
+        result[0].ShouldBeOfType<OpenCodeToolPart>();
+        ((OpenCodeToolPart)result[0]).State.ShouldBeOfType<OpenCodeToolCompleted>();
+    }
+
+    [Fact]
     public void ToolState_Discriminated_Deserializes()
     {
         var cases = new[]

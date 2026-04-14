@@ -21,8 +21,8 @@ export interface FleetMessage {
 
 /** Polymorphic message part — discriminated by "type" field. */
 export interface FleetMessagePart {
-  type: string;          // "text" | "tool" | "tool-result" | "reasoning"
-  kind: number;          // MessagePartKind enum (0=Text, 1=ToolUse, 2=ToolResult, 3=Reasoning) — ignored by frontend
+  type: string;          // "text" | "tool" | "tool-result" | "reasoning" | "file" | "step-finish"
+  kind: number;          // MessagePartKind enum — ignored by frontend
   // TextPart fields
   text?: string;
   // ReasoningPart fields
@@ -32,6 +32,19 @@ export interface FleetMessagePart {
   toolName?: string;
   arguments?: unknown;
   state?: number;        // ToolUseState enum: 0=Pending, 1=Running, 2=Completed, 3=Error
+  // FilePart fields
+  partId?: string;
+  mime?: string;
+  filename?: string;
+  url?: string;
+  // StepFinishPart fields
+  index?: number;
+  reason?: string;
+  cost?: number;
+  tokensInput?: number;
+  tokensOutput?: number;
+  tokensReasoning?: number;
+  completedAt?: number;
 }
 
 /**
@@ -168,6 +181,10 @@ export function prependMessages(
  */
 export function convertFleetMessageToAccumulated(msg: FleetMessage): AccumulatedMessage {
   const parts: AccumulatedPart[] = [];
+  let cost = 0;
+  let tokensInput = 0;
+  let tokensOutput = 0;
+  let tokensReasoning = 0;
 
   for (const part of msg.parts) {
     if (part.type === "text") {
@@ -188,6 +205,19 @@ export function convertFleetMessageToAccumulated(msg: FleetMessage): Accumulated
         callId: part.toolCallId ?? "",
         state: mapToolState(part.state),
       });
+    } else if (part.type === "file") {
+      parts.push({
+        partId: part.partId ?? `${msg.id}-file-${parts.length}`,
+        type: "file",
+        mime: part.mime ?? "",
+        filename: part.filename,
+        url: part.url ?? "",
+      });
+    } else if (part.type === "step-finish") {
+      cost += part.cost ?? 0;
+      tokensInput += part.tokensInput ?? 0;
+      tokensOutput += part.tokensOutput ?? 0;
+      tokensReasoning += part.tokensReasoning ?? 0;
     }
     // "tool-result" parts are not rendered by the frontend — skip
   }
@@ -202,6 +232,11 @@ export function convertFleetMessageToAccumulated(msg: FleetMessage): Accumulated
     parts,
     createdAt,
     agent: msg.agent,
+    cost: cost || undefined,
+    tokens:
+      tokensInput || tokensOutput || tokensReasoning
+        ? { input: tokensInput, output: tokensOutput, reasoning: tokensReasoning }
+        : undefined,
   };
 }
 

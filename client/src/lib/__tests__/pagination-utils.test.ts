@@ -278,6 +278,35 @@ describe("convertFleetMessageToAccumulated", () => {
     expect((result.parts[0] as { state: { status: string } }).state).toEqual({ status: "pending" });
   });
 
+  it("converts file parts from persisted Fleet messages", () => {
+    const msg = makeFleetMsg({
+      id: "msg-file-1",
+      parts: [{ type: "file", kind: 4, partId: "file-1", mime: "image/png", filename: "diagram.png", url: "https://example.test/diagram.png" }],
+    });
+    const result = convertFleetMessageToAccumulated(msg);
+    expect(result.parts).toHaveLength(1);
+    expect(result.parts[0]).toEqual({
+      partId: "file-1",
+      type: "file",
+      mime: "image/png",
+      filename: "diagram.png",
+      url: "https://example.test/diagram.png",
+    });
+  });
+
+  it("restores cost and tokens from persisted step-finish parts", () => {
+    const msg = makeFleetMsg({
+      parts: [
+        { type: "step-finish", kind: 5, index: 0, reason: "completed", cost: 0.125, tokensInput: 10, tokensOutput: 20, tokensReasoning: 3 },
+        { type: "step-finish", kind: 5, index: 1, reason: "completed", cost: 0.375, tokensInput: 1, tokensOutput: 2, tokensReasoning: 4 },
+      ],
+    });
+    const result = convertFleetMessageToAccumulated(msg);
+    expect(result.parts).toHaveLength(0);
+    expect(result.cost).toBeCloseTo(0.5);
+    expect(result.tokens).toEqual({ input: 11, output: 22, reasoning: 7 });
+  });
+
   it("skips tool-result parts", () => {
     const msg = makeFleetMsg({
       parts: [

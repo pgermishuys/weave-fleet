@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\WeaveFleet.Application\WeaveFleet.Application.csproj" />
     <ProjectReference Include="..\..\src\WeaveFleet.Domain\WeaveFleet.Domain.csproj" />
+    <ProjectReference Include="..\..\src\WeaveFleet.Infrastructure\WeaveFleet.Infrastructure.csproj" />
   </ItemGroup>
 
   <!-- Embed contract fixture files so FixtureLoader can read them from the assembly manifest -->

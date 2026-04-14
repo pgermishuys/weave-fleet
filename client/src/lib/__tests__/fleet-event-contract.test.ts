@@ -57,7 +57,7 @@ function createStateHarness(sessionId: string) {
   const onAgentSwitchRef: React.MutableRefObject<
     ((agent: string) => void) | undefined
   > = { current: vi.fn() };
-  const lastMessageIdRef: React.MutableRefObject<string | null> = {
+  const lastSequenceNumberRef: React.MutableRefObject<number | null> = {
     current: null,
   };
 
@@ -80,11 +80,15 @@ function createStateHarness(sessionId: string) {
       setSessionStatus,
       setError,
       onAgentSwitchRef,
-      lastMessageIdRef,
+      lastSequenceNumberRef,
     );
   };
 
-  return { dispatch, getMessages: () => messages };
+  return {
+    dispatch,
+    getMessages: () => messages,
+    getLastSequenceNumber: () => lastSequenceNumberRef.current,
+  };
 }
 
 describe("Fleet WebSocket events → AccumulatedMessage state contract", () => {
@@ -159,4 +163,35 @@ describe("Fleet WebSocket events → AccumulatedMessage state contract", () => {
       }
     });
   }
+
+  it("tracks sequence numbers from replayed websocket events", () => {
+    const harness = createStateHarness("sess-1");
+
+    harness.dispatch({
+      type: "message.updated",
+      sequenceNumber: 11,
+      properties: {
+        info: {
+          id: "msg-1",
+          role: "assistant",
+          sessionID: "sess-1",
+        },
+      },
+    } as WebSocketEvent);
+
+    harness.dispatch({
+      type: "message.part.updated",
+      sequenceNumber: 12,
+      properties: {
+        part: {
+          id: "part-1",
+          messageID: "msg-1",
+          type: "text",
+          text: "hello",
+        },
+      },
+    } as WebSocketEvent);
+
+    expect(harness.getLastSequenceNumber()).toBe(12);
+  });
 });

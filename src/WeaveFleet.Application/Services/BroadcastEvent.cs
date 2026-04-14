@@ -8,6 +8,7 @@ public sealed record BroadcastEvent(
     string Type,
     JsonElement Payload,
     DateTimeOffset Timestamp,
+    long? SequenceNumber = null,
     /// <summary>
     /// The user ID that owns this event. Subscribers receive only events whose
     /// <see cref="UserId"/> matches their own, or events with a null UserId (system-level).

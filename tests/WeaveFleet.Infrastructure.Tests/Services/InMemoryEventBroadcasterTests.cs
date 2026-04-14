@@ -1,4 +1,5 @@
 using System.Text.Json;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.Tests.Services;
@@ -131,6 +132,40 @@ public sealed class InMemoryEventBroadcasterTests
         await subscribeTask;
 
         received.ShouldContain("sessions");
+    }
+
+    [Fact]
+    public async Task Activity_subscriber_receives_sessions_topic_compatibility_events()
+    {
+        using var broadcaster = new InMemoryEventBroadcaster();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        BroadcastEvent? received = null;
+        var subscribeTask = Task.Run(async () =>
+        {
+            await foreach (var evt in broadcaster.SubscribeAsync(["activity"], subscriberUserId: null, cts.Token))
+            {
+                received = evt;
+                break;
+            }
+        });
+
+        while (broadcaster.SubscriberCount < 1)
+            await Task.Delay(10);
+
+        await broadcaster.BroadcastAsync(
+            "sessions",
+            "session_created",
+            JsonSerializer.SerializeToElement(new { id = "s1" }),
+            sequenceNumber: 99,
+            userId: null,
+            CancellationToken.None);
+
+        await subscribeTask;
+
+        received.ShouldNotBeNull();
+        received!.Topic.ShouldBe("sessions");
+        received.SequenceNumber.ShouldBe(99);
     }
 
     // -----------------------------------------------------------------------

@@ -154,6 +154,69 @@ public sealed class OpenCodeMapperTests
         toolPart.State.ShouldBe(ToolUseState.Completed);
     }
 
+    [Fact]
+    public void ToHarnessMessage_FilePart_MapsToFilePart()
+    {
+        var msg = new OpenCodeMessageWithParts
+        {
+            Info = new OpenCodeAssistantMessage
+            {
+                Id = "msg-file-1",
+                SessionId = "sess-1",
+                Time = new OpenCodeMessageTime { Created = 0L },
+            },
+            Parts =
+            [
+                new OpenCodeFilePart
+                {
+                    Id = "file-1",
+                    Mime = "image/png",
+                    Url = "https://example.test/file.png",
+                    Filename = "file.png",
+                },
+            ],
+        };
+
+        var result = OpenCodeMapper.ToHarnessMessage(msg);
+
+        result.Parts.Count.ShouldBe(1);
+        var filePart = result.Parts[0].ShouldBeOfType<FilePart>();
+        filePart.PartId.ShouldBe("file-1");
+        filePart.Mime.ShouldBe("image/png");
+        filePart.Url.ShouldBe("https://example.test/file.png");
+        filePart.Filename.ShouldBe("file.png");
+    }
+
+    [Fact]
+    public void ToHarnessMessage_StepFinishPart_MapsToStepFinishPart()
+    {
+        var msg = new OpenCodeMessageWithParts
+        {
+            Info = new OpenCodeAssistantMessage
+            {
+                Id = "msg-step-1",
+                SessionId = "sess-1",
+                Time = new OpenCodeMessageTime { Created = 0L },
+            },
+            Parts =
+            [
+                new OpenCodeStepFinishPart
+                {
+                    Id = "step-1",
+                    Index = 2,
+                    Reason = "completed",
+                },
+            ],
+        };
+
+        var result = OpenCodeMapper.ToHarnessMessage(msg);
+
+        result.Parts.Count.ShouldBe(1);
+        var stepFinishPart = result.Parts[0].ShouldBeOfType<StepFinishPart>();
+        stepFinishPart.Index.ShouldBe(2);
+        stepFinishPart.Reason.ShouldBe("completed");
+    }
+
     // ---------------------------------------------------------------------------
     // ToHarnessEvent
     // ---------------------------------------------------------------------------

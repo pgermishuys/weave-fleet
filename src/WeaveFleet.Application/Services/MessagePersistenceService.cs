@@ -70,6 +70,12 @@ public sealed class MessagePersistenceService
     }
 
     /// <summary>
+    /// Serializes an event payload for durable outbox storage.
+    /// </summary>
+    public static string SerializePayload<TPayload>(TPayload payload)
+        => JsonSerializer.Serialize(payload, SerializerOptions);
+
+    /// <summary>
     /// Merges a new <see cref="MessagePart"/> into an existing <see cref="PersistedMessage"/>,
     /// returning a new <see cref="PersistedMessage"/> with the updated parts.
     /// </summary>
@@ -83,9 +89,46 @@ public sealed class MessagePersistenceService
         => MergePartAndMetadata(existing, newPart, role: null, agentName: null);
 
     /// <summary>
-    /// Merges a new <see cref="MessagePart"/> into an existing <see cref="PersistedMessage"/>,
-    /// backfilling message metadata when available.
+    /// Appends buffered live text to the first persisted <see cref="TextPart"/>, or creates one when absent.
+    /// Used as a fallback when a harness streams ephemeral text deltas before an authoritative text snapshot arrives.
     /// </summary>
+    public static PersistedMessage MergeTextDeltaAndMetadata(
+        PersistedMessage existing,
+        string deltaText,
+        string? role,
+        string? agentName)
+    {
+        if (string.IsNullOrEmpty(deltaText))
+            return MergeMetadata(existing, role ?? existing.Role, agentName ?? existing.AgentName);
+
+        var parts = JsonSerializer.Deserialize<List<MessagePart>>(existing.PartsJson, SerializerOptions) ?? [];
+        var idx = parts.FindIndex(p => p is TextPart);
+        if (idx >= 0)
+        {
+            var existingText = ((TextPart)parts[idx]).Text;
+            parts[idx] = new TextPart(existingText + deltaText);
+        }
+        else
+        {
+            parts.Add(new TextPart(deltaText));
+        }
+
+        return new PersistedMessage
+        {
+            Id = existing.Id,
+            SessionId = existing.SessionId,
+            Role = role ?? existing.Role,
+            PartsJson = JsonSerializer.Serialize(parts, SerializerOptions),
+            Timestamp = existing.Timestamp,
+            CreatedAt = existing.CreatedAt,
+            AgentName = agentName ?? existing.AgentName,
+        };
+    }
+
+    /// <summary>
+     /// Merges a new <see cref="MessagePart"/> into an existing <see cref="PersistedMessage"/>,
+     /// backfilling message metadata when available.
+     /// </summary>
     public static PersistedMessage MergePartAndMetadata(
         PersistedMessage existing,
         MessagePart newPart,
@@ -121,6 +164,24 @@ public sealed class MessagePersistenceService
                     parts[idx] = reasoningPart;
                 else
                     parts.Add(reasoningPart);
+                break;
+            }
+            case FilePart filePart:
+            {
+                var idx = parts.FindIndex(p => p is FilePart f && f.PartId == filePart.PartId);
+                if (idx >= 0)
+                    parts[idx] = filePart;
+                else
+                    parts.Add(filePart);
+                break;
+            }
+            case StepFinishPart stepFinishPart:
+            {
+                var idx = parts.FindIndex(p => p is StepFinishPart s && s.Index == stepFinishPart.Index);
+                if (idx >= 0)
+                    parts[idx] = stepFinishPart;
+                else
+                    parts.Add(stepFinishPart);
                 break;
             }
             default:

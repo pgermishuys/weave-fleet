@@ -21,7 +21,12 @@ public sealed class DapperMessageRepository : IMessageRepository
     public async Task UpsertAsync(PersistedMessage message)
     {
         using var conn = _connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await UpsertAsync(conn, null, message);
+    }
+
+    public async Task UpsertAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, PersistedMessage message)
+    {
+        await connection.ExecuteAsync(
             """
             INSERT INTO messages (id, session_id, role, parts_json, timestamp, created_at, agent_name)
             SELECT @Id, @SessionId, @Role, @PartsJson, @Timestamp, @CreatedAt, @AgentName
@@ -43,7 +48,8 @@ public sealed class DapperMessageRepository : IMessageRepository
                 message.CreatedAt,
                 message.AgentName,
                 UserId = _userContext.UserId
-            });
+            },
+            transaction);
     }
 
     public async Task UpsertBatchAsync(IReadOnlyList<PersistedMessage> messages)
@@ -55,33 +61,7 @@ public sealed class DapperMessageRepository : IMessageRepository
         using var tx = conn.BeginTransaction();
         try
         {
-            foreach (var message in messages)
-            {
-                await conn.ExecuteAsync(
-                    """
-                    INSERT INTO messages (id, session_id, role, parts_json, timestamp, created_at, agent_name)
-                    SELECT @Id, @SessionId, @Role, @PartsJson, @Timestamp, @CreatedAt, @AgentName
-                    FROM sessions
-                    WHERE id = @SessionId AND user_id = @UserId
-                    ON CONFLICT(id, session_id) DO UPDATE SET
-                        role = excluded.role,
-                        parts_json = excluded.parts_json,
-                        timestamp = excluded.timestamp,
-                        agent_name = COALESCE(excluded.agent_name, messages.agent_name)
-                    """,
-                    new
-                    {
-                        message.Id,
-                        message.SessionId,
-                        message.Role,
-                        message.PartsJson,
-                        message.Timestamp,
-                        message.CreatedAt,
-                        message.AgentName,
-                        UserId = _userContext.UserId
-                    },
-                    tx);
-            }
+            await UpsertBatchAsync(conn, tx, messages);
             tx.Commit();
         }
         catch
@@ -89,6 +69,12 @@ public sealed class DapperMessageRepository : IMessageRepository
             tx.Rollback();
             throw;
         }
+    }
+
+    public async Task UpsertBatchAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction transaction, IReadOnlyList<PersistedMessage> messages)
+    {
+        foreach (var message in messages)
+            await UpsertAsync(connection, transaction, message);
     }
 
     public async Task<IReadOnlyList<PersistedMessage>> GetBySessionAsync(

@@ -63,6 +63,7 @@ public static class DependencyInjection
         services.AddScoped<IDelegationRepository, DapperDelegationRepository>();
         services.AddScoped<IWorkspaceRootRepository, DapperWorkspaceRootRepository>();
         services.AddScoped<IMessageRepository, DapperMessageRepository>();
+        services.AddScoped<IOutboxRepository, DapperOutboxRepository>();
         services.AddScoped<IUserRepository, DapperUserRepository>();
 
         // Credential storage — user-scoped repositories and application services
@@ -80,6 +81,7 @@ public static class DependencyInjection
         services.AddScoped<SessionOrchestrator>();
         services.AddScoped<SessionCallbackService>();
         services.AddScoped<DelegationService>();
+        services.AddScoped<SessionActivityWriteService>();
         services.AddScoped<UserService>();
         services.AddScoped<ISessionSourceProvider, LocalDirectorySessionSourceProvider>();
         services.AddSingleton<ISessionSourceProvider, ManagedWorkspaceSessionSourceProvider>();
@@ -114,9 +116,13 @@ public static class DependencyInjection
 
         // EventBroadcaster is singleton — pub/sub hub shared across all requests
         services.AddSingleton<IEventBroadcaster, InMemoryEventBroadcaster>();
+        services.AddSingleton<InProcessOutboxDispatcher>();
+        services.AddSingleton<IOutboxDispatcher>(sp => sp.GetRequiredService<InProcessOutboxDispatcher>());
 
-        // HarnessEventRelay bridges harness instance events to the broadcaster
+        // HarnessEventRelay bridges ephemeral harness events to the broadcaster
         services.AddHostedService<HarnessEventRelay>();
+        services.AddHostedService<OutboxDispatchBackgroundService>();
+        services.AddHostedService<OutboxCleanupBackgroundService>();
 
         // ── Analytics ─────────────────────────────────────────────────────────
         if (options.AnalyticsEnabled)

@@ -10,11 +10,10 @@ using WeaveFleet.Domain.Repositories;
 namespace WeaveFleet.Infrastructure.Services;
 
 /// <summary>
-/// Background service that bridges harness instance events to <see cref="IEventBroadcaster"/>.
+/// Background service that bridges ephemeral harness instance events to <see cref="IEventBroadcaster"/>.
 /// Subscribes to <see cref="InstanceTracker"/> registration/removal events and maintains
 /// one async-enumerable pump per live instance.
-/// The relay is a pure broadcast service — all message persistence is handled by each
-/// <see cref="IHarnessSession"/> implementation (instance-owned persistence pattern).
+/// Durable activity is intentionally excluded here and must flow through the transactional outbox.
 /// </summary>
 public sealed class HarnessEventRelay : BackgroundService
 {
@@ -32,6 +31,25 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly ILogger<HarnessEventRelay> _logger;
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _subscriptions = new();
     private CancellationToken _stoppingToken;
+
+    // Ephemeral event policy:
+    // - session.status / session.idle
+    //   Live process/session status indicators for UX. These are not durable facts
+    //   about conversation history and can be recomputed or rediscovered.
+    // - message.part.delta
+    //   High-frequency streaming preview chunks while a message is being generated.
+    //   These intentionally bypass DB/outbox; only the authoritative
+    //   message.created/message.updated/message.part.updated snapshots are persisted.
+    // - error
+    //   Live transport/runtime notification, not durable session history.
+    // - permission.*
+    //   UI capability/control-plane signals, not conversation state.
+    //
+    // Anything not listed here must not be directly relayed; durable activity must
+    // first commit through SessionActivityWriteService + transactional outbox.
+    private static bool IsEphemeralRelayEvent(string eventType)
+        => eventType is "session.status" or "session.idle" or "message.part.delta" or "error"
+            || eventType.StartsWith("permission.", StringComparison.Ordinal);
 
     public HarnessEventRelay(
         InstanceTracker tracker,
@@ -133,6 +151,9 @@ public sealed class HarnessEventRelay : BackgroundService
                 var targetFleetSessionId = evt.FleetSessionId ?? fleetSessionId;
                 var targetTopic = $"session:{targetFleetSessionId}";
 
+                if (!IsEphemeralRelayEvent(evt.Type))
+                    continue;
+
                 // Guard against null Payload — BroadcastAsync serializes via
                 // JsonSerializer.SerializeToElement which throws on null/Undefined JsonElement.
                 // Use an empty object {} as fallback when Payload is null.
@@ -163,4 +184,3 @@ public sealed class HarnessEventRelay : BackgroundService
         }
     }
 }
-

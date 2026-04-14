@@ -17,7 +17,13 @@ public interface IEventBroadcaster
     /// Null means system-level — delivered to all matching subscribers regardless of user.
     /// </param>
     /// <param name="ct">Cancellation token.</param>
-    Task BroadcastAsync(string topic, string type, object payload, string? userId = null, CancellationToken ct = default);
+    Task BroadcastAsync(string topic, string type, object payload);
+
+    Task BroadcastAsync(string topic, string type, object payload, CancellationToken ct);
+
+    Task BroadcastAsync(string topic, string type, object payload, string? userId, CancellationToken ct);
+
+    Task BroadcastAsync(string topic, string type, object payload, long? sequenceNumber, string? userId, CancellationToken ct);
 
     /// <summary>
     /// Subscribe to one or more <paramref name="topics"/>.

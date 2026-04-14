@@ -21,7 +21,12 @@ public sealed class DapperDelegationRepository : IDelegationRepository
     public async Task InsertAsync(Delegation delegation)
     {
         using var conn = _connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await InsertAsync(conn, null, delegation);
+    }
+
+    public async Task InsertAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, Delegation delegation)
+    {
+        await connection.ExecuteAsync(
             """
             INSERT INTO delegations (id, parent_session_id, child_session_id, parent_tool_call_id, title, status, created_at, updated_at, completed_at)
             SELECT @Id, @ParentSessionId, @ChildSessionId, @ParentToolCallId, @Title, @Status, @CreatedAt, @UpdatedAt, @CompletedAt
@@ -46,7 +51,8 @@ public sealed class DapperDelegationRepository : IDelegationRepository
                 delegation.UpdatedAt,
                 delegation.CompletedAt,
                 UserId = _userContext.UserId
-            });
+            },
+            transaction);
     }
 
     public async Task<Delegation?> GetByIdAsync(string id)
@@ -110,7 +116,12 @@ public sealed class DapperDelegationRepository : IDelegationRepository
     public async Task UpdateStatusAsync(string id, string status, string updatedAt, string? completedAt)
     {
         using var conn = _connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await UpdateStatusAsync(conn, null, id, status, updatedAt, completedAt);
+    }
+
+    public async Task UpdateStatusAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, string id, string status, string updatedAt, string? completedAt)
+    {
+        await connection.ExecuteAsync(
             """
             UPDATE delegations
             SET status = @Status,
@@ -122,13 +133,19 @@ public sealed class DapperDelegationRepository : IDelegationRepository
                   FROM sessions parent_session
                   WHERE parent_session.id = delegations.parent_session_id AND parent_session.user_id = @UserId)
             """,
-            new { Id = id, Status = status, UpdatedAt = updatedAt, CompletedAt = completedAt, UserId = _userContext.UserId });
+            new { Id = id, Status = status, UpdatedAt = updatedAt, CompletedAt = completedAt, UserId = _userContext.UserId },
+            transaction);
     }
 
     public async Task UpdateChildSessionIdAsync(string id, string childSessionId, string updatedAt)
     {
         using var conn = _connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await UpdateChildSessionIdAsync(conn, null, id, childSessionId, updatedAt);
+    }
+
+    public async Task UpdateChildSessionIdAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, string id, string childSessionId, string updatedAt)
+    {
+        await connection.ExecuteAsync(
             """
             UPDATE delegations
             SET child_session_id = @ChildSessionId,
@@ -143,6 +160,7 @@ public sealed class DapperDelegationRepository : IDelegationRepository
                   FROM sessions child_session
                   WHERE child_session.id = @ChildSessionId AND child_session.user_id = @UserId)
             """,
-            new { Id = id, ChildSessionId = childSessionId, UpdatedAt = updatedAt, UserId = _userContext.UserId });
+            new { Id = id, ChildSessionId = childSessionId, UpdatedAt = updatedAt, UserId = _userContext.UserId },
+            transaction);
     }
 }

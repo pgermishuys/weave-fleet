@@ -36,8 +36,8 @@ export interface CacheEntry {
   sessionStatus: "idle" | "busy";
   /** Last known delegations for this session. */
   delegations: DelegationDto[];
-  /** The last known message ID — used for gap-fill via loadMessagesSince on hydration. */
-  lastMessageId: string | null;
+  /** The last committed sequence number processed for this session. */
+  lastSequenceNumber: number | null;
   /** Unix timestamp (ms) when this entry was saved — used for TTL checks. */
   timestamp: number;
   /** Pagination state snapshot — restored to avoid incorrect "scroll up for older" state. */

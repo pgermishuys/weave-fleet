@@ -78,7 +78,7 @@ function createStateHarness(sessionId: string) {
   const onAgentSwitchRef: React.MutableRefObject<((agent: string) => void) | undefined> = {
     current: vi.fn(),
   };
-  const lastMessageIdRef: React.MutableRefObject<string | null> = { current: null };
+  const lastSequenceNumberRef: React.MutableRefObject<number | null> = { current: null };
 
   const dispatch = (event: WebSocketEvent) => {
     handleEvent(
@@ -90,7 +90,7 @@ function createStateHarness(sessionId: string) {
       setSessionStatus,
       setError,
       onAgentSwitchRef,
-      lastMessageIdRef,
+      lastSequenceNumberRef,
     );
   };
 
@@ -98,6 +98,7 @@ function createStateHarness(sessionId: string) {
     dispatch,
     getMessages: () => messages,
     getDelegations: () => delegations,
+    getLastSequenceNumber: () => lastSequenceNumberRef.current,
   };
 }
 
@@ -273,6 +274,36 @@ describe("handleEvent message.part.updated", () => {
 describe("useSessionEvents reconnect recovery", () => {
   it("keeps reconnect callback registration available", () => {
     expect(onReconnectCallbacks).toBeDefined();
+  });
+
+  it("tracks the highest committed sequence number seen", () => {
+    const harness = createStateHarness("sess-1");
+
+    harness.dispatch({
+      type: "message.updated",
+      sequenceNumber: 3,
+      properties: {
+        info: { id: "msg-1", role: "assistant", sessionID: "sess-1" },
+      },
+    } as WebSocketEvent);
+
+    harness.dispatch({
+      type: "message.part.updated",
+      sequenceNumber: 2,
+      properties: {
+        part: { id: "part-1", messageID: "msg-1", type: "text", text: "hello" },
+      },
+    } as WebSocketEvent);
+
+    harness.dispatch({
+      type: "message.updated",
+      sequenceNumber: 8,
+      properties: {
+        info: { id: "msg-1", role: "assistant", sessionID: "sess-1" },
+      },
+    } as WebSocketEvent);
+
+    expect(harness.getLastSequenceNumber()).toBe(8);
   });
 });
 

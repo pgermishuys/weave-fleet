@@ -196,6 +196,7 @@ public static class WebSocketEndpoints
                     data = new
                     {
                         type = evt.Type,
+                        sequenceNumber = evt.SequenceNumber,
                         properties = sanitizedPayload.Value
                     }
                 });
