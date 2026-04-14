@@ -139,7 +139,7 @@ export function useAutocomplete({
         meta: agent.color,
       }));
 
-    const fileItems: AutocompleteItem[] = files.map((filePath) => {
+    const fileItems: AutocompleteItem[] = (Array.isArray(files) ? files : []).map((filePath) => {
       const isDir = filePath.endsWith("/");
       const segments = filePath.replace(/\/$/, "").split("/");
       const shortName = segments[segments.length - 1] + (isDir ? "/" : "");

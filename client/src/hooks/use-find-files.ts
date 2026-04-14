@@ -2,6 +2,11 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api-client";
 
+interface FindFilesResponse {
+  instanceId: string;
+  files?: string[];
+}
+
 export interface UseFindFilesResult {
   files: string[];
   isLoading: boolean;
@@ -44,7 +49,7 @@ export function useFindFiles(instanceId: string, query: string): UseFindFilesRes
       setIsLoading(true);
       setError(undefined);
 
-      const url = `/api/instances/${encodeURIComponent(instanceId)}/find/files?query=${encodeURIComponent(trimmedQuery)}`;
+      const url = `/api/instances/${encodeURIComponent(instanceId)}/find/files?q=${encodeURIComponent(trimmedQuery)}`;
       apiFetch(url, { signal: controller.signal })
         .then(async (response) => {
           if (!response.ok) {
@@ -52,10 +57,12 @@ export function useFindFiles(instanceId: string, query: string): UseFindFilesRes
             const message = (data as { error?: string }).error ?? `HTTP ${response.status}`;
             throw new Error(message);
           }
-          return response.json() as Promise<string[]>;
+          return response.json() as Promise<FindFilesResponse>;
         })
         .then((data) => {
-          if (!cancelled) setFiles(data);
+          if (!cancelled) {
+            setFiles(Array.isArray(data.files) ? data.files : []);
+          }
         })
         .catch((err: unknown) => {
           if (!cancelled && !(err instanceof DOMException && err.name === "AbortError")) {
