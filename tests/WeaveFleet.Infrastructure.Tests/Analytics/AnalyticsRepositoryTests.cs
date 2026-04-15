@@ -1,5 +1,4 @@
 using Dapper;
-using NSubstitute;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Infrastructure.Analytics;
 
@@ -18,8 +17,7 @@ public sealed class AnalyticsRepositoryTests : IAsyncLifetime
         _factory = (AnalyticsTestDbHelper.SharedAnalyticsCacheFactory)factory;
 
         // All test data belongs to 'local-user'; repository queries as 'local-user'
-        var userContext = Substitute.For<IUserContext>();
-        userContext.UserId.Returns("local-user");
+        var userContext = new TestUserContext("local-user");
 
         _repo = new AnalyticsRepository(factory, userContext);
 
@@ -217,11 +215,9 @@ public sealed class AnalyticsRepositoryTenantIsolationTests : IAsyncLifetime
         _keeper = keeper;
         _factory = (AnalyticsTestDbHelper.SharedAnalyticsCacheFactory)factory;
 
-        var userContextA = Substitute.For<IUserContext>();
-        userContextA.UserId.Returns("user-a");
+        var userContextA = new TestUserContext("user-a");
 
-        var userContextB = Substitute.For<IUserContext>();
-        userContextB.UserId.Returns("user-b");
+        var userContextB = new TestUserContext("user-b");
 
         _repoUserA = new AnalyticsRepository(factory, userContextA);
         _repoUserB = new AnalyticsRepository(factory, userContextB);

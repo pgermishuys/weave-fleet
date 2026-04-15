@@ -47,7 +47,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
             var sessionId = $"sess-{Guid.NewGuid():N}";
 
             var connFactory = _factory.KestrelServices.GetRequiredService<IDbConnectionFactory>();
-            var userContext = new TestUserContext();
+            var userContext = new TestUserContext("local-user");
 
             var workspaceRepo = new DapperWorkspaceRepository(connFactory, userContext);
             await workspaceRepo.InsertAsync(new Workspace
@@ -131,7 +131,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
             var sessionId = $"sess-{Guid.NewGuid():N}";
 
             var connFactory = _factory.KestrelServices.GetRequiredService<IDbConnectionFactory>();
-            var userContext = new TestUserContext();
+            var userContext = new TestUserContext("local-user");
 
             var workspaceRepo = new DapperWorkspaceRepository(connFactory, userContext);
             await workspaceRepo.InsertAsync(new Workspace
@@ -206,7 +206,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
             var sessionId = $"sess-db-first-{Guid.NewGuid():N}";
 
             var connFactory = _factory.KestrelServices.GetRequiredService<IDbConnectionFactory>();
-            var userContext = new TestUserContext();
+            var userContext = new TestUserContext("local-user");
 
             var workspaceRepo = new DapperWorkspaceRepository(connFactory, userContext);
             await workspaceRepo.InsertAsync(new Workspace
@@ -276,7 +276,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
             var sessionId = $"sess-db-history-{Guid.NewGuid():N}";
 
             var connFactory = _factory.KestrelServices.GetRequiredService<IDbConnectionFactory>();
-            var userContext = new TestUserContext();
+            var userContext = new TestUserContext("local-user");
 
             var workspaceRepo = new DapperWorkspaceRepository(connFactory, userContext);
             await workspaceRepo.InsertAsync(new Workspace

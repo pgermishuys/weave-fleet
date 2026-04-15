@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
-using NSubstitute;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Testing.Builders;
+using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
@@ -65,49 +67,41 @@ public sealed class SessionLifecycleEndpointTests
     [Fact]
     public async Task ListSessions_WhenRetentionFilterMissing_UsesActiveRetention()
     {
-        var sessionRepository = Substitute.For<ISessionRepository>();
-        sessionRepository.ListAsync(
-            25,
-            5,
-            Arg.Any<IReadOnlyList<string>?>(),
-            Arg.Any<string?>(),
-            Arg.Any<IReadOnlyList<string>?>())
-            .Returns([MakeSession("session-1", "active", "active")]);
-        var service = BuildSessionService(sessionRepository);
+        var sessionRepo = new InMemorySessionRepository();
+        sessionRepo.Seed(MakeSession("session-1", "active", "active"));
+        var service = BuildSessionService(sessionRepo);
 
         var result = await service.ListSessionsAsync(25, 5, null, null, null);
 
         result.IsSuccess.ShouldBeTrue();
-        await sessionRepository.Received(1).ListAsync(
-            25,
-            5,
-            Arg.Is<IReadOnlyList<string>?>(value => value == null),
-            Arg.Is<string?>(value => value == null),
-            Arg.Is<IReadOnlyList<string>?>(value => value != null && value.Count == 1 && value[0] == "active"));
+        sessionRepo.ListAsyncCalls.Count.ShouldBe(1);
+        var call = sessionRepo.ListAsyncCalls[0];
+        call.Limit.ShouldBe(25);
+        call.Offset.ShouldBe(5);
+        call.Statuses.ShouldBeNull();
+        call.ProjectId.ShouldBeNull();
+        call.RetentionStatuses.ShouldNotBeNull();
+        call.RetentionStatuses!.Count.ShouldBe(1);
+        call.RetentionStatuses[0].ShouldBe("active");
     }
 
     [Fact]
     public async Task ListSessions_WhenRetentionFilterAll_OmitsRetentionConstraint()
     {
-        var sessionRepository = Substitute.For<ISessionRepository>();
-        sessionRepository.ListAsync(
-            25,
-            5,
-            Arg.Any<IReadOnlyList<string>?>(),
-            Arg.Any<string?>(),
-            Arg.Any<IReadOnlyList<string>?>())
-            .Returns([MakeSession("session-1", "active", "active")]);
-        var service = BuildSessionService(sessionRepository);
+        var sessionRepo = new InMemorySessionRepository();
+        sessionRepo.Seed(MakeSession("session-1", "active", "active"));
+        var service = BuildSessionService(sessionRepo);
 
         var result = await service.ListSessionsAsync(25, 5, null, null, "all");
 
         result.IsSuccess.ShouldBeTrue();
-        await sessionRepository.Received(1).ListAsync(
-            25,
-            5,
-            Arg.Is<IReadOnlyList<string>?>(value => value == null),
-            Arg.Is<string?>(value => value == null),
-            Arg.Is<IReadOnlyList<string>?>(value => value == null));
+        sessionRepo.ListAsyncCalls.Count.ShouldBe(1);
+        var call = sessionRepo.ListAsyncCalls[0];
+        call.Limit.ShouldBe(25);
+        call.Offset.ShouldBe(5);
+        call.Statuses.ShouldBeNull();
+        call.ProjectId.ShouldBeNull();
+        call.RetentionStatuses.ShouldBeNull();
     }
 
     private static async Task<IResult> InvokeStopSession(string id, SessionService sessionService)
@@ -136,24 +130,10 @@ public sealed class SessionLifecycleEndpointTests
 
     private static SessionService BuildSessionService(Session? session)
     {
-        var sessionRepository = Substitute.For<ISessionRepository>();
-        sessionRepository.GetByIdAsync(Arg.Any<string>()).Returns(callInfo =>
-        {
-            var id = callInfo.Arg<string>();
-            return session is not null && session.Id == id ? session : null;
-        });
-        sessionRepository.DeleteAsync(Arg.Any<string>()).Returns(true);
-        return BuildSessionService(sessionRepository);
-    }
-
-    private static SessionService BuildSessionService(ISessionRepository sessionRepository)
-    {
-        sessionRepository.DeleteAsync(Arg.Any<string>()).Returns(true);
-        var userContext = new TestUserContext("user-1");
-        var options = new WeaveFleet.Application.Configuration.FleetOptions();
-
-        var instanceRepository = Substitute.For<IInstanceRepository>();
-        instanceRepository.GetByIdAsync(Arg.Any<string>()).Returns(new Instance
+        var builder = new SessionOrchestratorBuilder();
+        if (session is not null)
+            builder.SessionRepository.Seed(session);
+        builder.InstanceRepository.Seed(new Instance
         {
             Id = "inst-1",
             Port = 0,
@@ -162,53 +142,28 @@ public sealed class SessionLifecycleEndpointTests
             Status = "running",
             CreatedAt = DateTime.UtcNow.ToString("O")
         });
-        instanceRepository.UpdateStatusAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>()).Returns(Task.CompletedTask);
+        var orchestrator = builder.Build();
+        return new SessionService(builder.SessionRepository, builder.ProjectRepository, orchestrator);
+    }
 
-        var projectRepository = Substitute.For<IProjectRepository>();
-        var callbackRepository = Substitute.For<ISessionCallbackRepository>();
-        var delegationRepository = Substitute.For<IDelegationRepository>();
-        var sessionSourceUsageRepository = Substitute.For<ISessionSourceUsageRepository>();
-        var eventBroadcaster = Substitute.For<IEventBroadcaster>();
-        var analyticsCollector = Substitute.For<WeaveFleet.Application.Analytics.IAnalyticsCollector>();
-        var messageRepository = Substitute.For<IMessageRepository>();
-        var credentialStore = Substitute.For<ICredentialStore>();
-        var workspaceRepository = Substitute.For<IWorkspaceRepository>();
-        var workspaceRootRepository = Substitute.For<IWorkspaceRootRepository>();
-        credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
-        workspaceRootRepository.ListAsync().Returns([
-            new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
-        ]);
-        var workspaceRootService = new WorkspaceRootService(workspaceRootRepository, userContext);
-        var sessionSourceResolutionService = new SessionSourceResolutionService([
-            new LocalDirectorySessionSourceProvider(workspaceRootService),
-            new ManagedWorkspaceSessionSourceProvider(options)
-        ], options);
-
-        var orchestrator = new SessionOrchestrator(
-            new WorkspaceService(
-                workspaceRepository,
-                userContext,
-                options,
-                Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceService>.Instance),
-            new InstanceService(instanceRepository, sessionRepository, userContext),
-            sessionSourceResolutionService,
-            Substitute.For<WeaveFleet.Application.Harnesses.IHarnessRegistry>(),
-            new InstanceTracker(),
-            sessionRepository,
-            sessionSourceUsageRepository,
-            callbackRepository,
-            delegationRepository,
-            projectRepository,
-            eventBroadcaster,
-            analyticsCollector,
-            messageRepository,
-            new DelegationService(delegationRepository, eventBroadcaster, userContext),
-            credentialStore,
-            userContext,
-            options,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance);
-
-        return new SessionService(sessionRepository, projectRepository, orchestrator);
+    private static SessionService BuildSessionService(InMemorySessionRepository sessionRepository)
+    {
+        var builder = new SessionOrchestratorBuilder();
+        // Seed the builder's session repo with the same data
+        foreach (var s in sessionRepository.All)
+            builder.SessionRepository.Seed(s);
+        builder.InstanceRepository.Seed(new Instance
+        {
+            Id = "inst-1",
+            Port = 0,
+            Directory = "/tmp",
+            Url = string.Empty,
+            Status = "running",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+        var orchestrator = builder.Build();
+        // Return service using the passed-in sessionRepository so ListAsyncCalls are tracked there
+        return new SessionService(sessionRepository, builder.ProjectRepository, orchestrator);
     }
 
     private static Session MakeSession(string id, string status, string retentionStatus)

@@ -19,6 +19,7 @@
   <ItemGroup>
     <Using Include="Xunit" />
     <Using Include="Microsoft.Playwright" />
+    <Using Include="WeaveFleet.Testing.Fakes" />
   </ItemGroup>
 
   <ItemGroup>
@@ -26,6 +27,7 @@
     <ProjectReference Include="..\..\src\WeaveFleet.Application\WeaveFleet.Application.csproj" />
     <ProjectReference Include="..\..\src\WeaveFleet.Domain\WeaveFleet.Domain.csproj" />
     <ProjectReference Include="..\..\src\WeaveFleet.Infrastructure\WeaveFleet.Infrastructure.csproj" />
+    <ProjectReference Include="..\WeaveFleet.Testing\WeaveFleet.Testing.csproj" />
     <ProjectReference Include="..\WeaveFleet.TestHarness\WeaveFleet.TestHarness.csproj" />
     <ProjectReference Include="..\WeaveFleet.IdP\WeaveFleet.IdP.csproj">
       <!-- Alias prevents the IdP's 'Program' top-level class from conflicting with WeaveFleet.Api's 'Program' -->

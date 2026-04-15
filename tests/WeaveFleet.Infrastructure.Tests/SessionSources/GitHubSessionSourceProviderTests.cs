@@ -2,7 +2,6 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using NSubstitute;
 using Shouldly;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
@@ -11,6 +10,8 @@ using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.SessionSources;
+using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.SessionSources;
 
@@ -142,38 +143,36 @@ public sealed class GitHubSessionSourceProviderTests
         result.Value.Input.ContextEnvelope.Content.ShouldNotContain("dsakeymaterial");
     }
 
-    private static (GitHubSessionSourceProvider Provider, IPluginStateStore Store) CreateProvider()
+    private static (GitHubSessionSourceProvider Provider, FakePluginStateStore Store) CreateProvider()
     {
-        var pluginStateStore = Substitute.For<IPluginStateStore>();
-        pluginStateStore.GetStateAsync("github", TestUserId, Arg.Any<CancellationToken>()).Returns(new JsonObject
+        var pluginStateStore = new FakePluginStateStore();
+        pluginStateStore.SetStateAsync("github", TestUserId, new JsonObject
         {
             ["access_token"] = "token"
-        });
+        }, CancellationToken.None).GetAwaiter().GetResult();
 
         var httpClientFactory = new TestHttpClientFactory(new FakeGitHubHandler());
-        var credentialRepository = Substitute.For<IUserCredentialRepository>();
-        var credentialProtector = Substitute.For<ICredentialProtector>();
-        credentialProtector.Decrypt(Arg.Any<string>()).Returns(ci => ci.Arg<string>());
-        credentialRepository.ListByUserNamespaceAndKindAsync(TestUserId, "github", "oauth-access-token").Returns([
-            new UserCredential
-            {
-                Id = "cred-1",
-                UserId = TestUserId,
-                Namespace = "github",
-                Kind = "oauth-access-token",
-                Label = "GitHub",
-                EncryptedValue = "token",
-                DisplayHint = "...oken",
-                CreatedAt = "2026-01-01T00:00:00Z",
-                UpdatedAt = "2026-01-01T00:00:00Z"
-            }
-        ]);
+
+        var credentialRepository = new InMemoryUserCredentialRepository();
+        credentialRepository.Seed(new UserCredential
+        {
+            Id = "cred-1",
+            UserId = TestUserId,
+            Namespace = "github",
+            Kind = "oauth-access-token",
+            Label = "GitHub",
+            EncryptedValue = "ENC:token",
+            DisplayHint = "...oken",
+            CreatedAt = "2026-01-01T00:00:00Z",
+            UpdatedAt = "2026-01-01T00:00:00Z"
+        });
+
+        var credentialProtector = new FakeCredentialProtector();
 
         var gitHubService = new GitHubService(httpClientFactory, pluginStateStore, credentialRepository, credentialProtector);
         var gitHubApiProxy = new GitHubApiProxy(httpClientFactory);
 
-        var userContext = Substitute.For<IUserContext>();
-        userContext.UserId.Returns(TestUserId);
+        var userContext = new TestUserContext(TestUserId);
 
         var provider = new GitHubSessionSourceProvider(gitHubService, gitHubApiProxy, userContext);
         return (provider, pluginStateStore);

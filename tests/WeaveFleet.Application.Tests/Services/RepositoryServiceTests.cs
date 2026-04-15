@@ -1,10 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using NSubstitute;
 using Shouldly;
-using WeaveFleet.Domain.Entities;
-using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Entities;
+using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Application.Tests.Services;
 
@@ -46,19 +46,17 @@ public sealed class RepositoryServiceTests
     public async Task ResolveRepositoryPathAsync_ReturnsFailureWhenOutsideAllowedRoots()
     {
         using var allowedRoot = new TempDirectory();
-        var workspaceRootRepository = Substitute.For<IWorkspaceRootRepository>();
-        workspaceRootRepository.ListAsync().Returns([
-            new WorkspaceRoot
-            {
-                Id = "root-1",
-                Path = allowedRoot.Path,
-                CreatedAt = DateTime.UtcNow.ToString("O")
-            }
-        ]);
+        var workspaceRootRepository = new InMemoryWorkspaceRootRepository();
+        workspaceRootRepository.Seed(new WorkspaceRoot
+        {
+            Id = "root-1",
+            Path = allowedRoot.Path,
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
 
-        var services = new ServiceCollection();
-        services.AddSingleton(workspaceRootRepository);
         var userContext = new TestUserContext();
+        var services = new ServiceCollection();
+        services.AddSingleton<WeaveFleet.Domain.Repositories.IWorkspaceRootRepository>(workspaceRootRepository);
         services.AddSingleton<IUserContext>(userContext);
         services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository, userContext));
 
@@ -77,19 +75,17 @@ public sealed class RepositoryServiceTests
     public async Task ResolveRepositoryPathAsync_ReturnsFailureWhenPathIsNotGitRepository()
     {
         using var tempDirectory = new TempDirectory();
-        var workspaceRootRepository = Substitute.For<IWorkspaceRootRepository>();
-        workspaceRootRepository.ListAsync().Returns([
-            new WorkspaceRoot
-            {
-                Id = "root-1",
-                Path = tempDirectory.Path,
-                CreatedAt = DateTime.UtcNow.ToString("O")
-            }
-        ]);
+        var workspaceRootRepository = new InMemoryWorkspaceRootRepository();
+        workspaceRootRepository.Seed(new WorkspaceRoot
+        {
+            Id = "root-1",
+            Path = tempDirectory.Path,
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
 
-        var services = new ServiceCollection();
-        services.AddSingleton(workspaceRootRepository);
         var userContext = new TestUserContext();
+        var services = new ServiceCollection();
+        services.AddSingleton<WeaveFleet.Domain.Repositories.IWorkspaceRootRepository>(workspaceRootRepository);
         services.AddSingleton<IUserContext>(userContext);
         services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository, userContext));
 
@@ -115,19 +111,17 @@ public sealed class RepositoryServiceTests
 
         Directory.CreateSymbolicLink(symlinkPath, outsideRepository.Path);
 
-        var workspaceRootRepository = Substitute.For<IWorkspaceRootRepository>();
-        workspaceRootRepository.ListAsync().Returns([
-            new WorkspaceRoot
-            {
-                Id = "root-1",
-                Path = allowedRoot.Path,
-                CreatedAt = DateTime.UtcNow.ToString("O")
-            }
-        ]);
+        var workspaceRootRepository = new InMemoryWorkspaceRootRepository();
+        workspaceRootRepository.Seed(new WorkspaceRoot
+        {
+            Id = "root-1",
+            Path = allowedRoot.Path,
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
 
-        var services = new ServiceCollection();
-        services.AddSingleton(workspaceRootRepository);
         var userContext = new TestUserContext();
+        var services = new ServiceCollection();
+        services.AddSingleton<WeaveFleet.Domain.Repositories.IWorkspaceRootRepository>(workspaceRootRepository);
         services.AddSingleton<IUserContext>(userContext);
         services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository, userContext));
 
@@ -156,19 +150,17 @@ public sealed class RepositoryServiceTests
         var symlinkDirectory = System.IO.Path.Combine(allowedRoot.Path, "link-outside");
         Directory.CreateSymbolicLink(symlinkDirectory, outsideParent.Path);
 
-        var workspaceRootRepository = Substitute.For<IWorkspaceRootRepository>();
-        workspaceRootRepository.ListAsync().Returns([
-            new WorkspaceRoot
-            {
-                Id = "root-1",
-                Path = allowedRoot.Path,
-                CreatedAt = DateTime.UtcNow.ToString("O")
-            }
-        ]);
+        var workspaceRootRepository = new InMemoryWorkspaceRootRepository();
+        workspaceRootRepository.Seed(new WorkspaceRoot
+        {
+            Id = "root-1",
+            Path = allowedRoot.Path,
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
 
-        var services = new ServiceCollection();
-        services.AddSingleton(workspaceRootRepository);
         var userContext = new TestUserContext();
+        var services = new ServiceCollection();
+        services.AddSingleton<WeaveFleet.Domain.Repositories.IWorkspaceRootRepository>(workspaceRootRepository);
         services.AddSingleton<IUserContext>(userContext);
         services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository, userContext));
 

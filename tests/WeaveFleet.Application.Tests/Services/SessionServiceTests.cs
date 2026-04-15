@@ -1,90 +1,48 @@
-using NSubstitute;
+using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
-using WeaveFleet.Application.SessionSources;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
-using WeaveFleet.Domain.Common;
+using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Entities;
-using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Testing.Builders;
+using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Application.Tests.Services;
 
 public sealed class SessionServiceTests
 {
-    private readonly ISessionRepository _sessionRepo = Substitute.For<ISessionRepository>();
-    private readonly ISessionSourceUsageRepository _sessionSourceUsageRepo = Substitute.For<ISessionSourceUsageRepository>();
-    private readonly ISessionCallbackRepository _callbackRepo = Substitute.For<ISessionCallbackRepository>();
-    private readonly IDelegationRepository _delegationRepo = Substitute.For<IDelegationRepository>();
-    private readonly IProjectRepository _projectRepo = Substitute.For<IProjectRepository>();
-    private readonly IWorkspaceRepository _workspaceRepo = Substitute.For<IWorkspaceRepository>();
-    private readonly IWorkspaceRootRepository _workspaceRootRepo = Substitute.For<IWorkspaceRootRepository>();
-    private readonly IInstanceRepository _instanceRepo = Substitute.For<IInstanceRepository>();
-    private readonly IEventBroadcaster _eventBroadcaster = Substitute.For<IEventBroadcaster>();
-    private readonly WeaveFleet.Application.Analytics.IAnalyticsCollector _analyticsCollector =
-        Substitute.For<WeaveFleet.Application.Analytics.IAnalyticsCollector>();
-    private readonly IMessageRepository _messageRepo = Substitute.For<IMessageRepository>();
-    private readonly ICredentialStore _credentialStore = Substitute.For<ICredentialStore>();
-    private readonly IUserContext _userContext = new TestUserContext("user-1");
-    private readonly SessionOrchestrator _sessionOrchestrator;
+    private readonly SessionOrchestratorBuilder _builder;
     private readonly SessionService _sut;
 
     public SessionServiceTests()
     {
-        _workspaceRootRepo.ListAsync().Returns([
+        _builder = new SessionOrchestratorBuilder()
+            .WithUserContext(new TestUserContext("user-1"));
+
+        _builder.WorkspaceRootRepository.Seed(
             new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
-        ]);
-        var workspaceRootService = new WorkspaceRootService(_workspaceRootRepo, _userContext);
-        var options = new WeaveFleet.Application.Configuration.FleetOptions();
-        var workspaceService = new WorkspaceService(
-            _workspaceRepo,
-            _userContext,
-            options,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceService>.Instance);
-        var instanceService = new InstanceService(_instanceRepo, _sessionRepo, _userContext);
-        var sessionSourceResolutionService = new SessionSourceResolutionService([
-            new LocalDirectorySessionSourceProvider(workspaceRootService),
-            new ManagedWorkspaceSessionSourceProvider(options)
-        ], options);
-        var delegationService = new DelegationService(_delegationRepo, _eventBroadcaster, _userContext);
-        _credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
-        _sessionOrchestrator = new SessionOrchestrator(
-            workspaceService,
-            instanceService,
-            sessionSourceResolutionService,
-            Substitute.For<WeaveFleet.Application.Harnesses.IHarnessRegistry>(),
-            new InstanceTracker(),
-            _sessionRepo,
-            _sessionSourceUsageRepo,
-            _callbackRepo,
-            _delegationRepo,
-            _projectRepo,
-            _eventBroadcaster,
-            _analyticsCollector,
-            _messageRepo,
-            delegationService,
-            _credentialStore,
-            _userContext,
-            options,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance);
-        _sut = new SessionService(_sessionRepo, _projectRepo, _sessionOrchestrator);
-        _instanceRepo.GetByIdAsync(Arg.Any<string>()).Returns(callInfo => new Instance
+        );
+
+        // Dynamic instance lookup: return a running instance for any id
+        _builder.InstanceRepository.GetByIdBehavior = id => Task.FromResult<Instance?>(new Instance
         {
-            Id = callInfo.Arg<string>(),
+            Id = id,
             Port = 0,
             Directory = "/tmp",
             Url = string.Empty,
             Status = "running",
             CreatedAt = DateTime.UtcNow.ToString("O")
         });
-        _sessionRepo.UpdateStatusAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>()).Returns(Task.CompletedTask);
-        _sessionRepo.ArchiveAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(Task.CompletedTask);
-        _sessionRepo.UnarchiveAsync(Arg.Any<string>()).Returns(Task.CompletedTask);
+
+        var orchestrator = _builder.Build();
+        _sut = new SessionService(_builder.SessionRepository, _builder.ProjectRepository, orchestrator);
     }
 
     [Fact]
     public async Task GetSessionAsync_WhenExists_ReturnsSession()
     {
-        var session = MakeSession("s1");
-        _sessionRepo.GetByIdAsync("s1").Returns(session);
+        _builder.SessionRepository.Seed(MakeSession("s1"));
 
         var result = await _sut.GetSessionAsync("s1");
 
@@ -95,8 +53,6 @@ public sealed class SessionServiceTests
     [Fact]
     public async Task GetSessionAsync_WhenMissing_ReturnsFailure()
     {
-        _sessionRepo.GetByIdAsync("missing").Returns((Session?)null);
-
         var result = await _sut.GetSessionAsync("missing");
 
         result.IsFailure.ShouldBeTrue();
@@ -106,10 +62,7 @@ public sealed class SessionServiceTests
     [Fact]
     public async Task DeleteSessionAsync_WhenExists_ReturnsTrue()
     {
-        _sessionRepo.GetByIdAsync("s1").Returns(MakeSession("s1"));
-        _delegationRepo.GetByChildSessionIdAsync("s1").Returns((Delegation?)null);
-        _sessionRepo.DeleteAsync("s1").Returns(true);
-        _instanceRepo.UpdateStatusAsync("i1", "stopped", Arg.Any<string>()).Returns(Task.CompletedTask);
+        _builder.SessionRepository.Seed(MakeSession("s1"));
 
         var result = await _sut.DeleteSessionAsync("s1");
 
@@ -119,8 +72,7 @@ public sealed class SessionServiceTests
     [Fact]
     public async Task StopSessionAsync_WhenOrchestratorSucceeds_ReturnsSuccess()
     {
-        _sessionRepo.GetByIdAsync("s-stop").Returns(MakeSession("s-stop"));
-        _instanceRepo.UpdateStatusAsync("i1", "stopped", Arg.Any<string>()).Returns(Task.CompletedTask);
+        _builder.SessionRepository.Seed(MakeSession("s-stop"));
 
         var result = await _sut.StopSessionAsync("s-stop");
 
@@ -130,7 +82,7 @@ public sealed class SessionServiceTests
     [Fact]
     public async Task UpdateRetentionAsync_WhenArchived_ArchivesSession()
     {
-        _sessionRepo.GetByIdAsync("s1").Returns(new Session
+        _builder.SessionRepository.Seed(new Session
         {
             Id = "s1",
             WorkspaceId = "w1",
@@ -146,7 +98,8 @@ public sealed class SessionServiceTests
         var result = await _sut.UpdateRetentionAsync("s1", "archived");
 
         result.IsSuccess.ShouldBeTrue();
-        await _sessionRepo.Received(1).ArchiveAsync("s1", Arg.Any<string>());
+        _builder.SessionRepository.ArchiveCalls.Count.ShouldBe(1);
+        _builder.SessionRepository.ArchiveCalls[0].Id.ShouldBe("s1");
     }
 
     [Fact]
@@ -161,52 +114,42 @@ public sealed class SessionServiceTests
     [Fact]
     public async Task ListSessionsAsync_WhenRetentionFilterMissing_DefaultsToActive()
     {
-        _sessionRepo.ListAsync(
-            10,
-            5,
-            Arg.Any<IReadOnlyList<string>?>(),
-            Arg.Any<string?>(),
-            Arg.Any<IReadOnlyList<string>?>())
-            .Returns([MakeSession("s1")]);
+        _builder.SessionRepository.Seed(MakeSession("s1"));
 
         var result = await _sut.ListSessionsAsync(10, 5, null, null, null);
 
         result.IsSuccess.ShouldBeTrue();
-        await _sessionRepo.Received(1).ListAsync(
-            10,
-            5,
-            Arg.Is<IReadOnlyList<string>?>(value => value == null),
-            Arg.Is<string?>(value => value == null),
-            Arg.Is<IReadOnlyList<string>?>(value => value != null && value.Count == 1 && value[0] == "active"));
+        _builder.SessionRepository.ListAsyncCalls.Count.ShouldBe(1);
+        var call = _builder.SessionRepository.ListAsyncCalls[0];
+        call.Limit.ShouldBe(10);
+        call.Offset.ShouldBe(5);
+        call.Statuses.ShouldBeNull();
+        call.ProjectId.ShouldBeNull();
+        call.RetentionStatuses.ShouldNotBeNull();
+        call.RetentionStatuses!.Count.ShouldBe(1);
+        call.RetentionStatuses![0].ShouldBe("active");
     }
 
     [Fact]
     public async Task ListSessionsAsync_WhenRetentionFilterAll_OmitsRetentionConstraint()
     {
-        _sessionRepo.ListAsync(
-            10,
-            0,
-            Arg.Any<IReadOnlyList<string>?>(),
-            Arg.Any<string?>(),
-            Arg.Any<IReadOnlyList<string>?>())
-            .Returns([MakeSession("s1")]);
+        _builder.SessionRepository.Seed(MakeSession("s1"));
 
         var result = await _sut.ListSessionsAsync(10, 0, null, null, "all");
 
         result.IsSuccess.ShouldBeTrue();
-        await _sessionRepo.Received(1).ListAsync(
-            10,
-            0,
-            Arg.Is<IReadOnlyList<string>?>(value => value == null),
-            Arg.Is<string?>(value => value == null),
-            Arg.Is<IReadOnlyList<string>?>(value => value == null));
+        _builder.SessionRepository.ListAsyncCalls.Count.ShouldBe(1);
+        var call = _builder.SessionRepository.ListAsyncCalls[0];
+        call.Limit.ShouldBe(10);
+        call.Offset.ShouldBe(0);
+        call.Statuses.ShouldBeNull();
+        call.ProjectId.ShouldBeNull();
+        call.RetentionStatuses.ShouldBeNull();
     }
 
     [Fact]
     public async Task DeleteSessionAsync_WhenMissing_ReturnsFailure()
     {
-        _sessionRepo.GetByIdAsync("missing").Returns((Session?)null);
-
         var result = await _sut.DeleteSessionAsync("missing");
 
         result.IsFailure.ShouldBeTrue();
@@ -215,13 +158,12 @@ public sealed class SessionServiceTests
     [Fact]
     public async Task MoveSessionToProjectAsync_ValidProject_ReturnsSuccess()
     {
-        _sessionRepo.GetByIdAsync("s1").Returns(MakeSession("s1"));
-        _projectRepo.GetByIdAsync("p1").Returns(new Project
+        _builder.SessionRepository.Seed(MakeSession("s1"));
+        _builder.ProjectRepository.Seed(new Project
         {
             Id = "p1", Name = "P1", Type = "user", Position = 1,
             CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01"
         });
-        _sessionRepo.UpdateProjectAsync("s1", "p1").Returns(Task.CompletedTask);
 
         var result = await _sut.MoveSessionToProjectAsync("s1", "p1");
 
@@ -231,8 +173,22 @@ public sealed class SessionServiceTests
     [Fact]
     public async Task GetFleetSummaryAsync_ReturnsAggregatedData()
     {
-        _sessionRepo.GetStatusCountsAsync().Returns((Active: 3, Idle: 1));
-        _sessionRepo.GetFleetTokenTotalsAsync().Returns((TotalTokens: 1000, TotalCost: 0.50));
+        // Seed 3 active + 1 idle sessions with tokens/cost totalling 1000 / $0.50
+        for (var i = 1; i <= 3; i++)
+            _builder.SessionRepository.Seed(new Session
+            {
+                Id = $"active-{i}", WorkspaceId = "w1", InstanceId = "i1",
+                OpencodeSessionId = $"oc-active-{i}", Title = "Active", Status = "active",
+                Directory = "/tmp", CreatedAt = "2026-01-01",
+                TotalTokens = 300, TotalCost = 0.15
+            });
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "idle-1", WorkspaceId = "w1", InstanceId = "i1",
+            OpencodeSessionId = "oc-idle-1", Title = "Idle", Status = "idle",
+            Directory = "/tmp", CreatedAt = "2026-01-01",
+            TotalTokens = 100, TotalCost = 0.05
+        });
 
         var result = await _sut.GetFleetSummaryAsync();
 

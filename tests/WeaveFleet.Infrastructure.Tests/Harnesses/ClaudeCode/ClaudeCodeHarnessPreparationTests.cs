@@ -1,11 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using NSubstitute;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
+using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.ClaudeCode;
 
@@ -58,7 +58,7 @@ public sealed class ClaudeCodeHarnessPreparationTests
     {
         return new ClaudeCodeHarnessRuntime(
             options: new FleetOptions(),
-            scopeFactory: Substitute.For<IServiceScopeFactory>(),
+            scopeFactory: TestServiceScopeFactory.CreateEmpty(),
             logger: NullLogger<ClaudeCodeHarnessRuntime>.Instance,
             loggerFactory: NullLoggerFactory.Instance);
     }

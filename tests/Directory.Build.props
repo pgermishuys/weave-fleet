@@ -2,6 +2,28 @@
   <!-- Import root Directory.Build.props first (MSBuild stops searching at the nearest file) -->
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
 
+  <!--
+    TESTING POLICY: No mocking libraries allowed.
+
+    This codebase uses hand-crafted fakes in WeaveFleet.Testing for all test doubles.
+    Mocking libraries (NSubstitute, Moq, FakeItEasy, etc.) are prohibited.
+
+    When to use fakes:
+    - Repository interfaces → InMemory* fakes in WeaveFleet.Testing/Fakes/Repositories/
+    - Service interfaces → Fake* classes in WeaveFleet.Testing/Fakes/
+    - HTTP dependencies → Custom HttpMessageHandler subclasses (test-local)
+
+    When to use real implementations:
+    - Value objects, DTOs, entities → always use real instances
+    - Services with no I/O → use the real implementation directly
+    - SQLite repositories → use TestDbHelper.CreateSharedDbAsync() (Infrastructure.Tests only)
+
+    When mocking is acceptable (rare exceptions):
+    - Never. If you need a test double, create a fake.
+    - If a fake would be unreasonably complex (50+ methods, deep state machine),
+      consider whether the interface is too large and should be split.
+  -->
+
   <!-- Suppress naming rules that conflict with xunit test naming conventions -->
   <!-- CA1707: Test methods use underscores (ArrangeActAssert_Description style) -->
   <PropertyGroup>

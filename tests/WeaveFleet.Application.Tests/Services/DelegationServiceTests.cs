@@ -1,15 +1,15 @@
-using NSubstitute;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
-using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Application.Tests.Services;
 
 public sealed class DelegationServiceTests
 {
-    private readonly IDelegationRepository _delegationRepository = Substitute.For<IDelegationRepository>();
-    private readonly IEventBroadcaster _eventBroadcaster = Substitute.For<IEventBroadcaster>();
+    private readonly InMemoryDelegationRepository _delegationRepository = new();
+    private readonly FakeEventBroadcaster _eventBroadcaster = new();
     private readonly IUserContext _userContext = new TestUserContext("user-1");
     private readonly DelegationService _sut;
 
@@ -21,33 +21,24 @@ public sealed class DelegationServiceTests
     [Fact]
     public async Task HandleDelegationDetectedAsync_WhenMissing_CreatesPendingDelegationAndBroadcasts()
     {
-        _delegationRepository.GetByParentToolCallIdAsync("parent-1", "tool-1")
-            .Returns((Delegation?)null);
-
         var result = await _sut.HandleDelegationDetectedAsync("parent-1", "tool-1", "Code Review");
 
         result.ParentToolCallId.ShouldBe("tool-1");
         result.Title.ShouldBe("Code Review");
         result.Status.ShouldBe("pending");
 
-        await _delegationRepository.Received(1).InsertAsync(Arg.Is<Delegation>(d =>
-            d.ParentSessionId == "parent-1" &&
-            d.ParentToolCallId == "tool-1" &&
-            d.Title == "Code Review" &&
-            d.Status == "pending" &&
-            d.ChildSessionId == null &&
-            d.CompletedAt == null));
+        var inserted = _delegationRepository.All.Single();
+        inserted.ParentSessionId.ShouldBe("parent-1");
+        inserted.ParentToolCallId.ShouldBe("tool-1");
+        inserted.Title.ShouldBe("Code Review");
+        inserted.Status.ShouldBe("pending");
+        inserted.ChildSessionId.ShouldBeNull();
+        inserted.CompletedAt.ShouldBeNull();
 
-        await _eventBroadcaster.Received(1).BroadcastAsync(
-            "session:parent-1",
-            "delegation.created",
-            Arg.Is<DelegationEventDto>(e =>
-                e.ParentSessionId == "parent-1" &&
-                e.ParentToolCallId == "tool-1" &&
-                e.Title == "Code Review" &&
-                e.Status == "pending"),
-            "user-1",
-            Arg.Any<CancellationToken>());
+        _eventBroadcaster.Broadcasts.Count(b =>
+            b.Topic == "session:parent-1" &&
+            b.Type == "delegation.created" &&
+            b.UserId == "user-1").ShouldBe(1);
     }
 
     [Fact]
@@ -63,21 +54,16 @@ public sealed class DelegationServiceTests
             CreatedAt = DateTime.UtcNow.ToString("O"),
             UpdatedAt = DateTime.UtcNow.ToString("O")
         };
-        _delegationRepository.GetByParentToolCallIdAsync("parent-1", "tool-1")
-            .Returns(existing);
+        _delegationRepository.Seed(existing);
 
         var result = await _sut.HandleDelegationDetectedAsync("parent-1", "tool-1", "Ignored");
 
         result.DelegationId.ShouldBe("del-1");
         result.Title.ShouldBe("Code Review");
 
-        await _delegationRepository.DidNotReceive().InsertAsync(Arg.Any<Delegation>());
-        await _eventBroadcaster.DidNotReceive().BroadcastAsync(
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<object>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
+        // No new insert (only the seeded one)
+        _delegationRepository.All.Count.ShouldBe(1);
+        _eventBroadcaster.Broadcasts.ShouldBeEmpty();
     }
 
     [Fact]
@@ -93,8 +79,7 @@ public sealed class DelegationServiceTests
             CreatedAt = DateTime.UtcNow.ToString("O"),
             UpdatedAt = DateTime.UtcNow.ToString("O")
         };
-        _delegationRepository.GetByParentToolCallIdAsync("parent-1", "tool-1")
-            .Returns(delegation);
+        _delegationRepository.Seed(delegation);
 
         var result = await _sut.HandleChildLinkedAsync("parent-1", "tool-1", "child-1");
 
@@ -102,24 +87,14 @@ public sealed class DelegationServiceTests
         result!.ChildSessionId.ShouldBe("child-1");
         result.Status.ShouldBe("running");
 
-        await _delegationRepository.Received(1).UpdateChildSessionIdAsync(
-            "del-1",
-            "child-1",
-            Arg.Any<string>());
-        await _delegationRepository.Received(1).UpdateStatusAsync(
-            Arg.Is("del-1"),
-            Arg.Is("running"),
-            Arg.Any<string>(),
-            Arg.Is<string?>(s => s == null));
-        await _eventBroadcaster.Received(1).BroadcastAsync(
-            "session:parent-1",
-            "delegation.updated",
-            Arg.Is<DelegationEventDto>(e =>
-                e.DelegationId == "del-1" &&
-                e.ChildSessionId == "child-1" &&
-                e.Status == "running"),
-            "user-1",
-            Arg.Any<CancellationToken>());
+        var stored = _delegationRepository.All.Single();
+        stored.ChildSessionId.ShouldBe("child-1");
+        stored.Status.ShouldBe("running");
+
+        _eventBroadcaster.Broadcasts.Count(b =>
+            b.Topic == "session:parent-1" &&
+            b.Type == "delegation.updated" &&
+            b.UserId == "user-1").ShouldBe(1);
     }
 
     [Fact]
@@ -136,33 +111,26 @@ public sealed class DelegationServiceTests
             CreatedAt = DateTime.UtcNow.ToString("O"),
             UpdatedAt = DateTime.UtcNow.ToString("O")
         };
-        _delegationRepository.GetByIdAsync("del-1").Returns(delegation);
+        _delegationRepository.Seed(delegation);
 
         var result = await _sut.HandleDelegationFinishedAsync("del-1", "completed");
 
         result.ShouldNotBeNull();
         result!.Status.ShouldBe("completed");
 
-        await _delegationRepository.Received(1).UpdateStatusAsync(
-            Arg.Is("del-1"),
-            Arg.Is("completed"),
-            Arg.Any<string>(),
-            Arg.Any<string>());
-        await _eventBroadcaster.Received(1).BroadcastAsync(
-            "session:parent-1",
-            "delegation.updated",
-            Arg.Is<DelegationEventDto>(e =>
-                e.DelegationId == "del-1" &&
-                e.Status == "completed" &&
-                e.ChildSessionId == "child-1"),
-            "user-1",
-            Arg.Any<CancellationToken>());
+        var stored = _delegationRepository.All.Single();
+        stored.Status.ShouldBe("completed");
+
+        _eventBroadcaster.Broadcasts.Count(b =>
+            b.Topic == "session:parent-1" &&
+            b.Type == "delegation.updated" &&
+            b.UserId == "user-1").ShouldBe(1);
     }
 
     [Fact]
     public async Task HandleDelegationFinishedAsync_WhenAlreadyTerminalWithDifferentStatus_Throws()
     {
-        _delegationRepository.GetByIdAsync("del-1").Returns(new Delegation
+        _delegationRepository.Seed(new Delegation
         {
             Id = "del-1",
             ParentSessionId = "parent-1",

@@ -1,6 +1,7 @@
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses;
+using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses;
 
@@ -75,7 +76,7 @@ public sealed class HarnessRegistryTests
         var h1 = new FakeHarness("opencode", "OpenCode");
         var h2 = new FakeHarness("claude-code", "Claude Code");
         var r1 = new FakeHarnessRuntime("opencode", available: true);
-        var r2 = new FakeHarnessRuntime("claude-code", available: false, reason: "Binary not found");
+        var r2 = new FakeHarnessRuntime("claude-code", available: false, availabilityReason: "Binary not found");
         var registry = new HarnessRegistry([h1, h2], [r1, r2]);
 
         var results = await registry.GetAvailabilityAsync(CancellationToken.None);
@@ -100,35 +101,4 @@ public sealed class HarnessRegistryTests
         results[0].Available.ShouldBeFalse();
         results[0].Reason.ShouldBe("No runtime registered.");
     }
-
-    /// <summary>Minimal fake descriptor for testing the registry.</summary>
-    private sealed class FakeHarness(string type, string displayName) : IHarness
-    {
-        public string Type => type;
-        public string DisplayName => displayName;
-        public HarnessCapabilities Capabilities => new();
-    }
-
-    /// <summary>Minimal fake runtime for testing the registry.</summary>
-    private sealed class FakeHarnessRuntime(
-        string harnessType,
-        bool available = true,
-        string? reason = null) : IHarnessRuntime
-    {
-        public string HarnessType => harnessType;
-
-        public Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
-            => Task.FromResult(new HarnessAvailability(available, reason));
-
-        public Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
-            => Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new FakeLaunchArtifacts()));
-
-        public Task<IHarnessSession> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct)
-            => throw new NotSupportedException("FakeHarnessRuntime cannot spawn.");
-
-        public Task<IHarnessSession> ResumeAsync(HarnessResumeOptions options, CancellationToken ct)
-            => throw new NotSupportedException("FakeHarnessRuntime cannot resume.");
-    }
-
-    private sealed record FakeLaunchArtifacts : RuntimeLaunchArtifacts;
 }

@@ -1,23 +1,23 @@
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
-using WeaveFleet.Domain.Repositories;
-using NSubstitute;
+using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 using Shouldly;
 
 namespace WeaveFleet.Application.Tests.Services;
 
 public sealed class SessionSourceResolutionServiceTests
 {
-    private readonly IWorkspaceRootRepository _workspaceRootRepository = Substitute.For<IWorkspaceRootRepository>();
+    private readonly InMemoryWorkspaceRootRepository _workspaceRootRepository = new();
     private readonly IUserContext _userContext = new TestUserContext();
     private readonly SessionSourceResolutionService _sut;
 
     public SessionSourceResolutionServiceTests()
     {
-        _workspaceRootRepository.ListAsync().Returns([
+        _workspaceRootRepository.Seed(
             new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
-        ]);
+        );
 
         _sut = new SessionSourceResolutionService([
             new LocalDirectorySessionSourceProvider(new WorkspaceRootService(_workspaceRootRepository, _userContext))
@@ -167,9 +167,10 @@ public sealed class SessionSourceResolutionServiceTests
         var symlinkDirectory = Path.Combine(allowedRoot.Path, "link-outside");
         Directory.CreateSymbolicLink(symlinkDirectory, outsideParent.Path);
 
-        _workspaceRootRepository.ListAsync().Returns([
+        _workspaceRootRepository.Clear();
+        _workspaceRootRepository.Seed(
             new WorkspaceRoot { Id = "root-1", Path = allowedRoot.Path, CreatedAt = DateTime.UtcNow.ToString("O") }
-        ]);
+        );
 
         var result = await _sut.ResolveCreateRequestAsync(new CreateSessionRequest
         {

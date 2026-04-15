@@ -1,12 +1,12 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using NSubstitute;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
+using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
 
@@ -146,7 +146,7 @@ public sealed class OpenCodeHarnessPreparationTests
             httpClientFactory: new TestHttpClientFactory(),
             portAllocator: new PortAllocator(10000, 10099),
             options: new FleetOptions(),
-            scopeFactory: Substitute.For<IServiceScopeFactory>(),
+            scopeFactory: TestServiceScopeFactory.CreateEmpty(),
             logger: NullLogger<OpenCodeHarnessRuntime>.Instance,
             loggerFactory: NullLoggerFactory.Instance);
     }

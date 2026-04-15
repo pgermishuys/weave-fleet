@@ -1,11 +1,12 @@
 using Dapper;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using NSubstitute;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Analytics;
+using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Analytics;
 
@@ -18,7 +19,7 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
     private AnalyticsCollector? _collector;
     private AnalyticsWriterService? _writer;
 
-    private readonly ISessionRepository _sessionRepo = Substitute.For<ISessionRepository>();
+    private readonly InMemorySessionRepository _sessionRepo = new();
 
     public async Task InitializeAsync()
     {
@@ -27,14 +28,8 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         _analyticsFactory = (AnalyticsTestDbHelper.SharedAnalyticsCacheFactory)factory;
         _collector = new AnalyticsCollector(NullLogger<AnalyticsCollector>.Instance);
 
-        // Build a mock scope factory that returns the mock session repository
-        var scope = Substitute.For<IServiceScope>();
-        var scopeProvider = Substitute.For<IServiceProvider>();
-        scopeProvider.GetService(typeof(ISessionRepository)).Returns(_sessionRepo);
-        scope.ServiceProvider.Returns(scopeProvider);
-
-        var scopeFactory = Substitute.For<IServiceScopeFactory>();
-        scopeFactory.CreateScope().Returns(scope);
+        var scopeFactory = TestServiceScopeFactory.Create(services =>
+            services.AddSingleton<ISessionRepository>(_sessionRepo));
 
         var options = new FleetOptions
         {
@@ -210,7 +205,7 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         await Task.Delay(2500, cts.Token);
         await _writer.StopAsync(CancellationToken.None);
 
-        await _sessionRepo.Received(1).IncrementTokensAsync("sess-dedup", Arg.Any<int>(), Arg.Any<double>());
+        _sessionRepo.IncrementTokensAsyncCalls.Count(c => c.Id == "sess-dedup").ShouldBe(1);
     }
 
     [Fact]

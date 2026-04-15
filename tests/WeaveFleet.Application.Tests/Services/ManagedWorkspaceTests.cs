@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using NSubstitute;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
-using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Application.Tests.Services;
 
@@ -12,7 +12,7 @@ public sealed class ManagedWorkspaceTests
     [Fact]
     public async Task CreateWorkspaceAsync_InCloudMode_CreatesManagedWorkspaceUnderConfiguredRoot()
     {
-        var workspaceRepository = Substitute.For<IWorkspaceRepository>();
+        var workspaceRepository = new InMemoryWorkspaceRepository();
         var userContext = new TestUserContext("user_123|org:abc");
 
         using var workspaceRoot = new TempDirectory();
@@ -45,7 +45,7 @@ public sealed class ManagedWorkspaceTests
     [Fact]
     public async Task CreateWorkspaceAsync_InCloudMode_UsesFallbackStorageKeyForEmptyOrHostileIdentity()
     {
-        var workspaceRepository = Substitute.For<IWorkspaceRepository>();
+        var workspaceRepository = new InMemoryWorkspaceRepository();
 
         using var workspaceRoot = new TempDirectory();
         var emptyIdentityService = new WorkspaceService(
@@ -86,7 +86,7 @@ public sealed class ManagedWorkspaceTests
     [Fact]
     public async Task CreateWorkspaceAsync_InCloudMode_TruncatesSanitizedStorageKeyTo64Characters()
     {
-        var workspaceRepository = Substitute.For<IWorkspaceRepository>();
+        var workspaceRepository = new InMemoryWorkspaceRepository();
         var userId = new string('a', 80) + "|unsafe";
 
         using var workspaceRoot = new TempDirectory();
@@ -114,7 +114,7 @@ public sealed class ManagedWorkspaceTests
     [Fact]
     public async Task CreateWorkspaceAsync_InLocalMode_LeavesDirectoryAndStrategyUnchanged()
     {
-        var workspaceRepository = Substitute.For<IWorkspaceRepository>();
+        var workspaceRepository = new InMemoryWorkspaceRepository();
         var service = new WorkspaceService(
             workspaceRepository,
             new TestUserContext("owner-1"),

@@ -1,9 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using NSubstitute;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
+using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.ClaudeCode;
 
@@ -107,7 +107,7 @@ public sealed class ClaudeCodeHarnessTests
         options.ClaudeCode.BinaryPath = "/nonexistent/path/to/claude-definitely-not-here";
         var runtime = new ClaudeCodeHarnessRuntime(
             options: options,
-            scopeFactory: Substitute.For<IServiceScopeFactory>(),
+            scopeFactory: TestServiceScopeFactory.CreateEmpty(),
             logger: NullLogger<ClaudeCodeHarnessRuntime>.Instance,
             loggerFactory: NullLoggerFactory.Instance);
 

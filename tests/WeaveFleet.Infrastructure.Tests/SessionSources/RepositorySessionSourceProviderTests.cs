@@ -1,12 +1,12 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using NSubstitute;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.SessionSources;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.SessionSources;
 
@@ -16,18 +16,16 @@ public sealed class RepositorySessionSourceProviderTests
     public async Task ResolveAsync_ReturnsWorkspaceIntentForAllowedRepository()
     {
         using var repository = new GitRepositoryFixture();
-        var workspaceRootRepository = Substitute.For<IWorkspaceRootRepository>();
-        workspaceRootRepository.ListAsync().Returns([
-            new WorkspaceRoot
-            {
-                Id = "root-1",
-                Path = repository.ParentPath,
-                CreatedAt = DateTime.UtcNow.ToString("O")
-            }
-        ]);
+        var workspaceRootRepository = new InMemoryWorkspaceRootRepository();
+        workspaceRootRepository.Seed(new WorkspaceRoot
+        {
+            Id = "root-1",
+            Path = repository.ParentPath,
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
 
         var services = new ServiceCollection();
-        services.AddSingleton(workspaceRootRepository);
+        services.AddSingleton<IWorkspaceRootRepository>(workspaceRootRepository);
         var userContext = new TestUserContext();
         services.AddSingleton<IUserContext>(userContext);
         services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository, userContext));
@@ -61,18 +59,16 @@ public sealed class RepositorySessionSourceProviderTests
     public async Task ResolveAsync_RejectsCloneIsolationStrategy()
     {
         using var repository = new GitRepositoryFixture();
-        var workspaceRootRepository = Substitute.For<IWorkspaceRootRepository>();
-        workspaceRootRepository.ListAsync().Returns([
-            new WorkspaceRoot
-            {
-                Id = "root-1",
-                Path = repository.ParentPath,
-                CreatedAt = DateTime.UtcNow.ToString("O")
-            }
-        ]);
+        var workspaceRootRepository = new InMemoryWorkspaceRootRepository();
+        workspaceRootRepository.Seed(new WorkspaceRoot
+        {
+            Id = "root-1",
+            Path = repository.ParentPath,
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
 
         var services = new ServiceCollection();
-        services.AddSingleton(workspaceRootRepository);
+        services.AddSingleton<IWorkspaceRootRepository>(workspaceRootRepository);
         var userContext = new TestUserContext();
         services.AddSingleton<IUserContext>(userContext);
         services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository, userContext));

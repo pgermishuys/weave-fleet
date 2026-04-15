@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using NSubstitute;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
@@ -9,6 +8,8 @@ using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
+using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.ClaudeCode;
 
@@ -19,32 +20,23 @@ namespace WeaveFleet.Infrastructure.Tests.Harnesses.ClaudeCode;
 /// </summary>
 public sealed class ClaudeCodeHarnessSessionPersistenceTests
 {
-    private sealed class StubConnectionFactory(System.Data.IDbConnection connection) : IDbConnectionFactory
-    {
-        public System.Data.IDbConnection CreateConnection() => connection;
-    }
-
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 
     /// <summary>
     /// Builds persistence dependencies backed by a real ServiceCollection so that
-    /// GetRequiredService&lt;T&gt;() resolves correctly without NSubstitute IServiceProvider quirks.
+    /// GetRequiredService&lt;T&gt;() resolves correctly.
     /// </summary>
-    private static (IServiceScopeFactory ScopeFactory, IMessageRepository MessageRepo)
+    private static (IServiceScopeFactory ScopeFactory, InMemoryMessageRepository MessageRepo)
         BuildPersistenceDependencies()
     {
-        var messageRepo = Substitute.For<IMessageRepository>();
-        var delegationRepo = Substitute.For<IDelegationRepository>();
-        var sessionRepo = Substitute.For<ISessionRepository>();
-        var outboxRepo = Substitute.For<IOutboxRepository>();
-        var outboxDispatcher = Substitute.For<IOutboxDispatcher>();
-        var connection = Substitute.For<System.Data.IDbConnection>();
-        var transaction = Substitute.For<System.Data.IDbTransaction>();
-        connection.BeginTransaction().Returns(transaction);
-        outboxRepo.EnqueueAsync(connection, transaction, Arg.Any<OutboxMessage>()).Returns(1L);
-        var connectionFactory = new StubConnectionFactory(connection);
+        var messageRepo = new InMemoryMessageRepository();
+        var delegationRepo = new InMemoryDelegationRepository();
+        var sessionRepo = new InMemorySessionRepository();
+        var outboxRepo = new InMemoryOutboxRepository();
+        var outboxDispatcher = new FakeOutboxDispatcher();
+        var connectionFactory = new FakeDbConnectionFactory();
         var sessionActivityWriteService = new SessionActivityWriteService(
             connectionFactory,
             messageRepo,
@@ -54,12 +46,12 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
             outboxDispatcher);
 
         var services = new ServiceCollection();
-        services.AddSingleton(messageRepo);
-        services.AddSingleton(delegationRepo);
-        services.AddSingleton(sessionRepo);
+        services.AddSingleton<IMessageRepository>(messageRepo);
+        services.AddSingleton<IDelegationRepository>(delegationRepo);
+        services.AddSingleton<ISessionRepository>(sessionRepo);
         services.AddSingleton<IDbConnectionFactory>(connectionFactory);
-        services.AddSingleton(outboxRepo);
-        services.AddSingleton(outboxDispatcher);
+        services.AddSingleton<IOutboxRepository>(outboxRepo);
+        services.AddSingleton<IOutboxDispatcher>(outboxDispatcher);
         services.AddSingleton(sessionActivityWriteService);
         var rootProvider = services.BuildServiceProvider();
         var scopeFactory = rootProvider.GetRequiredService<IServiceScopeFactory>();
@@ -70,19 +62,15 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
     /// <summary>
     /// Builds persistence dependencies including <see cref="ISessionRepository"/> for resume token tests.
     /// </summary>
-    private static (IServiceScopeFactory ScopeFactory, IMessageRepository MessageRepo, ISessionRepository SessionRepo)
+    private static (IServiceScopeFactory ScopeFactory, InMemoryMessageRepository MessageRepo, InMemorySessionRepository SessionRepo)
         BuildFullPersistenceDependencies()
     {
-        var messageRepo = Substitute.For<IMessageRepository>();
-        var delegationRepo = Substitute.For<IDelegationRepository>();
-        var sessionRepo = Substitute.For<ISessionRepository>();
-        var outboxRepo = Substitute.For<IOutboxRepository>();
-        var outboxDispatcher = Substitute.For<IOutboxDispatcher>();
-        var connection = Substitute.For<System.Data.IDbConnection>();
-        var transaction = Substitute.For<System.Data.IDbTransaction>();
-        connection.BeginTransaction().Returns(transaction);
-        outboxRepo.EnqueueAsync(connection, transaction, Arg.Any<OutboxMessage>()).Returns(1L);
-        var connectionFactory = new StubConnectionFactory(connection);
+        var messageRepo = new InMemoryMessageRepository();
+        var delegationRepo = new InMemoryDelegationRepository();
+        var sessionRepo = new InMemorySessionRepository();
+        var outboxRepo = new InMemoryOutboxRepository();
+        var outboxDispatcher = new FakeOutboxDispatcher();
+        var connectionFactory = new FakeDbConnectionFactory();
         var sessionActivityWriteService = new SessionActivityWriteService(
             connectionFactory,
             messageRepo,
@@ -92,12 +80,12 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
             outboxDispatcher);
 
         var services = new ServiceCollection();
-        services.AddSingleton(messageRepo);
-        services.AddSingleton(delegationRepo);
-        services.AddSingleton(sessionRepo);
+        services.AddSingleton<IMessageRepository>(messageRepo);
+        services.AddSingleton<IDelegationRepository>(delegationRepo);
+        services.AddSingleton<ISessionRepository>(sessionRepo);
         services.AddSingleton<IDbConnectionFactory>(connectionFactory);
-        services.AddSingleton(outboxRepo);
-        services.AddSingleton(outboxDispatcher);
+        services.AddSingleton<IOutboxRepository>(outboxRepo);
+        services.AddSingleton<IOutboxDispatcher>(outboxDispatcher);
         services.AddSingleton(sessionActivityWriteService);
         var rootProvider = services.BuildServiceProvider();
         var scopeFactory = rootProvider.GetRequiredService<IServiceScopeFactory>();
@@ -172,8 +160,8 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
             },
         };
 
-        messageRepo.GetBySessionAsync(fleetSessionId, 50, null)
-            .Returns(Task.FromResult<IReadOnlyList<PersistedMessage>>(persisted));
+        messageRepo.GetBySessionBehavior = (sessionId, limit, before) =>
+            Task.FromResult<IReadOnlyList<PersistedMessage>>(persisted);
 
         await using var instance = CreateInstance(fleetSessionId, scopeFactory);
 
@@ -190,8 +178,8 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
         var fleetSessionId = "fleet-cc-2";
         var (scopeFactory, messageRepo) = BuildPersistenceDependencies();
 
-        messageRepo.GetBySessionAsync(fleetSessionId, 50, null)
-            .Returns(Task.FromResult<IReadOnlyList<PersistedMessage>>([]));
+        messageRepo.GetBySessionBehavior = (_, _, _) =>
+            Task.FromResult<IReadOnlyList<PersistedMessage>>([]);
 
         await using var instance = CreateInstance(fleetSessionId, scopeFactory);
 
@@ -207,16 +195,19 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
         var fleetSessionId = "fleet-cc-3";
         var (scopeFactory, messageRepo) = BuildPersistenceDependencies();
 
-        messageRepo.GetBySessionAsync(fleetSessionId, Arg.Any<int>(), Arg.Any<string?>())
-            .Returns(Task.FromResult<IReadOnlyList<PersistedMessage>>([]));
+        messageRepo.GetBySessionBehavior = (_, _, _) =>
+            Task.FromResult<IReadOnlyList<PersistedMessage>>([]);
 
         await using var instance = CreateInstance(fleetSessionId, scopeFactory);
 
         var query = new MessageQuery { Limit = 10, Before = "cursor-msg-id" };
         await instance.GetMessagesAsync(query, CancellationToken.None);
 
-        await messageRepo.Received(1)
-            .GetBySessionAsync(fleetSessionId, 10, "cursor-msg-id");
+        messageRepo.GetBySessionCalls.Count.ShouldBe(1);
+        var call = messageRepo.GetBySessionCalls[0];
+        call.SessionId.ShouldBe(fleetSessionId);
+        call.Limit.ShouldBe(10);
+        call.BeforeMessageId.ShouldBe("cursor-msg-id");
     }
 
     [Fact]
@@ -238,8 +229,8 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
             })
             .ToList();
 
-        messageRepo.GetBySessionAsync(fleetSessionId, 5, null)
-            .Returns(Task.FromResult<IReadOnlyList<PersistedMessage>>(messages));
+        messageRepo.GetBySessionBehavior = (sessionId, limit, before) =>
+            Task.FromResult<IReadOnlyList<PersistedMessage>>(messages);
 
         await using var instance = CreateInstance(fleetSessionId, scopeFactory);
 
@@ -268,8 +259,8 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
             })
             .ToList();
 
-        messageRepo.GetBySessionAsync(fleetSessionId, 10, null)
-            .Returns(Task.FromResult<IReadOnlyList<PersistedMessage>>(messages));
+        messageRepo.GetBySessionBehavior = (_, _, _) =>
+            Task.FromResult<IReadOnlyList<PersistedMessage>>(messages);
 
         await using var instance = CreateInstance(fleetSessionId, scopeFactory);
 
@@ -294,11 +285,11 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
         var (scopeFactory, messageRepo) = BuildPersistenceDependencies();
 
         var persistSignal = new TaskCompletionSource();
-        messageRepo.UpsertAsync(Arg.Any<System.Data.IDbConnection>(), Arg.Any<System.Data.IDbTransaction?>(), Arg.Any<PersistedMessage>()).Returns(callInfo =>
+        messageRepo.UpsertBehavior = message =>
         {
             persistSignal.TrySetResult();
             return Task.CompletedTask;
-        });
+        };
 
         await using var instance = CreateInstance(fleetSessionId, scopeFactory);
 
@@ -316,13 +307,11 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
         // Wait for the fire-and-forget persist to complete
         await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        await messageRepo.Received(1).UpsertAsync(
-            Arg.Any<System.Data.IDbConnection>(),
-            Arg.Any<System.Data.IDbTransaction?>(),
-            Arg.Is<PersistedMessage>(m =>
-            m.SessionId == fleetSessionId &&
-            m.Role == "user" &&
-            m.PartsJson.Contains("Hello")));
+        messageRepo.UpsertCalls.Count.ShouldBe(1);
+        var upserted = messageRepo.UpsertCalls[0];
+        upserted.SessionId.ShouldBe(fleetSessionId);
+        upserted.Role.ShouldBe("user");
+        upserted.PartsJson.ShouldContain("Hello");
     }
 
     [Fact]
@@ -332,8 +321,7 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
         var (scopeFactory, messageRepo) = BuildPersistenceDependencies();
 
         // DB throws — should be silently swallowed
-        messageRepo.UpsertAsync(Arg.Any<System.Data.IDbConnection>(), Arg.Any<System.Data.IDbTransaction?>(), Arg.Any<PersistedMessage>())
-            .Returns(_ => Task.FromException(new InvalidOperationException("DB is on fire")));
+        messageRepo.UpsertBehavior = _ => Task.FromException(new InvalidOperationException("DB is on fire"));
 
         await using var instance = CreateInstance(fleetSessionId, scopeFactory);
 
@@ -352,7 +340,7 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
 
         // Instance should still be disposeably healthy (no unhandled exception propagated)
         // Verify UpsertAsync was called (and swallowed the exception)
-        await messageRepo.Received().UpsertAsync(Arg.Any<System.Data.IDbConnection>(), Arg.Any<System.Data.IDbTransaction?>(), Arg.Any<PersistedMessage>());
+        messageRepo.UpsertCalls.Count.ShouldBeGreaterThanOrEqualTo(1);
     }
 
     // -----------------------------------------------------------------------
@@ -378,8 +366,8 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
             },
         };
 
-        messageRepo.GetBySessionAsync(fleetSessionId, 50, null)
-            .Returns(Task.FromResult<IReadOnlyList<PersistedMessage>>(persisted));
+        messageRepo.GetBySessionBehavior = (_, _, _) =>
+            Task.FromResult<IReadOnlyList<PersistedMessage>>(persisted);
 
         await using var instance = CreateInstance(fleetSessionId, scopeFactory);
 
@@ -431,7 +419,8 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
         var claudeSessionId = "resume-token-xyz";
         var (scopeFactory, messageRepo) = BuildPersistenceDependencies();
 
-        messageRepo.UpsertAsync(Arg.Any<System.Data.IDbConnection>(), Arg.Any<System.Data.IDbTransaction?>(), Arg.Any<PersistedMessage>()).Returns(Task.CompletedTask);
+        // UpsertBehavior is a no-op (default Task.CompletedTask)
+        messageRepo.UpsertBehavior = _ => Task.CompletedTask;
 
         await using var instance = CreateInstance(
             fleetSessionId, scopeFactory, claudeSessionId: claudeSessionId);
@@ -461,9 +450,6 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
         // This exercises the DI wiring for the resume token persistence path.
         var fleetSessionId = "fleet-cc-resume-4";
         var (scopeFactory, _, sessionRepo) = BuildFullPersistenceDependencies();
-
-        sessionRepo.UpdateResumeTokenAsync(Arg.Any<string>(), Arg.Any<string>())
-            .Returns(Task.CompletedTask);
 
         await using var instance = CreateInstance(fleetSessionId, scopeFactory);
 

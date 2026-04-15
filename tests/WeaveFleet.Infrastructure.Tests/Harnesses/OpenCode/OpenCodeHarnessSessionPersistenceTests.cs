@@ -1,11 +1,9 @@
 using System.Net;
-using System.Data;
 using System.Text;
 using System.Text.Json;
 using System.Net.Http.Headers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using NSubstitute;
 using Shouldly;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
@@ -17,6 +15,9 @@ using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
+using WeaveFleet.Testing.Builders;
+using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
 
@@ -28,40 +29,26 @@ namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
 /// </summary>
 public sealed class OpenCodeHarnessSessionPersistenceTests
 {
-    private sealed class StubConnectionFactory(IDbConnection connection) : IDbConnectionFactory
-    {
-        public IDbConnection CreateConnection() => connection;
-    }
-
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 
     /// <summary>
     /// Builds persistence dependencies backed by a real ServiceCollection so that
-    /// GetRequiredService&lt;T&gt;() resolves correctly without NSubstitute IServiceProvider quirks.
+    /// GetRequiredService&lt;T&gt;() resolves correctly.
     /// </summary>
-    private static (IServiceScopeFactory ScopeFactory, IMessageRepository MessageRepo, IDelegationRepository DelegationRepo, IEventBroadcaster EventBroadcaster, List<OutboxMessage> OutboxMessages)
+    private static (IServiceScopeFactory ScopeFactory, InMemoryMessageRepository MessageRepo, InMemoryDelegationRepository DelegationRepo, FakeEventBroadcaster EventBroadcaster, InMemoryOutboxRepository OutboxRepository)
         BuildPersistenceDependencies()
     {
-        var messageRepo = Substitute.For<IMessageRepository>();
-        var delegationRepo = Substitute.For<IDelegationRepository>();
-        var eventBroadcaster = Substitute.For<IEventBroadcaster>();
-        var sessionRepo = Substitute.For<ISessionRepository>();
-        var outboxRepo = Substitute.For<IOutboxRepository>();
-        var outboxDispatcher = Substitute.For<IOutboxDispatcher>();
-        var outboxMessages = new List<OutboxMessage>();
-        var connection = Substitute.For<IDbConnection>();
-        var transaction = Substitute.For<IDbTransaction>();
-        connection.BeginTransaction().Returns(transaction);
-        outboxRepo.EnqueueAsync(connection, transaction, Arg.Any<OutboxMessage>()).Returns(callInfo =>
-        {
-            outboxMessages.Add(callInfo.ArgAt<OutboxMessage>(2));
-            return 1L;
-        });
+        var messageRepo = new InMemoryMessageRepository();
+        var delegationRepo = new InMemoryDelegationRepository();
+        var eventBroadcaster = new FakeEventBroadcaster();
+        var sessionRepo = new InMemorySessionRepository();
+        var outboxRepo = new InMemoryOutboxRepository();
+        var outboxDispatcher = new FakeOutboxDispatcher();
+        var connectionFactory = new FakeDbConnectionFactory();
         var userContext = new TestUserContext("user-1");
         var delegationService = new DelegationService(delegationRepo, eventBroadcaster, userContext);
-        var connectionFactory = new StubConnectionFactory(connection);
         var sessionActivityWriteService = new SessionActivityWriteService(
             connectionFactory,
             messageRepo,
@@ -71,20 +58,20 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             outboxDispatcher);
 
         var services = new ServiceCollection();
-        services.AddSingleton(messageRepo);
-        services.AddSingleton(delegationRepo);
-        services.AddSingleton(eventBroadcaster);
-        services.AddSingleton(sessionRepo);
+        services.AddSingleton<IMessageRepository>(messageRepo);
+        services.AddSingleton<IDelegationRepository>(delegationRepo);
+        services.AddSingleton<IEventBroadcaster>(eventBroadcaster);
+        services.AddSingleton<ISessionRepository>(sessionRepo);
         services.AddSingleton<IDbConnectionFactory>(connectionFactory);
-        services.AddSingleton(outboxRepo);
-        services.AddSingleton(outboxDispatcher);
+        services.AddSingleton<IOutboxRepository>(outboxRepo);
+        services.AddSingleton<IOutboxDispatcher>(outboxDispatcher);
         services.AddSingleton(sessionActivityWriteService);
         services.AddSingleton<IUserContext>(userContext);
         services.AddSingleton(delegationService);
         var rootProvider = services.BuildServiceProvider();
         var scopeFactory = rootProvider.GetRequiredService<IServiceScopeFactory>();
 
-        return (scopeFactory, messageRepo, delegationRepo, eventBroadcaster, outboxMessages);
+        return (scopeFactory, messageRepo, delegationRepo, eventBroadcaster, outboxRepo);
     }
 
     /// <summary>
@@ -257,11 +244,11 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     /// Creates an <see cref="OpenCodeHarnessSession"/> backed by a fake SSE HTTP handler
     /// that streams the provided SSE lines.
     /// </summary>
-    private static async Task<(OpenCodeHarnessSession Instance, IMessageRepository MessageRepo)>
+    private static async Task<(OpenCodeHarnessSession Instance, InMemoryMessageRepository MessageRepo)>
         CreateInstanceWithSseLines(
             string fleetSessionId,
             IEnumerable<string> sseLines,
-            Action<IMessageRepository>? configureRepo = null)
+            Action<InMemoryMessageRepository>? configureRepo = null)
     {
         var (scopeFactory, messageRepo, _, _, _) = BuildPersistenceDependencies();
         configureRepo?.Invoke(messageRepo);
@@ -334,11 +321,11 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             [BuildMessageUpdatedSseLine("assistant", "msg-1", "loom")],
             repo =>
             {
-                repo.UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>()).Returns(callInfo =>
+                repo.UpsertBehavior = _ =>
                 {
                     persistSignal.TrySetResult();
                     return Task.CompletedTask;
-                });
+                };
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -347,15 +334,12 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Task.Delay(200);
 
-        await messageRepo.Received(1).UpsertAsync(
-            Arg.Any<IDbConnection>(),
-            Arg.Any<IDbTransaction?>(),
-            Arg.Is<PersistedMessage>(m =>
-                m.Id == "msg-1"
-                && m.SessionId == fleetSessionId
-                && m.Role == "assistant"
-                && m.AgentName == "loom"
-                && m.PartsJson.Contains("Hello")));
+        messageRepo.UpsertCalls.ShouldContain(m =>
+            m.Id == "msg-1"
+            && m.SessionId == fleetSessionId
+            && m.Role == "assistant"
+            && m.AgentName == "loom"
+            && m.PartsJson.Contains("Hello"));
 
         await cts.CancelAsync();
         var capturedEvents = await consumeTask;
@@ -375,11 +359,11 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             [BuildMessageCreatedSseLine("user", "msg-user-1")],
             repo =>
             {
-                repo.UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>()).Returns(callInfo =>
+                repo.UpsertBehavior = _ =>
                 {
                     persistSignal.TrySetResult();
                     return Task.CompletedTask;
-                });
+                };
             });
 
         // Start consuming in background — the stream reconnects, so we cancel after persist fires
@@ -391,11 +375,8 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         await cts.CancelAsync();
         await consumeTask;
 
-        await messageRepo.Received(1).UpsertAsync(
-            Arg.Any<IDbConnection>(),
-            Arg.Any<IDbTransaction?>(),
-            Arg.Is<PersistedMessage>(m =>
-            m.SessionId == fleetSessionId && m.Role == "user"));
+        messageRepo.UpsertCalls.ShouldContain(m =>
+            m.SessionId == fleetSessionId && m.Role == "user");
 
         await instance.DisposeAsync();
     }
@@ -424,7 +405,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         await cts.CancelAsync();
         await consumeTask;
 
-        await messageRepo.DidNotReceive().UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>());
+        messageRepo.UpsertCalls.ShouldBeEmpty();
 
         await instance.DisposeAsync();
     }
@@ -440,8 +421,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             [BuildMessageCreatedSseLine("assistant", "msg-persist-failure-1")],
             repo =>
             {
-                repo.UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>())
-                    .Returns(_ => Task.FromException(new InvalidOperationException("DB is on fire")));
+                repo.UpsertBehavior = _ => Task.FromException(new InvalidOperationException("DB is on fire"));
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -484,14 +464,12 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             [BuildPartUpdatedSseLine(messageId, "oc-session", "Hello from part")],
             repo =>
             {
-                repo.GetByIdAsync(messageId, fleetSessionId)
-                    .Returns(Task.FromResult<PersistedMessage?>(null));
-
-                repo.UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>()).Returns(callInfo =>
+                repo.GetByIdBehavior = (_, _) => Task.FromResult<PersistedMessage?>(null);
+                repo.UpsertBehavior = _ =>
                 {
                     persistSignal.TrySetResult();
                     return Task.CompletedTask;
-                });
+                };
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -501,14 +479,11 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         await cts.CancelAsync();
         await consumeTask;
 
-        await messageRepo.Received(1).UpsertAsync(
-            Arg.Any<IDbConnection>(),
-            Arg.Any<IDbTransaction?>(),
-            Arg.Is<PersistedMessage>(m =>
+        messageRepo.UpsertCalls.ShouldContain(m =>
             m.Id == messageId &&
             m.SessionId == fleetSessionId &&
             m.Role == "assistant" &&
-            m.PartsJson.Contains("Hello from part")));
+            m.PartsJson.Contains("Hello from part"));
 
         await instance.DisposeAsync();
     }
@@ -537,15 +512,13 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             [BuildPartUpdatedSseLine(messageId, "oc-session", "Hello from part", "user", "loom")],
             repo =>
             {
-                repo.GetByIdAsync(messageId, fleetSessionId)
-                    .Returns(callInfo => Task.FromResult<PersistedMessage?>(lastUpserted));
-
-                repo.UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>()).Returns(callInfo =>
+                repo.GetByIdBehavior = (_, _) => Task.FromResult<PersistedMessage?>(lastUpserted);
+                repo.UpsertBehavior = m =>
                 {
-                    lastUpserted = callInfo.ArgAt<PersistedMessage>(2);
+                    lastUpserted = m;
                     persistSignal.TrySetResult();
                     return Task.CompletedTask;
-                });
+                };
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -600,8 +573,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             [emptyPartsLine],
             repo =>
             {
-                repo.GetByIdAsync(messageId, fleetSessionId)
-                    .Returns(Task.FromResult<PersistedMessage?>(existingMessage));
+                repo.GetByIdBehavior = (_, _) => Task.FromResult<PersistedMessage?>(existingMessage);
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -613,7 +585,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         await consumeTask;
 
         // UpsertAsync must NOT be called — guard prevented overwrite
-        await messageRepo.DidNotReceive().UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>());
+        messageRepo.UpsertCalls.ShouldBeEmpty();
 
         await instance.DisposeAsync();
     }
@@ -653,16 +625,14 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             ],
             repo =>
             {
-                repo.GetByIdAsync(messageId, fleetSessionId)
-                    .Returns(callInfo => Task.FromResult(lastUpserted));
-
-                repo.UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>()).Returns(callInfo =>
+                repo.GetByIdBehavior = (_, _) => Task.FromResult(lastUpserted);
+                repo.UpsertBehavior = m =>
                 {
-                    lastUpserted = callInfo.ArgAt<PersistedMessage>(2);
-                    persistedMessages.Add(lastUpserted);
+                    lastUpserted = m;
+                    persistedMessages.Add(m);
                     upsertSignal.TrySetResult();
                     return Task.CompletedTask;
-                });
+                };
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -722,15 +692,13 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             ],
             repo =>
             {
-                repo.GetByIdAsync(messageId, fleetSessionId)
-                    .Returns(callInfo => Task.FromResult(lastUpserted));
-
-                repo.UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>()).Returns(callInfo =>
+                repo.GetByIdBehavior = (_, _) => Task.FromResult(lastUpserted);
+                repo.UpsertBehavior = m =>
                 {
-                    lastUpserted = callInfo.ArgAt<PersistedMessage>(2);
+                    lastUpserted = m;
                     upsertSignal.TrySetResult();
                     return Task.CompletedTask;
-                });
+                };
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -755,7 +723,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
 
         PersistedMessage? lastUpserted = null;
         var upsertSignal = new TaskCompletionSource();
-        var (scopeFactory, messageRepo, _, _, outboxMessages) = BuildPersistenceDependencies();
+        var (scopeFactory, messageRepo, _, _, outboxRepo) = BuildPersistenceDependencies();
 
         var skeletonLine = "data: " + JsonSerializer.Serialize(new
         {
@@ -787,14 +755,13 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             sseBody.AppendLine();
         }
 
-        messageRepo.GetByIdAsync(messageId, fleetSessionId)
-            .Returns(_ => Task.FromResult(lastUpserted));
-        messageRepo.UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>()).Returns(callInfo =>
+        messageRepo.GetByIdBehavior = (_, _) => Task.FromResult(lastUpserted);
+        messageRepo.UpsertBehavior = m =>
         {
-            lastUpserted = callInfo.ArgAt<PersistedMessage>(2);
+            lastUpserted = m;
             upsertSignal.TrySetResult();
             return Task.CompletedTask;
-        });
+        };
 
         var handler = new FakeSseHttpMessageHandler(sseBody.ToString());
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
@@ -822,6 +789,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         await cts.CancelAsync();
         await consumeTask;
 
+        var outboxMessages = outboxRepo.All;
         var committedMessageUpdate = outboxMessages.Last(message => message.Type == "message.updated");
         var payload = JsonSerializer.Deserialize<JsonElement>(committedMessageUpdate.Payload);
         payload.GetProperty("parts")[0].GetProperty("text").GetString().ShouldBe("Merged response");
@@ -834,15 +802,14 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var fleetSessionId = "fleet-reasoning-outbox-1";
         var messageId = "msg-reasoning-1";
         var persistSignal = new TaskCompletionSource();
-        var (scopeFactory, messageRepo, _, _, outboxMessages) = BuildPersistenceDependencies();
+        var (scopeFactory, messageRepo, _, _, outboxRepo) = BuildPersistenceDependencies();
 
-        messageRepo.GetByIdAsync(messageId, fleetSessionId)
-            .Returns(Task.FromResult<PersistedMessage?>(null));
-        messageRepo.UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>()).Returns(_ =>
+        messageRepo.GetByIdBehavior = (_, _) => Task.FromResult<PersistedMessage?>(null);
+        messageRepo.UpsertBehavior = _ =>
         {
             persistSignal.TrySetResult();
             return Task.CompletedTask;
-        });
+        };
 
         var sseBody = new StringBuilder();
         sseBody.AppendLine(BuildReasoningPartUpdatedSseLine(messageId, "oc-session", "part-r1", "Hidden thought"));
@@ -874,16 +841,13 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         await cts.CancelAsync();
         await consumeTask;
 
-        await messageRepo.Received(1).UpsertAsync(
-            Arg.Any<IDbConnection>(),
-            Arg.Any<IDbTransaction?>(),
-            Arg.Is<PersistedMessage>(m =>
-                m.Id == messageId
-                && m.SessionId == fleetSessionId
-                && m.Role == "assistant"
-                && !m.PartsJson.Contains("Hidden thought", StringComparison.Ordinal)));
+        messageRepo.UpsertCalls.ShouldContain(m =>
+            m.Id == messageId
+            && m.SessionId == fleetSessionId
+            && m.Role == "assistant"
+            && !m.PartsJson.Contains("Hidden thought", StringComparison.Ordinal));
 
-        outboxMessages.ShouldNotContain(message =>
+        outboxRepo.All.ShouldNotContain(message =>
             message.Type == "message.part.updated" && message.Payload.Contains("Hidden thought", StringComparison.Ordinal));
     }
 
@@ -899,14 +863,12 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             [BuildFilePartUpdatedSseLine(messageId, "oc-session", "file-1", "image/png", "diagram.png", "https://example.test/diagram.png")],
             repo =>
             {
-                repo.GetByIdAsync(messageId, fleetSessionId)
-                    .Returns(Task.FromResult<PersistedMessage?>(null));
-
-                repo.UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>()).Returns(_ =>
+                repo.GetByIdBehavior = (_, _) => Task.FromResult<PersistedMessage?>(null);
+                repo.UpsertBehavior = _ =>
                 {
                     persistSignal.TrySetResult();
                     return Task.CompletedTask;
-                });
+                };
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -916,14 +878,11 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         await cts.CancelAsync();
         await consumeTask;
 
-        await messageRepo.Received(1).UpsertAsync(
-            Arg.Any<IDbConnection>(),
-            Arg.Any<IDbTransaction?>(),
-            Arg.Is<PersistedMessage>(m =>
-                m.Id == messageId
-                && m.SessionId == fleetSessionId
-                && m.PartsJson.Contains("diagram.png")
-                && m.PartsJson.Contains("https://example.test/diagram.png")));
+        messageRepo.UpsertCalls.ShouldContain(m =>
+            m.Id == messageId
+            && m.SessionId == fleetSessionId
+            && m.PartsJson.Contains("diagram.png")
+            && m.PartsJson.Contains("https://example.test/diagram.png"));
 
         await instance.DisposeAsync();
     }
@@ -940,14 +899,12 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             [BuildStepFinishPartUpdatedSseLine(messageId, "oc-session", "step-1", 3, "completed")],
             repo =>
             {
-                repo.GetByIdAsync(messageId, fleetSessionId)
-                    .Returns(Task.FromResult<PersistedMessage?>(null));
-
-                repo.UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>()).Returns(_ =>
+                repo.GetByIdBehavior = (_, _) => Task.FromResult<PersistedMessage?>(null);
+                repo.UpsertBehavior = _ =>
                 {
                     persistSignal.TrySetResult();
                     return Task.CompletedTask;
-                });
+                };
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -957,14 +914,11 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         await cts.CancelAsync();
         await consumeTask;
 
-        await messageRepo.Received(1).UpsertAsync(
-            Arg.Any<IDbConnection>(),
-            Arg.Any<IDbTransaction?>(),
-            Arg.Is<PersistedMessage>(m =>
-                m.Id == messageId
-                && m.SessionId == fleetSessionId
-                && m.PartsJson.Contains("step-finish")
-                && m.PartsJson.Contains("completed")));
+        messageRepo.UpsertCalls.ShouldContain(m =>
+            m.Id == messageId
+            && m.SessionId == fleetSessionId
+            && m.PartsJson.Contains("step-finish")
+            && m.PartsJson.Contains("completed"));
 
         await instance.DisposeAsync();
     }
@@ -972,17 +926,14 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     [Fact]
     public async Task SubscribeAsync_TaskToolEvent_CreatesDelegationAndBroadcasts()
     {
-        var messageRepo = Substitute.For<IMessageRepository>();
-        var delegationRepo = Substitute.For<IDelegationRepository>();
-        var eventBroadcaster = Substitute.For<IEventBroadcaster>();
-
-        delegationRepo.GetByParentToolCallIdAsync("fleet-delegation-1", "tool-1")
-            .Returns((Delegation?)null);
+        var messageRepo = new InMemoryMessageRepository();
+        var delegationRepo = new InMemoryDelegationRepository();
+        var eventBroadcaster = new FakeEventBroadcaster();
 
         var services = new ServiceCollection();
-        services.AddSingleton(messageRepo);
-        services.AddSingleton(delegationRepo);
-        services.AddSingleton(eventBroadcaster);
+        services.AddSingleton<IMessageRepository>(messageRepo);
+        services.AddSingleton<IDelegationRepository>(delegationRepo);
+        services.AddSingleton<IEventBroadcaster>(eventBroadcaster);
         services.AddSingleton<IUserContext>(new TestUserContext("user-1"));
         services.AddSingleton(new DelegationService(delegationRepo, eventBroadcaster, new TestUserContext("user-1")));
         var rootProvider = services.BuildServiceProvider();
@@ -1043,18 +994,15 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         await cts.CancelAsync();
         await consumeTask;
 
-        await delegationRepo.Received(1).InsertAsync(Arg.Is<Delegation>(d =>
+        delegationRepo.InsertedDelegations.ShouldContain(d =>
             d.ParentSessionId == "fleet-delegation-1" &&
             d.ParentToolCallId == "tool-1" &&
             d.Title == "reviewer" &&
-            d.Status == "pending"));
+            d.Status == "pending");
 
-        await eventBroadcaster.Received(1).BroadcastAsync(
-            "session:fleet-delegation-1",
-            "delegation.created",
-            Arg.Any<object>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
+        eventBroadcaster.Broadcasts.ShouldContain(b =>
+            b.Topic == "session:fleet-delegation-1" &&
+            b.Type == "delegation.created");
 
         await instance.DisposeAsync();
     }
@@ -1062,26 +1010,11 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     [Fact]
     public async Task SubscribeAsync_TaskToolRunningWithChildSession_LinksDelegationAndBroadcastsUpdate()
     {
-        var messageRepo = Substitute.For<IMessageRepository>();
-        var delegationRepo = Substitute.For<IDelegationRepository>();
-        var eventBroadcaster = Substitute.For<IEventBroadcaster>();
+        var delegationRepo = new InMemoryDelegationRepository();
+        var eventBroadcaster = new FakeEventBroadcaster();
+        var sessionRepo = new InMemorySessionRepository();
 
-        delegationRepo.GetByParentToolCallIdAsync("fleet-delegation-1", "tool-1")
-            .Returns(
-                (Delegation?)null,
-                new Delegation
-                {
-                    Id = "del-1",
-                    ParentSessionId = "fleet-delegation-1",
-                    ParentToolCallId = "tool-1",
-                    Title = "reviewer",
-                    Status = "pending",
-                    CreatedAt = DateTime.UtcNow.ToString("O"),
-                    UpdatedAt = DateTime.UtcNow.ToString("O")
-                });
-
-        var sessionRepo = Substitute.For<ISessionRepository>();
-        sessionRepo.GetByIdAsync("fleet-delegation-1").Returns(new Session
+        sessionRepo.Seed(new Session
         {
             Id = "fleet-delegation-1",
             WorkspaceId = "ws-1",
@@ -1093,82 +1026,89 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             CreatedAt = DateTime.UtcNow.ToString("O"),
             UserId = "user-1"
         });
+
         Session? persistedChildSession = null;
-        sessionRepo.GetByHarnessIdAsync("child-1").Returns(_ => persistedChildSession);
-        var harnessRegistry = Substitute.For<IHarnessRegistry>();
-        var harness = Substitute.For<IHarness>();
-        var harnessRuntime = Substitute.For<IHarnessRuntime>();
-        harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = true });
-        var childHarnessInstance = Substitute.For<IHarnessSession>();
-        childHarnessInstance.InstanceId.Returns("inst-child");
-        childHarnessInstance.HarnessType.Returns("opencode");
-        childHarnessInstance.Status.Returns(HarnessSessionStatus.Running);
-        harnessRuntime.ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>()).Returns(childHarnessInstance);
-        harnessRegistry.GetByType("opencode").Returns(harness);
-        harnessRegistry.GetRuntimeByType("opencode").Returns(harnessRuntime);
-        var instanceRepo = Substitute.For<IInstanceRepository>();
-        instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
-        sessionRepo.InsertAsync(Arg.Any<Session>())
-            .Returns(callInfo =>
-            {
-                persistedChildSession = callInfo.Arg<Session>();
-                return Task.CompletedTask;
-            });
-        var projectRepo = Substitute.For<IProjectRepository>();
-        projectRepo.ListAsync().Returns(new List<Project>());
-        var callbackRepo = Substitute.For<ISessionCallbackRepository>();
-        var workspaceRepo = Substitute.For<IWorkspaceRepository>();
-        var workspaceRootRepo = Substitute.For<IWorkspaceRootRepository>();
-        var analyticsCollector = Substitute.For<IAnalyticsCollector>();
-        var sessionSourceUsageRepo = Substitute.For<ISessionSourceUsageRepository>();
-        var credentialStore = Substitute.For<ICredentialStore>();
-        credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
-        harnessRuntime.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts())));
-        workspaceRootRepo.ListAsync().Returns([
-            new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
-        ]);
+        sessionRepo.GetByHarnessIdBehavior = _ => Task.FromResult(persistedChildSession);
+
+        // First call returns null, second call returns the delegation
+        var callCount = 0;
+        var delegation = new Delegation
+        {
+            Id = "del-1",
+            ParentSessionId = "fleet-delegation-1",
+            ParentToolCallId = "tool-1",
+            Title = "reviewer",
+            Status = "pending",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UpdatedAt = DateTime.UtcNow.ToString("O")
+        };
+        delegationRepo.GetByParentToolCallIdBehavior = (_, _) =>
+        {
+            callCount++;
+            return callCount == 1
+                ? Task.FromResult<Delegation?>(null)
+                : Task.FromResult<Delegation?>(delegation);
+        };
+
         var userContext = new TestUserContext("user-1");
-        var workspaceRootService = new WorkspaceRootService(workspaceRootRepo, userContext);
         var options = new FleetOptions();
 
+        var builder = new SessionOrchestratorBuilder()
+            .WithUserContext(userContext)
+            .WithOptions(options);
+
+        // Override the builder's repos with our configured ones
+        var runtime = builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = true });
+        runtime.PrepareRuntimeBehavior = (_, _) =>
+            Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts()));
+        var childHarnessInstance = new FakeHarnessSession("inst-child") { HarnessType = "opencode", Status = HarnessSessionStatus.Running };
+        runtime.ResumeBehavior = (_, _) => Task.FromResult<IHarnessSession>(childHarnessInstance);
+
+        builder.WorkspaceRootRepository.Seed(new WorkspaceRoot
+        {
+            Id = "root-1",
+            Path = Path.GetTempPath(),
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
         var services = new ServiceCollection();
-        services.AddSingleton(messageRepo);
-        services.AddSingleton(delegationRepo);
-        services.AddSingleton(eventBroadcaster);
-        services.AddSingleton(sessionRepo);
-        services.AddSingleton(instanceRepo);
-        services.AddSingleton(projectRepo);
-        services.AddSingleton(callbackRepo);
-        services.AddSingleton(workspaceRepo);
-        services.AddSingleton(sessionSourceUsageRepo);
-        services.AddSingleton<IHarnessRegistry>(harnessRegistry);
-        services.AddSingleton(analyticsCollector);
+        services.AddSingleton<IMessageRepository>(new InMemoryMessageRepository());
+        services.AddSingleton<IDelegationRepository>(delegationRepo);
+        services.AddSingleton<IEventBroadcaster>(eventBroadcaster);
+        services.AddSingleton<ISessionRepository>(sessionRepo);
+        services.AddSingleton<IInstanceRepository>(builder.InstanceRepository);
+        services.AddSingleton<IProjectRepository>(builder.ProjectRepository);
+        services.AddSingleton<ISessionCallbackRepository>(builder.SessionCallbackRepository);
+        services.AddSingleton<IWorkspaceRepository>(builder.WorkspaceRepository);
+        services.AddSingleton<ISessionSourceUsageRepository>(builder.SessionSourceUsageRepository);
+        services.AddSingleton<IHarnessRegistry>(builder.HarnessRegistry);
+        services.AddSingleton<IAnalyticsCollector>(builder.AnalyticsCollector);
         services.AddSingleton(new InstanceTracker());
         services.AddSingleton<IUserContext>(userContext);
-        services.AddSingleton(new InstanceService(instanceRepo, sessionRepo, userContext));
+        services.AddSingleton(new InstanceService(builder.InstanceRepository, sessionRepo, userContext));
         services.AddSingleton(new DelegationService(delegationRepo, eventBroadcaster, userContext));
+        var workspaceRootService = new WorkspaceRootService(builder.WorkspaceRootRepository, userContext);
         services.AddSingleton(new SessionSourceResolutionService([
             new LocalDirectorySessionSourceProvider(workspaceRootService)
         ]));
         services.AddSingleton(new SessionOrchestrator(
-            new WorkspaceService(workspaceRepo, userContext, options, NullLogger<WorkspaceService>.Instance),
-            new InstanceService(instanceRepo, sessionRepo, userContext),
+            new WorkspaceService(builder.WorkspaceRepository, userContext, options, NullLogger<WorkspaceService>.Instance),
+            new InstanceService(builder.InstanceRepository, sessionRepo, userContext),
             new SessionSourceResolutionService([
                 new LocalDirectorySessionSourceProvider(workspaceRootService)
             ]),
-            harnessRegistry,
+            builder.HarnessRegistry,
             new InstanceTracker(),
             sessionRepo,
-            sessionSourceUsageRepo,
-            callbackRepo,
+            builder.SessionSourceUsageRepository,
+            builder.SessionCallbackRepository,
             delegationRepo,
-            projectRepo,
+            builder.ProjectRepository,
             eventBroadcaster,
-            analyticsCollector,
-            messageRepo,
+            builder.AnalyticsCollector,
+            new InMemoryMessageRepository(),
             new DelegationService(delegationRepo, eventBroadcaster, userContext),
-            credentialStore,
+            builder.CredentialStore,
             userContext,
             options,
             NullLogger<SessionOrchestrator>.Instance));
@@ -1264,17 +1204,11 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         await cts.CancelAsync();
         await consumeTask;
 
-        await delegationRepo.Received(1).UpdateChildSessionIdAsync(
-            "del-1",
-            Arg.Any<string>(),
-            Arg.Any<string>());
+        delegationRepo.UpdateChildSessionIdCalls.ShouldContain(c => c.Id == "del-1");
 
-        await eventBroadcaster.Received().BroadcastAsync(
-            "session:fleet-delegation-1",
-            "delegation.updated",
-            Arg.Any<object>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
+        eventBroadcaster.Broadcasts.ShouldContain(b =>
+            b.Topic == "session:fleet-delegation-1" &&
+            b.Type == "delegation.updated");
 
         await instance.DisposeAsync();
     }
@@ -1282,11 +1216,11 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     [Fact]
     public async Task SubscribeAsync_SubtaskPartWithChildSession_LinksDelegationAndBroadcastsUpdate()
     {
-        var messageRepo = Substitute.For<IMessageRepository>();
-        var delegationRepo = Substitute.For<IDelegationRepository>();
-        var eventBroadcaster = Substitute.For<IEventBroadcaster>();
-        var sessionRepo = Substitute.For<ISessionRepository>();
-        sessionRepo.GetByIdAsync("fleet-delegation-1").Returns(new Session
+        var delegationRepo = new InMemoryDelegationRepository();
+        var eventBroadcaster = new FakeEventBroadcaster();
+        var sessionRepo = new InMemorySessionRepository();
+
+        sessionRepo.Seed(new Session
         {
             Id = "fleet-delegation-1",
             WorkspaceId = "ws-1",
@@ -1298,95 +1232,79 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             CreatedAt = DateTime.UtcNow.ToString("O"),
             UserId = "user-1"
         });
+
         Session? persistedChildSession = null;
-        sessionRepo.GetByHarnessIdAsync("child-1").Returns(_ => persistedChildSession);
-        var harnessRegistry = Substitute.For<IHarnessRegistry>();
-        var harness = Substitute.For<IHarness>();
-        var harnessRuntime = Substitute.For<IHarnessRuntime>();
-        harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = true });
-        var childHarnessInstance = Substitute.For<IHarnessSession>();
-        childHarnessInstance.InstanceId.Returns("inst-child");
-        childHarnessInstance.HarnessType.Returns("opencode");
-        childHarnessInstance.Status.Returns(HarnessSessionStatus.Running);
-        harnessRuntime.ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>()).Returns(childHarnessInstance);
-        harnessRegistry.GetByType("opencode").Returns(harness);
-        harnessRegistry.GetRuntimeByType("opencode").Returns(harnessRuntime);
-        var instanceRepo = Substitute.For<IInstanceRepository>();
-        instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
-        sessionRepo.InsertAsync(Arg.Any<Session>())
-            .Returns(callInfo =>
-            {
-                persistedChildSession = callInfo.Arg<Session>();
-                return Task.CompletedTask;
-            });
-        var projectRepo = Substitute.For<IProjectRepository>();
-        projectRepo.ListAsync().Returns(new List<Project>());
-        var callbackRepo = Substitute.For<ISessionCallbackRepository>();
-        var workspaceRepo = Substitute.For<IWorkspaceRepository>();
-        var analyticsCollector = Substitute.For<IAnalyticsCollector>();
-        var sessionSourceUsageRepo = Substitute.For<ISessionSourceUsageRepository>();
-        var credentialStore = Substitute.For<ICredentialStore>();
-        credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
-        harnessRuntime.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts())));
+        sessionRepo.GetByHarnessIdBehavior = _ => Task.FromResult(persistedChildSession);
 
-        delegationRepo.GetByParentToolCallIdAsync("fleet-delegation-1", "tool-1")
-            .Returns(
-                new Delegation
-                {
-                    Id = "del-1",
-                    ParentSessionId = "fleet-delegation-1",
-                    ParentToolCallId = "tool-1",
-                    Title = "thread",
-                    Status = "pending",
-                    CreatedAt = DateTime.UtcNow.ToString("O"),
-                    UpdatedAt = DateTime.UtcNow.ToString("O")
-                });
+        delegationRepo.Seed(new Delegation
+        {
+            Id = "del-1",
+            ParentSessionId = "fleet-delegation-1",
+            ParentToolCallId = "tool-1",
+            Title = "thread",
+            Status = "pending",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UpdatedAt = DateTime.UtcNow.ToString("O")
+        });
 
-        var services = new ServiceCollection();
-        services.AddSingleton(messageRepo);
-        services.AddSingleton(delegationRepo);
-        services.AddSingleton(eventBroadcaster);
-        services.AddSingleton(sessionRepo);
-        services.AddSingleton(instanceRepo);
-        services.AddSingleton(projectRepo);
-        services.AddSingleton(callbackRepo);
-        services.AddSingleton(workspaceRepo);
-        services.AddSingleton(sessionSourceUsageRepo);
-        services.AddSingleton<IHarnessRegistry>(harnessRegistry);
-        services.AddSingleton(analyticsCollector);
-        services.AddSingleton(new InstanceTracker());
         var userContext = new TestUserContext("user-1");
         var options = new FleetOptions();
+
+        var builder = new SessionOrchestratorBuilder()
+            .WithUserContext(userContext)
+            .WithOptions(options);
+
+        var runtime = builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = true });
+        runtime.PrepareRuntimeBehavior = (_, _) =>
+            Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts()));
+        var childHarnessInstance = new FakeHarnessSession("inst-child") { HarnessType = "opencode", Status = HarnessSessionStatus.Running };
+        runtime.ResumeBehavior = (_, _) => Task.FromResult<IHarnessSession>(childHarnessInstance);
+
+        builder.WorkspaceRootRepository.Seed(new WorkspaceRoot
+        {
+            Id = "root-1",
+            Path = Path.GetTempPath(),
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageRepository>(new InMemoryMessageRepository());
+        services.AddSingleton<IDelegationRepository>(delegationRepo);
+        services.AddSingleton<IEventBroadcaster>(eventBroadcaster);
+        services.AddSingleton<ISessionRepository>(sessionRepo);
+        services.AddSingleton<IInstanceRepository>(builder.InstanceRepository);
+        services.AddSingleton<IProjectRepository>(builder.ProjectRepository);
+        services.AddSingleton<ISessionCallbackRepository>(builder.SessionCallbackRepository);
+        services.AddSingleton<IWorkspaceRepository>(builder.WorkspaceRepository);
+        services.AddSingleton<ISessionSourceUsageRepository>(builder.SessionSourceUsageRepository);
+        services.AddSingleton<IHarnessRegistry>(builder.HarnessRegistry);
+        services.AddSingleton<IAnalyticsCollector>(builder.AnalyticsCollector);
+        services.AddSingleton(new InstanceTracker());
         services.AddSingleton<IUserContext>(userContext);
-        services.AddSingleton(new InstanceService(instanceRepo, sessionRepo, userContext));
+        services.AddSingleton(new InstanceService(builder.InstanceRepository, sessionRepo, userContext));
         services.AddSingleton(new DelegationService(delegationRepo, eventBroadcaster, userContext));
-        var workspaceRootRepo = Substitute.For<IWorkspaceRootRepository>();
-        workspaceRootRepo.ListAsync().Returns([
-            new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
-        ]);
-        var workspaceRootService = new WorkspaceRootService(workspaceRootRepo, userContext);
+        var workspaceRootService = new WorkspaceRootService(builder.WorkspaceRootRepository, userContext);
         services.AddSingleton(new SessionSourceResolutionService([
             new LocalDirectorySessionSourceProvider(workspaceRootService)
         ]));
         services.AddSingleton(new SessionOrchestrator(
-            new WorkspaceService(workspaceRepo, userContext, options, NullLogger<WorkspaceService>.Instance),
-            new InstanceService(instanceRepo, sessionRepo, userContext),
+            new WorkspaceService(builder.WorkspaceRepository, userContext, options, NullLogger<WorkspaceService>.Instance),
+            new InstanceService(builder.InstanceRepository, sessionRepo, userContext),
             new SessionSourceResolutionService([
                 new LocalDirectorySessionSourceProvider(workspaceRootService)
             ]),
-            harnessRegistry,
+            builder.HarnessRegistry,
             new InstanceTracker(),
             sessionRepo,
-            sessionSourceUsageRepo,
-            callbackRepo,
+            builder.SessionSourceUsageRepository,
+            builder.SessionCallbackRepository,
             delegationRepo,
-            projectRepo,
+            builder.ProjectRepository,
             eventBroadcaster,
-            analyticsCollector,
-            messageRepo,
+            builder.AnalyticsCollector,
+            new InMemoryMessageRepository(),
             new DelegationService(delegationRepo, eventBroadcaster, userContext),
-            credentialStore,
+            builder.CredentialStore,
             userContext,
             options,
             NullLogger<SessionOrchestrator>.Instance));
@@ -1447,17 +1365,11 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         await cts.CancelAsync();
         await consumeTask;
 
-        await delegationRepo.Received(1).UpdateChildSessionIdAsync(
-            "del-1",
-            Arg.Any<string>(),
-            Arg.Any<string>());
+        delegationRepo.UpdateChildSessionIdCalls.ShouldContain(c => c.Id == "del-1");
 
-        await eventBroadcaster.Received().BroadcastAsync(
-            "session:fleet-delegation-1",
-            "delegation.updated",
-            Arg.Any<object>(),
-            Arg.Any<string?>(),
-            Arg.Any<CancellationToken>());
+        eventBroadcaster.Broadcasts.ShouldContain(b =>
+            b.Topic == "session:fleet-delegation-1" &&
+            b.Type == "delegation.updated");
 
         await instance.DisposeAsync();
     }
@@ -1466,35 +1378,34 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     public async Task SubscribeAsync_RoutesEventsFromDelegatedChildOpenCodeSession()
     {
         var fleetSessionId = "fleet-parent";
-        var connection = Substitute.For<IDbConnection>();
-        var transaction = Substitute.For<IDbTransaction>();
-        connection.BeginTransaction().Returns(transaction);
+        var connectionFactory = new FakeDbConnectionFactory();
 
-        var messageRepo = Substitute.For<IMessageRepository>();
-        var delegationRepo = Substitute.For<IDelegationRepository>();
-        var eventBroadcaster = Substitute.For<IEventBroadcaster>();
-        var sessionRepo = Substitute.For<ISessionRepository>();
-        var outboxRepo = Substitute.For<IOutboxRepository>();
-        var outboxDispatcher = Substitute.For<IOutboxDispatcher>();
-        outboxRepo.EnqueueAsync(connection, transaction, Arg.Any<OutboxMessage>()).Returns(1L);
-        sessionRepo.GetByHarnessIdAsync("oc-child").Returns(new Session
+        var messageRepo = new InMemoryMessageRepository();
+        var delegationRepo = new InMemoryDelegationRepository();
+        var eventBroadcaster = new FakeEventBroadcaster();
+        var sessionRepo = new InMemorySessionRepository();
+        var outboxRepo = new InMemoryOutboxRepository();
+        var outboxDispatcher = new FakeOutboxDispatcher();
+
+        sessionRepo.Seed(new Session
         {
             Id = "fleet-child",
             ParentSessionId = "fleet-parent",
-            InstanceId = "inst-child"
+            InstanceId = "inst-child",
+            OpencodeSessionId = "oc-child"
         });
 
         var services = new ServiceCollection();
-        services.AddSingleton(messageRepo);
-        services.AddSingleton(delegationRepo);
-        services.AddSingleton(eventBroadcaster);
-        services.AddSingleton(sessionRepo);
-        services.AddSingleton<IDbConnectionFactory>(new StubConnectionFactory(connection));
-        services.AddSingleton(outboxRepo);
-        services.AddSingleton(outboxDispatcher);
+        services.AddSingleton<IMessageRepository>(messageRepo);
+        services.AddSingleton<IDelegationRepository>(delegationRepo);
+        services.AddSingleton<IEventBroadcaster>(eventBroadcaster);
+        services.AddSingleton<ISessionRepository>(sessionRepo);
+        services.AddSingleton<IDbConnectionFactory>(connectionFactory);
+        services.AddSingleton<IOutboxRepository>(outboxRepo);
+        services.AddSingleton<IOutboxDispatcher>(outboxDispatcher);
         services.AddSingleton<IUserContext>(new TestUserContext("user-1"));
         services.AddSingleton(new SessionActivityWriteService(
-            new StubConnectionFactory(connection),
+            connectionFactory,
             messageRepo,
             delegationRepo,
             sessionRepo,
@@ -1535,13 +1446,10 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var events = await consumeTask;
 
         events.ShouldBeEmpty();
-        await messageRepo.Received(1).UpsertAsync(
-            Arg.Any<IDbConnection>(),
-            Arg.Any<IDbTransaction?>(),
-            Arg.Is<PersistedMessage>(m =>
-                m.Id == "msg-child"
-                && m.SessionId == "fleet-child"
-                && m.PartsJson.Contains("child text")));
+        messageRepo.UpsertCalls.ShouldContain(m =>
+            m.Id == "msg-child"
+            && m.SessionId == "fleet-child"
+            && m.PartsJson.Contains("child text"));
 
         await instance.DisposeAsync();
     }

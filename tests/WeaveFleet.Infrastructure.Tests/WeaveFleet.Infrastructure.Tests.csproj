@@ -9,7 +9,6 @@
     <PackageReference Include="Dapper" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="NSubstitute" />
     <PackageReference Include="Shouldly" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
@@ -18,10 +17,12 @@
   <ItemGroup>
     <Using Include="Shouldly" />
     <Using Include="Xunit" />
+    <Using Include="WeaveFleet.Testing.Fakes" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\WeaveFleet.Infrastructure\WeaveFleet.Infrastructure.csproj" />
+    <ProjectReference Include="..\WeaveFleet.Testing\WeaveFleet.Testing.csproj" />
   </ItemGroup>
 
   <ItemGroup>

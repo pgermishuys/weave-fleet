@@ -40,7 +40,7 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
 
             var connFactory = _factory.KestrelServices.GetRequiredService<IDbConnectionFactory>();
             var tracker = _factory.KestrelServices.GetRequiredService<InstanceTracker>();
-            var userContext = new TestUserContext();
+            var userContext = new TestUserContext("local-user");
 
             var workspaceRepo = new DapperWorkspaceRepository(connFactory, userContext);
             await workspaceRepo.InsertAsync(new Workspace

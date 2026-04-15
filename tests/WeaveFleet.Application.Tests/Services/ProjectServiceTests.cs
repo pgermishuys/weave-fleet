@@ -1,15 +1,15 @@
-using NSubstitute;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
-using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Application.Tests.Services;
 
 public sealed class ProjectServiceTests
 {
-    private readonly IProjectRepository _projectRepo = Substitute.For<IProjectRepository>();
-    private readonly ISessionRepository _sessionRepo = Substitute.For<ISessionRepository>();
+    private readonly InMemoryProjectRepository _projectRepo = new();
+    private readonly InMemorySessionRepository _sessionRepo = new();
     private readonly IUserContext _userContext = new TestUserContext();
     private readonly ProjectService _sut;
 
@@ -21,11 +21,7 @@ public sealed class ProjectServiceTests
     [Fact]
     public async Task CreateProjectAsync_AssignsNextPosition()
     {
-        _projectRepo.ListAsync().Returns(new List<Project>
-        {
-            new() { Id = "p1", Name = "Existing", Position = 5, Type = "user", CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01" }
-        });
-        _projectRepo.InsertAsync(Arg.Any<Project>()).Returns(Task.CompletedTask);
+        _projectRepo.Seed(new Project { Id = "p1", Name = "Existing", Position = 5, Type = "user", CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01" });
 
         var result = await _sut.CreateProjectAsync("New Project");
 
@@ -33,14 +29,12 @@ public sealed class ProjectServiceTests
         result.Value.Name.ShouldBe("New Project");
         result.Value.Position.ShouldBe(6); // 5 + 1
         result.Value.UserId.ShouldBe(TestUserContext.DefaultUserId);
-        await _projectRepo.Received(1).InsertAsync(Arg.Is<Project>(p => p.Position == 6));
+        _projectRepo.All.Count(p => p.Position == 6).ShouldBe(1);
     }
 
     [Fact]
     public async Task GetProjectAsync_WhenNotFound_ReturnsFailure()
     {
-        _projectRepo.GetByIdAsync("missing").Returns((Project?)null);
-
         var result = await _sut.GetProjectAsync("missing");
 
         result.IsFailure.ShouldBeTrue();
@@ -50,7 +44,7 @@ public sealed class ProjectServiceTests
     [Fact]
     public async Task DeleteProjectAsync_ScratchProject_ReturnsValidationError()
     {
-        _projectRepo.GetByIdAsync("scratch-id").Returns(new Project
+        _projectRepo.Seed(new Project
         {
             Id = "scratch-id", Name = "Scratch", Type = "scratch", Position = 0,
             CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01"
@@ -65,7 +59,7 @@ public sealed class ProjectServiceTests
     [Fact]
     public async Task DeleteProjectAsync_InvalidMode_ReturnsValidationError()
     {
-        _projectRepo.GetByIdAsync("p1").Returns(new Project
+        _projectRepo.Seed(new Project
         {
             Id = "p1", Name = "P1", Type = "user", Position = 1,
             CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01"
@@ -80,46 +74,41 @@ public sealed class ProjectServiceTests
     [Fact]
     public async Task DeleteProjectAsync_DeleteSessions_DeletesSessionsThenProject()
     {
-        var project = new Project
+        _projectRepo.Seed(new Project
         {
             Id = "p1", Name = "P1", Type = "user", Position = 1,
             CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01"
-        };
-        _projectRepo.GetByIdAsync("p1").Returns(project);
-        _sessionRepo.DeleteByProjectIdAsync("p1").Returns(Task.CompletedTask);
-        _projectRepo.DeleteAsync("p1").Returns(Task.FromResult(true));
+        });
+        _sessionRepo.Seed(new Session { Id = "s1", ProjectId = "p1", Status = "active", CreatedAt = "2026-01-01" });
 
         var result = await _sut.DeleteProjectAsync("p1", "delete_sessions");
 
         result.IsSuccess.ShouldBeTrue();
-        await _sessionRepo.Received(1).DeleteByProjectIdAsync("p1");
-        await _projectRepo.Received(1).DeleteAsync("p1");
+        _sessionRepo.All.ShouldBeEmpty();
+        _projectRepo.All.ShouldBeEmpty();
     }
 
     [Fact]
     public async Task EnsureScratchProjectAsync_CreatesWhenAbsent()
     {
-        _projectRepo.GetScratchProjectAsync().Returns((Project?)null);
-        _projectRepo.InsertAsync(Arg.Any<Project>()).Returns(Task.CompletedTask);
-
         var result = await _sut.EnsureScratchProjectAsync();
 
         result.IsSuccess.ShouldBeTrue();
         result.Value.Type.ShouldBe("scratch");
         result.Value.UserId.ShouldBe(TestUserContext.DefaultUserId);
-        await _projectRepo.Received(1).InsertAsync(Arg.Is<Project>(p => p.Type == "scratch"));
+        _projectRepo.All.Count(p => p.Type == "scratch").ShouldBe(1);
     }
 
     [Fact]
     public async Task EnsureScratchProjectAsync_ReturnsExistingWhenPresent()
     {
         var existing = new Project { Id = "s1", Name = "Scratch", Type = "scratch", Position = 0, CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01" };
-        _projectRepo.GetScratchProjectAsync().Returns(existing);
+        _projectRepo.Seed(existing);
 
         var result = await _sut.EnsureScratchProjectAsync();
 
         result.IsSuccess.ShouldBeTrue();
         result.Value.Id.ShouldBe("s1");
-        await _projectRepo.DidNotReceive().InsertAsync(Arg.Any<Project>());
+        _projectRepo.All.Count.ShouldBe(1); // No new insert
     }
 }

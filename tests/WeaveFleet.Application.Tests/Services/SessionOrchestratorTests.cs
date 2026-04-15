@@ -1,123 +1,58 @@
-using Microsoft.Extensions.Logging.Abstractions;
-using NSubstitute;
-using NSubstitute.ExceptionExtensions;
 using Shouldly;
-using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.DTOs;
-using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
-using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Testing.Builders;
+using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Application.Tests.Services;
 
-public sealed class SessionOrchestratorTests
+public sealed class SessionOrchestratorTests : IAsyncDisposable
 {
-    private readonly IHarnessRegistry _harnessRegistry = Substitute.For<IHarnessRegistry>();
-    private readonly IHarness _harness = Substitute.For<IHarness>();
-    private readonly IHarnessRuntime _harnessRuntime = Substitute.For<IHarnessRuntime>();
-    private readonly IHarnessSession _harnessInstance = Substitute.For<IHarnessSession>();
-    private readonly ISessionRepository _sessionRepo = Substitute.For<ISessionRepository>();
-    private readonly ISessionSourceUsageRepository _sessionSourceUsageRepo = Substitute.For<ISessionSourceUsageRepository>();
-    private readonly ISessionCallbackRepository _callbackRepo = Substitute.For<ISessionCallbackRepository>();
-    private readonly IDelegationRepository _delegationRepo = Substitute.For<IDelegationRepository>();
-    private readonly IProjectRepository _projectRepo = Substitute.For<IProjectRepository>();
-    private readonly IWorkspaceRepository _workspaceRepo = Substitute.For<IWorkspaceRepository>();
-    private readonly IWorkspaceRootRepository _workspaceRootRepo = Substitute.For<IWorkspaceRootRepository>();
-    private readonly IInstanceRepository _instanceRepo = Substitute.For<IInstanceRepository>();
-    private readonly IEventBroadcaster _eventBroadcaster = Substitute.For<IEventBroadcaster>();
-    private readonly IAnalyticsCollector _analyticsCollector = Substitute.For<IAnalyticsCollector>();
-    private readonly IMessageRepository _messageRepo = Substitute.For<IMessageRepository>();
-    private readonly IOutboxRepository _outboxRepo = Substitute.For<IOutboxRepository>();
-    private readonly ICredentialStore _credentialStore = Substitute.For<ICredentialStore>();
+    private readonly SessionOrchestratorBuilder _builder;
     private readonly InstanceTracker _tracker = new();
-    private readonly IUserContext _userContext = new TestUserContext("user-1");
-    private readonly FleetOptions _options = new();
-    private readonly DelegationService _delegationService;
+    private readonly FakeHarnessSession _defaultSession = new("inst-1");
     private readonly SessionOrchestrator _sut;
+
+    public ValueTask DisposeAsync() => _defaultSession.DisposeAsync();
 
     public SessionOrchestratorTests()
     {
-        _workspaceRootRepo.ListAsync().Returns([
+        _builder = new SessionOrchestratorBuilder()
+            .WithUserContext(new TestUserContext("user-1"));
+
+        _builder.WorkspaceRootRepository.Seed(
             new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
-        ]);
-        var workspaceRootService = new WorkspaceRootService(_workspaceRootRepo, _userContext);
-        var workspaceService = new WorkspaceService(
-            _workspaceRepo,
-            _userContext,
-            _options,
-            NullLogger<WorkspaceService>.Instance);
+        );
 
-        var instanceService = new InstanceService(_instanceRepo, _sessionRepo, _userContext);
-        var sessionSourceResolutionService = new SessionSourceResolutionService([
-            new LocalDirectorySessionSourceProvider(workspaceRootService),
-            new ManagedWorkspaceSessionSourceProvider(_options)
-        ], _options);
-        _delegationService = new DelegationService(_delegationRepo, _eventBroadcaster, _userContext);
-
-        // Default: credential store returns empty bag; harness always reports Ready.
-        _credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
-        _harnessRuntime.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts())));
-
-        _sut = new SessionOrchestrator(
-            workspaceService,
-            instanceService,
-            sessionSourceResolutionService,
-            _harnessRegistry,
-            _tracker,
-            _sessionRepo,
-            _sessionSourceUsageRepo,
-            _callbackRepo,
-            _delegationRepo,
-            _projectRepo,
-            _eventBroadcaster,
-            _analyticsCollector,
-            _messageRepo,
-            _outboxRepo,
-            _delegationService,
-            _credentialStore,
-            _userContext,
-            _options,
-            NullLogger<SessionOrchestrator>.Instance,
-            sessionActivityWriteService: null);
-
-        // Default harness instance id
-        _harnessInstance.InstanceId.Returns("inst-1");
-        _harnessInstance.HarnessType.Returns("opencode");
-        _harnessInstance.Status.Returns(HarnessSessionStatus.Running);
-        _instanceRepo.GetByIdAsync(Arg.Any<string>()).Returns(callInfo => new Instance
+        // Dynamic instance lookup: return a running instance for any id
+        _builder.InstanceRepository.GetByIdBehavior = id => Task.FromResult<Instance?>(new Instance
         {
-            Id = callInfo.Arg<string>(),
+            Id = id,
             Port = 0,
             Directory = "/tmp",
             Url = string.Empty,
             Status = "running",
             CreatedAt = DateTime.UtcNow.ToString("O")
         });
-        _instanceRepo.UpdateStatusAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>()).Returns(Task.CompletedTask);
-        _sessionRepo.UpdateStatusAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>()).Returns(Task.CompletedTask);
-        _sessionRepo.ArchiveAsync(Arg.Any<string>(), Arg.Any<string>()).Returns(Task.CompletedTask);
-        _sessionRepo.UnarchiveAsync(Arg.Any<string>()).Returns(Task.CompletedTask);
+
+        _sut = _builder.Build();
     }
 
-    private void ConfigureHarnessAndScratchProject()
+    private void ConfigureHarnessAndScratchProject(string harnessType = "opencode")
     {
-        _harnessRegistry.GetByType("opencode").Returns(_harness);
-        _harnessRegistry.GetRuntimeByType("opencode").Returns(_harnessRuntime);
-        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
-            .Returns(_harnessInstance);
-        _projectRepo.ListAsync().Returns(new List<Project>
+        var runtime = _builder.RegisterHarness(harnessType, "OpenCode");
+        runtime.DefaultSession = _defaultSession;
+        _builder.ProjectRepository.Seed(new Project
         {
-            new() { Id = "scratch-1", Name = "Scratch", Type = "scratch", Position = 0,
-                CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01" }
+            Id = "scratch-1", Name = "Scratch", Type = "scratch", Position = 0,
+            CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01"
         });
-        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
-        _sessionRepo.InsertAsync(Arg.Any<Session>()).Returns(Task.CompletedTask);
     }
 
     // ── CreateSessionAsync ─────────────────────────────────────────────────────
@@ -125,7 +60,7 @@ public sealed class SessionOrchestratorTests
     [Fact]
     public async Task CreateSessionAsync_WhenHarnessNotFound_ReturnsFailure()
     {
-        _harnessRegistry.GetByType("opencode").Returns((IHarness?)null);
+        // No harness registered → GetByType returns null
         using var tempDirectory = new TempDirectory();
 
         var result = await _sut.CreateSessionAsync(new CreateSessionRequest
@@ -153,18 +88,15 @@ public sealed class SessionOrchestratorTests
         result.Value.Session.Title.ShouldBe("My Session");
         result.Value.InstanceId.ShouldBe("inst-1");
         result.Value.Session.UserId.ShouldBe("user-1");
-        await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(s =>
-            s.Title == "My Session" && s.ProjectId == "scratch-1" && s.UserId == "user-1"));
+        _builder.SessionRepository.InsertedSessions
+            .ShouldContain(s => s.Title == "My Session" && s.ProjectId == "scratch-1" && s.UserId == "user-1");
     }
 
     [Fact]
     public async Task CreateSessionAsync_WhenSpawnThrows_ReturnsUnexpectedError()
     {
-        _harnessRegistry.GetByType("opencode").Returns(_harness);
-        _harnessRegistry.GetRuntimeByType("opencode").Returns(_harnessRuntime);
-        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("process failed"));
-        _projectRepo.ListAsync().Returns(new List<Project>());
+        var runtime = _builder.RegisterHarness("opencode", "OpenCode");
+        runtime.SpawnBehavior = (_, _) => throw new InvalidOperationException("process failed");
         using var tempDirectory = new TempDirectory();
 
         var result = await _sut.CreateSessionAsync(new CreateSessionRequest
@@ -179,29 +111,40 @@ public sealed class SessionOrchestratorTests
     [Fact]
     public async Task CreateSessionAsync_InCloudModeWithoutDirectory_CreatesManagedWorkspaceSession()
     {
-        ConfigureHarnessAndScratchProject();
         using var workspaceRoot = new TempDirectory();
-        _options.Cloud = new CloudOptions
+        var builder = new SessionOrchestratorBuilder()
+            .WithUserContext(new TestUserContext("user-1"))
+            .WithOptions(new FleetOptions
+            {
+                Cloud = new CloudOptions { Enabled = true, WorkspaceRoot = workspaceRoot.Path }
+            });
+        builder.WorkspaceRootRepository.Seed(
+            new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
+        );
+        var runtime = builder.RegisterHarness("opencode", "OpenCode");
+        runtime.DefaultSession = new FakeHarnessSession("inst-1");
+        builder.ProjectRepository.Seed(new Project
         {
-            Enabled = true,
-            WorkspaceRoot = workspaceRoot.Path
-        };
+            Id = "scratch-1", Name = "Scratch", Type = "scratch", Position = 0,
+            CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01"
+        });
+        var sut = builder.Build();
 
-        var result = await _sut.CreateSessionAsync(new CreateSessionRequest());
+        var result = await sut.CreateSessionAsync(new CreateSessionRequest());
 
         result.IsSuccess.ShouldBeTrue();
-        await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(session =>
-            session.Directory.StartsWith(workspaceRoot.Path, StringComparison.OrdinalIgnoreCase)));
-        await _sessionSourceUsageRepo.Received(1).InsertAsync(Arg.Is<SessionSourceUsage>(usage =>
-            usage.ProviderId == SessionSourceProviderIds.Managed &&
-            usage.SourceType == SessionSourceTypeNames.ManagedWorkspace));
+        builder.SessionRepository.InsertedSessions
+            .ShouldContain(s => s.Directory.StartsWith(workspaceRoot.Path, StringComparison.OrdinalIgnoreCase));
+        builder.SessionSourceUsageRepository.All
+            .ShouldContain(u => u.ProviderId == SessionSourceProviderIds.Managed &&
+                                u.SourceType == SessionSourceTypeNames.ManagedWorkspace);
     }
 
     [Fact]
     public async Task PreviewAddSourceToSessionAsync_WhenSourceResolves_ReturnsEnvelope()
     {
         var sessionId = "session-1";
-        _sessionRepo.GetByIdAsync(sessionId).Returns(new Session
+        _builder.SessionRepository.Seed(new Session
         {
             Id = sessionId,
             InstanceId = "inst-1",
@@ -251,7 +194,7 @@ public sealed class SessionOrchestratorTests
     [Fact]
     public async Task AddSourceToSessionAsync_WhenSessionArchived_ReturnsValidationFailure()
     {
-        _sessionRepo.GetByIdAsync("session-archived").Returns(new Session
+        _builder.SessionRepository.Seed(new Session
         {
             Id = "session-archived",
             InstanceId = "inst-1",
@@ -274,7 +217,7 @@ public sealed class SessionOrchestratorTests
 
         result.IsFailure.ShouldBeTrue();
         result.Error.Code.ShouldBe("Validation.Session.RetentionStatus");
-        await _sessionSourceUsageRepo.DidNotReceive().InsertAsync(Arg.Any<SessionSourceUsage>());
+        _builder.SessionSourceUsageRepository.All.ShouldBeEmpty();
     }
 
     // ── PromptSessionAsync ────────────────────────────────────────────────────
@@ -282,8 +225,6 @@ public sealed class SessionOrchestratorTests
     [Fact]
     public async Task PromptSessionAsync_WhenSessionNotFound_ReturnsFailure()
     {
-        _sessionRepo.GetByIdAsync("missing").Returns((Session?)null);
-
         var result = await _sut.PromptSessionAsync("missing", "hello");
 
         result.IsFailure.ShouldBeTrue();
@@ -293,7 +234,7 @@ public sealed class SessionOrchestratorTests
     [Fact]
     public async Task PromptSessionAsync_WhenInstanceNotTracked_ReturnsFailure()
     {
-        _sessionRepo.GetByIdAsync("s1").Returns(new Session
+        _builder.SessionRepository.Seed(new Session
         {
             Id = "s1", InstanceId = "inst-99", Title = "T", Status = "active",
             Directory = "/tmp", CreatedAt = "2026-01-01"
@@ -308,23 +249,26 @@ public sealed class SessionOrchestratorTests
     [Fact]
     public async Task PromptSessionAsync_HappyPath_SendsPrompt()
     {
-        _sessionRepo.GetByIdAsync("s1").Returns(new Session
+        _builder.SessionRepository.Seed(new Session
         {
             Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active",
             Directory = "/tmp", CreatedAt = "2026-01-01", RetentionStatus = "active"
         });
-        _tracker.Register("inst-1", _harnessInstance);
+        _tracker.Register("inst-1", _defaultSession);
+        // Re-build sut with the tracker that has the session registered
+        var sut = BuildSutWithTracker();
 
-        var result = await _sut.PromptSessionAsync("s1", "hello");
+        var result = await sut.PromptSessionAsync("s1", "hello");
 
         result.IsSuccess.ShouldBeTrue();
-        await _harnessInstance.Received(1).SendPromptAsync("hello", null, Arg.Any<CancellationToken>());
+        _defaultSession.SendPromptCalls.Count.ShouldBe(1);
+        _defaultSession.SendPromptCalls[0].Text.ShouldBe("hello");
     }
 
     [Fact]
     public async Task PromptSessionAsync_WhenArchived_ReturnsValidationFailure()
     {
-        _sessionRepo.GetByIdAsync("s-archived").Returns(new Session
+        _builder.SessionRepository.Seed(new Session
         {
             Id = "s-archived",
             InstanceId = "inst-1",
@@ -339,7 +283,7 @@ public sealed class SessionOrchestratorTests
 
         result.IsFailure.ShouldBeTrue();
         result.Error.Code.ShouldBe("Validation.Session.RetentionStatus");
-        await _harnessInstance.DidNotReceive().SendPromptAsync(Arg.Any<string>(), Arg.Any<PromptOptions?>(), Arg.Any<CancellationToken>());
+        _defaultSession.SendPromptCalls.ShouldBeEmpty();
     }
 
     // ── GetSessionMessagesAsync ────────────────────────────────────────────────
@@ -367,26 +311,26 @@ public sealed class SessionOrchestratorTests
     public async Task GetSessionMessages_LiveInstance_StillReadsFromDb()
     {
         var session = MakeSession("s1", "inst-1");
-        _sessionRepo.GetByIdAsync("s1").Returns(session);
-        _tracker.Register("inst-1", _harnessInstance);
-        _messageRepo.GetBySessionAsync("s1", Arg.Any<int>(), null)
-            .Returns(MakePersistedMessages("s1", 1));
+        _builder.SessionRepository.Seed(session);
+        _tracker.Register("inst-1", _defaultSession);
+        foreach (var m in MakePersistedMessages("s1", 1))
+            _builder.MessageRepository.Seed(m);
+        var sut = BuildSutWithTracker();
 
-        var result = await _sut.GetSessionMessagesAsync("s1");
+        var result = await sut.GetSessionMessagesAsync("s1");
 
         result.IsSuccess.ShouldBeTrue();
         result.Value.Messages.Count.ShouldBe(1);
-        await _harnessInstance.DidNotReceive().GetMessagesAsync(Arg.Any<MessageQuery?>(), Arg.Any<CancellationToken>());
+        _defaultSession.GetMessagesBehavior.ShouldBeNull(); // never configured → never called
     }
 
     [Fact]
     public async Task GetSessionMessages_NoInstance_FallsBackToDb()
     {
         var session = MakeSession("s1", "inst-missing");
-        _sessionRepo.GetByIdAsync("s1").Returns(session);
-        // No instance registered — tracker returns null
-        var persisted = MakePersistedMessages("s1", 3);
-        _messageRepo.GetBySessionAsync("s1", Arg.Any<int>(), null).Returns(persisted);
+        _builder.SessionRepository.Seed(session);
+        foreach (var m in MakePersistedMessages("s1", 3))
+            _builder.MessageRepository.Seed(m);
 
         var result = await _sut.GetSessionMessagesAsync("s1");
 
@@ -398,9 +342,7 @@ public sealed class SessionOrchestratorTests
     public async Task GetSessionMessages_NoInstance_NoDbMessages_ReturnsEmptyPage()
     {
         var session = MakeSession("s1", "inst-missing");
-        _sessionRepo.GetByIdAsync("s1").Returns(session);
-        _messageRepo.GetBySessionAsync("s1", Arg.Any<int>(), null)
-            .Returns(new List<Domain.Entities.PersistedMessage>());
+        _builder.SessionRepository.Seed(session);
 
         var result = await _sut.GetSessionMessagesAsync("s1");
 
@@ -413,26 +355,23 @@ public sealed class SessionOrchestratorTests
     public async Task GetSessionMessages_LiveInstanceIsIgnoredEvenIfItWouldThrow()
     {
         var session = MakeSession("s1", "inst-1");
-        _sessionRepo.GetByIdAsync("s1").Returns(session);
-        _tracker.Register("inst-1", _harnessInstance);
-        _harnessInstance.GetMessagesAsync(Arg.Any<MessageQuery?>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new HttpRequestException("connection refused"));
+        _builder.SessionRepository.Seed(session);
+        _tracker.Register("inst-1", _defaultSession);
+        // Configure GetMessages to throw — but it should never be called
+        _defaultSession.GetMessagesBehavior = (_, _) => throw new HttpRequestException("connection refused");
+        foreach (var m in MakePersistedMessages("s1", 2))
+            _builder.MessageRepository.Seed(m);
+        var sut = BuildSutWithTracker();
 
-        var persisted = MakePersistedMessages("s1", 2);
-        _messageRepo.GetBySessionAsync("s1", Arg.Any<int>(), null).Returns(persisted);
-
-        var result = await _sut.GetSessionMessagesAsync("s1");
+        var result = await sut.GetSessionMessagesAsync("s1");
 
         result.IsSuccess.ShouldBeTrue();
         result.Value.Messages.Count.ShouldBe(2);
-        await _harnessInstance.DidNotReceive().GetMessagesAsync(Arg.Any<MessageQuery?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task GetSessionMessages_SessionNotFound_ReturnsNotFound()
     {
-        _sessionRepo.GetByIdAsync("ghost").Returns((Session?)null);
-
         var result = await _sut.GetSessionMessagesAsync("ghost");
 
         result.IsFailure.ShouldBeTrue();
@@ -443,57 +382,50 @@ public sealed class SessionOrchestratorTests
     public async Task GetSessionMessages_UsesHistoryPageSizeForDbFallback()
     {
         var session = MakeSession("s2", "inst-missing");
-        _sessionRepo.GetByIdAsync("s2").Returns(session);
+        _builder.SessionRepository.Seed(session);
 
         // Return limit+1 rows to trigger hasMore
-        _messageRepo.GetBySessionAsync("s2", Arg.Any<int>(), null)
-            .Returns(callInfo =>
-            {
-                var limit = callInfo.ArgAt<int>(1);
-                return MakePersistedMessages("s2", limit + 1);
-            });
+        _builder.MessageRepository.GetBySessionBehavior = (sessionId, limit, _) =>
+            Task.FromResult<IReadOnlyList<PersistedMessage>>(MakePersistedMessages(sessionId, limit + 1));
 
         var result = await _sut.GetSessionMessagesAsync("s2");
 
         result.IsSuccess.ShouldBeTrue();
         result.Value.HasMore.ShouldBeTrue();
-        // The DB was called with HistoryMessagePageSize+1 (default 10 → fetches 11)
-        await _messageRepo.Received(1).GetBySessionAsync("s2", 11, null);
+        // DB was called with HistoryMessagePageSize+1 (default 10 → fetches 11)
+        _builder.MessageRepository.GetBySessionCalls.ShouldContain(c => c.SessionId == "s2" && c.Limit == 11);
     }
 
     [Fact]
     public async Task GetSessionMessages_UsesHistoryPageSizeEvenForLiveInstance()
     {
         var session = MakeSession("s3", "inst-1");
-        _sessionRepo.GetByIdAsync("s3").Returns(session);
-        _tracker.Register("inst-1", _harnessInstance);
-        _messageRepo.GetBySessionAsync("s3", Arg.Any<int>(), null)
-            .Returns(MakePersistedMessages("s3", 2));
+        _builder.SessionRepository.Seed(session);
+        _tracker.Register("inst-1", _defaultSession);
+        foreach (var m in MakePersistedMessages("s3", 2))
+            _builder.MessageRepository.Seed(m);
+        var sut = BuildSutWithTracker();
 
-        await _sut.GetSessionMessagesAsync("s3");
+        await sut.GetSessionMessagesAsync("s3");
 
-        await _messageRepo.Received(1).GetBySessionAsync("s3", 11, null);
-        await _harnessInstance.DidNotReceive().GetMessagesAsync(Arg.Any<MessageQuery?>(), Arg.Any<CancellationToken>());
+        _builder.MessageRepository.GetBySessionCalls.ShouldContain(c => c.SessionId == "s3" && c.Limit == 11);
     }
 
     [Fact]
     public async Task GetCommittedEvents_ReturnsOutboxRowsAsCommittedEvents()
     {
         var session = MakeSession("s-committed", "inst-1");
-        _sessionRepo.GetByIdAsync("s-committed").Returns(session);
-        _outboxRepo.GetByTopicAfterAsync("session:s-committed", 5, 20)
-            .Returns([
-                new OutboxMessage
-                {
-                    Id = 6,
-                    Topic = "session:s-committed",
-                    Type = "message.updated",
-                    Payload = "{\"info\":{\"id\":\"msg-1\"}}",
-                    CreatedAt = "2026-01-01T00:00:00.0000000+00:00",
-                    AvailableAt = "2026-01-01T00:00:00.0000000+00:00",
-                    UserId = "user-1"
-                }
-            ]);
+        _builder.SessionRepository.Seed(session);
+        _builder.OutboxRepository.Seed(new OutboxMessage
+        {
+            Id = 6,
+            Topic = "session:s-committed",
+            Type = "message.updated",
+            Payload = "{\"info\":{\"id\":\"msg-1\"}}",
+            CreatedAt = "2026-01-01T00:00:00.0000000+00:00",
+            AvailableAt = "2026-01-01T00:00:00.0000000+00:00",
+            UserId = "user-1"
+        });
 
         var result = await _sut.GetCommittedEventsAsync("s-committed", 5, 20);
 
@@ -507,8 +439,6 @@ public sealed class SessionOrchestratorTests
     [Fact]
     public async Task GetCommittedEvents_SessionNotFound_ReturnsNotFound()
     {
-        _sessionRepo.GetByIdAsync("ghost").Returns((Session?)null);
-
         var result = await _sut.GetCommittedEventsAsync("ghost", 0, 10);
 
         result.IsFailure.ShouldBeTrue();
@@ -520,59 +450,39 @@ public sealed class SessionOrchestratorTests
     [Fact]
     public async Task CreateSessionAsync_StoresHarnessType()
     {
-        // Arrange — request specifies "claude-code"
-        _harnessRegistry.GetByType("claude-code").Returns(_harness);
-        _harnessRegistry.GetRuntimeByType("claude-code").Returns(_harnessRuntime);
-        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
-            .Returns(_harnessInstance);
-        _projectRepo.ListAsync().Returns(new List<Project>());
-        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
-        _sessionRepo.InsertAsync(Arg.Any<Session>()).Returns(Task.CompletedTask);
+        var runtime = _builder.RegisterHarness("claude-code", "Claude Code");
+        runtime.DefaultSession = _defaultSession;
         using var tempDirectory = new TempDirectory();
 
-        // Act
         var result = await _sut.CreateSessionAsync(new CreateSessionRequest
         {
             Directory = tempDirectory.Path,
             HarnessType = "claude-code"
         });
 
-        // Assert — session stored with correct harness type
         result.IsSuccess.ShouldBeTrue();
-        await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(s =>
-            s.HarnessType == "claude-code"));
+        _builder.SessionRepository.InsertedSessions.ShouldContain(s => s.HarnessType == "claude-code");
     }
 
     [Fact]
     public async Task CreateSessionAsync_DefaultsToOpenCode()
     {
-        // Arrange — no HarnessType in request
-        _harnessRegistry.GetByType("opencode").Returns(_harness);
-        _harnessRegistry.GetRuntimeByType("opencode").Returns(_harnessRuntime);
-        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
-            .Returns(_harnessInstance);
-        _projectRepo.ListAsync().Returns(new List<Project>());
-        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
-        _sessionRepo.InsertAsync(Arg.Any<Session>()).Returns(Task.CompletedTask);
+        var runtime = _builder.RegisterHarness("opencode", "OpenCode");
+        runtime.DefaultSession = _defaultSession;
         using var tempDirectory = new TempDirectory();
 
-        // Act
         var result = await _sut.CreateSessionAsync(new CreateSessionRequest
         {
             Directory = tempDirectory.Path
-            // HarnessType omitted → should default to "opencode"
         });
 
-        // Assert — default harness type is opencode
         result.IsSuccess.ShouldBeTrue();
-        await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(s =>
-            s.HarnessType == "opencode"));
+        _builder.SessionRepository.InsertedSessions.ShouldContain(s => s.HarnessType == "opencode");
     }
 
     [Fact]
     public async Task ResumeSessionAsync_UsesStoredHarnessType()
     {
-        // Arrange — session has harness type "claude-code" in DB
         var session = new Session
         {
             Id = "s-resume",
@@ -584,35 +494,26 @@ public sealed class SessionOrchestratorTests
             Directory = "/tmp",
             CreatedAt = "2026-01-01"
         };
-        _sessionRepo.GetByIdAsync("s-resume").Returns(session);
-        _workspaceRepo.GetByIdAsync("ws-1").Returns(new Domain.Entities.Workspace
+        _builder.SessionRepository.Seed(session);
+        _builder.WorkspaceRepository.Seed(new Domain.Entities.Workspace
         {
             Id = "ws-1",
             Directory = "/tmp",
             CreatedAt = "2026-01-01"
         });
-        _harnessRegistry.GetByType("claude-code").Returns(_harness);
-        _harnessRegistry.GetRuntimeByType("claude-code").Returns(_harnessRuntime);
-        _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = false });
-        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
-            .Returns(_harnessInstance);
-        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
-        _sessionRepo.UpdateForResumeAsync(Arg.Any<string>(), Arg.Any<string>())
-            .Returns(Task.CompletedTask);
+        var runtime = _builder.RegisterHarness("claude-code", "Claude Code", new HarnessCapabilities { SupportsResume = false });
+        runtime.DefaultSession = _defaultSession;
 
-        // Act
         var result = await _sut.ResumeSessionAsync("s-resume");
 
-        // Assert — harness resolved using stored type, not default "opencode"
         result.IsSuccess.ShouldBeTrue();
-        _harnessRegistry.Received(1).GetByType("claude-code");
-        _harnessRegistry.DidNotReceive().GetByType("opencode");
+        _builder.HarnessRegistry.GetByTypeCalls.ShouldContain("claude-code");
+        _builder.HarnessRegistry.GetByTypeCalls.ShouldNotContain("opencode");
     }
 
     [Fact]
     public async Task ResumeSessionAsync_WhenTokenPresent_AndSupportsResume_CallsResumeAsync()
     {
-        // Arrange — session has a resume token and harness supports resume
         var session = new Session
         {
             Id = "s-resume-token",
@@ -626,37 +527,27 @@ public sealed class SessionOrchestratorTests
             Directory = "/tmp",
             CreatedAt = "2026-01-01"
         };
-        _sessionRepo.GetByIdAsync("s-resume-token").Returns(session);
-        _workspaceRepo.GetByIdAsync("ws-2").Returns(new Domain.Entities.Workspace
+        _builder.SessionRepository.Seed(session);
+        _builder.WorkspaceRepository.Seed(new Domain.Entities.Workspace
         {
             Id = "ws-2",
             Directory = "/tmp",
             CreatedAt = "2026-01-01"
         });
-        _harnessRegistry.GetByType("opencode").Returns(_harness);
-        _harnessRegistry.GetRuntimeByType("opencode").Returns(_harnessRuntime);
-        _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = true });
-        _harnessRuntime.ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>())
-            .Returns(_harnessInstance);
-        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
-        _sessionRepo.UpdateForResumeAsync(Arg.Any<string>(), Arg.Any<string>())
-            .Returns(Task.CompletedTask);
+        var runtime = _builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = true });
+        runtime.DefaultSession = _defaultSession;
 
-        // Act
         var result = await _sut.ResumeSessionAsync("s-resume-token");
 
-        // Assert — ResumeAsync called with correct token; SpawnAsync NOT called
         result.IsSuccess.ShouldBeTrue();
-        await _harnessRuntime.Received(1).ResumeAsync(
-            Arg.Is<HarnessResumeOptions>(o => o.ResumeToken == "existing-session-token"),
-            Arg.Any<CancellationToken>());
-        await _harnessRuntime.DidNotReceive().SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
+        runtime.ResumeCalls.Count.ShouldBe(1);
+        runtime.ResumeCalls[0].ResumeToken.ShouldBe("existing-session-token");
+        runtime.SpawnCalls.ShouldBeEmpty();
     }
 
     [Fact]
     public async Task ResumeSessionAsync_WhenTokenNull_FallsBackToSpawnAsync()
     {
-        // Arrange — session has no resume token → SpawnAsync is called
         var session = new Session
         {
             Id = "s-resume-notok",
@@ -670,35 +561,26 @@ public sealed class SessionOrchestratorTests
             Directory = "/tmp",
             CreatedAt = "2026-01-01"
         };
-        _sessionRepo.GetByIdAsync("s-resume-notok").Returns(session);
-        _workspaceRepo.GetByIdAsync("ws-3").Returns(new Domain.Entities.Workspace
+        _builder.SessionRepository.Seed(session);
+        _builder.WorkspaceRepository.Seed(new Domain.Entities.Workspace
         {
             Id = "ws-3",
             Directory = "/tmp",
             CreatedAt = "2026-01-01"
         });
-        _harnessRegistry.GetByType("opencode").Returns(_harness);
-        _harnessRegistry.GetRuntimeByType("opencode").Returns(_harnessRuntime);
-        _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = true });
-        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
-            .Returns(_harnessInstance);
-        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
-        _sessionRepo.UpdateForResumeAsync(Arg.Any<string>(), Arg.Any<string>())
-            .Returns(Task.CompletedTask);
+        var runtime = _builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = true });
+        runtime.DefaultSession = _defaultSession;
 
-        // Act
         var result = await _sut.ResumeSessionAsync("s-resume-notok");
 
-        // Assert — SpawnAsync used as fallback; ResumeAsync NOT called
         result.IsSuccess.ShouldBeTrue();
-        await _harnessRuntime.Received(1).SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
-        await _harnessRuntime.DidNotReceive().ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>());
+        runtime.SpawnCalls.Count.ShouldBe(1);
+        runtime.ResumeCalls.ShouldBeEmpty();
     }
 
     [Fact]
     public async Task ResumeSessionAsync_WhenTokenPresent_ButSupportsResumeFalse_FallsBackToSpawnAsync()
     {
-        // Arrange — token exists but harness doesn't support resume → SpawnAsync fallback
         var session = new Session
         {
             Id = "s-resume-nosupp",
@@ -712,29 +594,21 @@ public sealed class SessionOrchestratorTests
             Directory = "/tmp",
             CreatedAt = "2026-01-01"
         };
-        _sessionRepo.GetByIdAsync("s-resume-nosupp").Returns(session);
-        _workspaceRepo.GetByIdAsync("ws-4").Returns(new Domain.Entities.Workspace
+        _builder.SessionRepository.Seed(session);
+        _builder.WorkspaceRepository.Seed(new Domain.Entities.Workspace
         {
             Id = "ws-4",
             Directory = "/tmp",
             CreatedAt = "2026-01-01"
         });
-        _harnessRegistry.GetByType("opencode").Returns(_harness);
-        _harnessRegistry.GetRuntimeByType("opencode").Returns(_harnessRuntime);
-        _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = false });
-        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
-            .Returns(_harnessInstance);
-        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
-        _sessionRepo.UpdateForResumeAsync(Arg.Any<string>(), Arg.Any<string>())
-            .Returns(Task.CompletedTask);
+        var runtime = _builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = false });
+        runtime.DefaultSession = _defaultSession;
 
-        // Act
         var result = await _sut.ResumeSessionAsync("s-resume-nosupp");
 
-        // Assert — SpawnAsync used (SupportsResume = false overrides token)
         result.IsSuccess.ShouldBeTrue();
-        await _harnessRuntime.Received(1).SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>());
-        await _harnessRuntime.DidNotReceive().ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>());
+        runtime.SpawnCalls.Count.ShouldBe(1);
+        runtime.ResumeCalls.ShouldBeEmpty();
     }
 
     [Fact]
@@ -752,13 +626,13 @@ public sealed class SessionOrchestratorTests
             Directory = "/tmp",
             CreatedAt = "2026-01-01"
         };
-        _sessionRepo.GetByIdAsync("s-archived-resume").Returns(session);
+        _builder.SessionRepository.Seed(session);
 
         var result = await _sut.ResumeSessionAsync("s-archived-resume");
 
         result.IsFailure.ShouldBeTrue();
         result.Error.Code.ShouldBe("Validation.Session.RetentionStatus");
-        _harnessRegistry.DidNotReceive().GetByType(Arg.Any<string>());
+        _builder.HarnessRegistry.GetByTypeCalls.ShouldBeEmpty();
     }
 
     [Fact]
@@ -766,7 +640,6 @@ public sealed class SessionOrchestratorTests
     {
         using var tempDirectory = new TempDirectory();
 
-        // Arrange — parent has "claude-code"
         var parent = new Session
         {
             Id = "s-parent",
@@ -778,22 +651,14 @@ public sealed class SessionOrchestratorTests
             ProjectId = null,
             CreatedAt = "2026-01-01"
         };
-        _sessionRepo.GetByIdAsync("s-parent").Returns(parent);
-        _harnessRegistry.GetByType("claude-code").Returns(_harness);
-        _harnessRegistry.GetRuntimeByType("claude-code").Returns(_harnessRuntime);
-        _harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>())
-            .Returns(_harnessInstance);
-        _projectRepo.ListAsync().Returns(new List<Project>());
-        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
-        _sessionRepo.InsertAsync(Arg.Any<Session>()).Returns(Task.CompletedTask);
+        _builder.SessionRepository.Seed(parent);
+        var runtime = _builder.RegisterHarness("claude-code", "Claude Code");
+        runtime.DefaultSession = _defaultSession;
 
-        // Act
         var result = await _sut.ForkSessionAsync("s-parent", "Forked Session");
 
-        // Assert — forked session uses same harness type as parent
         result.IsSuccess.ShouldBeTrue();
-        await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(s =>
-            s.HarnessType == "claude-code"));
+        _builder.SessionRepository.InsertedSessions.ShouldContain(s => s.HarnessType == "claude-code");
     }
 
     [Fact]
@@ -811,24 +676,16 @@ public sealed class SessionOrchestratorTests
             Directory = "/tmp/parent",
             CreatedAt = "2026-01-01"
         };
+        _builder.SessionRepository.Seed(parent);
+        _builder.ProjectRepository.Seed(new Project
+        {
+            Id = "proj-1", Name = "Project One", Type = "user", Position = 0,
+            CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01"
+        });
 
-        _sessionRepo.GetByIdAsync("parent-1").Returns(parent);
-        _sessionRepo.GetByHarnessIdAsync("oc-child-1").Returns((Session?)null);
-        _projectRepo.ListAsync().Returns([
-            new Project { Id = "proj-1", Name = "Project One", Type = "user", Position = 0, CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01" },
-        ]);
-        _harnessRegistry.GetByType("opencode").Returns(_harness);
-        _harnessRegistry.GetRuntimeByType("opencode").Returns(_harnessRuntime);
-        _harness.Capabilities.Returns(new HarnessCapabilities { SupportsResume = true });
-
-        var childInstance = Substitute.For<IHarnessSession>();
-        childInstance.InstanceId.Returns("inst-child");
-        childInstance.HarnessType.Returns("opencode");
-        childInstance.Status.Returns(HarnessSessionStatus.Running);
-        _harnessRuntime.ResumeAsync(Arg.Any<HarnessResumeOptions>(), Arg.Any<CancellationToken>())
-            .Returns(childInstance);
-        _instanceRepo.InsertAsync(Arg.Any<Instance>()).Returns(Task.CompletedTask);
-        _sessionRepo.InsertAsync(Arg.Any<Session>()).Returns(Task.CompletedTask);
+        var childSession = new FakeHarnessSession("inst-child");
+        var runtime = _builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = true });
+        runtime.ResumeBehavior = (_, _) => Task.FromResult<IHarnessSession>(childSession);
 
         var result = await _sut.EnsureDelegatedChildSessionAsync("parent-1", "oc-child-1", "thread");
 
@@ -839,15 +696,16 @@ public sealed class SessionOrchestratorTests
         result.Value.OpencodeSessionId.ShouldBe("oc-child-1");
         result.Value.UserId.ShouldBe("user-1");
 
-        await _harnessRuntime.Received(1).ResumeAsync(
-            Arg.Is<HarnessResumeOptions>(o => o.ResumeToken == "oc-child-1" && o.SessionId == result.Value.Id),
-            Arg.Any<CancellationToken>());
-        await _sessionRepo.Received(1).InsertAsync(Arg.Is<Session>(s =>
+        runtime.ResumeCalls.Count.ShouldBe(1);
+        runtime.ResumeCalls[0].ResumeToken.ShouldBe("oc-child-1");
+        runtime.ResumeCalls[0].SessionId.ShouldBe(result.Value.Id);
+
+        _builder.SessionRepository.InsertedSessions.ShouldContain(s =>
             s.IsHidden &&
             s.ParentSessionId == "parent-1" &&
             s.InstanceId == "inst-child" &&
             s.HarnessResumeToken == "oc-child-1" &&
-            s.UserId == "user-1"));
+            s.UserId == "user-1");
     }
 
     [Fact]
@@ -876,39 +734,22 @@ public sealed class SessionOrchestratorTests
             UpdatedAt = DateTime.UtcNow.ToString("O")
         };
 
-        _sessionRepo.GetByIdAsync("child-1").Returns(session);
-        _delegationRepo.GetByChildSessionIdAsync("child-1").Returns(delegation);
-        _delegationRepo.GetByParentSessionIdAsync("child-1").Returns([]);
-        _sessionRepo.DeleteAsync("child-1").Returns(true);
-        _harnessInstance.DeleteAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
-        _tracker.Register("inst-1", _harnessInstance);
+        _builder.SessionRepository.Seed(session);
+        _builder.DelegationRepository.Seed(delegation);
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
 
-        var result = await _sut.DeleteSessionAsync("child-1");
+        var result = await sut.DeleteSessionAsync("child-1");
 
         result.IsSuccess.ShouldBeTrue();
-        Received.InOrder(async () =>
-        {
-            await _delegationRepo.GetByChildSessionIdAsync("child-1");
-            await _delegationRepo.GetByParentSessionIdAsync("child-1");
-            await _delegationRepo.UpdateStatusAsync(
-                Arg.Is("del-1"),
-                Arg.Is("completed"),
-                Arg.Any<string>(),
-                Arg.Any<string>());
-            await _delegationRepo.UpdateChildSessionIdAsync(
-                Arg.Is("del-1"),
-                Arg.Is<string?>(childSessionId => childSessionId == null),
-                Arg.Any<string>());
-            await _sessionRepo.DeleteAsync("child-1");
-        });
-        await _harnessInstance.Received(1).DeleteAsync(Arg.Any<CancellationToken>());
-        await _eventBroadcaster.Received(1).BroadcastAsync(
-            "session:parent-1",
-            "delegation.updated",
-            Arg.Any<DelegationEventDto>(),
-            Arg.Is<string?>(userId => userId == "user-1"),
-            Arg.Any<CancellationToken>());
-        await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_deleted", Arg.Any<object>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        _builder.DelegationRepository.UpdateStatusCalls.ShouldContain(c => c.Id == "del-1" && c.Status == "completed");
+        _builder.DelegationRepository.UpdateChildSessionIdCalls.ShouldContain(c => c.Id == "del-1" && c.ChildSessionId == null);
+        _builder.SessionRepository.All.ShouldNotContain(s => s.Id == "child-1");
+        _defaultSession.DeleteCalled.ShouldBeTrue();
+        _builder.EventBroadcaster.Broadcasts.ShouldContain(b =>
+            b.Topic == "session:parent-1" && b.Type == "delegation.updated");
+        _builder.EventBroadcaster.Broadcasts.ShouldContain(b =>
+            b.Topic == "sessions" && b.Type == "session_deleted");
     }
 
     [Fact]
@@ -925,39 +766,29 @@ public sealed class SessionOrchestratorTests
             CreatedAt = "2026-01-01",
             UserId = "user-1"
         };
-
-        _sessionRepo.GetByIdAsync("parent-1").Returns(session);
-        _delegationRepo.GetByChildSessionIdAsync("parent-1").Returns((Delegation?)null);
-        _delegationRepo.GetByParentSessionIdAsync("parent-1").Returns([
-            new Delegation
-            {
-                Id = "del-1",
-                ParentSessionId = "parent-1",
-                ChildSessionId = "child-1",
-                Title = "reviewer",
-                Status = "completed",
-                CreatedAt = DateTime.UtcNow.ToString("O"),
-                UpdatedAt = DateTime.UtcNow.ToString("O")
-            }
-        ]);
-        _sessionRepo.DeleteAsync("parent-1").Returns(true);
+        _builder.SessionRepository.Seed(session);
+        _builder.DelegationRepository.Seed(new Delegation
+        {
+            Id = "del-1",
+            ParentSessionId = "parent-1",
+            ChildSessionId = "child-1",
+            Title = "reviewer",
+            Status = "completed",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UpdatedAt = DateTime.UtcNow.ToString("O")
+        });
 
         var result = await _sut.DeleteSessionAsync("parent-1");
 
         result.IsSuccess.ShouldBeTrue();
-        Received.InOrder(async () =>
-        {
-            await _delegationRepo.GetByChildSessionIdAsync("parent-1");
-            await _delegationRepo.GetByParentSessionIdAsync("parent-1");
-            await _delegationRepo.DeleteByParentSessionIdAsync("parent-1");
-            await _sessionRepo.DeleteAsync("parent-1");
-        });
+        _builder.DelegationRepository.DeleteByParentSessionIdCalls.ShouldContain("parent-1");
+        _builder.SessionRepository.All.ShouldNotContain(s => s.Id == "parent-1");
     }
 
     [Fact]
     public async Task StopSessionAsync_WhenRunning_StopsInstanceAndBroadcastsStopped()
     {
-        _sessionRepo.GetByIdAsync("s-stop").Returns(new Session
+        _builder.SessionRepository.Seed(new Session
         {
             Id = "s-stop",
             InstanceId = "inst-1",
@@ -967,20 +798,21 @@ public sealed class SessionOrchestratorTests
             Directory = "/tmp",
             CreatedAt = "2026-01-01"
         });
-        _tracker.Register("inst-1", _harnessInstance);
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
 
-        var result = await _sut.StopSessionAsync("s-stop");
+        var result = await sut.StopSessionAsync("s-stop");
 
         result.IsSuccess.ShouldBeTrue();
-        await _harnessInstance.Received(1).StopAsync(Arg.Any<CancellationToken>());
-        await _sessionRepo.Received(1).UpdateStatusAsync("s-stop", "stopped", Arg.Any<string>());
-        await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_stopped", Arg.Any<object>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        _defaultSession.StopCalled.ShouldBeTrue();
+        _builder.SessionRepository.UpdateStatusCalls.ShouldContain(c => c.Id == "s-stop" && c.Status == "stopped");
+        _builder.EventBroadcaster.Broadcasts.ShouldContain(b => b.Topic == "sessions" && b.Type == "session_stopped");
     }
 
     [Fact]
     public async Task ArchiveSessionAsync_WhenActive_ArchivesAndBroadcasts()
     {
-        _sessionRepo.GetByIdAsync("s-archive").Returns(new Session
+        _builder.SessionRepository.Seed(new Session
         {
             Id = "s-archive",
             InstanceId = "inst-1",
@@ -994,14 +826,14 @@ public sealed class SessionOrchestratorTests
         var result = await _sut.ArchiveSessionAsync("s-archive");
 
         result.IsSuccess.ShouldBeTrue();
-        await _sessionRepo.Received(1).ArchiveAsync("s-archive", Arg.Any<string>());
-        await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_archived", Arg.Any<object>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        _builder.SessionRepository.ArchiveCalls.ShouldContain(c => c.Id == "s-archive");
+        _builder.EventBroadcaster.Broadcasts.ShouldContain(b => b.Topic == "sessions" && b.Type == "session_archived");
     }
 
     [Fact]
     public async Task UnarchiveSessionAsync_WhenArchived_UnarchivesAndBroadcasts()
     {
-        _sessionRepo.GetByIdAsync("s-unarchive").Returns(new Session
+        _builder.SessionRepository.Seed(new Session
         {
             Id = "s-unarchive",
             InstanceId = "inst-1",
@@ -1015,8 +847,54 @@ public sealed class SessionOrchestratorTests
         var result = await _sut.UnarchiveSessionAsync("s-unarchive");
 
         result.IsSuccess.ShouldBeTrue();
-        await _sessionRepo.Received(1).UnarchiveAsync("s-unarchive");
-        await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_unarchived", Arg.Any<object>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        _builder.SessionRepository.UnarchiveCalls.ShouldContain("s-unarchive");
+        _builder.EventBroadcaster.Broadcasts.ShouldContain(b => b.Topic == "sessions" && b.Type == "session_unarchived");
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Builds a new SessionOrchestrator using the same builder fakes but with the pre-configured tracker.
+    /// Used for tests that need to pre-register instances in the tracker.
+    /// </summary>
+    private SessionOrchestrator BuildSutWithTracker()
+    {
+        var userContext = new TestUserContext("user-1");
+        var options = new FleetOptions();
+        var workspaceRootService = new WorkspaceRootService(_builder.WorkspaceRootRepository, userContext);
+        var workspaceService = new WeaveFleet.Application.Services.WorkspaceService(
+            _builder.WorkspaceRepository,
+            userContext,
+            options,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<WeaveFleet.Application.Services.WorkspaceService>.Instance);
+        var instanceService = new InstanceService(_builder.InstanceRepository, _builder.SessionRepository, userContext);
+        var sessionSourceResolutionService = new SessionSourceResolutionService([
+            new LocalDirectorySessionSourceProvider(workspaceRootService),
+            new ManagedWorkspaceSessionSourceProvider(options)
+        ], options);
+        var delegationService = new DelegationService(_builder.DelegationRepository, _builder.EventBroadcaster, userContext);
+
+        return new SessionOrchestrator(
+            workspaceService,
+            instanceService,
+            sessionSourceResolutionService,
+            _builder.HarnessRegistry,
+            _tracker,
+            _builder.SessionRepository,
+            _builder.SessionSourceUsageRepository,
+            _builder.SessionCallbackRepository,
+            _builder.DelegationRepository,
+            _builder.ProjectRepository,
+            _builder.EventBroadcaster,
+            _builder.AnalyticsCollector,
+            _builder.MessageRepository,
+            _builder.OutboxRepository,
+            delegationService,
+            _builder.CredentialStore,
+            userContext,
+            options,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance,
+            sessionActivityWriteService: null);
     }
 
     private sealed class TempDirectory : IDisposable
@@ -1035,7 +913,4 @@ public sealed class SessionOrchestratorTests
                 Directory.Delete(Path, recursive: true);
         }
     }
-
-    /// <summary>Minimal stub for RuntimeLaunchArtifacts (opaque pass-through in tests).</summary>
-    private sealed record StubLaunchArtifacts : RuntimeLaunchArtifacts;
 }

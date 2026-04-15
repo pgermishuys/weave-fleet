@@ -1,14 +1,13 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using NSubstitute;
 using Shouldly;
-using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
-using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Testing.Builders;
+using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Application.Tests.Services;
 
@@ -17,7 +16,7 @@ public sealed class MultiTenancyTests
     [Fact]
     public async Task CreateWorkspaceAsync_AssignsCurrentUserId()
     {
-        var workspaceRepository = Substitute.For<IWorkspaceRepository>();
+        var workspaceRepository = new InMemoryWorkspaceRepository();
         var userContext = new TestUserContext("owner-1");
         var service = new WorkspaceService(
             workspaceRepository,
@@ -31,60 +30,45 @@ public sealed class MultiTenancyTests
 
         result.IsSuccess.ShouldBeTrue();
         result.Value.UserId.ShouldBe("owner-1");
-        await workspaceRepository.Received(1).InsertAsync(Arg.Is<Workspace>(workspace =>
-            workspace.Directory == tempDirectory.Path &&
-            workspace.UserId == "owner-1"));
+        workspaceRepository.InsertedWorkspaces.ShouldContain(w =>
+            w.Directory == tempDirectory.Path &&
+            w.UserId == "owner-1");
     }
 
     [Fact]
     public async Task CreateSessionAsync_BroadcastsEventsToOwningUserAndPersistsOwner()
     {
-        var harnessRegistry = Substitute.For<IHarnessRegistry>();
-        var harness = Substitute.For<IHarness>();
-        var harnessRuntime = Substitute.For<IHarnessRuntime>();
-        var harnessInstance = Substitute.For<IHarnessSession>();
-        var sessionRepository = Substitute.For<ISessionRepository>();
-        var sessionSourceUsageRepository = Substitute.For<ISessionSourceUsageRepository>();
-        var sessionCallbackRepository = Substitute.For<ISessionCallbackRepository>();
-        var delegationRepository = Substitute.For<IDelegationRepository>();
-        var projectRepository = Substitute.For<IProjectRepository>();
-        var workspaceRepository = Substitute.For<IWorkspaceRepository>();
-        var workspaceRootRepository = Substitute.For<IWorkspaceRootRepository>();
-        var instanceRepository = Substitute.For<IInstanceRepository>();
-        var eventBroadcaster = Substitute.For<IEventBroadcaster>();
-        var analyticsCollector = Substitute.For<IAnalyticsCollector>();
-        var messageRepository = Substitute.For<IMessageRepository>();
-        var credentialStore = Substitute.For<ICredentialStore>();
         var userContext = new TestUserContext("owner-1");
+        var builder = new SessionOrchestratorBuilder()
+            .WithUserContext(userContext);
 
-        workspaceRootRepository.ListAsync().Returns([
-            new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
-        ]);
-
-        harnessRegistry.GetByType("opencode").Returns(harness);
-        harnessRegistry.GetRuntimeByType("opencode").Returns(harnessRuntime);
-        harnessInstance.InstanceId.Returns("inst-1");
-        harnessInstance.HarnessType.Returns("opencode");
-        harnessInstance.Status.Returns(HarnessSessionStatus.Running);
-        harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>()).Returns(harnessInstance);
-        harnessRuntime.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts())));
-        credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
-        projectRepository.ListAsync().Returns([
-            new Project
-            {
-                Id = "scratch-1",
-                Name = "Scratch",
-                Type = "scratch",
-                Position = 0,
-                CreatedAt = "2026-01-01",
-                UpdatedAt = "2026-01-01",
-                UserId = "owner-1"
-            }
-        ]);
-        instanceRepository.GetByIdAsync(Arg.Any<string>()).Returns(call => new Instance
+        builder.WorkspaceRootRepository.Seed(new WorkspaceRoot
         {
-            Id = call.Arg<string>(),
+            Id = "root-1",
+            Path = Path.GetTempPath(),
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        var runtime = builder.RegisterHarness("opencode", "OpenCode");
+        runtime.PrepareRuntimeBehavior = (_, _) =>
+            Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts()));
+        var session = new FakeHarnessSession("inst-1") { HarnessType = "opencode", Status = HarnessSessionStatus.Running };
+        runtime.SpawnBehavior = (_, _) => Task.FromResult<IHarnessSession>(session);
+
+        builder.ProjectRepository.Seed(new Project
+        {
+            Id = "scratch-1",
+            Name = "Scratch",
+            Type = "scratch",
+            Position = 0,
+            CreatedAt = "2026-01-01",
+            UpdatedAt = "2026-01-01",
+            UserId = "owner-1"
+        });
+
+        builder.InstanceRepository.GetByIdBehavior = id => Task.FromResult<Instance?>(new Instance
+        {
+            Id = id,
             Port = 0,
             Directory = "/tmp",
             Url = string.Empty,
@@ -93,33 +77,7 @@ public sealed class MultiTenancyTests
             UserId = "owner-1"
         });
 
-        var workspaceRootService = new WorkspaceRootService(workspaceRootRepository, userContext);
-        var options = new FleetOptions();
-        var workspaceService = new WorkspaceService(workspaceRepository, userContext, options, NullLogger<WorkspaceService>.Instance);
-        var instanceService = new InstanceService(instanceRepository, sessionRepository, userContext);
-        var sourceResolutionService = new SessionSourceResolutionService([
-            new LocalDirectorySessionSourceProvider(workspaceRootService)
-        ]);
-        var delegationService = new DelegationService(delegationRepository, eventBroadcaster, userContext);
-        var orchestrator = new SessionOrchestrator(
-            workspaceService,
-            instanceService,
-            sourceResolutionService,
-            harnessRegistry,
-            new InstanceTracker(),
-            sessionRepository,
-            sessionSourceUsageRepository,
-            sessionCallbackRepository,
-            delegationRepository,
-            projectRepository,
-            eventBroadcaster,
-            analyticsCollector,
-            messageRepository,
-            delegationService,
-            credentialStore,
-            userContext,
-            options,
-            NullLogger<SessionOrchestrator>.Instance);
+        var orchestrator = builder.Build();
 
         using var tempDirectory = new TempDirectory();
 
@@ -131,66 +89,49 @@ public sealed class MultiTenancyTests
 
         result.IsSuccess.ShouldBeTrue();
         result.Value.Session.UserId.ShouldBe("owner-1");
-        await sessionRepository.Received(1).InsertAsync(Arg.Is<Session>(session =>
-            session.Title == "Owned Session" &&
-            session.UserId == "owner-1"));
-        await eventBroadcaster.Received(1).BroadcastAsync(
-            "sessions",
-            "session_created",
-            Arg.Any<object>(),
-            "owner-1",
-            Arg.Any<CancellationToken>());
+        builder.SessionRepository.All.ShouldContain(s =>
+            s.Title == "Owned Session" &&
+            s.UserId == "owner-1");
+        builder.EventBroadcaster.Broadcasts.ShouldContain(b =>
+            b.Topic == "sessions" &&
+            b.Type == "session_created" &&
+            b.UserId == "owner-1");
     }
 
     [Fact]
     public async Task CreateSessionAsync_WhenCompletionCallbackTargetsDifferentUser_ReturnsUnauthorized()
     {
-        var harnessRegistry = Substitute.For<IHarnessRegistry>();
-        var harness = Substitute.For<IHarness>();
-        var harnessRuntime = Substitute.For<IHarnessRuntime>();
-        var harnessInstance = Substitute.For<IHarnessSession>();
-        var sessionRepository = Substitute.For<ISessionRepository>();
-        var sessionSourceUsageRepository = Substitute.For<ISessionSourceUsageRepository>();
-        var sessionCallbackRepository = Substitute.For<ISessionCallbackRepository>();
-        var delegationRepository = Substitute.For<IDelegationRepository>();
-        var projectRepository = Substitute.For<IProjectRepository>();
-        var workspaceRepository = Substitute.For<IWorkspaceRepository>();
-        var workspaceRootRepository = Substitute.For<IWorkspaceRootRepository>();
-        var instanceRepository = Substitute.For<IInstanceRepository>();
-        var eventBroadcaster = Substitute.For<IEventBroadcaster>();
-        var analyticsCollector = Substitute.For<IAnalyticsCollector>();
-        var messageRepository = Substitute.For<IMessageRepository>();
-        var credentialStore = Substitute.For<ICredentialStore>();
         var userContext = new TestUserContext("owner-1");
+        var builder = new SessionOrchestratorBuilder()
+            .WithUserContext(userContext);
 
-        workspaceRootRepository.ListAsync().Returns([
-            new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
-        ]);
-
-        harnessRegistry.GetByType("opencode").Returns(harness);
-        harnessRegistry.GetRuntimeByType("opencode").Returns(harnessRuntime);
-        harnessInstance.InstanceId.Returns("inst-1");
-        harnessInstance.HarnessType.Returns("opencode");
-        harnessInstance.Status.Returns(HarnessSessionStatus.Running);
-        harnessRuntime.SpawnAsync(Arg.Any<HarnessSpawnOptions>(), Arg.Any<CancellationToken>()).Returns(harnessInstance);
-        harnessRuntime.PrepareRuntimeAsync(Arg.Any<RuntimePreparationContext>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts())));
-        credentialStore.GetDecryptedCredentialsAsync(Arg.Any<string>()).Returns([]);
-        projectRepository.ListAsync().Returns([
-            new Project
-            {
-                Id = "scratch-1",
-                Name = "Scratch",
-                Type = "scratch",
-                Position = 0,
-                CreatedAt = "2026-01-01",
-                UpdatedAt = "2026-01-01",
-                UserId = "owner-1"
-            }
-        ]);
-        instanceRepository.GetByIdAsync(Arg.Any<string>()).Returns(call => new Instance
+        builder.WorkspaceRootRepository.Seed(new WorkspaceRoot
         {
-            Id = call.Arg<string>(),
+            Id = "root-1",
+            Path = Path.GetTempPath(),
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        var runtime = builder.RegisterHarness("opencode", "OpenCode");
+        runtime.PrepareRuntimeBehavior = (_, _) =>
+            Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubLaunchArtifacts()));
+        var session = new FakeHarnessSession("inst-1") { HarnessType = "opencode", Status = HarnessSessionStatus.Running };
+        runtime.SpawnBehavior = (_, _) => Task.FromResult<IHarnessSession>(session);
+
+        builder.ProjectRepository.Seed(new Project
+        {
+            Id = "scratch-1",
+            Name = "Scratch",
+            Type = "scratch",
+            Position = 0,
+            CreatedAt = "2026-01-01",
+            UpdatedAt = "2026-01-01",
+            UserId = "owner-1"
+        });
+
+        builder.InstanceRepository.GetByIdBehavior = id => Task.FromResult<Instance?>(new Instance
+        {
+            Id = id,
             Port = 0,
             Directory = "/tmp",
             Url = string.Empty,
@@ -198,7 +139,8 @@ public sealed class MultiTenancyTests
             CreatedAt = DateTime.UtcNow.ToString("O"),
             UserId = "owner-1"
         });
-        sessionRepository.GetByIdAsync("target-session").Returns(new Session
+
+        builder.SessionRepository.Seed(new Session
         {
             Id = "target-session",
             InstanceId = "inst-target",
@@ -210,33 +152,7 @@ public sealed class MultiTenancyTests
             UserId = "other-user"
         });
 
-        var workspaceRootService = new WorkspaceRootService(workspaceRootRepository, userContext);
-        var options = new FleetOptions();
-        var workspaceService = new WorkspaceService(workspaceRepository, userContext, options, NullLogger<WorkspaceService>.Instance);
-        var instanceService = new InstanceService(instanceRepository, sessionRepository, userContext);
-        var sourceResolutionService = new SessionSourceResolutionService([
-            new LocalDirectorySessionSourceProvider(workspaceRootService)
-        ]);
-        var delegationService = new DelegationService(delegationRepository, eventBroadcaster, userContext);
-        var orchestrator = new SessionOrchestrator(
-            workspaceService,
-            instanceService,
-            sourceResolutionService,
-            harnessRegistry,
-            new InstanceTracker(),
-            sessionRepository,
-            sessionSourceUsageRepository,
-            sessionCallbackRepository,
-            delegationRepository,
-            projectRepository,
-            eventBroadcaster,
-            analyticsCollector,
-            messageRepository,
-            delegationService,
-            credentialStore,
-            userContext,
-            options,
-            NullLogger<SessionOrchestrator>.Instance);
+        var orchestrator = builder.Build();
 
         using var tempDirectory = new TempDirectory();
 
@@ -249,7 +165,7 @@ public sealed class MultiTenancyTests
 
         result.IsFailure.ShouldBeTrue();
         result.Error.Code.ShouldBe("General.Unauthorized");
-        await sessionCallbackRepository.DidNotReceive().InsertAsync(Arg.Any<SessionCallback>());
+        builder.SessionCallbackRepository.All.ShouldBeEmpty();
     }
 
     private sealed class TempDirectory : IDisposable
@@ -271,4 +187,3 @@ public sealed class MultiTenancyTests
 
     private sealed record StubLaunchArtifacts : RuntimeLaunchArtifacts;
 }
-

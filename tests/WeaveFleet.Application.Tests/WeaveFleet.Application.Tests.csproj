@@ -7,7 +7,6 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="NSubstitute" />
     <PackageReference Include="Shouldly" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
@@ -15,10 +14,12 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="WeaveFleet.Testing.Fakes" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\WeaveFleet.Application\WeaveFleet.Application.csproj" />
+    <ProjectReference Include="..\WeaveFleet.Testing\WeaveFleet.Testing.csproj" />
   </ItemGroup>
 
 </Project>
