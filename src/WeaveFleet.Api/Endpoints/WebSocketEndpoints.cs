@@ -128,6 +128,42 @@ public static class WebSocketEndpoints
                     var responseBytes = Encoding.UTF8.GetBytes(response);
                     await webSocket.SendAsync(new ArraySegment<byte>(responseBytes),
                         WebSocketMessageType.Text, endOfMessage: true, cts.Token);
+
+                    // When subscribing to the "activity" topic, immediately send the current
+                    // activity state for all tracked sessions so page refresh shows correct status.
+                    if (newTopics.Contains("activity"))
+                    {
+                        var activityTracker = context.RequestServices.GetRequiredService<SessionActivityTracker>();
+                        foreach (var snapshot in activityTracker.GetAll().Values)
+                        {
+                            // Respect user scoping — only send snapshots owned by this subscriber
+                            if (userContext.UserId is not null
+                                && snapshot.UserId is not null
+                                && !string.Equals(snapshot.UserId, userContext.UserId, StringComparison.Ordinal))
+                            {
+                                continue;
+                            }
+
+                            var initialEvent = JsonSerializer.Serialize(new
+                            {
+                                type = "event",
+                                topic = "activity",
+                                data = new
+                                {
+                                    type = "activity_status",
+                                    sequenceNumber = (long?)null,
+                                    properties = new
+                                    {
+                                        sessionId = snapshot.FleetSessionId,
+                                        activityStatus = snapshot.ActivityStatus
+                                    }
+                                }
+                            });
+                            var initialBytes = Encoding.UTF8.GetBytes(initialEvent);
+                            await webSocket.SendAsync(new ArraySegment<byte>(initialBytes),
+                                WebSocketMessageType.Text, endOfMessage: true, cts.Token);
+                        }
+                    }
                 }
                 else if (messageType == "unsubscribe")
                 {
@@ -177,7 +213,8 @@ public static class WebSocketEndpoints
             {
                 bool inScope;
                 lock (subscribedTopics)
-                    inScope = subscribedTopics.Contains(evt.Topic);
+                    inScope = subscribedTopics.Contains(evt.Topic)
+                        || (evt.Topic == "sessions" && subscribedTopics.Contains("activity"));
 
                 if (!inScope)
                     continue;

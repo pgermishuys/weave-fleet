@@ -114,6 +114,10 @@ public static class DependencyInjection
         // InstanceTracker is singleton — holds live in-process handles across requests
         services.AddSingleton<InstanceTracker>();
 
+        // SessionActivityTracker is singleton — tracks ephemeral busy/idle state per session
+        // for initial-state snapshots on WebSocket subscribe (page refresh support).
+        services.AddSingleton<SessionActivityTracker>();
+
         // EventBroadcaster is singleton — pub/sub hub shared across all requests
         services.AddSingleton<IEventBroadcaster, InMemoryEventBroadcaster>();
         services.AddSingleton<InProcessOutboxDispatcher>();

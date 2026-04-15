@@ -122,6 +122,8 @@ describe("pruneStalePatches", () => {
 });
 
 describe("SessionsProvider", () => {
+  let streamEmit: (eventType: string, payload: unknown) => void;
+
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -152,6 +154,12 @@ describe("SessionsProvider", () => {
         listeners.get(eventType)?.forEach((callback) => callback(payload));
       },
     });
+    streamEmit = (eventType, payload) => {
+      const stream = mockUseActivityStream.mock.results[0]!.value as {
+        emit: (eventType: string, payload: unknown) => void;
+      };
+      stream.emit(eventType, payload);
+    };
   });
 
   it("includes retention filter defaults", () => {
@@ -186,5 +194,80 @@ describe("SessionsProvider", () => {
     });
 
     expect(result.current.sessions).toHaveLength(1);
+  });
+
+  it("patchesActivityStatusFromPropertiesFormat", async () => {
+    mockUseSessions.mockReturnValue({
+      sessions: [makeSession("sess-1", { activityStatus: "idle" })],
+      isLoading: false,
+      error: undefined,
+      refetch: vi.fn(),
+    });
+
+    const { result } = renderHook(() => useSessionsContext(), { wrapper });
+
+    await act(async () => {
+      streamEmit("activity_status", {
+        type: "activity_status",
+        properties: { sessionId: "sess-1", activityStatus: "busy" },
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.sessions[0]!.activityStatus).toBe("busy");
+    });
+  });
+
+  it("ignoresActivityStatusEventWithoutProperties", async () => {
+    mockUseSessions.mockReturnValue({
+      sessions: [makeSession("sess-1", { activityStatus: "idle" })],
+      isLoading: false,
+      error: undefined,
+      refetch: vi.fn(),
+    });
+
+    const { result } = renderHook(() => useSessionsContext(), { wrapper });
+
+    await act(async () => {
+      // Old format with "payload" field — should be ignored
+      streamEmit("activity_status", {
+        type: "activity_status",
+        payload: { sessionId: "sess-1", activityStatus: "busy" },
+      });
+    });
+
+    // Status should remain idle since "payload" field is no longer read
+    expect(result.current.sessions[0]!.activityStatus).toBe("idle");
+  });
+
+  it("patchesMultipleSessionsFromInitialStateEvents", async () => {
+    mockUseSessions.mockReturnValue({
+      sessions: [
+        makeSession("sess-1", { activityStatus: "idle" }),
+        makeSession("sess-2", { activityStatus: "idle" }),
+      ],
+      isLoading: false,
+      error: undefined,
+      refetch: vi.fn(),
+    });
+
+    const { result } = renderHook(() => useSessionsContext(), { wrapper });
+
+    await act(async () => {
+      // Simulate initial state snapshot events sent on WebSocket subscribe
+      streamEmit("activity_status", {
+        type: "activity_status",
+        properties: { sessionId: "sess-1", activityStatus: "busy" },
+      });
+      streamEmit("activity_status", {
+        type: "activity_status",
+        properties: { sessionId: "sess-2", activityStatus: "busy" },
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.sessions[0]!.activityStatus).toBe("busy");
+      expect(result.current.sessions[1]!.activityStatus).toBe("busy");
+    });
   });
 });

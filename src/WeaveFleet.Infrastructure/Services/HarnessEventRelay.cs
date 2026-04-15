@@ -27,6 +27,7 @@ public sealed class HarnessEventRelay : BackgroundService
 
     private readonly InstanceTracker _tracker;
     private readonly IEventBroadcaster _broadcaster;
+    private readonly SessionActivityTracker _activityTracker;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<HarnessEventRelay> _logger;
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _subscriptions = new();
@@ -54,11 +55,13 @@ public sealed class HarnessEventRelay : BackgroundService
     public HarnessEventRelay(
         InstanceTracker tracker,
         IEventBroadcaster broadcaster,
+        SessionActivityTracker activityTracker,
         IServiceScopeFactory scopeFactory,
         ILogger<HarnessEventRelay> logger)
     {
         _tracker = tracker;
         _broadcaster = broadcaster;
+        _activityTracker = activityTracker;
         _scopeFactory = scopeFactory;
         _logger = logger;
     }
@@ -164,6 +167,21 @@ public sealed class HarnessEventRelay : BackgroundService
                     ? evt.Payload.Value
                     : JsonSerializer.SerializeToElement(new { });
                 await _broadcaster.BroadcastAsync(targetTopic, evt.Type, payload, sessionUserId, ct).ConfigureAwait(false);
+
+                // Track activity status and broadcast on the global "sessions" topic so
+                // the sidebar activity stream receives it. This also populates the
+                // SessionActivityTracker for initial-state snapshots on WebSocket subscribe.
+                var activityStatus = ParseActivityStatus(evt.Type, evt.Payload);
+                if (activityStatus is not null)
+                {
+                    _activityTracker.Update(targetFleetSessionId, activityStatus, sessionUserId);
+                    await _broadcaster.BroadcastAsync(
+                        "sessions",
+                        "activity_status",
+                        new { sessionId = targetFleetSessionId, activityStatus },
+                        sessionUserId,
+                        ct).ConfigureAwait(false);
+                }
             }
         }
         catch (OperationCanceledException)
@@ -181,6 +199,38 @@ public sealed class HarnessEventRelay : BackgroundService
                 cts.Cancel();
                 cts.Dispose();
             }
+
+            // When the harness disconnects, clear the activity state and broadcast idle
+            // so the UI doesn't show a session stuck on "busy" after a crash or disconnect.
+            _activityTracker.Remove(fleetSessionId);
+            await _broadcaster.BroadcastAsync(
+                "sessions",
+                "activity_status",
+                new { sessionId = fleetSessionId, activityStatus = "idle" },
+                sessionUserId,
+                CancellationToken.None).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Parses the activity status string from a harness event.
+    /// Returns <c>"busy"</c>, <c>"idle"</c>, or <c>null</c> if the event is not an activity event.
+    /// </summary>
+    private static string? ParseActivityStatus(string eventType, JsonElement? payload)
+    {
+        if (eventType == "session.idle")
+            return "idle";
+
+        if (eventType == "session.status" && payload.HasValue)
+        {
+            // Payload shape: { "status": { "type": "busy" | "idle" | ... } }
+            if (payload.Value.TryGetProperty("status", out var statusProp)
+                && statusProp.TryGetProperty("type", out var typeProp))
+            {
+                return typeProp.GetString();
+            }
+        }
+
+        return null;
     }
 }

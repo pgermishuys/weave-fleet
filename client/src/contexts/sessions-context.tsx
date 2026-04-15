@@ -154,14 +154,14 @@ export function SessionsProvider({ children }: { children: React.ReactNode }) {
     function handleActivityStatus(payload: unknown) {
       const msg = payload as {
         type: string;
-        payload?: {
+        properties?: {
           sessionId: string;
           activityStatus: SessionActivityStatus;
         };
       };
-      if (!msg.payload) return;
+      if (!msg.properties) return;
       ssePatchesRef.current = new Map(ssePatchesRef.current);
-      ssePatchesRef.current.set(msg.payload.sessionId, msg.payload.activityStatus);
+      ssePatchesRef.current.set(msg.properties.sessionId, msg.properties.activityStatus);
       // rAF batching (from Plan 1 Task 5)
       if (rafRef.current === null) {
         rafRef.current = requestAnimationFrame(() => {
@@ -174,17 +174,17 @@ export function SessionsProvider({ children }: { children: React.ReactNode }) {
     function handleTokenUpdate(payload: unknown) {
       const msg = payload as {
         type: string;
-        payload?: {
+        properties?: {
           sessionId: string;
           totalTokens: number;
           totalCost: number;
         };
       };
-      if (!msg.payload) return;
+      if (!msg.properties) return;
       tokenPatchesRef.current = new Map(tokenPatchesRef.current);
-      tokenPatchesRef.current.set(msg.payload.sessionId, {
-        totalTokens: msg.payload.totalTokens,
-        totalCost: msg.payload.totalCost,
+      tokenPatchesRef.current.set(msg.properties.sessionId, {
+        totalTokens: msg.properties.totalTokens,
+        totalCost: msg.properties.totalCost,
       });
       // rAF batching
       if (rafRef.current === null) {
