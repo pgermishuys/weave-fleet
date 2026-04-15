@@ -119,6 +119,12 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
     }
   }, [open, refreshRepositories]);
 
+  useEffect(() => {
+    if (open && defaultDirectory) {
+      setDirectory(defaultDirectory);
+    }
+  }, [defaultDirectory, open, setDirectory]);
+
   const resolvedHarness = useMemo(() => {
     if (selectedHarness && harnesses.some((h) => h.type === selectedHarness)) {
       return selectedHarness;
@@ -207,7 +213,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
 
   const effectiveDirectory = isRepositorySource
     ? resolvedRepo?.path ?? ""
-    : (defaultDirectory || directory).trim();
+    : directory.trim();
 
   const effectiveSourceSelection = useMemo<SessionSourceSelection | undefined>(() => {
     if (isRepositorySource && resolvedRepo) {
@@ -226,7 +232,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
       };
     }
 
-    if (isDirectorySource && (defaultDirectory || directory).trim()) {
+    if (isDirectorySource && directory.trim()) {
       return {
         key: {
           providerId: "builtin.local",
@@ -235,7 +241,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
           contractVersion: 1,
         },
         input: {
-          directory: (defaultDirectory || directory).trim(),
+          directory: directory.trim(),
           isolationStrategy: "existing",
         },
       };
@@ -254,7 +260,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
     }
 
     return undefined;
-  }, [resolvedBranch, defaultDirectory, directory, isCloudMode, isDirectorySource, isManagedSource, isRepositorySource, repoStrategy, resolvedRepo]);
+  }, [resolvedBranch, directory, isCloudMode, isDirectorySource, isManagedSource, isRepositorySource, repoStrategy, resolvedRepo]);
 
   const canSubmit = Boolean((isCloudMode || effectiveDirectory) && selectedSource && effectiveSourceSelection) && !isLoading && !isAddingSource;
 
@@ -425,7 +431,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
 
           {isDirectorySource ? (
             <DirectorySourceForm
-              directory={defaultDirectory || directory}
+              directory={directory}
               isLoading={isLoading}
               onDirectoryChange={setDirectory}
             />
