@@ -9,6 +9,7 @@ import { GrepToolCard } from "./grep-tool-card";
 import { GlobToolCard } from "./glob-tool-card";
 import { WebFetchToolCard } from "./webfetch-tool-card";
 import { SkillToolCard } from "./skill-tool-card";
+import { QuestionToolCard } from "./question-tool-card";
 
 interface ToolCardRouterProps {
   part: AccumulatedPart & { type: "tool" };
@@ -40,6 +41,8 @@ export function ToolCardRouter({ part }: ToolCardRouterProps) {
       return <WebFetchToolCard part={part} />;
     case "skill":
       return <SkillToolCard part={part} />;
+    case "question":
+      return <QuestionToolCard part={part} />;
     default:
       return <CollapsibleToolCall part={part} />;
   }

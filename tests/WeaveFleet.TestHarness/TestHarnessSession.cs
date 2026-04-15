@@ -192,6 +192,11 @@ public sealed class TestHarnessSession : IHarnessSession
     /// <summary>
     /// Emits the scenario events into the channel with their configured delays.
     /// Transitions status: Starting → Running → (after events) → Idle.
+    /// Durable events for assistant messages are persisted via
+    /// <see cref="TryHandleDurableEventAsync"/> so tool parts (question, bash, etc.)
+    /// are available when the frontend fetches messages via the REST API.
+    /// User message echoes are skipped because <see cref="PersistUserPromptAsync"/>
+    /// already handles user message persistence.
     /// </summary>
     private async Task EmitEventsAsync(IReadOnlyList<ScenarioEvent> events, CancellationToken ct)
     {
@@ -205,6 +210,12 @@ public sealed class TestHarnessSession : IHarnessSession
                 if (scenarioEvent.Delay > TimeSpan.Zero)
                     await Task.Delay(scenarioEvent.Delay, ct).ConfigureAwait(false);
 
+                // Persist durable events for assistant messages so tool parts are
+                // available via REST. Skip user message echoes — those are already
+                // persisted by PersistUserPromptAsync.
+                if (IsDurableAssistantEvent(scenarioEvent.Event))
+                    await TryHandleDurableEventAsync(scenarioEvent.Event).ConfigureAwait(false);
+
                 await _channel.Writer.WriteAsync(scenarioEvent.Event, ct).ConfigureAwait(false);
             }
         }
@@ -217,6 +228,28 @@ public sealed class TestHarnessSession : IHarnessSession
         {
             _status = HarnessSessionStatus.Idle;
         }
+    }
+
+    /// <summary>
+    /// Returns true if the event is a durable event for an assistant message
+    /// (message.updated with role=assistant, or message.part.updated for an
+    /// assistant message). User message echoes return false.
+    /// </summary>
+    private static bool IsDurableAssistantEvent(HarnessEvent evt)
+    {
+        if (!evt.Payload.HasValue)
+            return false;
+
+        if (evt.Type == "message.updated")
+        {
+            if (!evt.Payload.Value.TryGetProperty("info", out var info))
+                return false;
+            if (!info.TryGetProperty("role", out var role))
+                return false;
+            return role.GetString() is "assistant";
+        }
+
+        return evt.Type is "message.part.updated";
     }
 
     private static List<ScenarioEvent> ApplyPromptText(IReadOnlyList<ScenarioEvent> events, string promptText)
@@ -413,11 +446,12 @@ public sealed class TestHarnessSession : IHarnessSession
             return false;
 
         var existingMessage = await messageRepo.GetByIdAsync(durableMessageId, _fleetSessionId).ConfigureAwait(false);
-        var text = part.TryGetProperty("text", out var textProp) ? textProp.GetString() ?? string.Empty : string.Empty;
-        var partsJson = System.Text.Json.JsonSerializer.Serialize(new object[]
-        {
-            new { type = "text", kind = 0, text }
-        });
+
+        // Serialize the part as-is from the event payload so tool parts retain their
+        // full state (tool name, callID, state with input/output). Previous code only
+        // extracted the "text" property, which lost tool data.
+        var partsJson = JsonSerializer.Serialize(new[] { part });
+
         var updated = existingMessage is null
             ? new PersistedMessage
             {

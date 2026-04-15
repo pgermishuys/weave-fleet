@@ -109,6 +109,71 @@
           ]
         }
       ]
+    },
+    {
+      "name": "question_tool_part_update_with_pending_state",
+      "session_id": "fleet-sess-abc",
+      "events": [
+        {
+          "type": "message.part.updated",
+          "properties": {
+            "sessionID": "fleet-sess-abc",
+            "part": {
+              "id": "question-1",
+              "sessionID": "fleet-sess-abc",
+              "messageID": "msg-3",
+              "type": "tool",
+              "tool": "question",
+              "callID": "call-q1",
+              "state": {
+                "status": "running",
+                "input": {
+                  "questions": [
+                    {
+                      "question": "How would you like to proceed?",
+                      "header": "Fix approach",
+                      "options": [
+                        { "label": "Option A", "description": "First approach" },
+                        { "label": "Option B", "description": "Second approach" }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ],
+      "expected_messages": [
+        {
+          "messageId": "msg-3",
+          "sessionId": "fleet-sess-abc",
+          "role": "assistant",
+          "parts": [
+            {
+              "partId": "question-1",
+              "type": "tool",
+              "tool": "question",
+              "callId": "call-q1",
+              "state": {
+                "status": "running",
+                "input": {
+                  "questions": [
+                    {
+                      "question": "How would you like to proceed?",
+                      "header": "Fix approach",
+                      "options": [
+                        { "label": "Option A", "description": "First approach" },
+                        { "label": "Option B", "description": "Second approach" }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }
