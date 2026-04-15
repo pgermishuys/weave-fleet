@@ -450,7 +450,7 @@ export function handleEvent(
     const info = properties?.info;
     if (!info?.id) return;
     setMessages((prev) => {
-      const next = mergeMessageUpdate(ensureMessage(prev, info), info);
+      const next = mergeMessageUpdate(ensureMessage(prev, info), { ...info, parts: properties?.parts });
       if (next.length > MAX_MESSAGES) {
         return next.slice(next.length - MAX_MESSAGES);
       }

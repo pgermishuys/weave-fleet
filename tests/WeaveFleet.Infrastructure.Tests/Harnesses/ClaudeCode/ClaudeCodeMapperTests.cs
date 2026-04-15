@@ -133,25 +133,6 @@ public sealed class ClaudeCodeMapperTests
     }
 
     // -----------------------------------------------------------------------
-    // ToUserMessage
-    // -----------------------------------------------------------------------
-
-    [Fact]
-    public void ToUserMessage_CreatesValidUserMessage()
-    {
-        var ts = DateTimeOffset.UtcNow;
-
-        var result = ClaudeCodeMapper.ToUserMessage("Fix the bug.", ts);
-
-        result.Role.ShouldBe("user");
-        result.Timestamp.ShouldBe(ts);
-        result.Id.ShouldStartWith("user-");
-        result.Parts.Count.ShouldBe(1);
-        var part = result.Parts[0].ShouldBeOfType<TextPart>();
-        part.Text.ShouldBe("Fix the bug.");
-    }
-
-    // -----------------------------------------------------------------------
     // ToFrontendEvents
     // -----------------------------------------------------------------------
 
@@ -250,6 +231,28 @@ public sealed class ClaudeCodeMapperTests
         toolPart.GetProperty("tool").GetString().ShouldBe("Edit");
         toolPart.GetProperty("callID").GetString().ShouldBe("toolu_1");
         toolPart.GetProperty("state").GetProperty("status").GetString().ShouldBe("running");
+    }
+
+    [Fact]
+    public void ToFrontendEvents_AssistantMessageWithToolResult_DoesNotEmitToolResultPartEvent()
+    {
+        var msg = new ClaudeCodeAssistantMessage
+        {
+            Message = new ClaudeCodeApiMessage
+            {
+                Id = "msg-tool-result-1",
+                Content =
+                [
+                    new ClaudeCodeTextBlock { Text = "Done" },
+                    new ClaudeCodeToolResultBlock { ToolUseId = "toolu_1", Content = "sensitive output", IsError = false },
+                ],
+            },
+        };
+
+        var events = ClaudeCodeMapper.ToFrontendEvents(msg, "fleet-sess-1");
+
+        events.Count.ShouldBe(2);
+        events.All(evt => evt.Payload?.ToString()?.Contains("sensitive output", StringComparison.Ordinal) != true).ShouldBeTrue();
     }
 
     [Fact]

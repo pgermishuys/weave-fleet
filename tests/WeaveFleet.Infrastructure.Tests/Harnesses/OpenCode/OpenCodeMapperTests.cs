@@ -155,6 +155,37 @@ public sealed class OpenCodeMapperTests
     }
 
     [Fact]
+    public void ToHarnessMessage_ToolPart_DoesNotPersistCompletedOutputBody()
+    {
+        var inputJson = JsonDocument.Parse("""{"command":"ls"}""").RootElement;
+        var outputJson = JsonDocument.Parse("""{"result":"file.txt"}""").RootElement;
+        var msg = new OpenCodeMessageWithParts
+        {
+            Info = new OpenCodeAssistantMessage
+            {
+                Id = "msg-tool-output-1",
+                SessionId = "sess-1",
+                Time = new OpenCodeMessageTime { Created = 0L },
+            },
+            Parts =
+            [
+                new OpenCodeToolPart
+                {
+                    CallId = "call-1",
+                    Tool = "bash",
+                    State = new OpenCodeToolCompleted { Input = inputJson, Output = outputJson },
+                },
+            ],
+        };
+
+        var result = OpenCodeMapper.ToHarnessMessage(msg);
+
+        var toolPart = result.Parts[0].ShouldBeOfType<ToolUsePart>();
+        toolPart.Arguments.GetProperty("command").GetString().ShouldBe("ls");
+        toolPart.Arguments.ToString().ShouldNotContain("file.txt");
+    }
+
+    [Fact]
     public void ToHarnessMessage_FilePart_MapsToFilePart()
     {
         var msg = new OpenCodeMessageWithParts

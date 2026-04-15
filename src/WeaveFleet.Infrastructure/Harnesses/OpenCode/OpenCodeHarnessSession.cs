@@ -130,6 +130,8 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     {
         await EnsureSessionAsync(ct).ConfigureAwait(false);
 
+        await PersistPromptAsync(text, options).ConfigureAwait(false);
+
         var parts = new List<OpenCodePromptPart>
         {
             new OpenCodePromptTextPart { Text = text },
@@ -187,6 +189,8 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     public async Task SendCommandAsync(CommandOptions options, CancellationToken ct)
     {
         await EnsureSessionAsync(ct).ConfigureAwait(false);
+
+        await PersistCommandAsync(options).ConfigureAwait(false);
 
         // OpenCode's CommandInput expects "model" as a plain string (e.g. "provider/model"),
         // unlike the prompt endpoint which accepts { providerID, modelID }.
@@ -278,6 +282,43 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 continue;
 
             yield return harnessEvent;
+        }
+    }
+
+    private async Task PersistCommandAsync(CommandOptions options)
+    {
+        try
+        {
+            using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
+            using var scope = _scopeFactory.CreateScope();
+            var sessionActivityWriteService = scope.ServiceProvider.GetRequiredService<SessionActivityWriteService>();
+            var commandMessage = MessagePersistenceService.CreateUserCommandMessage(options, DateTimeOffset.UtcNow);
+            var persisted = MessagePersistenceService.ToPersistedMessage(_fleetSessionId, commandMessage);
+            var createdAt = DateTimeOffset.UtcNow.ToString("O");
+
+            await sessionActivityWriteService.WriteAsync(
+                new SessionActivityWriteRequest
+                {
+                    MessagesToUpsert = [persisted],
+                    OutboxMessages =
+                    [
+                        new OutboxMessage
+                        {
+                            Topic = $"session:{_fleetSessionId}",
+                            Type = "message.updated",
+                            Payload = MessagePersistenceService.SerializePayload(
+                                MessagePersistenceService.BuildCommittedMessagePayload(persisted)),
+                            UserId = _ownerUserId,
+                            CreatedAt = createdAt,
+                            AvailableAt = createdAt,
+                        }
+                    ]
+                },
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            LogPersistFailed(_logger, _fleetSessionId, ex);
         }
     }
 
@@ -482,6 +523,43 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             using var scope = _scopeFactory.CreateScope();
             var repo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
             await repo.UpdateResumeTokenAsync(_fleetSessionId, token).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            LogPersistFailed(_logger, _fleetSessionId, ex);
+        }
+    }
+
+    private async Task PersistPromptAsync(string text, PromptOptions? options)
+    {
+        try
+        {
+            using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
+            using var scope = _scopeFactory.CreateScope();
+            var sessionActivityWriteService = scope.ServiceProvider.GetRequiredService<SessionActivityWriteService>();
+            var promptMessage = MessagePersistenceService.CreateUserPromptMessage(text, DateTimeOffset.UtcNow, options?.Agent);
+            var persisted = MessagePersistenceService.ToPersistedMessage(_fleetSessionId, promptMessage);
+            var createdAt = DateTimeOffset.UtcNow.ToString("O");
+
+            await sessionActivityWriteService.WriteAsync(
+                new SessionActivityWriteRequest
+                {
+                    MessagesToUpsert = [persisted],
+                    OutboxMessages =
+                    [
+                        new OutboxMessage
+                        {
+                            Topic = $"session:{_fleetSessionId}",
+                            Type = "message.updated",
+                            Payload = MessagePersistenceService.SerializePayload(
+                                MessagePersistenceService.BuildCommittedMessagePayload(persisted)),
+                            UserId = _ownerUserId,
+                            CreatedAt = createdAt,
+                            AvailableAt = createdAt,
+                        }
+                    ]
+                },
+                CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -697,8 +775,10 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             if (existing is null)
             {
                 // Create new skeleton message for this part
-                var partsJson = JsonSerializer.Serialize(
-                    new[] { fleetPart }, MessagePersistenceService.SerializerOptions);
+                var partsJson = fleetPart is ReasoningPart
+                    ? "[]"
+                    : JsonSerializer.Serialize(
+                        new[] { fleetPart }, MessagePersistenceService.SerializerOptions);
                 persisted = new PersistedMessage
                 {
                     Id = messageId,
@@ -786,23 +866,29 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         HarnessEvent evt,
         PersistedMessage persistedMessage)
     {
+        var durablePayload = evt.Type == "message.updated"
+            ? MessagePersistenceService.BuildCommittedMessagePayload(persistedMessage)
+            : MessagePersistenceService.SanitizeDurableEventPayload(evt.Type, evt.Payload);
+
         var createdAt = DateTimeOffset.UtcNow.ToString("O");
         await sessionActivityWriteService.WriteAsync(
             new SessionActivityWriteRequest
             {
                 MessagesToUpsert = [persistedMessage],
-                OutboxMessages =
-                [
-                    new OutboxMessage
-                    {
-                        Topic = $"session:{fleetSessionId}",
-                        Type = evt.Type,
-                        Payload = MessagePersistenceService.SerializePayload(evt.Payload!.Value),
-                        UserId = _ownerUserId,
-                        CreatedAt = createdAt,
-                        AvailableAt = createdAt
-                    }
-                ]
+                OutboxMessages = durablePayload.HasValue
+                    ?
+                    [
+                        new OutboxMessage
+                        {
+                            Topic = $"session:{fleetSessionId}",
+                            Type = evt.Type,
+                            Payload = MessagePersistenceService.SerializePayload(durablePayload.Value),
+                            UserId = _ownerUserId,
+                            CreatedAt = createdAt,
+                            AvailableAt = createdAt
+                        }
+                    ]
+                    : []
             },
             CancellationToken.None).ConfigureAwait(false);
     }

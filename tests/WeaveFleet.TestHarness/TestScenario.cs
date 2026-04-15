@@ -45,6 +45,11 @@ public sealed record ScenarioEvent
     public TimeSpan Delay { get; init; } = TimeSpan.Zero;
 }
 
+internal static class TestHarnessPromptTokens
+{
+    internal const string UserPromptPlaceholder = "_user_prompt_";
+}
+
 /// <summary>
 /// Fluent builder for <see cref="TestScenario"/>.
 /// </summary>
@@ -144,7 +149,7 @@ public sealed class TestScenarioBuilder
                 new { info = new { id = userMessageId, sessionID = sessionId, role = "user" } }),
                 responseDelay)
             .AddEvent(MakeEvent(sessionId, "message.part.updated",
-                new { sessionID = sessionId, part = new { id = userPartId, sessionID = sessionId, messageID = userMessageId, type = "text", text = "_user_prompt_" } }),
+                new { sessionID = sessionId, part = new { id = userPartId, sessionID = sessionId, messageID = userMessageId, type = "text", text = TestHarnessPromptTokens.UserPromptPlaceholder } }),
                 responseDelay)
             // Assistant response
             .AddEvent(MakeEvent(sessionId, "message.updated",
@@ -229,4 +234,3 @@ public sealed class PromptResponseBuilder
 
     internal IReadOnlyList<ScenarioEvent> Build() => _events.ToList();
 }
-

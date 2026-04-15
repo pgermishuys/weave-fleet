@@ -2,6 +2,7 @@ using System.Net;
 using System.Data;
 using System.Text;
 using System.Text.Json;
+using System.Net.Http.Headers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -40,7 +41,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     /// Builds persistence dependencies backed by a real ServiceCollection so that
     /// GetRequiredService&lt;T&gt;() resolves correctly without NSubstitute IServiceProvider quirks.
     /// </summary>
-    private static (IServiceScopeFactory ScopeFactory, IMessageRepository MessageRepo, IDelegationRepository DelegationRepo, IEventBroadcaster EventBroadcaster)
+    private static (IServiceScopeFactory ScopeFactory, IMessageRepository MessageRepo, IDelegationRepository DelegationRepo, IEventBroadcaster EventBroadcaster, List<OutboxMessage> OutboxMessages)
         BuildPersistenceDependencies()
     {
         var messageRepo = Substitute.For<IMessageRepository>();
@@ -49,10 +50,15 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var sessionRepo = Substitute.For<ISessionRepository>();
         var outboxRepo = Substitute.For<IOutboxRepository>();
         var outboxDispatcher = Substitute.For<IOutboxDispatcher>();
+        var outboxMessages = new List<OutboxMessage>();
         var connection = Substitute.For<IDbConnection>();
         var transaction = Substitute.For<IDbTransaction>();
         connection.BeginTransaction().Returns(transaction);
-        outboxRepo.EnqueueAsync(connection, transaction, Arg.Any<OutboxMessage>()).Returns(1L);
+        outboxRepo.EnqueueAsync(connection, transaction, Arg.Any<OutboxMessage>()).Returns(callInfo =>
+        {
+            outboxMessages.Add(callInfo.ArgAt<OutboxMessage>(2));
+            return 1L;
+        });
         var userContext = new TestUserContext("user-1");
         var delegationService = new DelegationService(delegationRepo, eventBroadcaster, userContext);
         var connectionFactory = new StubConnectionFactory(connection);
@@ -78,7 +84,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var rootProvider = services.BuildServiceProvider();
         var scopeFactory = rootProvider.GetRequiredService<IServiceScopeFactory>();
 
-        return (scopeFactory, messageRepo, delegationRepo, eventBroadcaster);
+        return (scopeFactory, messageRepo, delegationRepo, eventBroadcaster, outboxMessages);
     }
 
     /// <summary>
@@ -150,6 +156,23 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
                     sessionID = sessionId,
                     messageID = messageId,
                     type = "text",
+                    text
+                }
+            }
+        });
+
+    private static string BuildReasoningPartUpdatedSseLine(string messageId, string sessionId, string partId, string text) =>
+        "data: " + JsonSerializer.Serialize(new
+        {
+            type = "message.part.updated",
+            properties = new
+            {
+                part = new
+                {
+                    id = partId,
+                    sessionID = sessionId,
+                    messageID = messageId,
+                    type = "reasoning",
                     text
                 }
             }
@@ -240,7 +263,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             IEnumerable<string> sseLines,
             Action<IMessageRepository>? configureRepo = null)
     {
-        var (scopeFactory, messageRepo, _, _) = BuildPersistenceDependencies();
+        var (scopeFactory, messageRepo, _, _, _) = BuildPersistenceDependencies();
         configureRepo?.Invoke(messageRepo);
 
         // Build the SSE response body — each line followed by CRLF, then a blank line
@@ -272,6 +295,35 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             ownerUserId: TestUserContext.DefaultUserId);
 
         return (instance, messageRepo);
+    }
+
+    private static async Task<(OpenCodeHarnessSession Instance, IMessageRepository MessageRepo, RecordingHttpMessageHandler Handler)>
+        CreateInstanceForPromptSendAsync(
+            string fleetSessionId,
+            Action<IMessageRepository>? configureRepo = null)
+    {
+        var (scopeFactory, messageRepo, _, _, _) = BuildPersistenceDependencies();
+        configureRepo?.Invoke(messageRepo);
+
+        var handler = new RecordingHttpMessageHandler();
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
+        var ocHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
+        var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
+
+        var instance = new OpenCodeHarnessSession(
+            instanceId: "test-instance",
+            fleetSessionId: fleetSessionId,
+            httpClient: ocHttpClient,
+            processManager: processManager,
+            portAllocator: new PortAllocator(10000, 10099),
+            allocatedPort: 0,
+            workingDirectory: "/tmp",
+            shutdownTimeout: TimeSpan.FromSeconds(1),
+            scopeFactory: scopeFactory,
+            logger: NullLogger<OpenCodeHarnessSession>.Instance,
+            ownerUserId: TestUserContext.DefaultUserId);
+
+        return (instance, messageRepo, handler);
     }
 
     // -----------------------------------------------------------------------
@@ -375,6 +427,140 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             m.SessionId == fleetSessionId && m.Role == "user"));
 
         await instance.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task SendPromptAsync_PersistsSyntheticUserMessageBeforeDispatch()
+    {
+        var fleetSessionId = "fleet-send-1";
+        var persistSignal = new TaskCompletionSource();
+        var (scopeFactory, messageRepo, _, _, outboxMessages) = BuildPersistenceDependencies();
+
+        messageRepo.UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>()).Returns(_ =>
+        {
+            persistSignal.TrySetResult();
+            return Task.CompletedTask;
+        });
+
+        var handler = new RecordingHttpMessageHandler();
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
+        var ocHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
+        var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
+
+        await using var instance = new OpenCodeHarnessSession(
+            instanceId: "test-instance",
+            fleetSessionId: fleetSessionId,
+            httpClient: ocHttpClient,
+            processManager: processManager,
+            portAllocator: new PortAllocator(10000, 10099),
+            allocatedPort: 0,
+            workingDirectory: "/tmp",
+            shutdownTimeout: TimeSpan.FromSeconds(1),
+            scopeFactory: scopeFactory,
+            logger: NullLogger<OpenCodeHarnessSession>.Instance,
+            ownerUserId: TestUserContext.DefaultUserId);
+
+        await instance.SendPromptAsync("Remember this prompt", new PromptOptions { Agent = "loom" }, CancellationToken.None);
+
+        await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await messageRepo.Received(1).UpsertAsync(
+            Arg.Any<IDbConnection>(),
+            Arg.Any<IDbTransaction?>(),
+            Arg.Is<PersistedMessage>(m =>
+                m.SessionId == fleetSessionId
+                && m.Role == "user"
+                && m.AgentName == "loom"
+                && m.PartsJson.Contains("Remember this prompt")));
+
+        handler.RequestPaths.ShouldContain(path => path.Contains("/session", StringComparison.Ordinal));
+        handler.RequestPaths.ShouldContain(path => path.Contains("/prompt_async", StringComparison.Ordinal));
+
+        var promptPayload = JsonSerializer.Deserialize<JsonElement>(outboxMessages.Last(message => message.Type == "message.updated").Payload);
+        promptPayload.GetProperty("parts")[0].GetProperty("text").GetString().ShouldBe("Remember this prompt");
+    }
+
+    [Fact]
+    public async Task SendPromptAsync_PersistenceFailure_DoesNotBlockPromptDispatch()
+    {
+        var fleetSessionId = "fleet-send-2";
+
+        var (instance, messageRepo, handler) = await CreateInstanceForPromptSendAsync(
+            fleetSessionId,
+            repo =>
+            {
+                repo.UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>())
+                    .Returns(_ => Task.FromException(new InvalidOperationException("db down")));
+            });
+
+        await instance.SendPromptAsync("Continue anyway", null, CancellationToken.None);
+
+        await messageRepo.Received(1).UpsertAsync(
+            Arg.Any<IDbConnection>(),
+            Arg.Any<IDbTransaction?>(),
+            Arg.Any<PersistedMessage>());
+        handler.RequestPaths.ShouldContain(path => path.Contains("/prompt_async", StringComparison.Ordinal));
+
+        await instance.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task SendCommandAsync_PersistsSyntheticUserMessageBeforeDispatch()
+    {
+        var fleetSessionId = "fleet-command-1";
+        var persistSignal = new TaskCompletionSource();
+        var (scopeFactory, messageRepo, _, _, outboxMessages) = BuildPersistenceDependencies();
+
+        messageRepo.UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>()).Returns(_ =>
+        {
+            persistSignal.TrySetResult();
+            return Task.CompletedTask;
+        });
+
+        var handler = new RecordingHttpMessageHandler();
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
+        var ocHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
+        var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
+
+        await using var instance = new OpenCodeHarnessSession(
+            instanceId: "test-instance",
+            fleetSessionId: fleetSessionId,
+            httpClient: ocHttpClient,
+            processManager: processManager,
+            portAllocator: new PortAllocator(10000, 10099),
+            allocatedPort: 0,
+            workingDirectory: "/tmp",
+            shutdownTimeout: TimeSpan.FromSeconds(1),
+            scopeFactory: scopeFactory,
+            logger: NullLogger<OpenCodeHarnessSession>.Instance,
+            ownerUserId: TestUserContext.DefaultUserId);
+
+        await instance.SendCommandAsync(
+            new CommandOptions
+            {
+                Command = "review",
+                Arguments = "line one\nline two",
+                Agent = "loom",
+                ModelId = "anthropic/claude"
+            },
+            CancellationToken.None);
+
+        await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await messageRepo.Received(1).UpsertAsync(
+            Arg.Any<IDbConnection>(),
+            Arg.Any<IDbTransaction?>(),
+            Arg.Is<PersistedMessage>(m =>
+                m.SessionId == fleetSessionId
+                && m.Role == "user"
+                && m.AgentName == "loom"
+                && m.PartsJson.Contains("/review line one line two")));
+
+        handler.RequestPaths.ShouldContain(path => path.Contains("/session", StringComparison.Ordinal));
+        handler.RequestPaths.ShouldContain(path => path.Contains("/command", StringComparison.Ordinal));
+
+        var commandPayload = JsonSerializer.Deserialize<JsonElement>(outboxMessages.Last(message => message.Type == "message.updated").Payload);
+        commandPayload.GetProperty("parts")[0].GetProperty("text").GetString().ShouldBe("/review line one line two");
     }
 
     [Fact]
@@ -722,6 +908,146 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         lastUpserted.PartsJson.ShouldContain("Execution work: no. Plan completion work: yes.");
 
         await instance.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_MessageUpdated_WritesCommittedSnapshotPayloadAfterBufferedDeltaMerge()
+    {
+        var fleetSessionId = "fleet-delta-outbox-1";
+        var messageId = "msg-delta-outbox-1";
+
+        PersistedMessage? lastUpserted = null;
+        var upsertSignal = new TaskCompletionSource();
+        var (scopeFactory, messageRepo, _, _, outboxMessages) = BuildPersistenceDependencies();
+
+        var skeletonLine = "data: " + JsonSerializer.Serialize(new
+        {
+            type = "message.created",
+            properties = new
+            {
+                info = new
+                {
+                    id = messageId,
+                    sessionId = "oc-session",
+                    role = "assistant",
+                    agent = "loom",
+                    time = new { created = 1700000000L }
+                },
+                parts = Array.Empty<object>()
+            }
+        });
+
+        var sseBody = new StringBuilder();
+        foreach (var line in new[]
+                 {
+                     skeletonLine,
+                     BuildPartDeltaSseLine(messageId, "oc-session", "part-1", "Merged "),
+                     BuildPartDeltaSseLine(messageId, "oc-session", "part-1", "response"),
+                     BuildMessageUpdatedSseLine("assistant", messageId, "loom")
+                 })
+        {
+            sseBody.AppendLine(line);
+            sseBody.AppendLine();
+        }
+
+        messageRepo.GetByIdAsync(messageId, fleetSessionId)
+            .Returns(_ => Task.FromResult(lastUpserted));
+        messageRepo.UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>()).Returns(callInfo =>
+        {
+            lastUpserted = callInfo.ArgAt<PersistedMessage>(2);
+            upsertSignal.TrySetResult();
+            return Task.CompletedTask;
+        });
+
+        var handler = new FakeSseHttpMessageHandler(sseBody.ToString());
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
+        var ocHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
+        var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
+
+        await using var instance = new OpenCodeHarnessSession(
+            instanceId: "test-instance",
+            fleetSessionId: fleetSessionId,
+            httpClient: ocHttpClient,
+            processManager: processManager,
+            portAllocator: new PortAllocator(10000, 10099),
+            allocatedPort: 0,
+            workingDirectory: "/tmp",
+            shutdownTimeout: TimeSpan.FromSeconds(1),
+            scopeFactory: scopeFactory,
+            logger: NullLogger<OpenCodeHarnessSession>.Instance,
+            ownerUserId: TestUserContext.DefaultUserId);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token);
+
+        await upsertSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(300);
+        await cts.CancelAsync();
+        await consumeTask;
+
+        var committedMessageUpdate = outboxMessages.Last(message => message.Type == "message.updated");
+        var payload = JsonSerializer.Deserialize<JsonElement>(committedMessageUpdate.Payload);
+        payload.GetProperty("parts")[0].GetProperty("text").GetString().ShouldBe("Merged response");
+        outboxMessages.Count(message => message.Type == "message.part.delta").ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_MessagePartUpdated_ReasoningPart_DoesNotWriteDurableOutboxPayload()
+    {
+        var fleetSessionId = "fleet-reasoning-outbox-1";
+        var messageId = "msg-reasoning-1";
+        var persistSignal = new TaskCompletionSource();
+        var (scopeFactory, messageRepo, _, _, outboxMessages) = BuildPersistenceDependencies();
+
+        messageRepo.GetByIdAsync(messageId, fleetSessionId)
+            .Returns(Task.FromResult<PersistedMessage?>(null));
+        messageRepo.UpsertAsync(Arg.Any<IDbConnection>(), Arg.Any<IDbTransaction?>(), Arg.Any<PersistedMessage>()).Returns(_ =>
+        {
+            persistSignal.TrySetResult();
+            return Task.CompletedTask;
+        });
+
+        var sseBody = new StringBuilder();
+        sseBody.AppendLine(BuildReasoningPartUpdatedSseLine(messageId, "oc-session", "part-r1", "Hidden thought"));
+        sseBody.AppendLine();
+
+        var handler = new FakeSseHttpMessageHandler(sseBody.ToString());
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
+        var ocHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
+        var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
+
+        await using var instance = new OpenCodeHarnessSession(
+            instanceId: "test-instance",
+            fleetSessionId: fleetSessionId,
+            httpClient: ocHttpClient,
+            processManager: processManager,
+            portAllocator: new PortAllocator(10000, 10099),
+            allocatedPort: 0,
+            workingDirectory: "/tmp",
+            shutdownTimeout: TimeSpan.FromSeconds(1),
+            scopeFactory: scopeFactory,
+            logger: NullLogger<OpenCodeHarnessSession>.Instance,
+            ownerUserId: TestUserContext.DefaultUserId);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token);
+
+        await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(300);
+        await cts.CancelAsync();
+        await consumeTask;
+
+        await messageRepo.Received(1).UpsertAsync(
+            Arg.Any<IDbConnection>(),
+            Arg.Any<IDbTransaction?>(),
+            Arg.Is<PersistedMessage>(m =>
+                m.Id == messageId
+                && m.SessionId == fleetSessionId
+                && m.Role == "assistant"
+                && !m.PartsJson.Contains("Hidden thought", StringComparison.Ordinal)));
+
+        outboxMessages.ShouldNotContain(message =>
+            message.Type == "message.part.updated" && message.Payload.Contains("Hidden thought", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1399,6 +1725,48 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             var content = new StringContent(sseBody, Encoding.UTF8, "text/event-stream");
             var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
             return Task.FromResult(response);
+        }
+    }
+
+    private sealed class RecordingHttpMessageHandler : HttpMessageHandler
+    {
+        public List<string> RequestPaths { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            RequestPaths.Add(request.RequestUri?.PathAndQuery ?? string.Empty);
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/session")
+            {
+                return Task.FromResult(CreateJsonResponse("""
+                    {"id":"oc-session-1","slug":"sess","directory":"/tmp","time":{"created":1,"updated":1}}
+                    """));
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.Contains("/prompt_async", StringComparison.Ordinal) == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent));
+            }
+
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath.Contains("/command", StringComparison.Ordinal) == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent));
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+        }
+
+        private static HttpResponseMessage CreateJsonResponse(string json)
+        {
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8)
+                {
+                    Headers = { ContentType = new MediaTypeHeaderValue("application/json") }
+                }
+            };
         }
     }
 

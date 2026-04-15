@@ -266,6 +266,72 @@ public sealed class MessagePersistenceTests : E2ETestBase,
     }
 
     [Fact]
+    public async Task DirectLoad_RendersPersistedPromptAndAssistantResponseFromDatabase()
+    {
+        await WithFailureCapture(async () =>
+        {
+            var now = DateTimeOffset.UtcNow;
+            var workspaceId = $"ws-db-history-{Guid.NewGuid():N}";
+            var instanceId = $"inst-db-history-{Guid.NewGuid():N}";
+            var sessionId = $"sess-db-history-{Guid.NewGuid():N}";
+
+            var connFactory = _factory.KestrelServices.GetRequiredService<IDbConnectionFactory>();
+            var userContext = new TestUserContext();
+
+            var workspaceRepo = new DapperWorkspaceRepository(connFactory, userContext);
+            await workspaceRepo.InsertAsync(new Workspace
+            {
+                Id = workspaceId,
+                Directory = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar),
+                IsolationStrategy = "existing",
+                CreatedAt = now.ToString("O"),
+                UserId = userContext.UserId,
+            });
+
+            var instanceRepo = new DapperInstanceRepository(connFactory, userContext);
+            await instanceRepo.InsertAsync(new Instance
+            {
+                Id = instanceId,
+                Port = 0,
+                Directory = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar),
+                Url = "http://127.0.0.1:0",
+                Status = "stopped",
+                CreatedAt = now.ToString("O"),
+                UserId = userContext.UserId,
+            });
+
+            var sessionRepo = new DapperSessionRepository(connFactory, userContext);
+            await sessionRepo.InsertAsync(new Session
+            {
+                Id = sessionId,
+                WorkspaceId = workspaceId,
+                InstanceId = instanceId,
+                OpencodeSessionId = $"oc-db-history-{Guid.NewGuid():N}",
+                Title = "DB history fidelity test",
+                Status = "stopped",
+                Directory = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar),
+                CreatedAt = now.ToString("O"),
+                StoppedAt = now.ToString("O"),
+                HarnessType = "opencode",
+                UserId = userContext.UserId,
+            });
+
+            var messageRepo = new DapperMessageRepository(connFactory, userContext);
+            await messageRepo.UpsertBatchAsync(
+            [
+                MakeMessage("msg-db-prompt-1", sessionId, "user", "Persisted prompt text survives reload", now, agentName: null),
+                MakeMessage("msg-db-answer-1", sessionId, "assistant", "Persisted assistant text survives reload", now.AddSeconds(1), agentName: "loom"),
+            ]);
+
+            var detail = new SessionDetailPage(Page);
+            await detail.GotoAsync(sessionId, instanceId);
+
+            await detail.WaitForMessageTextAsync("Persisted prompt text survives reload", 10_000);
+            await detail.WaitForMessageTextAsync("Persisted assistant text survives reload", 10_000);
+        });
+    }
+
+    [Fact]
     public async Task NavigationBackToSession_ReplaysMissedCommittedEvents_ViaSequenceGapFill()
     {
         await WithFailureCapture(async () =>

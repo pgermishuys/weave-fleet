@@ -70,7 +70,7 @@ public sealed class MessagePersistenceServiceTests
     }
 
     [Fact]
-    public void RoundTrip_ReasoningPart_PreservesContent()
+    public void RoundTrip_ReasoningPart_ExcludesContentFromDurableHistory()
     {
         var original = MakeMessage([
             new ReasoningPart("Let me think", "summary")
@@ -79,10 +79,7 @@ public sealed class MessagePersistenceServiceTests
         var persisted = MessagePersistenceService.ToPersistedMessage("session-1", original);
         var restored = MessagePersistenceService.ToHarnessMessage(persisted);
 
-        restored.Parts.Count.ShouldBe(1);
-        var reasoning = restored.Parts[0].ShouldBeOfType<ReasoningPart>();
-        reasoning.Text.ShouldBe("Let me think");
-        reasoning.Summary.ShouldBe("summary");
+        restored.Parts.ShouldBeEmpty();
     }
 
     [Fact]
@@ -121,6 +118,155 @@ public sealed class MessagePersistenceServiceTests
         persisted.Role.ShouldBe("user");
         persisted.Timestamp.ShouldBe(message.Timestamp.ToString("O"));
         string.IsNullOrEmpty(persisted.CreatedAt).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void CreateUserPromptMessage_PreservesPromptAndAgent()
+    {
+        var timestamp = new DateTimeOffset(2026, 4, 15, 6, 0, 0, TimeSpan.Zero);
+
+        var message = MessagePersistenceService.CreateUserPromptMessage("Hello from prompt", timestamp, "loom");
+
+        message.Role.ShouldBe("user");
+        message.Timestamp.ShouldBe(timestamp);
+        message.Agent.ShouldBe("loom");
+        message.Id.ShouldStartWith("user-");
+        message.Parts.Count.ShouldBe(1);
+        message.Parts[0].ShouldBeOfType<TextPart>().Text.ShouldBe("Hello from prompt");
+    }
+
+    [Fact]
+    public void CreateUserCommandMessage_PreservesSlashCommandAndSanitizesArguments()
+    {
+        var timestamp = new DateTimeOffset(2026, 4, 15, 7, 0, 0, TimeSpan.Zero);
+
+        var message = MessagePersistenceService.CreateUserCommandMessage(
+            new CommandOptions
+            {
+                Command = "review",
+                Arguments = "line one\nline two",
+                Agent = "loom"
+            },
+            timestamp);
+
+        message.Role.ShouldBe("user");
+        message.Timestamp.ShouldBe(timestamp);
+        message.Agent.ShouldBe("loom");
+        message.Parts.Count.ShouldBe(1);
+        message.Parts[0].ShouldBeOfType<TextPart>().Text.ShouldBe("/review line one line two");
+    }
+
+    [Fact]
+    public void BuildCommittedMessagePayload_UsesPersistedSnapshotTextPartsOnly()
+    {
+        var persisted = new PersistedMessage
+        {
+            Id = "msg-1",
+            SessionId = "session-1",
+            Role = "assistant",
+            PartsJson = """[{"type":"text","text":"Merged final text"},{"type":"reasoning","text":"Hidden thought"}]""",
+            Timestamp = new DateTimeOffset(2026, 4, 15, 6, 0, 0, TimeSpan.Zero).ToString("O"),
+            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            AgentName = "loom",
+        };
+
+        var payload = MessagePersistenceService.BuildCommittedMessagePayload(persisted);
+
+        payload.GetProperty("info").GetProperty("id").GetString().ShouldBe("msg-1");
+        payload.GetProperty("info").GetProperty("agent").GetString().ShouldBe("loom");
+        var parts = payload.GetProperty("parts");
+        parts.GetArrayLength().ShouldBe(1);
+        parts[0].GetProperty("type").GetString().ShouldBe("text");
+        parts[0].GetProperty("text").GetString().ShouldBe("Merged final text");
+    }
+
+    [Fact]
+    public void SanitizeDurableEventPayload_DropsReasoningPartUpdates()
+    {
+        var payload = JsonSerializer.SerializeToElement(new
+        {
+            part = new
+            {
+                id = "part-r1",
+                messageID = "msg-1",
+                sessionID = "session-1",
+                type = "reasoning",
+                text = "Hidden thought"
+            }
+        });
+
+        var sanitized = MessagePersistenceService.SanitizeDurableEventPayload("message.part.updated", payload);
+
+        sanitized.HasValue.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void SanitizeDurableEventPayload_PreservesNonReasoningPartUpdates()
+    {
+        var payload = JsonSerializer.SerializeToElement(new
+        {
+            part = new
+            {
+                id = "part-1",
+                messageID = "msg-1",
+                sessionID = "session-1",
+                type = "text",
+                text = "Visible text"
+            }
+        });
+
+        var sanitized = MessagePersistenceService.SanitizeDurableEventPayload("message.part.updated", payload);
+
+        sanitized.HasValue.ShouldBeTrue();
+        sanitized.Value.GetProperty("part").GetProperty("type").GetString().ShouldBe("text");
+    }
+
+    [Fact]
+    public void ToPersistedMessage_ExcludesReasoningPartsFromDurableHistory()
+    {
+        var original = MakeMessage([
+            new TextPart("Visible text"),
+            new ReasoningPart("Hidden thought")
+        ]);
+
+        var persisted = MessagePersistenceService.ToPersistedMessage("session-1", original);
+
+        persisted.PartsJson.ShouldContain("Visible text");
+        persisted.PartsJson.ShouldNotContain("Hidden thought");
+    }
+
+    [Fact]
+    public void ToHarnessMessage_FiltersLegacyReasoningPartsFromDurableHistory()
+    {
+        var persisted = new PersistedMessage
+        {
+            Id = "msg-legacy-1",
+            SessionId = "session-1",
+            Role = "assistant",
+            PartsJson = """[{"type":"text","text":"Visible text"},{"type":"reasoning","text":"Hidden thought"}]""",
+            Timestamp = new DateTimeOffset(2026, 4, 15, 6, 0, 0, TimeSpan.Zero).ToString("O"),
+            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+        };
+
+        var restored = MessagePersistenceService.ToHarnessMessage(persisted);
+
+        restored.Parts.Count.ShouldBe(1);
+        restored.Parts[0].ShouldBeOfType<TextPart>().Text.ShouldBe("Visible text");
+    }
+
+    [Fact]
+    public void MergePartAndMetadata_IgnoresReasoningPartsInDurableHistory()
+    {
+        var existing = MakePersistedMessage("""[{"type":"text","text":"Visible text"}]""");
+
+        var result = MessagePersistenceService.MergePartAndMetadata(
+            existing,
+            new ReasoningPart("Hidden thought"),
+            "assistant",
+            null);
+
+        result.PartsJson.ShouldContain("Visible text");
+        result.PartsJson.ShouldNotContain("Hidden thought");
     }
 
     // -----------------------------------------------------------------------
@@ -249,7 +395,7 @@ public sealed class MessagePersistenceServiceTests
     }
 
     [Fact]
-    public void MergePart_ReasoningPart_ReplacesFirstExistingReasoningPart()
+    public void MergePart_ReasoningPart_DoesNotPersistHiddenContent()
     {
         var initial = MakeMessage([new ReasoningPart("Old thought", "old")]);
         var existingMsg = MessagePersistenceService.ToPersistedMessage("session-1", initial);
@@ -259,10 +405,7 @@ public sealed class MessagePersistenceServiceTests
         var result = MessagePersistenceService.MergePart(existingMsg, updatedReasoning);
 
         var restored = MessagePersistenceService.ToHarnessMessage(result);
-        restored.Parts.Count.ShouldBe(1);
-        var reasoning = restored.Parts[0].ShouldBeOfType<ReasoningPart>();
-        reasoning.Text.ShouldBe("New thought");
-        reasoning.Summary.ShouldBe("new");
+        restored.Parts.ShouldBeEmpty();
     }
 
     [Fact]

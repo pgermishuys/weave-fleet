@@ -45,7 +45,7 @@ export function ensureMessage(
 export function mergeMessageUpdate(
   prev: AccumulatedMessage[],
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  info: { id: string; time?: { completed?: number }; cost?: number; tokens?: { input: number; output: number; reasoning: number }; [key: string]: unknown }
+  info: { id: string; time?: { completed?: number }; cost?: number; tokens?: { input: number; output: number; reasoning: number }; parts?: Array<Record<string, unknown>>; [key: string]: unknown }
 ): AccumulatedMessage[] {
   const index = prev.findIndex((m) => m.messageId === info.id);
   if (index === -1) return prev; // message not found, no-op
@@ -77,19 +77,55 @@ export function mergeMessageUpdate(
       mergedTokens.output !== existing.tokens.output ||
       mergedTokens.reasoning !== existing.tokens.reasoning);
   const hasNewCost = mergedCost > (existing.cost ?? 0);
+  const snapshotParts = Array.isArray(info.parts)
+    ? info.parts
+        .map((part, partIndex) => mapCommittedSnapshotPart(info.id, part, partIndex))
+        .filter((part): part is NonNullable<typeof part> => part != null)
+    : null;
+  const mergedSnapshotParts = snapshotParts ? mergeCommittedSnapshotParts(existing.parts, snapshotParts) : null;
+  const hasSnapshotParts = mergedSnapshotParts != null;
 
-  if (!hasNewCompletedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost) {
+  if (!hasNewCompletedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts) {
     return prev; // nothing new to merge
   }
 
   const updated = prev.slice();
   updated[index] = {
     ...existing,
+    ...(hasSnapshotParts ? { parts: mergedSnapshotParts } : {}),
     ...(hasNewCompletedAt ? { completedAt } : {}),
     tokens: mergedTokens,
     cost: mergedCost,
   };
   return updated;
+}
+
+function mapCommittedSnapshotPart(
+  messageId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  part: Record<string, any>,
+  index: number,
+): AccumulatedTextPart | null {
+  if (part.type === "text") {
+    return {
+      partId: typeof part.id === "string" ? part.id : `${messageId}-text-${index}`,
+      type: "text",
+      text: typeof part.text === "string" ? part.text : "",
+    };
+  }
+
+  return null;
+}
+
+function mergeCommittedSnapshotParts(
+  existingParts: AccumulatedMessage["parts"],
+  snapshotParts: Array<AccumulatedTextPart>,
+): AccumulatedMessage["parts"] {
+  const nonSnapshotParts = existingParts.filter(
+    (part) => part.type !== "text" && part.type !== "reasoning"
+  );
+
+  return [...snapshotParts, ...nonSnapshotParts];
 }
 
 export function applyPartUpdate(

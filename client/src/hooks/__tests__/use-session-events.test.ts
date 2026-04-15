@@ -305,6 +305,47 @@ describe("useSessionEvents reconnect recovery", () => {
 
     expect(harness.getLastSequenceNumber()).toBe(8);
   });
+
+  it("applies committed snapshot parts from message.updated payloads", () => {
+    const harness = createStateHarness("sess-1");
+
+    harness.dispatch({
+      type: "message.updated",
+      properties: {
+        info: { id: "msg-1", role: "assistant", sessionID: "sess-1" },
+      },
+    } as WebSocketEvent);
+
+    harness.dispatch({
+      type: "message.part.updated",
+      properties: {
+        sessionID: "sess-1",
+        part: {
+          id: "file-1",
+          messageID: "msg-1",
+          type: "file",
+          mime: "text/plain",
+          filename: "out.txt",
+          url: "file:///tmp/out.txt",
+        },
+      },
+    } as WebSocketEvent);
+
+    harness.dispatch({
+      type: "message.updated",
+      properties: {
+        info: { id: "msg-1", role: "assistant", sessionID: "sess-1" },
+        parts: [
+          { id: "part-1", type: "text", text: "final merged text" },
+        ],
+      },
+    } as WebSocketEvent);
+
+    expect(harness.getMessages()[0]?.parts).toEqual([
+      { partId: "part-1", type: "text", text: "final merged text" },
+      { partId: "file-1", type: "file", mime: "text/plain", filename: "out.txt", url: "file:///tmp/out.txt" },
+    ]);
+  });
 });
 
 describe("handleEvent message.part.delta", () => {

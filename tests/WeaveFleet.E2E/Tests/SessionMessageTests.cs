@@ -138,4 +138,5 @@ public sealed class SessionMessageTests : E2ETestBase,
             finalStatus.ShouldBe("idle");
         });
     }
+
 }

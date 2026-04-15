@@ -39,22 +39,6 @@ internal static class ClaudeCodeMapper
     }
 
     /// <summary>
-    /// Creates a synthetic user <see cref="HarnessMessage"/> for prompt tracking.
-    /// Claude Code doesn't echo back user messages, so they are created synthetically
-    /// when the user sends a prompt.
-    /// </summary>
-    internal static HarnessMessage ToUserMessage(string prompt, DateTimeOffset timestamp)
-    {
-        return new HarnessMessage
-        {
-            Id = $"user-{Guid.NewGuid():N}",
-            Role = "user",
-            Parts = [new TextPart(prompt)],
-            Timestamp = timestamp,
-        };
-    }
-
-    /// <summary>
     /// Creates frontend-compatible events from a Claude Code stream message.
     /// Maps to the event types the frontend handles: <c>message.updated</c>,
     /// <c>message.part.updated</c>, and <c>session.idle</c>.

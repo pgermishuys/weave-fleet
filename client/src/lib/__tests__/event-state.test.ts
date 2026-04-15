@@ -1,5 +1,6 @@
 import {
   ensureMessage,
+  mergeMessageUpdate,
   applyPartUpdate,
   applyTextDelta,
   isRelevantToSession,
@@ -77,6 +78,84 @@ describe("ensureMessage", () => {
     expect(result).toHaveLength(2);
     expect(result[0].messageId).toBe("msg-1");
     expect(result[1].messageId).toBe("msg-2");
+  });
+});
+
+describe("mergeMessageUpdate", () => {
+  it("replaces text parts from an authoritative committed snapshot", () => {
+    const prev = [makeMessage({
+      parts: [{ partId: "part-1", type: "text", text: "stale preview" }],
+    })];
+
+    const result = mergeMessageUpdate(prev, {
+      id: "msg-1",
+      parts: [
+        { id: "part-1", type: "text", text: "final merged text" },
+      ],
+    });
+
+    expect(result[0]?.parts).toEqual([
+      { partId: "part-1", type: "text", text: "final merged text" },
+    ]);
+  });
+
+  it("preserves non-text parts when committed snapshots refresh text", () => {
+    const prev = [makeMessage({
+      parts: [
+        { partId: "part-1", type: "text", text: "stale preview" },
+        { partId: "file-1", type: "file", mime: "text/plain", url: "file:///tmp/out.txt", filename: "out.txt" },
+      ],
+    })];
+
+    const result = mergeMessageUpdate(prev, {
+      id: "msg-1",
+      parts: [
+        { id: "part-1", type: "text", text: "final merged text" },
+      ],
+    });
+
+    expect(result[0]?.parts).toEqual([
+      { partId: "part-1", type: "text", text: "final merged text" },
+      { partId: "file-1", type: "file", mime: "text/plain", url: "file:///tmp/out.txt", filename: "out.txt" },
+    ]);
+  });
+
+  it("ignores reasoning parts from committed snapshots", () => {
+    const prev = [makeMessage({
+      parts: [{ partId: "part-1", type: "text", text: "stale preview" }],
+    })];
+
+    const result = mergeMessageUpdate(prev, {
+      id: "msg-1",
+      parts: [
+        { id: "part-1", type: "text", text: "final merged text" },
+        { id: "part-r1", type: "reasoning", text: "hidden" },
+      ],
+    });
+
+    expect(result[0]?.parts).toEqual([
+      { partId: "part-1", type: "text", text: "final merged text" },
+    ]);
+  });
+
+  it("drops pre-existing reasoning parts when committed snapshots apply", () => {
+    const prev = [makeMessage({
+      parts: [
+        { partId: "part-1", type: "text", text: "stale preview" },
+        { partId: "part-r1", type: "reasoning", text: "hidden" },
+      ],
+    })];
+
+    const result = mergeMessageUpdate(prev, {
+      id: "msg-1",
+      parts: [
+        { id: "part-1", type: "text", text: "final merged text" },
+      ],
+    });
+
+    expect(result[0]?.parts).toEqual([
+      { partId: "part-1", type: "text", text: "final merged text" },
+    ]);
   });
 });
 

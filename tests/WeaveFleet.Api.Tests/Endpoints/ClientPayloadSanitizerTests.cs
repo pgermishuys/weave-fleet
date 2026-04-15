@@ -125,6 +125,31 @@ public sealed class ClientPayloadSanitizerTests
     }
 
     [Fact]
+    public void SanitizeEventPayload_PreservesCommittedSnapshotTextWhileDroppingReasoning()
+    {
+        var payload = JsonSerializer.SerializeToElement(new
+        {
+            info = new
+            {
+                id = "msg-1",
+                role = "assistant",
+            },
+            parts = new object[]
+            {
+                new { id = "part-1", type = "text", text = "Merged final text" },
+                new { id = "part-r1", type = "reasoning", text = "Hidden" }
+            }
+        });
+
+        var sanitized = ClientPayloadSanitizer.SanitizeEventPayload("message.updated", payload);
+
+        sanitized.HasValue.ShouldBeTrue();
+        var parts = sanitized.Value.GetProperty("parts");
+        parts.GetArrayLength().ShouldBe(1);
+        parts[0].GetProperty("text").GetString().ShouldBe("Merged final text");
+    }
+
+    [Fact]
     public void SanitizeEventPayload_DropsReasoningOnlyAssistantMessageUpdatedPayload()
     {
         var payload = JsonSerializer.SerializeToElement(new

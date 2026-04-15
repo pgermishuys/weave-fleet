@@ -78,6 +78,26 @@ public sealed class TestHarnessSessionTests
     }
 
     [Fact]
+    public async Task SendPromptAsync_RewritesEchoedUserPromptToActualText()
+    {
+        const string sessionId = "sess-1";
+        var scenario = new TestScenarioBuilder()
+            .WithSimpleTextResponse(sessionId, "msg-1", "Hello back!")
+            .Build();
+
+        var instance = new TestHarnessSession(sessionId, scenario);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var eventsTask = CollectEventsAsync(instance, expectedCount: 6, cts.Token);
+
+        await instance.SendPromptAsync("Actual prompt text", null, cts.Token);
+        var events = await eventsTask;
+
+        var userPartPayload = events[2].Payload!.Value.GetProperty("part");
+        userPartPayload.GetProperty("text").GetString().ShouldBe("Actual prompt text");
+    }
+
+    [Fact]
     public async Task SendPromptAsync_with_no_configured_response_emits_no_events()
     {
         var scenario = new TestScenarioBuilder().Build(); // no prompt responses
@@ -278,4 +298,3 @@ public sealed class TestHarnessSessionTests
         return events;
     }
 }
-

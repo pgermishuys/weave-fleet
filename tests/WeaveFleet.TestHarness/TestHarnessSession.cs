@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
@@ -104,7 +105,7 @@ public sealed class TestHarnessSession : IHarnessSession
                 : [];
 
             // Fire and forget: emit events in background so caller returns immediately
-            _ = Task.Run(() => EmitEventsAsync(events, promptToken), promptToken);
+            _ = Task.Run(() => EmitEventsAsync(ApplyPromptText(events, text), promptToken), promptToken);
         }
         finally
         {
@@ -216,6 +217,64 @@ public sealed class TestHarnessSession : IHarnessSession
         {
             _status = HarnessSessionStatus.Idle;
         }
+    }
+
+    private static List<ScenarioEvent> ApplyPromptText(IReadOnlyList<ScenarioEvent> events, string promptText)
+    {
+        var updatedEvents = new List<ScenarioEvent>(events.Count);
+
+        foreach (var scenarioEvent in events)
+        {
+            if (scenarioEvent.Event.Type is not "message.part.updated"
+                || !scenarioEvent.Event.Payload.HasValue
+                || !TryRewritePromptPayload(scenarioEvent.Event.Payload.Value, promptText, out var rewrittenPayload))
+            {
+                updatedEvents.Add(scenarioEvent);
+                continue;
+            }
+
+            updatedEvents.Add(new ScenarioEvent
+            {
+                Event = scenarioEvent.Event with { Payload = rewrittenPayload },
+                Delay = scenarioEvent.Delay,
+            });
+        }
+
+        return updatedEvents;
+    }
+
+    private static bool TryRewritePromptPayload(JsonElement payload, string promptText, out JsonElement rewrittenPayload)
+    {
+        rewrittenPayload = payload;
+
+        if (payload.ValueKind != JsonValueKind.Object
+            || !payload.TryGetProperty("part", out var part)
+            || part.ValueKind != JsonValueKind.Object
+            || !part.TryGetProperty("text", out var text)
+            || text.ValueKind != JsonValueKind.String
+            || !string.Equals(text.GetString(), TestHarnessPromptTokens.UserPromptPlaceholder, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var sessionId = payload.TryGetProperty("sessionID", out var sessionIdEl) && sessionIdEl.ValueKind == JsonValueKind.String
+            ? sessionIdEl.GetString()
+            : null;
+
+        rewrittenPayload = JsonSerializer.SerializeToElement(new
+        {
+            sessionID = sessionId,
+            part = new
+            {
+                id = part.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.String ? idEl.GetString() : null,
+                sessionID = part.TryGetProperty("sessionID", out var partSessionEl) && partSessionEl.ValueKind == JsonValueKind.String ? partSessionEl.GetString() : sessionId,
+                messageID = part.TryGetProperty("messageID", out var messageIdEl) && messageIdEl.ValueKind == JsonValueKind.String ? messageIdEl.GetString() : null,
+                type = "text",
+                text = promptText,
+            }
+        });
+
+        return true;
     }
 
     /// <summary>
