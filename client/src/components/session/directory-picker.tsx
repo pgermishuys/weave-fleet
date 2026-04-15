@@ -81,8 +81,7 @@ export function DirectoryPicker({
     const canScrollUp = el.scrollTop > 0;
 
     if ((scrollingDown && canScrollDown) || (!scrollingDown && canScrollUp)) {
-      event.preventDefault();
-      el.scrollTop += event.deltaY;
+      event.stopPropagation();
     }
   };
 
