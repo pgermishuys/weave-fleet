@@ -128,4 +128,69 @@ public sealed class QuestionToolCardTests : E2ETestBase,
                 .ToContainTextAsync("Yes, continue");
         });
     }
+
+    /// <summary>
+    /// Regression: when a question tool is pending, the user's reply must be sent
+    /// immediately instead of being queued. Previously the prompt input would queue
+    /// the reply (because the session appeared "busy"), creating a deadlock where
+    /// the session waited for the answer while the answer waited for idle.
+    /// </summary>
+    [Fact]
+    public async Task QuestionReply_BypassesQueueAndIsProcessed()
+    {
+        await WithFailureCapture(async () =>
+        {
+            // First prompt → question tool response; second prompt → normal text reply
+            ConfigureScenario(b =>
+                b.WithQuestionToolResponse(
+                    "_placeholder_",
+                    "msg-question-3",
+                    "Which approach do you prefer?",
+                    "Approach",
+                    [
+                        ("Option A", "First approach"),
+                        ("Option B", "Second approach")
+                    ])
+                .WithSimpleTextResponse(
+                    "_placeholder_",
+                    "msg-reply-3",
+                    "Great, proceeding with Option A."));
+
+            var dashboard = new FleetDashboardPage(Page);
+            await dashboard.GotoAsync();
+
+            var dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+
+            // Send prompt that triggers the question
+            await detail.SendPromptAsync("Help me decide");
+            await detail.WaitForIdleAsync();
+
+            // Verify the question appeared
+            var questionPrompt = Page.GetByTestId("question-prompt");
+            await Microsoft.Playwright.Assertions.Expect(questionPrompt).ToBeVisibleAsync(
+                new Microsoft.Playwright.LocatorAssertionsToBeVisibleOptions { Timeout = 5_000 });
+
+            // Verify the prompt placeholder indicates a pending question
+            var promptInput = Page.GetByTestId("prompt-input");
+            await Microsoft.Playwright.Assertions.Expect(promptInput)
+                .ToHaveAttributeAsync("placeholder", "Reply to the question above…",
+                    new Microsoft.Playwright.LocatorAssertionsToHaveAttributeOptions { Timeout = 5_000 });
+
+            // Reply to the question — this must NOT be queued
+            await detail.SendPromptAsync("Option A");
+            await detail.WaitForIdleAsync();
+
+            // The assistant's follow-up response should appear, proving the reply was processed
+            await detail.WaitForMessageTextAsync("Great, proceeding with Option A.");
+
+            // Placeholder should revert to the default idle text
+            await Microsoft.Playwright.Assertions.Expect(promptInput)
+                .ToHaveAttributeAsync("placeholder", "Send a message to this session…",
+                    new Microsoft.Playwright.LocatorAssertionsToHaveAttributeOptions { Timeout = 5_000 });
+        });
+    }
 }
