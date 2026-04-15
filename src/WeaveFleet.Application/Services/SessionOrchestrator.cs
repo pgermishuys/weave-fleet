@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Common;
@@ -36,6 +37,8 @@ public sealed partial class SessionOrchestrator(
     ILogger<SessionOrchestrator> logger,
     SessionActivityWriteService? sessionActivityWriteService = null)
 {
+    private readonly DelegationService _delegationService = delegationService;
+
     private sealed class NoOpOutboxRepository : IOutboxRepository
     {
         public Task<long> EnqueueAsync(OutboxMessage message) => Task.FromResult(0L);
@@ -952,12 +955,7 @@ public sealed partial class SessionOrchestrator(
             return FleetError.NotFoundFor(nameof(Session), id);
 
         var delegation = await delegationRepository.GetByChildSessionIdAsync(id);
-        if (delegation is not null)
-        {
-            await delegationService.HandleDelegationFinishedAsync(
-                delegation.Id,
-                GetDelegationTerminalStatus(session.Status));
-        }
+        var parentDelegations = await delegationRepository.GetByParentSessionIdAsync(id);
 
         // Stop live instance if running
         var liveInstance = instanceTracker.Get(session.InstanceId);
@@ -974,8 +972,36 @@ public sealed partial class SessionOrchestrator(
             return instanceUpdateResult.Error;
 
         var deletedAtText = deletedAt.ToString("O");
+        var delegationTerminalStatus = delegation is null ? null : GetDelegationTerminalStatus(session.Status);
         if (sessionActivityWriteService is null)
         {
+            if (delegation is not null && delegationTerminalStatus is not null)
+            {
+                delegation.Status = delegationTerminalStatus;
+                delegation.ChildSessionId = null;
+                delegation.UpdatedAt = deletedAtText;
+                delegation.CompletedAt = deletedAtText;
+
+                await delegationRepository.UpdateStatusAsync(delegation.Id, delegationTerminalStatus, deletedAtText, deletedAtText);
+                await delegationRepository.UpdateChildSessionIdAsync(delegation.Id, null, deletedAtText);
+                await eventBroadcaster.BroadcastAsync(
+                    $"session:{delegation.ParentSessionId}",
+                    "delegation.updated",
+                    new DelegationEventDto(
+                        delegation.Id,
+                        delegation.ParentSessionId,
+                        delegation.ParentToolCallId,
+                        delegation.ChildSessionId,
+                        delegation.Title,
+                        delegation.Status,
+                        delegation.CreatedAt),
+                    session.UserId,
+                    ct);
+            }
+
+            if (parentDelegations.Count > 0)
+                await delegationRepository.DeleteByParentSessionIdAsync(id);
+
             await sessionRepository.DeleteAsync(id);
             await eventBroadcaster.BroadcastAsync("sessions", "session_deleted", new
             {
@@ -984,18 +1010,62 @@ public sealed partial class SessionOrchestrator(
         }
         else
         {
+            var outboxMessages = new List<OutboxMessage>();
+            if (delegation is not null && delegationTerminalStatus is not null)
+            {
+                delegation.Status = delegationTerminalStatus;
+                delegation.ChildSessionId = null;
+                delegation.UpdatedAt = deletedAtText;
+                delegation.CompletedAt = deletedAtText;
+
+                outboxMessages.Add(new OutboxMessage
+                {
+                    Topic = $"session:{delegation.ParentSessionId}",
+                    Type = "delegation.updated",
+                    Payload = MessagePersistenceService.SerializePayload(new DelegationEventDto(
+                        delegation.Id,
+                        delegation.ParentSessionId,
+                        delegation.ParentToolCallId,
+                        delegation.ChildSessionId,
+                        delegation.Title,
+                        delegation.Status,
+                        delegation.CreatedAt)),
+                    UserId = session.UserId,
+                    CreatedAt = deletedAtText,
+                    AvailableAt = deletedAtText
+                });
+            }
+
+            outboxMessages.Add(
+                CreateSessionLifecycleOutboxMessage(
+                    "session_deleted",
+                    new { sessionId = id },
+                    deletedAtText,
+                    session.UserId));
+
             await sessionActivityWriteService.WriteAsync(
                 new SessionActivityWriteRequest
                 {
+                    DelegationStatusUpdates = delegation is not null && delegationTerminalStatus is not null
+                        ? [new DelegationStatusUpdate
+                        {
+                            Id = delegation.Id,
+                            Status = delegationTerminalStatus,
+                            UpdatedAt = deletedAtText,
+                            CompletedAt = deletedAtText
+                        }]
+                        : [],
+                    DelegationChildSessionUpdates = delegation is not null
+                        ? [new DelegationChildSessionUpdate
+                        {
+                            Id = delegation.Id,
+                            ChildSessionId = null,
+                            UpdatedAt = deletedAtText
+                        }]
+                        : [],
+                    DelegationDeletesByParentSessionId = parentDelegations.Count > 0 ? [id] : [],
                     SessionDeletes = [id],
-                    OutboxMessages =
-                    [
-                        CreateSessionLifecycleOutboxMessage(
-                            "session_deleted",
-                            new { sessionId = id },
-                            deletedAtText,
-                            session.UserId)
-                    ]
+                    OutboxMessages = outboxMessages
                 },
                 ct);
         }

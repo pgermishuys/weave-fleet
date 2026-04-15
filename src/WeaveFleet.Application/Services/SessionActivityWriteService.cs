@@ -39,9 +39,6 @@ public sealed class SessionActivityWriteService(
             foreach (var sessionId in request.SessionUnarchives)
                 await sessionRepository.UnarchiveAsync(connection, transaction, sessionId).ConfigureAwait(false);
 
-            foreach (var sessionId in request.SessionDeletes)
-                await sessionRepository.DeleteAsync(connection, transaction, sessionId).ConfigureAwait(false);
-
             foreach (var message in request.MessagesToUpsert)
                 await messageRepository.UpsertAsync(connection, transaction, message).ConfigureAwait(false);
 
@@ -71,6 +68,12 @@ public sealed class SessionActivityWriteService(
                     update.ChildSessionId,
                     update.UpdatedAt).ConfigureAwait(false);
             }
+
+            foreach (var parentSessionId in request.DelegationDeletesByParentSessionId)
+                await delegationRepository.DeleteByParentSessionIdAsync(connection, transaction, parentSessionId).ConfigureAwait(false);
+
+            foreach (var sessionId in request.SessionDeletes)
+                await sessionRepository.DeleteAsync(connection, transaction, sessionId).ConfigureAwait(false);
 
             foreach (var outboxMessage in request.OutboxMessages)
             {
@@ -105,6 +108,7 @@ public sealed class SessionActivityWriteRequest
     public IReadOnlyList<Delegation> DelegationsToInsert { get; init; } = [];
     public IReadOnlyList<DelegationStatusUpdate> DelegationStatusUpdates { get; init; } = [];
     public IReadOnlyList<DelegationChildSessionUpdate> DelegationChildSessionUpdates { get; init; } = [];
+    public IReadOnlyList<string> DelegationDeletesByParentSessionId { get; init; } = [];
     public IReadOnlyList<OutboxMessage> OutboxMessages { get; init; } = [];
 }
 
@@ -132,7 +136,7 @@ public sealed class DelegationStatusUpdate
 public sealed class DelegationChildSessionUpdate
 {
     public string Id { get; init; } = string.Empty;
-    public string ChildSessionId { get; init; } = string.Empty;
+    public string? ChildSessionId { get; init; }
     public string UpdatedAt { get; init; } = string.Empty;
 }
 

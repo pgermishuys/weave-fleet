@@ -13,6 +13,8 @@ public interface IDelegationRepository
     Task<Delegation?> GetByParentToolCallIdAsync(string parentSessionId, string toolCallId);
     Task UpdateStatusAsync(string id, string status, string updatedAt, string? completedAt);
     Task UpdateStatusAsync(IDbConnection connection, IDbTransaction? transaction, string id, string status, string updatedAt, string? completedAt);
-    Task UpdateChildSessionIdAsync(string id, string childSessionId, string updatedAt);
-    Task UpdateChildSessionIdAsync(IDbConnection connection, IDbTransaction? transaction, string id, string childSessionId, string updatedAt);
+    Task UpdateChildSessionIdAsync(string id, string? childSessionId, string updatedAt);
+    Task UpdateChildSessionIdAsync(IDbConnection connection, IDbTransaction? transaction, string id, string? childSessionId, string updatedAt);
+    Task DeleteByParentSessionIdAsync(string parentSessionId);
+    Task DeleteByParentSessionIdAsync(IDbConnection connection, IDbTransaction? transaction, string parentSessionId);
 }

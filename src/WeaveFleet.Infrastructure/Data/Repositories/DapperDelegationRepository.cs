@@ -137,13 +137,13 @@ public sealed class DapperDelegationRepository : IDelegationRepository
             transaction);
     }
 
-    public async Task UpdateChildSessionIdAsync(string id, string childSessionId, string updatedAt)
+    public async Task UpdateChildSessionIdAsync(string id, string? childSessionId, string updatedAt)
     {
         using var conn = _connectionFactory.CreateConnection();
         await UpdateChildSessionIdAsync(conn, null, id, childSessionId, updatedAt);
     }
 
-    public async Task UpdateChildSessionIdAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, string id, string childSessionId, string updatedAt)
+    public async Task UpdateChildSessionIdAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, string id, string? childSessionId, string updatedAt)
     {
         await connection.ExecuteAsync(
             """
@@ -155,12 +155,35 @@ public sealed class DapperDelegationRepository : IDelegationRepository
                   SELECT 1
                   FROM sessions parent_session
                   WHERE parent_session.id = delegations.parent_session_id AND parent_session.user_id = @UserId)
-              AND EXISTS (
-                  SELECT 1
-                  FROM sessions child_session
-                  WHERE child_session.id = @ChildSessionId AND child_session.user_id = @UserId)
+              AND (
+                  @ChildSessionId IS NULL
+                  OR EXISTS (
+                      SELECT 1
+                      FROM sessions child_session
+                      WHERE child_session.id = @ChildSessionId AND child_session.user_id = @UserId))
             """,
             new { Id = id, ChildSessionId = childSessionId, UpdatedAt = updatedAt, UserId = _userContext.UserId },
+            transaction);
+    }
+
+    public async Task DeleteByParentSessionIdAsync(string parentSessionId)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        await DeleteByParentSessionIdAsync(conn, null, parentSessionId);
+    }
+
+    public async Task DeleteByParentSessionIdAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, string parentSessionId)
+    {
+        await connection.ExecuteAsync(
+            """
+            DELETE FROM delegations
+            WHERE parent_session_id = @ParentSessionId
+              AND EXISTS (
+                  SELECT 1
+                  FROM sessions parent_session
+                  WHERE parent_session.id = delegations.parent_session_id AND parent_session.user_id = @UserId)
+            """,
+            new { ParentSessionId = parentSessionId, UserId = _userContext.UserId },
             transaction);
     }
 }

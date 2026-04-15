@@ -4,6 +4,7 @@ using NSubstitute.ExceptionExtensions;
 using Shouldly;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Services;
@@ -860,7 +861,8 @@ public sealed class SessionOrchestratorTests
             Title = "Child",
             Status = "completed",
             Directory = "/tmp",
-            CreatedAt = "2026-01-01"
+            CreatedAt = "2026-01-01",
+            UserId = "user-1"
         };
         var delegation = new Delegation
         {
@@ -876,7 +878,7 @@ public sealed class SessionOrchestratorTests
 
         _sessionRepo.GetByIdAsync("child-1").Returns(session);
         _delegationRepo.GetByChildSessionIdAsync("child-1").Returns(delegation);
-        _delegationRepo.GetByIdAsync("del-1").Returns(delegation);
+        _delegationRepo.GetByParentSessionIdAsync("child-1").Returns([]);
         _sessionRepo.DeleteAsync("child-1").Returns(true);
         _harnessInstance.DeleteAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
         _tracker.Register("inst-1", _harnessInstance);
@@ -887,16 +889,69 @@ public sealed class SessionOrchestratorTests
         Received.InOrder(async () =>
         {
             await _delegationRepo.GetByChildSessionIdAsync("child-1");
-            await _delegationRepo.GetByIdAsync("del-1");
+            await _delegationRepo.GetByParentSessionIdAsync("child-1");
             await _delegationRepo.UpdateStatusAsync(
                 Arg.Is("del-1"),
                 Arg.Is("completed"),
                 Arg.Any<string>(),
                 Arg.Any<string>());
+            await _delegationRepo.UpdateChildSessionIdAsync(
+                Arg.Is("del-1"),
+                Arg.Is<string?>(childSessionId => childSessionId == null),
+                Arg.Any<string>());
             await _sessionRepo.DeleteAsync("child-1");
         });
         await _harnessInstance.Received(1).DeleteAsync(Arg.Any<CancellationToken>());
+        await _eventBroadcaster.Received(1).BroadcastAsync(
+            "session:parent-1",
+            "delegation.updated",
+            Arg.Any<DelegationEventDto>(),
+            Arg.Is<string?>(userId => userId == "user-1"),
+            Arg.Any<CancellationToken>());
         await _eventBroadcaster.Received(1).BroadcastAsync("sessions", "session_deleted", Arg.Any<object>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DeleteSessionAsync_WhenSessionIsDelegationParent_DeletesDelegationsBeforeDelete()
+    {
+        var session = new Session
+        {
+            Id = "parent-1",
+            InstanceId = "inst-1",
+            WorkspaceId = "ws-1",
+            Title = "Parent",
+            Status = "completed",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01",
+            UserId = "user-1"
+        };
+
+        _sessionRepo.GetByIdAsync("parent-1").Returns(session);
+        _delegationRepo.GetByChildSessionIdAsync("parent-1").Returns((Delegation?)null);
+        _delegationRepo.GetByParentSessionIdAsync("parent-1").Returns([
+            new Delegation
+            {
+                Id = "del-1",
+                ParentSessionId = "parent-1",
+                ChildSessionId = "child-1",
+                Title = "reviewer",
+                Status = "completed",
+                CreatedAt = DateTime.UtcNow.ToString("O"),
+                UpdatedAt = DateTime.UtcNow.ToString("O")
+            }
+        ]);
+        _sessionRepo.DeleteAsync("parent-1").Returns(true);
+
+        var result = await _sut.DeleteSessionAsync("parent-1");
+
+        result.IsSuccess.ShouldBeTrue();
+        Received.InOrder(async () =>
+        {
+            await _delegationRepo.GetByChildSessionIdAsync("parent-1");
+            await _delegationRepo.GetByParentSessionIdAsync("parent-1");
+            await _delegationRepo.DeleteByParentSessionIdAsync("parent-1");
+            await _sessionRepo.DeleteAsync("parent-1");
+        });
     }
 
     [Fact]
