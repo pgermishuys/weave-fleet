@@ -447,31 +447,33 @@ public sealed class TestHarnessSession : IHarnessSession
 
         var existingMessage = await messageRepo.GetByIdAsync(durableMessageId, _fleetSessionId).ConfigureAwait(false);
 
-        // Serialize the part as-is from the event payload so tool parts retain their
-        // full state (tool name, callID, state with input/output). Previous code only
-        // extracted the "text" property, which lost tool data.
-        var partsJson = JsonSerializer.Serialize(new[] { part });
+        // Convert the raw event part into a typed MessagePart so the polymorphic
+        // type discriminator is serialized correctly. System.Text.Json requires the
+        // discriminator to precede other properties during deserialization, so we
+        // cannot store the raw event JSON directly.
+        var fleetPart = MapEventPartToMessagePart(part);
 
-        var updated = existingMessage is null
-            ? new PersistedMessage
+        PersistedMessage updated;
+        if (existingMessage is null)
+        {
+            var harnessMessage = new HarnessMessage
             {
                 Id = durableMessageId,
-                SessionId = _fleetSessionId,
                 Role = "assistant",
-                PartsJson = partsJson,
-                Timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                CreatedAt = DateTimeOffset.UtcNow.ToString("O")
-            }
-            : new PersistedMessage
-            {
-                Id = existingMessage.Id,
-                SessionId = existingMessage.SessionId,
-                Role = existingMessage.Role,
-                PartsJson = partsJson,
-                Timestamp = existingMessage.Timestamp,
-                CreatedAt = existingMessage.CreatedAt,
-                AgentName = existingMessage.AgentName
+                Parts = fleetPart is not null ? [fleetPart] : [],
+                Timestamp = DateTimeOffset.UtcNow,
             };
+            updated = MessagePersistenceService.ToPersistedMessage(_fleetSessionId, harnessMessage);
+        }
+        else if (fleetPart is not null)
+        {
+            updated = MessagePersistenceService.MergePartAndMetadata(
+                existingMessage, fleetPart, role: null, agentName: null);
+        }
+        else
+        {
+            updated = existingMessage;
+        }
 
         await writer.WriteAsync(
             new SessionActivityWriteRequest
@@ -492,5 +494,47 @@ public sealed class TestHarnessSession : IHarnessSession
             },
             CancellationToken.None).ConfigureAwait(false);
         return true;
+    }
+
+    /// <summary>
+    /// Maps a raw event part <see cref="JsonElement"/> to a typed <see cref="MessagePart"/>.
+    /// System.Text.Json polymorphic deserialization requires the type discriminator to be
+    /// the first JSON property, so raw event payloads (which may have other properties first)
+    /// must be converted to typed records before persistence.
+    /// </summary>
+    private static MessagePart? MapEventPartToMessagePart(JsonElement part)
+    {
+        if (!part.TryGetProperty("type", out var typeEl))
+            return null;
+
+        var partType = typeEl.GetString();
+        return partType switch
+        {
+            "text" => new TextPart(
+                part.TryGetProperty("text", out var textEl) ? textEl.GetString() ?? "" : ""),
+            "tool" => new ToolUsePart(
+                ToolCallId: part.TryGetProperty("callID", out var callIdEl) ? callIdEl.GetString() ?? "" : "",
+                ToolName: part.TryGetProperty("tool", out var toolEl) ? toolEl.GetString() ?? "" : "",
+                Arguments: part.TryGetProperty("input", out var inputEl) ? inputEl.Clone() : default,
+                State: MapToolState(part)),
+            _ => null,
+        };
+    }
+
+    private static ToolUseState MapToolState(JsonElement part)
+    {
+        if (!part.TryGetProperty("state", out var stateEl) || stateEl.ValueKind != JsonValueKind.Object)
+            return ToolUseState.Running;
+
+        if (!stateEl.TryGetProperty("status", out var statusEl))
+            return ToolUseState.Running;
+
+        return statusEl.GetString() switch
+        {
+            "completed" => ToolUseState.Completed,
+            "error" => ToolUseState.Error,
+            "pending" => ToolUseState.Pending,
+            _ => ToolUseState.Running,
+        };
     }
 }
