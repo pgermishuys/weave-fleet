@@ -150,7 +150,10 @@ internal sealed class OpenCodeHttpClient
             Encoding.UTF8,
             "application/json");
 
-        using var response = await _httpClient.PostAsync(url, content, ct).ConfigureAwait(false);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+        using var response = await _httpClient
+            .SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, ct)
+            .ConfigureAwait(false);
         LogResponse(_logger, (int)response.StatusCode, logUrl, null);
 
         if (!response.IsSuccessStatusCode)
