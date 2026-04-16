@@ -108,11 +108,11 @@ export function FleetPanel() {
   );
 
   return (
-    <nav className="flex-1 overflow-y-auto thin-scrollbar p-2 space-y-1">
+    <nav className="flex-1 overflow-y-auto thin-scrollbar p-3 space-y-1">
       {/* Fleet header row */}
       <div
         className={cn(
-          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+          "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
           isFleetActive
             ? "bg-sidebar-accent text-sidebar-accent-foreground"
             : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground"

@@ -91,7 +91,7 @@ export const SessionGroup = React.memo(function SessionGroup({ group, onTerminat
 
   return (
     <Collapsible open={!isCollapsed} onOpenChange={handleOpenChange}>
-      <div className="flex items-center gap-2 py-1.5 px-1 group/header rounded-md hover:bg-accent/50 transition-colors">
+      <div className="flex items-center gap-2 py-2 px-1 group/header rounded-md hover:bg-accent/50 transition-colors">
         {/* Expand/collapse chevron */}
         <CollapsibleTrigger asChild>
           <Button
@@ -125,7 +125,7 @@ export const SessionGroup = React.memo(function SessionGroup({ group, onTerminat
         />
 
         {/* Session count badge */}
-        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
+        <Badge variant="secondary" className="text-[11px] px-1.5 py-0 shrink-0">
           {group.sessionCount}
         </Badge>
 

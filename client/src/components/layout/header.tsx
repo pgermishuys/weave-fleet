@@ -28,7 +28,7 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
   const { clientConfig, currentUser } = useAppShell();
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-border px-4 sm:px-6">
+    <header className="flex h-16 items-center justify-between border-b border-border/80 px-4 sm:px-6 bg-background/80 backdrop-blur-sm">
       <div className="flex items-center gap-2 min-w-0">
         {isMobileNav && (
           <Button
@@ -43,9 +43,9 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
           </Button>
         )}
         <div className="min-w-0">
-          <h2 className="text-base sm:text-lg font-semibold truncate">{title}</h2>
+          <h2 className="text-lg sm:text-xl font-semibold truncate">{title}</h2>
           {subtitle && (
-            <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
+            <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
           )}
         </div>
       </div>

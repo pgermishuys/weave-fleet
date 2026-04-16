@@ -19,7 +19,7 @@ const SIDEBAR_WIDTH_KEY = "weave:sidebar:width";
 
 export const SIDEBAR_MIN_WIDTH = 180;
 export const SIDEBAR_MAX_WIDTH = 480;
-export const SIDEBAR_RAIL_WIDTH = 48;
+export const SIDEBAR_RAIL_WIDTH = 56;
 export const SIDEBAR_DEFAULT_WIDTH = 224;
 
 // Kept for any consumers that imported SIDEBAR_COLLAPSED_WIDTH

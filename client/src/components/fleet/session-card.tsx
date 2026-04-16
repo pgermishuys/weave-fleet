@@ -61,12 +61,12 @@ export function SessionCard({ session }: SessionCardProps) {
 
   return (
     <Link to={`/sessions/${session.id}`}>
-      <Card className="transition-all hover:border-foreground/20 hover:shadow-md cursor-pointer group">
+      <Card className="transition-all hover:shadow-[var(--card-shadow-hover)] hover:border-primary/20 cursor-pointer group">
         <CardHeader className="pb-2 pt-4 px-4">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
               <span
-                className={`h-2.5 w-2.5 rounded-full ${getStatusDot(session.status)} ${session.status === "active" ? "animate-pulse" : ""}`}
+                className={`h-3 w-3 rounded-full ${getStatusDot(session.status)} ${session.status === "active" ? "animate-pulse" : ""}`}
               />
               <h3 className="font-semibold text-sm">{session.name}</h3>
             </div>
@@ -75,14 +75,14 @@ export function SessionCard({ session }: SessionCardProps) {
           <div className="flex items-center gap-1.5 mt-1">
             <Badge
               variant="secondary"
-              className={`text-[10px] px-1.5 py-0 ${getAgentColor(session.currentAgent)}`}
+              className={`text-[11px] px-1.5 py-0 ${getAgentColor(session.currentAgent)}`}
             >
               {session.currentAgent}
             </Badge>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+            <Badge variant="outline" className="text-[11px] px-1.5 py-0">
               {getSourceLabel(session.source)}
             </Badge>
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-[11px] text-muted-foreground">
               {getStatusLabel(session.status)}
             </span>
           </div>
@@ -135,7 +135,7 @@ export function SessionCard({ session }: SessionCardProps) {
                 <Badge
                   key={tag}
                   variant="outline"
-                  className="text-[10px] px-1 py-0 text-muted-foreground"
+                  className="text-[11px] px-1 py-0 text-muted-foreground"
                 >
                   {tag}
                 </Badge>

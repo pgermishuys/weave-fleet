@@ -100,7 +100,7 @@ export function FleetToolbar({
   }, [groupBy, sortBy]);
 
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
       {/* Search — full width on mobile */}
       <div className="relative flex-1 sm:max-w-xs">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -108,7 +108,7 @@ export function FleetToolbar({
           placeholder="Search sessions…"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="h-8 pl-8 text-xs"
+          className="h-9 pl-8 text-sm"
         />
       </div>
 
@@ -116,7 +116,7 @@ export function FleetToolbar({
       <div className="flex items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs flex-1 sm:flex-none">
+            <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs flex-1 sm:flex-none">
               <Group className="h-3.5 w-3.5" />
               <span className="hidden xs:inline">Group: {GROUP_BY_LABELS[groupBy]}</span>
               <span className="xs:hidden">Group</span>
@@ -139,7 +139,7 @@ export function FleetToolbar({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs flex-1 sm:flex-none">
+            <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs flex-1 sm:flex-none">
               <ArrowUpDown className="h-3.5 w-3.5" />
               <span className="hidden xs:inline">Sort: {SORT_BY_LABELS[sortBy]}</span>
               <span className="xs:hidden">Sort</span>
@@ -162,7 +162,7 @@ export function FleetToolbar({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button data-testid="retention-filter-trigger" variant="outline" size="sm" className="h-8 gap-1.5 text-xs flex-1 sm:flex-none">
+            <Button data-testid="retention-filter-trigger" variant="outline" size="sm" className="h-9 gap-1.5 text-xs flex-1 sm:flex-none">
               <span className="hidden xs:inline">Show: {RETENTION_FILTER_LABELS[retentionFilter]}</span>
               <span className="xs:hidden">Show</span>
             </Button>

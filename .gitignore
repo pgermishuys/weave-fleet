@@ -32,3 +32,11 @@ Thumbs.db
 # Weave internal
 .weave/state/
 .weave/state.json
+.weave/runtime/
+
+# Test results
+test-results/
+client/test-results/
+
+# Local databases
+*.db

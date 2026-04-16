@@ -93,14 +93,14 @@ function IconRailButton({ icon: Icon, label, view, onSwitch }: IconRailButtonPro
               : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground"
           )}
         >
-          {/* Active left-border indicator */}
+          {/* Active left-border indicator — gradient for brand presence */}
           {isActive && (
             <span
               aria-hidden="true"
-              className="absolute left-0 top-1/4 h-1/2 w-0.5 rounded-r-sm bg-icon-rail-active"
+              className="absolute left-0 top-1/4 h-1/2 w-1 rounded-r-sm bg-gradient-to-b from-weave-blue via-weave-purple to-weave-pink"
             />
           )}
-          <Icon className="h-5 w-5 shrink-0" />
+          <Icon className="h-[22px] w-[22px] shrink-0" />
         </button>
       </TooltipTrigger>
       <TooltipContent side="right">{label}</TooltipContent>
@@ -132,14 +132,14 @@ function IconRailLink({ icon: Icon, label, href }: IconRailLinkProps) {
               : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground"
           )}
         >
-          {/* Active left-border indicator */}
+          {/* Active left-border indicator — gradient for brand presence */}
           {isActive && (
             <span
               aria-hidden="true"
-              className="absolute left-0 top-1/4 h-1/2 w-0.5 rounded-r-sm bg-icon-rail-active"
+              className="absolute left-0 top-1/4 h-1/2 w-1 rounded-r-sm bg-gradient-to-b from-weave-blue via-weave-purple to-weave-pink"
             />
           )}
-          <Icon className="h-5 w-5 shrink-0" />
+          <Icon className="h-[22px] w-[22px] shrink-0" />
         </Link>
       </TooltipTrigger>
       <TooltipContent side="right">{label}</TooltipContent>
@@ -151,7 +151,7 @@ function VersionBadge() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <p className="text-center text-[9px] text-muted-foreground/40 select-none py-1 cursor-default leading-tight">
+        <p className="text-center text-[10px] text-muted-foreground/40 select-none py-1 cursor-default leading-tight">
           v{import.meta.env.VITE_APP_VERSION?.split(".")[0]}
         </p>
       </TooltipTrigger>
@@ -191,7 +191,7 @@ function ProfileBadge() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <p className="text-center text-[8px] text-purple-400/70 select-none py-0.5 cursor-default leading-tight truncate px-0.5 max-w-full">
+        <p className="text-center text-[10px] text-purple-400/70 select-none py-0.5 cursor-default leading-tight truncate px-0.5 max-w-full">
           {profile}
         </p>
       </TooltipTrigger>
@@ -292,7 +292,7 @@ export function SidebarIconRail() {
       aria-label="Sidebar navigation"
       aria-orientation="vertical"
       className={cn(
-        "flex w-12 shrink-0 flex-col bg-icon-rail py-1",
+        "flex w-14 shrink-0 flex-col bg-icon-rail py-1",
         // Only show the right border when the panel is open (it acts as the
         // rail/panel separator). When the panel is closed the <aside>'s own
         // border-r handles the sidebar/main boundary.
@@ -316,7 +316,7 @@ export function SidebarIconRail() {
               {isWelcome && (
                 <span
                   aria-hidden="true"
-                  className="absolute left-0 top-1/4 h-1/2 w-0.5 rounded-r-sm bg-icon-rail-active"
+                  className="absolute left-0 top-1/4 h-1/2 w-1 rounded-r-sm bg-gradient-to-b from-weave-blue via-weave-purple to-weave-pink"
                 />
               )}
               <img

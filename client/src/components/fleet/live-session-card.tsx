@@ -84,19 +84,19 @@ export const LiveSessionCard = React.memo(function LiveSessionCard({
   const cardContent = (
     <div className={`relative group ${isInactive ? "opacity-60" : ""}`} data-testid="session-card" data-session-id={session.id}>
       <Link to={`/sessions/${encodeURIComponent(session.id)}?instanceId=${encodeURIComponent(instanceId)}`}>
-        <Card className="transition-all hover:border-foreground/20 hover:shadow-md cursor-pointer">
+        <Card className="transition-all hover:shadow-[var(--card-shadow-hover)] hover:border-primary/20 cursor-pointer">
           <CardHeader className="pb-2 pt-4 px-4">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2">
-                <span className={`h-2.5 w-2.5 rounded-full ${sessionStatusDot}`} data-testid="session-status-indicator" data-status={sessionStatusLabel} />
-                <h3 className="font-semibold text-sm font-mono truncate max-w-[140px]" data-testid="session-title">
+                <span className={`h-3 w-3 rounded-full ${sessionStatusDot}`} data-testid="session-status-indicator" data-status={sessionStatusLabel} />
+                <h3 className="font-semibold text-sm truncate max-w-[180px]" data-testid="session-title">
                   {session.title || session.id.slice(0, 12)}
                 </h3>
               </div>
               <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
             <div className="flex items-center gap-1.5 mt-1">
-              <Badge variant={badgeVariant} className="text-[10px] px-1.5 py-0">
+              <Badge variant={badgeVariant} className="text-[11px] px-1.5 py-0">
                 {sessionStatusLabel}
               </Badge>
               {ConnectionIcon && (
@@ -105,7 +105,7 @@ export const LiveSessionCard = React.memo(function LiveSessionCard({
                 </span>
               )}
               {isArchived && (
-                <Badge data-testid="session-card-archived-badge" variant="outline" className="text-[10px] px-1.5 py-0">
+                <Badge data-testid="session-card-archived-badge" variant="outline" className="text-[11px] px-1.5 py-0">
                   archived
                 </Badge>
               )}
@@ -126,17 +126,17 @@ export const LiveSessionCard = React.memo(function LiveSessionCard({
                 </TooltipProvider>
               )}
               {isParent && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-cyan-600 dark:text-cyan-400 border-cyan-600/40 dark:border-cyan-400/40">
+                <Badge variant="outline" className="text-[11px] px-1.5 py-0 text-cyan-600 dark:text-cyan-400 border-cyan-600/40 dark:border-cyan-400/40">
                   conductor
                 </Badge>
               )}
               {isChild && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-orange-600 dark:text-orange-400 border-orange-600/40 dark:border-orange-400/40">
+                <Badge variant="outline" className="text-[11px] px-1.5 py-0 text-orange-600 dark:text-orange-400 border-orange-600/40 dark:border-orange-400/40">
                   child
                 </Badge>
               )}
               {isolationStrategy === "existing" && (
-                <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[120px]">
+                <span className="text-[11px] text-muted-foreground font-mono truncate max-w-[120px]">
                   {workspaceDirectory}
                 </span>
               )}
@@ -154,7 +154,7 @@ export const LiveSessionCard = React.memo(function LiveSessionCard({
                   variant="compact"
                 />
               )}
-              <span className="ml-auto text-[10px] font-mono text-muted-foreground/60">
+              <span className="ml-auto text-[11px] font-mono text-muted-foreground/60">
                 {session.id.slice(0, 8)}…
               </span>
             </div>

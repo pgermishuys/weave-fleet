@@ -40,16 +40,18 @@ export function SummaryBar({ summary }: SummaryBarProps) {
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3" data-testid="summary-bar">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4" data-testid="summary-bar">
       {items.map((item) => (
         <div
           key={item.label}
-          className="flex flex-col items-center rounded-lg border bg-card p-2 sm:p-3 text-center"
+          className="relative overflow-hidden flex flex-col items-center rounded-xl border bg-card p-3 sm:p-4 text-center shadow-[var(--card-shadow)] transition-shadow duration-200 hover:shadow-[var(--card-shadow-hover)]"
           data-testid={`summary-${item.label.toLowerCase()}`}
         >
-          <item.icon className={`h-4 w-4 ${item.color}`} />
-          <span className="mt-1 text-lg font-semibold" data-testid={`summary-${item.label.toLowerCase()}-count`}>{item.value}</span>
-          <span className="text-xs text-muted-foreground">{item.label}</span>
+          {/* Gradient top accent */}
+          <span className="absolute inset-x-0 top-0 h-0.5 weave-gradient-bg" aria-hidden="true" />
+          <item.icon className={`h-5 w-5 ${item.color}`} />
+          <span className="mt-1 text-2xl font-semibold tabular-nums tracking-tight" data-testid={`summary-${item.label.toLowerCase()}-count`}>{item.value}</span>
+          <span className="text-sm text-muted-foreground">{item.label}</span>
         </div>
       ))}
     </div>

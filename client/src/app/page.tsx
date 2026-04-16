@@ -251,7 +251,7 @@ function FleetPageInner() {
                 </span>
                 <span className="text-xs text-muted-foreground">({items.length})</span>
               </div>
-               <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+               <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 card-grid-animated">
                  {nestSessions(items).map(({ item, children }) => (
                    <div key={`${item.instanceId}-${item.session.id}`} className="contents">
                      <LiveSessionCard
@@ -323,7 +323,7 @@ function FleetPageInner() {
                 </span>
                 <span className="text-xs text-muted-foreground">({items.length})</span>
               </div>
-               <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+               <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 card-grid-animated">
                  {nestSessions(items).map(({ item, children }) => (
                    <div key={`${item.instanceId}-${item.session.id}`} className="contents">
                      <LiveSessionCard
@@ -387,7 +387,7 @@ function FleetPageInner() {
                 </span>
                 <span className="text-xs text-muted-foreground">({sorted.length})</span>
               </div>
-               <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+               <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 card-grid-animated">
                  {nestSessions(sorted).map(({ item, children }) => (
                    <div key={`${item.instanceId}-${item.session.id}`} className="contents">
                      <LiveSessionCard
@@ -449,7 +449,7 @@ function FleetPageInner() {
     if (prefs.groupBy === "none") {
       const nested = nestSessions(sortSessions(searchFiltered));
       return (
-        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 card-grid-animated">
           {nested.map(({ item, children }) => (
             <div key={`${item.instanceId}-${item.session.id}`} className="contents">
               <LiveSessionCard
