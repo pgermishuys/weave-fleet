@@ -58,6 +58,7 @@ interface NewSessionDialogProps {
   userProjects?: ProjectResponse[];
   initialSource?: SessionSourceSelection;
   initialTitle?: string;
+  initialProjectId?: string;
 }
 
 function makeSourceId(source: RegisteredSessionSource): string {
@@ -74,7 +75,7 @@ function generateBranchName(text: string): string {
     .replace(/^-|-$/g, "");
 }
 
-export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, defaultDirectory, userProjects: userProjectsProp, initialSource, initialTitle }: NewSessionDialogProps) {
+export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, defaultDirectory, userProjects: userProjectsProp, initialSource, initialTitle, initialProjectId }: NewSessionDialogProps) {
   const navigate = useNavigate();
   const { clientConfig } = useAppShell();
   const [internalOpen, setInternalOpen] = useState(false);
@@ -93,6 +94,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
   const [repoDropdownOpen, setRepoDropdownOpen] = useState(false);
   const [repoHighlightIdx, setRepoHighlightIdx] = useState(0);
   const [repoStrategy, setRepoStrategy] = useState<RepositoryIsolationStrategy>("worktree");
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const repoInputRef = useRef<HTMLInputElement>(null);
   const repoListRef = useRef<HTMLDivElement>(null);
 
@@ -379,7 +381,14 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
-      <DialogContent data-testid="new-session-dialog" className="sm:max-w-md top-[10%] translate-y-0 max-h-[85vh] overflow-y-auto">
+      <DialogContent
+        data-testid="new-session-dialog"
+        className="sm:max-w-md top-[10%] translate-y-0 max-h-[85vh] overflow-y-auto"
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          titleInputRef.current?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>New Session</DialogTitle>
         </DialogHeader>
@@ -448,6 +457,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
               Title <span className="font-normal text-muted-foreground">(optional)</span>
             </label>
             <Input
+              ref={titleInputRef}
               id="session-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
