@@ -175,11 +175,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     public Task SendCommandAsync(CommandOptions options, CancellationToken ct)
     {
         // Sanitize arguments: collapse newlines to spaces to prevent prompt injection
-        var sanitizedArgs = options.Arguments?.ReplaceLineEndings(" ");
-
-        var promptText = string.IsNullOrWhiteSpace(sanitizedArgs)
-            ? $"/{options.Command}"
-            : $"/{options.Command} {sanitizedArgs}";
+        var promptText = CommandFormatting.FormatCommandPrompt(options);
 
         var promptOptions = options.Agent is not null || options.ModelId is not null
             ? new PromptOptions { Agent = options.Agent, ModelId = options.ModelId }

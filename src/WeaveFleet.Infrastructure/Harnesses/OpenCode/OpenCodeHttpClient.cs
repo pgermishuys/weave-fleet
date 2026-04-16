@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
@@ -381,7 +382,7 @@ internal sealed class OpenCodeHttpClient
 
                         if (evt is null) continue;
 
-                        if (evt.Type is "server.heartbeat" or "server.connected")
+                        if (evt.Type is EventTypes.ServerHeartbeat or EventTypes.ServerConnected)
                         {
                             LogSseHeartbeat(_logger, evt.Type, null);
                             continue;

@@ -1,5 +1,5 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -50,80 +50,20 @@ internal static class ClientPayloadSanitizer
         if (!payload.HasValue)
             return JsonSerializer.SerializeToElement(new { });
 
-        if (string.Equals(eventType, "message.created", StringComparison.Ordinal)
-            || string.Equals(eventType, "message.updated", StringComparison.Ordinal))
-        {
-            return SanitizeMessageEventPayload(payload.Value);
-        }
-
-        if (!string.Equals(eventType, "message.part.updated", StringComparison.Ordinal))
+        if (!EventTypeMetadata.Classify(eventType).RequiresReasoningFilter)
             return payload.Value.Clone();
 
+        if (eventType is EventTypes.MessageCreated or EventTypes.MessageUpdated)
+            return ReasoningFilter.FilterMessageEventPayload(payload.Value);
+
+        // message.part.updated — suppress reasoning parts entirely
         var payloadValue = payload.Value;
         if (payloadValue.ValueKind != JsonValueKind.Object)
             return payloadValue.Clone();
 
-        if (!payloadValue.TryGetProperty("part", out var partElement) || partElement.ValueKind != JsonValueKind.Object)
-            return payloadValue.Clone();
-
-        if (!partElement.TryGetProperty("type", out var typeElement) || typeElement.ValueKind != JsonValueKind.String)
-            return payloadValue.Clone();
-
-        return string.Equals(typeElement.GetString(), "reasoning", StringComparison.Ordinal)
+        return ReasoningFilter.IsReasoningPartEvent(payloadValue)
             ? null
             : payloadValue.Clone();
-    }
-
-    private static JsonElement? SanitizeMessageEventPayload(JsonElement payload)
-    {
-        if (payload.ValueKind != JsonValueKind.Object)
-            return payload.Clone();
-
-        if (!payload.TryGetProperty("parts", out var partsElement) || partsElement.ValueKind != JsonValueKind.Array)
-            return payload.Clone();
-
-        JsonArray? sanitizedParts = null;
-        var removedAny = false;
-
-        foreach (var part in partsElement.EnumerateArray())
-        {
-            if (IsReasoningPart(part))
-            {
-                removedAny = true;
-                continue;
-            }
-
-            sanitizedParts ??= [];
-            sanitizedParts.Add(JsonNode.Parse(part.GetRawText()));
-        }
-
-        if (!removedAny)
-            return payload.Clone();
-
-        var role = payload.TryGetProperty("info", out var infoElement)
-            && infoElement.ValueKind == JsonValueKind.Object
-            && infoElement.TryGetProperty("role", out var roleElement)
-            && roleElement.ValueKind == JsonValueKind.String
-                ? roleElement.GetString()
-                : null;
-
-        if (sanitizedParts is null && string.Equals(role, "assistant", StringComparison.Ordinal))
-            return null;
-
-        var payloadNode = JsonNode.Parse(payload.GetRawText())?.AsObject();
-        if (payloadNode is null)
-            return payload.Clone();
-
-        payloadNode["parts"] = sanitizedParts ?? [];
-        return JsonSerializer.SerializeToElement(payloadNode);
-    }
-
-    private static bool IsReasoningPart(JsonElement part)
-    {
-        return part.ValueKind == JsonValueKind.Object
-            && part.TryGetProperty("type", out var typeElement)
-            && typeElement.ValueKind == JsonValueKind.String
-            && string.Equals(typeElement.GetString(), "reasoning", StringComparison.Ordinal);
     }
 
     private static HarnessMessage? SanitizeMessage(HarnessMessage message)

@@ -77,7 +77,7 @@ internal static class ClaudeCodeMapper
 
         return new HarnessEvent
         {
-            Type = "message.updated",
+            Type = EventTypes.MessageUpdated,
             SessionId = sessionId,
             Timestamp = DateTimeOffset.UtcNow,
             Payload = payload,
@@ -110,7 +110,7 @@ internal static class ClaudeCodeMapper
         var payload = JsonSerializer.SerializeToElement(new { part = partPayload });
         return new HarnessEvent
         {
-            Type = "message.part.updated",
+            Type = EventTypes.MessagePartUpdated,
             SessionId = sessionId,
             Timestamp = DateTimeOffset.UtcNow,
             Payload = payload,
@@ -129,7 +129,7 @@ internal static class ClaudeCodeMapper
 
         return new HarnessEvent
         {
-            Type = "session.status",
+            Type = EventTypes.SessionStatus,
             SessionId = sessionId,
             Timestamp = DateTimeOffset.UtcNow,
             Payload = payload,
@@ -192,7 +192,7 @@ internal static class ClaudeCodeMapper
     {
         return new HarnessEvent
         {
-            Type = "session.idle",
+            Type = EventTypes.SessionIdle,
             SessionId = sessionId,
             Timestamp = DateTimeOffset.UtcNow,
             Payload = null,

@@ -279,13 +279,13 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
             // Enrich message events with modelId from the agent config cache.
             // OpenCode SSE events don't include modelId — only the REST API does.
-            if (harnessEvent.Type is "message.created" or "message.updated")
+            if (harnessEvent.Type is EventTypes.MessageCreated or EventTypes.MessageUpdated)
                 harnessEvent = await EnrichWithModelIdAsync(harnessEvent, ct).ConfigureAwait(false);
 
             // Fire-and-forget delegation detection for message.part.updated events.
             // This must remain in the session because it needs access to the raw SSE event
             // and the fleet session context for child session orchestration.
-            if (harnessEvent.Type == "message.part.updated")
+            if (harnessEvent.Type == EventTypes.MessagePartUpdated)
                 _ = TryEmitDelegationAsync(sseEvt);
 
             yield return harnessEvent;

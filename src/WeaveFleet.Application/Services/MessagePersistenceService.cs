@@ -24,7 +24,7 @@ public sealed class MessagePersistenceService
     /// </summary>
     public static PersistedMessage ToPersistedMessage(string sessionId, HarnessMessage message)
     {
-        var partsJson = JsonSerializer.Serialize(FilterDurableParts(message.Parts), SerializerOptions);
+        var partsJson = JsonSerializer.Serialize(ReasoningFilter.FilterDurableParts(message.Parts), SerializerOptions);
         return new PersistedMessage
         {
             Id = message.Id,
@@ -66,11 +66,7 @@ public sealed class MessagePersistenceService
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        var sanitizedArgs = options.Arguments?.ReplaceLineEndings(" ");
-        var prompt = string.IsNullOrWhiteSpace(sanitizedArgs)
-            ? $"/{options.Command}"
-            : $"/{options.Command} {sanitizedArgs}";
-
+        var prompt = CommandFormatting.FormatCommandPrompt(options);
         return CreateUserPromptMessage(prompt, timestamp, options.Agent);
     }
 
@@ -80,7 +76,7 @@ public sealed class MessagePersistenceService
     /// </summary>
     public static HarnessMessage ToHarnessMessage(PersistedMessage persisted)
     {
-        var parts = FilterDurableParts(JsonSerializer.Deserialize<IReadOnlyList<MessagePart>>(
+        var parts = ReasoningFilter.FilterDurableParts(JsonSerializer.Deserialize<IReadOnlyList<MessagePart>>(
             persisted.PartsJson, SerializerOptions) ?? []);
 
         return new HarnessMessage
@@ -122,29 +118,20 @@ public sealed class MessagePersistenceService
         if (!payload.HasValue)
             return JsonSerializer.SerializeToElement(new { });
 
-        if (eventType is "message.created" or "message.updated")
-            return SanitizeMessageLifecyclePayload(payload.Value);
+        if (!EventTypeMetadata.Classify(eventType).RequiresReasoningFilter)
+            return payload.Value.Clone();
 
-        if (eventType == "message.part.updated")
-        {
-            var payloadValue = payload.Value;
-            if (payloadValue.ValueKind != JsonValueKind.Object)
-                return payloadValue.Clone();
+        if (eventType is EventTypes.MessageCreated or EventTypes.MessageUpdated)
+            return ReasoningFilter.FilterMessageEventPayload(payload.Value);
 
-            if (!payloadValue.TryGetProperty("part", out var partElement)
-                || partElement.ValueKind != JsonValueKind.Object
-                || !partElement.TryGetProperty("type", out var typeElement)
-                || typeElement.ValueKind != JsonValueKind.String)
-            {
-                return payloadValue.Clone();
-            }
+        // message.part.updated — suppress reasoning parts entirely
+        var payloadValue = payload.Value;
+        if (payloadValue.ValueKind != JsonValueKind.Object)
+            return payloadValue.Clone();
 
-            return string.Equals(typeElement.GetString(), "reasoning", StringComparison.Ordinal)
-                ? null
-                : payloadValue.Clone();
-        }
-
-        return payload.Value.Clone();
+        return ReasoningFilter.IsReasoningPartEvent(payloadValue)
+            ? null
+            : payloadValue.Clone();
     }
 
     /// <summary>
@@ -264,15 +251,6 @@ public sealed class MessagePersistenceService
                     parts.Add(textPart);
                 break;
             }
-            case ReasoningPart reasoningPart:
-            {
-                var idx = parts.FindIndex(p => p is ReasoningPart);
-                if (idx >= 0)
-                    parts[idx] = reasoningPart;
-                else
-                    parts.Add(reasoningPart);
-                break;
-            }
             case FilePart filePart:
             {
                 var idx = parts.FindIndex(p => p is FilePart f && f.PartId == filePart.PartId);
@@ -327,45 +305,6 @@ public sealed class MessagePersistenceService
             }),
             _ => null,
         };
-    }
-
-    private static MessagePart[] FilterDurableParts(IReadOnlyList<MessagePart> parts)
-        => parts.Where(static part => part is not ReasoningPart).ToArray();
-
-    private static JsonElement? SanitizeMessageLifecyclePayload(JsonElement payload)
-    {
-        if (payload.ValueKind != JsonValueKind.Object)
-            return payload.Clone();
-
-        if (!payload.TryGetProperty("parts", out var partsElement) || partsElement.ValueKind != JsonValueKind.Array)
-            return payload.Clone();
-
-        var sanitizedParts = new List<JsonElement>();
-        var removedAny = false;
-
-        foreach (var part in partsElement.EnumerateArray())
-        {
-            if (part.ValueKind == JsonValueKind.Object
-                && part.TryGetProperty("type", out var typeElement)
-                && typeElement.ValueKind == JsonValueKind.String
-                && string.Equals(typeElement.GetString(), "reasoning", StringComparison.Ordinal))
-            {
-                removedAny = true;
-                continue;
-            }
-
-            sanitizedParts.Add(part.Clone());
-        }
-
-        if (!removedAny)
-            return payload.Clone();
-
-        var payloadNode = JsonNode.Parse(payload.GetRawText())?.AsObject();
-        if (payloadNode is null)
-            return payload.Clone();
-
-        payloadNode["parts"] = JsonSerializer.SerializeToNode(sanitizedParts);
-        return JsonSerializer.SerializeToElement(payloadNode);
     }
 
     /// <summary>

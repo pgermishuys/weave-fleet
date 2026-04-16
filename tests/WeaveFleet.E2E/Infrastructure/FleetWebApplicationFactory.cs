@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using WeaveFleet.Application.Configuration;
@@ -161,6 +162,14 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
 
         // ── Use ephemeral port for Kestrel (overrides "Urls" in appsettings.json) ──
         builder.UseUrls("http://127.0.0.1:0");
+        builder.UseSetting("Urls", "http://127.0.0.1:0");
+        builder.ConfigureAppConfiguration(config =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Urls"] = "http://127.0.0.1:0"
+            });
+        });
     }
 
     private static void RemoveProductionHarnessRegistrations(IServiceCollection services)

@@ -136,14 +136,17 @@ public sealed class TestScenarioBuilder
         TimeSpan? delay = null)
     {
         var partId = $"{messageId}-part-1";
+        var userPartId = $"{messageId}-user-part-1";
         var responseDelay = delay ?? TimeSpan.FromMilliseconds(10);
 
-        // User message is NOT emitted here — PersistUserPromptAsync already
-        // persists and broadcasts the user message before the scenario events
-        // are emitted, so echoing it again would create a duplicate.
         return WithPromptResponse(b => b
             .AddEvent(MakeEvent(sessionId, "session.status",
                 new { sessionId, status = new { type = "busy" } }))
+            // User message echo — matches the real harness event flow
+            .AddEvent(MakeEvent(sessionId, "message.updated",
+                new { info = new { id = $"{messageId}-user", sessionID = sessionId, role = "user" } }))
+            .AddEvent(MakeEvent(sessionId, "message.part.updated",
+                new { sessionID = sessionId, part = new { id = userPartId, sessionID = sessionId, messageID = $"{messageId}-user", type = "text", text = TestHarnessPromptTokens.UserPromptPlaceholder } }))
             // Assistant response
             .AddEvent(MakeEvent(sessionId, "message.updated",
                 new { info = new { id = messageId, sessionID = sessionId, role = "assistant" } }),

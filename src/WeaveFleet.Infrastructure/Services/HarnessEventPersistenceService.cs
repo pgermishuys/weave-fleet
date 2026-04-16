@@ -41,31 +41,29 @@ internal sealed class HarnessEventPersistenceService
     /// </summary>
     internal async Task<bool> TryHandleDurableEventAsync(string fleetSessionId, HarnessEvent evt)
     {
-        if (evt.Type is "message.created" or "message.updated")
-            return await TryPersistMessageAsync(fleetSessionId, evt).ConfigureAwait(false);
+        if (!EventTypeMetadata.Classify(evt.Type).IsDurable)
+            return false;
 
-        if (evt.Type == "message.part.updated")
-            return await TryPersistPartAsync(fleetSessionId, evt).ConfigureAwait(false);
-
-        if (evt.Type == "message.removed")
-            return await TryHandleMessageRemovedAsync(fleetSessionId, evt).ConfigureAwait(false);
-
-        if (evt.Type == "message.part.removed")
-            return await TryHandleMessagePartRemovedAsync(fleetSessionId, evt).ConfigureAwait(false);
-
-        if (evt.Type == "session.updated")
-            return await TryHandleSessionUpdatedAsync(fleetSessionId, evt).ConfigureAwait(false);
-
-        if (evt.Type == "session.error")
-            return await TryHandleSessionErrorAsync(fleetSessionId, evt).ConfigureAwait(false);
-
-        if (evt.Type == "session.compacted")
-            return await TryHandleSessionCompactedAsync(fleetSessionId, evt).ConfigureAwait(false);
-
-        if (evt.Type == "session.deleted")
-            return await TryHandleSessionDeletedAsync(fleetSessionId, evt).ConfigureAwait(false);
-
-        return false;
+        return evt.Type switch
+        {
+            EventTypes.MessageCreated or EventTypes.MessageUpdated =>
+                await TryPersistMessageAsync(fleetSessionId, evt).ConfigureAwait(false),
+            EventTypes.MessagePartUpdated =>
+                await TryPersistPartAsync(fleetSessionId, evt).ConfigureAwait(false),
+            EventTypes.MessageRemoved =>
+                await TryHandleMessageRemovedAsync(fleetSessionId, evt).ConfigureAwait(false),
+            EventTypes.MessagePartRemoved =>
+                await TryHandleMessagePartRemovedAsync(fleetSessionId, evt).ConfigureAwait(false),
+            EventTypes.SessionUpdated =>
+                await TryHandleSessionUpdatedAsync(fleetSessionId, evt).ConfigureAwait(false),
+            EventTypes.SessionError =>
+                await TryHandleSessionErrorAsync(fleetSessionId, evt).ConfigureAwait(false),
+            EventTypes.SessionCompacted =>
+                await TryHandleSessionCompactedAsync(fleetSessionId, evt).ConfigureAwait(false),
+            EventTypes.SessionDeleted =>
+                await TryHandleSessionDeletedAsync(fleetSessionId, evt).ConfigureAwait(false),
+            _ => false,
+        };
     }
 
     /// <summary>
@@ -74,7 +72,7 @@ internal sealed class HarnessEventPersistenceService
     /// </summary>
     internal void BufferTextDelta(string fleetSessionId, HarnessEvent evt)
     {
-        if (evt.Type != "message.part.delta" || !evt.Payload.HasValue || evt.Payload.Value.ValueKind != JsonValueKind.Object)
+        if (evt.Type != EventTypes.MessagePartDelta || !evt.Payload.HasValue || evt.Payload.Value.ValueKind != JsonValueKind.Object)
             return;
 
         var payload = evt.Payload.Value;
@@ -149,7 +147,7 @@ internal sealed class HarnessEventPersistenceService
                             new OutboxMessage
                             {
                                 Topic = $"session:{fleetSessionId}",
-                                Type = "message.updated",
+                                Type = EventTypes.MessageUpdated,
                                 Payload = MessagePersistenceService.SerializePayload(
                                     MessagePersistenceService.BuildCommittedMessagePayload(merged)),
                                 UserId = _ownerUserId,
@@ -173,7 +171,7 @@ internal sealed class HarnessEventPersistenceService
 
     private async Task<bool> TryPersistMessageAsync(string fleetSessionId, HarnessEvent evt)
     {
-        if (evt.Type is not ("message.created" or "message.updated"))
+        if (evt.Type is not (EventTypes.MessageCreated or EventTypes.MessageUpdated))
             return false;
 
         try
@@ -231,7 +229,7 @@ internal sealed class HarnessEventPersistenceService
                 }
             }
 
-            if (evt.Type == "message.updated")
+            if (evt.Type == EventTypes.MessageUpdated)
             {
                 // Apply any buffered text deltas regardless of whether the message already
                 // exists in the DB. A message.updated arriving before any message.part.updated
@@ -262,7 +260,7 @@ internal sealed class HarnessEventPersistenceService
 
     private async Task<bool> TryPersistPartAsync(string fleetSessionId, HarnessEvent evt)
     {
-        if (evt.Type is not "message.part.updated")
+        if (evt.Type is not EventTypes.MessagePartUpdated)
             return false;
 
         try
@@ -494,7 +492,7 @@ internal sealed class HarnessEventPersistenceService
 
     private async Task WriteDurableEventAsync(string fleetSessionId, HarnessEvent evt, PersistedMessage persistedMessage)
     {
-        var durablePayload = evt.Type == "message.updated"
+        var durablePayload = evt.Type == EventTypes.MessageUpdated
             ? MessagePersistenceService.BuildCommittedMessagePayload(persistedMessage)
             : MessagePersistenceService.SanitizeDurableEventPayload(evt.Type, evt.Payload);
 

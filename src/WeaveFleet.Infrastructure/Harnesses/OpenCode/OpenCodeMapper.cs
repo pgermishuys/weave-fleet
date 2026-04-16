@@ -219,7 +219,7 @@ internal static class OpenCodeMapper
         string userId = "local-user")
     {
         // Only process message.updated events
-        if (evt.Type is not "message.updated")
+        if (evt.Type is not EventTypes.MessageUpdated)
             return null;
 
         try
@@ -290,7 +290,7 @@ internal static class OpenCodeMapper
 
     internal static DelegationExtraction? TryExtractDelegation(OpenCodeSseEvent evt, string parentSessionId)
     {
-        if (evt.Type is not "message.part.updated")
+        if (evt.Type is not EventTypes.MessagePartUpdated)
             return null;
 
         if (string.IsNullOrWhiteSpace(parentSessionId))

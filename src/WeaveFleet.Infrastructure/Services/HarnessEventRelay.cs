@@ -52,8 +52,7 @@ public sealed class HarnessEventRelay : BackgroundService
     // session.compacted, session.deleted) are handled by HarnessEventPersistenceService
     // and are NOT directly relayed to the broadcaster.
     private static bool IsEphemeralRelayEvent(string eventType)
-        => eventType is "session.status" or "session.idle" or "message.part.delta" or "error"
-            || eventType.StartsWith("permission.", StringComparison.Ordinal);
+        => EventTypeMetadata.Classify(eventType).IsEphemeralRelay;
 
     public HarnessEventRelay(
         InstanceTracker tracker,
@@ -269,10 +268,10 @@ public sealed class HarnessEventRelay : BackgroundService
     /// </summary>
     private static string? ParseActivityStatus(string eventType, JsonElement? payload)
     {
-        if (eventType == "session.idle")
+        if (eventType == EventTypes.SessionIdle)
             return "idle";
 
-        if (eventType == "session.status" && payload.HasValue)
+        if (eventType == EventTypes.SessionStatus && payload.HasValue)
         {
             // Payload shape: { "status": { "type": "busy" | "idle" | ... } }
             if (payload.Value.TryGetProperty("status", out var statusProp)
