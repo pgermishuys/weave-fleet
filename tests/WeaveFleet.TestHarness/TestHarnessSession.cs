@@ -63,6 +63,9 @@ public sealed class TestHarnessSession : IHarnessSession
     public string? ResumeToken => null;
 
     /// <inheritdoc/>
+    public int? ProcessId => null;
+
+    /// <inheritdoc/>
     public HarnessSessionStatus Status => _status;
 
     /// <inheritdoc/>

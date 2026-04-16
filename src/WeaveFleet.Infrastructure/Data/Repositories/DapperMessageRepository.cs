@@ -38,15 +38,16 @@ public sealed class DapperMessageRepository : IMessageRepository
     {
         await connection.ExecuteAsync(
             """
-            INSERT INTO messages (id, session_id, role, parts_json, timestamp, created_at, agent_name)
-            SELECT @Id, @SessionId, @Role, @PartsJson, @Timestamp, @CreatedAt, @AgentName
+            INSERT INTO messages (id, session_id, role, parts_json, timestamp, created_at, agent_name, model_id)
+            SELECT @Id, @SessionId, @Role, @PartsJson, @Timestamp, @CreatedAt, @AgentName, @ModelId
             FROM sessions
             WHERE id = @SessionId AND user_id = @UserId
             ON CONFLICT(id, session_id) DO UPDATE SET
                 role = excluded.role,
                 parts_json = excluded.parts_json,
                 timestamp = excluded.timestamp,
-                agent_name = COALESCE(excluded.agent_name, messages.agent_name)
+                agent_name = COALESCE(excluded.agent_name, messages.agent_name),
+                model_id = COALESCE(excluded.model_id, messages.model_id)
             """,
             new
             {
@@ -57,6 +58,7 @@ public sealed class DapperMessageRepository : IMessageRepository
                 message.Timestamp,
                 message.CreatedAt,
                 message.AgentName,
+                message.ModelId,
                 UserId = _userContext.UserId
             },
             transaction);

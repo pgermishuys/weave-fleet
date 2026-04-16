@@ -43,6 +43,7 @@ internal static class OpenCodeMapper
             Parts = parts,
             Timestamp = DateTimeOffsetFromUnixMs(msg.Info.Time.Created),
             Agent = ExtractAgent(msg.Info),
+            ModelId = ExtractModelId(msg.Info),
         };
     }
 
@@ -188,6 +189,12 @@ internal static class OpenCodeMapper
     {
         OpenCodeAssistantMessage a => a.Agent,
         OpenCodeUserMessage u => u.Agent,
+        _ => null,
+    };
+
+    private static string? ExtractModelId(OpenCodeMessageInfo info) => info switch
+    {
+        OpenCodeAssistantMessage a => a.ModelId,
         _ => null,
     };
 

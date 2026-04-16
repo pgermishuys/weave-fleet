@@ -81,7 +81,7 @@ public sealed class TestScenarioBuilderTests
     }
 
     [Fact]
-    public void WithSimpleTextResponse_enqueues_6_events()
+    public void WithSimpleTextResponse_enqueues_4_events()
     {
         var scenario = new TestScenarioBuilder()
             .WithSimpleTextResponse("sess-1", "msg-1", "Hello back!")
@@ -89,13 +89,11 @@ public sealed class TestScenarioBuilderTests
 
         scenario.PromptResponses.Count.ShouldBe(1);
         var events = scenario.PromptResponses.Dequeue();
-        events.Count.ShouldBe(6);
+        events.Count.ShouldBe(4);
         events[0].Event.Type.ShouldBe("session.status");
-        events[1].Event.Type.ShouldBe("message.updated");   // user message
-        events[2].Event.Type.ShouldBe("message.part.updated"); // user part
-        events[3].Event.Type.ShouldBe("message.updated");   // assistant message
-        events[4].Event.Type.ShouldBe("message.part.updated"); // assistant part
-        events[5].Event.Type.ShouldBe("session.idle");
+        events[1].Event.Type.ShouldBe("message.updated");   // assistant message
+        events[2].Event.Type.ShouldBe("message.part.updated"); // assistant part
+        events[3].Event.Type.ShouldBe("session.idle");
     }
 
     [Fact]

@@ -31,7 +31,7 @@ public static class WebSocketEndpoints
 
     private static async Task HandleWebSocketAsync(HttpContext context)
     {
-        var fleetOptions = context.RequestServices.GetRequiredService<WeaveFleet.Application.Configuration.FleetOptions>();
+        var fleetOptions = context.RequestServices.GetRequiredService<Application.Configuration.FleetOptions>();
 
         if (!IsOriginAllowed(context, fleetOptions))
         {
@@ -48,7 +48,7 @@ public static class WebSocketEndpoints
         using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
         var logger = context.RequestServices.GetRequiredService<ILogger<WebApplication>>();
         var broadcaster = context.RequestServices.GetRequiredService<IEventBroadcaster>();
-        var userContext = context.RequestServices.GetRequiredService<WeaveFleet.Application.Services.IUserContext>();
+        var userContext = context.RequestServices.GetRequiredService<IUserContext>();
 
         if (logger.IsEnabled(LogLevel.Debug))
             LogConnected(logger, context.Connection.RemoteIpAddress?.ToString(), null);
@@ -260,7 +260,7 @@ public static class WebSocketEndpoints
         }
     }
 
-    private static bool IsOriginAllowed(HttpContext context, WeaveFleet.Application.Configuration.FleetOptions fleetOptions)
+    private static bool IsOriginAllowed(HttpContext context, Application.Configuration.FleetOptions fleetOptions)
     {
         if (!fleetOptions.Auth.Enabled)
             return true;

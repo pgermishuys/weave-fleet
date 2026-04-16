@@ -14,4 +14,5 @@ public sealed class PersistedMessage
     public string Timestamp { get; set; } = string.Empty;
     public string CreatedAt { get; set; } = string.Empty;
     public string? AgentName { get; set; }
+    public string? ModelId { get; set; }
 }

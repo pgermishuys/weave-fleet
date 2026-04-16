@@ -359,7 +359,7 @@ internal sealed class OpenCodeHttpClient
 
                     response.EnsureSuccessStatusCode();
                     await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-                    using var reader = new System.IO.StreamReader(stream);
+                    using var reader = new StreamReader(stream);
 
                     while (!ct.IsCancellationRequested)
                     {

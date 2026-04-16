@@ -17,6 +17,7 @@ export interface FleetMessage {
   timestamp: string;     // ISO 8601 DateTimeOffset
   textContent: string;   // convenience: concatenated text parts
   agent?: string;        // agent name (e.g. "loom", "thread") — null for non-agent messages
+  modelId?: string;      // model that produced this message (e.g. "claude-sonnet-4")
 }
 
 /** Polymorphic message part — discriminated by "type" field. */
@@ -232,6 +233,7 @@ export function convertFleetMessageToAccumulated(msg: FleetMessage): Accumulated
     parts,
     createdAt,
     agent: msg.agent,
+    modelID: msg.modelId,
     cost: cost || undefined,
     tokens:
       tokensInput || tokensOutput || tokensReasoning

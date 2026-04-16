@@ -135,22 +135,15 @@ public sealed class TestScenarioBuilder
         string text,
         TimeSpan? delay = null)
     {
-        var userMessageId = $"{messageId}-user";
-        var userPartId = $"{userMessageId}-part-1";
         var partId = $"{messageId}-part-1";
         var responseDelay = delay ?? TimeSpan.FromMilliseconds(10);
 
+        // User message is NOT emitted here — PersistUserPromptAsync already
+        // persists and broadcasts the user message before the scenario events
+        // are emitted, so echoing it again would create a duplicate.
         return WithPromptResponse(b => b
             .AddEvent(MakeEvent(sessionId, "session.status",
                 new { sessionId, status = new { type = "busy" } }))
-            // User message — mirrors real OpenCode behaviour where the user's prompt
-            // is echoed back via SSE so the frontend can render it.
-            .AddEvent(MakeEvent(sessionId, "message.updated",
-                new { info = new { id = userMessageId, sessionID = sessionId, role = "user" } }),
-                responseDelay)
-            .AddEvent(MakeEvent(sessionId, "message.part.updated",
-                new { sessionID = sessionId, part = new { id = userPartId, sessionID = sessionId, messageID = userMessageId, type = "text", text = TestHarnessPromptTokens.UserPromptPlaceholder } }),
-                responseDelay)
             // Assistant response
             .AddEvent(MakeEvent(sessionId, "message.updated",
                 new { info = new { id = messageId, sessionID = sessionId, role = "assistant" } }),

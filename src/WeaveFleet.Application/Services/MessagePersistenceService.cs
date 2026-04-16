@@ -34,6 +34,7 @@ public sealed class MessagePersistenceService
             Timestamp = message.Timestamp.ToString("O"),
             CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
             AgentName = message.Agent,
+            ModelId = message.ModelId,
         };
     }
 
@@ -92,6 +93,7 @@ public sealed class MessagePersistenceService
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.RoundtripKind),
             Agent = persisted.AgentName,
+            ModelId = persisted.ModelId,
         };
     }
 
@@ -169,10 +171,11 @@ public sealed class MessagePersistenceService
                 role = message.Role,
                 sessionID = persisted.SessionId,
                 agent = message.Agent,
+                modelID = message.ModelId,
                 time = new { created = message.Timestamp.ToUnixTimeMilliseconds() },
             },
             parts,
-        });
+        }, SerializerOptions);
     }
 
     /// <summary>
@@ -222,6 +225,7 @@ public sealed class MessagePersistenceService
             Timestamp = existing.Timestamp,
             CreatedAt = existing.CreatedAt,
             AgentName = agentName ?? existing.AgentName,
+            ModelId = existing.ModelId,
         };
     }
 
@@ -301,6 +305,7 @@ public sealed class MessagePersistenceService
             Timestamp = existing.Timestamp,
             CreatedAt = existing.CreatedAt,
             AgentName = agentName ?? existing.AgentName,
+            ModelId = existing.ModelId,
         };
     }
 
@@ -380,6 +385,7 @@ public sealed class MessagePersistenceService
             Timestamp = existing.Timestamp,
             CreatedAt = existing.CreatedAt,
             AgentName = agentName ?? existing.AgentName,
+            ModelId = existing.ModelId,
         };
     }
 }

@@ -6,21 +6,6 @@ namespace WeaveFleet.Application.Services;
 /// </summary>
 public interface IEventBroadcaster
 {
-    /// <summary>
-    /// Publish an event to all subscribers of <paramref name="topic"/>.
-    /// </summary>
-    /// <param name="topic">The pub/sub topic.</param>
-    /// <param name="type">The event type name.</param>
-    /// <param name="payload">Event payload to serialize.</param>
-    /// <param name="userId">
-    /// The owner's user ID. When non-null, only subscribers with the same user ID receive the event.
-    /// Null means system-level — delivered to all matching subscribers regardless of user.
-    /// </param>
-    /// <param name="ct">Cancellation token.</param>
-    Task BroadcastAsync(string topic, string type, object payload);
-
-    Task BroadcastAsync(string topic, string type, object payload, CancellationToken ct);
-
     Task BroadcastAsync(string topic, string type, object payload, string? userId, CancellationToken ct);
 
     Task BroadcastAsync(string topic, string type, object payload, long? sequenceNumber, string? userId, CancellationToken ct);

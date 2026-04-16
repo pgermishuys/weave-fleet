@@ -33,6 +33,7 @@ public sealed class OpenCodeMapperTests
         result.Timestamp.ShouldBe(DateTimeOffset.FromUnixTimeMilliseconds(1_000_000L));
         result.Parts.Count.ShouldBe(1);
         result.TextContent.ShouldBe("Hello");
+        result.ModelId.ShouldBeNull();
     }
 
     // ---------------------------------------------------------------------------
@@ -61,6 +62,7 @@ public sealed class OpenCodeMapperTests
         result.Role.ShouldBe("assistant");
         result.Timestamp.ShouldBe(DateTimeOffset.FromUnixTimeMilliseconds(2_000_000L));
         result.Parts.ShouldBeEmpty();
+        result.ModelId.ShouldBe("gpt-4o");
     }
 
     // ---------------------------------------------------------------------------

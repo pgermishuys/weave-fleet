@@ -209,12 +209,20 @@ internal sealed class HarnessEventPersistenceService
             var persisted = MessagePersistenceService.ToPersistedMessage(fleetSessionId, harnessMessage);
             var existing = await _messageRepository.GetByIdAsync(persisted.Id, persisted.SessionId).ConfigureAwait(false);
 
+            // Track whether the incoming event carries a ModelId that the existing record lacks.
+            var modelIdChanged = existing is not null && existing.ModelId is null && persisted.ModelId is not null;
+
+            // Backfill ModelId from the incoming event into any existing record so it
+            // is not lost when the skeleton message.created arrives before message.updated.
+            if (modelIdChanged)
+                existing!.ModelId = persisted.ModelId;
+
             if (harnessMessage.Parts.Count == 0)
             {
                 if (existing is not null)
                 {
                     var merged = MessagePersistenceService.MergeMetadata(existing, persisted.Role, persisted.AgentName);
-                    if (existing.Role != merged.Role || existing.AgentName != merged.AgentName)
+                    if (existing.Role != merged.Role || existing.AgentName != merged.AgentName || modelIdChanged)
                     {
                         await WriteDurableEventAsync(fleetSessionId, evt, merged).ConfigureAwait(false);
                         return true;
@@ -234,7 +242,8 @@ internal sealed class HarnessEventPersistenceService
                 if (existing is null
                     || existing.Role != merged.Role
                     || existing.AgentName != merged.AgentName
-                    || existing.PartsJson != merged.PartsJson)
+                    || existing.PartsJson != merged.PartsJson
+                    || modelIdChanged)
                 {
                     await WriteDurableEventAsync(fleetSessionId, evt, merged).ConfigureAwait(false);
                     return true;

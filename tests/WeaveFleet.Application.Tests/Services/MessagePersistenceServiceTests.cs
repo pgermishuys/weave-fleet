@@ -429,18 +429,136 @@ public sealed class MessagePersistenceServiceTests
     }
 
     [Fact]
-    public void MergeMetadata_PreservesPartsWhileUpdatingMessageIdentity()
+    public void BuildCommittedMessagePayload_IncludesModelIdInInfo()
     {
-        var existing = MakePersistedMessage("""[{"type":"text","text":"existing content"}]""");
+        var persisted = new PersistedMessage
+        {
+            Id = "msg-1",
+            SessionId = "session-1",
+            Role = "assistant",
+            PartsJson = """[{"type":"text","text":"Hello"}]""",
+            Timestamp = new DateTimeOffset(2026, 4, 15, 6, 0, 0, TimeSpan.Zero).ToString("O"),
+            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            AgentName = "loom",
+            ModelId = "claude-sonnet-4",
+        };
 
-        var result = MessagePersistenceService.MergeMetadata(
-            existing,
-            "user",
-            "loom");
+        var payload = MessagePersistenceService.BuildCommittedMessagePayload(persisted);
 
-        result.Role.ShouldBe("user");
-        result.AgentName.ShouldBe("loom");
-        result.PartsJson.ShouldContain("existing content");
-        result.Timestamp.ShouldBe(existing.Timestamp);
+        payload.GetProperty("info").GetProperty("modelID").GetString().ShouldBe("claude-sonnet-4");
+    }
+
+    [Fact]
+    public void BuildCommittedMessagePayload_OmitsModelIdWhenNull()
+    {
+        var persisted = new PersistedMessage
+        {
+            Id = "msg-1",
+            SessionId = "session-1",
+            Role = "user",
+            PartsJson = """[{"type":"text","text":"Hello"}]""",
+            Timestamp = new DateTimeOffset(2026, 4, 15, 6, 0, 0, TimeSpan.Zero).ToString("O"),
+            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+        };
+
+        var payload = MessagePersistenceService.BuildCommittedMessagePayload(persisted);
+
+        payload.GetProperty("info").TryGetProperty("modelID", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void ToPersistedMessage_CarriesModelId()
+    {
+        var message = new HarnessMessage
+        {
+            Id = "msg-1",
+            Role = "assistant",
+            Parts = [new TextPart("Hello")],
+            Timestamp = DateTimeOffset.UtcNow,
+            Agent = "loom",
+            ModelId = "claude-sonnet-4",
+        };
+
+        var persisted = MessagePersistenceService.ToPersistedMessage("session-1", message);
+
+        persisted.ModelId.ShouldBe("claude-sonnet-4");
+    }
+
+    [Fact]
+    public void ToHarnessMessage_CarriesModelId()
+    {
+        var persisted = new PersistedMessage
+        {
+            Id = "msg-1",
+            SessionId = "session-1",
+            Role = "assistant",
+            PartsJson = """[{"type":"text","text":"Hello"}]""",
+            Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            AgentName = "loom",
+            ModelId = "claude-sonnet-4",
+        };
+
+        var message = MessagePersistenceService.ToHarnessMessage(persisted);
+
+        message.ModelId.ShouldBe("claude-sonnet-4");
+    }
+
+    [Fact]
+    public void MergeTextDeltaAndMetadata_PreservesModelId()
+    {
+        var existing = new PersistedMessage
+        {
+            Id = "msg-1",
+            SessionId = "session-1",
+            Role = "assistant",
+            PartsJson = """[{"type":"text","text":"Hello"}]""",
+            Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            ModelId = "claude-sonnet-4",
+        };
+
+        var result = MessagePersistenceService.MergeTextDeltaAndMetadata(existing, " world", "assistant", null);
+
+        result.ModelId.ShouldBe("claude-sonnet-4");
+    }
+
+    [Fact]
+    public void MergePartAndMetadata_PreservesModelId()
+    {
+        var existing = new PersistedMessage
+        {
+            Id = "msg-1",
+            SessionId = "session-1",
+            Role = "assistant",
+            PartsJson = "[]",
+            Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            ModelId = "claude-sonnet-4",
+        };
+
+        var result = MessagePersistenceService.MergePartAndMetadata(existing, new TextPart("Hello"), "assistant", null);
+
+        result.ModelId.ShouldBe("claude-sonnet-4");
+    }
+
+    [Fact]
+    public void MergeMetadata_PreservesModelId()
+    {
+        var existing = new PersistedMessage
+        {
+            Id = "msg-1",
+            SessionId = "session-1",
+            Role = "assistant",
+            PartsJson = "[]",
+            Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            ModelId = "claude-sonnet-4",
+        };
+
+        var result = MessagePersistenceService.MergeMetadata(existing, "assistant", null);
+
+        result.ModelId.ShouldBe("claude-sonnet-4");
     }
 }
+

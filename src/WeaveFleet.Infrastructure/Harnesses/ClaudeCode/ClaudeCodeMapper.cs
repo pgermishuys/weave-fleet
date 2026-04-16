@@ -1,5 +1,6 @@
 using System.Text.Json;
 using WeaveFleet.Application.Analytics;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
@@ -35,6 +36,7 @@ internal static class ClaudeCodeMapper
             Role = "assistant",
             Parts = parts,
             Timestamp = timestamp,
+            ModelId = msg.Message?.Model,
         };
     }
 
@@ -68,9 +70,10 @@ internal static class ClaudeCodeMapper
                 id = msg.Id,
                 role = msg.Role,
                 sessionID = sessionId,
+                modelID = msg.ModelId,
                 time = new { created = msg.Timestamp.ToUnixTimeMilliseconds() },
             }
-        });
+        }, MessagePersistenceService.SerializerOptions);
 
         return new HarnessEvent
         {

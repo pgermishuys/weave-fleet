@@ -108,6 +108,9 @@ public sealed record HarnessMessage
     /// <summary>The agent that produced this message (e.g. "loom", "thread").</summary>
     public string? Agent { get; init; }
 
+    /// <summary>The model that produced this message (e.g. "claude-sonnet-4").</summary>
+    public string? ModelId { get; init; }
+
     /// <summary>Convenience: concatenated text parts.</summary>
     public string TextContent =>
         string.Join("", Parts.OfType<TextPart>().Select(p => p.Text));
