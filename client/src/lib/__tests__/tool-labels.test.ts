@@ -123,41 +123,6 @@ describe("getToolLabel", () => {
     expect(getToolLabel("skill", null)).toBe("skill");
   });
 
-  // ─── question ──────────────────────────────────────────────────────────────
-
-  it("returns header for question when present", () => {
-    expect(
-      getToolLabel("question", {
-        questions: [{ header: "Fix approach", question: "How to proceed?" }],
-      }),
-    ).toBe("Fix approach");
-  });
-
-  it("falls back to truncated question text when header is missing", () => {
-    expect(
-      getToolLabel("question", {
-        questions: [{ question: "How would you like to proceed with the fix?" }],
-      }),
-    ).toBe("How would you like to proceed with the fix?");
-  });
-
-  it("truncates long question text at 60 chars", () => {
-    const longQuestion = "a".repeat(80);
-    const result = getToolLabel("question", {
-      questions: [{ question: longQuestion }],
-    });
-    expect(result).toHaveLength(61); // 60 + "…"
-    expect(result.endsWith("…")).toBe(true);
-  });
-
-  it("falls back to 'question' when input is null", () => {
-    expect(getToolLabel("question", null)).toBe("question");
-  });
-
-  it("falls back to 'question' when questions array is empty", () => {
-    expect(getToolLabel("question", { questions: [] })).toBe("question");
-  });
-
   // ─── unknown tools ────────────────────────────────────────────────────────
 
   it("returns tool name for unknown tools", () => {

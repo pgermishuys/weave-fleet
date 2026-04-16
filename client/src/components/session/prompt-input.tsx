@@ -49,8 +49,6 @@ interface PromptInputProps {
   onFocusRequest?: (focus: () => void) => void;
   /** Current session status — used for message queue (queue on busy, auto-send on idle). */
   sessionStatus?: "idle" | "busy";
-  /** When true, the session has a pending question tool awaiting user input — bypass the queue. */
-  hasPendingQuestion?: boolean;
 }
 
 let nextAttachmentId = 0;
@@ -70,7 +68,6 @@ export function PromptInput({
   onModelChange,
   onFocusRequest,
   sessionStatus = "idle",
-  hasPendingQuestion = false,
 }: PromptInputProps) {
   const { text: persistedDraft, setText: persistDraft, clearDraft } = useDraftState(sessionId);
   const [value, setValue] = useState(persistedDraft);
@@ -332,11 +329,8 @@ export function PromptInput({
         : undefined;
 
     // If session is busy, queue the message instead of sending directly.
-    // Exception: when a question tool is pending, send immediately so the
-    // answer reaches the agent (otherwise the queue deadlocks — the session
-    // stays busy waiting for the answer while the answer waits for idle).
     // Note: queue doesn't support attachments yet — send text only
-    if (sessionStatus === "busy" && !hasPendingQuestion && !attachments) {
+    if (sessionStatus === "busy" && !attachments) {
       messageQueue.enqueue(
         text,
         selectedAgent ?? undefined,
@@ -516,7 +510,7 @@ export function PromptInput({
               autocomplete.onClose();
             }, 150);
           }}
-          placeholder={disabledMessage ?? (hasPendingQuestion ? "Reply to the question above…" : sessionStatus === "busy" ? "Queue a follow-up message…" : "Send a message to this session…")}
+          placeholder={disabledMessage ?? (sessionStatus === "busy" ? "Queue a follow-up message…" : "Send a message to this session…")}
           className="text-sm"
           disabled={isDisabled}
           style={{ overflowY: "hidden" }}
@@ -565,11 +559,11 @@ export function PromptInput({
           data-testid="prompt-send-button"
           disabled={!canSend}
           onClick={() => void handleSend()}
-          title={sessionStatus === "busy" && !hasPendingQuestion ? "Queue message" : "Send message"}
+          title={sessionStatus === "busy" ? "Queue message" : "Send message"}
         >
           {isSending ? (
             <Loader2 className="h-4 w-4 animate-spin" />
-          ) : sessionStatus === "busy" && !hasPendingQuestion ? (
+          ) : sessionStatus === "busy" ? (
             <ListPlus className="h-4 w-4" />
           ) : (
             <Send className="h-4 w-4" />

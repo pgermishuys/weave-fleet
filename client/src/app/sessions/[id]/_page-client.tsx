@@ -534,24 +534,6 @@ export default function SessionDetailPage() {
     }));
   })();
 
-  // Detect whether the last assistant message has a question tool in "running" state.
-  // When true, the prompt input should send replies immediately instead of queuing
-  // them — otherwise the queue deadlocks (session stays busy waiting for the answer
-  // while the answer waits for the session to go idle).
-  const hasPendingQuestion = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i];
-      if (msg.role !== "assistant") continue;
-      return msg.parts.some(
-        (p) =>
-          p.type === "tool" &&
-          p.tool === "question" &&
-          (p.state as { status?: string } | undefined)?.status === "running"
-      );
-    }
-    return false;
-  }, [messages]);
-
   const handleSend = useCallback(
     async (text: string, agent?: string, model?: SelectedModel, attachments?: ImageAttachment[]) => {
       await sendPrompt(sessionId, instanceId, text, agent, model ?? undefined, attachments);
@@ -1071,6 +1053,7 @@ export default function SessionDetailPage() {
                   disabled={isReadOnly}
                 >
                   <ActivityStreamV1
+                    key={sessionId}
                     messages={messages}
                     delegations={delegations}
                     status={status}
@@ -1106,7 +1089,6 @@ export default function SessionDetailPage() {
                 selectedModel={selectedModel}
                 onModelChange={setSelectedModel}
                 sessionStatus={sessionStatus}
-                hasPendingQuestion={hasPendingQuestion}
                 onFocusRequest={(focus) => {
                   promptFocusRef.current = focus;
                 }}

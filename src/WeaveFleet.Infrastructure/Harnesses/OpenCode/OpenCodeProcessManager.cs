@@ -114,6 +114,10 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
         psi.Environment["OPENCODE_SERVER_PASSWORD"] = options.Password;
         psi.Environment["OPENCODE_SERVER_USERNAME"] = options.Username;
 
+        // Inline config: deny the question tool so the agent never blocks waiting
+        // for interactive input that cannot be provided in an orchestrator context.
+        psi.Environment["OPENCODE_CONFIG_CONTENT"] = """{"permission":{"question":"deny"}}""";
+
         // Additional caller-supplied env vars
         foreach (var (key, value) in options.EnvironmentVariables)
         {

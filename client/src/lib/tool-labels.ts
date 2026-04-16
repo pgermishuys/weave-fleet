@@ -84,20 +84,6 @@ export function getToolLabel(
       return "skill";
     }
 
-    case "question": {
-      const questions = input?.questions;
-      if (Array.isArray(questions) && questions.length > 0) {
-        const first = questions[0] as Record<string, unknown> | undefined;
-        if (typeof first?.header === "string" && first.header) {
-          return first.header;
-        }
-        if (typeof first?.question === "string" && first.question) {
-          return truncate(first.question, 60);
-        }
-      }
-      return "question";
-    }
-
     default:
       return toolName;
   }
