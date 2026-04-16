@@ -85,7 +85,7 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
   const [title, setTitle] = useState("");
   const [branch, setBranch] = useState("");
   const [branchManuallyEdited, setBranchManuallyEdited] = useState(false);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(UNGROUPED_VALUE);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(initialProjectId ?? UNGROUPED_VALUE);
   const [selectedHarness, setSelectedHarness] = useState("");
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(defaultDirectory ? DIRECTORY_SOURCE_ID : null);
 
@@ -320,9 +320,9 @@ export function NewSessionDialog({ trigger, open: controlledOpen, onOpenChange, 
     setRepoDropdownOpen(false);
     setRepoStrategy("worktree");
     setSelectedHarness("");
-    setSelectedProjectId(UNGROUPED_VALUE);
+    setSelectedProjectId(initialProjectId ?? UNGROUPED_VALUE);
     setSelectedSourceId(defaultDirectory && !isCloudMode ? DIRECTORY_SOURCE_ID : null);
-  }, [defaultDirectory, isCloudMode]);
+  }, [defaultDirectory, isCloudMode, initialProjectId]);
 
   const setOpen = useCallback((value: boolean) => {
     if (!value) {

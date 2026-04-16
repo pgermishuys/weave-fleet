@@ -1,5 +1,6 @@
 using WeaveFleet.E2E.Infrastructure;
 using WeaveFleet.E2E.Pages;
+using System.Net.Http.Json;
 
 namespace WeaveFleet.E2E.Tests;
 
@@ -515,4 +516,56 @@ public sealed class SessionLifecycleTests : E2ETestBase,
             await Microsoft.Playwright.Assertions.Expect(Page.GetByTestId("prompt-input")).ToBeEnabledAsync();
         });
     }
+
+    /// <summary>
+    /// Verifies that right-clicking a project in the sidebar shows a "New Session" context menu item,
+    /// and that clicking it opens the New Session dialog with the project pre-selected, allowing
+    /// a session to be created and appear in the sidebar.
+    /// </summary>
+    [Fact]
+    public async Task NewSessionFromProjectContextMenu_OpensDialogAndCreatesSession()
+    {
+        await WithFailureCapture(async () =>
+        {
+            ConfigureScenario(b =>
+                b.WithSimpleTextResponse("_placeholder_", "msg-proj-ctx-1", "Project context menu session"));
+
+            // Create a project via the API so we have a known project ID
+            using var http = new HttpClient { BaseAddress = new Uri(ServerUrl) };
+            var createResp = await http.PostAsJsonAsync("/api/projects", new { name = "E2E Context Menu Project", description = "" });
+            createResp.EnsureSuccessStatusCode();
+            var project = await createResp.Content.ReadFromJsonAsync<ProjectApiResponse>();
+            project.ShouldNotBeNull();
+
+            var dashboard = new FleetDashboardPage(Page);
+            var sidebar = new FleetSidebarPage(Page);
+            await dashboard.GotoAsync();
+
+            // Verify the "New Session" item is present in the project context menu
+            await sidebar.OpenProjectContextMenuAsync(project!.Id);
+            var newSessionMenuItem = Page.GetByRole(AriaRole.Menuitem, new() { Name = "New Session" });
+            await Microsoft.Playwright.Assertions.Expect(newSessionMenuItem).ToBeVisibleAsync();
+
+            // Click "New Session" from the project context menu
+            await newSessionMenuItem.ClickAsync();
+
+            // Verify the New Session dialog opens
+            var dialogLocator = Page.GetByTestId("new-session-dialog");
+            await Microsoft.Playwright.Assertions.Expect(dialogLocator).ToBeVisibleAsync();
+
+            // Fill in the directory and submit to create a session
+            var dialog = new NewSessionDialog(Page);
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+
+            // Verify the session was created and appears in the sidebar
+            var sessionId = new Uri(Page.Url).AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+            await sidebar.ExpectSessionVisibleAsync(sessionId);
+        });
+    }
+
+    // ── Private helpers ──────────────────────────────────────────────────────
+
+    private sealed record ProjectApiResponse(string Id, string Name, string? Description, string Type, int Position, int SessionCount, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
 }

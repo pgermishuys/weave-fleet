@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback } from "react";
-import { ChevronRight, FolderOpen, Pencil, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { ChevronRight, FolderOpen, Pencil, Trash2, ArrowUp, ArrowDown, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Collapsible,
@@ -17,6 +17,7 @@ import {
 import { InlineEdit } from "@/components/ui/inline-edit";
 import { SidebarWorkspaceItem } from "@/components/layout/sidebar-workspace-item";
 import { ConfirmDeleteProjectDialog } from "@/components/fleet/confirm-delete-project-dialog";
+import { NewSessionDialog } from "@/components/session/new-session-dialog";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { useUpdateProject } from "@/hooks/use-update-project";
 import { useDeleteProject } from "@/hooks/use-delete-project";
@@ -57,6 +58,7 @@ export const SidebarProjectItem = React.memo(function SidebarProjectItem({
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showNewSession, setShowNewSession] = useState(false);
 
   const { updateProject } = useUpdateProject();
   const { deleteProject, isDeleting } = useDeleteProject();
@@ -131,6 +133,7 @@ export const SidebarProjectItem = React.memo(function SidebarProjectItem({
       tabIndex={0}
       aria-label={group.projectName}
       aria-expanded={!isCollapsed}
+      data-project-id={group.projectId ?? undefined}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -210,6 +213,16 @@ export const SidebarProjectItem = React.memo(function SidebarProjectItem({
             </ContextMenuTrigger>
             <ContextMenuContent>
               <ContextMenuItem
+                onClick={() => setShowNewSession(true)}
+                className="gap-2 text-xs"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                New Session
+              </ContextMenuItem>
+
+              <ContextMenuSeparator />
+
+              <ContextMenuItem
                 onClick={() => setIsRenaming(true)}
                 className="gap-2 text-xs"
               >
@@ -274,6 +287,16 @@ export const SidebarProjectItem = React.memo(function SidebarProjectItem({
           projectName={group.projectName}
           onConfirm={handleDeleteConfirm}
           isDeleting={isDeleting}
+        />
+      )}
+
+      {/* New Session dialog — rendered outside the Collapsible */}
+      {!isUngrouped && (
+        <NewSessionDialog
+          open={showNewSession}
+          onOpenChange={setShowNewSession}
+          initialProjectId={group.projectId ?? undefined}
+          userProjects={userProjects}
         />
       )}
     </>

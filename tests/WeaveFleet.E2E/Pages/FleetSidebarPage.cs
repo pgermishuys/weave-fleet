@@ -28,4 +28,18 @@ public sealed class FleetSidebarPage(IPage page)
 
     public Task ExpectSessionHiddenAsync(string sessionId)
         => Assertions.Expect(GetSessionLeaf(sessionId)).ToHaveCountAsync(0);
+
+    // ── Project context menu helpers ─────────────────────────────────────────
+
+    public ILocator GetProjectItem(string projectId)
+        => _page.Locator($"[data-project-id='{projectId}']");
+
+    public async Task OpenProjectContextMenuAsync(string projectId)
+        => await GetProjectItem(projectId).ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
+
+    public async Task ClickProjectMenuItemAsync(string projectId, string menuItem)
+    {
+        await OpenProjectContextMenuAsync(projectId);
+        await _page.GetByRole(AriaRole.Menuitem, new() { Name = menuItem }).ClickAsync();
+    }
 }
