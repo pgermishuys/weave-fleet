@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
+using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
@@ -29,9 +30,28 @@ public sealed class HarnessEventRelayTests
         var broadcaster = new FakeEventBroadcaster();
         var sessionRepo = new InMemorySessionRepository();
         var activityTracker = new SessionActivityTracker();
+        var messageRepo = new InMemoryMessageRepository();
+        var delegationRepo = new InMemoryDelegationRepository();
+        var outboxRepo = new InMemoryOutboxRepository();
+        var outboxDispatcher = new FakeOutboxDispatcher();
+        var connectionFactory = new FakeDbConnectionFactory();
 
         var scopeFactory = TestServiceScopeFactory.Create(services =>
-            services.AddSingleton<ISessionRepository>((ISessionRepository)sessionRepo));
+        {
+            services.AddSingleton<ISessionRepository>((ISessionRepository)sessionRepo);
+            services.AddSingleton<IMessageRepository>((IMessageRepository)messageRepo);
+            services.AddSingleton<IDelegationRepository>((IDelegationRepository)delegationRepo);
+            services.AddSingleton<IOutboxRepository>((IOutboxRepository)outboxRepo);
+            services.AddSingleton<IOutboxDispatcher>((IOutboxDispatcher)outboxDispatcher);
+            services.AddSingleton<IDbConnectionFactory>((IDbConnectionFactory)connectionFactory);
+            services.AddSingleton(new SessionActivityWriteService(
+                connectionFactory,
+                messageRepo,
+                delegationRepo,
+                sessionRepo,
+                outboxRepo,
+                outboxDispatcher));
+        });
 
         var broadcastSignal = new TaskCompletionSource<(string, string)>(TaskCreationOptions.RunContinuationsAsynchronously);
         broadcaster.OnBroadcast = (topic, type, _, _, _) =>
@@ -272,11 +292,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task Ephemeral_event_payload_sessionIds_are_preserved_when_broadcast()
     {
-        var broadcaster = new FakeEventBroadcaster();
-        var sessionRepo = new InMemorySessionRepository();
-        var activityTracker = new SessionActivityTracker();
-        var scopeFactory = TestServiceScopeFactory.Create(services =>
-            services.AddSingleton<ISessionRepository>((ISessionRepository)sessionRepo));
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
 
         var fleetSessionId = "fleet-abc";
         var instanceId = "instance-payload-test";
@@ -422,11 +438,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task SessionStatusBusyEventUpdatesTrackerAndBroadcastsOnSessionsTopic()
     {
-        var broadcaster = new FakeEventBroadcaster();
-        var sessionRepo = new InMemorySessionRepository();
-        var activityTracker = new SessionActivityTracker();
-        var scopeFactory = TestServiceScopeFactory.Create(services =>
-            services.AddSingleton<ISessionRepository>((ISessionRepository)sessionRepo));
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
 
         var fleetSessionId = "fleet-activity-busy";
         var instanceId = "instance-activity-busy";
@@ -488,11 +500,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task SessionIdleEventUpdatesTrackerAndBroadcastsOnSessionsTopic()
     {
-        var broadcaster = new FakeEventBroadcaster();
-        var sessionRepo = new InMemorySessionRepository();
-        var activityTracker = new SessionActivityTracker();
-        var scopeFactory = TestServiceScopeFactory.Create(services =>
-            services.AddSingleton<ISessionRepository>((ISessionRepository)sessionRepo));
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
 
         var fleetSessionId = "fleet-activity-idle";
         var instanceId = "instance-activity-idle";
@@ -556,11 +564,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task InstanceRemovalClearsTrackerAndBroadcastsIdle()
     {
-        var broadcaster = new FakeEventBroadcaster();
-        var sessionRepo = new InMemorySessionRepository();
-        var activityTracker = new SessionActivityTracker();
-        var scopeFactory = TestServiceScopeFactory.Create(services =>
-            services.AddSingleton<ISessionRepository>((ISessionRepository)sessionRepo));
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
 
         var fleetSessionId = "fleet-disconnect";
         var instanceId = "instance-disconnect";
@@ -605,6 +609,72 @@ public sealed class HarnessEventRelayTests
 
         // Tracker should be cleared
         activityTracker.Get(fleetSessionId).ShouldBeNull();
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Durable_events_are_persisted_even_when_no_frontend_subscriber_exists()
+    {
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var relay = BuildRelay(tracker, broadcaster, activityTracker, scopeFactory);
+
+        var fleetSessionId = "fleet-durable-persist";
+        var instanceId = "instance-durable-persist";
+        var messageId = "msg-durable-persist-1";
+
+        sessionRepo.Seed(new Session { Id = fleetSessionId, InstanceId = instanceId, UserId = "user-1" });
+
+        // Retrieve the message repo from the scope factory to inspect upsert calls
+        using var inspectScope = scopeFactory.CreateScope();
+        var messageRepo = (InMemoryMessageRepository)inspectScope.ServiceProvider.GetRequiredService<IMessageRepository>();
+
+        var persistSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        messageRepo.UpsertBehavior = _ =>
+        {
+            persistSignal.TrySetResult();
+            return Task.CompletedTask;
+        };
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeHarnessSession(instanceId);
+        tracker.Register(instanceId, instance);
+
+        // Emit a durable event (message.updated) — no frontend subscriber
+        instance.Emit(new HarnessEvent
+        {
+            Type = "message.updated",
+            SessionId = "oc-durable-persist",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                info = new
+                {
+                    id = messageId,
+                    sessionId = "oc-durable-persist",
+                    role = "assistant",
+                    time = new { created = 1700000000L }
+                },
+                parts = new[] { new { type = "text", id = "p1", sessionId = "oc-durable-persist", messageId, text = "Persisted without subscriber" } }
+            })
+        });
+        instance.Complete();
+
+        // Wait for persistence to fire
+        await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        messageRepo.UpsertCalls.ShouldContain(m =>
+            m.Id == messageId &&
+            m.SessionId == fleetSessionId &&
+            m.PartsJson.Contains("Persisted without subscriber"));
+
+        // Durable event must NOT be broadcast to frontend
+        broadcaster.Broadcasts.ShouldNotContain(b => b.Topic == $"session:{fleetSessionId}" && b.Type == "message.updated");
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);

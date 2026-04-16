@@ -1,10 +1,8 @@
 using System.Text.Json;
-using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Services;
-using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Services;
@@ -14,6 +12,11 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 /// <summary>
 /// Wraps a running <c>opencode serve</c> process and HTTP client for a single session.
 /// Implements <see cref="IHarnessSession"/>.
+/// <para>
+/// This class is a pure event producer — it yields all events from the OpenCode SSE
+/// stream without filtering or persisting. Durable persistence is handled by
+/// <see cref="HarnessEventPersistenceService"/> in <c>HarnessEventRelay.PumpAsync</c>.
+/// </para>
 /// </summary>
 internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 {
@@ -39,7 +42,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
     private static readonly Action<ILogger, string, Exception?> LogPersistFailed =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(6, "PersistFailed"),
-            "Failed to persist message event for session {SessionId}");
+            "Failed to persist resume token for session {SessionId}");
 
     private static readonly Action<ILogger, string, Exception?> LogSendCommand =
         LoggerMessage.Define<string>(LogLevel.Debug, new EventId(7, "SendCommand"),
@@ -63,7 +66,6 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly string _fleetSessionId;
     private readonly string _ownerUserId;
-    private readonly ConcurrentDictionary<(string MessageKey, string PartId), string> _bufferedTextDeltas = new();
 
     private string? _openCodeSessionId;
     private HarnessSessionStatus _status = HarnessSessionStatus.Starting;
@@ -253,8 +255,6 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                     continue;
             }
 
-            var targetFleetSessionId = routedFleetSessionId ?? _fleetSessionId;
-
             // Fire-and-forget analytics intercept — never blocks or throws
             if (isParentEvent && _analyticsCollector is not null)
             {
@@ -271,11 +271,11 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 FleetSessionId = !isParentEvent ? routedFleetSessionId : null
             };
 
-            BufferTextDelta(targetFleetSessionId, harnessEvent);
-
-            var handledDurably = await TryHandleDurableEventAsync(targetFleetSessionId, harnessEvent, sseEvt).ConfigureAwait(false);
-            if (handledDurably)
-                continue;
+            // Fire-and-forget delegation detection for message.part.updated events.
+            // This must remain in the session because it needs access to the raw SSE event
+            // and the fleet session context for child session orchestration.
+            if (harnessEvent.Type == "message.part.updated")
+                _ = TryEmitDelegationAsync(sseEvt);
 
             yield return harnessEvent;
         }
@@ -489,247 +489,6 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         }
     }
 
-    private async Task<bool> TryHandleDurableEventAsync(string fleetSessionId, HarnessEvent evt, OpenCodeSseEvent sseEvt)
-    {
-        // Durable vs ephemeral event policy for OpenCode session activity:
-        //
-        // Persisted via DB + transactional outbox:
-        // - message.created
-        //   Authoritative creation/update envelope for a user/assistant message.
-        //   Stored because it contributes to durable conversation history and must
-        //   survive reload/reconnect.
-        // - message.updated
-        //   Authoritative snapshot update for a message. Stored for the same reason:
-        //   it changes committed session state and must be replayable.
-        // - message.part.updated
-        //   Authoritative update for a concrete message part. Stored because this is
-        //   the committed content snapshot that the client should recover after a
-        //   reload/reconnect. This can legitimately represent a partial committed
-        //   message while generation is in flight.
-        //
-        // Not persisted here (ephemeral/live-only elsewhere):
-        // - message.part.delta
-        //   Streaming preview chunks for in-progress generation. These improve live
-        //   UX but are not treated as committed state. If the process dies before a
-        //   corresponding *.updated event arrives, the preview can be lost and the
-        //   client falls back to the last committed snapshot.
-        // - session.status / session.idle / error / permission.*
-        //   Transport/control-plane signals rather than durable conversation history.
-        //
-        // Keep this classifier aligned with HarnessEventRelay.IsEphemeralRelayEvent so
-        // every event type has exactly one path: durable via outbox, or ephemeral via
-        // direct broadcast.
-        if (evt.Type is "message.created" or "message.updated")
-            return await TryPersistMessageAsync(fleetSessionId, evt).ConfigureAwait(false);
-
-        if (evt.Type == "message.part.updated")
-        {
-            var handledDelegation = await TryEmitDelegationAsync(sseEvt).ConfigureAwait(false);
-            var handledMessagePart = await TryPersistPartAsync(fleetSessionId, evt).ConfigureAwait(false);
-            return handledDelegation || handledMessagePart;
-        }
-
-        return false;
-    }
-
-    private async Task<bool> TryPersistMessageAsync(string fleetSessionId, HarnessEvent evt)
-    {
-        // Only process message lifecycle events that carry authoritative message metadata.
-        if (evt.Type is not ("message.created" or "message.updated"))
-            return false;
-
-        try
-        {
-            if (!evt.Payload.HasValue || evt.Payload.Value.ValueKind != JsonValueKind.Object)
-                return false;
-
-            var payload = evt.Payload.Value;
-
-            // Guard: must have an "info" property
-            if (!payload.TryGetProperty("info", out var infoEl))
-                return false;
-
-            // Guard: only persist user and assistant messages.
-            // Read role from raw JSON — avoid polymorphic deserialization of the abstract base type,
-            // which requires the discriminator to be the first property in STJ polymorphism.
-            if (!infoEl.TryGetProperty("role", out var roleEl))
-                return false;
-
-            var role = roleEl.GetString();
-            if (role is not ("user" or "assistant"))
-                return false;
-
-            // Deserialize the concrete info type directly (avoids STJ polymorphism ordering issues).
-            OpenCodeMessageInfo? info = role == "assistant"
-                ? infoEl.Deserialize<OpenCodeAssistantMessage>(OpenCodeJsonOptions.Default)
-                : infoEl.Deserialize<OpenCodeUserMessage>(OpenCodeJsonOptions.Default);
-            if (info is null) return false;
-
-            // Deserialize parts array manually — same STJ polymorphism workaround as
-            // DeserializeParts: the "type" discriminator may not be the first property.
-            IReadOnlyList<OpenCodeMessagePart> parts = [];
-            if (payload.TryGetProperty("parts", out var partsEl))
-                parts = OpenCodeHttpClient.DeserializeParts(partsEl);
-
-            var openCodeMessage = new OpenCodeMessageWithParts { Info = info, Parts = parts };
-            var harnessMessage = OpenCodeMapper.ToHarnessMessage(openCodeMessage);
-
-            using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
-            using var scope = _scopeFactory.CreateScope();
-            var messageRepo = scope.ServiceProvider.GetRequiredService<IMessageRepository>();
-            var sessionActivityWriteService = scope.ServiceProvider.GetRequiredService<SessionActivityWriteService>();
-
-            var persisted = MessagePersistenceService.ToPersistedMessage(fleetSessionId, harnessMessage);
-            var existing = await messageRepo.GetByIdAsync(persisted.Id, persisted.SessionId).ConfigureAwait(false);
-
-            // Don't overwrite existing message parts with empty lifecycle skeletons.
-            if (harnessMessage.Parts.Count == 0)
-            {
-                if (existing is not null)
-                {
-                    var merged = MessagePersistenceService.MergeMetadata(
-                        existing,
-                        persisted.Role,
-                        persisted.AgentName);
-
-                    if (existing.Role != merged.Role
-                        || existing.AgentName != merged.AgentName)
-                    {
-                        await WriteDurableEventAsync(fleetSessionId, sessionActivityWriteService, evt, merged).ConfigureAwait(false);
-                        return true;
-                    }
-
-                    return false;
-                }
-            }
-
-            if (evt.Type == "message.updated" && existing is not null)
-            {
-                var merged = ApplyBufferedTextDeltaIfPresent(
-                    fleetSessionId,
-                    existing,
-                    persisted.Id,
-                    persisted.Role,
-                    persisted.AgentName);
-
-                if (existing.Role != merged.Role
-                    || existing.AgentName != merged.AgentName
-                    || existing.PartsJson != merged.PartsJson)
-                {
-                    await WriteDurableEventAsync(fleetSessionId, sessionActivityWriteService, evt, merged).ConfigureAwait(false);
-                    return true;
-                }
-
-                return false;
-            }
-
-            await WriteDurableEventAsync(fleetSessionId, sessionActivityWriteService, evt, persisted).ConfigureAwait(false);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            // Silent failure — persistence must never crash event stream
-            LogPersistFailed(_logger, _fleetSessionId, ex);
-            return false;
-        }
-    }
-
-    private async Task<bool> TryPersistPartAsync(string fleetSessionId, HarnessEvent evt)
-    {
-        // Only process message.part.updated events
-        if (evt.Type is not "message.part.updated")
-            return false;
-
-        try
-        {
-            if (!evt.Payload.HasValue || evt.Payload.Value.ValueKind != JsonValueKind.Object)
-                return false;
-
-            var payload = evt.Payload.Value;
-
-            // Extract the "part" object from the payload
-            if (!payload.TryGetProperty("part", out var partEl))
-                return false;
-
-            if (partEl.ValueKind != JsonValueKind.Object)
-                return false;
-
-            // Extract messageID (uppercase D) from the part object
-            if (!partEl.TryGetProperty("messageID", out var messageIdEl))
-                return false;
-
-            var messageId = messageIdEl.GetString();
-            if (string.IsNullOrEmpty(messageId))
-                return false;
-
-            // Deserialize the part manually to tolerate discriminator ordering differences
-            // in both the outer message part and nested tool state payloads.
-            OpenCodeMessagePart? openCodePart = OpenCodePartDeserializer.DeserializePart(partEl);
-
-            if (openCodePart is null)
-                return false; // Unsupported or unknown part type
-
-            // Map to Fleet MessagePart
-            var fleetPart = OpenCodeMapper.MapPart(openCodePart);
-            if (fleetPart is null)
-                return false; // Mapper returned null (e.g. text part with null Text)
-
-            using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
-            using var scope = _scopeFactory.CreateScope();
-            var messageRepo = scope.ServiceProvider.GetRequiredService<IMessageRepository>();
-            var sessionActivityWriteService = scope.ServiceProvider.GetRequiredService<SessionActivityWriteService>();
-
-            var existing = await messageRepo.GetByIdAsync(messageId, fleetSessionId).ConfigureAwait(false);
-
-            // Try to extract agent and role from the event info (if present)
-            string? agentName = null;
-            string? role = null;
-            if (payload.TryGetProperty("info", out var infoEl))
-            {
-                if (infoEl.TryGetProperty("agent", out var agentEl))
-                    agentName = agentEl.GetString();
-
-                if (infoEl.TryGetProperty("role", out var roleEl) && roleEl.GetString() is { } rawRole)
-                    role = rawRole is "user" or "assistant" ? rawRole : null;
-            }
-
-            PersistedMessage persisted;
-            if (existing is null)
-            {
-                // Create new skeleton message for this part
-                var partsJson = fleetPart is ReasoningPart
-                    ? "[]"
-                    : JsonSerializer.Serialize(
-                        new[] { fleetPart }, MessagePersistenceService.SerializerOptions);
-                persisted = new PersistedMessage
-                {
-                    Id = messageId,
-                    SessionId = fleetSessionId,
-                    Role = role ?? "assistant",
-                    PartsJson = partsJson,
-                    Timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                    CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
-                    AgentName = agentName,
-                };
-            }
-            else
-            {
-                persisted = MessagePersistenceService.MergePartAndMetadata(existing, fleetPart, role, agentName);
-            }
-
-            ClearBufferedTextDelta(fleetSessionId, messageId, openCodePart.Id);
-
-            await WriteDurableEventAsync(fleetSessionId, sessionActivityWriteService, evt, persisted).ConfigureAwait(false);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            // Silent failure — persistence must never crash event stream
-            LogPersistFailed(_logger, _fleetSessionId, ex);
-            return false;
-        }
-    }
-
     private async Task<bool> TryEmitDelegationAsync(OpenCodeSseEvent sseEvt)
     {
         try
@@ -781,99 +540,4 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             return false;
         }
     }
-
-    private async Task WriteDurableEventAsync(
-        string fleetSessionId,
-        SessionActivityWriteService sessionActivityWriteService,
-        HarnessEvent evt,
-        PersistedMessage persistedMessage)
-    {
-        var durablePayload = evt.Type == "message.updated"
-            ? MessagePersistenceService.BuildCommittedMessagePayload(persistedMessage)
-            : MessagePersistenceService.SanitizeDurableEventPayload(evt.Type, evt.Payload);
-
-        var createdAt = DateTimeOffset.UtcNow.ToString("O");
-        await sessionActivityWriteService.WriteAsync(
-            new SessionActivityWriteRequest
-            {
-                MessagesToUpsert = [persistedMessage],
-                OutboxMessages = durablePayload.HasValue
-                    ?
-                    [
-                        new OutboxMessage
-                        {
-                            Topic = $"session:{fleetSessionId}",
-                            Type = evt.Type,
-                            Payload = MessagePersistenceService.SerializePayload(durablePayload.Value),
-                            UserId = _ownerUserId,
-                            CreatedAt = createdAt,
-                            AvailableAt = createdAt
-                        }
-                    ]
-                    : []
-            },
-            CancellationToken.None).ConfigureAwait(false);
-    }
-
-    private void BufferTextDelta(string fleetSessionId, HarnessEvent evt)
-    {
-        if (evt.Type != "message.part.delta" || !evt.Payload.HasValue || evt.Payload.Value.ValueKind != JsonValueKind.Object)
-            return;
-
-        var payload = evt.Payload.Value;
-        if (!payload.TryGetProperty("field", out var fieldEl) || fieldEl.GetString() != "text")
-            return;
-
-        if (!payload.TryGetProperty("messageID", out var messageIdEl)
-            || !payload.TryGetProperty("partID", out var partIdEl)
-            || !payload.TryGetProperty("delta", out var deltaEl))
-            return;
-
-        var messageId = messageIdEl.GetString();
-        var partId = partIdEl.GetString();
-        var delta = deltaEl.GetString();
-        if (string.IsNullOrEmpty(messageId) || string.IsNullOrEmpty(partId) || string.IsNullOrEmpty(delta))
-            return;
-
-        _bufferedTextDeltas.AddOrUpdate((BuildBufferedDeltaKey(fleetSessionId, messageId, partId), partId), delta, (_, existing) => existing + delta);
-    }
-
-    private PersistedMessage ApplyBufferedTextDeltaIfPresent(
-        string fleetSessionId,
-        PersistedMessage existing,
-        string messageId,
-        string role,
-        string? agentName)
-    {
-        var prefix = BuildBufferedDeltaPrefix(fleetSessionId, messageId);
-        var matchingEntries = _bufferedTextDeltas
-            .Where(entry => entry.Key.MessageKey.StartsWith(prefix, StringComparison.Ordinal))
-            .ToArray();
-
-        if (matchingEntries.Length == 0)
-            return MessagePersistenceService.MergeMetadata(existing, role, agentName);
-
-        var merged = existing;
-        foreach (var entry in matchingEntries)
-        {
-            merged = MessagePersistenceService.MergeTextDeltaAndMetadata(merged, entry.Value, role, agentName);
-            _bufferedTextDeltas.TryRemove(entry.Key, out _);
-        }
-
-        return merged;
-    }
-
-    private void ClearBufferedTextDelta(string fleetSessionId, string messageId, string partId)
-    {
-        if (string.IsNullOrEmpty(messageId) || string.IsNullOrEmpty(partId))
-            return;
-
-        _bufferedTextDeltas.TryRemove((BuildBufferedDeltaKey(fleetSessionId, messageId, partId), partId), out _);
-    }
-
-    private static string BuildBufferedDeltaPrefix(string fleetSessionId, string messageId)
-        => $"{fleetSessionId}::{messageId}::";
-
-    private static string BuildBufferedDeltaKey(string fleetSessionId, string messageId, string partId)
-        => $"{BuildBufferedDeltaPrefix(fleetSessionId, messageId)}{partId}";
 }

@@ -56,4 +56,16 @@ public interface IMessageRepository
     /// method useful for testing and non-cascade scenarios.
     /// </summary>
     Task DeleteBySessionAsync(string sessionId);
+
+    /// <summary>
+    /// Delete a single message by its composite key (id, session_id).
+    /// Used when a message.removed event is received from the harness.
+    /// </summary>
+    Task DeleteByIdAsync(string id, string sessionId);
+
+    /// <summary>
+    /// Remove a specific part from a message by its part ID.
+    /// Used when a message.part.removed event is received from the harness.
+    /// </summary>
+    Task RemovePartAsync(string messageId, string sessionId, string partId);
 }

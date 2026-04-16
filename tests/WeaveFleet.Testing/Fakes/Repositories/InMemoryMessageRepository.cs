@@ -113,4 +113,37 @@ public sealed class InMemoryMessageRepository : IMessageRepository
             _store.Remove(key);
         return Task.CompletedTask;
     }
+
+    public Task DeleteByIdAsync(string id, string sessionId)
+    {
+        _store.Remove((id, sessionId));
+        return Task.CompletedTask;
+    }
+
+    public Task RemovePartAsync(string messageId, string sessionId, string partId)
+    {
+        if (!_store.TryGetValue((messageId, sessionId), out var existing))
+            return Task.CompletedTask;
+
+        var parts = System.Text.Json.JsonSerializer.Deserialize<List<System.Text.Json.JsonElement>>(existing.PartsJson) ?? [];
+        var filtered = parts.Where(p =>
+        {
+            if (p.TryGetProperty("id", out var idEl) && idEl.GetString() == partId)
+                return false;
+            return true;
+        }).ToList();
+
+        var updated = new PersistedMessage
+        {
+            Id = existing.Id,
+            SessionId = existing.SessionId,
+            Role = existing.Role,
+            PartsJson = System.Text.Json.JsonSerializer.Serialize(filtered),
+            Timestamp = existing.Timestamp,
+            CreatedAt = existing.CreatedAt,
+            AgentName = existing.AgentName,
+        };
+        _store[(messageId, sessionId)] = updated;
+        return Task.CompletedTask;
+    }
 }

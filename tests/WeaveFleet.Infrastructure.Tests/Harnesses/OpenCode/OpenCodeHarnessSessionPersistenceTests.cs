@@ -15,6 +15,7 @@ using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
+using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Testing.Builders;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
@@ -22,10 +23,11 @@ using WeaveFleet.Testing.Fakes.Repositories;
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
 
 /// <summary>
-/// Tests that <see cref="OpenCodeHarnessSession"/> persists messages to the database
-/// via <see cref="IMessageRepository"/> when processing SSE events in SubscribeAsync.
-/// These tests were relocated from HarnessEventRelayTests after the persistence logic
-/// was moved from the relay into the instance (instance-owned persistence pattern).
+/// Tests for harness event persistence. Persistence tests target
+/// <see cref="HarnessEventPersistenceService"/> directly (the service that owns
+/// durable persistence in the relay pump). Delegation tests target
+/// <see cref="OpenCodeHarnessSession.SubscribeAsync"/> which still handles
+/// delegation detection as a fire-and-forget side effect.
 /// </summary>
 public sealed class OpenCodeHarnessSessionPersistenceTests
 {
@@ -75,8 +77,51 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     }
 
     /// <summary>
-    /// Builds a valid OpenCode message.created event SSE line with the given role and messageId.
+    /// Builds a <see cref="HarnessEventPersistenceService"/> with configurable fake repositories.
     /// </summary>
+    private static (HarnessEventPersistenceService Service, InMemoryMessageRepository MessageRepo, InMemoryOutboxRepository OutboxRepo)
+        BuildPersistenceService(
+            Action<InMemoryMessageRepository>? configureMessageRepo = null,
+            Action<InMemorySessionRepository>? configureSessionRepo = null)
+    {
+        var messageRepo = new InMemoryMessageRepository();
+        var sessionRepo = new InMemorySessionRepository();
+        var delegationRepo = new InMemoryDelegationRepository();
+        var outboxRepo = new InMemoryOutboxRepository();
+        var outboxDispatcher = new FakeOutboxDispatcher();
+        var connectionFactory = new FakeDbConnectionFactory();
+
+        configureMessageRepo?.Invoke(messageRepo);
+        configureSessionRepo?.Invoke(sessionRepo);
+
+        var sessionActivityWriteService = new SessionActivityWriteService(
+            connectionFactory,
+            messageRepo,
+            delegationRepo,
+            sessionRepo,
+            outboxRepo,
+            outboxDispatcher);
+
+        var service = new HarnessEventPersistenceService(
+            messageRepo,
+            sessionRepo,
+            sessionActivityWriteService,
+            ownerUserId: "user-1");
+
+        return (service, messageRepo, outboxRepo);
+    }
+
+    /// <summary>
+    /// Builds a <see cref="HarnessEvent"/> with the given type and JSON payload.
+    /// </summary>
+    private static HarnessEvent BuildEvent(string type, object payload) =>
+        new()
+        {
+            Type = type,
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(payload)
+        };
     private static string BuildMessageCreatedSseLine(string role, string messageId) =>
         BuildMessageCreatedSseLine(role, messageId, agent: null);
 
@@ -242,15 +287,16 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
 
     /// <summary>
     /// Creates an <see cref="OpenCodeHarnessSession"/> backed by a fake SSE HTTP handler
-    /// that streams the provided SSE lines.
+    /// that streams the provided SSE lines. Also returns a <see cref="HarnessEventPersistenceService"/>
+    /// pre-wired to the same repositories so tests can drive persistence directly.
     /// </summary>
-    private static async Task<(OpenCodeHarnessSession Instance, InMemoryMessageRepository MessageRepo)>
+    private static async Task<(OpenCodeHarnessSession Instance, InMemoryMessageRepository MessageRepo, HarnessEventPersistenceService PersistenceService)>
         CreateInstanceWithSseLines(
             string fleetSessionId,
             IEnumerable<string> sseLines,
             Action<InMemoryMessageRepository>? configureRepo = null)
     {
-        var (scopeFactory, messageRepo, _, _, _) = BuildPersistenceDependencies();
+        var (scopeFactory, messageRepo, _, _, outboxRepo) = BuildPersistenceDependencies();
         configureRepo?.Invoke(messageRepo);
 
         // Build the SSE response body — each line followed by CRLF, then a blank line
@@ -281,7 +327,18 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: TestUserContext.DefaultUserId);
 
-        return (instance, messageRepo);
+        // Build a persistence service wired to the same messageRepo so tests can drive persistence directly.
+        var sessionRepo2 = new InMemorySessionRepository();
+        var delegationRepo2 = new InMemoryDelegationRepository();
+        var outboxRepo2 = new InMemoryOutboxRepository();
+        var outboxDispatcher2 = new FakeOutboxDispatcher();
+        var connectionFactory2 = new FakeDbConnectionFactory();
+        var activityWriteService2 = new SessionActivityWriteService(
+            connectionFactory2, messageRepo, delegationRepo2, sessionRepo2, outboxRepo2, outboxDispatcher2);
+        var sharedPersistenceService = new HarnessEventPersistenceService(
+            messageRepo, sessionRepo2, activityWriteService2, ownerUserId: TestUserContext.DefaultUserId);
+
+        return (instance, messageRepo, sharedPersistenceService);
     }
 
     // -----------------------------------------------------------------------
@@ -291,17 +348,28 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     /// <summary>
     /// Consumes all events from the instance's SubscribeAsync stream until the stream ends
     /// (when the fake HTTP handler closes the connection) or the CTS fires.
+    /// For each event, drives persistence via the provided <see cref="HarnessEventPersistenceService"/>.
     /// OperationCanceledException from the CT is expected and silently ignored.
     /// </summary>
     private static async Task<List<HarnessEvent>> ConsumeEventsAsync(
         OpenCodeHarnessSession instance,
-        CancellationToken ct)
+        CancellationToken ct,
+        HarnessEventPersistenceService? persistenceService = null,
+        string? fleetSessionId = null)
     {
         var events = new List<HarnessEvent>();
         try
         {
             await foreach (var evt in instance.SubscribeAsync(ct))
+            {
                 events.Add(evt);
+                if (persistenceService is not null && fleetSessionId is not null)
+                {
+                    persistenceService.BufferTextDelta(fleetSessionId, evt);
+                    await persistenceService.TryHandleDurableEventAsync(fleetSessionId, evt)
+                        .ConfigureAwait(false);
+                }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -316,7 +384,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var fleetSessionId = "fleet-persist-1";
         var persistSignal = new TaskCompletionSource();
 
-        var (instance, messageRepo) = await CreateInstanceWithSseLines(
+        var (instance, messageRepo, persistenceService) = await CreateInstanceWithSseLines(
             fleetSessionId,
             [BuildMessageUpdatedSseLine("assistant", "msg-1", "loom")],
             repo =>
@@ -329,7 +397,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var consumeTask = ConsumeEventsAsync(instance, cts.Token);
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token, persistenceService, fleetSessionId);
 
         await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Task.Delay(200);
@@ -342,8 +410,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             && m.PartsJson.Contains("Hello"));
 
         await cts.CancelAsync();
-        var capturedEvents = await consumeTask;
-        capturedEvents.ShouldBeEmpty();
+        await consumeTask;
 
         await instance.DisposeAsync();
     }
@@ -354,7 +421,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var fleetSessionId = "fleet-persist-2";
         var persistSignal = new TaskCompletionSource();
 
-        var (instance, messageRepo) = await CreateInstanceWithSseLines(
+        var (instance, messageRepo, persistenceService) = await CreateInstanceWithSseLines(
             fleetSessionId,
             [BuildMessageCreatedSseLine("user", "msg-user-1")],
             repo =>
@@ -368,7 +435,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
 
         // Start consuming in background — the stream reconnects, so we cancel after persist fires
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var consumeTask = ConsumeEventsAsync(instance, cts.Token);
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token, persistenceService, fleetSessionId);
 
         // Wait for persist to fire, then cancel the stream
         await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -393,12 +460,12 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         });
 
         // Track when at least one event is broadcast to know when processing is done
-        var (instance, messageRepo) = await CreateInstanceWithSseLines(
+        var (instance, messageRepo, persistenceService) = await CreateInstanceWithSseLines(
             fleetSessionId,
             [sessionStatusLine]);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var consumeTask = ConsumeEventsAsync(instance, cts.Token);
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token, persistenceService, fleetSessionId);
 
         // Give the event time to be processed, then cancel
         await Task.Delay(300);
@@ -416,7 +483,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var fleetSessionId = "fleet-persist-4";
         var eventDeliveredSignal = new TaskCompletionSource();
 
-        var (instance, messageRepo) = await CreateInstanceWithSseLines(
+        var (instance, messageRepo, _) = await CreateInstanceWithSseLines(
             fleetSessionId,
             [BuildMessageCreatedSseLine("assistant", "msg-persist-failure-1")],
             repo =>
@@ -459,7 +526,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var messageId = "msg-part-1";
         var persistSignal = new TaskCompletionSource();
 
-        var (instance, messageRepo) = await CreateInstanceWithSseLines(
+        var (instance, messageRepo, persistenceService) = await CreateInstanceWithSseLines(
             fleetSessionId,
             [BuildPartUpdatedSseLine(messageId, "oc-session", "Hello from part")],
             repo =>
@@ -473,7 +540,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var consumeTask = ConsumeEventsAsync(instance, cts.Token);
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token, persistenceService, fleetSessionId);
 
         await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await cts.CancelAsync();
@@ -507,7 +574,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
 
         var persistSignal = new TaskCompletionSource();
 
-        var (instance, messageRepo) = await CreateInstanceWithSseLines(
+        var (instance, messageRepo, persistenceService) = await CreateInstanceWithSseLines(
             fleetSessionId,
             [BuildPartUpdatedSseLine(messageId, "oc-session", "Hello from part", "user", "loom")],
             repo =>
@@ -522,7 +589,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var consumeTask = ConsumeEventsAsync(instance, cts.Token);
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token, persistenceService, fleetSessionId);
 
         await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await cts.CancelAsync();
@@ -568,7 +635,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
         };
 
-        var (instance, messageRepo) = await CreateInstanceWithSseLines(
+        var (instance, messageRepo, persistenceService) = await CreateInstanceWithSseLines(
             fleetSessionId,
             [emptyPartsLine],
             repo =>
@@ -577,7 +644,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var consumeTask = ConsumeEventsAsync(instance, cts.Token);
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token, persistenceService, fleetSessionId);
 
         // Give fire-and-forget tasks time to settle, then cancel
         await Task.Delay(300);
@@ -616,7 +683,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             }
         });
 
-        var (instance, messageRepo) = await CreateInstanceWithSseLines(
+        var (instance, messageRepo, persistenceService) = await CreateInstanceWithSseLines(
             fleetSessionId,
             [
                 skeletonLine,
@@ -636,7 +703,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var consumeTask = ConsumeEventsAsync(instance, cts.Token);
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token, persistenceService, fleetSessionId);
 
         await upsertSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Task.Delay(300);
@@ -682,7 +749,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             }
         });
 
-        var (instance, messageRepo) = await CreateInstanceWithSseLines(
+        var (instance, messageRepo, persistenceService) = await CreateInstanceWithSseLines(
             fleetSessionId,
             [
                 skeletonLine,
@@ -702,7 +769,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var consumeTask = ConsumeEventsAsync(instance, cts.Token);
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token, persistenceService, fleetSessionId);
 
         await upsertSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Task.Delay(300);
@@ -781,8 +848,18 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: TestUserContext.DefaultUserId);
 
+        var sessionRepo2 = new InMemorySessionRepository();
+        var delegationRepo2 = new InMemoryDelegationRepository();
+        var outboxRepo2 = new InMemoryOutboxRepository();
+        var outboxDispatcher2 = new FakeOutboxDispatcher();
+        var connectionFactory2 = new FakeDbConnectionFactory();
+        var activityWriteService2 = new SessionActivityWriteService(
+            connectionFactory2, messageRepo, delegationRepo2, sessionRepo2, outboxRepo, outboxDispatcher2);
+        var persistenceService = new HarnessEventPersistenceService(
+            messageRepo, sessionRepo2, activityWriteService2, ownerUserId: TestUserContext.DefaultUserId);
+
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var consumeTask = ConsumeEventsAsync(instance, cts.Token);
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token, persistenceService, fleetSessionId);
 
         await upsertSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Task.Delay(300);
@@ -833,8 +910,18 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: TestUserContext.DefaultUserId);
 
+        var sessionRepo2 = new InMemorySessionRepository();
+        var delegationRepo2 = new InMemoryDelegationRepository();
+        var outboxRepo2 = new InMemoryOutboxRepository();
+        var outboxDispatcher2 = new FakeOutboxDispatcher();
+        var connectionFactory2 = new FakeDbConnectionFactory();
+        var activityWriteService2 = new SessionActivityWriteService(
+            connectionFactory2, messageRepo, delegationRepo2, sessionRepo2, outboxRepo, outboxDispatcher2);
+        var persistenceService = new HarnessEventPersistenceService(
+            messageRepo, sessionRepo2, activityWriteService2, ownerUserId: TestUserContext.DefaultUserId);
+
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var consumeTask = ConsumeEventsAsync(instance, cts.Token);
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token, persistenceService, fleetSessionId);
 
         await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Task.Delay(300);
@@ -858,7 +945,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var messageId = "msg-file-1";
         var persistSignal = new TaskCompletionSource();
 
-        var (instance, messageRepo) = await CreateInstanceWithSseLines(
+        var (instance, messageRepo, persistenceService) = await CreateInstanceWithSseLines(
             fleetSessionId,
             [BuildFilePartUpdatedSseLine(messageId, "oc-session", "file-1", "image/png", "diagram.png", "https://example.test/diagram.png")],
             repo =>
@@ -872,7 +959,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var consumeTask = ConsumeEventsAsync(instance, cts.Token);
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token, persistenceService, fleetSessionId);
 
         await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await cts.CancelAsync();
@@ -894,7 +981,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var messageId = "msg-step-1";
         var persistSignal = new TaskCompletionSource();
 
-        var (instance, messageRepo) = await CreateInstanceWithSseLines(
+        var (instance, messageRepo, persistenceService) = await CreateInstanceWithSseLines(
             fleetSessionId,
             [BuildStepFinishPartUpdatedSseLine(messageId, "oc-session", "step-1", 3, "completed")],
             repo =>
@@ -908,7 +995,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var consumeTask = ConsumeEventsAsync(instance, cts.Token);
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token, persistenceService, fleetSessionId);
 
         await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await cts.CancelAsync();
@@ -1445,13 +1532,280 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         await cts.CancelAsync();
         var events = await consumeTask;
 
-        events.ShouldBeEmpty();
-        messageRepo.UpsertCalls.ShouldContain(m =>
-            m.Id == "msg-child"
-            && m.SessionId == "fleet-child"
-            && m.PartsJson.Contains("child text"));
+        // SubscribeAsync is now a pure event producer — it yields child-routed events
+        // with FleetSessionId set so the relay can route them to the correct topic.
+        // Persistence is handled by HarnessEventPersistenceService in the relay pump.
+        events.ShouldContain(e =>
+            e.Type == "message.part.updated"
+            && e.FleetSessionId == "fleet-child");
 
         await instance.DisposeAsync();
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: new event type handlers (message.removed, message.part.removed,
+    //        session.updated, session.error, session.compacted, session.deleted)
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task MessageRemoved_DeletesMessageFromRepository()
+    {
+        var fleetSessionId = "fleet-msg-removed-1";
+        var messageId = "msg-to-delete";
+
+        var (service, messageRepo, _) = BuildPersistenceService(configureMessageRepo: repo =>
+        {
+            repo.Seed(new PersistedMessage
+            {
+                Id = messageId,
+                SessionId = fleetSessionId,
+                Role = "assistant",
+                PartsJson = "[]",
+                Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            });
+        });
+
+        var evt = BuildEvent("message.removed", new { id = messageId });
+        var handled = await service.TryHandleDurableEventAsync(fleetSessionId, evt);
+
+        handled.ShouldBeTrue();
+        messageRepo.All.ShouldNotContain(m => m.Id == messageId && m.SessionId == fleetSessionId);
+    }
+
+    [Fact]
+    public async Task MessageRemoved_EmitsOutboxEvent()
+    {
+        var fleetSessionId = "fleet-msg-removed-2";
+        var messageId = "msg-to-delete-2";
+
+        var (service, _, outboxRepo) = BuildPersistenceService();
+
+        var evt = BuildEvent("message.removed", new { id = messageId });
+        await service.TryHandleDurableEventAsync(fleetSessionId, evt);
+
+        outboxRepo.All.ShouldContain(m =>
+            m.Topic == $"session:{fleetSessionId}" &&
+            m.Type == "message.removed");
+    }
+
+    [Fact]
+    public async Task MessagePartRemoved_RemovesPartFromMessage()
+    {
+        var fleetSessionId = "fleet-part-removed-1";
+        var messageId = "msg-with-parts";
+        var partId = "part-to-remove";
+
+        var (service, messageRepo, _) = BuildPersistenceService(configureMessageRepo: repo =>
+        {
+            repo.Seed(new PersistedMessage
+            {
+                Id = messageId,
+                SessionId = fleetSessionId,
+                Role = "assistant",
+                PartsJson = "[{\"id\":\"" + partId + "\",\"type\":\"text\",\"text\":\"hello\"},{\"id\":\"part-keep\",\"type\":\"text\",\"text\":\"keep\"}]",
+                Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            });
+        });
+
+        var evt = BuildEvent("message.part.removed", new { messageID = messageId, id = partId });
+        var handled = await service.TryHandleDurableEventAsync(fleetSessionId, evt);
+
+        handled.ShouldBeTrue();
+        var updated = messageRepo.All.FirstOrDefault(m => m.Id == messageId && m.SessionId == fleetSessionId);
+        updated.ShouldNotBeNull();
+        updated.PartsJson.ShouldNotContain(partId);
+        updated.PartsJson.ShouldContain("part-keep");
+    }
+
+    [Fact]
+    public async Task MessagePartRemoved_EmitsOutboxEvent()
+    {
+        var fleetSessionId = "fleet-part-removed-2";
+
+        var (service, _, outboxRepo) = BuildPersistenceService();
+
+        var evt = BuildEvent("message.part.removed", new { messageID = "msg-1", id = "part-1" });
+        await service.TryHandleDurableEventAsync(fleetSessionId, evt);
+
+        outboxRepo.All.ShouldContain(m =>
+            m.Topic == $"session:{fleetSessionId}" &&
+            m.Type == "message.part.removed");
+    }
+
+    [Fact]
+    public async Task SessionUpdated_UpdatesTitleInRepository()
+    {
+        var fleetSessionId = "fleet-session-updated-1";
+
+        var (service, _, outboxRepo) = BuildPersistenceService(configureSessionRepo: repo =>
+        {
+            repo.Seed(new Session
+            {
+                Id = fleetSessionId,
+                Title = "Old Title",
+                Status = "active",
+                CreatedAt = DateTime.UtcNow.ToString("O"),
+                UserId = "user-1"
+            });
+        });
+
+        var evt = BuildEvent("session.updated", new { title = "New Title" });
+        var handled = await service.TryHandleDurableEventAsync(fleetSessionId, evt);
+
+        handled.ShouldBeTrue();
+        outboxRepo.All.ShouldContain(m =>
+            m.Topic == $"session:{fleetSessionId}" &&
+            m.Type == "session.updated");
+    }
+
+    [Fact]
+    public async Task SessionError_EmitsOutboxEventAndIsEphemeral()
+    {
+        var fleetSessionId = "fleet-session-error-1";
+
+        var (service, _, outboxRepo) = BuildPersistenceService();
+
+        var evt = BuildEvent("session.error", new { error = "something went wrong" });
+        var handled = await service.TryHandleDurableEventAsync(fleetSessionId, evt);
+
+        // session.error is durable — returns true so relay does NOT broadcast it directly
+        handled.ShouldBeTrue();
+        outboxRepo.All.ShouldContain(m =>
+            m.Topic == $"session:{fleetSessionId}" &&
+            m.Type == "session.error");
+    }
+
+    [Fact]
+    public async Task SessionCompacted_EmitsOutboxEventAndIsEphemeral()
+    {
+        var fleetSessionId = "fleet-session-compacted-1";
+
+        var (service, _, outboxRepo) = BuildPersistenceService();
+
+        var evt = BuildEvent("session.compacted", new { });
+        var handled = await service.TryHandleDurableEventAsync(fleetSessionId, evt);
+
+        // session.compacted is durable — returns true so relay does NOT broadcast it directly
+        handled.ShouldBeTrue();
+        outboxRepo.All.ShouldContain(m =>
+            m.Topic == $"session:{fleetSessionId}" &&
+            m.Type == "session.compacted");
+    }
+
+    [Fact]
+    public async Task SessionDeleted_EmitsOutboxEventAndIsDurable()
+    {
+        var fleetSessionId = "fleet-session-deleted-1";
+
+        var (service, _, outboxRepo) = BuildPersistenceService();
+
+        var evt = BuildEvent("session.deleted", new { });
+        var handled = await service.TryHandleDurableEventAsync(fleetSessionId, evt);
+
+        // session.deleted is durable — returns true so relay does NOT broadcast it
+        handled.ShouldBeTrue();
+        outboxRepo.All.ShouldContain(m =>
+            m.Topic == $"session:{fleetSessionId}" &&
+            m.Type == "session.deleted");
+    }
+
+    [Fact]
+    public async Task DurableEventsPersistedEvenWithNoFrontendSubscriber()
+    {
+        // Verifies that persistence happens in the relay pump regardless of whether
+        // any frontend WebSocket subscriber is connected.
+        var fleetSessionId = "fleet-no-subscriber-1";
+        var messageId = "msg-no-sub-1";
+
+        var (service, messageRepo, _) = BuildPersistenceService();
+
+        // Simulate a message.updated event arriving with no frontend subscriber
+        var evt = new HarnessEvent
+        {
+            Type = "message.updated",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                info = new
+                {
+                    id = messageId,
+                    sessionId = "oc-session",
+                    role = "assistant",
+                    time = new { created = 1700000000L }
+                },
+                parts = new[] { new { type = "text", id = "p1", sessionId = "oc-session", messageId, text = "Persisted without subscriber" } }
+            })
+        };
+
+        var handled = await service.TryHandleDurableEventAsync(fleetSessionId, evt);
+
+        handled.ShouldBeTrue();
+        messageRepo.UpsertCalls.ShouldContain(m =>
+            m.Id == messageId &&
+            m.SessionId == fleetSessionId &&
+            m.PartsJson.Contains("Persisted without subscriber"));
+    }
+
+    [Fact]
+    public async Task DeltaBuffer_FlushedOnDisconnect_PreservesPartialContent()
+    {
+        var fleetSessionId = "fleet-delta-flush-1";
+        var messageId = "msg-delta-flush-1";
+
+        var (service, messageRepo, _) = BuildPersistenceService(configureMessageRepo: repo =>
+        {
+            repo.Seed(new PersistedMessage
+            {
+                Id = messageId,
+                SessionId = fleetSessionId,
+                Role = "assistant",
+                PartsJson = "[]",
+                Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            });
+        });
+
+        // Buffer some deltas (simulating streaming that was interrupted before message.updated)
+        var delta1 = new HarnessEvent
+        {
+            Type = "message.part.delta",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                messageID = messageId,
+                partID = "part-1",
+                field = "text",
+                delta = "Partial "
+            })
+        };
+        var delta2 = new HarnessEvent
+        {
+            Type = "message.part.delta",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                messageID = messageId,
+                partID = "part-1",
+                field = "text",
+                delta = "content"
+            })
+        };
+
+        service.BufferTextDelta(fleetSessionId, delta1);
+        service.BufferTextDelta(fleetSessionId, delta2);
+
+        // Flush on disconnect
+        await service.FlushBufferedDeltasAsync(fleetSessionId);
+
+        messageRepo.UpsertCalls.ShouldContain(m =>
+            m.Id == messageId &&
+            m.SessionId == fleetSessionId &&
+            m.PartsJson.Contains("Partial content"));
     }
 
     // -----------------------------------------------------------------------

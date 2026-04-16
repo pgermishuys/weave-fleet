@@ -13,7 +13,8 @@ namespace WeaveFleet.Infrastructure.Services;
 /// Background service that bridges ephemeral harness instance events to <see cref="IEventBroadcaster"/>.
 /// Subscribes to <see cref="InstanceTracker"/> registration/removal events and maintains
 /// one async-enumerable pump per live instance.
-/// Durable activity is intentionally excluded here and must flow through the transactional outbox.
+/// Durable activity flows through <see cref="HarnessEventPersistenceService"/> which is
+/// created once per pump lifetime and called for every event before ephemeral relay.
 /// </summary>
 public sealed class HarnessEventRelay : BackgroundService
 {
@@ -46,8 +47,10 @@ public sealed class HarnessEventRelay : BackgroundService
     // - permission.*
     //   UI capability/control-plane signals, not conversation state.
     //
-    // Anything not listed here must not be directly relayed; durable activity must
-    // first commit through SessionActivityWriteService + transactional outbox.
+    // Durable events (message.created, message.updated, message.part.updated,
+    // message.removed, message.part.removed, session.updated, session.error,
+    // session.compacted, session.deleted) are handled by HarnessEventPersistenceService
+    // and are NOT directly relayed to the broadcaster.
     private static bool IsEphemeralRelayEvent(string eventType)
         => eventType is "session.status" or "session.idle" or "message.part.delta" or "error"
             || eventType.StartsWith("permission.", StringComparison.Ordinal);
@@ -146,13 +149,43 @@ public sealed class HarnessEventRelay : BackgroundService
             return;
         }
 
-        var topic = $"session:{fleetSessionId}";
+        // Create one persistence service per pump lifetime — it owns the delta buffer
+        // for this instance and must outlive individual events.
+        // The pump scope is kept alive for the entire pump lifetime so that the scoped
+        // repositories and services resolved from it are not disposed prematurely.
+        IServiceScope? pumpScope = null;
+        HarnessEventPersistenceService? persistenceService = null;
+        if (sessionUserId is not null)
+        {
+            pumpScope = _scopeFactory.CreateScope();
+            var messageRepo = pumpScope.ServiceProvider.GetRequiredService<IMessageRepository>();
+            var sessionRepo = pumpScope.ServiceProvider.GetRequiredService<ISessionRepository>();
+            var activityWriteService = pumpScope.ServiceProvider.GetRequiredService<SessionActivityWriteService>();
+            persistenceService = new HarnessEventPersistenceService(
+                messageRepo,
+                sessionRepo,
+                activityWriteService,
+                sessionUserId);
+        }
+
         try
         {
             await foreach (var evt in instance.SubscribeAsync(ct).ConfigureAwait(false))
             {
                 var targetFleetSessionId = evt.FleetSessionId ?? fleetSessionId;
                 var targetTopic = $"session:{targetFleetSessionId}";
+
+                // Buffer text deltas before persistence so they are available when
+                // message.updated arrives and merges the buffered content.
+                persistenceService?.BufferTextDelta(targetFleetSessionId, evt);
+
+                // Attempt durable persistence for all events. Returns true if the event
+                // was handled durably and should NOT be relayed as ephemeral.
+                var handledDurably = persistenceService is not null
+                    && await persistenceService.TryHandleDurableEventAsync(targetFleetSessionId, evt).ConfigureAwait(false);
+
+                if (handledDurably)
+                    continue;
 
                 if (!IsEphemeralRelayEvent(evt.Type))
                     continue;
@@ -200,6 +233,20 @@ public sealed class HarnessEventRelay : BackgroundService
                 cts.Dispose();
             }
 
+            // Flush any buffered text deltas so partial streaming content is not lost
+            // when the harness disconnects or crashes.
+            if (persistenceService is not null)
+            {
+                try
+                {
+                    await persistenceService.FlushBufferedDeltasAsync(fleetSessionId).ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    // Best-effort flush — never crash the pump cleanup
+                }
+            }
+
             // When the harness disconnects, clear the activity state and broadcast idle
             // so the UI doesn't show a session stuck on "busy" after a crash or disconnect.
             _activityTracker.Remove(fleetSessionId);
@@ -209,6 +256,10 @@ public sealed class HarnessEventRelay : BackgroundService
                 new { sessionId = fleetSessionId, activityStatus = "idle" },
                 sessionUserId,
                 CancellationToken.None).ConfigureAwait(false);
+
+            // Dispose the pump scope after all cleanup is complete so that the scoped
+            // repositories and services remain valid throughout the flush above.
+            pumpScope?.Dispose();
         }
     }
 

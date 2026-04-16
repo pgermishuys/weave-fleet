@@ -1,4 +1,6 @@
 using Dapper;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
@@ -8,6 +10,14 @@ namespace WeaveFleet.Infrastructure.Data.Repositories;
 
 public sealed class DapperMessageRepository : IMessageRepository
 {
+    // Matches MessagePersistenceService.SerializerOptions — camelCase + omit nulls.
+    // Used when round-tripping PartsJson through JsonElement to preserve property casing.
+    private static readonly JsonSerializerOptions PartsJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
+
     private readonly IDbConnectionFactory _connectionFactory;
 
     private readonly IUserContext _userContext;
@@ -203,5 +213,56 @@ public sealed class DapperMessageRepository : IMessageRepository
                   WHERE s.id = messages.session_id AND s.user_id = @UserId)
             """,
             new { SessionId = sessionId, UserId = _userContext.UserId });
+    }
+
+    public async Task DeleteByIdAsync(string id, string sessionId)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        await conn.ExecuteAsync(
+            """
+            DELETE FROM messages
+            WHERE id = @Id AND session_id = @SessionId
+              AND EXISTS (
+                  SELECT 1
+                  FROM sessions s
+                  WHERE s.id = messages.session_id AND s.user_id = @UserId)
+            """,
+            new { Id = id, SessionId = sessionId, UserId = _userContext.UserId });
+    }
+
+    public async Task RemovePartAsync(string messageId, string sessionId, string partId)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        var existing = await conn.QuerySingleOrDefaultAsync<PersistedMessage>(
+            """
+            SELECT m.*
+            FROM messages m
+            INNER JOIN sessions s ON s.id = m.session_id
+            WHERE m.id = @MessageId AND m.session_id = @SessionId AND s.user_id = @UserId
+            """,
+            new { MessageId = messageId, SessionId = sessionId, UserId = _userContext.UserId });
+
+        if (existing is null)
+            return;
+
+        var parts = JsonSerializer.Deserialize<List<JsonElement>>(existing.PartsJson, PartsJsonOptions) ?? [];
+        var filtered = parts.Where(p =>
+        {
+            if (p.TryGetProperty("id", out var idEl) && idEl.GetString() == partId)
+                return false;
+            return true;
+        }).ToList();
+
+        var newPartsJson = JsonSerializer.Serialize(filtered, PartsJsonOptions);
+        await conn.ExecuteAsync(
+            """
+            UPDATE messages SET parts_json = @PartsJson
+            WHERE id = @MessageId AND session_id = @SessionId
+              AND EXISTS (
+                  SELECT 1
+                  FROM sessions s
+                  WHERE s.id = messages.session_id AND s.user_id = @UserId)
+            """,
+            new { PartsJson = newPartsJson, MessageId = messageId, SessionId = sessionId, UserId = _userContext.UserId });
     }
 }
