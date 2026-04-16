@@ -267,6 +267,9 @@ export function useSessionEvents(
     setStatus("connecting");
     setError(undefined);
     lastSequenceNumberRef.current = null;
+    // Reset suppress flag so auto-scroll is not blocked by a stale value
+    // from a previous session's cache hydration.
+    if (suppressAutoScrollRef) suppressAutoScrollRef.current = false;
 
     const cached = sessionCache.get(sessionId, instanceId);
     if (cached) {
