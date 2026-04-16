@@ -11,6 +11,9 @@ public interface IHarnessSession : IAsyncDisposable
     /// <summary>Unique identifier for this running instance.</summary>
     string InstanceId { get; }
 
+    /// <summary>OS process ID of the underlying agent process, if available.</summary>
+    int? ProcessId { get; }
+
     /// <summary>
     /// Opaque token used to resume this session after a crash or restart.
     /// Null if the harness has not yet captured a session ID or does not support resume.

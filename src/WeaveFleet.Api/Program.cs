@@ -21,6 +21,7 @@ using WeaveFleet.Api.Telemetry;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Data;
 using WeaveFleet.Infrastructure.Services;
@@ -200,6 +201,40 @@ if (!fleetOptions.Auth.Enabled)
 using (var scope = app.Services.CreateScope())
 {
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    // Orphan killing: kill any child processes from the previous run before marking them stopped
+    var instanceRepo = scope.ServiceProvider.GetRequiredService<IInstanceRepository>();
+    var runningInstances = await instanceRepo.GetRunningAsync();
+    foreach (var instance in runningInstances)
+    {
+        if (instance.Pid is not { } pid) continue;
+        try
+        {
+            var proc = System.Diagnostics.Process.GetProcessById(pid);
+            // Guard against PID reuse: only kill if the process name looks like a known agent
+            var procName = proc.ProcessName;
+            if (procName.Contains("opencode", StringComparison.OrdinalIgnoreCase)
+                || procName.Contains("claude", StringComparison.OrdinalIgnoreCase)
+                || procName.Contains("node", StringComparison.OrdinalIgnoreCase))
+            {
+                StartupLog.OrphanKilling(logger, pid, procName);
+                proc.Kill(entireProcessTree: true);
+            }
+            else
+            {
+                StartupLog.OrphanSkipped(logger, pid, procName);
+            }
+        }
+        catch (ArgumentException)
+        {
+            // Process already exited — not an error
+        }
+        catch (Exception ex)
+        {
+            StartupLog.OrphanKillFailed(logger, pid, ex);
+        }
+    }
+
     var instanceService = scope.ServiceProvider.GetRequiredService<InstanceService>();
     var instanceCount = await instanceService.MarkAllStoppedAsync();
     var sessionCount = await instanceService.MarkAllNonTerminalSessionsStoppedAsync();
@@ -294,6 +329,34 @@ app.UseStaticFiles();    // Serves files from wwwroot/
 // SPA fallback — any unmatched route serves index.html for client-side routing
 app.MapFallbackToFile("index.html");
 
+// Graceful shutdown: stop all tracked harness instances before the process exits
+var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+lifetime.ApplicationStopping.Register(() =>
+{
+    var tracker = app.Services.GetRequiredService<InstanceTracker>();
+    var shutdownLogger = app.Services.GetRequiredService<ILogger<Program>>();
+    var instances = tracker.GetAll();
+    if (instances.Count == 0) return;
+
+    StartupLog.GracefulShutdownStarted(shutdownLogger, instances.Count);
+
+    var tasks = instances.Values.Select(async session =>
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await session.StopAsync(cts.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            StartupLog.GracefulShutdownInstanceFailed(shutdownLogger, session.InstanceId, ex);
+        }
+    });
+
+    Task.WhenAll(tasks).GetAwaiter().GetResult();
+    StartupLog.GracefulShutdownComplete(shutdownLogger, instances.Count);
+});
+
 await app.RunAsync();
 
 static bool IsApiOrWebSocketRequest(PathString path)
@@ -305,6 +368,30 @@ internal static partial class StartupLog
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Recovery: marked {Instances} instance(s) and {Sessions} session(s) as stopped.")]
     public static partial void RecoveryComplete(ILogger logger, int instances, int sessions);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Graceful shutdown: stopping {Count} tracked instance(s).")]
+    public static partial void GracefulShutdownStarted(ILogger logger, int count);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Graceful shutdown: failed to stop instance {InstanceId}.")]
+    public static partial void GracefulShutdownInstanceFailed(ILogger logger, string instanceId, Exception ex);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Graceful shutdown: stopped {Count} instance(s).")]
+    public static partial void GracefulShutdownComplete(ILogger logger, int count);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Startup orphan kill: killing pid {Pid} ({ProcessName}).")]
+    public static partial void OrphanKilling(ILogger logger, int pid, string processName);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "Startup orphan skip: pid {Pid} ({ProcessName}) does not match known agent names.")]
+    public static partial void OrphanSkipped(ILogger logger, int pid, string processName);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Startup orphan kill failed for pid {Pid}.")]
+    public static partial void OrphanKillFailed(ILogger logger, int pid, Exception ex);
 }
 
 // Expose Program for WebApplicationFactory in E2E tests

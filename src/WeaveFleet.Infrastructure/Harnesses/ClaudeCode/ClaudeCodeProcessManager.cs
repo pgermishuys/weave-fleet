@@ -50,6 +50,7 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
     private Process? _process;
     private bool _started;
     private bool _disposed;
+    private System.Runtime.InteropServices.SafeHandle? _jobObjectHandle;
 
     /// <summary>Fired when the process exits.</summary>
     public event EventHandler<int>? ProcessExited;
@@ -159,6 +160,7 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
 
         _started = true;
         _process.Start();
+        _jobObjectHandle = ProcessGroupHelper.AssignToProcessGroup(_process, _logger);
         _process.BeginErrorReadLine();
 
         LogProcessStarted(_logger, _process.Id, options.WorkingDirectory, null);
@@ -190,14 +192,8 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
 
         try
         {
-            if (OperatingSystem.IsWindows())
-            {
-                _process.Kill(entireProcessTree: true);
-            }
-            else
-            {
-                _process.Kill(entireProcessTree: false); // SIGTERM equivalent via Kill
-            }
+            // Kill the entire process group (Unix) or process tree (Windows)
+            ProcessGroupHelper.KillProcessGroup(_process.Id, _logger);
 
             await _process.WaitForExitAsync().WaitAsync(timeout).ConfigureAwait(false);
         }
@@ -220,5 +216,6 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
 
         await StopAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         _process?.Dispose();
+        _jobObjectHandle?.Dispose();
     }
 }

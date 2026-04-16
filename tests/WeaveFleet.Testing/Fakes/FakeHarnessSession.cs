@@ -16,6 +16,7 @@ public sealed class FakeHarnessSession : IHarnessSession
     // ── Configurable properties ──────────────────────────────────────────────
 
     public string InstanceId { get; }
+    public int? ProcessId { get; set; }
     public string HarnessType { get; set; } = "opencode";
     public string? ResumeToken { get; set; }
     public HarnessSessionStatus Status { get; set; } = HarnessSessionStatus.Running;

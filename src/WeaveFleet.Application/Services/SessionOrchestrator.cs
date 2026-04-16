@@ -214,7 +214,7 @@ public sealed partial class SessionOrchestrator(
         var instanceResult = await instanceService.RegisterInstanceAsync(
             id: harnessInstance.InstanceId,
             port: 0,           // port is harness-implementation detail; 0 = unknown
-            pid: null,
+            pid: harnessInstance.ProcessId,
             directory: workspace.Directory,
             url: string.Empty);
         if (instanceResult.IsFailure)
@@ -418,7 +418,7 @@ public sealed partial class SessionOrchestrator(
         await instanceService.RegisterInstanceAsync(
             id: harnessInstance.InstanceId,
             port: 0,
-            pid: null,
+            pid: harnessInstance.ProcessId,
             directory: workspaceResult.Value,
             url: string.Empty);
 
@@ -500,7 +500,7 @@ public sealed partial class SessionOrchestrator(
         var instanceResult = await instanceService.RegisterInstanceAsync(
             id: harnessInstance.InstanceId,
             port: 0,
-            pid: null,
+            pid: harnessInstance.ProcessId,
             directory: parent.Directory,
             url: string.Empty);
         if (instanceResult.IsFailure)

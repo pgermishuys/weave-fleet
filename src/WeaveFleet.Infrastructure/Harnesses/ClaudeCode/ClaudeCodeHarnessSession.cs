@@ -105,6 +105,9 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     public string InstanceId { get; }
 
     /// <inheritdoc />
+    public int? ProcessId => _activeProcess?.ProcessId;
+
+    /// <inheritdoc />
     public string HarnessType => "claude-code";
 
     /// <inheritdoc />

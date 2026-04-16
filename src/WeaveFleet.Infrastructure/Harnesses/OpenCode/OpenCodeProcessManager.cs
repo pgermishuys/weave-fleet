@@ -60,6 +60,7 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
     private Uri? _baseUrl;
     private bool _started;
     private bool _disposed;
+    private System.Runtime.InteropServices.SafeHandle? _jobObjectHandle;
 
     /// <summary>Fired when the process exits (expected or not).</summary>
     public event EventHandler<int>? ProcessExited;
@@ -178,6 +179,7 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
 
         _started = true;
         _process.Start();
+        _jobObjectHandle = ProcessGroupHelper.AssignToProcessGroup(_process, _logger);
         _process.BeginOutputReadLine();
         _process.BeginErrorReadLine();
 
@@ -212,15 +214,8 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
 
         try
         {
-            // Request graceful shutdown
-            if (OperatingSystem.IsWindows())
-            {
-                _process.Kill(entireProcessTree: true);
-            }
-            else
-            {
-                _process.Kill(entireProcessTree: false); // SIGTERM equivalent via Kill
-            }
+            // Kill the entire process group (Unix) or process tree (Windows)
+            ProcessGroupHelper.KillProcessGroup(_process.Id, _logger);
 
             await _process.WaitForExitAsync().WaitAsync(timeout).ConfigureAwait(false);
         }
@@ -243,5 +238,6 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
 
         await StopAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         _process?.Dispose();
+        _jobObjectHandle?.Dispose();
     }
 }

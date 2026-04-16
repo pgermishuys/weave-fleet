@@ -71,6 +71,9 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     private HarnessSessionStatus _status = HarnessSessionStatus.Starting;
     private bool _disposed;
 
+    /// <summary>Cached agent-name → modelId mapping, populated lazily from the agents endpoint.</summary>
+    private Dictionary<string, string>? _agentModelCache;
+
     /// <summary>Initialises the instance with all required dependencies.</summary>
     public OpenCodeHarnessSession(
         string instanceId,
@@ -113,6 +116,9 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
     /// <inheritdoc />
     public string InstanceId { get; }
+
+    /// <inheritdoc />
+    public int? ProcessId => _processManager.ProcessId;
 
     /// <inheritdoc />
     public string HarnessType => "opencode";
@@ -271,6 +277,11 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 FleetSessionId = !isParentEvent ? routedFleetSessionId : null
             };
 
+            // Enrich message events with modelId from the agent config cache.
+            // OpenCode SSE events don't include modelId — only the REST API does.
+            if (harnessEvent.Type is "message.created" or "message.updated")
+                harnessEvent = await EnrichWithModelIdAsync(harnessEvent, ct).ConfigureAwait(false);
+
             // Fire-and-forget delegation detection for message.part.updated events.
             // This must remain in the session because it needs access to the raw SSE event
             // and the fleet session context for child session orchestration.
@@ -279,6 +290,83 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
             yield return harnessEvent;
         }
+    }
+
+    /// <summary>
+    /// Enriches a message event payload with <c>modelId</c> from the cached agent→model mapping.
+    /// OpenCode SSE events don't include <c>modelId</c> — only the REST API does.
+    /// </summary>
+    private async Task<HarnessEvent> EnrichWithModelIdAsync(HarnessEvent evt, CancellationToken ct)
+    {
+        if (!evt.Payload.HasValue || evt.Payload.Value.ValueKind != JsonValueKind.Object)
+            return evt;
+
+        var payload = evt.Payload.Value;
+        if (!payload.TryGetProperty("info", out var infoEl) || infoEl.ValueKind != JsonValueKind.Object)
+            return evt;
+
+        // Already has modelId — nothing to do
+        if (infoEl.TryGetProperty("modelId", out var existingModelId)
+            && existingModelId.ValueKind == JsonValueKind.String
+            && !string.IsNullOrEmpty(existingModelId.GetString()))
+            return evt;
+
+        // Only enrich assistant messages
+        if (!infoEl.TryGetProperty("role", out var roleEl) || roleEl.GetString() is not "assistant")
+            return evt;
+
+        // Look up agent name → model from cache
+        var agentName = infoEl.TryGetProperty("agent", out var agentEl) ? agentEl.GetString() : null;
+        var modelId = await ResolveModelIdForAgentAsync(agentName, ct).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(modelId))
+            return evt;
+
+        // Inject modelId into the info block
+        var payloadNode = System.Text.Json.Nodes.JsonNode.Parse(payload.GetRawText())?.AsObject();
+        if (payloadNode is null)
+            return evt;
+
+        var infoNode = payloadNode["info"]?.AsObject();
+        if (infoNode is null)
+            return evt;
+
+        infoNode["modelId"] = modelId;
+        return evt with { Payload = JsonSerializer.SerializeToElement(payloadNode) };
+    }
+
+    /// <summary>
+    /// Resolves the model ID for a given agent name, using a lazily-populated cache.
+    /// Falls back to the default agent's model if the specific agent is not found.
+    /// </summary>
+    private async Task<string?> ResolveModelIdForAgentAsync(string? agentName, CancellationToken ct)
+    {
+        if (_agentModelCache is null)
+        {
+            try
+            {
+                var agents = await _httpClient.GetAgentsAsync(_workingDirectory, ct).ConfigureAwait(false);
+                _agentModelCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var agent in agents)
+                {
+                    if (agent.Name is not null && agent.Model?.ModelId is not null)
+                        _agentModelCache[agent.Name] = agent.Model.ModelId;
+                }
+            }
+            catch
+            {
+                // Best-effort — don't block event processing
+                return null;
+            }
+        }
+
+        // Try exact agent match first, then fall back to "default" agent
+        if (agentName is not null && _agentModelCache.TryGetValue(agentName, out var model))
+            return model;
+
+        if (_agentModelCache.TryGetValue("default", out var defaultModel))
+            return defaultModel;
+
+        return _agentModelCache.Values.FirstOrDefault();
     }
 
     private async Task<string?> TryResolveChildFleetSessionIdAsync(string openCodeSessionId)
