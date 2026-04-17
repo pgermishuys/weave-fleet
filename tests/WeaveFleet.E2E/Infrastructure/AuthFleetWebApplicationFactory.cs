@@ -162,6 +162,7 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
             var testOptions = new FleetOptions
             {
                 DatabasePath = _dbPath,
+                AnalyticsDatabasePath = _analyticsDbPath,
                 AnalyticsEnabled = true,
                 Port = 0,
                 Host = "127.0.0.1",
@@ -256,6 +257,8 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
         TryDeleteFile($"{_dbPath}-wal");
         TryDeleteFile($"{_dbPath}-shm");
         TryDeleteFile(_analyticsDbPath);
+        TryDeleteFile($"{_analyticsDbPath}-wal");
+        TryDeleteFile($"{_analyticsDbPath}-shm");
         TryDeleteDirectory(_workspaceRoot);
     }
 
@@ -280,6 +283,7 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
         Environment.SetEnvironmentVariable("Fleet__Cloud__Enabled", "true");
         Environment.SetEnvironmentVariable("Fleet__Cloud__WorkspaceRoot", _workspaceRoot);
         Environment.SetEnvironmentVariable("Fleet__DatabasePath", _dbPath);
+        Environment.SetEnvironmentVariable("Fleet__AnalyticsDatabasePath", _analyticsDbPath);
         Environment.SetEnvironmentVariable("Fleet__AnalyticsEnabled", "true");
         Environment.SetEnvironmentVariable("Fleet__Port", "0");
         Environment.SetEnvironmentVariable("Fleet__Host", "127.0.0.1");
@@ -300,6 +304,7 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
         Environment.SetEnvironmentVariable("Fleet__Cloud__Enabled", null);
         Environment.SetEnvironmentVariable("Fleet__Cloud__WorkspaceRoot", null);
         Environment.SetEnvironmentVariable("Fleet__DatabasePath", null);
+        Environment.SetEnvironmentVariable("Fleet__AnalyticsDatabasePath", null);
         Environment.SetEnvironmentVariable("Fleet__AnalyticsEnabled", null);
         Environment.SetEnvironmentVariable("Fleet__Port", null);
         Environment.SetEnvironmentVariable("Fleet__Host", null);
