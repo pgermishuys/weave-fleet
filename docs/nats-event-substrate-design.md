@@ -1,5 +1,15 @@
 # NATS Event Substrate — Design
 
+> **Amended 2026-04-17 by the unified fan-out refactor.** The dual-path split
+> described below (durable events via outbox → WebSocket / ephemeral events via
+> core NATS → WebSocket) has been collapsed. Today both categories travel through
+> a single core NATS fan-out subscription (`WebSocketFanOutSubscriber`), durable
+> events additionally persist via `MessagePersistenceProjection` on the JetStream
+> stream, and harness events no longer flow through the outbox. See
+> [`unified-fanout-design.md`](./unified-fanout-design.md) for the authoritative
+> topology. Sections of this document describing the split routing are retained
+> for historical context only.
+
 ## Context
 
 Weave Fleet today delivers real-time harness events to WebSocket clients via an in-process `InMemoryEventBroadcaster` (`System.Threading.Channels`) and persists durable message/session state to SQLite through `HarnessEventPersistenceService` (called from the relay pump). Events are lost on process restart, there is no archive, and there is no seam for downstream consumers (read-model projections, external integrations, analytics, multi-node fan-out).
