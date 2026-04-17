@@ -170,10 +170,10 @@ A projection that needs tenant/project/session reads them off the subject (parse
 
 ### Managed cloud
 - **NATS**: external clustered JetStream we operate. `Fleet:Nats:ExternalUrl` always set; embedded service never spins up.
-- **Auth**: per-tenant NATS user credentials issued at tenant provisioning time; subject permissions scoped to `tenant.{workspaceId}.>`.
-- **Tenant prefix**: per workspace.
+- **Auth**: a single deployment-level NATS credential (per Decision 11) with access to the full `tenant.*.>` subject space. Tenant isolation is enforced at the application layer (Decision 7), not at the NATS auth boundary. Per-tenant NATS users are a future defence-in-depth option and are not part of the initial managed-cloud rollout.
+- **Tenant prefix**: per workspace, resolved at publish + subscribe time from the authenticated request context.
 - **Retention**: `MaxAge = 30d`.
-- **Scale-out**: multiple Fleet nodes, each with its own durable + ephemeral consumer pair; HTTP layer load-balances clients to any node.
+- **Scale-out**: multiple Fleet nodes, each with its own durable + ephemeral consumer pair; HTTP layer load-balances clients to any node. Per-node durable consumer names for the WS fan-out projection carry a `{nodeId}` suffix (`fleet-ws-fanout-durable-{nodeId}`) so each node receives its own copy of the stream; the persistence projection uses a single stream-wide consumer (one writer to SQLite).
 
 ## Framework To Build
 
@@ -181,12 +181,13 @@ A small fluent DI surface wraps the NATS client and provides stream configuratio
 
 **Core pieces:**
 - `NatsServerHostedService` — launches the bundled `nats-server` subprocess when no external URL is configured; no-op otherwise.
-- `NatsStreamInitializer` — hosted service that idempotently creates the durable stream on startup (catch "already exists" and continue).
-- `IEventPublisher` + `NatsEventPublisher` — publish abstraction; internally routes each `HarnessEvent` to JetStream or core NATS based on `EventTypeMetadata.Classify`.
-- `ProjectionListener` — one per registered projection; creates a durable JetStream consumer (`AckPolicy.Explicit`, `DeliverPolicy.All`), pumps deserialized `HarnessEvent`s to the projection's `HandleAsync`, acks on success, logs + re-raises on failure.
+- `NatsStreamInitializer` — hosted service that idempotently creates the durable stream on startup (catch "already exists" and continue). Also pre-creates the durable consumer for every registered projection before publishes are accepted — interest-based retention requires every consumer to be bound so GC cannot run ahead of a late-starting listener.
+- `IEventPublisher` + `NatsEventPublisher` — publish abstraction; internally routes each `HarnessEvent` to JetStream or core NATS based on `EventTypeMetadata.Classify`. Validates subject segments (project id, session id) against NATS structural characters (`.`, `*`, `>`, whitespace) before interpolating into a subject.
+- `ProjectionListener` — one per registered projection; binds to a pre-created durable JetStream consumer (`AckPolicy.Explicit`, `DeliverPolicy.All`), pumps deserialized `HarnessEvent`s to the projection's `HandleAsync`, acks on success. On handler exception it NAKs up to a bounded retry budget; past that it TERMs the message as poison and records a metric. Deserialization failures are TERM'd immediately.
 - `ProjectionHostService` — hosted service that spins up one `ProjectionListener` per registered projection.
-- `NatsNamingStrategy` — prepends tenant/isolation prefix to streams/consumers/subjects; resolves the prefix from request/session context.
-- `IProjection<HarnessEvent>` — single generic interface; each projection implements `HandleAsync(HarnessEvent, CancellationToken)` and dispatches internally on `evt.Type`.
+- `NatsNamingStrategy` — prepends tenant/isolation prefix to streams/consumers/subjects; resolves the prefix from request/session context. Durable consumer names for fan-out-style projections (WS fan-out) are suffixed with the node id; storage-writer projections (persistence) use a stream-wide consumer.
+- `IProjection<HarnessEvent>` — single generic interface; each projection implements `HandleAsync(HarnessEvent, ProjectionContext, CancellationToken)` and dispatches internally on `evt.Type`.
+- `EphemeralEventRelayService` — core NATS subscriber for `tenant.*.project.*.live.*.>`. In addition to forwarding events to `IEventBroadcaster`, it hosts the activity-status handler that updates `SessionActivityTracker` and emits `activity_status` broadcasts on the global `"sessions"` topic. This responsibility lived inline in `HarnessEventRelay` before cutover; moving it to the ephemeral subscriber preserves the "initial snapshot on WebSocket subscribe" contract.
 
 **Fluent DI shape:**
 ```csharp
