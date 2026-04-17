@@ -121,6 +121,7 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
 
         // Override configuration to use isolated DB paths for E2E.
         builder.UseSetting("Fleet:DatabasePath", _dbPath);
+        builder.UseSetting("Fleet:AnalyticsDatabasePath", _analyticsDbPath);
         builder.UseSetting("Fleet:AnalyticsEnabled", "true");
         builder.UseSetting("Fleet:Auth:Enabled", "false");
         builder.UseSetting("Fleet:Port", "0");
@@ -145,6 +146,7 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
             var testOptions = new FleetOptions
             {
                 DatabasePath = _dbPath,
+                AnalyticsDatabasePath = _analyticsDbPath,
                 AnalyticsEnabled = true,
                 Port = 0,
                 Host = "127.0.0.1"
@@ -220,6 +222,8 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
         TryDeleteFile($"{_dbPath}-wal");
         TryDeleteFile($"{_dbPath}-shm");
         TryDeleteFile(_analyticsDbPath);
+        TryDeleteFile($"{_analyticsDbPath}-wal");
+        TryDeleteFile($"{_analyticsDbPath}-shm");
     }
 
     private static void TryDeleteFile(string path)
