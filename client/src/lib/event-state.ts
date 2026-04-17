@@ -121,11 +121,25 @@ function mergeCommittedSnapshotParts(
   existingParts: AccumulatedMessage["parts"],
   snapshotParts: Array<AccumulatedTextPart>,
 ): AccumulatedMessage["parts"] {
-  const nonSnapshotParts = existingParts.filter(
-    (part) => part.type !== "text" && part.type !== "reasoning"
+  const existingTextByPartId = new Map(
+    existingParts
+      .filter((p): p is AccumulatedTextPart => p.type === "text")
+      .map((p) => [p.partId, p]),
   );
 
-  return [...snapshotParts, ...nonSnapshotParts];
+  const mergedText = snapshotParts.map((snap) => {
+    const existing = existingTextByPartId.get(snap.partId);
+    if (existing && existing.text.length > snap.text.length) {
+      return existing;
+    }
+    return snap;
+  });
+
+  const nonTextParts = existingParts.filter(
+    (part) => part.type !== "text" && part.type !== "reasoning",
+  );
+
+  return [...mergedText, ...nonTextParts];
 }
 
 export function applyPartUpdate(

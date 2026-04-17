@@ -1869,5 +1869,149 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         }
     }
 
+    [Fact]
+    public async Task MessagePartUpdated_BufferedDeltasLongerThanSnapshot_PreservesFullAccumulatedText()
+    {
+        var fleetSessionId = "fleet-delta-race-1";
+        var messageId = "msg-delta-race-1";
+        var partId = "part-race-1";
+
+        var (service, messageRepo, _) = BuildPersistenceService(configureMessageRepo: repo =>
+        {
+            repo.Seed(new PersistedMessage
+            {
+                Id = messageId,
+                SessionId = fleetSessionId,
+                Role = "assistant",
+                PartsJson = "[]",
+                Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            });
+        });
+
+        // Buffer deltas that arrived before the harness built its snapshot
+        var delta1 = new HarnessEvent
+        {
+            Type = "message.part.delta",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                messageID = messageId,
+                partID = partId,
+                field = "text",
+                delta = "Hello "
+            })
+        };
+        var delta2 = new HarnessEvent
+        {
+            Type = "message.part.delta",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                messageID = messageId,
+                partID = partId,
+                field = "text",
+                delta = "world"
+            })
+        };
+
+        service.BufferTextDelta(fleetSessionId, delta1);
+        service.BufferTextDelta(fleetSessionId, delta2);
+
+        // The harness snapshot only contains the first delta (race: snapshot was built before delta2 arrived)
+        var partUpdatedEvt = new HarnessEvent
+        {
+            Type = "message.part.updated",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                part = new
+                {
+                    id = partId,
+                    sessionID = "oc-session",
+                    messageID = messageId,
+                    type = "text",
+                    text = "Hello " // snapshot is missing "world"
+                }
+            })
+        };
+
+        var handled = await service.TryHandleDurableEventAsync(fleetSessionId, partUpdatedEvt);
+
+        handled.ShouldBeTrue();
+        messageRepo.UpsertCalls.ShouldContain(m =>
+            m.Id == messageId &&
+            m.SessionId == fleetSessionId &&
+            m.PartsJson.Contains("Hello world"));
+    }
+
+    [Fact]
+    public async Task MessagePartUpdated_SnapshotLongerThanBufferedDeltas_UsesSnapshotText()
+    {
+        var fleetSessionId = "fleet-delta-race-2";
+        var messageId = "msg-delta-race-2";
+        var partId = "part-race-2";
+
+        var (service, messageRepo, _) = BuildPersistenceService(configureMessageRepo: repo =>
+        {
+            repo.Seed(new PersistedMessage
+            {
+                Id = messageId,
+                SessionId = fleetSessionId,
+                Role = "assistant",
+                PartsJson = "[]",
+                Timestamp = DateTimeOffset.UtcNow.ToString("O"),
+                CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            });
+        });
+
+        // Buffer a short delta
+        var delta = new HarnessEvent
+        {
+            Type = "message.part.delta",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                messageID = messageId,
+                partID = partId,
+                field = "text",
+                delta = "Hi"
+            })
+        };
+
+        service.BufferTextDelta(fleetSessionId, delta);
+
+        // The harness snapshot contains more text (normal case — snapshot wins)
+        var partUpdatedEvt = new HarnessEvent
+        {
+            Type = "message.part.updated",
+            SessionId = "oc-session",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                part = new
+                {
+                    id = partId,
+                    sessionID = "oc-session",
+                    messageID = messageId,
+                    type = "text",
+                    text = "Hi there, full response"
+                }
+            })
+        };
+
+        var handled = await service.TryHandleDurableEventAsync(fleetSessionId, partUpdatedEvt);
+
+        handled.ShouldBeTrue();
+        messageRepo.UpsertCalls.ShouldContain(m =>
+            m.Id == messageId &&
+            m.SessionId == fleetSessionId &&
+            m.PartsJson.Contains("Hi there, full response"));
+    }
+
     private sealed record StubLaunchArtifacts : RuntimeLaunchArtifacts;
 }

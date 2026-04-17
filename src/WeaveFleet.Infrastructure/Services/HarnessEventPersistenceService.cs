@@ -323,6 +323,7 @@ internal sealed class HarnessEventPersistenceService
                 persisted = MessagePersistenceService.MergePartAndMetadata(existing, fleetPart, role, agentName);
             }
 
+            persisted = MergeBufferedDeltaIntoPartIfLonger(fleetSessionId, messageId, openCodePart.Id, persisted);
             ClearBufferedTextDelta(fleetSessionId, messageId, openCodePart.Id);
             await WriteDurableEventAsync(fleetSessionId, evt, persisted).ConfigureAwait(false);
             return true;
@@ -542,6 +543,40 @@ internal sealed class HarnessEventPersistenceService
         }
 
         return merged;
+    }
+
+    private PersistedMessage MergeBufferedDeltaIntoPartIfLonger(
+        string fleetSessionId,
+        string messageId,
+        string partId,
+        PersistedMessage persisted)
+    {
+        var key = (BuildBufferedDeltaKey(fleetSessionId, messageId, partId), partId);
+        if (!_bufferedTextDeltas.TryGetValue(key, out var bufferedText) || string.IsNullOrEmpty(bufferedText))
+            return persisted;
+
+        var parts = JsonSerializer.Deserialize<List<MessagePart>>(
+            persisted.PartsJson, MessagePersistenceService.SerializerOptions) ?? [];
+        var idx = parts.FindIndex(p => p is TextPart);
+        if (idx < 0)
+            return persisted;
+
+        var snapshotText = ((TextPart)parts[idx]).Text;
+        if (bufferedText.Length <= snapshotText.Length)
+            return persisted;
+
+        parts[idx] = new TextPart(bufferedText);
+        return new PersistedMessage
+        {
+            Id = persisted.Id,
+            SessionId = persisted.SessionId,
+            Role = persisted.Role,
+            PartsJson = JsonSerializer.Serialize(parts, MessagePersistenceService.SerializerOptions),
+            Timestamp = persisted.Timestamp,
+            CreatedAt = persisted.CreatedAt,
+            AgentName = persisted.AgentName,
+            ModelId = persisted.ModelId,
+        };
     }
 
     private void ClearBufferedTextDelta(string fleetSessionId, string messageId, string partId)

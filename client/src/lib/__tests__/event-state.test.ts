@@ -157,6 +157,40 @@ describe("mergeMessageUpdate", () => {
       { partId: "part-1", type: "text", text: "final merged text" },
     ]);
   });
+
+  it("keeps accumulated text when it is longer than the snapshot text (streaming race)", () => {
+    const prev = [makeMessage({
+      parts: [{ partId: "part-1", type: "text", text: "Hello world" }],
+    })];
+
+    const result = mergeMessageUpdate(prev, {
+      id: "msg-1",
+      parts: [
+        { id: "part-1", type: "text", text: "Hello " }, // snapshot is a prefix
+      ],
+    });
+
+    expect(result[0]?.parts).toEqual([
+      { partId: "part-1", type: "text", text: "Hello world" },
+    ]);
+  });
+
+  it("uses snapshot text when it is longer than accumulated text (normal case)", () => {
+    const prev = [makeMessage({
+      parts: [{ partId: "part-1", type: "text", text: "Hi" }],
+    })];
+
+    const result = mergeMessageUpdate(prev, {
+      id: "msg-1",
+      parts: [
+        { id: "part-1", type: "text", text: "Hi there, full response" },
+      ],
+    });
+
+    expect(result[0]?.parts).toEqual([
+      { partId: "part-1", type: "text", text: "Hi there, full response" },
+    ]);
+  });
 });
 
 // ─── applyPartUpdate ─────────────────────────────────────────────────────────
