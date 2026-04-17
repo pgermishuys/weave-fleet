@@ -147,7 +147,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime
         {
             var psi = new ProcessStartInfo
             {
-                FileName = "opencode",
+                FileName = ExecutableResolver.Resolve("opencode"),
                 Arguments = "--version",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,

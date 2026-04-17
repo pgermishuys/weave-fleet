@@ -83,7 +83,7 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
 
         var psi = new ProcessStartInfo
         {
-            FileName = options.BinaryPath,
+            FileName = ExecutableResolver.Resolve(options.BinaryPath),
             WorkingDirectory = options.WorkingDirectory,
             UseShellExecute = false,
             RedirectStandardOutput = true,

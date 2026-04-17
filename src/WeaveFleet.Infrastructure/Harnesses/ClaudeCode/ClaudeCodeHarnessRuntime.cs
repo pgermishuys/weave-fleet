@@ -57,7 +57,9 @@ public sealed class ClaudeCodeHarnessRuntime : IHarnessRuntime
     /// <inheritdoc />
     public async Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
     {
-        var binaryPath = _options.ClaudeCode.BinaryPath;
+        // Resolve the binary via PATHEXT on Windows so npm-installed CLIs (e.g. "claude.cmd")
+        // work without explicit configuration.
+        var binaryPath = ExecutableResolver.Resolve(_options.ClaudeCode.BinaryPath);
 
         // 1. Check the binary exists and is runnable
         try
