@@ -329,13 +329,15 @@ app.UseStaticFiles();    // Serves files from wwwroot/
 // SPA fallback — any unmatched route serves index.html for client-side routing
 app.MapFallbackToFile("index.html");
 
-// Graceful shutdown: stop all tracked harness instances before the process exits
+// Graceful shutdown: stop all tracked harness instances before the process exits.
+// Resolve dependencies up front (the root IServiceProvider may already be disposed by the
+// time ApplicationStopping fires — both are singletons, so capturing them is safe).
 var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+var shutdownTracker = app.Services.GetRequiredService<InstanceTracker>();
+var shutdownLogger = app.Services.GetRequiredService<ILogger<Program>>();
 lifetime.ApplicationStopping.Register(() =>
 {
-    var tracker = app.Services.GetRequiredService<InstanceTracker>();
-    var shutdownLogger = app.Services.GetRequiredService<ILogger<Program>>();
-    var instances = tracker.GetAll();
+    var instances = shutdownTracker.GetAll();
     if (instances.Count == 0) return;
 
     StartupLog.GracefulShutdownStarted(shutdownLogger, instances.Count);

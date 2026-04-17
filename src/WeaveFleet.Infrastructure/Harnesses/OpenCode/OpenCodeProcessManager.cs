@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Infrastructure.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
@@ -96,7 +97,7 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
 
         var psi = new ProcessStartInfo
         {
-            FileName = "opencode",
+            FileName = ExecutableResolver.Resolve("opencode"),
             WorkingDirectory = options.WorkingDirectory,
             UseShellExecute = false,
             RedirectStandardOutput = true,

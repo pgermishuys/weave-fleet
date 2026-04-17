@@ -40,3 +40,5 @@ client/test-results/
 
 # Local databases
 *.db
+src/WeaveFleet.Api/data
+src/WeaveFleet.Api/weave/data
