@@ -99,11 +99,11 @@ public sealed class ProjectionListener
         }
 
         // 2. Subject + payload parse — malformed input is immediate poison.
-        NatsNamingStrategy.ParsedDurableSubject parsed;
+        NatsNamingStrategy.ParsedSubject parsed;
         HarnessEvent evt;
         try
         {
-            parsed = NatsNamingStrategy.ParseDurableSubject(msg.Subject)
+            parsed = NatsNamingStrategy.ParseSubject(msg.Subject)
                 ?? throw new InvalidOperationException($"Subject did not parse: {msg.Subject}");
             evt = JsonSerializer.Deserialize<HarnessEvent>(msg.Data!)
                 ?? throw new InvalidOperationException("Payload did not deserialize to HarnessEvent.");

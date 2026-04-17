@@ -67,7 +67,7 @@ public sealed class NatsEventPublisher : IEventPublisher
 
     private async Task PublishDurableAsync(HarnessEvent evt, EventPublishContext context, CancellationToken ct)
     {
-        var subject = _naming.DurableSubject(context.ProjectId, context.FleetSessionId, evt.Type);
+        var subject = _naming.Subject(context.ProjectId, context.FleetSessionId, evt.Type);
         var payload = JsonSerializer.SerializeToUtf8Bytes(evt);
         var msgId = $"{context.FleetSessionId}:{context.Sequence}";
         var headers = new NatsHeaders
@@ -108,7 +108,7 @@ public sealed class NatsEventPublisher : IEventPublisher
 
     private async Task PublishEphemeralAsync(HarnessEvent evt, EventPublishContext context, CancellationToken ct)
     {
-        var subject = _naming.EphemeralSubject(context.ProjectId, context.FleetSessionId, evt.Type);
+        var subject = _naming.Subject(context.ProjectId, context.FleetSessionId, evt.Type);
         var payload = JsonSerializer.SerializeToUtf8Bytes(evt);
         var headers = new NatsHeaders();
         if (context.UserId is { Length: > 0 }) headers["x-fleet-user-id"] = context.UserId;

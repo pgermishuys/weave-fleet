@@ -51,7 +51,7 @@ public sealed class NatsStreamInitializer : IHostedService
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         var js = _jsLazy.Value;
-        var config = new StreamConfig(_options.StreamName, [NatsNamingStrategy.DurableStreamFilter])
+        var config = new StreamConfig(_options.StreamName, NatsNamingStrategy.DurableStreamSubjects.ToArray())
         {
             Retention = StreamConfigRetention.Interest,
             Storage = StreamConfigStorage.File,
@@ -91,7 +91,7 @@ public sealed class NatsStreamInitializer : IHostedService
             {
                 AckPolicy = ConsumerConfigAckPolicy.Explicit,
                 DeliverPolicy = ConsumerConfigDeliverPolicy.All,
-                FilterSubject = NatsNamingStrategy.DurableStreamFilter,
+                FilterSubject = NatsNamingStrategy.FanOutSubscriptionFilter,
                 MaxDeliver = _options.ProjectionRetryBudget,
             };
             await js.CreateOrUpdateConsumerAsync(_options.StreamName, consumerConfig, cancellationToken)
