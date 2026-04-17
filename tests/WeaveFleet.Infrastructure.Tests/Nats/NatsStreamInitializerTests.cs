@@ -59,11 +59,11 @@ public sealed class NatsStreamInitializerTests : IClassFixture<EmbeddedNatsTestF
         var options = await FreshOptionsAsync("preconsumer", js);
 
         var services = new ServiceCollection();
-        services.AddScoped<NoOpProjection>();
+        services.AddScoped<StubProjection>();
         services.AddLogging();
         var sp = services.BuildServiceProvider();
 
-        var entry = new ProjectionRegistryEntry(typeof(NoOpProjection), ConsumerScope.Cluster);
+        var entry = new ProjectionRegistryEntry(typeof(StubProjection), ConsumerScope.Cluster);
         var registry = new ProjectionRegistry([entry]);
         var naming = new NatsNamingStrategy(options, nodeId: "node-Z");
         var customStreamFilterForThisTest = $"{options.TenantPrefix}.project.*.session.*.>";
@@ -72,9 +72,15 @@ public sealed class NatsStreamInitializerTests : IClassFixture<EmbeddedNatsTestF
         await sut.StartAsync(CancellationToken.None);
 
         var stream = await js.GetStreamAsync(options.StreamName);
-        var consumerName = naming.ClusterConsumerName("noop");
+        var consumerName = naming.ClusterConsumerName("stub");
         var consumer = await js.GetConsumerAsync(options.StreamName, consumerName);
         consumer.ShouldNotBeNull();
+    }
+
+    private sealed class StubProjection : IProjection<HarnessEvent>
+    {
+        public string Name => "stub";
+        public Task HandleAsync(HarnessEvent evt, ProjectionContext ctx, CancellationToken ct) => Task.CompletedTask;
     }
 
     // Test-only subclass that overrides the stream filter so tests can have isolated subject
