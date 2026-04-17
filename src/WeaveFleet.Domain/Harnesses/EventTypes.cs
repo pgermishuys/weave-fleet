@@ -16,6 +16,7 @@ public static class EventTypes
     public const string SessionDeleted = "session.deleted";
     public const string SessionStatus = "session.status";
     public const string SessionIdle = "session.idle";
+    public const string SessionDiff = "session.diff";
 
     public const string Error = "error";
 

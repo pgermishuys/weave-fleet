@@ -102,6 +102,7 @@ public sealed class EventTypeMetadataTests
     public void UnknownEventTypes_DefaultToNonDurableNonEphemeral(string eventType)
     {
         var classification = EventTypeMetadata.Classify(eventType);
+        classification.IsKnown.ShouldBeFalse();
         classification.IsDurable.ShouldBeFalse();
         classification.IsEphemeralRelay.ShouldBeFalse();
         classification.RequiresReasoningFilter.ShouldBeFalse();
@@ -109,16 +110,32 @@ public sealed class EventTypeMetadataTests
     }
 
     // -----------------------------------------------------------------------
-    // Server control events (not durable, not ephemeral relay)
+    // Server control / known-ignored events (not durable, not ephemeral relay)
     // -----------------------------------------------------------------------
 
     [Theory]
     [InlineData(EventTypes.ServerHeartbeat)]
     [InlineData(EventTypes.ServerConnected)]
-    public void ServerControlEventTypes_AreNeitherDurableNorEphemeralRelay(string eventType)
+    [InlineData(EventTypes.SessionDiff)]
+    public void KnownIgnoredEventTypes_AreKnownButNeitherDurableNorEphemeralRelay(string eventType)
     {
         var classification = EventTypeMetadata.Classify(eventType);
+        classification.IsKnown.ShouldBeTrue();
         classification.IsDurable.ShouldBeFalse();
         classification.IsEphemeralRelay.ShouldBeFalse();
+    }
+
+    // -----------------------------------------------------------------------
+    // IsKnown — every classified type must set it
+    // -----------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(EventTypes.MessageCreated)]
+    [InlineData(EventTypes.SessionStatus)]
+    [InlineData(EventTypes.MessagePartDelta)]
+    [InlineData("permission.request")]
+    public void ClassifiedEventTypes_AreKnown(string eventType)
+    {
+        EventTypeMetadata.Classify(eventType).IsKnown.ShouldBeTrue();
     }
 }

@@ -60,7 +60,8 @@ public sealed class NatsEventPublisher : IEventPublisher
             return;
         }
 
-        LogUnknownEventType(_logger, evt.Type, null);
+        if (!classification.IsKnown)
+            LogUnknownEventType(_logger, evt.Type, null);
         _metrics.RecordPublish(routing: "dropped", eventType: evt.Type, tenant: _options.TenantPrefix, result: "ok");
     }
 
