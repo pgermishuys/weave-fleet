@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weave Fleet — AI Workspace</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0b; --card: #141416; --card-hover: #1a1a1e; --border: #1e1e22;
+    --text: #e4e4e7; --muted: #71717a; --accent: #6366f1; --accent-hover: #818cf8;
+    --green: #22c55e; --amber: #f59e0b; --blue: #3b82f6; --red: #ef4444;
+    --radius: 8px; --radius-sm: 6px; --radius-lg: 12px;
+  }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; font-size: 14px; line-height: 1.5; overflow: hidden; }
+  ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #2a2a2e; border-radius: 3px; }
+
+  .app { display: flex; flex-direction: column; height: 100vh; }
+
+  /* Top Bar */
+  .topbar { height: 48px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; flex-shrink: 0; background: var(--card); }
+  .breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .breadcrumb span { color: var(--text); font-weight: 500; }
+  .breadcrumb .sep { color: #333; }
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+  .conn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #a855f7); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: white; }
+
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* Left Sidebar */
+  .sidebar-left { width: 280px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--card); flex-shrink: 0; }
+  .sidebar-header { padding: 12px; border-bottom: 1px solid var(--border); }
+  .search-box { width: 100%; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; outline: none; transition: border-color .2s; }
+  .search-box:focus { border-color: var(--accent); }
+  .new-session-btn { width: 100%; margin-top: 8px; padding: 8px; border-radius: var(--radius-sm); background: var(--accent); color: white; border: none; font-size: 13px; font-weight: 500; cursor: pointer; transition: background .2s; }
+  .new-session-btn:hover { background: var(--accent-hover); }
+  .session-list { flex: 1; overflow-y: auto; padding: 8px; }
+  .session-group-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 8px 8px 4px; font-weight: 600; }
+  .session-item { padding: 10px 12px; border-radius: var(--radius-sm); cursor: pointer; transition: background .15s; margin-bottom: 2px; }
+  .session-item:hover { background: var(--card-hover); }
+  .session-item.active { background: #1c1c24; border: 1px solid #2a2a3a; }
+  .session-item .top-row { display: flex; align-items: center; justify-content: space-between; }
+  .session-item .name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .session-item .desc { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge { font-size: 10px; padding: 2px 6px; border-radius: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; flex-shrink: 0; }
+  .badge.running { background: rgba(34,197,94,.15); color: var(--green); }
+  .badge.idle { background: rgba(245,158,11,.15); color: var(--amber); }
+  .badge.complete { background: rgba(59,130,246,.15); color: var(--blue); }
+  .badge.error { background: rgba(239,68,68,.15); color: var(--red); }
+  .agent-tag { font-size: 11px; color: var(--accent); margin-top: 4px; }
+
+  /* Center */
+  .center { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+  .chat-stream { flex: 1; overflow-y: auto; padding: 20px 24px; }
+  .msg { margin-bottom: 16px; max-width: 800px; }
+  .msg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .msg-author { font-size: 13px; font-weight: 600; }
+  .msg-time { font-size: 11px; color: var(--muted); }
+  .msg-body { font-size: 14px; line-height: 1.6; color: #d1d1d6; }
+  .msg.user .msg-author { color: var(--text); }
+  .msg.agent .msg-author { color: var(--accent); }
+  .tool-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin: 8px 0; overflow: hidden; }
+  .tool-card-header { padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; font-size: 13px; font-weight: 500; background: rgba(255,255,255,.02); }
+  .tool-card-header:hover { background: rgba(255,255,255,.04); }
+  .tool-icon { color: var(--muted); font-size: 12px; margin-right: 8px; }
+  .tool-card-body { padding: 12px; border-top: 1px solid var(--border); font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; color: var(--muted); line-height: 1.6; white-space: pre-wrap; background: rgba(0,0,0,.3); }
+  .tool-card-body.collapsed { display: none; }
+  .chevron { transition: transform .2s; display: inline-block; }
+  .chevron.open { transform: rotate(90deg); }
+
+  /* Composer */
+  .composer-area { border-top: 1px solid var(--border); padding: 12px 24px 16px; background: var(--card); }
+  .context-chips { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+  .chip { display: flex; align-items: center; gap: 4px; padding: 3px 10px; background: rgba(99,102,241,.12); border: 1px solid rgba(99,102,241,.25); border-radius: 12px; font-size: 12px; color: var(--accent); }
+  .chip .remove { cursor: pointer; opacity: .6; margin-left: 2px; }
+  .chip .remove:hover { opacity: 1; }
+  .input-wrapper { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color .2s; }
+  .input-wrapper:focus-within { border-color: var(--accent); }
+  .composer-input { width: 100%; min-height: 60px; max-height: 160px; padding: 12px; background: transparent; border: none; color: var(--text); font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; resize: none; outline: none; line-height: 1.5; }
+  .composer-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-top: 1px solid var(--border); background: rgba(255,255,255,.01); }
+  .toolbar-left { display: flex; align-items: center; gap: 12px; }
+  .model-picker { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--radius-sm); background: rgba(255,255,255,.05); border: 1px solid var(--border); color: var(--text); font-size: 12px; cursor: pointer; transition: background .15s; }
+  .model-picker:hover { background: rgba(255,255,255,.08); }
+  .effort-dots { display: flex; gap: 4px; align-items: center; padding: 4px 8px; border-radius: var(--radius-sm); background: rgba(255,255,255,.05); border: 1px solid var(--border); }
+  .effort-dot { width: 8px; height: 8px; border-radius: 50%; background: #333; cursor: pointer; transition: background .15s; }
+  .effort-dot.active { background: var(--accent); }
+  .effort-dot:hover { background: var(--accent-hover); }
+  .agent-selector { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--radius-sm); background: rgba(99,102,241,.1); border: 1px solid rgba(99,102,241,.2); color: var(--accent); font-size: 12px; cursor: pointer; }
+  .send-btn { padding: 6px 16px; background: var(--accent); color: white; border: none; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; cursor: pointer; transition: background .2s; }
+  .send-btn:hover { background: var(--accent-hover); }
+
+  /* Right Sidebar */
+  .sidebar-right { width: 300px; border-left: 1px solid var(--border); background: var(--card); display: flex; flex-direction: column; flex-shrink: 0; transition: width .3s, opacity .3s; }
+  .sidebar-right.collapsed { width: 0; overflow: hidden; opacity: 0; }
+  .plan-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .plan-header h3 { font-size: 13px; font-weight: 600; }
+  .plan-toggle { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; }
+  .progress-bar-wrap { padding: 12px 16px; }
+  .progress-bar { height: 4px; background: #222; border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width .3s; }
+  .progress-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .plan-list { flex: 1; overflow-y: auto; padding: 8px 16px; }
+  .plan-item { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; font-size: 13px; }
+  .plan-check { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border); background: transparent; flex-shrink: 0; margin-top: 2px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .plan-check.done { background: var(--accent); border-color: var(--accent); }
+  .plan-check.done::after { content: '✓'; color: white; font-size: 10px; }
+  .plan-item.done .plan-text { text-decoration: line-through; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="breadcrumb">
+      <span style="color:var(--accent);font-weight:700;font-size:14px;">⬡ Weave</span>
+      <span class="sep">›</span> Fleet
+      <span class="sep">›</span> <span>Implement OAuth flow</span>
+    </div>
+    <div class="topbar-right">
+      <div class="conn-dot" title="Connected"></div>
+      <div class="avatar">PG</div>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- Left Sidebar -->
+    <div class="sidebar-left">
+      <div class="sidebar-header">
+        <input class="search-box" placeholder="Search sessions…" />
+        <button class="new-session-btn">+ New Session</button>
+      </div>
+      <div class="session-list">
+        <div class="session-group-label">weave-fleet</div>
+        <div class="session-item active">
+          <div class="top-row"><span class="name">Implement OAuth flow</span><span class="badge running">running</span></div>
+          <div class="desc">Add Google & GitHub OAuth providers</div>
+          <div class="agent-tag">Tapestry · Claude Sonnet 4</div>
+        </div>
+        <div class="session-item">
+          <div class="top-row"><span class="name">Refactor database layer</span><span class="badge running">running</span></div>
+          <div class="desc">Migrate to repository pattern</div>
+          <div class="agent-tag">Shuttle · Claude Opus 4</div>
+        </div>
+        <div class="session-item">
+          <div class="top-row"><span class="name">Fix rate limiter bug</span><span class="badge complete">complete</span></div>
+          <div class="desc">Token bucket off-by-one error</div>
+          <div class="agent-tag">Thread · Claude Sonnet 4</div>
+        </div>
+
+        <div class="session-group-label">weave-core</div>
+        <div class="session-item">
+          <div class="top-row"><span class="name">Add streaming support</span><span class="badge idle">idle</span></div>
+          <div class="desc">SSE endpoint for real-time updates</div>
+          <div class="agent-tag">Tapestry · Claude Sonnet 4</div>
+        </div>
+        <div class="session-item">
+          <div class="top-row"><span class="name">Update CI pipeline</span><span class="badge complete">complete</span></div>
+          <div class="desc">Add test coverage gates</div>
+          <div class="agent-tag">Shuttle · Claude Sonnet 4</div>
+        </div>
+        <div class="session-item">
+          <div class="top-row"><span class="name">Audit auth middleware</span><span class="badge error">error</span></div>
+          <div class="desc">JWT validation bypass found</div>
+          <div class="agent-tag">Thread · Claude Opus 4</div>
+        </div>
+
+        <div class="session-group-label">weave-ui</div>
+        <div class="session-item">
+          <div class="top-row"><span class="name">Dashboard redesign</span><span class="badge idle">idle</span></div>
+          <div class="desc">New layout with analytics panel</div>
+          <div class="agent-tag">Tapestry · Claude Sonnet 4</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Center -->
+    <div class="center">
+      <div class="chat-stream">
+        <div class="msg user">
+          <div class="msg-header"><span class="msg-author">You</span><span class="msg-time">2:34 PM</span></div>
+          <div class="msg-body">Implement OAuth authentication with Google and GitHub as providers. Use the existing auth middleware and add the new providers alongside the current email/password flow.</div>
+        </div>
+
+        <div class="msg agent">
+          <div class="msg-header"><span class="msg-author">Tapestry</span><span class="msg-time">2:34 PM</span></div>
+          <div class="msg-body">I'll implement OAuth authentication for Google and GitHub. Let me start by examining the existing auth structure and then add the OAuth providers.</div>
+        </div>
+
+        <div class="tool-card">
+          <div class="tool-card-header" onclick="toggleTool(this)">
+            <span><span class="tool-icon">$</span> Bash — <span style="color:var(--muted)">ls src/auth/</span></span>
+            <span class="chevron open">›</span>
+          </div>
+          <div class="tool-card-body">middleware.ts
+providers/
+  email.ts
+  index.ts
+session.ts
+types.ts</div>
+        </div>
+
+        <div class="tool-card">
+          <div class="tool-card-header" onclick="toggleTool(this)">
+            <span><span class="tool-icon">✎</span> Edit — <span style="color:var(--muted)">src/auth/providers/google.ts</span> <span style="color:var(--green);font-size:11px;">+84 lines</span></span>
+            <span class="chevron">›</span>
+          </div>
+          <div class="tool-card-body collapsed">import { OAuth2Client } from 'google-auth-library';
+import { AuthProvider, AuthResult } from '../types';
+
+export class GoogleAuthProvider implements AuthProvider {
+  private client: OAuth2Client;
+  // ... implementation
+}</div>
+        </div>
+
+        <div class="msg agent">
+          <div class="msg-header"><span class="msg-author">Tapestry</span><span class="msg-time">2:35 PM</span></div>
+          <div class="msg-body">I've created the Google OAuth provider. Now let me add the GitHub provider and wire both into the auth middleware.</div>
+        </div>
+
+        <div class="tool-card">
+          <div class="tool-card-header" onclick="toggleTool(this)">
+            <span><span class="tool-icon">✎</span> Edit — <span style="color:var(--muted)">src/auth/providers/github.ts</span> <span style="color:var(--green);font-size:11px;">+72 lines</span></span>
+            <span class="chevron">›</span>
+          </div>
+          <div class="tool-card-body collapsed">import { Octokit } from '@octokit/rest';
+import { AuthProvider, AuthResult } from '../types';
+
+export class GitHubAuthProvider implements AuthProvider {
+  // ... implementation
+}</div>
+        </div>
+
+        <div class="tool-card">
+          <div class="tool-card-header" onclick="toggleTool(this)">
+            <span><span class="tool-icon">✎</span> Edit — <span style="color:var(--muted)">src/auth/middleware.ts</span> <span style="color:var(--amber);font-size:11px;">~23 lines</span></span>
+            <span class="chevron">›</span>
+          </div>
+          <div class="tool-card-body collapsed">// Added OAuth route handlers
+router.get('/auth/google', googleAuth.initiate);
+router.get('/auth/google/callback', googleAuth.callback);
+router.get('/auth/github', githubAuth.initiate);
+router.get('/auth/github/callback', githubAuth.callback);</div>
+        </div>
+
+        <div class="msg agent">
+          <div class="msg-header"><span class="msg-author">Tapestry</span><span class="msg-time">2:36 PM</span></div>
+          <div class="msg-body">Both OAuth providers are now implemented and registered. Here's a summary of changes:
+
+• <strong>src/auth/providers/google.ts</strong> — Google OAuth2 provider with token validation and profile mapping
+• <strong>src/auth/providers/github.ts</strong> — GitHub OAuth provider using Octokit for user data
+• <strong>src/auth/middleware.ts</strong> — Updated to register OAuth routes alongside existing email/password flow
+• <strong>src/auth/providers/index.ts</strong> — Re-exported new providers
+
+Let me now add the environment variable validation and update the config schema.</div>
+        </div>
+
+        <div class="tool-card">
+          <div class="tool-card-header" onclick="toggleTool(this)">
+            <span><span class="tool-icon">$</span> Bash — <span style="color:var(--muted)">npm run typecheck</span></span>
+            <span class="chevron open">›</span>
+          </div>
+          <div class="tool-card-body" style="color:var(--green);">✓ No type errors found
+  Checked 142 files in 3.2s</div>
+        </div>
+      </div>
+
+      <!-- Composer -->
+      <div class="composer-area">
+        <div class="context-chips">
+          <div class="chip">📄 src/auth/types.ts <span class="remove">×</span></div>
+          <div class="chip">📄 .env.example <span class="remove">×</span></div>
+        </div>
+        <div class="input-wrapper">
+          <textarea class="composer-input" placeholder="Send a message…" rows="2">Now add unit tests for both providers</textarea>
+          <div class="composer-toolbar">
+            <div class="toolbar-left">
+              <div class="model-picker">
+                <span style="color:var(--muted);font-size:11px;">▾</span>
+                Claude Sonnet 4
+              </div>
+              <div class="effort-dots" title="Reasoning effort">
+                <div class="effort-dot" title="Low"></div>
+                <div class="effort-dot active" title="Medium"></div>
+                <div class="effort-dot" title="High"></div>
+              </div>
+              <div class="agent-selector">
+                <span style="font-size:10px;">◆</span> Tapestry
+              </div>
+            </div>
+            <button class="send-btn">Send ↵</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Sidebar -->
+    <div class="sidebar-right" id="rightSidebar">
+      <div class="plan-header">
+        <h3>Plan</h3>
+        <button class="plan-toggle" onclick="document.getElementById('rightSidebar').classList.toggle('collapsed')">✕</button>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar"><div class="progress-fill" style="width:60%"></div></div>
+        <div class="progress-label">3 of 5 tasks complete</div>
+      </div>
+      <div class="plan-list">
+        <div class="plan-item done"><div class="plan-check done"></div><span class="plan-text">Examine existing auth structure</span></div>
+        <div class="plan-item done"><div class="plan-check done"></div><span class="plan-text">Create Google OAuth provider</span></div>
+        <div class="plan-item done"><div class="plan-check done"></div><span class="plan-text">Create GitHub OAuth provider</span></div>
+        <div class="plan-item"><div class="plan-check"></div><span class="plan-text">Update middleware & routes</span></div>
+        <div class="plan-item"><div class="plan-check"></div><span class="plan-text">Add config validation & tests</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleTool(header) {
+  const body = header.nextElementSibling;
+  const chevron = header.querySelector('.chevron');
+  body.classList.toggle('collapsed');
+  chevron.classList.toggle('open');
+}
+</script>
+</body>
+</html>

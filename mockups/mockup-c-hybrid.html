@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weave Fleet — Hybrid Minimal</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0b; --card: #141416; --card-hover: #1a1a1e; --border: #1e1e22;
+    --text: #e4e4e7; --muted: #71717a; --accent: #6366f1; --accent-hover: #818cf8;
+    --green: #22c55e; --amber: #f59e0b; --blue: #3b82f6; --red: #ef4444;
+    --radius: 8px; --radius-sm: 6px; --radius-lg: 12px;
+  }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; font-size: 14px; line-height: 1.5; overflow: hidden; }
+  ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #2a2a2e; border-radius: 3px; }
+
+  .app { display: flex; height: 100vh; }
+
+  /* Icon Rail */
+  .rail { width: 48px; background: var(--card); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 4px; flex-shrink: 0; z-index: 50; transition: width .2s; overflow: hidden; }
+  .rail:hover { width: 160px; }
+  .rail-logo { font-size: 18px; color: var(--accent); margin-bottom: 16px; flex-shrink: 0; width: 48px; text-align: center; line-height: 32px; }
+  .rail-item { width: 100%; padding: 10px 0; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: background .15s; border-radius: 0; color: var(--muted); position: relative; }
+  .rail-item:hover { background: rgba(255,255,255,.04); color: var(--text); }
+  .rail-item.active { color: var(--accent); }
+  .rail-item .icon { width: 48px; text-align: center; font-size: 16px; flex-shrink: 0; }
+  .rail-item .label { font-size: 13px; font-weight: 500; white-space: nowrap; opacity: 0; transition: opacity .15s; }
+  .rail:hover .rail-item .label { opacity: 1; }
+
+  .main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* View Toggle */
+  .view-toggle-bar { height: 44px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 8px; background: var(--card); flex-shrink: 0; }
+  .view-btn { padding: 5px 14px; border-radius: 14px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer; transition: all .15s; }
+  .view-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .view-btn:hover:not(.active) { border-color: #333; color: var(--text); }
+  .view-toggle-sep { flex: 1; }
+  .view-toggle-info { font-size: 12px; color: var(--muted); }
+
+  /* Fleet View */
+  .fleet-view { flex: 1; overflow-y: auto; padding: 24px; display: none; }
+  .fleet-view.visible { display: block; }
+  .kanban { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; height: 100%; }
+  .kanban-col { background: rgba(255,255,255,.02); border-radius: var(--radius-lg); border: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .col-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .col-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  .col-count { font-size: 11px; background: rgba(255,255,255,.08); padding: 1px 7px; border-radius: 8px; color: var(--muted); }
+  .col-body { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+  .k-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; cursor: pointer; transition: all .15s; }
+  .k-card:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+  .k-card-title { font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+  .k-card-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+  .k-tag { padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 500; }
+  .k-drag { color: #333; font-size: 10px; cursor: grab; margin-right: 2px; }
+
+  /* Session View */
+  .session-view { flex: 1; display: none; flex-direction: column; overflow: hidden; }
+  .session-view.visible { display: flex; }
+  .session-topbar { height: 48px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 12px; background: var(--card); flex-shrink: 0; }
+  .back-link { font-size: 12px; color: var(--muted); cursor: pointer; transition: color .15s; }
+  .back-link:hover { color: var(--text); }
+  .session-title-edit { background: none; border: none; color: var(--text); font-size: 15px; font-weight: 600; outline: none; flex: 1; }
+  .status-badge { font-size: 10px; padding: 3px 8px; border-radius: 10px; font-weight: 600; background: rgba(34,197,94,.15); color: var(--green); }
+
+  .chat-area { flex: 1; overflow-y: auto; padding: 24px 32px; max-width: 860px; margin: 0 auto; width: 100%; }
+  .s-msg { margin-bottom: 20px; }
+  .s-msg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .s-msg-author { font-size: 13px; font-weight: 600; }
+  .s-msg-author.agent { color: var(--accent); }
+  .s-msg-time { font-size: 11px; color: var(--muted); }
+  .s-msg-body { font-size: 14px; line-height: 1.65; color: #d1d1d6; }
+  .s-tool { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin: 8px 0; font-size: 12px; font-family: 'SF Mono', monospace; color: var(--muted); cursor: pointer; transition: border-color .15s; }
+  .s-tool:hover { border-color: #333; }
+  .s-tool-label { color: var(--text); font-family: system-ui; font-weight: 500; margin-bottom: 4px; }
+
+  /* Floating Toolbar (dock) */
+  .dock { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--card); border: 1px solid var(--border); border-radius: 24px; padding: 8px 16px; display: flex; align-items: center; gap: 12px; box-shadow: 0 8px 32px rgba(0,0,0,.5); z-index: 100; display: none; }
+  .session-view.visible ~ .dock { display: flex; }
+  .dock-item { padding: 6px 12px; border-radius: 14px; font-size: 12px; font-weight: 500; cursor: pointer; transition: background .15s; color: var(--muted); display: flex; align-items: center; gap: 6px; border: 1px solid transparent; background: rgba(255,255,255,.04); }
+  .dock-item:hover { background: rgba(255,255,255,.08); color: var(--text); }
+  .dock-item.accent { background: rgba(99,102,241,.15); color: var(--accent); border-color: rgba(99,102,241,.2); }
+  .dock-send { padding: 6px 18px; background: var(--accent); color: white; border: none; border-radius: 14px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background .2s; }
+  .dock-send:hover { background: var(--accent-hover); }
+  .dock-sep { width: 1px; height: 20px; background: var(--border); }
+
+  /* Slide-over panel */
+  .slideover { position: fixed; top: 44px; right: 0; bottom: 0; width: 380px; background: var(--card); border-left: 1px solid var(--border); transform: translateX(100%); transition: transform .25s ease; z-index: 90; display: flex; flex-direction: column; }
+  .slideover.open { transform: translateX(0); }
+  .slideover-tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .slideover-tab { flex: 1; padding: 10px; font-size: 12px; font-weight: 500; text-align: center; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s; }
+  .slideover-tab:hover { color: var(--text); }
+  .slideover-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .slideover-body { flex: 1; overflow-y: auto; padding: 16px; }
+  .slideover-close { position: absolute; top: 10px; right: 12px; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; z-index: 2; }
+
+  .todo-item { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .todo-check { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); flex-shrink: 0; }
+  .todo-check.done { background: var(--accent); border-color: var(--accent); }
+  .todo-item.done { color: var(--muted); text-decoration: line-through; }
+
+  .diff-file { margin-bottom: 12px; }
+  .diff-file-header { font-size: 12px; font-weight: 600; padding: 6px 8px; background: rgba(255,255,255,.03); border-radius: var(--radius-sm) var(--radius-sm) 0 0; border: 1px solid var(--border); }
+  .diff-lines { font-family: 'SF Mono', monospace; font-size: 11px; line-height: 1.7; padding: 8px; background: rgba(0,0,0,.3); border: 1px solid var(--border); border-top: none; border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+  .diff-add { color: var(--green); }
+  .diff-del { color: var(--red); }
+  .diff-ctx { color: #555; }
+
+  /* Edge tab triggers */
+  .edge-trigger { position: fixed; right: 0; width: 24px; background: var(--card); border-left: 1px solid var(--border); border-radius: 6px 0 0 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 11px; color: var(--muted); writing-mode: vertical-rl; padding: 8px 4px; z-index: 80; transition: background .15s; display: none; }
+  .session-view.visible ~ .edge-trigger { display: flex; }
+  .edge-trigger:hover { background: var(--card-hover); color: var(--text); }
+  .edge-trigger.t1 { top: 120px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Icon Rail -->
+  <div class="rail">
+    <div class="rail-logo">⬡</div>
+    <div class="rail-item active"><span class="icon">▦</span><span class="label">Fleet</span></div>
+    <div class="rail-item"><span class="icon">◬</span><span class="label">Sessions</span></div>
+    <div class="rail-item"><span class="icon">◈</span><span class="label">Analytics</span></div>
+    <div class="rail-item" style="margin-top:auto"><span class="icon">⚙</span><span class="label">Settings</span></div>
+  </div>
+
+  <div class="main-area">
+    <!-- View Toggle -->
+    <div class="view-toggle-bar">
+      <button class="view-btn active" id="fleetBtn" onclick="showView('fleet')">Fleet View</button>
+      <button class="view-btn" id="sessionBtn" onclick="showView('session')">Session View</button>
+      <div class="view-toggle-sep"></div>
+      <div class="view-toggle-info">8 sessions · 3 running</div>
+    </div>
+
+    <!-- Fleet View (Kanban) -->
+    <div class="fleet-view visible" id="fleetView">
+      <div class="kanban">
+        <!-- Queued -->
+        <div class="kanban-col">
+          <div class="col-header"><span class="col-title" style="color:var(--muted)">Queued</span><span class="col-count">2</span></div>
+          <div class="col-body">
+            <div class="k-card" onclick="showView('session')">
+              <div class="k-card-title"><span class="k-drag">⠿</span> Migrate to ESM modules</div>
+              <div class="k-card-meta">
+                <span class="k-tag" style="background:rgba(99,102,241,.15);color:var(--accent)">Tapestry</span>
+                <span>Sonnet 4</span>
+                <span>—</span>
+              </div>
+            </div>
+            <div class="k-card">
+              <div class="k-card-title"><span class="k-drag">⠿</span> Add rate limit headers</div>
+              <div class="k-card-meta">
+                <span class="k-tag" style="background:rgba(139,92,246,.15);color:#8b5cf6">Shuttle</span>
+                <span>Sonnet 4</span>
+                <span>—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Running -->
+        <div class="kanban-col">
+          <div class="col-header"><span class="col-title" style="color:var(--green)">Running</span><span class="col-count">3</span></div>
+          <div class="col-body">
+            <div class="k-card" onclick="showView('session')">
+              <div class="k-card-title"><span class="k-drag">⠿</span> Implement OAuth flow</div>
+              <div class="k-card-meta">
+                <span class="k-tag" style="background:rgba(99,102,241,.15);color:var(--accent)">Tapestry</span>
+                <span>Sonnet 4</span>
+                <span>3m 42s</span>
+                <span>48K</span>
+              </div>
+            </div>
+            <div class="k-card">
+              <div class="k-card-title"><span class="k-drag">⠿</span> Refactor database layer</div>
+              <div class="k-card-meta">
+                <span class="k-tag" style="background:rgba(139,92,246,.15);color:#8b5cf6">Shuttle</span>
+                <span>Opus 4</span>
+                <span>7m 18s</span>
+                <span>124K</span>
+              </div>
+            </div>
+            <div class="k-card">
+              <div class="k-card-title"><span class="k-drag">⠿</span> Add WebSocket handlers</div>
+              <div class="k-card-meta">
+                <span class="k-tag" style="background:rgba(59,130,246,.15);color:var(--blue)">Thread</span>
+                <span>Sonnet 4</span>
+                <span>1m 05s</span>
+                <span>12K</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Review -->
+        <div class="kanban-col">
+          <div class="col-header"><span class="col-title" style="color:var(--amber)">Review</span><span class="col-count">1</span></div>
+          <div class="col-body">
+            <div class="k-card">
+              <div class="k-card-title"><span class="k-drag">⠿</span> Fix pagination bug</div>
+              <div class="k-card-meta">
+                <span class="k-tag" style="background:rgba(99,102,241,.15);color:var(--accent)">Tapestry</span>
+                <span>Sonnet 4</span>
+                <span>5m 30s</span>
+                <span>67K</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Complete -->
+        <div class="kanban-col">
+          <div class="col-header"><span class="col-title" style="color:var(--blue)">Complete</span><span class="col-count">2</span></div>
+          <div class="col-body">
+            <div class="k-card" style="opacity:.7">
+              <div class="k-card-title"><span class="k-drag">⠿</span> Fix rate limiter bug</div>
+              <div class="k-card-meta">
+                <span class="k-tag" style="background:rgba(59,130,246,.15);color:var(--blue)">Thread</span>
+                <span>Sonnet 4</span>
+                <span>4m 12s</span>
+                <span>52K</span>
+              </div>
+            </div>
+            <div class="k-card" style="opacity:.7">
+              <div class="k-card-title"><span class="k-drag">⠿</span> Update CI pipeline</div>
+              <div class="k-card-meta">
+                <span class="k-tag" style="background:rgba(139,92,246,.15);color:#8b5cf6">Shuttle</span>
+                <span>Sonnet 4</span>
+                <span>2m 48s</span>
+                <span>34K</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Session View -->
+    <div class="session-view" id="sessionView">
+      <div class="session-topbar">
+        <span class="back-link" onclick="showView('fleet')">← Fleet</span>
+        <input class="session-title-edit" value="Implement OAuth flow" />
+        <span class="status-badge">Running</span>
+      </div>
+      <div class="chat-area">
+        <div class="s-msg">
+          <div class="s-msg-header"><span class="s-msg-author">You</span><span class="s-msg-time">2:34 PM</span></div>
+          <div class="s-msg-body">Implement OAuth authentication with Google and GitHub as providers. Use the existing auth middleware and add the new providers alongside the current email/password flow.</div>
+        </div>
+        <div class="s-msg">
+          <div class="s-msg-header"><span class="s-msg-author agent">Tapestry</span><span class="s-msg-time">2:34 PM</span></div>
+          <div class="s-msg-body">I'll implement OAuth authentication for Google and GitHub. Let me start by examining the existing auth structure.</div>
+        </div>
+        <div class="s-tool">
+          <div class="s-tool-label">$ ls src/auth/</div>
+          middleware.ts  providers/  session.ts  types.ts
+        </div>
+        <div class="s-msg">
+          <div class="s-msg-header"><span class="s-msg-author agent">Tapestry</span><span class="s-msg-time">2:35 PM</span></div>
+          <div class="s-msg-body">Good, the auth module uses a provider pattern. I'll create new providers for Google and GitHub OAuth, then register them in the middleware.</div>
+        </div>
+        <div class="s-tool">
+          <div class="s-tool-label">✎ Created src/auth/providers/google.ts (+84 lines)</div>
+          <span style="color:var(--green)">GoogleAuthProvider</span> — OAuth2 with PKCE, token validation, profile mapping
+        </div>
+        <div class="s-tool">
+          <div class="s-tool-label">✎ Created src/auth/providers/github.ts (+72 lines)</div>
+          <span style="color:var(--green)">GitHubAuthProvider</span> — OAuth App flow via Octokit
+        </div>
+        <div class="s-msg">
+          <div class="s-msg-header"><span class="s-msg-author agent">Tapestry</span><span class="s-msg-time">2:36 PM</span></div>
+          <div class="s-msg-body">Both providers are implemented. I've updated the middleware to register the OAuth routes and updated the config schema to require the new environment variables. All type checks pass.</div>
+        </div>
+        <div class="s-tool" style="border-color:rgba(34,197,94,.3)">
+          <div class="s-tool-label" style="color:var(--green)">✓ npm run typecheck — 0 errors (3.2s)</div>
+        </div>
+        <div style="height:80px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Floating Dock (session view only) -->
+<div class="dock" id="dock">
+  <div class="dock-item" onclick="togglePanel()">◇ Sonnet 4</div>
+  <div class="dock-sep"></div>
+  <div class="dock-item" style="gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:var(--muted);display:inline-block"></span><span style="width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block"></span><span style="width:6px;height:6px;border-radius:50%;background:var(--muted);display:inline-block"></span></div>
+  <div class="dock-sep"></div>
+  <div class="dock-item accent">◆ Tapestry</div>
+  <div class="dock-sep"></div>
+  <div class="dock-item">+ Attach</div>
+  <div class="dock-sep"></div>
+  <input style="background:transparent;border:none;color:var(--text);font-size:13px;outline:none;width:180px;padding:4px 0" placeholder="Send a message…" />
+  <button class="dock-send">↵</button>
+</div>
+
+<!-- Edge trigger -->
+<div class="edge-trigger t1" id="edgeTrigger" onclick="togglePanel()">Panels</div>
+
+<!-- Slideover -->
+<div class="slideover" id="slideover">
+  <button class="slideover-close" onclick="togglePanel()">✕</button>
+  <div class="slideover-tabs">
+    <div class="slideover-tab active" onclick="showPanelTab(this,'todos')">TODOs</div>
+    <div class="slideover-tab" onclick="showPanelTab(this,'diffs')">Diffs</div>
+    <div class="slideover-tab" onclick="showPanelTab(this,'terminal')">Terminal</div>
+  </div>
+  <div class="slideover-body" id="panelTodos">
+    <div class="todo-item done"><div class="todo-check done"></div> Examine existing auth structure</div>
+    <div class="todo-item done"><div class="todo-check done"></div> Create Google OAuth provider</div>
+    <div class="todo-item done"><div class="todo-check done"></div> Create GitHub OAuth provider</div>
+    <div class="todo-item"><div class="todo-check"></div> Update middleware & routes</div>
+    <div class="todo-item"><div class="todo-check"></div> Add config validation</div>
+    <div class="todo-item"><div class="todo-check"></div> Write integration tests</div>
+  </div>
+  <div class="slideover-body" id="panelDiffs" style="display:none">
+    <div class="diff-file">
+      <div class="diff-file-header">src/auth/providers/google.ts <span style="color:var(--green);font-size:11px;margin-left:8px;">+84</span></div>
+      <div class="diff-lines">
+<span class="diff-add">+ import { OAuth2Client } from 'google-auth-library';</span>
+<span class="diff-add">+ import { AuthProvider, AuthResult } from '../types';</span>
+<span class="diff-add">+</span>
+<span class="diff-add">+ export class GoogleAuthProvider implements AuthProvider {</span>
+<span class="diff-add">+   private client: OAuth2Client;</span>
+<span class="diff-ctx">  ...</span>
+      </div>
+    </div>
+    <div class="diff-file">
+      <div class="diff-file-header">src/auth/middleware.ts <span style="color:var(--amber);font-size:11px;margin-left:8px;">~23</span></div>
+      <div class="diff-lines">
+<span class="diff-ctx">  import { emailProvider } from './providers/email';</span>
+<span class="diff-add">+ import { googleProvider } from './providers/google';</span>
+<span class="diff-add">+ import { githubProvider } from './providers/github';</span>
+<span class="diff-ctx">  </span>
+<span class="diff-del">- const providers = [emailProvider];</span>
+<span class="diff-add">+ const providers = [emailProvider, googleProvider, githubProvider];</span>
+      </div>
+    </div>
+  </div>
+  <div class="slideover-body" id="panelTerminal" style="display:none;font-family:'SF Mono',monospace;font-size:12px;line-height:1.8;color:var(--muted);background:rgba(0,0,0,.3);border-radius:var(--radius-sm);padding:12px">
+<span style="color:#555">$</span> npm run typecheck
+<span style="color:var(--green)">✓ No type errors found</span>
+  Checked 142 files in 3.2s
+
+<span style="color:#555">$</span> npm test -- --filter=auth
+<span style="color:var(--green)">PASS</span> src/auth/__tests__/google.test.ts (4 tests)
+<span style="color:var(--green)">PASS</span> src/auth/__tests__/github.test.ts (3 tests)
+  </div>
+</div>
+
+<script>
+function showView(view) {
+  const fv = document.getElementById('fleetView');
+  const sv = document.getElementById('sessionView');
+  const fb = document.getElementById('fleetBtn');
+  const sb = document.getElementById('sessionBtn');
+  const dock = document.getElementById('dock');
+  const edge = document.getElementById('edgeTrigger');
+  if (view === 'fleet') {
+    fv.classList.add('visible'); sv.classList.remove('visible');
+    fb.classList.add('active'); sb.classList.remove('active');
+    dock.style.display = 'none'; edge.style.display = 'none';
+    document.getElementById('slideover').classList.remove('open');
+  } else {
+    sv.classList.add('visible'); fv.classList.remove('visible');
+    sb.classList.add('active'); fb.classList.remove('active');
+    dock.style.display = 'flex'; edge.style.display = 'flex';
+  }
+}
+function togglePanel() {
+  document.getElementById('slideover').classList.toggle('open');
+}
+function showPanelTab(el, tab) {
+  document.querySelectorAll('.slideover-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panelTodos').style.display = tab === 'todos' ? 'block' : 'none';
+  document.getElementById('panelDiffs').style.display = tab === 'diffs' ? 'block' : 'none';
+  document.getElementById('panelTerminal').style.display = tab === 'terminal' ? 'block' : 'none';
+}
+</script>
+</body>
+</html>

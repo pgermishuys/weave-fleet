@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1440">
+<title>Fleet — Unified Workspace</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#0a0a0b;--card:#141416;--border:#1e1e22;--text:#e4e4e7;--muted:#71717a;
+    --accent:#6366f1;--accent-dim:rgba(99,102,241,.15);
+    --running:#22c55e;--idle:#f59e0b;--complete:#3b82f6;--error:#ef4444;--queued:#8b5cf6;
+    --radius:8px;--radius-sm:6px;--radius-lg:12px;
+  }
+  body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;font-size:13px;display:flex;flex-direction:column}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;font-size:inherit}
+  input,textarea{font-family:inherit;background:none;border:none;color:inherit;outline:none;font-size:inherit}
+
+  /* TOP BAR */
+  .topbar{height:44px;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:8px;flex-shrink:0;background:var(--card)}
+  .breadcrumb{display:flex;align-items:center;gap:6px;font-size:13px;margin-left:8px}
+  .breadcrumb span{color:var(--muted);cursor:pointer;transition:color .15s}
+  .breadcrumb span:hover{color:var(--text)}
+  .breadcrumb .sep{font-size:10px;cursor:default}
+  .breadcrumb .sep:hover{color:var(--muted)}
+  .breadcrumb .current{color:var(--text);font-weight:500}
+  .topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .avatar{width:26px;height:26px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600}
+
+  /* LAYOUT */
+  .layout{display:flex;flex:1;overflow:hidden}
+
+  /* ICON RAIL */
+  .icon-rail{width:48px;background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:4px;flex-shrink:0}
+  .rail-icon{width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s;position:relative;color:var(--muted);font-size:18px}
+  .rail-icon:hover{background:rgba(255,255,255,.05);color:var(--text)}
+  .rail-icon.active{color:var(--accent)}
+  .rail-icon.active::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:3px;background:var(--accent);border-radius:0 2px 2px 0}
+  .rail-icon svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .rail-spacer{flex:1}
+
+  /* PROJECT PANEL */
+  .project-panel{width:240px;border-right:1px solid var(--border);display:flex;flex-direction:column;background:var(--bg);flex-shrink:0;overflow:hidden}
+  .panel-header{padding:12px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--border)}
+  .panel-search{width:100%;padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px}
+  .panel-search::placeholder{color:var(--muted)}
+  .panel-search:focus{border-color:var(--accent)}
+  .panel-btns{display:flex;gap:6px}
+  .panel-btn{flex:1;padding:6px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:11px;text-align:center;color:var(--muted);transition:all .15s}
+  .panel-btn:hover{border-color:var(--accent);color:var(--accent)}
+  .panel-tree{flex:1;overflow-y:auto;padding:4px 0}
+  .panel-tree::-webkit-scrollbar{width:4px}
+  .panel-tree::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  .tree-project{cursor:pointer}
+  .tree-project-header{display:flex;align-items:center;gap:6px;padding:6px 12px;transition:background .15s;cursor:pointer}
+  .tree-project-header:hover{background:rgba(255,255,255,.03)}
+  .tree-project-header.selected{background:var(--accent-dim)}
+  .tree-chevron{font-size:10px;color:var(--muted);width:14px;text-align:center;transition:transform .15s}
+  .tree-chevron.open{transform:rotate(90deg)}
+  .tree-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .tree-name{font-size:12px;font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tree-count{font-size:10px;color:var(--muted)}
+  .tree-sessions{overflow:hidden;max-height:0;transition:max-height .25s ease}
+  .tree-sessions.open{max-height:500px}
+  .tree-session{display:flex;align-items:center;gap:6px;padding:5px 12px 5px 34px;cursor:pointer;transition:background .15s;font-size:12px}
+  .tree-session:hover{background:rgba(255,255,255,.03)}
+  .tree-session.active{background:var(--accent-dim)}
+  .tree-session-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+  .tree-session-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tree-session-agent{font-size:10px;color:var(--muted)}
+
+  /* MAIN CONTENT */
+  .main{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+  .main-scroll{flex:1;overflow-y:auto;padding:24px}
+  .main-scroll::-webkit-scrollbar{width:4px}
+  .main-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+  /* HOME / DASHBOARD */
+  .home-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:800px;margin:0 auto}
+  .home-title{grid-column:1/-1;font-size:20px;font-weight:700;margin-bottom:4px}
+  .home-subtitle{grid-column:1/-1;font-size:13px;color:var(--muted);margin-bottom:8px}
+  .project-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;cursor:pointer;transition:all .15s}
+  .project-card:hover{border-color:rgba(255,255,255,.1);transform:translateY(-1px)}
+  .pc-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .pc-dot{width:10px;height:10px;border-radius:50%}
+  .pc-name{font-size:15px;font-weight:600}
+  .pc-desc{font-size:12px;color:var(--muted);line-height:1.4;margin-bottom:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .pc-stats{display:flex;gap:16px;font-size:11px;color:var(--muted)}
+  .pc-stats strong{color:var(--text);font-weight:600}
+  .pc-sparkline{margin-left:auto;display:flex;align-items:end;gap:2px;height:20px}
+  .pc-spark-bar{width:3px;background:var(--accent);border-radius:1px;opacity:.6}
+  .card-create{background:transparent;border:1px dashed var(--border);border-radius:var(--radius);padding:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;min-height:140px}
+  .card-create:hover{border-color:var(--accent);color:var(--accent)}
+  .card-create span{font-size:13px;color:var(--muted)}
+  .card-create:hover span{color:var(--accent)}
+
+  /* PROJECT DETAIL */
+  .proj-detail{max-width:900px;margin:0 auto;width:100%}
+  .pd-header{margin-bottom:20px}
+  .pd-name{font-size:22px;font-weight:700}
+  .pd-desc{font-size:13px;color:var(--muted);margin-top:4px}
+  .pd-stats{display:flex;gap:20px;margin-top:12px}
+  .pd-stat .val{font-size:18px;font-weight:700}
+  .pd-stat .lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .pd-toggle{display:flex;gap:4px;margin:16px 0 12px}
+  .pd-toggle-btn{padding:5px 12px;border-radius:20px;font-size:11px;color:var(--muted);cursor:pointer;transition:all .15s;border:1px solid var(--border)}
+  .pd-toggle-btn.active{background:var(--accent-dim);color:var(--accent);border-color:var(--accent)}
+  .pd-toggle-btn:hover{color:var(--text)}
+  .session-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .sc{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;cursor:pointer;transition:all .15s}
+  .sc:hover{border-color:rgba(255,255,255,.1)}
+  .sc-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .sc-status{width:8px;height:8px;border-radius:50%}
+  .sc-title{font-size:13px;font-weight:500;flex:1}
+  .sc-time{font-size:11px;color:var(--muted)}
+  .sc-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
+  .sc-agent-av{width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;background:var(--accent-dim);color:var(--accent)}
+  .sc-badge{padding:1px 6px;border-radius:10px;background:var(--accent-dim);color:var(--accent);font-size:10px}
+  .sc-tokens{margin-left:auto}
+
+  /* SESSION VIEW */
+  .session-view{display:flex;flex:1;overflow:hidden}
+  .session-stream{flex:1;display:flex;flex-direction:column;overflow:hidden}
+  .stream-scroll{flex:1;overflow-y:auto;padding:24px 32px}
+  .stream-scroll::-webkit-scrollbar{width:4px}
+  .stream-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  .message{margin-bottom:20px;display:flex;gap:12px}
+  .msg-av{width:30px;height:30px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0}
+  .msg-av.agent{background:var(--accent-dim);color:var(--accent)}
+  .msg-av.user{background:rgba(255,255,255,.08)}
+  .msg-body{flex:1;min-width:0}
+  .msg-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .msg-name{font-weight:600;font-size:13px}
+  .msg-time{font-size:11px;color:var(--muted)}
+  .msg-model{font-size:10px;padding:2px 6px;background:var(--accent-dim);color:var(--accent);border-radius:10px}
+  .msg-text{line-height:1.55;font-size:13px}
+  .msg-text code{background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px;font-size:12px}
+  .tool-card{margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;font-size:12px;display:flex;align-items:center;gap:8px;cursor:pointer;transition:background .15s}
+  .tool-card:hover{background:rgba(255,255,255,.02)}
+  .tool-card .icon{font-size:14px}
+  .tool-card .label{font-weight:500}
+  .tool-card .file{margin-left:auto;color:var(--muted);font-size:11px}
+
+  /* FLOATING COMPOSER */
+  .composer-wrap{padding:16px 32px 20px}
+  .composer{background:rgba(20,20,22,.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:16px;overflow:hidden;transition:border-color .15s}
+  .composer:focus-within{border-color:rgba(99,102,241,.4)}
+  .composer textarea{width:100%;padding:12px 16px;min-height:42px;resize:none;font-size:13px;line-height:1.5;background:transparent}
+  .composer textarea::placeholder{color:var(--muted)}
+  .composer-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--border)}
+  .pill{display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;transition:background .15s}
+  .pill-model{background:var(--accent-dim);color:var(--accent)}
+  .pill-model:hover{background:rgba(99,102,241,.25)}
+  .effort{display:flex;gap:3px;padding:4px 8px}
+  .edot{width:8px;height:8px;border-radius:50%;background:var(--border);cursor:pointer;transition:background .15s}
+  .edot.on{background:var(--accent)}
+  .pill-agent{background:rgba(255,255,255,.06);color:var(--muted)}
+  .btn-send{margin-left:auto;padding:6px 16px;background:var(--accent);color:#fff;border-radius:20px;font-size:12px;font-weight:500;transition:opacity .15s}
+  .btn-send:hover{opacity:.85}
+
+  /* RIGHT SLIDE-OVER */
+  .slide-over{width:260px;border-left:1px solid var(--border);background:var(--card);display:flex;flex-direction:column;flex-shrink:0}
+  .so-header{padding:12px 16px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:space-between}
+  .so-close{color:var(--muted);cursor:pointer;font-size:16px}
+  .so-close:hover{color:var(--text)}
+  .so-body{flex:1;overflow-y:auto;padding:12px 16px}
+  .so-body::-webkit-scrollbar{width:4px}
+  .so-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  .todo-item{display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
+  .todo-item:last-child{border-bottom:none}
+  .todo-cb{width:15px;height:15px;border:1.5px solid var(--border);border-radius:3px;flex-shrink:0;margin-top:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
+  .todo-cb.checked{background:var(--accent);border-color:var(--accent)}
+  .todo-cb.checked::after{content:'✓';font-size:9px;color:#fff}
+  .todo-text{font-size:12px;line-height:1.4}
+  .todo-text.done{text-decoration:line-through;color:var(--muted)}
+
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="breadcrumb" id="breadcrumb">
+    <span onclick="navigate('home')">Fleet</span>
+  </div>
+  <div class="topbar-right">
+    <div class="avatar">PG</div>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- ICON RAIL -->
+  <div class="icon-rail">
+    <div class="rail-icon" onclick="navigate('home')" title="Home">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    </div>
+    <div class="rail-icon active" title="Projects">
+      <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+    </div>
+    <div class="rail-icon" title="Analytics">
+      <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    </div>
+    <div class="rail-spacer"></div>
+    <div class="rail-icon" title="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </div>
+  </div>
+
+  <!-- PROJECT PANEL -->
+  <div class="project-panel">
+    <div class="panel-header">
+      <input class="panel-search" placeholder="Search projects & sessions…">
+      <div class="panel-btns">
+        <button class="panel-btn">+ Project</button>
+        <button class="panel-btn">+ Session</button>
+      </div>
+    </div>
+    <div class="panel-tree">
+      <!-- OAuth Integration -->
+      <div class="tree-project">
+        <div class="tree-project-header" onclick="toggleTree(this)">
+          <span class="tree-chevron open">›</span>
+          <span class="tree-dot" style="background:var(--accent)"></span>
+          <span class="tree-name">OAuth Integration</span>
+          <span class="tree-count">8</span>
+        </div>
+        <div class="tree-sessions open" style="max-height:500px">
+          <div class="tree-session active" onclick="navigate('session')"><span class="tree-session-dot" style="background:var(--running)"></span><span class="tree-session-title">Implement token refresh</span><span class="tree-session-agent">T</span></div>
+          <div class="tree-session" onclick="navigate('session')"><span class="tree-session-dot" style="background:var(--running)"></span><span class="tree-session-title">Add PKCE support</span><span class="tree-session-agent">S</span></div>
+          <div class="tree-session" onclick="navigate('session')"><span class="tree-session-dot" style="background:var(--complete)"></span><span class="tree-session-title">OAuth state validation</span><span class="tree-session-agent">T</span></div>
+          <div class="tree-session" onclick="navigate('session')"><span class="tree-session-dot" style="background:var(--complete)"></span><span class="tree-session-title">Authorization code flow</span><span class="tree-session-agent">W</span></div>
+          <div class="tree-session" onclick="navigate('session')"><span class="tree-session-dot" style="background:var(--idle)"></span><span class="tree-session-title">Token introspection</span><span class="tree-session-agent">P</span></div>
+        </div>
+      </div>
+      <!-- Database Refactor -->
+      <div class="tree-project">
+        <div class="tree-project-header" onclick="toggleTree(this)">
+          <span class="tree-chevron">›</span>
+          <span class="tree-dot" style="background:var(--running)"></span>
+          <span class="tree-name">Database Refactor</span>
+          <span class="tree-count">5</span>
+        </div>
+        <div class="tree-sessions">
+          <div class="tree-session"><span class="tree-session-dot" style="background:var(--running)"></span><span class="tree-session-title">Refactor connection pooling</span><span class="tree-session-agent">T</span></div>
+          <div class="tree-session"><span class="tree-session-dot" style="background:var(--running)"></span><span class="tree-session-title">Add read replicas</span><span class="tree-session-agent">S</span></div>
+          <div class="tree-session"><span class="tree-session-dot" style="background:var(--complete)"></span><span class="tree-session-title">Query optimization</span><span class="tree-session-agent">P</span></div>
+        </div>
+      </div>
+      <!-- CI/CD -->
+      <div class="tree-project">
+        <div class="tree-project-header" onclick="toggleTree(this)">
+          <span class="tree-chevron">›</span>
+          <span class="tree-dot" style="background:var(--idle)"></span>
+          <span class="tree-name">CI/CD Pipeline</span>
+          <span class="tree-count">3</span>
+        </div>
+        <div class="tree-sessions">
+          <div class="tree-session"><span class="tree-session-dot" style="background:var(--running)"></span><span class="tree-session-title">Setup GitHub Actions</span><span class="tree-session-agent">W</span></div>
+          <div class="tree-session"><span class="tree-session-dot" style="background:var(--queued)"></span><span class="tree-session-title">Docker multi-stage builds</span><span class="tree-session-agent">S</span></div>
+        </div>
+      </div>
+      <!-- API v2 -->
+      <div class="tree-project">
+        <div class="tree-project-header" onclick="toggleTree(this)">
+          <span class="tree-chevron">›</span>
+          <span class="tree-dot" style="background:var(--complete)"></span>
+          <span class="tree-name">API v2 Migration</span>
+          <span class="tree-count">12</span>
+        </div>
+        <div class="tree-sessions">
+          <div class="tree-session"><span class="tree-session-dot" style="background:var(--running)"></span><span class="tree-session-title">Migrate /users endpoints</span><span class="tree-session-agent">T</span></div>
+          <div class="tree-session"><span class="tree-session-dot" style="background:var(--complete)"></span><span class="tree-session-title">URL path restructuring</span><span class="tree-session-agent">S</span></div>
+        </div>
+      </div>
+      <!-- Frontend -->
+      <div class="tree-project">
+        <div class="tree-project-header" onclick="toggleTree(this)">
+          <span class="tree-chevron">›</span>
+          <span class="tree-dot" style="background:var(--error)"></span>
+          <span class="tree-name">Frontend Redesign</span>
+          <span class="tree-count">6</span>
+        </div>
+        <div class="tree-sessions">
+          <div class="tree-session"><span class="tree-session-dot" style="background:var(--running)"></span><span class="tree-session-title">Component library setup</span><span class="tree-session-agent">P</span></div>
+          <div class="tree-session"><span class="tree-session-dot" style="background:var(--error)"></span><span class="tree-session-title">Dark mode theming</span><span class="tree-session-agent">W</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main" id="main">
+
+    <!-- HOME VIEW -->
+    <div class="main-scroll" id="view-home">
+      <div class="home-grid">
+        <div class="home-title">Welcome back</div>
+        <div class="home-subtitle">5 projects · 34 sessions · 3 running now</div>
+
+        <div class="project-card" onclick="navigate('project')">
+          <div class="pc-header"><span class="pc-dot" style="background:var(--accent)"></span><span class="pc-name">OAuth Integration</span></div>
+          <div class="pc-desc">Implement OAuth 2.0 with PKCE flow, token refresh, and client credential management for the API gateway.</div>
+          <div class="pc-stats"><span><strong>8</strong> sessions</span><span><strong>3</strong> active</span><span>12m ago</span>
+            <div class="pc-sparkline"><div class="pc-spark-bar" style="height:8px"></div><div class="pc-spark-bar" style="height:14px"></div><div class="pc-spark-bar" style="height:10px"></div><div class="pc-spark-bar" style="height:18px"></div><div class="pc-spark-bar" style="height:20px"></div><div class="pc-spark-bar" style="height:16px"></div><div class="pc-spark-bar" style="height:12px"></div></div>
+          </div>
+        </div>
+
+        <div class="project-card" onclick="navigate('project')">
+          <div class="pc-header"><span class="pc-dot" style="background:var(--running)"></span><span class="pc-name">Database Refactor</span></div>
+          <div class="pc-desc">Refactor connection pooling, add read replica support, and optimize slow queries across the data layer.</div>
+          <div class="pc-stats"><span><strong>5</strong> sessions</span><span><strong>2</strong> active</span><span>8m ago</span>
+            <div class="pc-sparkline"><div class="pc-spark-bar" style="height:6px"></div><div class="pc-spark-bar" style="height:10px"></div><div class="pc-spark-bar" style="height:16px"></div><div class="pc-spark-bar" style="height:12px"></div><div class="pc-spark-bar" style="height:8px"></div></div>
+          </div>
+        </div>
+
+        <div class="project-card" onclick="navigate('project')">
+          <div class="pc-header"><span class="pc-dot" style="background:var(--idle)"></span><span class="pc-name">CI/CD Pipeline</span></div>
+          <div class="pc-desc">Setup GitHub Actions workflows with Docker multi-stage builds and automated deployment to staging.</div>
+          <div class="pc-stats"><span><strong>3</strong> sessions</span><span><strong>1</strong> active</span><span>25m ago</span>
+            <div class="pc-sparkline"><div class="pc-spark-bar" style="height:4px"></div><div class="pc-spark-bar" style="height:12px"></div><div class="pc-spark-bar" style="height:8px"></div></div>
+          </div>
+        </div>
+
+        <div class="project-card" onclick="navigate('project')">
+          <div class="pc-header"><span class="pc-dot" style="background:var(--complete)"></span><span class="pc-name">API v2 Migration</span></div>
+          <div class="pc-desc">Migrate all public endpoints to v2 REST conventions with backward compatibility shims.</div>
+          <div class="pc-stats"><span><strong>12</strong> sessions</span><span><strong>3</strong> active</span><span>2m ago</span>
+            <div class="pc-sparkline"><div class="pc-spark-bar" style="height:10px"></div><div class="pc-spark-bar" style="height:14px"></div><div class="pc-spark-bar" style="height:20px"></div><div class="pc-spark-bar" style="height:18px"></div><div class="pc-spark-bar" style="height:16px"></div><div class="pc-spark-bar" style="height:20px"></div><div class="pc-spark-bar" style="height:14px"></div><div class="pc-spark-bar" style="height:10px"></div></div>
+          </div>
+        </div>
+
+        <div class="project-card" onclick="navigate('project')">
+          <div class="pc-header"><span class="pc-dot" style="background:var(--error)"></span><span class="pc-name">Frontend Redesign</span></div>
+          <div class="pc-desc">Rebuild the frontend with a new component library, dark mode support, and responsive layouts.</div>
+          <div class="pc-stats"><span><strong>6</strong> sessions</span><span><strong>1</strong> active</span><span>1h ago</span>
+            <div class="pc-sparkline"><div class="pc-spark-bar" style="height:16px"></div><div class="pc-spark-bar" style="height:10px"></div><div class="pc-spark-bar" style="height:6px"></div><div class="pc-spark-bar" style="height:4px"></div></div>
+          </div>
+        </div>
+
+        <div class="card-create" onclick="alert('Create project')"><span>+ Create Project</span></div>
+      </div>
+    </div>
+
+    <!-- PROJECT DETAIL VIEW -->
+    <div class="main-scroll hidden" id="view-project">
+      <div class="proj-detail">
+        <div class="pd-header">
+          <div class="pd-name">OAuth Integration</div>
+          <div class="pd-desc">Implement OAuth 2.0 with PKCE flow, token refresh, and client credential management for the API gateway.</div>
+          <div class="pd-stats">
+            <div class="pd-stat"><div class="val">8</div><div class="lbl">Sessions</div></div>
+            <div class="pd-stat"><div class="val" style="color:var(--running)">3</div><div class="lbl">Active</div></div>
+            <div class="pd-stat"><div class="val">450K</div><div class="lbl">Tokens</div></div>
+            <div class="pd-stat"><div class="val">$2.18</div><div class="lbl">Cost</div></div>
+          </div>
+        </div>
+        <div class="pd-toggle">
+          <div class="pd-toggle-btn active">Cards</div>
+          <div class="pd-toggle-btn">Kanban</div>
+        </div>
+        <div class="session-cards">
+          <div class="sc" onclick="navigate('session')"><div class="sc-top"><span class="sc-status" style="background:var(--running)"></span><span class="sc-title">Implement token refresh</span><span class="sc-time">2m ago</span></div><div class="sc-row"><span class="sc-agent-av">T</span>Tapestry<span class="sc-badge">Sonnet 4</span><span class="sc-tokens">32K tok</span></div></div>
+          <div class="sc" onclick="navigate('session')"><div class="sc-top"><span class="sc-status" style="background:var(--running)"></span><span class="sc-title">Add PKCE support</span><span class="sc-time">5m ago</span></div><div class="sc-row"><span class="sc-agent-av">S</span>Shuttle<span class="sc-badge">Opus 4</span><span class="sc-tokens">28K tok</span></div></div>
+          <div class="sc" onclick="navigate('session')"><div class="sc-top"><span class="sc-status" style="background:var(--idle)"></span><span class="sc-title">Token introspection middleware</span><span class="sc-time">12m ago</span></div><div class="sc-row"><span class="sc-agent-av">P</span>Pattern<span class="sc-badge">Sonnet 4</span><span class="sc-tokens">18K tok</span></div></div>
+          <div class="sc" onclick="navigate('session')"><div class="sc-top"><span class="sc-status" style="background:var(--complete)"></span><span class="sc-title">OAuth state validation</span><span class="sc-time">18m ago</span></div><div class="sc-row"><span class="sc-agent-av">T</span>Thread<span class="sc-badge">Sonnet 4</span><span class="sc-tokens">45K tok</span></div></div>
+          <div class="sc" onclick="navigate('session')"><div class="sc-top"><span class="sc-status" style="background:var(--complete)"></span><span class="sc-title">Authorization code flow</span><span class="sc-time">1h ago</span></div><div class="sc-row"><span class="sc-agent-av">W</span>Warp<span class="sc-badge">Opus 4</span><span class="sc-tokens">62K tok</span></div></div>
+          <div class="sc" onclick="navigate('session')"><div class="sc-top"><span class="sc-status" style="background:var(--complete)"></span><span class="sc-title">Rate limiting per client</span><span class="sc-time">45m ago</span></div><div class="sc-row"><span class="sc-agent-av">W</span>Weft<span class="sc-badge">Haiku 3.5</span><span class="sc-tokens">12K tok</span></div></div>
+          <div class="sc" onclick="navigate('session')"><div class="sc-top"><span class="sc-status" style="background:var(--queued)"></span><span class="sc-title">Integration test suite</span><span class="sc-time">3m ago</span></div><div class="sc-row"><span class="sc-agent-av">S</span>Spindle<span class="sc-badge">Sonnet 4</span><span class="sc-tokens">—</span></div></div>
+          <div class="sc" onclick="navigate('session')"><div class="sc-top"><span class="sc-status" style="background:var(--complete)"></span><span class="sc-title">Mock OAuth provider</span><span class="sc-time">2h ago</span></div><div class="sc-row"><span class="sc-agent-av">T</span>Tapestry<span class="sc-badge">Sonnet 4</span><span class="sc-tokens">35K tok</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SESSION VIEW -->
+    <div class="session-view hidden" id="view-session">
+      <div class="session-stream">
+        <div class="stream-scroll">
+          <div class="message">
+            <div class="msg-av user">PG</div>
+            <div class="msg-body">
+              <div class="msg-header"><span class="msg-name">You</span><span class="msg-time">2 min ago</span></div>
+              <div class="msg-text">Implement automatic token refresh with a sliding window. The refresh should happen 30 seconds before expiry and use the existing <code>TokenStore</code> interface.</div>
+            </div>
+          </div>
+          <div class="message">
+            <div class="msg-av agent">T</div>
+            <div class="msg-body">
+              <div class="msg-header"><span class="msg-name">Tapestry</span><span class="msg-model">Claude Sonnet 4</span><span class="msg-time">2 min ago</span></div>
+              <div class="msg-text">I'll implement the token refresh mechanism. Let me examine the current <code>TokenStore</code> interface and build the scheduler with exponential backoff.</div>
+              <div class="tool-card"><span class="icon">📄</span><span class="label">Read</span><span class="file">src/auth/token_store.go</span></div>
+              <div class="tool-card" style="margin-top:4px"><span class="icon">✏️</span><span class="label">Edit</span><span class="file">src/auth/refresh.go — +48 lines</span></div>
+              <div class="tool-card" style="margin-top:4px"><span class="icon">🧪</span><span class="label">Tests</span><span class="file">3 passed · 0.06s</span></div>
+            </div>
+          </div>
+          <div class="message">
+            <div class="msg-av agent">T</div>
+            <div class="msg-body">
+              <div class="msg-header"><span class="msg-name">Tapestry</span><span class="msg-model">Claude Sonnet 4</span><span class="msg-time">1 min ago</span></div>
+              <div class="msg-text">The <code>RefreshScheduler</code> is implemented with a 30-second sliding window. It uses a mutex to prevent concurrent refresh attempts and includes exponential backoff (starting at 1s, max 30s) on failure. All 3 tests pass. Now adding observability hooks…</div>
+            </div>
+          </div>
+        </div>
+        <div class="composer-wrap">
+          <div class="composer">
+            <textarea placeholder="Message Tapestry…" rows="1"></textarea>
+            <div class="composer-bar">
+              <div class="pill pill-model">Claude Sonnet 4 ▾</div>
+              <div class="effort"><span class="edot on"></span><span class="edot on"></span><span class="edot"></span></div>
+              <div class="pill pill-agent">Tapestry</div>
+              <button class="btn-send">Send ↵</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="slide-over">
+        <div class="so-header">Plan / TODO <span class="so-close">×</span></div>
+        <div class="so-body">
+          <div class="todo-item"><div class="todo-cb checked"></div><div class="todo-text done">Read existing TokenStore interface</div></div>
+          <div class="todo-item"><div class="todo-cb checked"></div><div class="todo-text done">Create RefreshScheduler struct</div></div>
+          <div class="todo-item"><div class="todo-cb checked"></div><div class="todo-text done">Implement sliding window check</div></div>
+          <div class="todo-item"><div class="todo-cb" style="border-color:var(--accent)"></div><div class="todo-text">Add exponential backoff</div></div>
+          <div class="todo-item"><div class="todo-cb"></div><div class="todo-text">Handle concurrent refresh</div></div>
+          <div class="todo-item"><div class="todo-cb"></div><div class="todo-text">Add metrics and logging</div></div>
+          <div class="todo-item"><div class="todo-cb"></div><div class="todo-text">Write integration tests</div></div>
+          <div class="todo-item"><div class="todo-cb"></div><div class="todo-text">Update documentation</div></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function navigate(view){
+  const bc=document.getElementById('breadcrumb');
+  document.getElementById('view-home').classList.add('hidden');
+  document.getElementById('view-project').classList.add('hidden');
+  document.getElementById('view-session').classList.add('hidden');
+  if(view==='home'){
+    document.getElementById('view-home').classList.remove('hidden');
+    bc.innerHTML='<span onclick="navigate(\'home\')">Fleet</span>';
+  }else if(view==='project'){
+    document.getElementById('view-project').classList.remove('hidden');
+    bc.innerHTML='<span onclick="navigate(\'home\')">Fleet</span><span class="sep">›</span><span class="current" onclick="navigate(\'project\')">OAuth Integration</span>';
+  }else if(view==='session'){
+    document.getElementById('view-session').classList.remove('hidden');
+    bc.innerHTML='<span onclick="navigate(\'home\')">Fleet</span><span class="sep">›</span><span onclick="navigate(\'project\')">OAuth Integration</span><span class="sep">›</span><span class="current">Token Refresh</span>';
+  }
+}
+function toggleTree(el){
+  const chev=el.querySelector('.tree-chevron');
+  const sessions=el.nextElementSibling;
+  chev.classList.toggle('open');
+  sessions.classList.toggle('open');
+  if(sessions.classList.contains('open')){sessions.style.maxHeight='500px'}else{sessions.style.maxHeight='0'}
+}
+</script>
+</body>
+</html>

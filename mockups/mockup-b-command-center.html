@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weave Fleet — Command Center</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0b; --card: #141416; --card-hover: #1a1a1e; --border: #1e1e22;
+    --text: #e4e4e7; --muted: #71717a; --accent: #6366f1; --accent-hover: #818cf8;
+    --green: #22c55e; --amber: #f59e0b; --blue: #3b82f6; --red: #ef4444;
+    --radius: 8px; --radius-sm: 6px; --radius-lg: 12px;
+  }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; font-size: 14px; line-height: 1.5; overflow-x: hidden; }
+  ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #2a2a2e; border-radius: 3px; }
+
+  /* Top Nav */
+  .topnav { height: 56px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; background: var(--card); position: sticky; top: 0; z-index: 100; }
+  .topnav-left { display: flex; align-items: center; gap: 32px; }
+  .logo { font-size: 15px; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+  .logo-icon { font-size: 18px; }
+  .nav-tabs { display: flex; gap: 4px; }
+  .nav-tab { padding: 6px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; transition: all .15s; border: none; background: none; }
+  .nav-tab:hover { color: var(--text); background: rgba(255,255,255,.05); }
+  .nav-tab.active { color: var(--text); background: rgba(99,102,241,.15); }
+  .topnav-right { display: flex; align-items: center; gap: 12px; }
+  .cmd-k { padding: 5px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--muted); font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: border-color .15s; }
+  .cmd-k:hover { border-color: #333; }
+  .cmd-k kbd { background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #a855f7); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: white; }
+
+  .content { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+  /* Stat Cards */
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; transition: border-color .2s; }
+  .stat-card:hover { border-color: #2a2a30; }
+  .stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 500; }
+  .stat-value { font-size: 32px; font-weight: 700; margin: 4px 0; letter-spacing: -.02em; }
+  .stat-spark { height: 32px; display: flex; align-items: flex-end; gap: 2px; margin-top: 8px; }
+  .spark-bar { flex: 1; background: var(--accent); border-radius: 2px; opacity: .5; transition: opacity .15s; min-width: 3px; }
+  .stat-card:hover .spark-bar { opacity: .8; }
+  .stat-change { font-size: 11px; margin-top: 4px; }
+  .stat-change.up { color: var(--green); }
+  .stat-change.down { color: var(--red); }
+
+  /* Mid Section */
+  .mid-section { display: grid; grid-template-columns: 1fr 380px; gap: 16px; margin-bottom: 24px; }
+
+  /* Session Feed */
+  .feed-panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+  .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .panel-title { font-size: 14px; font-weight: 600; }
+  .panel-badge { font-size: 12px; background: rgba(34,197,94,.15); color: var(--green); padding: 2px 8px; border-radius: 10px; }
+  .feed-list { max-height: 420px; overflow-y: auto; }
+  .feed-item { padding: 16px 20px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .15s; }
+  .feed-item:last-child { border-bottom: none; }
+  .feed-item:hover { background: var(--card-hover); }
+  .feed-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .feed-title { font-size: 14px; font-weight: 500; }
+  .feed-agent { display: flex; align-items: center; gap: 6px; }
+  .agent-av { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: white; flex-shrink: 0; }
+  .feed-action { font-size: 12px; color: var(--muted); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .feed-action code { background: rgba(255,255,255,.06); padding: 1px 6px; border-radius: 3px; font-size: 11px; font-family: 'SF Mono', monospace; }
+  .feed-bottom { display: flex; align-items: center; justify-content: space-between; }
+  .feed-progress { flex: 1; max-width: 200px; height: 3px; background: #222; border-radius: 2px; overflow: hidden; margin-right: 12px; }
+  .feed-progress-fill { height: 100%; border-radius: 2px; }
+  .feed-meta { font-size: 11px; color: var(--muted); display: flex; gap: 12px; }
+
+  /* Quick Actions */
+  .quick-panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+  .new-session-big { margin: 16px 20px; padding: 14px; background: var(--accent); color: white; border: none; border-radius: var(--radius); font-size: 14px; font-weight: 600; cursor: pointer; width: calc(100% - 40px); transition: background .2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .new-session-big:hover { background: var(--accent-hover); }
+  .quick-section { padding: 12px 20px; }
+  .quick-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; margin-bottom: 8px; }
+  .template-item { padding: 8px 12px; border-radius: var(--radius-sm); cursor: pointer; transition: background .15s; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .template-item:hover { background: rgba(255,255,255,.04); }
+  .template-icon { color: var(--muted); font-size: 12px; }
+  .repo-item { padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer; transition: background .15s; font-size: 13px; display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .repo-item:hover { background: rgba(255,255,255,.04); color: var(--text); }
+
+  /* Log Viewer */
+  .log-panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+  .log-tabs { display: flex; gap: 2px; padding: 0 20px; background: rgba(255,255,255,.02); }
+  .log-tab { padding: 10px 14px; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s; }
+  .log-tab:hover { color: var(--text); }
+  .log-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .log-body { padding: 12px 20px; max-height: 200px; overflow-y: auto; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.8; }
+  .log-line { display: flex; gap: 12px; }
+  .log-ts { color: #444; flex-shrink: 0; }
+  .log-agent { color: var(--accent); flex-shrink: 0; min-width: 70px; }
+  .log-msg { color: var(--muted); }
+  .log-msg.err { color: var(--red); }
+  .log-msg.ok { color: var(--green); }
+
+  /* FAB */
+  .fab { position: fixed; bottom: 24px; right: 24px; width: 52px; height: 52px; border-radius: 50%; background: var(--accent); color: white; border: none; font-size: 22px; cursor: pointer; box-shadow: 0 4px 24px rgba(99,102,241,.4); transition: transform .2s, box-shadow .2s; display: flex; align-items: center; justify-content: center; z-index: 200; }
+  .fab:hover { transform: scale(1.08); box-shadow: 0 6px 32px rgba(99,102,241,.5); }
+  .fab-modal { position: fixed; bottom: 88px; right: 24px; width: 420px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: 0 16px 48px rgba(0,0,0,.5); z-index: 200; display: none; overflow: hidden; }
+  .fab-modal.open { display: block; animation: slideUp .2s ease; }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .fab-modal-header { padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; }
+  .fab-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; }
+  .fab-input { width: 100%; padding: 14px 16px; background: transparent; border: none; color: var(--text); font-size: 14px; outline: none; }
+  .fab-footer { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; }
+  .fab-send { padding: 6px 16px; background: var(--accent); color: white; border: none; border-radius: var(--radius-sm); font-size: 13px; cursor: pointer; }
+</style>
+</head>
+<body>
+  <!-- Top Nav -->
+  <nav class="topnav">
+    <div class="topnav-left">
+      <div class="logo"><span class="logo-icon">⬡</span> Weave Fleet</div>
+      <div class="nav-tabs">
+        <button class="nav-tab active">Fleet</button>
+        <button class="nav-tab">Analytics</button>
+        <button class="nav-tab">Pipelines</button>
+        <button class="nav-tab">Settings</button>
+      </div>
+    </div>
+    <div class="topnav-right">
+      <button class="cmd-k"><kbd>⌘</kbd><kbd>K</kbd> Command palette</button>
+      <div class="avatar">PG</div>
+    </div>
+  </nav>
+
+  <div class="content">
+    <!-- Stats -->
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="stat-label">Active Sessions</div>
+        <div class="stat-value">7</div>
+        <div class="stat-spark" id="spark1"></div>
+        <div class="stat-change up">↑ 3 from yesterday</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Tokens Today</div>
+        <div class="stat-value">1.2M</div>
+        <div class="stat-spark" id="spark2"></div>
+        <div class="stat-change up">↑ 18% vs avg</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Success Rate</div>
+        <div class="stat-value" style="color:var(--green)">94%</div>
+        <div class="stat-spark" id="spark3"></div>
+        <div class="stat-change up">↑ 2% this week</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg Duration</div>
+        <div class="stat-value">4.2m</div>
+        <div class="stat-spark" id="spark4"></div>
+        <div class="stat-change down">↓ 0.8m faster</div>
+      </div>
+    </div>
+
+    <!-- Mid -->
+    <div class="mid-section">
+      <!-- Live Feed -->
+      <div class="feed-panel">
+        <div class="panel-header">
+          <span class="panel-title">Live Sessions</span>
+          <span class="panel-badge">7 active</span>
+        </div>
+        <div class="feed-list">
+          <div class="feed-item">
+            <div class="feed-top">
+              <div class="feed-agent"><div class="agent-av" style="background:var(--accent)">T</div><span class="feed-title">Implement OAuth flow</span></div>
+              <span style="font-size:11px;color:var(--green);">● Running</span>
+            </div>
+            <div class="feed-action">Editing <code>src/auth/providers/google.ts</code></div>
+            <div class="feed-bottom">
+              <div class="feed-progress"><div class="feed-progress-fill" style="width:65%;background:var(--accent)"></div></div>
+              <div class="feed-meta"><span>3m 42s</span><span>48K tokens</span></div>
+            </div>
+          </div>
+          <div class="feed-item">
+            <div class="feed-top">
+              <div class="feed-agent"><div class="agent-av" style="background:#8b5cf6">S</div><span class="feed-title">Refactor database layer</span></div>
+              <span style="font-size:11px;color:var(--green);">● Running</span>
+            </div>
+            <div class="feed-action">Running <code>npm run typecheck</code></div>
+            <div class="feed-bottom">
+              <div class="feed-progress"><div class="feed-progress-fill" style="width:82%;background:#8b5cf6"></div></div>
+              <div class="feed-meta"><span>7m 18s</span><span>124K tokens</span></div>
+            </div>
+          </div>
+          <div class="feed-item">
+            <div class="feed-top">
+              <div class="feed-agent"><div class="agent-av" style="background:var(--blue)">T</div><span class="feed-title">Add WebSocket handlers</span></div>
+              <span style="font-size:11px;color:var(--green);">● Running</span>
+            </div>
+            <div class="feed-action">Reading <code>src/ws/connection.ts</code></div>
+            <div class="feed-bottom">
+              <div class="feed-progress"><div class="feed-progress-fill" style="width:30%;background:var(--blue)"></div></div>
+              <div class="feed-meta"><span>1m 05s</span><span>12K tokens</span></div>
+            </div>
+          </div>
+          <div class="feed-item">
+            <div class="feed-top">
+              <div class="feed-agent"><div class="agent-av" style="background:var(--accent)">T</div><span class="feed-title">Fix pagination bug</span></div>
+              <span style="font-size:11px;color:var(--amber);">● Idle</span>
+            </div>
+            <div class="feed-action">Waiting for user approval</div>
+            <div class="feed-bottom">
+              <div class="feed-progress"><div class="feed-progress-fill" style="width:90%;background:var(--amber)"></div></div>
+              <div class="feed-meta"><span>5m 30s</span><span>67K tokens</span></div>
+            </div>
+          </div>
+          <div class="feed-item">
+            <div class="feed-top">
+              <div class="feed-agent"><div class="agent-av" style="background:#8b5cf6">S</div><span class="feed-title">Update API documentation</span></div>
+              <span style="font-size:11px;color:var(--green);">● Running</span>
+            </div>
+            <div class="feed-action">Editing <code>docs/api/endpoints.md</code></div>
+            <div class="feed-bottom">
+              <div class="feed-progress"><div class="feed-progress-fill" style="width:45%;background:#8b5cf6"></div></div>
+              <div class="feed-meta"><span>2m 12s</span><span>31K tokens</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="quick-panel">
+        <div class="panel-header">
+          <span class="panel-title">Quick Actions</span>
+        </div>
+        <button class="new-session-big">+ New Session</button>
+        <div class="quick-section">
+          <div class="quick-section-title">Recent Templates</div>
+          <div class="template-item"><span class="template-icon">◇</span> Bug fix from issue</div>
+          <div class="template-item"><span class="template-icon">◇</span> Code review + refactor</div>
+          <div class="template-item"><span class="template-icon">◇</span> Test coverage boost</div>
+          <div class="template-item"><span class="template-icon">◇</span> Documentation update</div>
+        </div>
+        <div class="quick-section">
+          <div class="quick-section-title">Pinned Repositories</div>
+          <div class="repo-item"><span style="color:var(--accent)">⬡</span> weave-fleet</div>
+          <div class="repo-item"><span style="color:#8b5cf6">⬡</span> weave-core</div>
+          <div class="repo-item"><span style="color:var(--blue)">⬡</span> weave-ui</div>
+          <div class="repo-item"><span style="color:var(--green)">⬡</span> weave-sdk</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log Viewer -->
+    <div class="log-panel">
+      <div class="panel-header" style="padding-bottom:0; border-bottom:none;">
+        <span class="panel-title">Agent Logs</span>
+      </div>
+      <div class="log-tabs">
+        <div class="log-tab active">All</div>
+        <div class="log-tab">Errors</div>
+        <div class="log-tab">Completions</div>
+      </div>
+      <div class="log-body">
+        <div class="log-line"><span class="log-ts">14:36:42</span><span class="log-agent">Tapestry</span><span class="log-msg ok">✓ TypeCheck passed — 0 errors</span></div>
+        <div class="log-line"><span class="log-ts">14:36:38</span><span class="log-agent">Shuttle</span><span class="log-msg">Edited src/db/repository.ts (+42, -18)</span></div>
+        <div class="log-line"><span class="log-ts">14:36:31</span><span class="log-agent">Thread</span><span class="log-msg">Reading src/ws/connection.ts</span></div>
+        <div class="log-line"><span class="log-ts">14:36:28</span><span class="log-agent">Tapestry</span><span class="log-msg">Running npm run typecheck</span></div>
+        <div class="log-line"><span class="log-ts">14:36:15</span><span class="log-agent">Shuttle</span><span class="log-msg err">✗ Test failed: repository.test.ts:42</span></div>
+        <div class="log-line"><span class="log-ts">14:36:02</span><span class="log-agent">Tapestry</span><span class="log-msg">Created src/auth/providers/github.ts (+72 lines)</span></div>
+        <div class="log-line"><span class="log-ts">14:35:48</span><span class="log-agent">Shuttle</span><span class="log-msg">Running npm test -- --filter=repository</span></div>
+        <div class="log-line"><span class="log-ts">14:35:33</span><span class="log-agent">Thread</span><span class="log-msg ok">✓ Session started — Add WebSocket handlers</span></div>
+        <div class="log-line"><span class="log-ts">14:35:20</span><span class="log-agent">Tapestry</span><span class="log-msg">Created src/auth/providers/google.ts (+84 lines)</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FAB -->
+  <button class="fab" onclick="document.getElementById('fabModal').classList.toggle('open')">⌘</button>
+  <div class="fab-modal" id="fabModal">
+    <div class="fab-modal-header">
+      <span>Quick Prompt</span>
+      <button class="fab-close" onclick="document.getElementById('fabModal').classList.remove('open')">✕</button>
+    </div>
+    <input class="fab-input" placeholder="Describe a task for an agent…" />
+    <div class="fab-footer">
+      <button class="fab-send">Launch Session →</button>
+    </div>
+  </div>
+
+<script>
+// Generate sparklines
+function sparkline(id, data, color) {
+  const el = document.getElementById(id);
+  const max = Math.max(...data);
+  data.forEach(v => {
+    const bar = document.createElement('div');
+    bar.className = 'spark-bar';
+    bar.style.height = (v / max * 100) + '%';
+    if (color) bar.style.background = color;
+    el.appendChild(bar);
+  });
+}
+sparkline('spark1', [3,5,4,7,6,5,7,8,6,7,5,7], '#6366f1');
+sparkline('spark2', [800,950,1100,900,1050,1200,980,1150,1300,1100,1250,1200], '#6366f1');
+sparkline('spark3', [89,91,93,90,92,94,93,95,94,92,93,94], '#22c55e');
+sparkline('spark4', [5.2,4.8,5.0,4.5,4.3,4.8,4.2,4.6,4.1,4.4,4.3,4.2], '#6366f1');
+</script>
+</body>
+</html>

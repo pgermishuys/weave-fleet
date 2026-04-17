@@ -1,0 +1,1555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weave Fleet — Evolved Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --rail-bg: #0c0c0d; --panel-bg: #111113; --card-bg: #141416; --main-bg: #0a0a0b;
+    --border: #1e1e22; --text: #e4e4e7; --muted: #71717a; --accent: #6366f1; --accent-dim: rgba(99,102,241,.15);
+    --running: #22c55e; --idle: #f59e0b; --complete: #3b82f6; --error: #ef4444; --queued: #8b5cf6;
+    --radius-card: 8px; --radius-btn: 6px; --radius-panel: 12px;
+    --font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  html, body { height: 100%; font-family: var(--font); font-size: 13px; color: var(--text); background: var(--main-bg); overflow: hidden; }
+  input, select, textarea, button { font-family: inherit; font-size: inherit; color: inherit; }
+
+  /* ── LAYOUT ── */
+  .app { display: flex; flex-direction: column; height: 100vh; }
+  .topbar { height: 48px; min-height: 48px; background: var(--panel-bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 16px 0 0; z-index: 10; }
+  .main { display: flex; flex: 1; overflow: hidden; }
+  .rail { width: 48px; min-width: 48px; background: var(--rail-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 8px 0; }
+  .context-panel { width: 280px; min-width: 280px; background: var(--panel-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .center { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .right-panel { width: 280px; min-width: 280px; background: var(--panel-bg); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── TOPBAR ── */
+  .breadcrumb { display: flex; align-items: center; gap: 6px; padding-left: 16px; font-size: 13px; color: var(--muted); }
+  .breadcrumb span { color: var(--muted); }
+  .breadcrumb .crumb { color: var(--text); cursor: pointer; }
+  .breadcrumb .crumb:hover { color: #fff; }
+  .breadcrumb .sep { font-size: 10px; color: #52525b; }
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+  .status-pill { display: flex; align-items: center; gap: 6px; background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.2); border-radius: 20px; padding: 4px 12px 4px 8px; font-size: 12px; color: var(--running); }
+  .status-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--running); animation: pulse-dot 2s ease-in-out infinite; }
+  @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+  .topbar-icon { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-btn); color: var(--muted); cursor: pointer; position: relative; transition: background .15s, color .15s; }
+  .topbar-icon:hover { background: rgba(255,255,255,.06); color: var(--text); }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #fff; cursor: pointer; }
+
+  /* ── RAIL ── */
+  .rail-item { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-btn); color: var(--muted); cursor: pointer; position: relative; font-size: 15px; transition: color .15s, background .15s; margin-bottom: 2px; border-left: 3px solid transparent; }
+  .rail-item:hover { color: #a1a1aa; }
+  .rail-item.active { color: #fff; border-left-color: var(--accent); background: rgba(255,255,255,.04); }
+  .rail-logo { font-size: 20px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+  .rail-divider { width: 24px; height: 1px; background: var(--border); margin: 6px 0; }
+  .rail-bottom { margin-top: auto; }
+  .rail-status-dot { position: absolute; top: 7px; right: 7px; width: 6px; height: 6px; border-radius: 50%; }
+  .rail-badge { position: absolute; top: 4px; right: 2px; background: var(--error); color: #fff; font-size: 9px; font-weight: 700; min-width: 14px; height: 14px; border-radius: 7px; display: flex; align-items: center; justify-content: center; padding: 0 3px; }
+  /* Rail tooltips */
+  .rail-item::after { content: attr(data-tooltip); position: absolute; left: 52px; top: 50%; transform: translateY(-50%); background: #27272a; color: var(--text); font-size: 12px; padding: 4px 10px; border-radius: 4px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .15s .2s; z-index: 100; }
+  .rail-item:hover::after { opacity: 1; }
+
+  /* ── CONTEXT PANEL SHARED ── */
+  .panel-header { padding: 14px 16px 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .panel-search { margin: 0 12px 8px; position: relative; }
+  .panel-search input { width: 100%; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-btn); padding: 7px 10px 7px 30px; color: var(--text); outline: none; transition: border-color .15s; }
+  .panel-search input:focus { border-color: var(--accent); }
+  .panel-search .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 12px; pointer-events: none; }
+  .panel-buttons { display: flex; gap: 6px; padding: 0 12px 10px; }
+  .btn-accent { background: var(--accent); color: #fff; border: none; border-radius: var(--radius-btn); padding: 6px 12px; font-size: 12px; font-weight: 500; cursor: pointer; transition: opacity .15s; }
+  .btn-accent:hover { opacity: .85; }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: var(--radius-btn); padding: 6px 12px; font-size: 12px; cursor: pointer; transition: background .15s, color .15s; }
+  .btn-ghost:hover { background: rgba(255,255,255,.04); color: var(--text); }
+
+  /* ── SESSIONS PANEL ── */
+  .sessions-list { flex: 1; overflow-y: auto; padding: 0 0 12px; }
+  .sessions-list::-webkit-scrollbar { width: 4px; }
+  .sessions-list::-webkit-scrollbar-thumb { background: #27272a; border-radius: 2px; }
+  .project-group { margin-bottom: 2px; }
+  .project-header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; transition: background .12s; user-select: none; }
+  .project-header:hover { background: rgba(255,255,255,.03); }
+  .project-chevron { font-size: 10px; color: var(--muted); width: 14px; text-align: center; transition: transform .2s; }
+  .project-header.collapsed .project-chevron { transform: rotate(-90deg); }
+  .project-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .project-name { font-weight: 600; font-size: 13px; flex: 1; }
+  .project-active-count { font-size: 11px; color: var(--running); }
+  .project-total { font-size: 11px; color: var(--muted); }
+  .project-menu { color: var(--muted); font-size: 14px; opacity: 0; cursor: pointer; padding: 0 4px; transition: opacity .12s; }
+  .project-header:hover .project-menu { opacity: 1; }
+  .project-body { overflow: hidden; transition: max-height .25s ease; }
+  .project-header.collapsed + .project-body { max-height: 0 !important; }
+  .sub-group-label { padding: 4px 12px 2px 38px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #52525b; }
+  .session-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 38px; cursor: pointer; transition: background .12s; border-left: 3px solid transparent; }
+  .session-item:hover { background: rgba(255,255,255,.03); }
+  .session-item.active { background: var(--accent-dim); border-left-color: var(--accent); }
+  .session-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .session-info { flex: 1; min-width: 0; }
+  .session-title { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .session-meta { font-size: 10px; color: var(--muted); display: flex; gap: 6px; }
+  .ungrouped-label { padding: 10px 12px 4px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--border); margin-top: 4px; }
+
+  /* ── BOARD CONTROLS PANEL ── */
+  .board-controls { flex: 1; overflow-y: auto; padding: 0 12px 12px; }
+  .board-controls::-webkit-scrollbar { width: 4px; }
+  .board-controls::-webkit-scrollbar-thumb { background: #27272a; border-radius: 2px; }
+  .bc-section { margin-bottom: 16px; }
+  .bc-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 6px; }
+  .bc-select { width: 100%; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-btn); padding: 7px 10px; color: var(--text); outline: none; -webkit-appearance: none; cursor: pointer; }
+  .bc-select:focus { border-color: var(--accent); }
+  .bc-check { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; font-size: 12px; }
+  .bc-check input[type="checkbox"], .bc-check input[type="radio"] { appearance: none; width: 14px; height: 14px; border: 1px solid #3f3f46; border-radius: 3px; background: var(--card-bg); cursor: pointer; position: relative; flex-shrink: 0; transition: background .12s, border-color .12s; }
+  .bc-check input[type="radio"] { border-radius: 50%; }
+  .bc-check input:checked { background: var(--accent); border-color: var(--accent); }
+  .bc-check input:checked::after { content: '✓'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; font-weight: 700; }
+  .bc-check input[type="radio"]:checked::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #fff; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+  .radio-pills { display: flex; gap: 4px; }
+  .radio-pill { padding: 5px 12px; font-size: 11px; font-weight: 500; border: 1px solid var(--border); border-radius: 20px; background: transparent; color: var(--muted); cursor: pointer; transition: all .15s; }
+  .radio-pill.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+  .radio-pill:hover:not(.active) { background: rgba(255,255,255,.04); color: var(--text); }
+  .bc-quick-stats { display: flex; gap: 12px; padding: 10px 0 0; border-top: 1px solid var(--border); margin-top: 8px; }
+  .bc-stat { text-align: center; }
+  .bc-stat-val { font-size: 18px; font-weight: 700; }
+  .bc-stat-lbl { font-size: 10px; color: var(--muted); }
+
+  /* ── CENTER: ACTIVITY STREAM ── */
+  .activity-stream { flex: 1; overflow-y: auto; padding: 20px 24px; }
+  .activity-stream::-webkit-scrollbar { width: 5px; }
+  .activity-stream::-webkit-scrollbar-thumb { background: #27272a; border-radius: 2px; }
+  .message { margin-bottom: 20px; }
+  .msg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .msg-avatar { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; flex-shrink: 0; }
+  .msg-avatar.user { background: #3f3f46; color: var(--text); }
+  .msg-avatar.agent { background: var(--accent-dim); color: var(--accent); }
+  .msg-name { font-weight: 600; font-size: 13px; }
+  .msg-model { font-size: 11px; color: var(--muted); }
+  .msg-body { padding-left: 32px; line-height: 1.6; color: #d4d4d8; }
+  .msg-body code { background: var(--card-bg); border: 1px solid var(--border); padding: 1px 5px; border-radius: 3px; font-family: 'SF Mono', 'Cascadia Code', monospace; font-size: 12px; color: #c084fc; }
+  .tool-card { margin-top: 10px; border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; background: var(--card-bg); }
+  .tool-header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; transition: background .12s; font-size: 12px; }
+  .tool-header:hover { background: rgba(255,255,255,.03); }
+  .tool-icon { font-size: 12px; color: var(--muted); }
+  .tool-label { font-weight: 600; color: var(--text); }
+  .tool-path { color: var(--muted); font-family: monospace; font-size: 11px; }
+  .tool-chevron { margin-left: auto; color: var(--muted); font-size: 10px; transition: transform .2s; }
+  .tool-card.collapsed .tool-chevron { transform: rotate(-90deg); }
+  .tool-body { max-height: 200px; overflow: hidden; transition: max-height .25s ease; }
+  .tool-card.collapsed .tool-body { max-height: 0; }
+  .diff-line { padding: 2px 12px; font-family: monospace; font-size: 11px; line-height: 1.6; }
+  .diff-add { background: rgba(34,197,94,.08); color: #4ade80; }
+  .diff-context { color: var(--muted); }
+  .test-output { padding: 8px 12px; font-family: monospace; font-size: 11px; line-height: 1.7; }
+  .test-pass { color: var(--running); }
+  .test-label { color: var(--muted); }
+
+  /* ── COMPOSER ── */
+  .composer { border-top: 1px solid var(--border); padding: 12px 24px 16px; background: var(--panel-bg); position: relative; z-index: 50; overflow: visible; }
+  .composer-box { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-panel); transition: border-color .15s; position: relative; }
+  .composer-box:focus-within { border-color: var(--accent); }
+  .composer-box textarea { width: 100%; background: transparent; border: none; padding: 12px 16px; color: var(--text); resize: none; outline: none; min-height: 48px; max-height: 140px; line-height: 1.5; }
+  .composer-box textarea::placeholder { color: #52525b; }
+  .composer-toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--border); position: relative; overflow: visible; }
+
+  /* Selector buttons */
+  .selector-btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; font-size: 12px; border-radius: 20px; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--muted); transition: all .15s; position: relative; }
+  .selector-btn:hover { background: rgba(255,255,255,.06); color: var(--text); border-color: #3f3f46; }
+  .selector-btn.active { border-color: rgba(99,102,241,.4); color: var(--text); }
+  .selector-btn .sel-icon { width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; flex-shrink: 0; }
+  .selector-btn .sel-label { font-size: 10px; color: var(--muted); margin-right: 2px; }
+  .selector-btn .sel-value { font-weight: 500; }
+  .selector-btn .sel-chevron { font-size: 9px; color: var(--muted); margin-left: 2px; }
+
+  /* Model selector specific */
+  .selector-btn.model-sel .sel-icon { background: var(--accent-dim); color: var(--accent); }
+  .selector-btn.model-sel.active { border-color: rgba(99,102,241,.4); }
+
+  /* Agent selector specific */
+  .selector-btn.agent-sel .sel-icon { background: rgba(34,197,94,.15); color: var(--running); }
+  .selector-btn.agent-sel.active { border-color: rgba(34,197,94,.3); }
+
+  /* Effort toggle */
+  .effort-toggle { display: flex; align-items: center; gap: 2px; padding: 4px 8px; border-radius: 20px; border: 1px solid var(--border); cursor: pointer; transition: border-color .15s; }
+  .effort-toggle:hover { border-color: #3f3f46; }
+  .effort-toggle .effort-label { font-size: 10px; color: var(--muted); margin-right: 4px; }
+  .effort-dot { width: 7px; height: 7px; border-radius: 50%; background: #3f3f46; transition: background .15s; }
+  .effort-dot.filled { background: var(--accent); }
+
+  /* Dropdown menus */
+  .selector-dropdown { position: absolute; bottom: calc(100% + 6px); left: 0; min-width: 240px; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 4px; z-index: 200; display: none; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  .selector-dropdown.show { display: block; }
+  .selector-dropdown .dd-header { font-size: 10px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); padding: 8px 10px 4px; font-weight: 600; }
+  .selector-dropdown .dd-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--radius-btn); cursor: pointer; transition: background .15s; }
+  .selector-dropdown .dd-item:hover { background: rgba(255,255,255,.06); }
+  .selector-dropdown .dd-item.selected { background: var(--accent-dim); }
+  .selector-dropdown .dd-item .dd-icon { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+  .selector-dropdown .dd-item .dd-name { font-size: 12px; font-weight: 500; }
+  .selector-dropdown .dd-item .dd-desc { font-size: 10px; color: var(--muted); }
+  .selector-dropdown .dd-item .dd-check { margin-left: auto; color: var(--accent); font-size: 13px; }
+  .selector-dropdown .dd-divider { height: 1px; background: var(--border); margin: 4px 0; }
+
+  .send-btn { margin-left: auto; background: var(--accent); border: none; color: #fff; height: 32px; padding: 0 16px; border-radius: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; font-weight: 500; transition: opacity .15s; }
+  .send-btn:hover { opacity: .85; }
+  .send-btn .send-key { font-size: 10px; opacity: .7; }
+
+  /* ── CENTER: KANBAN ── */
+  .kanban-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .kanban-header { padding: 16px 24px 12px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .kanban-header h1 { font-size: 20px; font-weight: 700; }
+  .kanban-header .subtitle { font-size: 13px; color: var(--muted); }
+  .kanban-header .btn-accent { margin-left: auto; }
+  .kanban-board { flex: 1; display: flex; gap: 16px; padding: 0 24px 16px; overflow-x: auto; overflow-y: hidden; }
+  .kanban-board::-webkit-scrollbar { height: 6px; }
+  .kanban-board::-webkit-scrollbar-thumb { background: #27272a; border-radius: 3px; }
+  .kanban-col { min-width: 280px; max-width: 280px; display: flex; flex-direction: column; }
+  .col-header { margin-bottom: 10px; }
+  .col-bar { height: 3px; border-radius: 2px; margin-bottom: 8px; }
+  .col-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .col-count { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .col-cards { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
+  .col-cards::-webkit-scrollbar { width: 3px; }
+  .col-cards::-webkit-scrollbar-thumb { background: #27272a; border-radius: 2px; }
+  .k-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 10px 12px; border-left: 4px solid var(--muted); cursor: pointer; transition: transform .15s, border-color .15s, background .15s; position: relative; overflow: hidden; }
+  .k-card:hover { transform: translateY(-1px); border-color: #2a2a2e; }
+  .k-card.failed-card { background: rgba(239,68,68,.04); }
+  .k-card-title { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+  .k-card-project { font-size: 11px; color: var(--muted); margin-bottom: 8px; display: flex; align-items: center; gap: 5px; }
+  .k-card-project .dot { width: 5px; height: 5px; border-radius: 50%; }
+  .k-card-pills { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+  .k-pill { padding: 2px 8px; font-size: 10px; border-radius: 10px; background: rgba(255,255,255,.06); color: var(--muted); }
+  .k-pill.agent { color: var(--text); background: rgba(255,255,255,.08); }
+  .k-card-footer { display: flex; gap: 10px; font-size: 10px; color: #52525b; }
+  .k-progress { position: absolute; bottom: 0; left: 0; height: 2px; background: var(--accent); border-radius: 0 1px 0 0; transition: width .3s; }
+
+  /* ── RIGHT PANEL ── */
+  .right-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .right-tab { flex: 1; text-align: center; padding: 10px 0; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: color .15s, border-color .15s; }
+  .right-tab:hover { color: var(--text); }
+  .right-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .right-content { flex: 1; overflow-y: auto; padding: 14px 14px 20px; }
+  .right-content::-webkit-scrollbar { width: 4px; }
+  .right-content::-webkit-scrollbar-thumb { background: #27272a; border-radius: 2px; }
+
+  /* Right: Session tab */
+  .session-header-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 12px; margin-bottom: 12px; }
+  .session-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .session-title-text { font-size: 14px; font-weight: 600; flex: 1; }
+  .session-status-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+  .session-status-badge.running { background: rgba(34,197,94,.12); color: var(--running); }
+  .session-status-badge.complete { background: rgba(59,130,246,.12); color: var(--complete); }
+  .session-project-link { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); cursor: pointer; padding: 3px 8px; border-radius: 10px; background: rgba(255,255,255,.04); transition: background .15s, color .15s; }
+  .session-project-link:hover { background: rgba(255,255,255,.08); color: var(--text); }
+  .session-project-link .proj-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .session-meta-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 11px; color: var(--muted); }
+  .session-meta-row .meta-item { display: flex; align-items: center; gap: 4px; }
+  .session-meta-row .meta-icon { font-size: 12px; }
+
+  .rp-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 8px; }
+
+  /* Token/cost stats */
+  .token-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .token-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-btn); padding: 10px; }
+  .token-card .tc-val { font-size: 16px; font-weight: 700; }
+  .token-card .tc-lbl { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .token-card .tc-sub { font-size: 10px; color: #52525b; margin-top: 1px; }
+
+  /* Context window meter */
+  .context-meter { margin-bottom: 16px; }
+  .context-meter-header { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; }
+  .context-meter-header .cm-label { color: var(--muted); }
+  .context-meter-header .cm-value { color: var(--text); font-weight: 500; }
+  .context-meter-bar { height: 6px; background: rgba(255,255,255,.06); border-radius: 3px; overflow: hidden; }
+  .context-meter-fill { height: 100%; border-radius: 3px; background: var(--accent); transition: width .3s ease; }
+  .context-meter-fill.warn { background: var(--idle); }
+  .context-meter-fill.danger { background: var(--error); }
+
+  /* Files changed */
+  .files-summary { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 8px; }
+  .files-summary .fs-count { font-weight: 600; }
+  .files-summary .fs-adds { color: var(--running); font-size: 11px; }
+  .files-summary .fs-dels { color: var(--error); font-size: 11px; }
+  .file-item { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: 11px; border-radius: 4px; color: var(--muted); transition: background .12s; cursor: default; }
+  .file-item:hover { background: rgba(255,255,255,.03); }
+  .file-item .fi-icon { font-size: 12px; flex-shrink: 0; }
+  .file-item .fi-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'SF Mono', Menlo, monospace; font-size: 11px; }
+  .file-item .fi-stat { font-size: 10px; flex-shrink: 0; }
+  .file-item .fi-add { color: var(--running); }
+  .file-item .fi-del { color: var(--error); }
+
+  /* Agent/model info row */
+  .info-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12px; }
+  .info-row .ir-label { color: var(--muted); width: 52px; flex-shrink: 0; font-size: 11px; }
+  .info-row .ir-value { display: flex; align-items: center; gap: 5px; }
+  .info-row .ir-icon { width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; flex-shrink: 0; }
+  .info-divider { height: 1px; background: var(--border); margin: 10px 0; }
+
+  /* Right: Plan tab */
+  .plan-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+  .todo-item { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; font-size: 12px; line-height: 1.4; }
+  .todo-check { width: 16px; height: 16px; border: 1.5px solid #3f3f46; border-radius: 4px; flex-shrink: 0; margin-top: 1px; display: flex; align-items: center; justify-content: center; font-size: 10px; }
+  .todo-check.checked { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .todo-check.in-progress { border-color: var(--accent); }
+  .todo-text { flex: 1; }
+  .todo-text.done { text-decoration: line-through; color: var(--muted); }
+
+  /* Right: Summary tab */
+  .summary-big { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+  .summary-label { font-size: 11px; color: var(--muted); margin-bottom: 14px; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 11px; }
+  .bar-label { width: 70px; text-align: right; color: var(--muted); flex-shrink: 0; }
+  .bar-track { flex: 1; height: 8px; background: rgba(255,255,255,.04); border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; }
+  .bar-val { width: 20px; font-size: 11px; color: var(--muted); }
+  .stacked-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin-bottom: 14px; }
+  .stacked-segment { height: 100%; transition: width .3s; }
+  .agents-list, .cost-list { margin-bottom: 16px; }
+  .agent-row, .cost-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; }
+  .cost-val { font-family: monospace; color: var(--text); }
+
+  /* Right: Activity tab */
+  .activity-feed-item { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.03); font-size: 11px; line-height: 1.5; }
+  .activity-feed-item:last-child { border-bottom: none; }
+  .af-time { color: #52525b; }
+  .af-session { font-weight: 500; }
+  .af-action { color: var(--muted); }
+
+  /* ── PLUGIN PANELS ── */
+  .plugin-header { padding: 14px 16px 10px; display: flex; align-items: center; gap: 8px; }
+  .plugin-header-title { font-size: 16px; font-weight: 700; }
+  .connected-pill { display: inline-flex; align-items: center; padding: 2px 8px; font-size: 10px; font-weight: 600; border-radius: 10px; background: rgba(34,197,94,.15); color: #22c55e; }
+  .error-pill { display: inline-flex; align-items: center; padding: 2px 8px; font-size: 10px; font-weight: 600; border-radius: 10px; background: rgba(239,68,68,.15); color: #ef4444; }
+  .disconnected-pill { display: inline-flex; align-items: center; padding: 2px 8px; font-size: 10px; font-weight: 600; border-radius: 10px; background: rgba(113,113,122,.15); color: var(--muted); }
+  .plugin-header-gear { margin-left: auto; color: var(--muted); cursor: pointer; font-size: 14px; }
+  .plugin-header-gear:hover { color: var(--text); }
+  .plugin-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .plugin-tab { flex: 1; text-align: center; padding: 10px 0; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: color .15s, border-color .15s; }
+  .plugin-tab:hover { color: var(--text); }
+  .plugin-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .plugin-list { flex: 1; overflow-y: auto; padding: 0; }
+  .plugin-list::-webkit-scrollbar { width: 4px; }
+  .plugin-list::-webkit-scrollbar-thumb { background: #27272a; border-radius: 2px; }
+  .issue-item, .ticket-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .12s; position: relative; }
+  .issue-item:hover, .ticket-item:hover { background: rgba(255,255,255,.04); }
+  .issue-item:hover .link-action, .ticket-item:hover .link-action { opacity: 1; }
+  .issue-status { font-size: 14px; flex-shrink: 0; width: 16px; text-align: center; }
+  .issue-info { flex: 1; min-width: 0; }
+  .issue-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .issue-repo { font-size: 11px; color: var(--muted); }
+  .issue-labels { display: flex; gap: 3px; margin-top: 3px; flex-wrap: wrap; }
+  .issue-label { padding: 2px 6px; font-size: 9px; border-radius: 10px; font-weight: 600; }
+  .issue-label.bug { background: rgba(239,68,68,.15); color: #ef4444; }
+  .issue-label.enhancement { background: rgba(59,130,246,.15); color: #3b82f6; }
+  .issue-label.auth { background: rgba(139,92,246,.15); color: #8b5cf6; }
+  .issue-label.devops { background: rgba(245,158,11,.15); color: #f59e0b; }
+  .issue-label.docs { background: rgba(34,197,94,.15); color: #22c55e; }
+  .issue-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .issue-avatar { width: 16px; height: 16px; border-radius: 50%; background: #3f3f46; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 600; color: var(--text); }
+  .issue-time { font-size: 10px; color: var(--muted); white-space: nowrap; }
+  .link-action { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--accent); opacity: 0; transition: opacity .12s; pointer-events: none; }
+  .ticket-id { font-size: 12px; font-weight: 700; color: var(--muted); flex-shrink: 0; width: 56px; }
+  .ticket-info { flex: 1; min-width: 0; }
+  .ticket-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ticket-meta { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+  .ticket-status { padding: 2px 6px; font-size: 9px; border-radius: 10px; font-weight: 600; }
+  .ticket-status.in-progress { background: rgba(245,158,11,.15); color: #f59e0b; }
+  .ticket-status.todo { background: rgba(113,113,122,.15); color: var(--muted); }
+  .ticket-status.done { background: rgba(34,197,94,.15); color: #22c55e; }
+  .ticket-status.cancelled { background: rgba(239,68,68,.15); color: #ef4444; text-decoration: line-through; }
+  .ticket-priority { font-size: 10px; flex-shrink: 0; }
+  .mp-section-label { padding: 12px 12px 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .mp-installed-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .mp-installed-icon { font-size: 14px; flex-shrink: 0; }
+  .mp-installed-name { font-weight: 600; font-size: 13px; flex: 1; }
+  .mp-installed-status { font-size: 10px; font-weight: 600; }
+  .mp-configure { font-size: 11px; color: var(--muted); cursor: pointer; transition: color .12s; }
+  .mp-configure:hover { color: var(--text); }
+  .mp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 12px; }
+  .mp-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+  .mp-card-icon { font-size: 16px; }
+  .mp-card-name { font-size: 12px; font-weight: 600; }
+  .mp-card-desc { font-size: 11px; color: var(--muted); line-height: 1.4; }
+  .mp-card .btn-ghost { margin-top: 6px; padding: 4px 8px; font-size: 11px; align-self: flex-start; }
+  .simple-panel-content { padding: 14px; }
+  .simple-panel-content p { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 12px; }
+  .container-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12px; }
+  .container-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .error-item { padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .error-item-title { font-size: 12px; font-weight: 500; }
+  .error-item-time { font-size: 10px; color: var(--muted); }
+
+  /* ── UTILITY ── */
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="breadcrumb" id="breadcrumb">
+      <span class="crumb" onclick="selectRailItem('sessions')">Weave Fleet</span>
+      <span class="sep">›</span>
+      <span class="crumb">OAuth Integration</span>
+      <span class="sep">›</span>
+      <span class="crumb">Implement token refresh</span>
+    </div>
+    <div class="topbar-right">
+      <div class="status-pill"><span class="dot"></span>Running</div>
+      <div class="topbar-icon" title="Notifications">🔔</div>
+      <div class="avatar">PG</div>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- ICON RAIL -->
+    <div class="rail">
+      <div class="rail-item rail-logo" data-tooltip="Weave Fleet">W</div>
+      <div class="rail-divider"></div>
+      <div class="rail-item" data-id="board" data-tooltip="Board" onclick="selectRailItem('board')">▦</div>
+      <div class="rail-item active" data-id="sessions" data-tooltip="Sessions" onclick="selectRailItem('sessions')">💬</div>
+      <div class="rail-divider"></div>
+      <div class="rail-item" data-id="github" data-tooltip="GitHub" style="font-size:11px;font-weight:600" onclick="selectRailItem('github')">GH<span class="rail-status-dot" style="background:var(--running)"></span></div>
+      <div class="rail-item" data-id="linear" data-tooltip="Linear" style="font-size:11px;font-weight:600" onclick="selectRailItem('linear')">Li<span class="rail-status-dot" style="background:var(--running)"></span></div>
+      <div class="rail-item" data-id="slack" data-tooltip="Slack" style="font-size:11px;font-weight:600;color:#52525b" onclick="selectRailItem('slack')">Sl</div>
+      <div class="rail-item" data-id="docker" data-tooltip="Docker" onclick="selectRailItem('docker')">🐳<span class="rail-status-dot" style="background:var(--running)"></span></div>
+      <div class="rail-item" data-id="sentry" data-tooltip="Sentry" onclick="selectRailItem('sentry')">⚠<span class="rail-status-dot" style="background:var(--error)"></span><span class="rail-badge">2</span></div>
+      <div class="rail-bottom">
+        <div class="rail-item" data-id="marketplace" data-tooltip="Marketplace" onclick="selectRailItem('marketplace')">🧩</div>
+        <div class="rail-item" data-tooltip="Settings">⚙</div>
+      </div>
+    </div>
+
+    <!-- CONTEXT PANEL: SESSIONS -->
+    <div class="context-panel" id="ctx-sessions">
+      <div class="panel-header">Sessions</div>
+      <div class="panel-search">
+        <span class="search-icon">⌕</span>
+        <input type="text" placeholder="Search sessions…" oninput="filterSidebar(this.value)">
+      </div>
+      <div class="panel-buttons">
+        <button class="btn-accent" style="flex:1">New Session</button>
+        <button class="btn-ghost">New Project</button>
+      </div>
+      <div class="sessions-list" id="sessions-list">
+        <!-- OAuth Integration -->
+        <div class="project-group" data-project="oauth-integration">
+          <div class="project-header" onclick="toggleGroup(this)">
+            <span class="project-chevron">▾</span>
+            <span class="project-dot" style="background:#6366f1"></span>
+            <span class="project-name">OAuth Integration</span>
+            <span class="project-active-count">3</span>
+            <span class="project-total">[8]</span>
+            <span class="project-menu">⋯</span>
+          </div>
+          <div class="project-body" style="max-height:500px">
+            <div class="sub-group-label">src/auth</div>
+            <div class="session-item active" onclick="selectSession(this,'OAuth Integration','#6366f1','Implement token refresh')">
+              <span class="session-dot" style="background:var(--running)"></span>
+              <div class="session-info"><div class="session-title">Implement token refresh</div><div class="session-meta"><span>Tapestry</span><span>2m ago</span></div></div>
+            </div>
+            <div class="session-item" onclick="selectSession(this,'OAuth Integration','#6366f1','Add PKCE support')">
+              <span class="session-dot" style="background:var(--running)"></span>
+              <div class="session-info"><div class="session-title">Add PKCE support</div><div class="session-meta"><span>Shuttle</span><span>5m ago</span></div></div>
+            </div>
+            <div class="session-item" onclick="selectSession(this,'OAuth Integration','#6366f1','Authorization code flow')">
+              <span class="session-dot" style="background:var(--complete)"></span>
+              <div class="session-info"><div class="session-title">Authorization code flow</div><div class="session-meta"><span>Warp</span><span>45m ago</span></div></div>
+            </div>
+            <div class="session-item" onclick="selectSession(this,'OAuth Integration','#6366f1','Rate limiting per client')">
+              <span class="session-dot" style="background:var(--complete)"></span>
+              <div class="session-info"><div class="session-title">Rate limiting per client</div><div class="session-meta"><span>Weft</span><span>32m ago</span></div></div>
+            </div>
+            <div class="sub-group-label">src/middleware</div>
+            <div class="session-item" onclick="selectSession(this,'OAuth Integration','#6366f1','OAuth state validation')">
+              <span class="session-dot" style="background:var(--idle)"></span>
+              <div class="session-info"><div class="session-title">OAuth state validation</div><div class="session-meta"><span>Thread</span><span>18m ago</span></div></div>
+            </div>
+            <div class="session-item" onclick="selectSession(this,'OAuth Integration','#6366f1','Mock OAuth provider')">
+              <span class="session-dot" style="background:var(--complete)"></span>
+              <div class="session-info"><div class="session-title">Mock OAuth provider</div><div class="session-meta"><span>Tapestry</span><span>15m ago</span></div></div>
+            </div>
+            <div class="sub-group-label">tests</div>
+            <div class="session-item" onclick="selectSession(this,'OAuth Integration','#6366f1','Token refresh tests')">
+              <span class="session-dot" style="background:var(--queued)"></span>
+              <div class="session-info"><div class="session-title">Token refresh tests</div><div class="session-meta"><span>Thread</span><span>1m ago</span></div></div>
+            </div>
+            <div class="session-item" onclick="selectSession(this,'OAuth Integration','#6366f1','Integration test suite')">
+              <span class="session-dot" style="background:var(--queued)"></span>
+              <div class="session-info"><div class="session-title">Integration test suite</div><div class="session-meta"><span>Weft</span><span>3m ago</span></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Database Refactor -->
+        <div class="project-group" data-project="database-refactor">
+          <div class="project-header collapsed" onclick="toggleGroup(this)">
+            <span class="project-chevron">▾</span>
+            <span class="project-dot" style="background:#22c55e"></span>
+            <span class="project-name">Database Refactor</span>
+            <span class="project-active-count">1</span>
+            <span class="project-total">[5]</span>
+            <span class="project-menu">⋯</span>
+          </div>
+          <div class="project-body" style="max-height:300px">
+            <div class="session-item"><span class="session-dot" style="background:var(--queued)"></span><div class="session-info"><div class="session-title">Add read replicas</div><div class="session-meta"><span>Shuttle</span><span>10m ago</span></div></div></div>
+            <div class="session-item"><span class="session-dot" style="background:var(--complete)"></span><div class="session-info"><div class="session-title">Connection pooling</div><div class="session-meta"><span>Shuttle</span><span>38m ago</span></div></div></div>
+          </div>
+        </div>
+
+        <!-- CI/CD Pipeline -->
+        <div class="project-group" data-project="cicd-pipeline">
+          <div class="project-header collapsed" onclick="toggleGroup(this)">
+            <span class="project-chevron">▾</span>
+            <span class="project-dot" style="background:#f59e0b"></span>
+            <span class="project-name">CI/CD Pipeline</span>
+            <span class="project-active-count">0</span>
+            <span class="project-total">[3]</span>
+            <span class="project-menu">⋯</span>
+          </div>
+          <div class="project-body" style="max-height:200px">
+            <div class="session-item"><span class="session-dot" style="background:var(--queued)"></span><div class="session-info"><div class="session-title">Setup GitHub Actions</div><div class="session-meta"><span>Tapestry</span><span>25m ago</span></div></div></div>
+          </div>
+        </div>
+
+        <!-- API v2 Migration -->
+        <div class="project-group" data-project="api-v2-migration">
+          <div class="project-header" onclick="toggleGroup(this)">
+            <span class="project-chevron">▾</span>
+            <span class="project-dot" style="background:#3b82f6"></span>
+            <span class="project-name">API v2 Migration</span>
+            <span class="project-active-count">4</span>
+            <span class="project-total">[12]</span>
+            <span class="project-menu">⋯</span>
+          </div>
+          <div class="project-body" style="max-height:400px">
+            <div class="sub-group-label">src/api/v2</div>
+            <div class="session-item" onclick="selectSession(this,'API v2 Migration','#3b82f6','Migrate user endpoints')">
+              <span class="session-dot" style="background:var(--running)"></span>
+              <div class="session-info"><div class="session-title">Migrate user endpoints</div><div class="session-meta"><span>Tapestry</span><span>30s ago</span></div></div>
+            </div>
+            <div class="session-item" onclick="selectSession(this,'API v2 Migration','#3b82f6','Deprecation headers')">
+              <span class="session-dot" style="background:var(--complete)"></span>
+              <div class="session-info"><div class="session-title">Deprecation headers</div><div class="session-meta"><span>Thread</span><span>20m ago</span></div></div>
+            </div>
+            <div class="session-item" onclick="selectSession(this,'API v2 Migration','#3b82f6','API v2 contract tests')">
+              <span class="session-dot" style="background:var(--error)"></span>
+              <div class="session-info"><div class="session-title">API v2 contract tests</div><div class="session-meta"><span>Weft</span><span>12m ago</span></div></div>
+            </div>
+            <div class="sub-group-label">src/api/compat</div>
+            <div class="session-item"><span class="session-dot" style="background:var(--idle)"></span><div class="session-info"><div class="session-title">Backward compat layer</div><div class="session-meta"><span>Pattern</span><span>22m ago</span></div></div></div>
+            <div class="session-item"><span class="session-dot" style="background:var(--complete)"></span><div class="session-info"><div class="session-title">Version negotiation</div><div class="session-meta"><span>Shuttle</span><span>1h ago</span></div></div></div>
+            <div class="sub-group-label">tests</div>
+            <div class="session-item"><span class="session-dot" style="background:var(--queued)"></span><div class="session-info"><div class="session-title">Compat regression suite</div><div class="session-meta"><span>Thread</span><span>15m ago</span></div></div></div>
+          </div>
+        </div>
+
+        <!-- Frontend Redesign -->
+        <div class="project-group" data-project="frontend-redesign">
+          <div class="project-header collapsed" onclick="toggleGroup(this)">
+            <span class="project-chevron">▾</span>
+            <span class="project-dot" style="background:#ef4444"></span>
+            <span class="project-name">Frontend Redesign</span>
+            <span class="project-active-count">2</span>
+            <span class="project-total">[6]</span>
+            <span class="project-menu">⋯</span>
+          </div>
+          <div class="project-body" style="max-height:300px">
+            <div class="session-item"><span class="session-dot" style="background:var(--running)"></span><div class="session-info"><div class="session-title">Component library setup</div><div class="session-meta"><span>Pattern</span><span>8m ago</span></div></div></div>
+            <div class="session-item"><span class="session-dot" style="background:var(--queued)"></span><div class="session-info"><div class="session-title">E2E test suite</div><div class="session-meta"><span>Thread</span><span>30m ago</span></div></div></div>
+          </div>
+        </div>
+
+        <!-- Ungrouped -->
+        <div class="ungrouped-label">Ungrouped (2)</div>
+        <div class="session-item"><span class="session-dot" style="background:var(--complete)"></span><div class="session-info"><div class="session-title">Cleanup temp files</div><div class="session-meta"><span>Spindle</span><span>2h ago</span></div></div></div>
+        <div class="session-item"><span class="session-dot" style="background:var(--idle)"></span><div class="session-info"><div class="session-title">Update README</div><div class="session-meta"><span>Warp</span><span>1h ago</span></div></div></div>
+      </div>
+    </div>
+
+    <!-- CONTEXT PANEL: BOARD CONTROLS -->
+    <div class="context-panel hidden" id="ctx-board">
+      <div class="panel-header" style="font-size:16px;font-weight:700;text-transform:none;letter-spacing:0;color:var(--text)">Board</div>
+      <div class="board-controls">
+        <div class="bc-section">
+          <div class="bc-label">Project</div>
+          <select class="bc-select"><option>All Projects</option><option>OAuth Integration</option><option>Database Refactor</option><option>CI/CD Pipeline</option><option>API v2 Migration</option><option>Frontend Redesign</option></select>
+        </div>
+        <div class="bc-section">
+          <div class="bc-label">Status</div>
+          <label class="bc-check"><input type="checkbox" checked><span style="color:var(--queued)">●</span> Queued</label>
+          <label class="bc-check"><input type="checkbox" checked><span style="color:var(--running)">●</span> Running</label>
+          <label class="bc-check"><input type="checkbox" checked><span style="color:var(--idle)">●</span> In Review</label>
+          <label class="bc-check"><input type="checkbox" checked><span style="color:var(--complete)">●</span> Completed</label>
+          <label class="bc-check"><input type="checkbox" checked><span style="color:var(--error)">●</span> Failed</label>
+        </div>
+        <div class="bc-section">
+          <div class="bc-label">Agent</div>
+          <label class="bc-check"><input type="checkbox" checked> Tapestry</label>
+          <label class="bc-check"><input type="checkbox" checked> Shuttle</label>
+          <label class="bc-check"><input type="checkbox" checked> Thread</label>
+          <label class="bc-check"><input type="checkbox" checked> Pattern</label>
+          <label class="bc-check"><input type="checkbox" checked> Weft</label>
+          <label class="bc-check"><input type="checkbox" checked> Warp</label>
+          <label class="bc-check"><input type="checkbox" checked> Spindle</label>
+        </div>
+        <div class="bc-section">
+          <div class="bc-label">Group By</div>
+          <div class="radio-pills">
+            <span class="radio-pill active" onclick="setRadioPill(this)">Status</span>
+            <span class="radio-pill" onclick="setRadioPill(this)">Project</span>
+            <span class="radio-pill" onclick="setRadioPill(this)">Agent</span>
+          </div>
+        </div>
+        <div class="bc-section">
+          <div class="bc-label">Sort By</div>
+          <select class="bc-select"><option>Recent</option><option>Oldest</option><option>Tokens</option><option>Cost</option></select>
+        </div>
+        <div class="bc-quick-stats">
+          <div class="bc-stat"><div class="bc-stat-val">15</div><div class="bc-stat-lbl">Total</div></div>
+          <div class="bc-stat"><div class="bc-stat-val" style="color:var(--running)">4</div><div class="bc-stat-lbl">Active</div></div>
+          <div class="bc-stat"><div class="bc-stat-val" style="color:var(--queued)">3</div><div class="bc-stat-lbl">Queued</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTEXT PANEL: GITHUB -->
+    <div class="context-panel hidden" id="ctx-github">
+      <div class="plugin-header">
+        <span class="plugin-header-title">GitHub</span>
+        <span class="connected-pill">Connected</span>
+        <span class="plugin-header-gear">⚙</span>
+      </div>
+      <div class="plugin-tabs">
+        <div class="plugin-tab active" onclick="switchPluginTab(this,'ctx-github',0)">Issues</div>
+        <div class="plugin-tab" onclick="switchPluginTab(this,'ctx-github',1)">Pull Requests</div>
+        <div class="plugin-tab" onclick="switchPluginTab(this,'ctx-github',2)">Repos</div>
+      </div>
+      <!-- Issues tab -->
+      <div class="plugin-tab-content" data-tab="0">
+        <div class="panel-search"><span class="search-icon">⌕</span><input type="text" placeholder="Search issues…"></div>
+        <div class="plugin-list">
+          <div class="issue-item">
+            <span class="issue-status" style="color:var(--running)">○</span>
+            <div class="issue-info"><div class="issue-title">Token refresh fails on expired sessions</div><div class="issue-repo">weave-fleet</div><div class="issue-labels"><span class="issue-label bug">bug</span><span class="issue-label auth">auth</span></div></div>
+            <div class="issue-right"><span class="issue-avatar">PG</span><span class="issue-time">2h ago</span></div>
+            <span class="link-action">Link →</span>
+          </div>
+          <div class="issue-item">
+            <span class="issue-status" style="color:var(--running)">○</span>
+            <div class="issue-info"><div class="issue-title">Add PKCE support for public clients</div><div class="issue-repo">weave-fleet</div><div class="issue-labels"><span class="issue-label enhancement">enhancement</span></div></div>
+            <div class="issue-right"><span class="issue-avatar">SM</span><span class="issue-time">5h ago</span></div>
+            <span class="link-action">Link →</span>
+          </div>
+          <div class="issue-item">
+            <span class="issue-status" style="color:var(--running)">○</span>
+            <div class="issue-info"><div class="issue-title">Rate limiter not respecting client tiers</div><div class="issue-repo">weave-fleet</div><div class="issue-labels"><span class="issue-label bug">bug</span></div></div>
+            <div class="issue-right"><span class="issue-avatar">PG</span><span class="issue-time">1d ago</span></div>
+            <span class="link-action">Link →</span>
+          </div>
+          <div class="issue-item">
+            <span class="issue-status" style="color:#8b5cf6">●</span>
+            <div class="issue-info"><div class="issue-title">Implement OAuth state parameter</div><div class="issue-repo">weave-fleet</div><div class="issue-labels"><span class="issue-label auth">auth</span></div></div>
+            <div class="issue-right"><span class="issue-avatar">SM</span><span class="issue-time">2d ago</span></div>
+            <span class="link-action">Link →</span>
+          </div>
+          <div class="issue-item">
+            <span class="issue-status" style="color:var(--running)">○</span>
+            <div class="issue-info"><div class="issue-title">Docker compose for local dev</div><div class="issue-repo">weave-fleet</div><div class="issue-labels"><span class="issue-label devops">devops</span></div></div>
+            <div class="issue-right"><span class="issue-avatar">JK</span><span class="issue-time">3d ago</span></div>
+            <span class="link-action">Link →</span>
+          </div>
+          <div class="issue-item">
+            <span class="issue-status" style="color:var(--running)">○</span>
+            <div class="issue-info"><div class="issue-title">API v2 migration guide</div><div class="issue-repo">weave-docs</div><div class="issue-labels"><span class="issue-label docs">docs</span></div></div>
+            <div class="issue-right"><span class="issue-avatar">PG</span><span class="issue-time">4d ago</span></div>
+            <span class="link-action">Link →</span>
+          </div>
+          <div class="issue-item">
+            <span class="issue-status" style="color:#8b5cf6">●</span>
+            <div class="issue-info"><div class="issue-title">Fix CORS headers for OAuth callback</div><div class="issue-repo">weave-fleet</div><div class="issue-labels"><span class="issue-label bug">bug</span><span class="issue-label auth">auth</span></div></div>
+            <div class="issue-right"><span class="issue-avatar">SM</span><span class="issue-time">5d ago</span></div>
+            <span class="link-action">Link →</span>
+          </div>
+          <div class="issue-item">
+            <span class="issue-status" style="color:var(--running)">○</span>
+            <div class="issue-info"><div class="issue-title">Add Sentry error tracking</div><div class="issue-repo">weave-fleet</div><div class="issue-labels"><span class="issue-label enhancement">enhancement</span></div></div>
+            <div class="issue-right"><span class="issue-avatar">JK</span><span class="issue-time">1w ago</span></div>
+            <span class="link-action">Link →</span>
+          </div>
+        </div>
+      </div>
+      <!-- Pull Requests tab -->
+      <div class="plugin-tab-content hidden" data-tab="1">
+        <div class="panel-search"><span class="search-icon">⌕</span><input type="text" placeholder="Search pull requests…"></div>
+        <div class="plugin-list">
+          <div class="issue-item">
+            <span class="issue-status" style="color:var(--running)">○</span>
+            <div class="issue-info"><div class="issue-title">feat: implement token refresh scheduler</div><div class="issue-repo">weave-fleet #142</div></div>
+            <div class="issue-right"><span class="issue-avatar">PG</span><span class="issue-time">1h ago</span></div>
+          </div>
+          <div class="issue-item">
+            <span class="issue-status" style="color:#8b5cf6">●</span>
+            <div class="issue-info"><div class="issue-title">fix: CORS headers for OAuth callback</div><div class="issue-repo">weave-fleet #138</div></div>
+            <div class="issue-right"><span class="issue-avatar">SM</span><span class="issue-time">5d ago</span></div>
+          </div>
+        </div>
+      </div>
+      <!-- Repos tab -->
+      <div class="plugin-tab-content hidden" data-tab="2">
+        <div class="panel-search"><span class="search-icon">⌕</span><input type="text" placeholder="Search repos…"></div>
+        <div class="plugin-list">
+          <div class="issue-item"><div class="issue-info"><div class="issue-title">weave-fleet</div><div class="issue-repo">Go · 14 open issues · Updated 2h ago</div></div></div>
+          <div class="issue-item"><div class="issue-info"><div class="issue-title">weave-docs</div><div class="issue-repo">MDX · 3 open issues · Updated 4d ago</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTEXT PANEL: LINEAR -->
+    <div class="context-panel hidden" id="ctx-linear">
+      <div class="plugin-header">
+        <span class="plugin-header-title">Linear</span>
+        <span class="connected-pill">Connected</span>
+        <span class="plugin-header-gear">⚙</span>
+      </div>
+      <div class="panel-search"><span class="search-icon">⌕</span><input type="text" placeholder="Search tickets…"></div>
+      <div class="plugin-list">
+        <div class="ticket-item">
+          <span class="ticket-id">ENG-142</span>
+          <div class="ticket-info"><div class="ticket-title">Implement token refresh mechanism</div><div class="ticket-meta"><span class="ticket-status in-progress">In Progress</span><span class="ticket-priority">🟠</span></div></div>
+          <span class="issue-avatar">PG</span>
+          <span class="link-action">Link →</span>
+        </div>
+        <div class="ticket-item">
+          <span class="ticket-id">ENG-138</span>
+          <div class="ticket-info"><div class="ticket-title">PKCE flow for mobile clients</div><div class="ticket-meta"><span class="ticket-status todo">Todo</span><span class="ticket-priority">🟡</span></div></div>
+          <span class="issue-avatar">SM</span>
+          <span class="link-action">Link →</span>
+        </div>
+        <div class="ticket-item">
+          <span class="ticket-id">ENG-135</span>
+          <div class="ticket-info"><div class="ticket-title">Database connection pool tuning</div><div class="ticket-meta"><span class="ticket-status in-progress">In Progress</span><span class="ticket-priority">🟠</span></div></div>
+          <span class="issue-avatar">PG</span>
+          <span class="link-action">Link →</span>
+        </div>
+        <div class="ticket-item">
+          <span class="ticket-id">ENG-131</span>
+          <div class="ticket-info"><div class="ticket-title">API v2 response schema migration</div><div class="ticket-meta"><span class="ticket-status todo">Todo</span><span class="ticket-priority">🔴</span></div></div>
+          <span class="issue-avatar">JK</span>
+          <span class="link-action">Link →</span>
+        </div>
+        <div class="ticket-item">
+          <span class="ticket-id">ENG-128</span>
+          <div class="ticket-info"><div class="ticket-title">Setup CI/CD pipeline</div><div class="ticket-meta"><span class="ticket-status done">Done</span><span class="ticket-priority">🟡</span></div></div>
+          <span class="issue-avatar">SM</span>
+          <span class="link-action">Link →</span>
+        </div>
+        <div class="ticket-item">
+          <span class="ticket-id">ENG-125</span>
+          <div class="ticket-info"><div class="ticket-title">Frontend component library</div><div class="ticket-meta"><span class="ticket-status in-progress">In Progress</span><span class="ticket-priority">⚪</span></div></div>
+          <span class="issue-avatar">PG</span>
+          <span class="link-action">Link →</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTEXT PANEL: MARKETPLACE -->
+    <div class="context-panel hidden" id="ctx-marketplace">
+      <div class="plugin-header">
+        <span class="plugin-header-title">Marketplace</span>
+      </div>
+      <div class="panel-search"><span class="search-icon">⌕</span><input type="text" placeholder="Search plugins…"></div>
+      <div class="plugin-list">
+        <div class="mp-section-label">Installed</div>
+        <div class="mp-installed-item"><span class="mp-installed-icon" style="font-size:11px;font-weight:600">GH</span><span class="mp-installed-name">GitHub</span><span class="mp-installed-status" style="color:#22c55e">Connected</span><span class="mp-configure">Configure</span></div>
+        <div class="mp-installed-item"><span class="mp-installed-icon" style="font-size:11px;font-weight:600">Li</span><span class="mp-installed-name">Linear</span><span class="mp-installed-status" style="color:#22c55e">Connected</span><span class="mp-configure">Configure</span></div>
+        <div class="mp-installed-item"><span class="mp-installed-icon" style="font-size:11px;font-weight:600">Sl</span><span class="mp-installed-name">Slack</span><span class="mp-installed-status" style="color:var(--muted)">Disconnected</span><span class="mp-configure">Configure</span></div>
+        <div class="mp-installed-item"><span class="mp-installed-icon">🐳</span><span class="mp-installed-name">Docker</span><span class="mp-installed-status" style="color:#22c55e">Connected</span><span class="mp-configure">Configure</span></div>
+        <div class="mp-installed-item"><span class="mp-installed-icon">⚠</span><span class="mp-installed-name">Sentry</span><span class="mp-installed-status" style="color:#ef4444">Error</span><span class="mp-configure">Configure</span></div>
+        <div class="mp-section-label">Available</div>
+        <div class="mp-grid">
+          <div class="mp-card"><span class="mp-card-icon">📝</span><span class="mp-card-name">Notion</span><span class="mp-card-desc">Sync docs and wikis</span><button class="btn-ghost">Install</button></div>
+          <div class="mp-card"><span class="mp-card-icon">▲</span><span class="mp-card-name">Vercel</span><span class="mp-card-desc">Deploy previews and status</span><button class="btn-ghost">Install</button></div>
+          <div class="mp-card"><span class="mp-card-icon">☁</span><span class="mp-card-name">AWS</span><span class="mp-card-desc">CloudWatch logs and alerts</span><button class="btn-ghost">Install</button></div>
+          <div class="mp-card"><span class="mp-card-icon">🚨</span><span class="mp-card-name">PagerDuty</span><span class="mp-card-desc">Incident management</span><button class="btn-ghost">Install</button></div>
+          <div class="mp-card"><span class="mp-card-icon">📄</span><span class="mp-card-name">Confluence</span><span class="mp-card-desc">Documentation sync</span><button class="btn-ghost">Install</button></div>
+          <div class="mp-card"><span class="mp-card-icon">🏗</span><span class="mp-card-name">Terraform</span><span class="mp-card-desc">Infrastructure state</span><button class="btn-ghost">Install</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTEXT PANEL: SLACK -->
+    <div class="context-panel hidden" id="ctx-slack">
+      <div class="plugin-header">
+        <span class="plugin-header-title">Slack</span>
+        <span class="disconnected-pill">Disconnected</span>
+      </div>
+      <div class="simple-panel-content">
+        <p>Send session summaries and get notifications in Slack channels.</p>
+        <button class="btn-accent">Connect Slack</button>
+      </div>
+    </div>
+
+    <!-- CONTEXT PANEL: DOCKER -->
+    <div class="context-panel hidden" id="ctx-docker">
+      <div class="plugin-header">
+        <span class="plugin-header-title">Docker</span>
+        <span class="connected-pill">Connected</span>
+      </div>
+      <div class="simple-panel-content">
+        <p style="font-weight:600;color:var(--text)">3 containers running</p>
+        <div class="container-item"><span class="container-dot" style="background:var(--running)"></span><span>weave-api</span><span style="color:var(--muted);margin-left:auto;font-size:10px">Up 2h</span></div>
+        <div class="container-item"><span class="container-dot" style="background:var(--running)"></span><span>weave-db</span><span style="color:var(--muted);margin-left:auto;font-size:10px">Up 2h</span></div>
+        <div class="container-item"><span class="container-dot" style="background:var(--running)"></span><span>weave-redis</span><span style="color:var(--muted);margin-left:auto;font-size:10px">Up 2h</span></div>
+      </div>
+    </div>
+
+    <!-- CONTEXT PANEL: SENTRY -->
+    <div class="context-panel hidden" id="ctx-sentry">
+      <div class="plugin-header">
+        <span class="plugin-header-title">Sentry</span>
+        <span class="error-pill">2 Errors</span>
+      </div>
+      <div class="simple-panel-content">
+        <p style="font-weight:600;color:var(--text)">2 unresolved errors</p>
+        <div class="error-item"><div class="error-item-title">TypeError: Cannot read property 'refresh' of undefined</div><div class="error-item-time">src/auth/refresh.go · 12m ago</div></div>
+        <div class="error-item"><div class="error-item-title">ConnectionError: Redis connection refused</div><div class="error-item-time">src/cache/redis.go · 45m ago</div></div>
+      </div>
+    </div>
+    <div class="center" id="center-sessions">
+      <div class="activity-stream">
+        <!-- Message 1: User -->
+        <div class="message">
+          <div class="msg-header">
+            <div class="msg-avatar user">PG</div>
+            <span class="msg-name">You</span>
+          </div>
+          <div class="msg-body">Implement automatic token refresh with a sliding window. The refresh should happen 30 seconds before expiry and use the existing <code>TokenStore</code> interface.</div>
+        </div>
+
+        <!-- Message 2: Agent -->
+        <div class="message">
+          <div class="msg-header">
+            <div class="msg-avatar agent">T</div>
+            <span class="msg-name">Tapestry</span>
+            <span class="msg-model">Claude Sonnet 4</span>
+          </div>
+          <div class="msg-body">
+            I'll implement the token refresh mechanism. Let me start by examining the current <code>TokenStore</code> interface and the existing auth flow.
+
+            <div class="tool-card collapsed" onclick="toggleToolCard(this)">
+              <div class="tool-header">
+                <span class="tool-icon">📄</span>
+                <span class="tool-label">Read File</span>
+                <span class="tool-path">src/auth/token_store.go</span>
+                <span class="tool-chevron">▾</span>
+              </div>
+              <div class="tool-body">
+                <div class="diff-line diff-context">package auth</div>
+                <div class="diff-line diff-context"></div>
+                <div class="diff-line diff-context">type TokenStore interface {</div>
+                <div class="diff-line diff-context">    Get(key string) (*Token, error)</div>
+                <div class="diff-line diff-context">    Set(key string, token *Token) error</div>
+                <div class="diff-line diff-context">    Delete(key string) error</div>
+                <div class="diff-line diff-context">}</div>
+              </div>
+            </div>
+
+            <div class="tool-card" onclick="toggleToolCard(this)">
+              <div class="tool-header">
+                <span class="tool-icon">✏️</span>
+                <span class="tool-label">Edit File</span>
+                <span class="tool-path">src/auth/refresh.go</span>
+                <span class="tool-chevron">▾</span>
+              </div>
+              <div class="tool-body">
+                <div class="diff-line diff-add">+ func NewRefreshScheduler(store TokenStore, opts ...Option) *RefreshScheduler {</div>
+                <div class="diff-line diff-add">+     s := &RefreshScheduler{</div>
+                <div class="diff-line diff-add">+         store:    store,</div>
+                <div class="diff-line diff-add">+         window:   30 * time.Second,</div>
+                <div class="diff-line diff-add">+         ticker:   time.NewTicker(10 * time.Second),</div>
+                <div class="diff-line diff-add">+         stopCh:   make(chan struct{}),</div>
+                <div class="diff-line diff-add">+     }</div>
+                <div class="diff-line diff-add">+     for _, o := range opts {</div>
+                <div class="diff-line diff-add">+         o(s)</div>
+                <div class="diff-line diff-add">+     }</div>
+                <div class="diff-line diff-add">+     return s</div>
+                <div class="diff-line diff-add">+ }</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Message 3: Agent -->
+        <div class="message">
+          <div class="msg-header">
+            <div class="msg-avatar agent">T</div>
+            <span class="msg-name">Tapestry</span>
+            <span class="msg-model">Claude Sonnet 4</span>
+          </div>
+          <div class="msg-body">
+            I've created the <code>RefreshScheduler</code> with a configurable sliding window. It monitors token expiry and triggers a refresh 30 seconds before expiration. The scheduler uses the existing <code>TokenStore</code> interface for persistence.
+
+            <div class="tool-card" onclick="toggleToolCard(this)">
+              <div class="tool-header">
+                <span class="tool-icon">▶</span>
+                <span class="tool-label">Run Tests</span>
+                <span class="tool-path">go test ./src/auth/...</span>
+                <span class="tool-chevron">▾</span>
+              </div>
+              <div class="tool-body">
+                <div class="test-output">
+                  <div><span class="test-pass">PASS</span> <span class="test-label">TestRefreshScheduler_SlidingWindow (0.02s)</span></div>
+                  <div><span class="test-pass">PASS</span> <span class="test-label">TestRefreshScheduler_TokenExpiry (0.01s)</span></div>
+                  <div><span class="test-pass">PASS</span> <span class="test-label">TestRefreshScheduler_ConcurrentAccess (0.05s)</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Composer -->
+      <div class="composer">
+        <div class="composer-box">
+          <textarea rows="1" placeholder="Message Tapestry…"></textarea>
+          <div class="composer-toolbar">
+
+            <!-- Agent Selector -->
+            <div class="selector-btn agent-sel active" onclick="toggleDropdown('agent-dd', event)">
+              <span class="sel-icon" style="background:rgba(99,102,241,.15);color:var(--accent)">T</span>
+              <span class="sel-value">Tapestry</span>
+              <span class="sel-chevron">▾</span>
+              <div class="selector-dropdown" id="agent-dd" style="min-width:260px">
+                <div class="dd-header">Agents</div>
+                <div class="dd-item selected" onclick="selectAgent(this, 'Tapestry', 'T', 'Executor — runs plans and writes code')">
+                  <span class="dd-icon" style="background:var(--accent-dim);color:var(--accent)">T</span>
+                  <div><div class="dd-name">Tapestry</div><div class="dd-desc">Executor — runs plans and writes code</div></div>
+                  <span class="dd-check">✓</span>
+                </div>
+                <div class="dd-item" onclick="selectAgent(this, 'Pattern', 'P', 'Planner — scopes work and creates plans')">
+                  <span class="dd-icon" style="background:rgba(168,85,247,.15);color:#a855f7">P</span>
+                  <div><div class="dd-name">Pattern</div><div class="dd-desc">Planner — scopes work and creates plans</div></div>
+                  <span class="dd-check" style="visibility:hidden">✓</span>
+                </div>
+                <div class="dd-item" onclick="selectAgent(this, 'Thread', 'Th', 'Explorer — fast codebase search')">
+                  <span class="dd-icon" style="background:rgba(59,130,246,.15);color:#3b82f6">Th</span>
+                  <div><div class="dd-name">Thread</div><div class="dd-desc">Explorer — fast codebase search</div></div>
+                  <span class="dd-check" style="visibility:hidden">✓</span>
+                </div>
+                <div class="dd-item" onclick="selectAgent(this, 'Shuttle', 'Sh', 'Specialist — domain-specific work')">
+                  <span class="dd-icon" style="background:rgba(245,158,11,.15);color:#f59e0b">Sh</span>
+                  <div><div class="dd-name">Shuttle</div><div class="dd-desc">Specialist — domain-specific work</div></div>
+                  <span class="dd-check" style="visibility:hidden">✓</span>
+                </div>
+                <div class="dd-item" onclick="selectAgent(this, 'Spindle', 'Sp', 'Researcher — external docs and APIs')">
+                  <span class="dd-icon" style="background:rgba(34,197,94,.15);color:#22c55e">Sp</span>
+                  <div><div class="dd-name">Spindle</div><div class="dd-desc">Researcher — external docs and APIs</div></div>
+                  <span class="dd-check" style="visibility:hidden">✓</span>
+                </div>
+                <div class="dd-divider"></div>
+                <div class="dd-header">Review</div>
+                <div class="dd-item" onclick="selectAgent(this, 'Weft', 'We', 'Reviewer — code quality and audits')">
+                  <span class="dd-icon" style="background:rgba(59,130,246,.15);color:#3b82f6">We</span>
+                  <div><div class="dd-name">Weft</div><div class="dd-desc">Reviewer — code quality and audits</div></div>
+                  <span class="dd-check" style="visibility:hidden">✓</span>
+                </div>
+                <div class="dd-item" onclick="selectAgent(this, 'Warp', 'Wa', 'Security — auth, crypto, and vulnerabilities')">
+                  <span class="dd-icon" style="background:rgba(239,68,68,.15);color:#ef4444">Wa</span>
+                  <div><div class="dd-name">Warp</div><div class="dd-desc">Security — auth, crypto, and vulnerabilities</div></div>
+                  <span class="dd-check" style="visibility:hidden">✓</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Model Selector -->
+            <div class="selector-btn model-sel active" onclick="toggleDropdown('model-dd', event)">
+              <span class="sel-icon">S4</span>
+              <span class="sel-value">Claude Sonnet 4</span>
+              <span class="sel-chevron">▾</span>
+              <div class="selector-dropdown" id="model-dd">
+                <div class="dd-header">Anthropic</div>
+                <div class="dd-item selected" onclick="selectModel(this, 'Claude Sonnet 4', 'S4', 'var(--accent)')">
+                  <span class="dd-icon" style="background:var(--accent-dim);color:var(--accent)">S4</span>
+                  <div><div class="dd-name">Claude Sonnet 4</div><div class="dd-desc">Fast, balanced · 200K context</div></div>
+                  <span class="dd-check">✓</span>
+                </div>
+                <div class="dd-item" onclick="selectModel(this, 'Claude Opus 4', 'O4', '#f59e0b')">
+                  <span class="dd-icon" style="background:rgba(245,158,11,.15);color:#f59e0b">O4</span>
+                  <div><div class="dd-name">Claude Opus 4</div><div class="dd-desc">Most capable · 200K context</div></div>
+                  <span class="dd-check" style="visibility:hidden">✓</span>
+                </div>
+                <div class="dd-item" onclick="selectModel(this, 'Claude Haiku 3.5', 'H3', '#22c55e')">
+                  <span class="dd-icon" style="background:rgba(34,197,94,.15);color:#22c55e">H3</span>
+                  <div><div class="dd-name">Claude Haiku 3.5</div><div class="dd-desc">Fastest, lightweight · 200K context</div></div>
+                  <span class="dd-check" style="visibility:hidden">✓</span>
+                </div>
+                <div class="dd-divider"></div>
+                <div class="dd-header">OpenAI</div>
+                <div class="dd-item" onclick="selectModel(this, 'GPT-4o', 'G4', '#3b82f6')">
+                  <span class="dd-icon" style="background:rgba(59,130,246,.15);color:#3b82f6">G4</span>
+                  <div><div class="dd-name">GPT-4o</div><div class="dd-desc">Multimodal · 128K context</div></div>
+                  <span class="dd-check" style="visibility:hidden">✓</span>
+                </div>
+                <div class="dd-item" onclick="selectModel(this, 'o3', 'o3', '#a855f7')">
+                  <span class="dd-icon" style="background:rgba(168,85,247,.15);color:#a855f7">o3</span>
+                  <div><div class="dd-name">o3</div><div class="dd-desc">Reasoning · 200K context</div></div>
+                  <span class="dd-check" style="visibility:hidden">✓</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Effort Toggle -->
+            <div class="effort-toggle" title="Reasoning effort" onclick="cycleEffort()">
+              <span class="effort-label">Effort</span>
+              <div class="effort-dot filled" data-level="1"></div>
+              <div class="effort-dot filled" data-level="2"></div>
+              <div class="effort-dot" data-level="3"></div>
+            </div>
+
+            <button class="send-btn">Send <span class="send-key">↵</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CENTER: KANBAN BOARD -->
+    <div class="center hidden" id="center-board">
+      <div class="kanban-container">
+        <div class="kanban-header">
+          <h1>Fleet Board</h1>
+          <span class="subtitle">All Projects</span>
+          <button class="btn-accent">New Session</button>
+        </div>
+        <div class="kanban-board">
+          <!-- QUEUED -->
+          <div class="kanban-col">
+            <div class="col-header">
+              <div class="col-bar" style="background:var(--queued)"></div>
+              <div class="col-title">Queued <span class="col-count">(3)</span></div>
+            </div>
+            <div class="col-cards">
+              <div class="k-card" style="border-left-color:#f59e0b">
+                <div class="k-card-title">Setup GitHub Actions</div>
+                <div class="k-card-project"><span class="dot" style="background:#f59e0b"></span>CI/CD Pipeline</div>
+                <div class="k-card-pills"><span class="k-pill agent">Tapestry</span><span class="k-pill">Sonnet 4</span></div>
+              </div>
+              <div class="k-card" style="border-left-color:#22c55e">
+                <div class="k-card-title">Add read replicas</div>
+                <div class="k-card-project"><span class="dot" style="background:#22c55e"></span>Database Refactor</div>
+                <div class="k-card-pills"><span class="k-pill agent">Shuttle</span><span class="k-pill">Opus 4</span></div>
+              </div>
+              <div class="k-card" style="border-left-color:#ef4444">
+                <div class="k-card-title">E2E test suite</div>
+                <div class="k-card-project"><span class="dot" style="background:#ef4444"></span>Frontend Redesign</div>
+                <div class="k-card-pills"><span class="k-pill agent">Thread</span><span class="k-pill">Sonnet 4</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RUNNING -->
+          <div class="kanban-col">
+            <div class="col-header">
+              <div class="col-bar" style="background:var(--running)"></div>
+              <div class="col-title">Running <span class="col-count">(4)</span></div>
+            </div>
+            <div class="col-cards">
+              <div class="k-card" style="border-left-color:#6366f1">
+                <div class="k-card-title">Implement token refresh</div>
+                <div class="k-card-project"><span class="dot" style="background:#6366f1"></span>OAuth Integration</div>
+                <div class="k-card-pills"><span class="k-pill agent">Tapestry</span><span class="k-pill">Sonnet 4</span></div>
+                <div class="k-card-footer"><span>2m</span><span>12K tok</span><span>$0.04</span></div>
+                <div class="k-progress" style="width:60%"></div>
+              </div>
+              <div class="k-card" style="border-left-color:#6366f1">
+                <div class="k-card-title">Add PKCE support</div>
+                <div class="k-card-project"><span class="dot" style="background:#6366f1"></span>OAuth Integration</div>
+                <div class="k-card-pills"><span class="k-pill agent">Shuttle</span><span class="k-pill">Sonnet 4</span></div>
+                <div class="k-card-footer"><span>5m</span><span>28K tok</span><span>$0.09</span></div>
+                <div class="k-progress" style="width:35%"></div>
+              </div>
+              <div class="k-card" style="border-left-color:#3b82f6">
+                <div class="k-card-title">Migrate user endpoints</div>
+                <div class="k-card-project"><span class="dot" style="background:#3b82f6"></span>API v2 Migration</div>
+                <div class="k-card-pills"><span class="k-pill agent">Tapestry</span><span class="k-pill">Opus 4</span></div>
+                <div class="k-card-footer"><span>30s</span><span>3K tok</span><span>$0.02</span></div>
+                <div class="k-progress" style="width:10%"></div>
+              </div>
+              <div class="k-card" style="border-left-color:#ef4444">
+                <div class="k-card-title">Component library setup</div>
+                <div class="k-card-project"><span class="dot" style="background:#ef4444"></span>Frontend Redesign</div>
+                <div class="k-card-pills"><span class="k-pill agent">Pattern</span><span class="k-pill">Sonnet 4</span></div>
+                <div class="k-card-footer"><span>8m</span><span>45K tok</span><span>$0.14</span></div>
+                <div class="k-progress" style="width:72%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- IN REVIEW -->
+          <div class="kanban-col">
+            <div class="col-header">
+              <div class="col-bar" style="background:var(--idle)"></div>
+              <div class="col-title">In Review <span class="col-count">(2)</span></div>
+            </div>
+            <div class="col-cards">
+              <div class="k-card" style="border-left-color:#6366f1">
+                <div class="k-card-title">OAuth state validation</div>
+                <div class="k-card-project"><span class="dot" style="background:#6366f1"></span>OAuth Integration</div>
+                <div class="k-card-pills"><span class="k-pill agent">Thread</span></div>
+                <div class="k-card-footer"><span>18m</span><span>89K tok</span><span>$0.28</span></div>
+              </div>
+              <div class="k-card" style="border-left-color:#3b82f6">
+                <div class="k-card-title">Backward compat layer</div>
+                <div class="k-card-project"><span class="dot" style="background:#3b82f6"></span>API v2 Migration</div>
+                <div class="k-card-pills"><span class="k-pill agent">Pattern</span></div>
+                <div class="k-card-footer"><span>22m</span><span>102K tok</span><span>$0.52</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- COMPLETED -->
+          <div class="kanban-col">
+            <div class="col-header">
+              <div class="col-bar" style="background:var(--complete)"></div>
+              <div class="col-title">Completed <span class="col-count">(5)</span></div>
+            </div>
+            <div class="col-cards">
+              <div class="k-card" style="border-left-color:#6366f1">
+                <div class="k-card-title">Authorization code flow</div>
+                <div class="k-card-project"><span class="dot" style="background:#6366f1"></span>OAuth Integration</div>
+                <div class="k-card-pills"><span class="k-pill agent">Warp</span></div>
+                <div class="k-card-footer"><span>45m</span><span>156K tok</span><span>$0.48</span></div>
+              </div>
+              <div class="k-card" style="border-left-color:#6366f1">
+                <div class="k-card-title">Rate limiting per client</div>
+                <div class="k-card-project"><span class="dot" style="background:#6366f1"></span>OAuth Integration</div>
+                <div class="k-card-pills"><span class="k-pill agent">Weft</span></div>
+                <div class="k-card-footer"><span>32m</span><span>98K tok</span><span>$0.30</span></div>
+              </div>
+              <div class="k-card" style="border-left-color:#6366f1">
+                <div class="k-card-title">Mock OAuth provider</div>
+                <div class="k-card-project"><span class="dot" style="background:#6366f1"></span>OAuth Integration</div>
+                <div class="k-card-pills"><span class="k-pill agent">Tapestry</span></div>
+                <div class="k-card-footer"><span>15m</span><span>34K tok</span><span>$0.02</span></div>
+              </div>
+              <div class="k-card" style="border-left-color:#3b82f6">
+                <div class="k-card-title">Deprecation headers</div>
+                <div class="k-card-project"><span class="dot" style="background:#3b82f6"></span>API v2 Migration</div>
+                <div class="k-card-pills"><span class="k-pill agent">Thread</span></div>
+                <div class="k-card-footer"><span>20m</span><span>67K tok</span><span>$0.21</span></div>
+              </div>
+              <div class="k-card" style="border-left-color:#22c55e">
+                <div class="k-card-title">Connection pooling</div>
+                <div class="k-card-project"><span class="dot" style="background:#22c55e"></span>Database Refactor</div>
+                <div class="k-card-pills"><span class="k-pill agent">Shuttle</span></div>
+                <div class="k-card-footer"><span>38m</span><span>145K tok</span><span>$0.74</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- FAILED -->
+          <div class="kanban-col">
+            <div class="col-header">
+              <div class="col-bar" style="background:var(--error)"></div>
+              <div class="col-title">Failed <span class="col-count">(1)</span></div>
+            </div>
+            <div class="col-cards">
+              <div class="k-card failed-card" style="border-left-color:#3b82f6">
+                <div class="k-card-title">API v2 contract tests</div>
+                <div class="k-card-project"><span class="dot" style="background:#3b82f6"></span>API v2 Migration</div>
+                <div class="k-card-pills"><span class="k-pill agent">Weft</span></div>
+                <div class="k-card-footer"><span>12m</span><span>56K tok</span><span>$0.17</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL: SESSION VIEW -->
+    <div class="right-panel" id="right-sessions">
+      <div class="right-tabs">
+        <div class="right-tab active" onclick="switchRightTab(0, 'right-sessions')">Session</div>
+        <div class="right-tab" onclick="switchRightTab(1, 'right-sessions')">Plan / TODO</div>
+      </div>
+      <!-- Session Tab -->
+      <div class="right-content right-tab-content" data-tab="0">
+
+        <!-- Session header card -->
+        <div class="session-header-card">
+          <div class="session-title-row">
+            <span class="session-title-text">Implement token refresh</span>
+            <span class="session-status-badge running">● Running</span>
+          </div>
+          <div class="session-project-link">
+            <span class="proj-dot" style="background:var(--accent)"></span>
+            OAuth Integration
+          </div>
+          <div class="session-meta-row">
+            <span class="meta-item"><span class="meta-icon">⏱</span> 2m 34s</span>
+            <span class="meta-item"><span class="meta-icon">↻</span> 3 turns</span>
+          </div>
+        </div>
+
+        <!-- Agent & Model -->
+        <div class="rp-section-title">Configuration</div>
+        <div class="info-row">
+          <span class="ir-label">Agent</span>
+          <span class="ir-value">
+            <span class="ir-icon" style="background:var(--accent-dim);color:var(--accent)">T</span>
+            Tapestry
+          </span>
+        </div>
+        <div class="info-row">
+          <span class="ir-label">Model</span>
+          <span class="ir-value">
+            <span class="ir-icon" style="background:var(--accent-dim);color:var(--accent)">S4</span>
+            Claude Sonnet 4
+          </span>
+        </div>
+        <div class="info-row">
+          <span class="ir-label">Effort</span>
+          <span class="ir-value" style="gap:3px">
+            <span style="width:7px;height:7px;border-radius:50%;background:var(--accent)"></span>
+            <span style="width:7px;height:7px;border-radius:50%;background:var(--accent)"></span>
+            <span style="width:7px;height:7px;border-radius:50%;background:#3f3f46"></span>
+            <span style="color:var(--muted);font-size:11px;margin-left:4px">Medium</span>
+          </span>
+        </div>
+
+        <div class="info-divider"></div>
+
+        <!-- Context Window -->
+        <div class="rp-section-title">Context Window</div>
+        <div class="context-meter">
+          <div class="context-meter-header">
+            <span class="cm-label">Usage</span>
+            <span class="cm-value">42,800 / 200K</span>
+          </div>
+          <div class="context-meter-bar">
+            <div class="context-meter-fill" style="width:21%"></div>
+          </div>
+        </div>
+
+        <!-- Tokens & Cost -->
+        <div class="rp-section-title">Tokens &amp; Cost</div>
+        <div class="token-grid">
+          <div class="token-card">
+            <div class="tc-val">12,400</div>
+            <div class="tc-lbl">Input Tokens</div>
+            <div class="tc-sub">$0.024</div>
+          </div>
+          <div class="token-card">
+            <div class="tc-val">3,840</div>
+            <div class="tc-lbl">Output Tokens</div>
+            <div class="tc-sub">$0.019</div>
+          </div>
+          <div class="token-card">
+            <div class="tc-val">26,560</div>
+            <div class="tc-lbl">Cache Read</div>
+            <div class="tc-sub">$0.003</div>
+          </div>
+          <div class="token-card">
+            <div class="tc-val" style="color:var(--accent)">$0.046</div>
+            <div class="tc-lbl">Total Cost</div>
+            <div class="tc-sub">this session</div>
+          </div>
+        </div>
+
+        <div class="info-divider"></div>
+
+        <!-- Files Changed -->
+        <div class="rp-section-title">Files Changed</div>
+        <div class="files-summary">
+          <span class="fs-count">4 files</span>
+          <span class="fs-adds">+128</span>
+          <span class="fs-dels">−14</span>
+        </div>
+        <div class="file-item">
+          <span class="fi-icon">📄</span>
+          <span class="fi-name">src/auth/refresh.go</span>
+          <span class="fi-stat"><span class="fi-add">+86</span> <span class="fi-del">−2</span></span>
+        </div>
+        <div class="file-item">
+          <span class="fi-icon">📄</span>
+          <span class="fi-name">src/auth/refresh_test.go</span>
+          <span class="fi-stat"><span class="fi-add">+34</span></span>
+        </div>
+        <div class="file-item">
+          <span class="fi-icon">📄</span>
+          <span class="fi-name">src/auth/token_store.go</span>
+          <span class="fi-stat"><span class="fi-add">+6</span> <span class="fi-del">−12</span></span>
+        </div>
+        <div class="file-item">
+          <span class="fi-icon">📄</span>
+          <span class="fi-name">src/auth/options.go</span>
+          <span class="fi-stat"><span class="fi-add">+2</span></span>
+        </div>
+
+      </div>
+      <!-- Plan Tab -->
+      <div class="right-content right-tab-content hidden" data-tab="1">
+        <div class="plan-title">Token Refresh Implementation</div>
+        <div class="todo-item"><div class="todo-check checked">✓</div><span class="todo-text done">Analyze existing TokenStore interface</span></div>
+        <div class="todo-item"><div class="todo-check checked">✓</div><span class="todo-text done">Design RefreshScheduler architecture</span></div>
+        <div class="todo-item"><div class="todo-check checked">✓</div><span class="todo-text done">Implement sliding window logic</span></div>
+        <div class="todo-item"><div class="todo-check in-progress"></div><span class="todo-text">Add concurrent refresh protection</span></div>
+        <div class="todo-item"><div class="todo-check"></div><span class="todo-text">Implement retry with exponential backoff</span></div>
+        <div class="todo-item"><div class="todo-check"></div><span class="todo-text">Add metrics and observability hooks</span></div>
+        <div class="todo-item"><div class="todo-check"></div><span class="todo-text">Write integration tests</span></div>
+        <div class="todo-item"><div class="todo-check"></div><span class="todo-text">Update documentation</span></div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL: BOARD VIEW -->
+    <div class="right-panel hidden" id="right-board">
+      <div class="right-tabs">
+        <div class="right-tab active" onclick="switchRightTab(0, 'right-board')">Summary</div>
+        <div class="right-tab" onclick="switchRightTab(1, 'right-board')">Activity</div>
+      </div>
+      <!-- Summary Tab -->
+      <div class="right-content right-tab-content" data-tab="0">
+        <div class="summary-big">15</div>
+        <div class="summary-label">Total Sessions</div>
+        <div class="stacked-bar">
+          <div class="stacked-segment" style="width:20%;background:var(--queued)" title="Queued: 3"></div>
+          <div class="stacked-segment" style="width:26.7%;background:var(--running)" title="Running: 4"></div>
+          <div class="stacked-segment" style="width:13.3%;background:var(--idle)" title="In Review: 2"></div>
+          <div class="stacked-segment" style="width:33.3%;background:var(--complete)" title="Complete: 5"></div>
+          <div class="stacked-segment" style="width:6.7%;background:var(--error)" title="Failed: 1"></div>
+        </div>
+        <div class="bar-row"><span class="bar-label">Queued</span><div class="bar-track"><div class="bar-fill" style="width:20%;background:var(--queued)"></div></div><span class="bar-val">3</span></div>
+        <div class="bar-row"><span class="bar-label">Running</span><div class="bar-track"><div class="bar-fill" style="width:27%;background:var(--running)"></div></div><span class="bar-val">4</span></div>
+        <div class="bar-row"><span class="bar-label">In Review</span><div class="bar-track"><div class="bar-fill" style="width:13%;background:var(--idle)"></div></div><span class="bar-val">2</span></div>
+        <div class="bar-row"><span class="bar-label">Complete</span><div class="bar-track"><div class="bar-fill" style="width:33%;background:var(--complete)"></div></div><span class="bar-val">5</span></div>
+        <div class="bar-row" style="margin-bottom:16px"><span class="bar-label">Failed</span><div class="bar-track"><div class="bar-fill" style="width:7%;background:var(--error)"></div></div><span class="bar-val">1</span></div>
+
+        <div class="rp-section-title">Top Agents</div>
+        <div class="agents-list">
+          <div class="agent-row"><span>Tapestry</span><span style="color:var(--muted)">6</span></div>
+          <div class="agent-row"><span>Shuttle</span><span style="color:var(--muted)">3</span></div>
+          <div class="agent-row"><span>Thread</span><span style="color:var(--muted)">2</span></div>
+          <div class="agent-row"><span>Pattern</span><span style="color:var(--muted)">2</span></div>
+          <div class="agent-row"><span>Weft</span><span style="color:var(--muted)">2</span></div>
+        </div>
+
+        <div class="rp-section-title">Cost by Project</div>
+        <div class="cost-list">
+          <div class="cost-row"><span>OAuth Integration</span><span class="cost-val">$1.08</span></div>
+          <div class="cost-row"><span>API v2 Migration</span><span class="cost-val">$1.64</span></div>
+          <div class="cost-row"><span>Database Refactor</span><span class="cost-val">$0.74</span></div>
+          <div class="cost-row"><span>CI/CD Pipeline</span><span class="cost-val">$0.00</span></div>
+          <div class="cost-row"><span>Frontend Redesign</span><span class="cost-val">$0.14</span></div>
+        </div>
+      </div>
+      <!-- Activity Tab -->
+      <div class="right-content right-tab-content hidden" data-tab="1">
+        <div class="activity-feed-item"><span class="af-time">2m ago</span> — <span class="af-session">Implement token refresh</span> — <span class="af-action">Edited src/auth/refresh.go</span></div>
+        <div class="activity-feed-item"><span class="af-time">3m ago</span> — <span class="af-session">Implement token refresh</span> — <span class="af-action" style="color:var(--running)">Tests passing (3/3)</span></div>
+        <div class="activity-feed-item"><span class="af-time">5m ago</span> — <span class="af-session">Add PKCE support</span> — <span class="af-action">Running tests...</span></div>
+        <div class="activity-feed-item"><span class="af-time">8m ago</span> — <span class="af-session">Component library</span> — <span class="af-action">Created 12 files</span></div>
+        <div class="activity-feed-item"><span class="af-time">12m ago</span> — <span class="af-session" style="color:var(--error)">API v2 contract tests</span> — <span class="af-action" style="color:var(--error)">Failed: 3 assertions</span></div>
+        <div class="activity-feed-item"><span class="af-time">15m ago</span> — <span class="af-session">Mock OAuth provider</span> — <span class="af-action" style="color:var(--running)">Completed ✓</span></div>
+        <div class="activity-feed-item"><span class="af-time">18m ago</span> — <span class="af-session">OAuth state validation</span> — <span class="af-action" style="color:var(--complete)">Moved to review</span></div>
+        <div class="activity-feed-item"><span class="af-time">20m ago</span> — <span class="af-session">Deprecation headers</span> — <span class="af-action" style="color:var(--running)">Completed ✓</span></div>
+        <div class="activity-feed-item"><span class="af-time">22m ago</span> — <span class="af-session">Backward compat layer</span> — <span class="af-action">Moved to review</span></div>
+        <div class="activity-feed-item"><span class="af-time">30m ago</span> — <span class="af-session">Migrate user endpoints</span> — <span class="af-action">Started session</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── STATE ──
+let currentView = 'sessions'; // 'sessions' | 'board' | plugin id
+const pluginIds = ['github', 'linear', 'marketplace', 'slack', 'docker', 'sentry'];
+
+// ── RAIL NAVIGATION ──
+function selectRailItem(id) {
+  // Update rail icons
+  document.querySelectorAll('.rail-item[data-id]').forEach(el => el.classList.toggle('active', el.dataset.id === id));
+
+  const isPlugin = pluginIds.includes(id);
+  const isSessions = id === 'sessions';
+  const isBoard = id === 'board';
+
+  // Hide all context panels
+  document.getElementById('ctx-sessions').classList.add('hidden');
+  document.getElementById('ctx-board').classList.add('hidden');
+  pluginIds.forEach(pid => document.getElementById('ctx-' + pid).classList.add('hidden'));
+
+  // Show the right context panel
+  if (isSessions) {
+    document.getElementById('ctx-sessions').classList.remove('hidden');
+  } else if (isBoard) {
+    document.getElementById('ctx-board').classList.remove('hidden');
+  } else if (isPlugin) {
+    document.getElementById('ctx-' + id).classList.remove('hidden');
+  }
+
+  // Center content: plugins don't change the center, sessions/board do
+  if (!isPlugin) {
+    currentView = id;
+    document.getElementById('center-sessions').classList.toggle('hidden', !isSessions);
+    document.getElementById('center-board').classList.toggle('hidden', isSessions);
+    document.getElementById('right-sessions').classList.toggle('hidden', !isSessions);
+    document.getElementById('right-board').classList.toggle('hidden', isSessions);
+  }
+
+  // Update breadcrumb
+  updateBreadcrumb(isPlugin ? id : null);
+}
+
+function updateBreadcrumb(pluginId) {
+  const bc = document.getElementById('breadcrumb');
+  if (pluginId) {
+    const name = pluginId.charAt(0).toUpperCase() + pluginId.slice(1);
+    bc.innerHTML = `<span class="crumb" onclick="selectRailItem('sessions')">Weave Fleet</span><span class="sep">›</span><span class="crumb">${name}</span>`;
+    return;
+  }
+  if (currentView === 'board') {
+    bc.innerHTML = '<span class="crumb" onclick="selectRailItem(\'sessions\')">Weave Fleet</span><span class="sep">›</span><span class="crumb">Board</span>';
+  } else {
+    const active = document.querySelector('.session-item.active');
+    if (active) {
+      const project = active.closest('.project-group')?.querySelector('.project-name')?.textContent || '';
+      const session = active.querySelector('.session-title')?.textContent || '';
+      bc.innerHTML = `<span class="crumb" onclick="selectRailItem('sessions')">Weave Fleet</span><span class="sep">›</span><span class="crumb">${project}</span><span class="sep">›</span><span class="crumb">${session}</span>`;
+    } else {
+      bc.innerHTML = '<span class="crumb">Weave Fleet</span>';
+    }
+  }
+}
+
+// ── PROJECT GROUPS ──
+function toggleGroup(header) {
+  header.classList.toggle('collapsed');
+}
+
+// ── SESSION SELECTION ──
+function selectSession(el, project, color, title) {
+  document.querySelectorAll('.session-item').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  updateBreadcrumb();
+}
+
+// ── RIGHT PANEL TABS ──
+function switchRightTab(idx, panelId) {
+  const panel = document.getElementById(panelId);
+  panel.querySelectorAll('.right-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+  panel.querySelectorAll('.right-tab-content').forEach((c, i) => c.classList.toggle('hidden', i !== idx));
+}
+
+// ── TOOL CARDS ──
+function toggleToolCard(card) {
+  card.classList.toggle('collapsed');
+}
+
+// ── SEARCH FILTER ──
+function filterSidebar(query) {
+  const q = query.toLowerCase();
+  document.querySelectorAll('.session-item').forEach(el => {
+    const title = el.querySelector('.session-title')?.textContent.toLowerCase() || '';
+    el.style.display = title.includes(q) ? '' : 'none';
+  });
+  document.querySelectorAll('.project-group').forEach(g => {
+    const visible = g.querySelectorAll('.session-item:not([style*="display: none"])').length;
+    g.style.display = visible > 0 || !q ? '' : 'none';
+  });
+}
+
+// ── RADIO PILLS ──
+function setRadioPill(el) {
+  el.parentElement.querySelectorAll('.radio-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// ── PLUGIN TABS ──
+function switchPluginTab(tab, panelId, idx) {
+  const panel = document.getElementById(panelId);
+  panel.querySelectorAll('.plugin-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+  panel.querySelectorAll('.plugin-tab-content').forEach((c, i) => c.classList.toggle('hidden', i !== idx));
+}
+
+// ── AUTO-RESIZE TEXTAREA ──
+document.querySelector('.composer-box textarea')?.addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 140) + 'px';
+});
+
+// ── DROPDOWN TOGGLES ──
+function toggleDropdown(id, e) {
+  e.stopPropagation();
+  const dd = document.getElementById(id);
+  const wasOpen = dd.classList.contains('show');
+  // Close all dropdowns first
+  document.querySelectorAll('.selector-dropdown').forEach(d => d.classList.remove('show'));
+  if (!wasOpen) dd.classList.add('show');
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.selector-dropdown')) {
+    document.querySelectorAll('.selector-dropdown').forEach(d => d.classList.remove('show'));
+  }
+});
+
+// ── MODEL SELECTOR ──
+function selectModel(item, name, abbr, color) {
+  // Update dropdown checks
+  const dd = item.closest('.selector-dropdown');
+  dd.querySelectorAll('.dd-item').forEach(i => {
+    i.classList.remove('selected');
+    i.querySelector('.dd-check').style.visibility = 'hidden';
+  });
+  item.classList.add('selected');
+  item.querySelector('.dd-check').style.visibility = 'visible';
+
+  // Update button
+  const btn = dd.closest('.selector-btn');
+  btn.querySelector('.sel-icon').textContent = abbr;
+  btn.querySelector('.sel-icon').style.background = `${color}22`;
+  btn.querySelector('.sel-icon').style.color = color;
+  btn.querySelector('.sel-value').textContent = name;
+
+  // Close dropdown
+  dd.classList.remove('show');
+}
+
+// ── AGENT SELECTOR ──
+function selectAgent(item, name, abbr, desc) {
+  const dd = item.closest('.selector-dropdown');
+  dd.querySelectorAll('.dd-item').forEach(i => {
+    i.classList.remove('selected');
+    i.querySelector('.dd-check').style.visibility = 'hidden';
+  });
+  item.classList.add('selected');
+  item.querySelector('.dd-check').style.visibility = 'visible';
+
+  // Update button
+  const btn = dd.closest('.selector-btn');
+  const iconEl = item.querySelector('.dd-icon');
+  btn.querySelector('.sel-icon').textContent = abbr;
+  btn.querySelector('.sel-icon').style.background = iconEl.style.background;
+  btn.querySelector('.sel-icon').style.color = iconEl.style.color;
+  btn.querySelector('.sel-value').textContent = name;
+
+  // Update placeholder
+  const textarea = document.querySelector('.composer-box textarea');
+  if (textarea) textarea.placeholder = `Message ${name}…`;
+
+  dd.classList.remove('show');
+}
+
+// ── EFFORT CYCLE ──
+let effortLevel = 2; // 1=low, 2=medium, 3=high
+function cycleEffort() {
+  effortLevel = (effortLevel % 3) + 1;
+  const dots = document.querySelectorAll('.effort-toggle .effort-dot');
+  const labels = ['Low', 'Medium', 'High'];
+  dots.forEach((dot, i) => {
+    dot.classList.toggle('filled', i < effortLevel);
+  });
+  document.querySelector('.effort-toggle').title = `Reasoning effort: ${labels[effortLevel - 1]}`;
+}
+</script>
+</body>
+</html>
