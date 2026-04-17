@@ -12,9 +12,9 @@ public static class NatsServiceCollectionExtensions
     /// Register the NATS event substrate: embedded server (if applicable), stream initializer,
     /// publisher, projection host, and any projections declared via the fluent builder.
     /// <para>
-    /// Does NOT register the ephemeral-event relay service — that is wired in
-    /// <c>DependencyInjection.cs</c> alongside its broadcaster dependency so registration order
-    /// is always correct.
+    /// Does NOT register the unified fan-out subscriber (<c>WebSocketFanOutSubscriber</c>) —
+    /// that is wired in <c>DependencyInjection.cs</c> alongside its broadcaster dependency so
+    /// registration order is always correct.
     /// </para>
     /// </summary>
     public static IServiceCollection AddEventStore(
