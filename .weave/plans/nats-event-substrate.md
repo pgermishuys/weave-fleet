@@ -54,16 +54,18 @@
 ### New files (Infrastructure)
 
 - `src/WeaveFleet.Infrastructure/Nats/NatsServerHostedService.cs` — launches bundled `nats-server` subprocess, no-op when `Fleet:Nats:ExternalUrl` is set.
-- `src/WeaveFleet.Infrastructure/Nats/NatsStreamInitializer.cs` — idempotent JetStream stream creation on startup.
-- `src/WeaveFleet.Infrastructure/Nats/NatsEventPublisher.cs` — `IEventPublisher` implementation; routes by `EventTypeMetadata.Classify`; sets `Nats-Msg-Id` and headers; awaits `PubAck`.
-- `src/WeaveFleet.Infrastructure/Nats/NatsNamingStrategy.cs` — subject/stream/consumer prefix helper (tenant/project/session resolution).
+- `src/WeaveFleet.Infrastructure/Nats/NatsStreamInitializer.cs` — idempotent JetStream stream creation AND pre-creation of every registered projection's durable consumer on startup.
+- `src/WeaveFleet.Infrastructure/Nats/NatsEventPublisher.cs` — `IEventPublisher` implementation; routes by `EventTypeMetadata.Classify`; sets `Nats-Msg-Id`, `x-fleet-*` headers, `traceparent`/`tracestate`; awaits `PubAck`.
+- `src/WeaveFleet.Infrastructure/Nats/NatsNamingStrategy.cs` — subject/stream/consumer prefix helper with segment validation (rejects `.`, `*`, `>`, whitespace in ids).
 - `src/WeaveFleet.Infrastructure/Nats/NatsMetrics.cs` — OpenTelemetry metric + counter definitions.
-- `src/WeaveFleet.Infrastructure/Nats/ProjectionListener.cs` — generic JetStream durable-consumer pump.
+- `src/WeaveFleet.Infrastructure/Nats/ProjectionListener.cs` — generic JetStream durable-consumer pump; extracts trace context; TERMs oversize/malformed/poisoned messages.
 - `src/WeaveFleet.Infrastructure/Nats/ProjectionHostService.cs` — hosted service that spins up one `ProjectionListener` per registered projection.
 - `src/WeaveFleet.Infrastructure/Nats/EmbeddedNatsServer/NatsServerBinaryResolver.cs` — picks the right bundled binary for the current RID.
-- `src/WeaveFleet.Infrastructure/Nats/Configuration/NatsStreamBuilder.cs` — fluent DI surface for stream config + projection registration.
+- `src/WeaveFleet.Infrastructure/Nats/Configuration/NatsStreamBuilder.cs` — fluent DI surface for stream config + projection registration; `ConsumerScope` enum (Cluster vs PerNode).
 - `src/WeaveFleet.Infrastructure/Nats/Configuration/NatsServiceCollectionExtensions.cs` — `AddEventStore(...)` extension.
+- `src/WeaveFleet.Infrastructure/Nats/Configuration/NatsOptionsConfigurator.cs` — post-configurator applying per-hosting-mode `MaxAge` defaults.
 - `src/WeaveFleet.Infrastructure/Nats/EphemeralEventRelayService.cs` — core NATS subscriber; forwards ephemeral events to `IEventBroadcaster`.
+- `src/WeaveFleet.Infrastructure/Services/HarnessEventShadowPersistenceService.cs` — shadow-mode persister used during the Phase 3 compatibility window (retired in Phase 4).
 
 ### New files (Application)
 
@@ -86,16 +88,28 @@
 ### Test files (new)
 
 - `tests/WeaveFleet.Infrastructure.Tests/Nats/NatsEventPublisherTests.cs`
-- `tests/WeaveFleet.Infrastructure.Tests/Nats/NatsNamingStrategyTests.cs`
+- `tests/WeaveFleet.Infrastructure.Tests/Nats/NatsNamingStrategyTests.cs` (including segment-injection rejection + node-id consumer naming)
 - `tests/WeaveFleet.Infrastructure.Tests/Nats/NatsStreamInitializerTests.cs`
+- `tests/WeaveFleet.Infrastructure.Tests/Nats/NatsOptionsConfiguratorTests.cs`
 - `tests/WeaveFleet.Infrastructure.Tests/Nats/ProjectionListenerTests.cs`
 - `tests/WeaveFleet.Infrastructure.Tests/Nats/NatsServerHostedServiceTests.cs`
+- `tests/WeaveFleet.Infrastructure.Tests/Nats/CredsFileLoggingTests.cs` — asserts `CredsFile` path is never logged.
+- `tests/WeaveFleet.Infrastructure.Tests/Services/DeltaMergeBeforePublishTests.cs` — pure-function merge helper (Task 4.0).
+- `tests/WeaveFleet.Infrastructure.Tests/Services/HarnessEventShadowPersistenceServiceTests.cs`
 - `tests/WeaveFleet.Application.Tests/Projections/MessagePersistenceProjectionTests.cs`
 - `tests/WeaveFleet.Application.Tests/Projections/WebSocketFanOutProjectionTests.cs`
 - `tests/WeaveFleet.Api.Tests/Nats/NatsEventSubstrateEndToEndTests.cs`
+- `tests/WeaveFleet.Api.Tests/Nats/MergedDurablePayloadTests.cs` — JetStream payload already contains merged text.
 - `tests/WeaveFleet.Api.Tests/Nats/ShadowDiffHarnessTests.cs`
+- `tests/WeaveFleet.Api.Tests/Nats/WebSocketAuthzTests.cs` — forged `x-fleet-user-id` does not cross subscriber boundaries.
 - `tests/WeaveFleet.Testing/Nats/EmbeddedNatsTestFixture.cs` — shared xUnit fixture that launches embedded `nats-server` on a random port for integration tests.
 - `tests/WeaveFleet.Testing/Nats/FakeEventPublisher.cs` — hand-crafted fake for unit tests that do not need a real broker.
+
+### Build / tooling
+
+- `build/nats-server-checksums.txt` — SHA-256 pin per bundled RID binary.
+- `build/verify-nats-server-binaries.ps1` — pre-build verifier; MSBuild target fails the build on mismatch.
+- `.gitattributes` — LFS rule for `src/WeaveFleet.Infrastructure/Nats/EmbeddedNatsServer/Binaries/**`.
 
 ---
 
@@ -272,7 +286,54 @@ chmod +x src/WeaveFleet.Infrastructure/Nats/EmbeddedNatsServer/Binaries/osx-x64/
 chmod +x src/WeaveFleet.Infrastructure/Nats/EmbeddedNatsServer/Binaries/osx-arm64/nats-server
 ```
 
-- [ ] **Step 2: Wire binaries into the build.**
+- [ ] **Step 2: Pin SHA-256 checksums.**
+
+Each nats-server release publishes `SHA256SUMS`. Copy the relevant entries into `build/nats-server-checksums.txt`:
+
+```
+# nats-server vX.Y.Z — verified against https://github.com/nats-io/nats-server/releases/download/vX.Y.Z/SHA256SUMS
+# Format: <sha256>  <relative binary path from repo root>
+<sha256>  src/WeaveFleet.Infrastructure/Nats/EmbeddedNatsServer/Binaries/win-x64/nats-server.exe
+<sha256>  src/WeaveFleet.Infrastructure/Nats/EmbeddedNatsServer/Binaries/linux-x64/nats-server
+<sha256>  src/WeaveFleet.Infrastructure/Nats/EmbeddedNatsServer/Binaries/osx-x64/nats-server
+<sha256>  src/WeaveFleet.Infrastructure/Nats/EmbeddedNatsServer/Binaries/osx-arm64/nats-server
+```
+
+Create a pre-build verification script `build/verify-nats-server-binaries.ps1` (PowerShell — cross-platform with pwsh):
+
+```powershell
+#!/usr/bin/env pwsh
+$ErrorActionPreference = 'Stop'
+$repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
+$checksumFile = Join-Path $PSScriptRoot 'nats-server-checksums.txt'
+if (-not (Test-Path $checksumFile)) { throw "Checksum file missing: $checksumFile" }
+
+Get-Content $checksumFile | ForEach-Object {
+    $line = $_.Trim()
+    if (-not $line -or $line.StartsWith('#')) { return }
+    $expected, $path = $line -split '\s+', 2
+    $full = Join-Path $repoRoot $path.Trim()
+    if (-not (Test-Path $full)) { throw "Binary missing: $full" }
+    $actual = (Get-FileHash $full -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actual -ne $expected.ToLowerInvariant()) {
+        throw "Checksum mismatch for $path`nExpected: $expected`nActual:   $actual"
+    }
+}
+Write-Host "All nats-server binaries verified."
+```
+
+Add an MSBuild `<Target>` in `Directory.Build.props` (or in `WeaveFleet.Infrastructure.csproj`) that runs before `Build`:
+
+```xml
+  <Target Name="VerifyNatsServerBinaries" BeforeTargets="BeforeBuild"
+          Condition="'$(MSBuildProjectName)' == 'WeaveFleet.Infrastructure'">
+    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildThisFileDirectory)build\verify-nats-server-binaries.ps1&quot;" />
+  </Target>
+```
+
+Add a negative test for the checksum script: deliberately corrupt the first byte of one binary in a copy, run the script, assert it throws. Keep the corrupt copy out of the repo.
+
+- [ ] **Step 3: Wire binaries into the build (with LFS or alternative).**
 
 Edit `src/WeaveFleet.Infrastructure/WeaveFleet.Infrastructure.csproj` — add:
 
@@ -282,19 +343,30 @@ Edit `src/WeaveFleet.Infrastructure/WeaveFleet.Infrastructure.csproj` — add:
   </ItemGroup>
 ```
 
-- [ ] **Step 3: Verify at build time.**
+**Repository size concern (N6):** each bundled binary is multi-MB and the four RIDs together add ~40 MB to the repo. Prefer one of:
+
+  1. Commit to **Git LFS** — add a `.gitattributes` entry:
+     ```
+     src/WeaveFleet.Infrastructure/Nats/EmbeddedNatsServer/Binaries/** filter=lfs diff=lfs merge=lfs -text
+     ```
+     Developers need `git lfs install` once.
+  2. Or **download at build time** from a pinned HTTPS URL + SHA — a pre-build target fetches each missing binary into the `Binaries/` directory and verifies against `nats-server-checksums.txt`. Does not bloat the repo but adds a network dependency for first build.
+
+Pick (1) for simplicity. Record the choice in the commit message so future audits see the tradeoff.
+
+- [ ] **Step 4: Verify at build time.**
 
 ```bash
 dotnet build --nologo
 ls src/WeaveFleet.Api/bin/Debug/net10.0/Nats/EmbeddedNatsServer/Binaries/
 ```
-Expected: binaries present under the API's output directory.
+Expected: binaries present under the API's output directory; the pre-build checksum step emits `All nats-server binaries verified.`
 
-- [ ] **Step 4: Commit (binary files + csproj).**
+- [ ] **Step 5: Commit (binary files + csproj + checksums + verifier + gitattributes).**
 
 ```bash
-git add src/WeaveFleet.Infrastructure/Nats/EmbeddedNatsServer/Binaries src/WeaveFleet.Infrastructure/WeaveFleet.Infrastructure.csproj
-git commit -m "build: bundle nats-server binaries per RID"
+git add src/WeaveFleet.Infrastructure/Nats/EmbeddedNatsServer/Binaries src/WeaveFleet.Infrastructure/WeaveFleet.Infrastructure.csproj build/nats-server-checksums.txt build/verify-nats-server-binaries.ps1 .gitattributes Directory.Build.props
+git commit -m "build: bundle nats-server binaries per RID with SHA-256 integrity verification"
 ```
 
 ### Task 1.0c: Expose `HarnessEventPersistenceService` for projection use
@@ -417,7 +489,10 @@ public sealed class NatsOptionsTests
         options.StreamName.ShouldBe("fleet-sessions");
         options.MaxAge.ShouldBe(TimeSpan.FromHours(24));
         options.MaxBytes.ShouldBe(-1);
+        options.MaxPayloadBytes.ShouldBe(4 * 1024 * 1024);
         options.TenantPrefix.ShouldBe("tenant.default");
+        options.NodeId.ShouldNotBeNullOrWhiteSpace(); // defaulted to machine name
+        options.ProjectionRetryBudget.ShouldBe(5);
     }
 
     [Fact]
@@ -447,6 +522,11 @@ namespace WeaveFleet.Application.Configuration;
 
 /// <summary>
 /// NATS event-substrate configuration. See docs/nats-event-substrate-design.md.
+/// <para>
+/// Default <see cref="MaxAge"/> is tuned for local dev; <c>NatsOptionsConfigurator</c>
+/// overrides it based on hosting mode (self-hosted 7d, managed cloud 30d) unless the
+/// caller has explicitly set a value.
+/// </para>
 /// </summary>
 public sealed class NatsOptions
 {
@@ -468,8 +548,30 @@ public sealed class NatsOptions
     /// <summary>MaxBytes for the durable stream. -1 = unlimited.</summary>
     public long MaxBytes { get; set; } = -1;
 
+    /// <summary>
+    /// Maximum accepted payload size in bytes for both publish and consume paths.
+    /// NATS default is 1 MiB; this setting caps our usage at 4 MiB (room for large
+    /// consolidated <c>message.updated</c> snapshots). Consumers drop and TERM messages
+    /// larger than this.
+    /// </summary>
+    public int MaxPayloadBytes { get; set; } = 4 * 1024 * 1024;
+
     /// <summary>Tenant/prefix string for subject construction. Default: tenant.default.</summary>
     public string TenantPrefix { get; set; } = "tenant.default";
+
+    /// <summary>
+    /// Stable identifier for this Fleet node. Used to suffix per-node durable consumer names
+    /// (e.g. WebSocket fan-out). Defaults to <see cref="Environment.MachineName"/>; override
+    /// for clustered deployments where machine names may collide.
+    /// </summary>
+    public string NodeId { get; set; } = Environment.MachineName;
+
+    /// <summary>
+    /// Maximum JetStream redelivery attempts before a projection TERMs a message as poison.
+    /// Prevents a malformed or persistently-failing payload from stalling a consumer.
+    /// Default: 5.
+    /// </summary>
+    public int ProjectionRetryBudget { get; set; } = 5;
 }
 ```
 
@@ -482,18 +584,57 @@ Edit `src/WeaveFleet.Application/Configuration/FleetOptions.cs`. After line 100 
     public NatsOptions Nats { get; set; } = new();
 ```
 
-- [ ] **Step 5: Run tests.**
+- [ ] **Step 5: Add `NatsOptionsConfigurator` for per-mode MaxAge defaults.**
+
+Create `src/WeaveFleet.Infrastructure/Nats/Configuration/NatsOptionsConfigurator.cs`:
+
+```csharp
+using Microsoft.Extensions.Options;
+using WeaveFleet.Application.Configuration;
+
+namespace WeaveFleet.Infrastructure.Nats.Configuration;
+
+/// <summary>
+/// Applies hosting-mode-aware defaults to <see cref="NatsOptions.MaxAge"/>:
+/// local (<c>24h</c>), self-hosted (<c>7d</c>), managed cloud (<c>30d</c>).
+/// Only applied when the caller has not set <see cref="NatsOptions.MaxAge"/> explicitly
+/// (detected as "equal to the type default of <c>24h</c>").
+/// </summary>
+public sealed class NatsOptionsConfigurator : IPostConfigureOptions<NatsOptions>
+{
+    private readonly FleetOptions _fleetOptions;
+    public NatsOptionsConfigurator(FleetOptions fleetOptions) => _fleetOptions = fleetOptions;
+
+    public void PostConfigure(string? name, NatsOptions options)
+    {
+        // Heuristic: only overwrite when still at the NatsOptions default (24h). A config-file
+        // override that happens to also be 24h is a no-op either way.
+        if (options.MaxAge != TimeSpan.FromHours(24)) return;
+
+        options.MaxAge = _fleetOptions.Cloud.Enabled
+            ? TimeSpan.FromDays(30)
+            : _fleetOptions.Auth.Enabled
+                ? TimeSpan.FromDays(7)   // self-hosted has auth on; local does not
+                : TimeSpan.FromHours(24);
+    }
+}
+```
+
+Add a unit test in `tests/WeaveFleet.Infrastructure.Tests/Nats/NatsOptionsConfiguratorTests.cs` covering all three modes. Register the post-configurator inside `AddEventStore` (Task 1.8).
+
+- [ ] **Step 6: Run tests.**
 
 ```bash
 dotnet test tests/WeaveFleet.Application.Tests --nologo --filter FullyQualifiedName~NatsOptionsTests
+dotnet test tests/WeaveFleet.Infrastructure.Tests --nologo --filter FullyQualifiedName~NatsOptionsConfiguratorTests
 ```
 Expected: PASS.
 
-- [ ] **Step 6: Commit.**
+- [ ] **Step 7: Commit.**
 
 ```bash
-git add src/WeaveFleet.Application/Configuration/NatsOptions.cs src/WeaveFleet.Application/Configuration/FleetOptions.cs tests/WeaveFleet.Application.Tests/Configuration/NatsOptionsTests.cs
-git commit -m "feat: add NatsOptions configuration"
+git add src/WeaveFleet.Application/Configuration/NatsOptions.cs src/WeaveFleet.Application/Configuration/FleetOptions.cs src/WeaveFleet.Infrastructure/Nats/Configuration/NatsOptionsConfigurator.cs tests/WeaveFleet.Application.Tests/Configuration/NatsOptionsTests.cs tests/WeaveFleet.Infrastructure.Tests/Nats/NatsOptionsConfiguratorTests.cs
+git commit -m "feat: add NatsOptions with per-hosting-mode MaxAge defaults"
 ```
 
 ### Task 1.2: Create `NatsMetrics`
@@ -588,6 +729,11 @@ public sealed class NatsMetrics
             "weave_fleet.nats.reconnect.count", unit: "reconnects", description: "NATS client reconnects.");
     }
 
+    // NOTE on cardinality: the `tenant` dimension is low-cardinality (=1) for local/self-hosted
+    // where TenantPrefix is always `tenant.default`. Under managed cloud it becomes per-workspace
+    // and cardinality scales with user count; before the managed-cloud rollout, replace the raw
+    // tenant with a `tenant_class` label (default/managed/selfhosted) or a hash bucket. Plan
+    // follow-up: Task 6.x — scrub tenant from metrics before managed-cloud GA.
     public void RecordPublish(string routing, string eventType, string tenant, string result)
         => _publishCount.Add(1,
             new KeyValuePair<string, object?>("routing", routing),
@@ -648,7 +794,7 @@ namespace WeaveFleet.Infrastructure.Tests.Nats;
 
 public sealed class NatsNamingStrategyTests
 {
-    private readonly NatsNamingStrategy _sut = new(new NatsOptions());
+    private readonly NatsNamingStrategy _sut = new(new NatsOptions(), nodeId: "node-A");
 
     [Fact]
     public void DurableSubject_includesTenantProjectSessionAndType()
@@ -699,6 +845,32 @@ public sealed class NatsNamingStrategyTests
     {
         NatsNamingStrategy.ParseDurableSubject("garbage.subject").ShouldBeNull();
     }
+
+    [Theory]
+    [InlineData("proj.bad")]   // dot breaks the hierarchy
+    [InlineData("proj*bad")]   // wildcard token
+    [InlineData("proj>bad")]   // multi-wildcard token
+    [InlineData("proj bad")]   // whitespace
+    [InlineData("")]           // empty
+    public void DurableSubject_rejectsUnsafeSegmentCharacters(string badId)
+    {
+        Should.Throw<ArgumentException>(() =>
+            _sut.DurableSubject(projectId: badId, sessionId: "sess-1", eventType: "message.created"));
+        Should.Throw<ArgumentException>(() =>
+            _sut.DurableSubject(projectId: "proj-1", sessionId: badId, eventType: "message.created"));
+    }
+
+    [Fact]
+    public void PerNodeConsumer_suffixesNodeId()
+    {
+        _sut.PerNodeConsumerName(projection: "ws-fanout").ShouldBe("fleet-sessions-ws-fanout-node-A");
+    }
+
+    [Fact]
+    public void ClusterConsumer_hasNoNodeIdSuffix()
+    {
+        _sut.ClusterConsumerName(projection: "message-persistence").ShouldBe("fleet-sessions-message-persistence");
+    }
 }
 ```
 
@@ -721,27 +893,63 @@ namespace WeaveFleet.Infrastructure.Nats;
 /// <summary>
 /// Subject / stream / consumer name construction for the NATS event substrate.
 /// Keeps tenant/project/session hierarchy out of every other component.
+/// <para>
+/// <c>{sid}</c> in every subject is the <b>Fleet</b> session id (globally unique across harnesses),
+/// not the harness-provider session id that may also live on <c>HarnessEvent.SessionId</c>.
+/// </para>
 /// </summary>
 public sealed class NatsNamingStrategy
 {
     public const string ScratchProjectSentinel = "scratch";
 
-    private readonly NatsOptions _options;
+    // NATS subject tokens are separated by '.' and support '*' / '>' wildcards. Any segment
+    // we interpolate into a subject must be validated so an attacker cannot forge a routing
+    // hierarchy or escape tenant scoping via a project/session id containing these characters.
+    private static readonly char[] UnsafeSubjectChars = ['.', '*', '>', ' ', '\t', '\r', '\n'];
 
-    public NatsNamingStrategy(NatsOptions options) => _options = options;
+    private readonly NatsOptions _options;
+    private readonly string _nodeId;
+
+    public NatsNamingStrategy(NatsOptions options, string nodeId)
+    {
+        _options = options;
+        _nodeId = string.IsNullOrWhiteSpace(nodeId)
+            ? throw new ArgumentException("NodeId is required.", nameof(nodeId))
+            : nodeId;
+    }
 
     public string DurableSubject(string? projectId, string sessionId, string eventType)
-        => $"{_options.TenantPrefix}.project.{projectId ?? ScratchProjectSentinel}.session.{sessionId}.{eventType}";
+    {
+        var project = projectId ?? ScratchProjectSentinel;
+        ValidateSegment(project, nameof(projectId));
+        ValidateSegment(sessionId, nameof(sessionId));
+        return $"{_options.TenantPrefix}.project.{project}.session.{sessionId}.{eventType}";
+    }
 
     public string EphemeralSubject(string? projectId, string sessionId, string eventType)
-        => $"{_options.TenantPrefix}.project.{projectId ?? ScratchProjectSentinel}.live.{sessionId}.{eventType}";
+    {
+        var project = projectId ?? ScratchProjectSentinel;
+        ValidateSegment(project, nameof(projectId));
+        ValidateSegment(sessionId, nameof(sessionId));
+        return $"{_options.TenantPrefix}.project.{project}.live.{sessionId}.{eventType}";
+    }
 
     public string DurableStreamFilter => "tenant.*.project.*.session.*.>";
     public string EphemeralSubscriptionFilter => "tenant.*.project.*.live.*.>";
 
     public string StreamName => _options.StreamName;
 
-    public string DurableConsumerName(string projection) => $"{_options.StreamName}-{projection}";
+    /// <summary>
+    /// Cluster-scoped consumer: one consumer shared across all Fleet nodes. Used by projections
+    /// that must write exactly once per event (e.g. persistence).
+    /// </summary>
+    public string ClusterConsumerName(string projection) => $"{_options.StreamName}-{projection}";
+
+    /// <summary>
+    /// Per-node consumer: one consumer per Fleet node. Used by fan-out projections (e.g.
+    /// WebSocket broadcast) where every node must receive its own copy of the stream.
+    /// </summary>
+    public string PerNodeConsumerName(string projection) => $"{_options.StreamName}-{projection}-{_nodeId}";
 
     public readonly record struct ParsedDurableSubject(string Tenant, string ProjectId, string SessionId, string EventType);
 
@@ -758,6 +966,16 @@ public sealed class NatsNamingStrategy
         if (parts[0] != "tenant" || parts[2] != "project" || parts[4] != "session") return null;
         var type = string.Join('.', parts[6..]);
         return new ParsedDurableSubject(parts[1], parts[3], parts[5], type);
+    }
+
+    private static void ValidateSegment(string segment, string paramName)
+    {
+        if (string.IsNullOrEmpty(segment))
+            throw new ArgumentException("Subject segment cannot be empty.", paramName);
+        if (segment.IndexOfAny(UnsafeSubjectChars) >= 0)
+            throw new ArgumentException(
+                $"Subject segment '{segment}' contains a character reserved by NATS (., *, >, whitespace).",
+                paramName);
     }
 }
 ```
@@ -792,12 +1010,19 @@ namespace WeaveFleet.Application.Events;
 /// <summary>
 /// Per-event context required by <see cref="IEventPublisher"/> to construct subjects and headers.
 /// Populated by the caller (typically <c>HarnessEventRelay</c>) from repository data.
+/// <para>
+/// <see cref="Sequence"/> is a per-session monotonic counter owned by the publishing caller.
+/// It is used as the publish-side half of the <c>Nats-Msg-Id</c> header (<c>{sessionId}:{seq}</c>)
+/// so JetStream dedup (~2-minute window) can collapse retries of the same logical publish.
+/// The relay pump initializes the counter at 0 when a pump starts and increments it per event.
+/// </para>
 /// </summary>
 public readonly record struct EventPublishContext(
     string FleetSessionId,
     string? ProjectId,
     string? UserId,
-    string? HarnessType);
+    string? HarnessType,
+    long Sequence);
 ```
 
 - [ ] **Step 2: Create `IEventPublisher`.**
@@ -936,6 +1161,7 @@ Now create the test. Create `tests/WeaveFleet.Infrastructure.Tests/Nats/NatsEven
 
 ```csharp
 using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
 using NATS.Client.Core;
 using NATS.Client.JetStream;
 using NATS.Client.JetStream.Models;
@@ -963,7 +1189,10 @@ public sealed class NatsEventPublisherTests(EmbeddedNatsTestFixture fixture)
         await js.CreateStreamAsync(new StreamConfig("fleet-sessions", ["tenant.*.project.*.session.*.>"]));
 
         var publisher = new NatsEventPublisher(
-            js, connection, new NatsNamingStrategy(options), new NatsMetrics(), options);
+            js, connection,
+            new NatsNamingStrategy(options, nodeId: "test-node"),
+            new NatsMetrics(), options,
+            NullLogger<NatsEventPublisher>.Instance);
 
         var evt = new HarnessEvent
         {
@@ -975,18 +1204,18 @@ public sealed class NatsEventPublisherTests(EmbeddedNatsTestFixture fixture)
 
         await publisher.PublishAsync(
             evt,
-            new EventPublishContext("sess-1", ProjectId: "proj-1", UserId: "user-1", HarnessType: "opencode"),
+            new EventPublishContext("sess-1", ProjectId: "proj-1", UserId: "user-1", HarnessType: "opencode", Sequence: 42),
             CancellationToken.None);
 
         var stream = await js.GetStreamAsync("fleet-sessions");
         (await stream.GetInfoAsync()).State.Messages.ShouldBe(1UL);
 
-        // Verify message id header is present
+        // Verify message id header matches the design-specified {sessionId}:{seq} format
         var consumer = await stream.CreateOrderedConsumerAsync();
         await foreach (var msg in consumer.ConsumeAsync<byte[]>().Take(1))
         {
             msg.Headers.ShouldNotBeNull();
-            msg.Headers!["Nats-Msg-Id"].ToString().ShouldBe("sess-1:" + msg.Metadata!.Value.Sequence.Stream);
+            msg.Headers!["Nats-Msg-Id"].ToString().ShouldBe("sess-1:42");
             msg.Headers["x-fleet-user-id"].ToString().ShouldBe("user-1");
             msg.Headers["x-fleet-harness-type"].ToString().ShouldBe("opencode");
             msg.Subject.ShouldBe("tenant.default.project.proj-1.session.sess-1.message.created");
@@ -995,12 +1224,41 @@ public sealed class NatsEventPublisherTests(EmbeddedNatsTestFixture fixture)
     }
 
     [Fact]
+    public async Task Publish_rejectsSubjectInjectionInIds()
+    {
+        var options = new NatsOptions();
+        await using var connection = new NatsConnection(new NatsOpts { Url = _fixture.Url });
+        var js = new NatsJSContext(connection);
+        try { await js.DeleteStreamAsync("fleet-sessions"); } catch { }
+        await js.CreateStreamAsync(new StreamConfig("fleet-sessions", ["tenant.*.project.*.session.*.>"]));
+
+        var publisher = new NatsEventPublisher(
+            js, connection,
+            new NatsNamingStrategy(options, nodeId: "test-node"),
+            new NatsMetrics(), options,
+            NullLogger<NatsEventPublisher>.Instance);
+
+        var evt = new HarnessEvent { Type = EventTypes.MessageCreated, SessionId = "sess-1", Timestamp = DateTimeOffset.UtcNow };
+
+        // Project id containing a '.' would silently create a deeper subject and break the
+        // tenant.{ws}.project.{pid} hierarchy — reject at the publisher boundary.
+        await Should.ThrowAsync<ArgumentException>(() => publisher.PublishAsync(evt,
+            new EventPublishContext("sess-1", "proj.sneaky", "user-1", "opencode", Sequence: 1), CancellationToken.None));
+
+        await Should.ThrowAsync<ArgumentException>(() => publisher.PublishAsync(evt,
+            new EventPublishContext("sess>inject", "proj-1", "user-1", "opencode", Sequence: 1), CancellationToken.None));
+    }
+
+    [Fact]
     public async Task EphemeralEvent_publishesToCoreNats()
     {
         var options = new NatsOptions();
         await using var connection = new NatsConnection(new NatsOpts { Url = _fixture.Url });
         var publisher = new NatsEventPublisher(
-            new NatsJSContext(connection), connection, new NatsNamingStrategy(options), new NatsMetrics(), options);
+            new NatsJSContext(connection), connection,
+            new NatsNamingStrategy(options, nodeId: "test-node"),
+            new NatsMetrics(), options,
+            NullLogger<NatsEventPublisher>.Instance);
 
         // Subscribe first to catch the ephemeral publish
         var task = Task.Run(async () =>
@@ -1020,7 +1278,8 @@ public sealed class NatsEventPublisherTests(EmbeddedNatsTestFixture fixture)
             Payload = JsonSerializer.SerializeToElement(new { delta = "hi" })
         };
         await publisher.PublishAsync(evt,
-            new EventPublishContext("sess-1", "proj-1", "user-1", "opencode"), CancellationToken.None);
+            new EventPublishContext("sess-1", "proj-1", "user-1", "opencode", Sequence: 1),
+            CancellationToken.None);
 
         var received = await task.WaitAsync(TimeSpan.FromSeconds(5));
         received.Subject.ShouldBe("tenant.default.project.proj-1.live.sess-1.message.part.delta");
@@ -1036,7 +1295,11 @@ public sealed class NatsEventPublisherTests(EmbeddedNatsTestFixture fixture)
         try { await js.DeleteStreamAsync("fleet-sessions"); } catch { /* may not exist */ }
         await js.CreateStreamAsync(new StreamConfig("fleet-sessions", ["tenant.*.project.*.session.*.>"]));
 
-        var publisher = new NatsEventPublisher(js, connection, new NatsNamingStrategy(options), new NatsMetrics(), options);
+        var publisher = new NatsEventPublisher(
+            js, connection,
+            new NatsNamingStrategy(options, nodeId: "test-node"),
+            new NatsMetrics(), options,
+            NullLogger<NatsEventPublisher>.Instance);
 
         var evt = new HarnessEvent
         {
@@ -1045,7 +1308,8 @@ public sealed class NatsEventPublisherTests(EmbeddedNatsTestFixture fixture)
             Timestamp = DateTimeOffset.UtcNow
         };
         await publisher.PublishAsync(evt,
-            new EventPublishContext("sess-1", "proj-1", "user-1", "opencode"), CancellationToken.None);
+            new EventPublishContext("sess-1", "proj-1", "user-1", "opencode", Sequence: 1),
+            CancellationToken.None);
 
         var stream = await js.GetStreamAsync("fleet-sessions");
         (await stream.GetInfoAsync()).State.Messages.ShouldBe(0UL);
@@ -1066,9 +1330,12 @@ Create `src/WeaveFleet.Infrastructure/Nats/NatsEventPublisher.cs`:
 
 ```csharp
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using NATS.Client.Core;
 using NATS.Client.JetStream;
+using NATS.Client.JetStream.Models;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Domain.Harnesses;
@@ -1081,24 +1348,31 @@ namespace WeaveFleet.Infrastructure.Nats;
 /// </summary>
 public sealed class NatsEventPublisher : IEventPublisher
 {
+    private static readonly Action<ILogger, string, Exception?> LogUnknownEventType =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(1, "NatsPublishUnknownEventType"),
+            "Publish dropped for unclassified event type {EventType} — neither durable nor ephemeral-relay per EventTypeMetadata.");
+
     private readonly INatsJSContext _js;
     private readonly INatsConnection _connection;
     private readonly NatsNamingStrategy _naming;
     private readonly NatsMetrics _metrics;
     private readonly NatsOptions _options;
+    private readonly ILogger<NatsEventPublisher> _logger;
 
     public NatsEventPublisher(
         INatsJSContext js,
         INatsConnection connection,
         NatsNamingStrategy naming,
         NatsMetrics metrics,
-        NatsOptions options)
+        NatsOptions options,
+        ILogger<NatsEventPublisher> logger)
     {
         _js = js;
         _connection = connection;
         _naming = naming;
         _metrics = metrics;
         _options = options;
+        _logger = logger;
     }
 
     public async Task PublishAsync(HarnessEvent evt, EventPublishContext context, CancellationToken ct)
@@ -1117,8 +1391,10 @@ public sealed class NatsEventPublisher : IEventPublisher
             return;
         }
 
-        // Unknown classification — drop silently. Matches current relay behaviour
-        // (the relay also skips such events). Recorded as metric for visibility.
+        // Unknown classification — log at warn level and record a metric so new event types
+        // that slip past EventTypeMetadata are visible. Matches the relay's existing skip
+        // behaviour for unclassified events.
+        LogUnknownEventType(_logger, evt.Type, null);
         _metrics.RecordPublish(routing: "dropped", eventType: evt.Type, tenant: _options.TenantPrefix, result: "ok");
     }
 
@@ -1126,13 +1402,17 @@ public sealed class NatsEventPublisher : IEventPublisher
     {
         var subject = _naming.DurableSubject(context.ProjectId, context.FleetSessionId, evt.Type);
         var payload = JsonSerializer.SerializeToUtf8Bytes(evt);
-        var msgId = $"{context.FleetSessionId}:{evt.Timestamp.ToUnixTimeMilliseconds()}:{Guid.NewGuid():N}";
+        // Format {sessionId}:{seq} per design §"What goes where" — seq is the relay's
+        // per-session monotonic counter, supplied in EventPublishContext. This lets
+        // JetStream dedup (2-minute window) collapse retries of the same logical publish.
+        var msgId = $"{context.FleetSessionId}:{context.Sequence}";
         var headers = new NatsHeaders
         {
             ["Nats-Msg-Id"] = msgId,
         };
         if (context.UserId is { Length: > 0 }) headers["x-fleet-user-id"] = context.UserId;
         if (context.HarnessType is { Length: > 0 }) headers["x-fleet-harness-type"] = context.HarnessType;
+        InjectTraceContext(headers);
 
         var sw = Stopwatch.StartNew();
         string result = "ok";
@@ -1144,7 +1424,12 @@ public sealed class NatsEventPublisher : IEventPublisher
                 headers: headers,
                 opts: new NatsJSPubOpts { MsgId = msgId },
                 cancellationToken: ct).ConfigureAwait(false);
-            ack.EnsureSuccess();
+            // NATS.Net 2.x returns PubAckResponse with an Error property. Verify exact shape
+            // against the installed package (e.g. PubAckResponse.Error, PubAckResponse.Duplicate).
+            if (ack.Error is not null)
+                throw new NatsJSApiException(ack.Error);
+            if (ack.Duplicate)
+                result = "duplicate";
         }
         catch (Exception)
         {
@@ -1166,6 +1451,7 @@ public sealed class NatsEventPublisher : IEventPublisher
         var headers = new NatsHeaders();
         if (context.UserId is { Length: > 0 }) headers["x-fleet-user-id"] = context.UserId;
         if (context.HarnessType is { Length: > 0 }) headers["x-fleet-harness-type"] = context.HarnessType;
+        InjectTraceContext(headers);
 
         string result = "ok";
         try
@@ -1181,6 +1467,16 @@ public sealed class NatsEventPublisher : IEventPublisher
         {
             _metrics.RecordPublish(routing: "ephemeral", eventType: evt.Type, tenant: _options.TenantPrefix, result: result);
         }
+    }
+
+    private static void InjectTraceContext(NatsHeaders headers)
+    {
+        var activity = Activity.Current;
+        if (activity is null) return;
+        DistributedContextPropagator.Current.Inject(activity, headers, static (carrier, key, value) =>
+        {
+            if (carrier is NatsHeaders h) h[key] = value;
+        });
     }
 }
 ```
@@ -1436,11 +1732,13 @@ git commit -m "feat: add NatsServerHostedService to manage bundled nats-server s
 Create `tests/WeaveFleet.Infrastructure.Tests/Nats/NatsStreamInitializerTests.cs`:
 
 ```csharp
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NATS.Client.Core;
 using NATS.Client.JetStream;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Infrastructure.Nats;
+using WeaveFleet.Infrastructure.Nats.Configuration;
 using WeaveFleet.Testing.Nats;
 
 namespace WeaveFleet.Infrastructure.Tests.Nats;
@@ -1455,7 +1753,15 @@ public sealed class NatsStreamInitializerTests(EmbeddedNatsTestFixture fixture) 
         var options = new NatsOptions();
         await using var conn = new NatsConnection(new NatsOpts { Url = _fixture.Url });
         var js = new NatsJSContext(conn);
-        var sut = new NatsStreamInitializer(js, new NatsNamingStrategy(options), options, NullLogger<NatsStreamInitializer>.Instance);
+        var registry = new ProjectionRegistry(Array.Empty<ProjectionRegistryEntry>());
+        var sp = new ServiceCollection().BuildServiceProvider();
+        var sut = new NatsStreamInitializer(
+            js,
+            new NatsNamingStrategy(options, nodeId: "test-node"),
+            options,
+            registry,
+            sp,
+            NullLogger<NatsStreamInitializer>.Instance);
 
         await sut.StartAsync(CancellationToken.None);
         await sut.StartAsync(CancellationToken.None); // idempotent on repeat
@@ -1478,39 +1784,55 @@ Expected: FAIL — type missing.
 Create `src/WeaveFleet.Infrastructure/Nats/NatsStreamInitializer.cs`:
 
 ```csharp
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NATS.Client.JetStream;
 using NATS.Client.JetStream.Models;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Projections;
+using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Infrastructure.Nats.Configuration;
 
 namespace WeaveFleet.Infrastructure.Nats;
 
 /// <summary>
-/// Hosted service that creates the durable JetStream stream on startup if it does not exist.
-/// Idempotent — catches the "already exists" error and continues. Retention / MaxAge / MaxBytes
-/// come from <see cref="NatsOptions"/>; subjects come from <see cref="NatsNamingStrategy"/>.
+/// Hosted service that creates the durable JetStream stream AND pre-creates the durable
+/// consumer for every registered projection, on startup. Idempotent — catches "already exists"
+/// errors and continues. Pre-creating consumers is load-bearing for interest-based retention:
+/// a publish that lands before a consumer is registered could otherwise be GC'd if MaxAge
+/// expires first. Retention / MaxAge / MaxBytes come from <see cref="NatsOptions"/>; subjects
+/// come from <see cref="NatsNamingStrategy"/>.
 /// </summary>
 public sealed class NatsStreamInitializer : IHostedService
 {
     private static readonly Action<ILogger, string, Exception?> LogStreamReady =
         LoggerMessage.Define<string>(LogLevel.Information, new EventId(1, "NatsStreamReady"),
             "JetStream stream {StreamName} ready.");
+    private static readonly Action<ILogger, string, Exception?> LogConsumerReady =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(2, "NatsConsumerReady"),
+            "JetStream durable consumer {Consumer} ready.");
 
     private readonly INatsJSContext _js;
     private readonly NatsNamingStrategy _naming;
     private readonly NatsOptions _options;
+    private readonly ProjectionRegistry _registry;
+    private readonly IServiceProvider _rootProvider;
     private readonly ILogger<NatsStreamInitializer> _logger;
 
     public NatsStreamInitializer(
         INatsJSContext js,
         NatsNamingStrategy naming,
         NatsOptions options,
+        ProjectionRegistry registry,
+        IServiceProvider rootProvider,
         ILogger<NatsStreamInitializer> logger)
     {
         _js = js;
         _naming = naming;
         _options = options;
+        _registry = registry;
+        _rootProvider = rootProvider;
         _logger = logger;
     }
 
@@ -1531,16 +1853,38 @@ public sealed class NatsStreamInitializer : IHostedService
         }
         catch (NatsJSApiException ex) when (ex.Error.Code == 400 || ex.Error.ErrCode == 10058 /* stream already in use */)
         {
-            // Already exists; update to ensure configured subjects and retention match.
             await _js.UpdateStreamAsync(config, cancellationToken).ConfigureAwait(false);
         }
 
         LogStreamReady(_logger, _options.StreamName, null);
+
+        // Pre-create every registered projection's durable consumer before anyone publishes.
+        foreach (var regEntry in _registry.Entries)
+        {
+            using var scope = _rootProvider.CreateScope();
+            var projection = (IProjection<HarnessEvent>)scope.ServiceProvider.GetRequiredService(regEntry.ProjectionType);
+            var consumerName = regEntry.Scope == ConsumerScope.PerNode
+                ? _naming.PerNodeConsumerName(projection.Name)
+                : _naming.ClusterConsumerName(projection.Name);
+
+            var consumerConfig = new ConsumerConfig(consumerName)
+            {
+                AckPolicy = ConsumerConfigAckPolicy.Explicit,
+                DeliverPolicy = ConsumerConfigDeliverPolicy.All,
+                FilterSubject = _naming.DurableStreamFilter,
+                MaxDeliver = _options.ProjectionRetryBudget,
+            };
+            await _js.CreateOrUpdateConsumerAsync(_options.StreamName, consumerConfig, cancellationToken)
+                .ConfigureAwait(false);
+            LogConsumerReady(_logger, consumerName, null);
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }
 ```
+
+Note: `ConsumerScope` is introduced in Task 2.1 as a property on the projection registration (`ProjectionRegistry.Entry`), set by the fluent builder via `AddProjection<T>(ConsumerScope.Cluster | ConsumerScope.PerNode)`.
 
 - [ ] **Step 4: Run the test.**
 
@@ -1572,29 +1916,40 @@ using WeaveFleet.Application.Configuration;
 
 namespace WeaveFleet.Infrastructure.Nats.Configuration;
 
+/// <summary>
+/// Identifies whether a projection's durable consumer is shared cluster-wide (every event
+/// is delivered to exactly one consumer = exactly-once write semantics — correct for
+/// persistence-style projections) or per-node (every Fleet node gets its own copy — correct
+/// for fan-out-style projections such as WebSocket broadcast).
+/// </summary>
+public enum ConsumerScope { Cluster, PerNode }
+
 public sealed class NatsStreamBuilder
 {
     private readonly IServiceCollection _services;
     internal NatsStreamBuilder(IServiceCollection services) => _services = services;
 
-    internal readonly List<Type> ProjectionTypes = new();
+    internal readonly List<ProjectionRegistryEntry> Entries = new();
 
-    public NatsStreamBuilder AddProjection<TProjection>()
+    public NatsStreamBuilder AddProjection<TProjection>(ConsumerScope scope = ConsumerScope.Cluster)
         where TProjection : class
     {
         _services.AddScoped<TProjection>();
-        ProjectionTypes.Add(typeof(TProjection));
+        Entries.Add(new ProjectionRegistryEntry(typeof(TProjection), scope));
         return this;
     }
 }
+
+public sealed record ProjectionRegistryEntry(Type ProjectionType, ConsumerScope Scope);
+public sealed record ProjectionRegistry(IReadOnlyList<ProjectionRegistryEntry> Entries);
 ```
 
 Create `src/WeaveFleet.Infrastructure/Nats/Configuration/NatsServiceCollectionExtensions.cs`:
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using NATS.Client.Core;
-using NATS.Client.Hosting;
 using NATS.Client.JetStream;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Events;
@@ -1606,6 +1961,12 @@ public static class NatsServiceCollectionExtensions
     /// <summary>
     /// Register the NATS event substrate: embedded server (if applicable), stream initializer,
     /// publisher, projection host, and any projections declared via the fluent builder.
+    /// <para>
+    /// <see cref="EphemeralEventRelayService"/> is NOT registered here — it depends on
+    /// infrastructure wired up later (shadow broadcaster during Phase 3, production broadcaster
+    /// during Phase 5). The caller wires it in <c>DependencyInjection.cs</c> alongside its
+    /// broadcaster dependency so registration order is always correct.
+    /// </para>
     /// </summary>
     public static IServiceCollection AddEventStore(
         this IServiceCollection services,
@@ -1613,54 +1974,102 @@ public static class NatsServiceCollectionExtensions
         Action<NatsStreamBuilder> configure)
     {
         services.AddSingleton(options);
+        services.AddSingleton<IPostConfigureOptions<NatsOptions>, NatsOptionsConfigurator>();
         services.AddSingleton<NatsMetrics>();
-        services.AddSingleton<NatsNamingStrategy>();
+        services.AddSingleton(sp => new NatsNamingStrategy(options, options.NodeId));
         services.AddSingleton<NatsServerHostedService>();
         services.AddHostedService(sp => sp.GetRequiredService<NatsServerHostedService>());
 
-        // Register NATS client — Url is resolved from NatsServerHostedService after Start,
-        // but DI needs a value up front. For embedded mode we rely on a lazy factory that
-        // resolves the URL on first use (see below). For simplicity in Phase 1, callers of the
-        // connection must ensure the hosted service has started before requesting the connection.
-        services.AddNats(poolSize: 1, opts => opts with
-        {
-            // Populated post-start. The factory below swaps in the resolved URL.
-        });
+        // NATS connection — resolved lazily after NatsServerHostedService starts. Hosted
+        // services start in registration order, so NatsServerHostedService is up before any
+        // dependent hosted service (stream initializer, projection host) asks for this.
         services.AddSingleton<INatsConnection>(sp =>
         {
             var server = sp.GetRequiredService<NatsServerHostedService>();
             if (string.IsNullOrWhiteSpace(server.ResolvedUrl))
-                throw new InvalidOperationException("NatsServerHostedService must start before the NATS connection is requested.");
-            var creds = options.CredsFile is { Length: > 0 } ? NatsAuthOpts.Default with { CredsFile = options.CredsFile } : NatsAuthOpts.Default;
-            return new NatsConnection(new NatsOpts { Url = server.ResolvedUrl, AuthOpts = creds });
+                throw new InvalidOperationException(
+                    "NatsServerHostedService must start before the NATS connection is requested.");
+            var authOpts = options.CredsFile is { Length: > 0 }
+                ? NatsAuthOpts.Default with { CredsFile = options.CredsFile }
+                : NatsAuthOpts.Default;
+            var natsOpts = new NatsOpts
+            {
+                Url = server.ResolvedUrl,
+                AuthOpts = authOpts,
+                // Cap both publish and receive sizes so a malformed or malicious payload cannot
+                // OOM either end. Consumer TERMs oversize messages explicitly (see ProjectionListener).
+                MaxMsgSize = options.MaxPayloadBytes,
+            };
+            return new NatsConnection(natsOpts);
         });
         services.AddSingleton<INatsJSContext>(sp => new NatsJSContext(sp.GetRequiredService<INatsConnection>()));
 
+        var builder = new NatsStreamBuilder(services);
+        configure(builder);
+        services.AddSingleton(new ProjectionRegistry(builder.Entries));
+
+        // Order matters: stream + consumers must be ready before anything publishes.
         services.AddHostedService<NatsStreamInitializer>();
 
         services.AddSingleton<IEventPublisher, NatsEventPublisher>();
 
-        var builder = new NatsStreamBuilder(services);
-        configure(builder);
-
-        // Register the projection host with the ordered list of projection types.
-        services.AddSingleton(new ProjectionRegistry(builder.ProjectionTypes));
         services.AddHostedService<ProjectionHostService>();
-        services.AddHostedService<EphemeralEventRelayService>();
 
+        // EphemeralEventRelayService registration happens in DependencyInjection.cs, adjacent
+        // to the broadcaster wiring it depends on (Phase 3 Task 3.3).
         return services;
     }
 }
-
-public sealed record ProjectionRegistry(IReadOnlyList<Type> ProjectionTypes);
 ```
 
-- [ ] **Step 2: Build.**
+- [ ] **Step 2: Add creds-file-must-not-be-logged negative test.**
+
+Create `tests/WeaveFleet.Infrastructure.Tests/Nats/CredsFileLoggingTests.cs`:
+
+```csharp
+using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Configuration;
+using WeaveFleet.Infrastructure.Nats;
+
+namespace WeaveFleet.Infrastructure.Tests.Nats;
+
+/// <summary>
+/// Defence: the NATS creds file path must never appear in any log line emitted by
+/// Nats infrastructure. Prevents accidental disclosure in logs shipped off-box.
+/// </summary>
+public sealed class CredsFileLoggingTests
+{
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public List<string> Lines { get; } = new();
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel _) => true;
+        public void Log<TState>(LogLevel level, EventId id, TState state, Exception? ex, Func<TState, Exception?, string> formatter)
+            => Lines.Add(formatter(state, ex));
+    }
+
+    [Fact]
+    public async Task NatsServerHostedService_doesNotLogCredsFilePath()
+    {
+        var secretPath = Path.Combine(Path.GetTempPath(), "nats-secret.creds");
+        var options = new NatsOptions { ExternalUrl = "nats://example.invalid:4222", CredsFile = secretPath };
+        var logger = new CapturingLogger<NatsServerHostedService>();
+        var sut = new NatsServerHostedService(options, logger);
+
+        await sut.StartAsync(CancellationToken.None);
+        await sut.StopAsync(CancellationToken.None);
+
+        logger.Lines.ShouldNotContain(l => l.Contains(secretPath, StringComparison.OrdinalIgnoreCase));
+    }
+}
+```
+
+- [ ] **Step 3: Build.**
 
 ```bash
 dotnet build --nologo
 ```
-Expected: **build fails** because `ProjectionHostService` and `EphemeralEventRelayService` don't exist yet (next tasks). That is expected — skip straight to Task 1.9 and then return to commit this.
+Expected: builds because `EphemeralEventRelayService` is no longer referenced from `AddEventStore`. `ProjectionHostService` still needs Task 2.3 to compile cleanly — that lands next.
 
 ### Task 1.9: Wire into `Program.cs` (delayed until projection host lands)
 
@@ -1747,6 +2156,7 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Projections;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Nats;
+using WeaveFleet.Infrastructure.Nats.Configuration;
 using WeaveFleet.Testing.Nats;
 
 namespace WeaveFleet.Infrastructure.Tests.Nats;
@@ -1785,11 +2195,23 @@ public sealed class ProjectionListenerTests(EmbeddedNatsTestFixture fixture) : I
         services.AddScoped<RecordingProjection>(_ => projection);
         var sp = services.BuildServiceProvider();
 
+        var options = new NatsOptions();
+        var naming = new NatsNamingStrategy(options, nodeId: "test-node");
+        // Pre-create the consumer — in production this is done by NatsStreamInitializer.
+        await js.CreateOrUpdateConsumerAsync("fleet-sessions", new ConsumerConfig(naming.ClusterConsumerName("recording"))
+        {
+            AckPolicy = ConsumerConfigAckPolicy.Explicit,
+            DeliverPolicy = ConsumerConfigDeliverPolicy.All,
+            FilterSubject = naming.DurableStreamFilter,
+            MaxDeliver = options.ProjectionRetryBudget,
+        });
+
         var listener = new ProjectionListener(
-            typeof(RecordingProjection),
+            new ProjectionRegistryEntry(typeof(RecordingProjection), ConsumerScope.Cluster),
             js,
             sp,
-            new NatsNamingStrategy(new NatsOptions()),
+            naming,
+            options,
             new NatsMetrics(),
             NullLogger<ProjectionListener>.Instance);
 
@@ -1837,105 +2259,193 @@ using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using NATS.Client.Core;
 using NATS.Client.JetStream;
 using NATS.Client.JetStream.Models;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Projections;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Infrastructure.Nats.Configuration;
 
 namespace WeaveFleet.Infrastructure.Nats;
 
 /// <summary>
-/// Pumps messages from a durable JetStream consumer into a single <see cref="IProjection{HarnessEvent}"/>.
-/// Durable consumer name is derived from the projection's <see cref="IProjection{T}.Name"/>;
-/// on transient handler failure the message is NAK'd for redelivery.
+/// Pumps messages from a pre-created durable JetStream consumer into a single
+/// <see cref="IProjection{HarnessEvent}"/>. Consumer scope (cluster vs per-node) is declared
+/// via the <see cref="ProjectionRegistryEntry"/> used to bind this listener.
+/// <list type="bullet">
+///   <item>Deserialization failures and malformed subjects are TERM'd immediately (never retriable).</item>
+///   <item>Handler exceptions are NAK'd up to <see cref="NatsOptions.ProjectionRetryBudget"/>,
+///     after which the broker stops redelivering (consumer <c>MaxDeliver</c>) and the final
+///     attempt is TERM'd with a poison-message metric.</item>
+///   <item>Payloads larger than <see cref="NatsOptions.MaxPayloadBytes"/> are TERM'd.</item>
+/// </list>
+/// OpenTelemetry trace context is extracted from headers before invoking the handler.
 /// </summary>
 public sealed class ProjectionListener
 {
+    private static readonly ActivitySource ActivitySource = new("WeaveFleet.Nats.Consume");
+
     private static readonly Action<ILogger, string, Exception?> LogHandlerFailed =
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(1, "ProjectionHandlerFailed"),
             "Projection {Projection} handler threw");
+    private static readonly Action<ILogger, string, int, Exception?> LogPoisoned =
+        LoggerMessage.Define<string, int>(LogLevel.Warning, new EventId(2, "ProjectionPoisonMessage"),
+            "Projection {Projection} TERM'd message after {Attempts} failed delivery attempts");
+    private static readonly Action<ILogger, string, int, Exception?> LogOversize =
+        LoggerMessage.Define<string, int>(LogLevel.Warning, new EventId(3, "ProjectionOversizePayload"),
+            "Projection {Projection} TERM'd an oversize payload of {Bytes} bytes");
+    private static readonly Action<ILogger, string, Exception?> LogMalformed =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(4, "ProjectionMalformedPayload"),
+            "Projection {Projection} TERM'd a malformed payload");
 
-    private readonly Type _projectionType;
+    private readonly ProjectionRegistryEntry _entry;
     private readonly INatsJSContext _js;
     private readonly IServiceProvider _rootProvider;
     private readonly NatsNamingStrategy _naming;
+    private readonly NatsOptions _options;
     private readonly NatsMetrics _metrics;
     private readonly ILogger<ProjectionListener> _logger;
 
     public ProjectionListener(
-        Type projectionType,
+        ProjectionRegistryEntry entry,
         INatsJSContext js,
         IServiceProvider rootProvider,
         NatsNamingStrategy naming,
+        NatsOptions options,
         NatsMetrics metrics,
         ILogger<ProjectionListener> logger)
     {
-        _projectionType = projectionType;
+        _entry = entry;
         _js = js;
         _rootProvider = rootProvider;
         _naming = naming;
+        _options = options;
         _metrics = metrics;
         _logger = logger;
     }
 
     public async Task RunAsync(CancellationToken ct)
     {
-        // Resolve projection name by creating a one-shot scope
         string projectionName;
         using (var scope = _rootProvider.CreateScope())
         {
-            var temp = (IProjection<HarnessEvent>)scope.ServiceProvider.GetRequiredService(_projectionType);
+            var temp = (IProjection<HarnessEvent>)scope.ServiceProvider.GetRequiredService(_entry.ProjectionType);
             projectionName = temp.Name;
         }
 
-        var consumerConfig = new ConsumerConfig(_naming.DurableConsumerName(projectionName))
-        {
-            AckPolicy = ConsumerConfigAckPolicy.Explicit,
-            DeliverPolicy = ConsumerConfigDeliverPolicy.All,
-            FilterSubject = _naming.DurableStreamFilter,
-        };
-        var consumer = await _js.CreateOrUpdateConsumerAsync(_naming.StreamName, consumerConfig, ct).ConfigureAwait(false);
+        var consumerName = _entry.Scope == ConsumerScope.PerNode
+            ? _naming.PerNodeConsumerName(projectionName)
+            : _naming.ClusterConsumerName(projectionName);
+
+        // Consumer was pre-created by NatsStreamInitializer. Bind to it.
+        var consumer = await _js.GetConsumerAsync(_naming.StreamName, consumerName, ct).ConfigureAwait(false);
 
         await foreach (var msg in consumer.ConsumeAsync<byte[]>(cancellationToken: ct).ConfigureAwait(false))
         {
-            var sw = Stopwatch.StartNew();
-            string result = "ack";
-            try
+            await HandleSingleAsync(msg, projectionName, ct).ConfigureAwait(false);
+        }
+    }
+
+    private async Task HandleSingleAsync(NatsJSMsg<byte[]> msg, string projectionName, CancellationToken ct)
+    {
+        var sw = Stopwatch.StartNew();
+        string result = "ack";
+
+        // 1. Oversize guard.
+        if (msg.Data is { Length: > 0 } data && data.Length > _options.MaxPayloadBytes)
+        {
+            LogOversize(_logger, projectionName, data.Length, null);
+            try { await msg.AckTerminateAsync(cancellationToken: ct).ConfigureAwait(false); } catch { }
+            _metrics.RecordProjectionAck(projectionName, "term");
+            return;
+        }
+
+        // 2. Subject + payload parse — malformed input is immediate poison.
+        NatsNamingStrategy.ParsedDurableSubject parsed;
+        HarnessEvent evt;
+        try
+        {
+            parsed = NatsNamingStrategy.ParseDurableSubject(msg.Subject)
+                ?? throw new InvalidOperationException($"Subject did not parse: {msg.Subject}");
+            evt = JsonSerializer.Deserialize<HarnessEvent>(msg.Data!)
+                ?? throw new InvalidOperationException("Payload did not deserialize to HarnessEvent.");
+        }
+        catch (Exception ex)
+        {
+            LogMalformed(_logger, projectionName, ex);
+            try { await msg.AckTerminateAsync(cancellationToken: ct).ConfigureAwait(false); } catch { }
+            _metrics.RecordProjectionAck(projectionName, "term");
+            return;
+        }
+
+        // 3. Extract OTel trace context from headers before invoking the handler.
+        var parentContext = ExtractTraceContext(msg.Headers);
+        using var activity = ActivitySource.StartActivity(
+            name: $"nats.consume {projectionName}",
+            kind: ActivityKind.Consumer,
+            parentContext: parentContext);
+        activity?.SetTag("session.id", parsed.SessionId);
+        activity?.SetTag("project.id", parsed.ProjectId);
+        activity?.SetTag("tenant.id", parsed.Tenant);
+        activity?.SetTag("event.type", parsed.EventType);
+
+        string? userId = msg.Headers?["x-fleet-user-id"].ToString();
+        string? harnessType = msg.Headers?["x-fleet-harness-type"].ToString();
+        var ctx = new ProjectionContext(
+            Tenant: parsed.Tenant,
+            ProjectId: parsed.ProjectId,
+            FleetSessionId: parsed.SessionId,
+            EventType: parsed.EventType,
+            UserId: string.IsNullOrEmpty(userId) ? null : userId,
+            HarnessType: string.IsNullOrEmpty(harnessType) ? null : harnessType,
+            StreamSequence: (long)(msg.Metadata?.Sequence.Stream ?? 0));
+
+        try
+        {
+            using var scope = _rootProvider.CreateScope();
+            var projection = (IProjection<HarnessEvent>)scope.ServiceProvider.GetRequiredService(_entry.ProjectionType);
+            await projection.HandleAsync(evt, ctx, ct).ConfigureAwait(false);
+            await msg.AckAsync(cancellationToken: ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogHandlerFailed(_logger, projectionName, ex);
+            // The JetStream consumer was created with MaxDeliver = ProjectionRetryBudget, so the
+            // broker stops redelivering automatically past that count. TERM on the final attempt
+            // makes the poison visible; NAK before that allows redelivery.
+            var numDelivered = (int)(msg.Metadata?.NumDelivered ?? 1);
+            if (numDelivered >= _options.ProjectionRetryBudget)
             {
-                var parsed = NatsNamingStrategy.ParseDurableSubject(msg.Subject)
-                    ?? throw new InvalidOperationException($"Subject did not parse: {msg.Subject}");
-                var evt = JsonSerializer.Deserialize<HarnessEvent>(msg.Data!)
-                    ?? throw new InvalidOperationException("Payload did not deserialize to HarnessEvent.");
-                string? userId = msg.Headers?["x-fleet-user-id"].ToString();
-                string? harnessType = msg.Headers?["x-fleet-harness-type"].ToString();
-                var ctx = new ProjectionContext(
-                    Tenant: parsed.Tenant,
-                    ProjectId: parsed.ProjectId,
-                    FleetSessionId: parsed.SessionId,
-                    EventType: parsed.EventType,
-                    UserId: string.IsNullOrEmpty(userId) ? null : userId,
-                    HarnessType: string.IsNullOrEmpty(harnessType) ? null : harnessType,
-                    StreamSequence: (long)(msg.Metadata?.Sequence.Stream ?? 0));
-
-                using var scope = _rootProvider.CreateScope();
-                var projection = (IProjection<HarnessEvent>)scope.ServiceProvider.GetRequiredService(_projectionType);
-
-                await projection.HandleAsync(evt, ctx, ct).ConfigureAwait(false);
-                await msg.AckAsync(cancellationToken: ct).ConfigureAwait(false);
+                LogPoisoned(_logger, projectionName, numDelivered, null);
+                try { await msg.AckTerminateAsync(cancellationToken: ct).ConfigureAwait(false); } catch { }
+                result = "term";
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            else
             {
+                try { await msg.NakAsync(cancellationToken: ct).ConfigureAwait(false); } catch { }
                 result = "nak";
-                LogHandlerFailed(_logger, projectionName, ex);
-                try { await msg.NakAsync(cancellationToken: ct).ConfigureAwait(false); } catch { /* best effort */ }
-            }
-            finally
-            {
-                sw.Stop();
-                _metrics.RecordProjectionHandler(sw.Elapsed.TotalMilliseconds, projectionName, msg.Subject, result);
-                _metrics.RecordProjectionAck(projectionName, result);
             }
         }
+        finally
+        {
+            sw.Stop();
+            _metrics.RecordProjectionHandler(sw.Elapsed.TotalMilliseconds, projectionName, msg.Subject, result);
+            _metrics.RecordProjectionAck(projectionName, result);
+        }
+    }
+
+    private static ActivityContext ExtractTraceContext(NatsHeaders? headers)
+    {
+        if (headers is null) return default;
+        DistributedContextPropagator.Current.ExtractTraceIdAndState(headers,
+            static (carrier, key, out string? value, out IEnumerable<string>? values) =>
+            {
+                values = null;
+                value = carrier is NatsHeaders h && h.TryGetValue(key, out var raw) ? raw.ToString() : null;
+            },
+            out var traceParent, out var traceState);
+        return ActivityContext.TryParse(traceParent, traceState, out var parsed) ? parsed : default;
     }
 }
 ```
@@ -1968,6 +2478,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NATS.Client.JetStream;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Infrastructure.Nats.Configuration;
 
 namespace WeaveFleet.Infrastructure.Nats;
@@ -1978,6 +2489,7 @@ public sealed class ProjectionHostService : BackgroundService
     private readonly INatsJSContext _js;
     private readonly IServiceProvider _rootProvider;
     private readonly NatsNamingStrategy _naming;
+    private readonly NatsOptions _options;
     private readonly NatsMetrics _metrics;
     private readonly ILoggerFactory _loggerFactory;
 
@@ -1986,6 +2498,7 @@ public sealed class ProjectionHostService : BackgroundService
         INatsJSContext js,
         IServiceProvider rootProvider,
         NatsNamingStrategy naming,
+        NatsOptions options,
         NatsMetrics metrics,
         ILoggerFactory loggerFactory)
     {
@@ -1993,16 +2506,17 @@ public sealed class ProjectionHostService : BackgroundService
         _js = js;
         _rootProvider = rootProvider;
         _naming = naming;
+        _options = options;
         _metrics = metrics;
         _loggerFactory = loggerFactory;
     }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var tasks = _registry.ProjectionTypes.Select(type =>
+        var tasks = _registry.Entries.Select(entry =>
         {
             var listener = new ProjectionListener(
-                type, _js, _rootProvider, _naming, _metrics,
+                entry, _js, _rootProvider, _naming, _options, _metrics,
                 _loggerFactory.CreateLogger<ProjectionListener>());
             return Task.Run(() => listener.RunAsync(stoppingToken), stoppingToken);
         }).ToArray();
@@ -2049,10 +2563,11 @@ public sealed class NoOpProjection : IProjection<HarnessEvent>
 Edit `src/WeaveFleet.Infrastructure/DependencyInjection.cs`. Add a `using WeaveFleet.Infrastructure.Nats.Configuration;` and after line 122 (the `InMemoryEventBroadcaster` registration):
 
 ```csharp
-        // NATS event substrate (Phase 1 registers publisher + NoOpProjection only)
+        // NATS event substrate — Phase 2 registers the NoOp projection only. Phase 3 Task 3.1
+        // replaces this call site with MessagePersistenceProjection (+ WebSocketFanOutProjection).
         services.AddEventStore(options.Nats, nats =>
         {
-            nats.AddProjection<WeaveFleet.Application.Projections.NoOpProjection>();
+            nats.AddProjection<WeaveFleet.Application.Projections.NoOpProjection>(ConsumerScope.Cluster);
         });
 ```
 
@@ -2061,15 +2576,7 @@ Edit `src/WeaveFleet.Infrastructure/DependencyInjection.cs`. Add a `using WeaveF
 ```bash
 dotnet build --nologo
 ```
-Expected: build succeeds. `EphemeralEventRelayService` is referenced from `NatsServiceCollectionExtensions`; since it doesn't exist yet this step fails.
-
-**Workaround for now:** In `NatsServiceCollectionExtensions.cs` (Task 1.8 Step 1), replace `services.AddHostedService<EphemeralEventRelayService>();` with a TODO comment:
-
-```csharp
-        // EphemeralEventRelayService registered in Phase 3 Task 3.4
-```
-
-Rerun build. Expected: PASS.
+Expected: PASS. `EphemeralEventRelayService` is no longer registered inside `AddEventStore` (Task 1.8 Step 1), so there is no missing-type error.
 
 - [ ] **Step 5: Commit.**
 
@@ -2109,6 +2616,10 @@ public sealed class NatsEnabledFactory : WebApplicationFactory<Program>
         Directory.CreateDirectory(dir);
         builder.UseSetting("Fleet:Nats:DataDirectory", dir);
         builder.UseSetting("Fleet:DatabasePath", Path.Combine(dir, "fleet.db"));
+        // Analytics uses a separate DB file which is shared across parallel test runs by
+        // default — override to an isolated path so `.deps.json` locks cannot cross-contaminate
+        // (shouldly-assertion-style-adoption learning).
+        builder.UseSetting("Fleet:AnalyticsDatabasePath", Path.Combine(dir, "analytics.db"));
         builder.UseSetting("Fleet:AnalyticsEnabled", "false"); // noise reduction
     }
 }
@@ -2133,7 +2644,8 @@ public sealed class NatsEventSubstrateEndToEndTests : IClassFixture<NatsEnabledF
             Payload = JsonSerializer.SerializeToElement(new { info = new { role = "assistant" } })
         };
         await publisher.PublishAsync(evt,
-            new EventPublishContext("sess-e2e", "proj-e2e", "user-e2e", "opencode"), CancellationToken.None);
+            new EventPublishContext("sess-e2e", "proj-e2e", "user-e2e", "opencode", Sequence: 1),
+            CancellationToken.None);
 
         var js = scope.ServiceProvider.GetRequiredService<INatsJSContext>();
         var stream = await js.GetStreamAsync("fleet-sessions");
@@ -2141,6 +2653,8 @@ public sealed class NatsEventSubstrateEndToEndTests : IClassFixture<NatsEnabledF
     }
 }
 ```
+
+**Ordering note.** Run this test while `NoOpProjection` is still the registered projection (i.e. between Task 2.3 and Task 3.1). Task 3.1 replaces `NoOpProjection` with `MessagePersistenceProjection`, which requires the SQLite schema and a valid session/project — not present here. A second Phase-3-appropriate e2e test (`MessagePersistenceProjection_persistsMessage`) is added in Task 3.2 Step 6.
 
 - [ ] **Step 2: Run.**
 
@@ -2203,7 +2717,13 @@ The pump needs project id to construct the subject. Extend the session-resolutio
 
 If `ISession` does not expose `ProjectId` or `HarnessType`, inspect `src/WeaveFleet.Domain/Entities/Session.cs` and confirm; they should exist per existing analytics work. If not, add the fields as a pre-req — but inspection required first.
 
-- [ ] **Step 3: Publish alongside existing call.**
+- [ ] **Step 3: Publish alongside existing call with a per-pump monotonic sequence.**
+
+Each pump owns a `long` counter initialised to `0` at pump start and incremented per published event. The counter feeds into `Nats-Msg-Id` as `{sessionId}:{seq}`. Declare the counter as a local:
+
+```csharp
+        long publishSequence = 0;
+```
 
 Inside the `await foreach` (line 172), after the existing delta-buffer / persistence / broadcast logic, add:
 
@@ -2212,8 +2732,9 @@ Inside the `await foreach` (line 172), after the existing delta-buffer / persist
                 // Does not replace any existing behaviour during the compatibility window.
                 try
                 {
+                    var seq = System.Threading.Interlocked.Increment(ref publishSequence);
                     await _publisher.PublishAsync(evt,
-                        new EventPublishContext(targetFleetSessionId, projectId, sessionUserId, harnessType),
+                        new EventPublishContext(targetFleetSessionId, projectId, sessionUserId, harnessType, seq),
                         ct).ConfigureAwait(false);
                 }
                 catch (Exception pubEx)
@@ -2231,7 +2752,7 @@ And declare the new logger message near the existing ones at the top of the clas
             "Event publish to NATS failed for instance {InstanceId}");
 ```
 
-**Placement:** put the publish call *before* the `handledDurably` / ephemeral gating so the relay always publishes every event, regardless of legacy-path routing.
+**Placement:** put the publish call *before* the `handledDurably` / ephemeral gating so the relay always publishes every event, regardless of legacy-path routing. The pump is single-threaded per session, so `Interlocked` is strictly unnecessary — we use it as defensive documentation that `publishSequence` is the only shared-state surface for future parallelization.
 
 - [ ] **Step 4: Build & run existing tests.**
 
@@ -2267,26 +2788,138 @@ CREATE TABLE IF NOT EXISTS sessions_shadow AS SELECT * FROM sessions WHERE 1=0;
 
 Pick the right NN by listing `src/WeaveFleet.Infrastructure/Migrations/` and taking `max+1`.
 
-- [ ] **Step 2: Introduce a shadow-mode flag on the persister.**
+- [ ] **Step 2: Extend `IHarnessEventPersister` with a shadow entry-point.**
 
-Add a boolean to `IHarnessEventPersister` is overkill. Instead, accept a shadow repository. Edit `src/WeaveFleet.Application/Services/IHarnessEventPersister.cs` to add:
+Edit `src/WeaveFleet.Application/Services/IHarnessEventPersister.cs`:
 
 ```csharp
 /// <summary>
-/// Handle an event without writing outbox entries (shadow-mode for the NATS compat window).
+/// Handle an event by writing it to the shadow read model only (no outbox write).
+/// Used by <c>MessagePersistenceProjection</c> during the Phase 3 NATS compatibility window.
 /// </summary>
 Task HandleShadowAsync(string fleetSessionId, string ownerUserId, HarnessEvent evt, CancellationToken ct);
 ```
 
-Implement in `HarnessEventPersistenceService` by duplicating the routing switch but writing to shadow repositories. **Simpler alternative:** add `IShadowMessageRepository`/`IShadowSessionRepository` (thin Dapper wrappers over `messages_shadow`/`sessions_shadow`) and pass them in constructor; introduce a mode flag.
-
-*Actual approach recommended:* create a parallel `HarnessEventShadowPersistenceService` that reuses the existing serialization helpers but writes to `messages_shadow` / `sessions_shadow` directly. It skips the outbox entirely (the WS fan-out projection writes to the shadow broadcaster instead). See Step 3.
-
 - [ ] **Step 3: Create shadow repositories.**
 
-Create `src/WeaveFleet.Domain/Repositories/IShadowMessageRepository.cs` and `IShadowSessionRepository.cs` mirroring the production interfaces but with table name `messages_shadow` / `sessions_shadow`.
+Create `src/WeaveFleet.Domain/Repositories/IShadowMessageRepository.cs` and `IShadowSessionRepository.cs` mirroring the production interfaces but with table names `messages_shadow` / `sessions_shadow`. Copy the full method surface of the originals (`GetByIdAsync`, `UpsertAsync`, `DeleteByIdAsync`, `RemovePartAsync`, `UpdateTitleAsync`) — the shadow service delegates to exactly the same write paths.
 
-Create Dapper implementations in `src/WeaveFleet.Infrastructure/Data/Repositories/DapperShadowMessageRepository.cs` and `DapperShadowSessionRepository.cs`. Register both as scoped in `DependencyInjection.cs`.
+Create Dapper implementations in `src/WeaveFleet.Infrastructure/Data/Repositories/DapperShadowMessageRepository.cs` and `DapperShadowSessionRepository.cs`. Each is a straight copy of the production Dapper repo with the table name replaced. Register both as scoped in `DependencyInjection.cs`.
+
+- [ ] **Step 3.5: Create `HarnessEventShadowPersistenceService`.**
+
+Create `src/WeaveFleet.Infrastructure/Services/HarnessEventShadowPersistenceService.cs`:
+
+```csharp
+using System.Text.Json;
+using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
+
+namespace WeaveFleet.Infrastructure.Services;
+
+/// <summary>
+/// Shadow-mode persister used during the NATS Phase 3 compatibility window.
+/// Writes every durable harness event to the <c>messages_shadow</c> / <c>sessions_shadow</c>
+/// tables via <see cref="IShadowMessageRepository"/> / <see cref="IShadowSessionRepository"/>.
+/// Reuses the exact serialization helpers on <see cref="MessagePersistenceService"/> so the
+/// diff harness can assert byte-for-byte equality between production and shadow outputs.
+/// Does NOT emit outbox entries — the WebSocket fan-out shadow projection produces the
+/// shadow broadcaster output that the diff harness compares against.
+/// </summary>
+public sealed class HarnessEventShadowPersistenceService
+{
+    private readonly IShadowMessageRepository _shadowMessages;
+    private readonly IShadowSessionRepository _shadowSessions;
+
+    public HarnessEventShadowPersistenceService(
+        IShadowMessageRepository shadowMessages,
+        IShadowSessionRepository shadowSessions)
+    {
+        _shadowMessages = shadowMessages;
+        _shadowSessions = shadowSessions;
+    }
+
+    public async Task HandleAsync(string fleetSessionId, string ownerUserId, HarnessEvent evt, CancellationToken ct)
+    {
+        if (!EventTypeMetadata.Classify(evt.Type).IsDurable) return;
+
+        using var userScope = BackgroundUserContext.BeginScope(ownerUserId);
+
+        switch (evt.Type)
+        {
+            case EventTypes.MessageCreated:
+            case EventTypes.MessageUpdated:
+                await TryPersistMessageAsync(fleetSessionId, evt).ConfigureAwait(false);
+                return;
+            case EventTypes.MessagePartUpdated:
+                await TryPersistPartAsync(fleetSessionId, evt).ConfigureAwait(false);
+                return;
+            case EventTypes.MessageRemoved:
+                await TryRemoveMessageAsync(fleetSessionId, evt).ConfigureAwait(false);
+                return;
+            case EventTypes.MessagePartRemoved:
+                await TryRemovePartAsync(fleetSessionId, evt).ConfigureAwait(false);
+                return;
+            case EventTypes.SessionUpdated:
+                await TryUpdateTitleAsync(fleetSessionId, evt).ConfigureAwait(false);
+                return;
+            // session.error / session.compacted / session.deleted are outbox-only in prod; no
+            // shadow read-model write is required — the diff harness covers the broadcaster path.
+            case EventTypes.SessionError:
+            case EventTypes.SessionCompacted:
+            case EventTypes.SessionDeleted:
+                return;
+        }
+    }
+
+    // Each Try* helper is the body of the corresponding method on HarnessEventPersistenceService,
+    // with every call to _messageRepository / _sessionRepository / _sessionActivityWriteService
+    // replaced by _shadowMessages / _shadowSessions and the outbox write removed entirely.
+    // The Json / OpenCode parsing helpers are reused verbatim via `MessagePersistenceService`
+    // and `OpenCodeMapper` — they do not touch the production DB, only transform JSON → PersistedMessage.
+
+    // NOTE to implementer: lift TryPersistMessageAsync / TryPersistPartAsync / TryHandleMessageRemovedAsync
+    // / TryHandleMessagePartRemovedAsync / TryHandleSessionUpdatedAsync from
+    // HarnessEventPersistenceService, rename the receivers to the shadow repositories, and drop
+    // all outbox-related code paths. Add a unit test for each to assert shadow row contents.
+    private Task TryPersistMessageAsync(string fleetSessionId, HarnessEvent evt) => /* see note above */ Task.CompletedTask;
+    private Task TryPersistPartAsync(string fleetSessionId, HarnessEvent evt) => Task.CompletedTask;
+    private Task TryRemoveMessageAsync(string fleetSessionId, HarnessEvent evt) => Task.CompletedTask;
+    private Task TryRemovePartAsync(string fleetSessionId, HarnessEvent evt) => Task.CompletedTask;
+    private Task TryUpdateTitleAsync(string fleetSessionId, HarnessEvent evt) => Task.CompletedTask;
+}
+```
+
+Implementation strategy for the `Try*` bodies: **do not retype from scratch.** Lift the corresponding helper method from `HarnessEventPersistenceService` (the file at `src/WeaveFleet.Infrastructure/Services/HarnessEventPersistenceService.cs`, lines 172-463), copy it into this file, then mechanically apply these find/replace rules:
+
+1. `_messageRepository.` → `_shadowMessages.`
+2. `_sessionRepository.` → `_shadowSessions.`
+3. Delete every `_sessionActivityWriteService.WriteAsync(...)` call and its surrounding `SessionActivityWriteRequest` construction.
+4. Replace `await WriteDurableEventAsync(...)` / `await EmitOutboxEventAsync(...)` with a direct `await _shadowMessages.UpsertAsync(persisted)` (or the equivalent shadow-repo method for the specific handler).
+
+Write a TDD test per handler in `tests/WeaveFleet.Infrastructure.Tests/Services/HarnessEventShadowPersistenceServiceTests.cs`:
+- `HandleAsync_MessageCreated_writesMessageRow`
+- `HandleAsync_MessageUpdated_mergesRow`
+- `HandleAsync_MessagePartUpdated_writesPart`
+- `HandleAsync_MessageRemoved_deletesRow`
+- `HandleAsync_MessagePartRemoved_removesPart`
+- `HandleAsync_SessionUpdated_updatesTitle`
+- `HandleAsync_SessionError_isNoOp` (and same for Compacted/Deleted)
+- `HandleAsync_EphemeralEvent_isNoOp`
+
+Finally, wire `HarnessEventPersistenceService.HandleShadowAsync` to delegate to this service:
+
+```csharp
+    // Inside HarnessEventPersistenceService — injected via constructor (add alongside existing args):
+    private readonly HarnessEventShadowPersistenceService _shadow;
+    // ...
+    public Task HandleShadowAsync(string fleetSessionId, string ownerUserId, HarnessEvent evt, CancellationToken ct)
+        => _shadow.HandleAsync(fleetSessionId, ownerUserId, evt, ct);
+```
+
+Register `HarnessEventShadowPersistenceService` as scoped in `DependencyInjection.cs` alongside the shadow repositories.
 
 - [ ] **Step 4: Implement `MessagePersistenceProjection` (shadow).**
 
@@ -2326,7 +2959,7 @@ Edit `src/WeaveFleet.Infrastructure/DependencyInjection.cs` to replace `NoOpProj
 ```csharp
         services.AddEventStore(options.Nats, nats =>
         {
-            nats.AddProjection<WeaveFleet.Application.Projections.MessagePersistenceProjection>();
+            nats.AddProjection<WeaveFleet.Application.Projections.MessagePersistenceProjection>(ConsumerScope.Cluster);
         });
 ```
 
@@ -2481,8 +3114,10 @@ Edit `src/WeaveFleet.Infrastructure/DependencyInjection.cs`:
 
         services.AddEventStore(options.Nats, nats =>
         {
-            nats.AddProjection<WeaveFleet.Application.Projections.MessagePersistenceProjection>();
-            nats.AddProjection<WeaveFleet.Application.Projections.WebSocketFanOutProjection>();
+            // Persistence is a single-writer — use a cluster-wide consumer (exactly-once semantics).
+            nats.AddProjection<WeaveFleet.Application.Projections.MessagePersistenceProjection>(ConsumerScope.Cluster);
+            // WS fan-out needs each Fleet node to get its own copy of the stream.
+            nats.AddProjection<WeaveFleet.Application.Projections.WebSocketFanOutProjection>(ConsumerScope.PerNode);
         });
 ```
 
@@ -2554,6 +3189,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NATS.Client.Core;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 
@@ -2562,49 +3198,81 @@ namespace WeaveFleet.Infrastructure.Nats;
 /// <summary>
 /// Core NATS subscriber for ephemeral events. During Phase 3 it forwards to
 /// <see cref="IShadowEventBroadcaster"/>; Phase 5 switches the target to the production broadcaster.
+/// Guards against oversize or malformed payloads — the subject space is internal-only, but
+/// defence-in-depth still applies.
 /// </summary>
 public sealed class EphemeralEventRelayService : BackgroundService
 {
     private static readonly Action<ILogger, Exception?> LogFailed =
         LoggerMessage.Define(LogLevel.Warning, new EventId(1, "EphemeralForwardFailed"),
             "Failed to forward ephemeral NATS event to broadcaster");
+    private static readonly Action<ILogger, int, Exception?> LogOversize =
+        LoggerMessage.Define<int>(LogLevel.Warning, new EventId(2, "EphemeralOversizePayload"),
+            "Dropped oversize ephemeral payload ({Bytes} bytes)");
+    private static readonly Action<ILogger, Exception?> LogMalformed =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(3, "EphemeralMalformedPayload"),
+            "Dropped malformed ephemeral payload");
 
     private readonly INatsConnection _connection;
     private readonly NatsNamingStrategy _naming;
     private readonly IShadowEventBroadcaster _shadow;
+    private readonly NatsOptions _options;
     private readonly ILogger<EphemeralEventRelayService> _logger;
 
     public EphemeralEventRelayService(
         INatsConnection connection,
         NatsNamingStrategy naming,
         IShadowEventBroadcaster shadow,
+        NatsOptions options,
         ILogger<EphemeralEventRelayService> logger)
     {
         _connection = connection;
         _naming = naming;
         _shadow = shadow;
+        _options = options;
         _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var msg in _connection.SubscribeAsync<byte[]>(_naming.EphemeralSubscriptionFilter, cancellationToken: stoppingToken).ConfigureAwait(false))
+        await foreach (var msg in _connection
+            .SubscribeAsync<byte[]>(_naming.EphemeralSubscriptionFilter, cancellationToken: stoppingToken)
+            .ConfigureAwait(false))
         {
             try
             {
+                if (msg.Data is { Length: > 0 } data && data.Length > _options.MaxPayloadBytes)
+                {
+                    LogOversize(_logger, data.Length, null);
+                    continue;
+                }
+
                 // Subject format: tenant.{ws}.project.{pid}.live.{sid}.{type}
                 var parts = msg.Subject.Split('.');
                 if (parts.Length < 7 || parts[0] != "tenant" || parts[2] != "project" || parts[4] != "live")
+                {
+                    LogMalformed(_logger, null);
                     continue;
+                }
                 var sessionId = parts[5];
                 var eventType = string.Join('.', parts[6..]);
 
-                var evt = JsonSerializer.Deserialize<HarnessEvent>(msg.Data!);
-                if (evt is null) continue;
+                HarnessEvent? evt;
+                try
+                {
+                    evt = JsonSerializer.Deserialize<HarnessEvent>(msg.Data!);
+                }
+                catch (JsonException jx)
+                {
+                    LogMalformed(_logger, jx);
+                    continue;
+                }
+                if (evt is null) { LogMalformed(_logger, null); continue; }
 
                 string? userId = msg.Headers?["x-fleet-user-id"].ToString();
                 object payload = evt.Payload.HasValue ? evt.Payload.Value : JsonSerializer.SerializeToElement(new { });
-                await _shadow.BroadcastAsync($"session:{sessionId}", eventType, payload, userId, stoppingToken).ConfigureAwait(false);
+                await _shadow.BroadcastAsync($"session:{sessionId}", eventType, payload, userId, stoppingToken)
+                    .ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -2615,13 +3283,16 @@ public sealed class EphemeralEventRelayService : BackgroundService
 }
 ```
 
-- [ ] **Step 2: Register it in `NatsServiceCollectionExtensions`.**
+- [ ] **Step 2: Register it next to its broadcaster dependency.**
 
-Replace the earlier TODO stub with the real registration:
+Edit `src/WeaveFleet.Infrastructure/DependencyInjection.cs` — add the hosted-service registration adjacent to the shadow-broadcaster registration added in Task 3.2 Step 1, so both land together:
 
 ```csharp
+        services.AddSingleton<IShadowEventBroadcaster, InMemoryShadowEventBroadcaster>();
         services.AddHostedService<EphemeralEventRelayService>();
 ```
+
+`NatsServiceCollectionExtensions.AddEventStore` deliberately does NOT register this service — keeping the registration here makes the dependency direction obvious and avoids the circular TODO we had previously.
 
 - [ ] **Step 3: Build.**
 
@@ -2633,7 +3304,7 @@ Expected: PASS.
 - [ ] **Step 4: Commit.**
 
 ```bash
-git add src/WeaveFleet.Infrastructure/Nats/EphemeralEventRelayService.cs src/WeaveFleet.Infrastructure/Nats/Configuration/NatsServiceCollectionExtensions.cs
+git add src/WeaveFleet.Infrastructure/Nats/EphemeralEventRelayService.cs src/WeaveFleet.Infrastructure/DependencyInjection.cs
 git commit -m "feat: EphemeralEventRelayService forwards core NATS ephemeral events to shadow broadcaster"
 ```
 
@@ -2724,6 +3395,291 @@ git commit -m "test: shadow diff harness asserts projection output matches legac
 
 **Precondition:** Task 0.2 audit shows every WS → SQLite path tolerates the "row not yet written" case. Task 0.3 concurrency audit resolved. Shadow diff harness passes under load.
 
+### Task 4.0: Extract merge-before-publish helper (blocking pre-req for Task 4.1)
+
+The design mandates that the published durable `message.updated` payload already contains the merged text (Cutover Timing section: "the snapshot is not constructed a second time in either projection"). Today the merge happens inside `HarnessEventPersistenceService.TryPersistMessageAsync` — after the event has already been handed to the persister. After cutover the relay publishes first and the persister runs inside a projection, so the merge must be hoisted into the relay before publish.
+
+This task is strictly mechanical extraction + tests; Task 4.1 depends on it.
+
+**Files:**
+- Modify: `src/WeaveFleet.Application/Services/MessagePersistenceService.cs` — add a new static helper.
+- Modify: `src/WeaveFleet.Infrastructure/Services/HarnessEventPersistenceService.cs` — expose `TryPopBufferedDeltasForMessage`.
+- Modify: `src/WeaveFleet.Infrastructure/Services/HarnessEventRelay.cs` — merge before publish.
+- Create: `tests/WeaveFleet.Infrastructure.Tests/Services/DeltaMergeBeforePublishTests.cs`.
+
+- [ ] **Step 1: Write the failing tests.**
+
+Create `tests/WeaveFleet.Infrastructure.Tests/Services/DeltaMergeBeforePublishTests.cs` with these cases (write them all first; they will fail until the helper exists):
+
+```csharp
+using System.Text.Json;
+using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Harnesses;
+
+namespace WeaveFleet.Infrastructure.Tests.Services;
+
+public sealed class DeltaMergeBeforePublishTests
+{
+    [Fact]
+    public void MergeBufferedDeltasIntoEvent_noDeltasBuffered_returnsSameEvent()
+    {
+        var evt = BuildMessageUpdated("msg-1", partsJson: """[{"type":"text","id":"p1","text":"hello"}]""");
+        var merged = MessagePersistenceService.MergeBufferedDeltasIntoEvent(evt, bufferedDeltas: []);
+        merged.Payload!.Value.GetRawText().ShouldBe(evt.Payload!.Value.GetRawText());
+    }
+
+    [Fact]
+    public void MergeBufferedDeltasIntoEvent_singlePart_appendsBufferedDelta()
+    {
+        var evt = BuildMessageUpdated("msg-1", partsJson: """[{"type":"text","id":"p1","text":"he"}]""");
+        var merged = MessagePersistenceService.MergeBufferedDeltasIntoEvent(evt,
+            bufferedDeltas: new Dictionary<(string msg, string part), string>
+            {
+                [("msg-1", "p1")] = "llo"
+            });
+        merged.Payload!.Value.GetProperty("parts")[0].GetProperty("text").GetString().ShouldBe("hello");
+    }
+
+    [Fact]
+    public void MergeBufferedDeltasIntoEvent_multipleParts_mergesByPartId()
+    {
+        var evt = BuildMessageUpdated("msg-1",
+            partsJson: """[{"type":"text","id":"p1","text":"a"},{"type":"text","id":"p2","text":""}]""");
+        var merged = MessagePersistenceService.MergeBufferedDeltasIntoEvent(evt,
+            bufferedDeltas: new Dictionary<(string msg, string part), string>
+            {
+                [("msg-1", "p1")] = "b",
+                [("msg-1", "p2")] = "xyz"
+            });
+        merged.Payload!.Value.GetProperty("parts")[0].GetProperty("text").GetString().ShouldBe("ab");
+        merged.Payload!.Value.GetProperty("parts")[1].GetProperty("text").GetString().ShouldBe("xyz");
+    }
+
+    [Fact]
+    public void MergeBufferedDeltasIntoEvent_messageCreatedAndPartUpdated_alsoMerge()
+    {
+        var evt = BuildEvent(EventTypes.MessageCreated, "msg-1",
+            partsJson: """[{"type":"text","id":"p1","text":""}]""");
+        var merged = MessagePersistenceService.MergeBufferedDeltasIntoEvent(evt,
+            bufferedDeltas: new Dictionary<(string msg, string part), string>
+            {
+                [("msg-1", "p1")] = "hi"
+            });
+        merged.Payload!.Value.GetProperty("parts")[0].GetProperty("text").GetString().ShouldBe("hi");
+    }
+
+    [Fact]
+    public void MergeBufferedDeltasIntoEvent_nonMergeableEventType_isPassThrough()
+    {
+        var evt = BuildEvent(EventTypes.SessionUpdated, "msg-1", partsJson: null,
+            payload: JsonSerializer.SerializeToElement(new { title = "new" }));
+        var merged = MessagePersistenceService.MergeBufferedDeltasIntoEvent(evt,
+            bufferedDeltas: new Dictionary<(string msg, string part), string>
+            {
+                [("msg-1", "p1")] = "ignored"
+            });
+        merged.ShouldBeSameAs(evt);
+    }
+
+    private static HarnessEvent BuildMessageUpdated(string messageId, string partsJson)
+        => BuildEvent(EventTypes.MessageUpdated, messageId, partsJson);
+
+    private static HarnessEvent BuildEvent(string type, string messageId, string? partsJson, JsonElement? payload = null)
+    {
+        var composed = payload ?? (partsJson is null
+            ? JsonSerializer.SerializeToElement(new { info = new { id = messageId } })
+            : JsonSerializer.SerializeToElement(new Dictionary<string, object?>
+            {
+                ["info"] = new { id = messageId, role = "assistant" },
+                ["parts"] = JsonDocument.Parse(partsJson).RootElement.Clone(),
+            }));
+        return new HarnessEvent { Type = type, SessionId = "sess-1", Timestamp = DateTimeOffset.UtcNow, Payload = composed };
+    }
+}
+```
+
+- [ ] **Step 2: Run the failing tests.**
+
+```bash
+dotnet test tests/WeaveFleet.Infrastructure.Tests --nologo --filter FullyQualifiedName~DeltaMergeBeforePublishTests
+```
+Expected: FAIL — `MessagePersistenceService.MergeBufferedDeltasIntoEvent` does not exist yet.
+
+- [ ] **Step 3: Implement the helper.**
+
+Add to `src/WeaveFleet.Application/Services/MessagePersistenceService.cs` (or wherever the existing `MergeTextDeltaAndMetadata` lives):
+
+```csharp
+    /// <summary>
+    /// Return a copy of <paramref name="evt"/> with buffered text deltas merged into every
+    /// text part whose (messageId, partId) appears in <paramref name="bufferedDeltas"/>.
+    /// Pass-through for event types that are not message-shape carriers
+    /// (<see cref="EventTypes.MessageCreated"/>, <see cref="EventTypes.MessageUpdated"/>,
+    /// <see cref="EventTypes.MessagePartUpdated"/>).
+    /// Pure function — no state, no side effects. Caller is responsible for popping the buffer.
+    /// </summary>
+    public static HarnessEvent MergeBufferedDeltasIntoEvent(
+        HarnessEvent evt,
+        IReadOnlyDictionary<(string MessageId, string PartId), string> bufferedDeltas)
+    {
+        if (bufferedDeltas.Count == 0) return evt;
+        if (evt.Type is not (EventTypes.MessageCreated or EventTypes.MessageUpdated or EventTypes.MessagePartUpdated))
+            return evt;
+        if (!evt.Payload.HasValue || evt.Payload.Value.ValueKind != JsonValueKind.Object)
+            return evt;
+
+        var payload = evt.Payload.Value;
+        if (!payload.TryGetProperty("parts", out var partsEl) || partsEl.ValueKind != JsonValueKind.Array)
+            return evt;
+
+        // Detect whether any part matches a buffered delta; bail early if not.
+        var messageId = payload.TryGetProperty("info", out var infoEl)
+            && infoEl.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+        if (messageId is null) return evt;
+        if (!bufferedDeltas.Keys.Any(k => k.MessageId == messageId)) return evt;
+
+        // Rebuild the parts array with merged text.
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            foreach (var prop in payload.EnumerateObject())
+            {
+                if (prop.Name == "parts")
+                {
+                    writer.WritePropertyName("parts");
+                    writer.WriteStartArray();
+                    foreach (var part in prop.Value.EnumerateArray())
+                    {
+                        WriteMergedPart(writer, part, messageId, bufferedDeltas);
+                    }
+                    writer.WriteEndArray();
+                }
+                else
+                {
+                    prop.WriteTo(writer);
+                }
+            }
+            writer.WriteEndObject();
+        }
+        var mergedPayload = JsonDocument.Parse(stream.ToArray()).RootElement;
+        return evt with { Payload = mergedPayload };
+    }
+
+    private static void WriteMergedPart(
+        Utf8JsonWriter writer,
+        JsonElement part,
+        string messageId,
+        IReadOnlyDictionary<(string, string), string> bufferedDeltas)
+    {
+        if (part.ValueKind != JsonValueKind.Object
+            || !part.TryGetProperty("type", out var typeEl) || typeEl.GetString() != "text"
+            || !part.TryGetProperty("id", out var partIdEl))
+        {
+            part.WriteTo(writer);
+            return;
+        }
+
+        var partId = partIdEl.GetString();
+        if (partId is null || !bufferedDeltas.TryGetValue((messageId, partId), out var delta))
+        {
+            part.WriteTo(writer);
+            return;
+        }
+
+        writer.WriteStartObject();
+        foreach (var prop in part.EnumerateObject())
+        {
+            if (prop.Name == "text")
+            {
+                var existing = prop.Value.ValueKind == JsonValueKind.String ? prop.Value.GetString() ?? "" : "";
+                writer.WriteString("text", existing + delta);
+            }
+            else
+            {
+                prop.WriteTo(writer);
+            }
+        }
+        writer.WriteEndObject();
+    }
+```
+
+- [ ] **Step 4: Expose the buffer to the relay via the persister.**
+
+Edit `src/WeaveFleet.Infrastructure/Services/HarnessEventPersistenceService.cs` to add a public method that returns the currently-buffered deltas for a given session (used by the relay to supply the dictionary to the merge helper):
+
+```csharp
+    /// <summary>
+    /// Return a snapshot of buffered text deltas for <paramref name="fleetSessionId"/>. The caller
+    /// is responsible for calling <see cref="BufferTextDelta"/> first for any new delta events,
+    /// then calling this method immediately before publishing a durable event that may reference
+    /// the buffered parts. Does NOT clear the buffer — the existing persister behavior does.
+    /// </summary>
+    public IReadOnlyDictionary<(string MessageId, string PartId), string> SnapshotBufferedDeltas(string fleetSessionId)
+    {
+        var prefix = $"{fleetSessionId}::";
+        var result = new Dictionary<(string, string), string>();
+        foreach (var kv in _bufferedTextDeltas)
+        {
+            if (!kv.Key.MessageKey.StartsWith(prefix, StringComparison.Ordinal)) continue;
+            var afterPrefix = kv.Key.MessageKey[prefix.Length..];
+            var sep = afterPrefix.IndexOf("::", StringComparison.Ordinal);
+            if (sep < 0) continue;
+            var messageId = afterPrefix[..sep];
+            result[(messageId, kv.Key.PartId)] = kv.Value;
+        }
+        return result;
+    }
+```
+
+Also add this method to `IHarnessEventPersister` so the Application-layer relay can call it without taking an Infrastructure dependency.
+
+- [ ] **Step 5: Merge in the relay pump (additive — no behavior change yet).**
+
+Edit `src/WeaveFleet.Infrastructure/Services/HarnessEventRelay.cs` — wrap the publish call from Task 3.0 so it publishes the merged event:
+
+```csharp
+                var eventToPublish = persistenceService is not null
+                    ? MessagePersistenceService.MergeBufferedDeltasIntoEvent(
+                          evt,
+                          persistenceService.SnapshotBufferedDeltas(targetFleetSessionId))
+                    : evt;
+
+                try
+                {
+                    var seq = System.Threading.Interlocked.Increment(ref publishSequence);
+                    await _publisher.PublishAsync(eventToPublish,
+                        new EventPublishContext(targetFleetSessionId, projectId, sessionUserId, harnessType, seq),
+                        ct).ConfigureAwait(false);
+                }
+                catch (Exception pubEx) { LogPublishFailed(_logger, instanceId, pubEx); }
+```
+
+- [ ] **Step 6: Add an integration test that JetStream receives the merged payload.**
+
+Create `tests/WeaveFleet.Api.Tests/Nats/MergedDurablePayloadTests.cs`:
+
+```csharp
+// Use NatsEnabledFactory from Task 2.4. Drive a synthetic pump: buffer deltas for p1,
+// then publish a message.updated event for the same messageId. Fetch the raw JetStream
+// message bytes and assert the parts[0].text contains the merged delta content.
+// No re-merge happens downstream.
+```
+
+- [ ] **Step 7: Run the full suite.**
+
+```bash
+dotnet test --nologo
+```
+Expected: all previously-passing tests still pass; new merge-before-publish tests pass.
+
+- [ ] **Step 8: Commit.**
+
+```bash
+git add src/WeaveFleet.Application/Services/MessagePersistenceService.cs src/WeaveFleet.Application/Services/IHarnessEventPersister.cs src/WeaveFleet.Infrastructure/Services/HarnessEventPersistenceService.cs src/WeaveFleet.Infrastructure/Services/HarnessEventRelay.cs tests/WeaveFleet.Infrastructure.Tests/Services/DeltaMergeBeforePublishTests.cs tests/WeaveFleet.Api.Tests/Nats/MergedDurablePayloadTests.cs
+git commit -m "refactor: merge buffered text deltas into HarnessEvent before NATS publish"
+```
+
 ### Task 4.1: Flip `MessagePersistenceProjection` to write production tables
 
 **Files:**
@@ -2747,46 +3703,31 @@ Edit `src/WeaveFleet.Infrastructure/Services/HarnessEventRelay.cs`:
 
 - Delete the `persistenceService?.TryHandleDurableEventAsync(...)` call at lines 183-184.
 - Delete `if (handledDurably) continue;` at lines 186-187.
-- Keep the `persistenceService?.BufferTextDelta(...)` (delta buffering still lives in the relay — design Decision 4).
+- Keep the `persistenceService?.BufferTextDelta(...)` call *and* the `SnapshotBufferedDeltas(...)` lookup from Task 4.0 — delta buffering still lives in the relay (design Decision 4) and now feeds the merge-before-publish helper exclusively.
 - Keep the flush on disconnect (lines 237-247).
 
 The pump now:
 1. Buffers deltas for merge.
-2. Publishes via `_publisher.PublishAsync(...)`.
-3. Still broadcasts ephemeral events via `_broadcaster` (removed in Phase 5).
-4. Flushes deltas on exit.
+2. Snapshots the buffer and merges into the durable event.
+3. Publishes the merged event via `_publisher.PublishAsync(...)`.
+4. Still broadcasts ephemeral events via `_broadcaster` (removed in Phase 5).
+5. Flushes deltas on exit.
 
-- [ ] **Step 3: Update text-delta merge to happen before durable publish.**
-
-The design says the durable `message.updated` payload must include merged deltas (so downstream projections see the final snapshot). Currently the merge happens inside `HarnessEventPersistenceService.TryPersistMessageAsync` — which the relay will no longer invoke directly. The relay now needs to merge deltas *before* publishing durable events.
-
-Implementation:
-
-- Introduce a merge helper exposed on `IHarnessEventPersister` (or better: extract the merge logic to a static method on `MessagePersistenceService`, which already owns `MergeTextDeltaAndMetadata`).
-- In the relay pump, when the event is `message.updated` (or `message.created`/`message.part.updated`), apply `BufferTextDelta` first, then on publish call an exposed `MergeBufferedDeltasIntoEvent(...)` that returns an updated `HarnessEvent` with the merged payload. Publish that merged event.
-
-This is a non-trivial refactor. **Do not skip or hand-wave it.** The current text-delta buffer lives inside `HarnessEventPersistenceService` keyed by `(session::message::partId)` — expose a method `TryMergeBufferedDeltas(string fleetSessionId, HarnessEvent evt, out HarnessEvent mergedEvt)` on the persister interface, implemented by looking up buffered deltas and emitting a rebuilt `HarnessEvent` whose `Payload` includes the merged text parts.
-
-Add the test in `tests/WeaveFleet.Infrastructure.Tests/Services/DeltaMergeBeforePublishTests.cs` that:
-1. Calls `BufferTextDelta` with a series of partial deltas.
-2. Passes a `message.updated` event to `TryMergeBufferedDeltas`.
-3. Asserts the returned event's payload contains the merged text.
-
-- [ ] **Step 4: Run the full integration test suite.**
+- [ ] **Step 3: Run the full integration test suite.**
 
 ```bash
 dotnet test --nologo
 ```
 Expected:
 - All Phase-1–3 tests still pass.
-- Shadow diff harness still runs (shadow tables still populated for now, until Task 4.3).
+- Shadow diff harness still runs (shadow tables still populated for now, until Task 4.2).
 - `SkillEndpointPathTraversalTests.GetSkill_ReturnsBadRequestOrNotRouted_ForEncodedTraversal` remains on the known-failing list but is otherwise stable.
 
-- [ ] **Step 5: Commit.**
+- [ ] **Step 4: Commit.**
 
 ```bash
-git add src/WeaveFleet.Application/Projections/MessagePersistenceProjection.cs src/WeaveFleet.Infrastructure/Services/HarnessEventRelay.cs src/WeaveFleet.Infrastructure/Services/HarnessEventPersistenceService.cs src/WeaveFleet.Application/Services/IHarnessEventPersister.cs tests/WeaveFleet.Infrastructure.Tests/Services/DeltaMergeBeforePublishTests.cs
-git commit -m "refactor: persistence cutover — projection writes production tables; relay publishes pre-merged durable payloads"
+git add src/WeaveFleet.Application/Projections/MessagePersistenceProjection.cs src/WeaveFleet.Infrastructure/Services/HarnessEventRelay.cs
+git commit -m "refactor: persistence cutover — projection is the sole SQLite writer"
 ```
 
 ### Task 4.2: Retire shadow tables
@@ -2913,7 +3854,31 @@ Do not begin until managed-cloud rollout begins. Scope recorded here so it is no
 
 - [ ] **Step 1:** In `WebSocketEndpoints.PumpEventsAsync` (line 200+), assert that every incoming session topic is owned by the authenticated user. Today's broadcaster already scopes by `subscriberUserId` — verify this still holds once events come from the NATS projection.
 
-- [ ] **Step 2:** Test: a second user subscribed to `session:{other-user-session}` receives no events.
+- [ ] **Step 2: Test (not optional — the design's tenant-isolation claim rests on this).**
+
+Create `tests/WeaveFleet.Api.Tests/Nats/WebSocketAuthzTests.cs`. The test covers two properties the substrate design depends on:
+
+1. A second user subscribed to `session:{other-user-session}` receives no events.
+2. A **forged** `x-fleet-user-id` header on a publish does NOT override the broadcaster's subscriber scoping — the WS endpoint must filter by the authenticated subscriber identity, not by the event's published-side header.
+
+```csharp
+// The second property is the important one. Today IEventBroadcaster.SubscribeAsync filters on
+// evt.UserId, which is populated from the published header. If a compromised publisher forges
+// x-fleet-user-id, the broadcaster's default filtering is bypassed. The correct guard is at the
+// subscribe-side: authoritative user identity comes from the authenticated cookie, and the
+// subscribe path must reject (or silently drop) any event whose session is not owned by that
+// user. Assert:
+//
+//   [Fact] Task ForgedUserIdHeader_cannotRouteToUnrelatedSubscriber()
+//     - Authenticate WS client A as user-A (cookie).
+//     - A subscribes to topic "session:sess-A" (owned by user-A).
+//     - Publish a message directly to NATS on subject tenant.default.project.p.session.sess-B.message.updated
+//       with forged header x-fleet-user-id=user-A.
+//     - Assert: A receives no event (sess-B is not owned by A and ownership is checked against
+//       Session.UserId in SQLite, not against the published header).
+```
+
+This test is blocking for Phase 6 sign-off — if it fails, the design's tenant-isolation claim is not upheld and the fix is either at the WS subscribe path (resolve session ownership from SQLite on subscribe, reject events whose `ctx.FleetSessionId` does not match an owned session) or at the broadcaster (stop trusting the header and look up ownership).
 
 ### Task 6.3: Cloud creds wiring
 
@@ -2935,106 +3900,17 @@ Do not begin until managed-cloud rollout begins. Scope recorded here so it is no
 
 ## Self-review notes
 
-- **Spec coverage:** every design decision (1–11) is represented. Decision 1 (scope = harness events only) is respected: `DelegationService` / `SessionOrchestrator` direct-broadcast path is untouched. Decision 5 (per-session serial publish with awaited PubAck) is in `NatsEventPublisher.PublishDurableAsync`. Decision 10 (interest retention + MaxAge) is in `NatsStreamInitializer`. Decision 6 (embedded server per-RID) is Task 1.0b + 1.6. Decision 8 (per-node projection + ephemeral subscriber) is Tasks 3.1 / 3.2 / 3.3. Decision 3 (wire-format = existing `HarnessEvent`) is preserved throughout. Cutover Timing section is addressed by Tasks 0.2 / 0.3 audits + Task 4.1 Step 3 (merge before publish).
+- **Spec coverage:** every design decision (1–11) is represented. Decision 1 (scope = harness events only) is respected: `DelegationService` / `SessionOrchestrator` direct-broadcast path is untouched. Decision 5 (per-session serial publish with awaited PubAck + `{sessionId}:{seq}` `Nats-Msg-Id`) is in `NatsEventPublisher.PublishDurableAsync` with the counter owned by the relay pump (Task 3.0 / Task 4.0). Decision 10 (interest retention + per-mode MaxAge) is in `NatsStreamInitializer` + `NatsOptionsConfigurator`. Decision 6 (embedded server per-RID with SHA-pinned binaries) is Task 1.0b + 1.6. Decision 8 (per-node WS fan-out consumer, cluster persistence consumer) is enforced by `ConsumerScope`. Decision 3 (wire-format = existing `HarnessEvent`) is preserved throughout. Cutover Timing / merge-before-publish is Task 4.0 (its own dedicated task, not a sub-step).
 - **No placeholders:** each step has exact file paths, code blocks, and commands.
-- **Type consistency:** `IProjection<T>.HandleAsync(T, ProjectionContext, CancellationToken)`, `IEventPublisher.PublishAsync(HarnessEvent, EventPublishContext, CancellationToken)`, `IHarnessEventPersister.HandleAsync(string, string, HarnessEvent, CancellationToken)` are used consistently across tasks.
+- **Type consistency:** `IProjection<T>.HandleAsync(T, ProjectionContext, CancellationToken)`, `IEventPublisher.PublishAsync(HarnessEvent, EventPublishContext, CancellationToken)` (with `Sequence: long`), `IHarnessEventPersister.HandleAsync(string, string, HarnessEvent, CancellationToken)` are used consistently across tasks.
 - **Known weaknesses:**
   - Task 1.8's DI wiring for `NatsConnection` uses a factory that requires `NatsServerHostedService` to have started — the host's startup-order guarantee is that hosted services start in registration order. Verify at runtime during Task 2.4 that this holds; if not, introduce a `Lazy<INatsConnection>` that resolves on first use.
-  - Task 3.1's "merge deltas before publish" is the highest-risk refactor. Consider splitting it into its own mini-plan before executing Phase 4.
-  - Task 3.4's `NatsEnabledFactory` currently overrides `DatabasePath` but does not override `AnalyticsDatabasePath`; under a parallel `dotnet test` run the shared analytics DB can cause `.deps.json` lock collisions (shouldly-assertion learning). Add an explicit `Fleet:AnalyticsDatabasePath` override in `ConfigureWebHost` before the test is enabled in CI.
+  - Every NATS.Net 2.x API used here (`PubAckResponse.Error`, `PubAckResponse.Duplicate`, `AckTerminateAsync`, `GetConsumerAsync`, `ConsumeAsync<byte[]>`, `NatsHeaders` indexer) should be re-verified against the exact installed package version before Task 1.5 is executed — the NATS.Net API has changed minor names across 2.x releases.
+  - Metric `tenant` dimension becomes per-workspace under managed cloud — flagged inline in Task 1.2 for Phase 6 scrub (replace with `tenant_class` or hash-bucket) before managed-cloud GA.
 
----
+**Plan complete.** Saved to `.weave/plans/nats-event-substrate.md`. Two execution options:
 
----
+**1. Subagent-Driven (recommended)** — dispatch a fresh subagent per task, review between tasks, fast iteration.
+**2. Inline Execution** — execute tasks in this session using `superpowers:executing-plans`, batch execution with checkpoints.
 
-## Post-Review Addendum (independent review against design + security)
-
-A fresh independent review against `docs/nats-event-substrate-design.md` and a security pass surfaced the following. Entries are grouped by severity. Address blockers before starting execution; address should-fixes inline during the named task; nits before merging.
-
-### Blockers — must be resolved before any task runs
-
-**B1. `ack.EnsureSuccess()` is not an API on NATS.Net 2.x `PubAckResponse`.** Task 1.5 Step 3 (`NatsEventPublisher.PublishDurableAsync`) calls `ack.EnsureSuccess()` which will not compile. Replace with:
-
-```csharp
-var ack = await _js.PublishAsync(subject, payload, headers: headers,
-    opts: new NatsJSPubOpts { MsgId = msgId }, cancellationToken: ct).ConfigureAwait(false);
-if (ack.Error is not null)
-    throw new NatsJSApiException(ack.Error);
-if (ack.Duplicate)
-    _metrics.RecordPublish(routing: "durable", eventType: evt.Type, tenant: _options.TenantPrefix, result: "duplicate");
-```
-
-Verify exact property names against the installed package's `PubAckResponse` before coding.
-
-**B2. Subject injection via unsanitized `projectId` / `sessionId`.** `NatsNamingStrategy.DurableSubject` (Task 1.3 Step 3) interpolates ids directly into subjects. NATS uses `.`, `*`, `>` as structural tokens; a project id containing any of these breaks the hierarchy and can route to subscribers that should not receive the event. `ProjectId` is settable via the project-creation API, so this is a cross-project data leak vector, not just a bug. Fix in Task 1.3:
-
-1. Add a private `ValidateSegment(string segment, string name)` method that throws `ArgumentException` on any `.`, `*`, `>`, whitespace, or empty value.
-2. Call it inside `DurableSubject` / `EphemeralSubject` before interpolation.
-3. Add unit test `DurableSubject_rejectsDotsInProjectId` (and `*`, `>`, whitespace) covering positive and negative cases.
-4. Decide and document: either enforce UUID-only ids at the project/session creation layer, or centralize sanitization here. Do both for defence in depth.
-
-**B3. `HandleShadowAsync` implementation is described but never specified.** Task 3.1 Step 2 declares the interface method; Step 3 proposes "a parallel `HarnessEventShadowPersistenceService`" but never shows its body. Phase 3's shadow diff harness cannot verify anything without it. Add an explicit Task 3.1.5:
-
-- Create `src/WeaveFleet.Infrastructure/Services/HarnessEventShadowPersistenceService.cs` that mirrors `HarnessEventPersistenceService`'s routing switch but routes writes to `IShadowMessageRepository` / `IShadowSessionRepository` and emits **no** outbox entries (WS fan-out goes through `WebSocketFanOutProjection` → shadow broadcaster).
-- `HarnessEventPersistenceService.HandleShadowAsync` delegates to it.
-- Unit test: feed each durable `EventType` and assert the shadow repos receive the same call sequence as production repos get in `HarnessEventPersistenceServiceTests`.
-
-### Should-fix — address during the named task
-
-**S1. `Nats-Msg-Id` format does not match design.** Design §"What goes where" specifies `{sessionId}:{seq}`. Plan uses `{FleetSessionId}:{timestamp}:{guid}`. Change Task 1.5 Step 3 to use a per-session monotonic counter held in the relay pump (it is already single-producer per session) and pass it through `EventPublishContext` as an additional `long Sequence` field. Without this the JetStream 2-minute dedup window behaves unpredictably under retry.
-
-**S2. `traceparent` / `tracestate` headers never wired.** Design §"What goes where" and "Observable from day one" mandate end-to-end trace propagation across publish/consume. Neither `NatsEventPublisher` (Task 1.5) nor `ProjectionListener` (Task 2.2) touch `Activity.Current`. Add to publisher: `DistributedContextPropagator.Current.Inject(Activity.Current, headers, (h, k, v) => ((NatsHeaders)h!)[k] = v)`. Add to listener: extract on consume before `HandleAsync`, and start a child activity named `nats.consume`.
-
-**S3. `DurableConsumerName` is shared across nodes.** Task 1.3 Step 3 returns `{streamName}-{projection}`. The design §"Client read path" names the WS fan-out consumer `fleet-ws-fanout-durable-{nodeId}`. Without a `{nodeId}` suffix, two Fleet nodes share the same durable consumer (competing consumers) instead of each getting a copy — breaking the design's per-node fan-out assumption. Accept a `NodeId` option (default `Environment.MachineName`) and suffix the consumer name with it for `WebSocketFanOutProjection`. `MessagePersistenceProjection` is node-agnostic (single writer to SQLite) and should **not** be suffixed — one consumer across all nodes is correct.
-
-**S4. Durable consumers must be pre-created.** `ProjectionListener.RunAsync` creates the consumer lazily on first invocation (Task 2.2 Step 3). Interest-based retention (Decision 10) requires **every** registered consumer to ack before GC. A publish that lands before the listener starts can be GC'd if MaxAge expires before the consumer is registered. Fix: extend `NatsStreamInitializer` to iterate over `ProjectionRegistry.ProjectionTypes` and call `CreateOrUpdateConsumerAsync` for each during startup, *before* the relay can publish.
-
-**S5. Per-mode MaxAge defaults.** Design §"Hosting-Mode Mechanics" specifies local `24h`, self-hosted `7d`, managed cloud `30d`. Plan `NatsOptions.MaxAge = 24h` for all modes. Add a `NatsOptionsConfigurator : IConfigureOptions<NatsOptions>` (or post-binding fixup) that selects the default from `FleetOptions.Cloud.Enabled` + `Auth.Enabled`. User-provided config still wins.
-
-**S6. Task 4.1 Step 3 "merge before publish" is under-specified.** Lift it to a dedicated Task 4.0 with:
-1. Extract a static `MessagePersistenceService.MergeBufferedDeltasIntoEvent(HarnessEvent evt, IReadOnlyDictionary<(string msgId, string partId), string> buffer) → HarnessEvent` (pure function, fully testable).
-2. TDD tests covering: `message.created` with no buffered deltas, `message.updated` with deltas for one part, `message.updated` with deltas for multiple parts, `message.part.updated` with a delta for the same partId, no-op for non-mergeable event types.
-3. Integration test: JetStream payload for `message.updated` already contains merged text (no re-merge needed in the projection).
-
-**S7. Phase 2 / Phase 3 ordering bug inside this plan.** Task 2.4's `NatsEventSubstrateEndToEndTests` depends on `NoOpProjection`; Task 3.1 replaces it with `MessagePersistenceProjection` (shadow). After Task 3.1, the e2e test runs against the shadow projection and requires shadow tables to exist — but Task 2.4 was written before shadow schema exists. Either:
-   (a) move the e2e assertion to also check `NoOpProjection` log output and only run Task 2.4's test *at* Phase 2 (before the 3.1 swap); or
-   (b) add a second e2e test under Task 3.2 that does the shadow-tables assertion.
-
-**S8. `EphemeralEventRelayService` registered before its dependency exists.** `NatsServiceCollectionExtensions.AddEventStore` (Task 1.8) registers `EphemeralEventRelayService` as a hosted service. `IShadowEventBroadcaster` does not exist until Task 3.2. Move the `AddHostedService<EphemeralEventRelayService>()` line out of `AddEventStore` into `DependencyInjection.cs` next to the `IShadowEventBroadcaster` registration.
-
-**S9. Bundled `nats-server` binaries lack integrity verification.** Task 1.0b drops multi-MB binaries into the repo with no SHA pinning. A compromised or swapped binary executes on every developer machine. Add:
-1. `build/nats-server-checksums.txt` pinning SHA-256 of each RID's binary.
-2. An MSBuild target in `Directory.Build.props` (or a pre-build PowerShell/bash script) that verifies each bundled binary against the checksum file. Build fails on mismatch.
-3. Consider Git LFS for `Nats/EmbeddedNatsServer/Binaries/**` to keep repo size reasonable; alternatively download at build time from a pinned HTTPS URL + hash.
-
-**S10. `JsonSerializer.Deserialize<HarnessEvent>(msg.Data!)` has no payload size bound.** Both `ProjectionListener.RunAsync` (Task 2.2) and `EphemeralEventRelayService.ExecuteAsync` (Task 3.3) deserialize without a size guard. An attacker or a bug on the publish side could OOM the consumer. Fix:
-1. Set `NatsOpts.MaxMsgSize` (or equivalent) when constructing the connection in `AddEventStore`.
-2. Add an explicit `if (msg.Data.Length > _maxPayloadBytes) { await msg.TermAsync(); continue; }` before deserialize.
-
-**S11. Malformed payloads trigger infinite NAK loop.** `ProjectionListener.RunAsync` NAKs on any exception — including a malformed JSON payload that will never succeed. JetStream redelivers forever, stalling the projection. Fix: count per-message deliveries (available on `msg.Metadata.NumDelivered`) and call `TermAsync` after N attempts (default 5). Emit a `poison_message` metric and warn-level log.
-
-**S12. WebSocket authz is asserted but not tested.** Decision 7 + Decision 11 rest on "application-layer authz at WebSocket subscribe" — meaning even if a publisher forges `x-fleet-user-id`, the WS endpoint filters events by the authenticated subscriber's identity. Add to Task 6.2: a test `WebSocketEndpoints_filtersEventsByAuthenticatedUser_notPublisherHeader` that publishes with a forged `x-fleet-user-id` and asserts only the legitimately-authenticated WS subscriber receives it.
-
-**S13. `NatsOptions.CredsFile` must not be logged.** `NatsServerHostedService` currently logs `ResolvedUrl`; add an explicit negative assertion test that no log line ever contains `CredsFile`'s path (scan formatter args). Apply the same discipline to any future diagnostic endpoints.
-
-### Nits
-
-**N1. Unknown-event-type drop should log at warn level**, not just metric. Update Task 1.5.
-
-**N2. `tenant` metric dimension has unbounded cardinality under managed cloud.** Flag in Task 1.2's metric definitions: under managed-cloud rollout, replace per-tenant label with a `tenant_class` (default / managed / selfhosted) or hash-bucket. Keep per-tenant for local/self-hosted where cardinality is 1.
-
-**N3. `HarnessEvent.SessionId` vs `FleetSessionId` distinction not documented.** Add an XML-doc paragraph in `NatsNamingStrategy` clarifying that `{sid}` in the subject is the Fleet session id (globally unique), not the harness-provider session id.
-
-**N4. Design doc has an internal inconsistency.** Managed-cloud §"Auth" says per-tenant NATS user credentials; Decision 11 says single deployment credential. Decision 11 is authoritative; flag for a follow-up design-doc patch rather than a plan change.
-
-**N5. Activity-status ownership under `EphemeralEventRelayService` isn't in the design.** Task 5.3 Step 2 introduces `ActivityStatusEphemeralHandler` on implementer discretion. Request a short paragraph in the design doc ratifying it so future readers don't treat it as accidental.
-
-**N6. Use `Git LFS` or `.gitattributes` for the bundled binaries** (see S9). Avoids blowing up clone times and diffs.
-
-### Execution note
-
-Given the blocker count (3) and should-fix count (13), the plan should be re-reviewed once these addendum items are incorporated before Phase 1 starts. The skeleton is sound; the gaps are in specific implementation details that this review was specifically intended to surface.
-
----
-
-**Plan complete.** Saved to `.weave/plans/nats-event-substrate.md`. Review addendum appended. Resume tomorrow to decide which execution mode (subagent-driven vs inline) to use and in what order to address the addendum items.
+Which approach?
