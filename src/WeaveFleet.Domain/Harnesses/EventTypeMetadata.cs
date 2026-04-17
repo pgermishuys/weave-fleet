@@ -5,6 +5,9 @@ namespace WeaveFleet.Domain.Harnesses;
 /// </summary>
 public readonly struct EventClassification
 {
+    /// <summary>Whether the event type is recognised by the registry. Unknown types default to <c>false</c> so callers can distinguish genuinely unclassified events from known-but-unrouted ones (e.g. server control events).</summary>
+    public bool IsKnown { get; init; }
+
     /// <summary>Whether the event should be persisted to durable storage.</summary>
     public bool IsDurable { get; init; }
 
@@ -35,6 +38,7 @@ public static class EventTypeMetadata
         {
         EventTypes.MessageCreated => new EventClassification
         {
+            IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
             RequiresReasoningFilter = true,
@@ -42,6 +46,7 @@ public static class EventTypeMetadata
         },
         EventTypes.MessageUpdated => new EventClassification
         {
+            IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
             RequiresReasoningFilter = true,
@@ -49,6 +54,7 @@ public static class EventTypeMetadata
         },
         EventTypes.MessagePartUpdated => new EventClassification
         {
+            IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
             RequiresReasoningFilter = true,
@@ -56,6 +62,7 @@ public static class EventTypeMetadata
         },
         EventTypes.MessageRemoved => new EventClassification
         {
+            IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
             RequiresReasoningFilter = false,
@@ -63,6 +70,7 @@ public static class EventTypeMetadata
         },
         EventTypes.MessagePartRemoved => new EventClassification
         {
+            IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
             RequiresReasoningFilter = false,
@@ -70,6 +78,7 @@ public static class EventTypeMetadata
         },
         EventTypes.SessionUpdated => new EventClassification
         {
+            IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
             RequiresReasoningFilter = false,
@@ -77,6 +86,7 @@ public static class EventTypeMetadata
         },
         EventTypes.SessionError => new EventClassification
         {
+            IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
             RequiresReasoningFilter = false,
@@ -84,6 +94,7 @@ public static class EventTypeMetadata
         },
         EventTypes.SessionCompacted => new EventClassification
         {
+            IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
             RequiresReasoningFilter = false,
@@ -91,6 +102,7 @@ public static class EventTypeMetadata
         },
         EventTypes.SessionDeleted => new EventClassification
         {
+            IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
             RequiresReasoningFilter = false,
@@ -98,6 +110,7 @@ public static class EventTypeMetadata
         },
         EventTypes.SessionStatus => new EventClassification
         {
+            IsKnown = true,
             IsDurable = false,
             IsEphemeralRelay = true,
             RequiresReasoningFilter = false,
@@ -105,6 +118,7 @@ public static class EventTypeMetadata
         },
         EventTypes.SessionIdle => new EventClassification
         {
+            IsKnown = true,
             IsDurable = false,
             IsEphemeralRelay = true,
             RequiresReasoningFilter = false,
@@ -112,6 +126,7 @@ public static class EventTypeMetadata
         },
         EventTypes.MessagePartDelta => new EventClassification
         {
+            IsKnown = true,
             IsDurable = false,
             IsEphemeralRelay = true,
             RequiresReasoningFilter = false,
@@ -119,6 +134,7 @@ public static class EventTypeMetadata
         },
         EventTypes.Error => new EventClassification
         {
+            IsKnown = true,
             IsDurable = false,
             IsEphemeralRelay = true,
             RequiresReasoningFilter = false,
@@ -126,6 +142,7 @@ public static class EventTypeMetadata
         },
         EventTypes.ServerHeartbeat => new EventClassification
         {
+            IsKnown = true,
             IsDurable = false,
             IsEphemeralRelay = false,
             RequiresReasoningFilter = false,
@@ -133,6 +150,15 @@ public static class EventTypeMetadata
         },
         EventTypes.ServerConnected => new EventClassification
         {
+            IsKnown = true,
+            IsDurable = false,
+            IsEphemeralRelay = false,
+            RequiresReasoningFilter = false,
+            IsActivitySignal = false,
+        },
+        EventTypes.SessionDiff => new EventClassification
+        {
+            IsKnown = true,
             IsDurable = false,
             IsEphemeralRelay = false,
             RequiresReasoningFilter = false,
@@ -140,6 +166,7 @@ public static class EventTypeMetadata
         },
         _ when EventTypes.IsPermissionEvent(eventType) => new EventClassification
         {
+            IsKnown = true,
             IsDurable = false,
             IsEphemeralRelay = true,
             RequiresReasoningFilter = false,
