@@ -947,11 +947,14 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         await cts.CancelAsync();
         await consumeTask;
 
-        var outboxMessages = outboxRepo.All;
-        var committedMessageUpdate = outboxMessages.Last(message => message.Type == "message.updated");
-        var payload = JsonSerializer.Deserialize<JsonElement>(committedMessageUpdate.Payload);
-        payload.GetProperty("parts")[0].GetProperty("text").GetString().ShouldBe("Merged response");
-        outboxMessages.Count(message => message.Type == "message.part.delta").ShouldBe(0);
+        // Harness events no longer write to the outbox — the unified fan-out subscriber
+        // delivers them directly off NATS. Verify the persisted message contains the merged
+        // text (buffered deltas merged into the MessageUpdated snapshot) and that no harness
+        // events at all were written to the outbox.
+        lastUpserted.ShouldNotBeNull();
+        lastUpserted.PartsJson.ShouldContain("Merged response");
+        outboxRepo.All.Count(m => m.Type == "message.updated").ShouldBe(0);
+        outboxRepo.All.Count(m => m.Type == "message.part.delta").ShouldBe(0);
     }
 
     [Fact]
@@ -1708,8 +1711,10 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     }
 
     [Fact]
-    public async Task MessageRemoved_EmitsOutboxEvent()
+    public async Task MessageRemoved_DoesNotEmitOutboxEvent()
     {
+        // Harness events no longer travel through the outbox — the unified fan-out subscriber
+        // delivers message.removed directly off NATS.
         var fleetSessionId = "fleet-msg-removed-2";
         var messageId = "msg-to-delete-2";
 
@@ -1718,9 +1723,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var evt = BuildEvent("message.removed", new { id = messageId });
         await service.TryHandleDurableEventAsync(fleetSessionId, evt);
 
-        outboxRepo.All.ShouldContain(m =>
-            m.Topic == $"session:{fleetSessionId}" &&
-            m.Type == "message.removed");
+        outboxRepo.All.ShouldNotContain(m => m.Type == "message.removed");
     }
 
     [Fact]
@@ -1754,7 +1757,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     }
 
     [Fact]
-    public async Task MessagePartRemoved_EmitsOutboxEvent()
+    public async Task MessagePartRemoved_DoesNotEmitOutboxEvent()
     {
         var fleetSessionId = "fleet-part-removed-2";
 
@@ -1763,9 +1766,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var evt = BuildEvent("message.part.removed", new { messageID = "msg-1", id = "part-1" });
         await service.TryHandleDurableEventAsync(fleetSessionId, evt);
 
-        outboxRepo.All.ShouldContain(m =>
-            m.Topic == $"session:{fleetSessionId}" &&
-            m.Type == "message.part.removed");
+        outboxRepo.All.ShouldNotContain(m => m.Type == "message.part.removed");
     }
 
     [Fact]
@@ -1789,60 +1790,36 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var handled = await service.TryHandleDurableEventAsync(fleetSessionId, evt);
 
         handled.ShouldBeTrue();
-        outboxRepo.All.ShouldContain(m =>
-            m.Topic == $"session:{fleetSessionId}" &&
-            m.Type == "session.updated");
+        // Title is persisted via the session repository; no outbox write — clients receive the
+        // session.updated event via the unified NATS fan-out subscriber.
+        outboxRepo.All.ShouldNotContain(m => m.Type == "session.updated");
     }
 
-    [Fact]
-    public async Task SessionError_EmitsOutboxEventAndIsEphemeral()
+    [Theory]
+    [InlineData("session.error", "{ \"error\": \"boom\" }")]
+    [InlineData("session.compacted", "{ }")]
+    [InlineData("session.deleted", "{ }")]
+    public async Task SessionLifecycleEvents_AreDurableAndBypassOutbox(string eventType, string payloadJson)
     {
-        var fleetSessionId = "fleet-session-error-1";
-
+        // Session lifecycle signals (error/compacted/deleted) are classified durable so they
+        // are captured by JetStream for replay, but the handler has no DB side-effect and
+        // no outbox write. Clients receive the event via the unified fan-out subscriber.
+        var fleetSessionId = $"fleet-{eventType}-1";
         var (service, _, outboxRepo) = BuildPersistenceService();
+        var payload = JsonSerializer.Deserialize<JsonElement>(payloadJson);
 
-        var evt = BuildEvent("session.error", new { error = "something went wrong" });
+        var evt = new HarnessEvent
+        {
+            Type = eventType,
+            SessionId = fleetSessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = payload,
+        };
+
         var handled = await service.TryHandleDurableEventAsync(fleetSessionId, evt);
 
-        // session.error is durable — returns true so relay does NOT broadcast it directly
         handled.ShouldBeTrue();
-        outboxRepo.All.ShouldContain(m =>
-            m.Topic == $"session:{fleetSessionId}" &&
-            m.Type == "session.error");
-    }
-
-    [Fact]
-    public async Task SessionCompacted_EmitsOutboxEventAndIsEphemeral()
-    {
-        var fleetSessionId = "fleet-session-compacted-1";
-
-        var (service, _, outboxRepo) = BuildPersistenceService();
-
-        var evt = BuildEvent("session.compacted", new { });
-        var handled = await service.TryHandleDurableEventAsync(fleetSessionId, evt);
-
-        // session.compacted is durable — returns true so relay does NOT broadcast it directly
-        handled.ShouldBeTrue();
-        outboxRepo.All.ShouldContain(m =>
-            m.Topic == $"session:{fleetSessionId}" &&
-            m.Type == "session.compacted");
-    }
-
-    [Fact]
-    public async Task SessionDeleted_EmitsOutboxEventAndIsDurable()
-    {
-        var fleetSessionId = "fleet-session-deleted-1";
-
-        var (service, _, outboxRepo) = BuildPersistenceService();
-
-        var evt = BuildEvent("session.deleted", new { });
-        var handled = await service.TryHandleDurableEventAsync(fleetSessionId, evt);
-
-        // session.deleted is durable — returns true so relay does NOT broadcast it
-        handled.ShouldBeTrue();
-        outboxRepo.All.ShouldContain(m =>
-            m.Topic == $"session:{fleetSessionId}" &&
-            m.Type == "session.deleted");
+        outboxRepo.All.ShouldNotContain(m => m.Type == eventType);
     }
 
     [Fact]
