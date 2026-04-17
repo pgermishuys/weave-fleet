@@ -14,6 +14,7 @@ using WeaveFleet.Infrastructure.Data.Repositories;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
+using WeaveFleet.Infrastructure.Nats.Configuration;
 using WeaveFleet.Infrastructure.Plugins;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 using WeaveFleet.Infrastructure.SessionSources;
@@ -122,6 +123,13 @@ public static class DependencyInjection
         services.AddSingleton<IEventBroadcaster, InMemoryEventBroadcaster>();
         services.AddSingleton<InProcessOutboxDispatcher>();
         services.AddSingleton<IOutboxDispatcher>(sp => sp.GetRequiredService<InProcessOutboxDispatcher>());
+
+        // NATS event substrate — Phase 1/2 registers NoOpProjection only. Later phases
+        // replace this call site with the production projections.
+        services.AddEventStore(options.Nats, nats =>
+        {
+            nats.AddProjection<WeaveFleet.Application.Projections.NoOpProjection>(ConsumerScope.Cluster);
+        });
 
         // HarnessEventRelay bridges ephemeral harness events to the broadcaster
         services.AddHostedService<HarnessEventRelay>();

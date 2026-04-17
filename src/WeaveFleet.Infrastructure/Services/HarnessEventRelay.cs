@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -26,8 +27,13 @@ public sealed class HarnessEventRelay : BackgroundService
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(2, "PumpFailed"),
             "Event pump failed for instance {InstanceId}");
 
+    private static readonly Action<ILogger, string, Exception?> LogPublishFailed =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(3, "EventPublishFailed"),
+            "Event publish to NATS failed for instance {InstanceId}");
+
     private readonly InstanceTracker _tracker;
     private readonly IEventBroadcaster _broadcaster;
+    private readonly IEventPublisher _publisher;
     private readonly SessionActivityTracker _activityTracker;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<HarnessEventRelay> _logger;
@@ -57,12 +63,14 @@ public sealed class HarnessEventRelay : BackgroundService
     public HarnessEventRelay(
         InstanceTracker tracker,
         IEventBroadcaster broadcaster,
+        IEventPublisher publisher,
         SessionActivityTracker activityTracker,
         IServiceScopeFactory scopeFactory,
         ILogger<HarnessEventRelay> logger)
     {
         _tracker = tracker;
         _broadcaster = broadcaster;
+        _publisher = publisher;
         _activityTracker = activityTracker;
         _scopeFactory = scopeFactory;
         _logger = logger;
@@ -120,6 +128,8 @@ public sealed class HarnessEventRelay : BackgroundService
         // InstanceTracker.Register() fires before ISessionRepository.InsertAsync() completes.
         string? fleetSessionId = null;
         string? sessionUserId = null;
+        string? sessionProjectId = null;
+        string? sessionHarnessType = null;
         for (int attempt = 0; attempt < 10 && !ct.IsCancellationRequested; attempt++)
         {
             using var scope = _scopeFactory.CreateScope();
@@ -129,6 +139,8 @@ public sealed class HarnessEventRelay : BackgroundService
             {
                 fleetSessionId = session.Id;
                 sessionUserId = session.UserId;
+                sessionProjectId = session.ProjectId;
+                sessionHarnessType = session.HarnessType;
                 break;
             }
 
@@ -167,6 +179,10 @@ public sealed class HarnessEventRelay : BackgroundService
                 sessionUserId);
         }
 
+        // Per-pump monotonic sequence for the NATS `Nats-Msg-Id` header
+        // ({sessionId}:{seq}). Feeds JetStream's ~2-minute dedup window.
+        long publishSequence = 0;
+
         try
         {
             await foreach (var evt in instance.SubscribeAsync(ct).ConfigureAwait(false))
@@ -177,6 +193,27 @@ public sealed class HarnessEventRelay : BackgroundService
                 // Buffer text deltas before persistence so they are available when
                 // message.updated arrives and merges the buffered content.
                 persistenceService?.BufferTextDelta(targetFleetSessionId, evt);
+
+                // Dual-write: publish to NATS so downstream projections observe every event.
+                // Does not replace any legacy behaviour — Phase 3 dual-write during the
+                // compatibility window. A publish failure must not break the legacy path.
+                try
+                {
+                    var seq = Interlocked.Increment(ref publishSequence);
+                    await _publisher.PublishAsync(
+                        evt,
+                        new EventPublishContext(
+                            targetFleetSessionId,
+                            sessionProjectId,
+                            sessionUserId,
+                            sessionHarnessType,
+                            seq),
+                        ct).ConfigureAwait(false);
+                }
+                catch (Exception pubEx)
+                {
+                    LogPublishFailed(_logger, instanceId, pubEx);
+                }
 
                 // Attempt durable persistence for all events. Returns true if the event
                 // was handled durably and should NOT be relayed as ephemeral.

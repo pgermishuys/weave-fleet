@@ -65,7 +65,15 @@ public sealed class HarnessEventRelayTests
         FakeEventBroadcaster broadcaster,
         SessionActivityTracker activityTracker,
         IServiceScopeFactory scopeFactory)
-        => new(tracker, broadcaster, activityTracker, scopeFactory, NullLogger<HarnessEventRelay>.Instance);
+        => new(tracker, broadcaster, new FakeEventPublisher(), activityTracker, scopeFactory, NullLogger<HarnessEventRelay>.Instance);
+
+    private static HarnessEventRelay BuildRelay(
+        InstanceTracker tracker,
+        FakeEventBroadcaster broadcaster,
+        FakeEventPublisher publisher,
+        SessionActivityTracker activityTracker,
+        IServiceScopeFactory scopeFactory)
+        => new(tracker, broadcaster, publisher, activityTracker, scopeFactory, NullLogger<HarnessEventRelay>.Instance);
 
     // -----------------------------------------------------------------------
     // Test 1: Happy path
@@ -675,6 +683,116 @@ public sealed class HarnessEventRelayTests
 
         // Durable event must NOT be broadcast to frontend
         broadcaster.Broadcasts.ShouldNotContain(b => b.Topic == $"session:{fleetSessionId}" && b.Type == "message.updated");
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    // -----------------------------------------------------------------------
+    // Dual-write: every event should also flow through IEventPublisher
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task Relay_dualWrites_everyEventToEventPublisher_withMonotonicSequence()
+    {
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
+
+        var fleetSessionId = "fleet-dual-1";
+        var instanceId = "instance-dual-1";
+        sessionRepo.Seed(new Session
+        {
+            Id = fleetSessionId,
+            InstanceId = instanceId,
+            UserId = "user-xyz",
+            ProjectId = "proj-dual",
+            HarnessType = "opencode",
+        });
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeHarnessSession(instanceId);
+        tracker.Register(instanceId, instance);
+
+        // Emit multiple events
+        instance.Emit(new HarnessEvent
+        {
+            Type = EventTypes.SessionStatus,
+            SessionId = "oc-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { status = new { type = "busy" } })
+        });
+        instance.Emit(new HarnessEvent
+        {
+            Type = EventTypes.MessagePartDelta,
+            SessionId = "oc-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { delta = "x" })
+        });
+        instance.Complete();
+
+        // Poll until the publisher has seen both events
+        for (int i = 0; i < 50 && publisher.Calls.Count < 2; i++)
+        {
+            await Task.Delay(50);
+        }
+
+        publisher.Calls.Count.ShouldBeGreaterThanOrEqualTo(2);
+
+        // Per-pump monotonic sequence: every Nats-Msg-Id seq is strictly increasing.
+        var seqs = publisher.Calls.Select(c => c.Context.Sequence).ToArray();
+        for (int i = 1; i < seqs.Length; i++)
+            seqs[i].ShouldBeGreaterThan(seqs[i - 1]);
+
+        // Project/user/harness-type pass through from the session row.
+        var first = publisher.Calls.First();
+        first.Context.FleetSessionId.ShouldBe(fleetSessionId);
+        first.Context.ProjectId.ShouldBe("proj-dual");
+        first.Context.UserId.ShouldBe("user-xyz");
+        first.Context.HarnessType.ShouldBe("opencode");
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Relay_publishFailure_doesNotBreakLegacyPath()
+    {
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker, broadcastSignal) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher
+        {
+            // Force every publish to throw — simulating a broken broker.
+            ShouldFail = true,
+        };
+        var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
+
+        var fleetSessionId = "fleet-pub-fail";
+        var instanceId = "instance-pub-fail";
+        sessionRepo.Seed(new Session { Id = fleetSessionId, InstanceId = instanceId, UserId = "u" });
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeHarnessSession(instanceId);
+        tracker.Register(instanceId, instance);
+        instance.Emit(new HarnessEvent
+        {
+            Type = EventTypes.SessionStatus,
+            SessionId = "oc-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { status = new { type = "busy" } })
+        });
+        instance.Complete();
+
+        // Legacy broadcaster path still fires — publish failure is swallowed.
+        var result = await broadcastSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        result.Topic.ShouldBe($"session:{fleetSessionId}");
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);

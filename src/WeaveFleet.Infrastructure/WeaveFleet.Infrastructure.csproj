@@ -3,11 +3,16 @@
   <ItemGroup>
     <PackageReference Include="Dapper" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="NATS.Net" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Migrations\*.sql" />
     <EmbeddedResource Include="AnalyticsMigrations\*.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Nats\EmbeddedNatsServer\Binaries\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
