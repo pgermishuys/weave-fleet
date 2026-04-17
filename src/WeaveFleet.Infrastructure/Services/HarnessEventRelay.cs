@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -10,11 +10,18 @@ using WeaveFleet.Domain.Repositories;
 namespace WeaveFleet.Infrastructure.Services;
 
 /// <summary>
-/// Background service that bridges ephemeral harness instance events to <see cref="IEventBroadcaster"/>.
-/// Subscribes to <see cref="InstanceTracker"/> registration/removal events and maintains
-/// one async-enumerable pump per live instance.
-/// Durable activity flows through <see cref="HarnessEventPersistenceService"/> which is
-/// created once per pump lifetime and called for every event before ephemeral relay.
+/// Background service that subscribes to <see cref="InstanceTracker"/> registration/removal
+/// events and maintains one async-enumerable pump per live harness instance. Each pump:
+/// <list type="number">
+///   <item>Resolves the Fleet session metadata (id, owner, project, harness-type).</item>
+///   <item>Publishes every <see cref="HarnessEvent"/> to NATS via <see cref="IEventPublisher"/>
+///     with a per-pump monotonic sequence for JetStream dedup.</item>
+///   <item>On disconnect: flushes any buffered text deltas through the persister and emits a
+///     final idle broadcast on the global <c>sessions</c> topic.</item>
+/// </list>
+/// The relay is publish-only — durable persistence is handled downstream by
+/// <c>MessagePersistenceProjection</c>, and WebSocket fan-out for ephemeral events is handled
+/// by <c>EphemeralEventRelayService</c>.
 /// </summary>
 public sealed class HarnessEventRelay : BackgroundService
 {
@@ -26,43 +33,30 @@ public sealed class HarnessEventRelay : BackgroundService
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(2, "PumpFailed"),
             "Event pump failed for instance {InstanceId}");
 
+    private static readonly Action<ILogger, string, Exception?> LogPublishFailed =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(3, "EventPublishFailed"),
+            "Event publish to NATS failed for instance {InstanceId}");
+
     private readonly InstanceTracker _tracker;
     private readonly IEventBroadcaster _broadcaster;
+    private readonly IEventPublisher _publisher;
     private readonly SessionActivityTracker _activityTracker;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<HarnessEventRelay> _logger;
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _subscriptions = new();
     private CancellationToken _stoppingToken;
 
-    // Ephemeral event policy:
-    // - session.status / session.idle
-    //   Live process/session status indicators for UX. These are not durable facts
-    //   about conversation history and can be recomputed or rediscovered.
-    // - message.part.delta
-    //   High-frequency streaming preview chunks while a message is being generated.
-    //   These intentionally bypass DB/outbox; only the authoritative
-    //   message.created/message.updated/message.part.updated snapshots are persisted.
-    // - error
-    //   Live transport/runtime notification, not durable session history.
-    // - permission.*
-    //   UI capability/control-plane signals, not conversation state.
-    //
-    // Durable events (message.created, message.updated, message.part.updated,
-    // message.removed, message.part.removed, session.updated, session.error,
-    // session.compacted, session.deleted) are handled by HarnessEventPersistenceService
-    // and are NOT directly relayed to the broadcaster.
-    private static bool IsEphemeralRelayEvent(string eventType)
-        => EventTypeMetadata.Classify(eventType).IsEphemeralRelay;
-
     public HarnessEventRelay(
         InstanceTracker tracker,
         IEventBroadcaster broadcaster,
+        IEventPublisher publisher,
         SessionActivityTracker activityTracker,
         IServiceScopeFactory scopeFactory,
         ILogger<HarnessEventRelay> logger)
     {
         _tracker = tracker;
         _broadcaster = broadcaster;
+        _publisher = publisher;
         _activityTracker = activityTracker;
         _scopeFactory = scopeFactory;
         _logger = logger;
@@ -79,7 +73,6 @@ public sealed class HarnessEventRelay : BackgroundService
         foreach (var (id, instance) in _tracker.GetAll())
             StartSubscription(id, instance);
 
-        // Keep alive until shutdown, then clean up event handlers
         return Task.Delay(Timeout.Infinite, stoppingToken)
             .ContinueWith(_ =>
             {
@@ -108,7 +101,7 @@ public sealed class HarnessEventRelay : BackgroundService
         if (!_subscriptions.TryAdd(instanceId, cts))
         {
             cts.Dispose();
-            return; // already subscribed
+            return;
         }
 
         _ = Task.Run(() => PumpAsync(instanceId, instance, cts.Token), cts.Token);
@@ -116,10 +109,12 @@ public sealed class HarnessEventRelay : BackgroundService
 
     private async Task PumpAsync(string instanceId, IHarnessSession instance, CancellationToken ct)
     {
-        // Look up fleet session ID with retry to handle the race condition where
+        // Resolve fleet session metadata with retry to handle the race where
         // InstanceTracker.Register() fires before ISessionRepository.InsertAsync() completes.
         string? fleetSessionId = null;
         string? sessionUserId = null;
+        string? sessionProjectId = null;
+        string? sessionHarnessType = null;
         for (int attempt = 0; attempt < 10 && !ct.IsCancellationRequested; attempt++)
         {
             using var scope = _scopeFactory.CreateScope();
@@ -129,6 +124,8 @@ public sealed class HarnessEventRelay : BackgroundService
             {
                 fleetSessionId = session.Id;
                 sessionUserId = session.UserId;
+                sessionProjectId = session.ProjectId;
+                sessionHarnessType = session.HarnessType;
                 break;
             }
 
@@ -148,71 +145,30 @@ public sealed class HarnessEventRelay : BackgroundService
             return;
         }
 
-        // Create one persistence service per pump lifetime — it owns the delta buffer
-        // for this instance and must outlive individual events.
-        // The pump scope is kept alive for the entire pump lifetime so that the scoped
-        // repositories and services resolved from it are not disposed prematurely.
-        IServiceScope? pumpScope = null;
-        HarnessEventPersistenceService? persistenceService = null;
-        if (sessionUserId is not null)
-        {
-            pumpScope = _scopeFactory.CreateScope();
-            var messageRepo = pumpScope.ServiceProvider.GetRequiredService<IMessageRepository>();
-            var sessionRepo = pumpScope.ServiceProvider.GetRequiredService<ISessionRepository>();
-            var activityWriteService = pumpScope.ServiceProvider.GetRequiredService<SessionActivityWriteService>();
-            persistenceService = new HarnessEventPersistenceService(
-                messageRepo,
-                sessionRepo,
-                activityWriteService,
-                sessionUserId);
-        }
+        long publishSequence = 0;
 
         try
         {
             await foreach (var evt in instance.SubscribeAsync(ct).ConfigureAwait(false))
             {
                 var targetFleetSessionId = evt.FleetSessionId ?? fleetSessionId;
-                var targetTopic = $"session:{targetFleetSessionId}";
 
-                // Buffer text deltas before persistence so they are available when
-                // message.updated arrives and merges the buffered content.
-                persistenceService?.BufferTextDelta(targetFleetSessionId, evt);
-
-                // Attempt durable persistence for all events. Returns true if the event
-                // was handled durably and should NOT be relayed as ephemeral.
-                var handledDurably = persistenceService is not null
-                    && await persistenceService.TryHandleDurableEventAsync(targetFleetSessionId, evt).ConfigureAwait(false);
-
-                if (handledDurably)
-                    continue;
-
-                if (!IsEphemeralRelayEvent(evt.Type))
-                    continue;
-
-                // Guard against null Payload — BroadcastAsync serializes via
-                // JsonSerializer.SerializeToElement which throws on null/Undefined JsonElement.
-                // Use an empty object {} as fallback when Payload is null.
-                // Preserve the source payload session IDs. Upstream harness instances are
-                // responsible for filtering events so only the correct Fleet session is
-                // broadcast on this topic.
-                object payload = evt.Payload.HasValue
-                    ? evt.Payload.Value
-                    : JsonSerializer.SerializeToElement(new { });
-                await _broadcaster.BroadcastAsync(targetTopic, evt.Type, payload, sessionUserId, ct).ConfigureAwait(false);
-
-                // Track activity status and broadcast on the global "sessions" topic so
-                // the sidebar activity stream receives it. This also populates the
-                // SessionActivityTracker for initial-state snapshots on WebSocket subscribe.
-                var activityStatus = ParseActivityStatus(evt.Type, evt.Payload);
-                if (activityStatus is not null)
+                try
                 {
-                    _activityTracker.Update(targetFleetSessionId, activityStatus, sessionUserId);
-                    await _broadcaster.BroadcastAsync(
-                        "sessions",
-                        "activity_status",
-                        new { sessionId = targetFleetSessionId, activityStatus },
-                        sessionUserId,
+                    var seq = Interlocked.Increment(ref publishSequence);
+                    await _publisher.PublishAsync(
+                        evt,
+                        new EventPublishContext(
+                            targetFleetSessionId,
+                            sessionProjectId,
+                            sessionUserId,
+                            sessionHarnessType,
+                            seq),
                         ct).ConfigureAwait(false);
+                }
+                catch (Exception pubEx)
+                {
+                    LogPublishFailed(_logger, instanceId, pubEx);
                 }
             }
         }
@@ -232,13 +188,16 @@ public sealed class HarnessEventRelay : BackgroundService
                 cts.Dispose();
             }
 
-            // Flush any buffered text deltas so partial streaming content is not lost
-            // when the harness disconnects or crashes.
-            if (persistenceService is not null)
+            // Flush buffered text deltas through the persister so partial streaming content
+            // is not lost when the harness disconnects or crashes.
+            if (sessionUserId is not null)
             {
                 try
                 {
-                    await persistenceService.FlushBufferedDeltasAsync(fleetSessionId).ConfigureAwait(false);
+                    using var scope = _scopeFactory.CreateScope();
+                    var persister = scope.ServiceProvider.GetRequiredService<IHarnessEventPersister>();
+                    await persister.FlushBufferedDeltasAsync(fleetSessionId, sessionUserId, CancellationToken.None)
+                        .ConfigureAwait(false);
                 }
                 catch (Exception)
                 {
@@ -246,8 +205,9 @@ public sealed class HarnessEventRelay : BackgroundService
                 }
             }
 
-            // When the harness disconnects, clear the activity state and broadcast idle
-            // so the UI doesn't show a session stuck on "busy" after a crash or disconnect.
+            // Clear activity state and broadcast idle so the UI doesn't show a session stuck
+            // on "busy" after a crash/disconnect. This isn't tied to an event, so it stays in
+            // the relay (the only code that knows when a pump ends).
             _activityTracker.Remove(fleetSessionId);
             await _broadcaster.BroadcastAsync(
                 "sessions",
@@ -255,32 +215,6 @@ public sealed class HarnessEventRelay : BackgroundService
                 new { sessionId = fleetSessionId, activityStatus = "idle" },
                 sessionUserId,
                 CancellationToken.None).ConfigureAwait(false);
-
-            // Dispose the pump scope after all cleanup is complete so that the scoped
-            // repositories and services remain valid throughout the flush above.
-            pumpScope?.Dispose();
         }
-    }
-
-    /// <summary>
-    /// Parses the activity status string from a harness event.
-    /// Returns <c>"busy"</c>, <c>"idle"</c>, or <c>null</c> if the event is not an activity event.
-    /// </summary>
-    private static string? ParseActivityStatus(string eventType, JsonElement? payload)
-    {
-        if (eventType == EventTypes.SessionIdle)
-            return "idle";
-
-        if (eventType == EventTypes.SessionStatus && payload.HasValue)
-        {
-            // Payload shape: { "status": { "type": "busy" | "idle" | ... } }
-            if (payload.Value.TryGetProperty("status", out var statusProp)
-                && statusProp.TryGetProperty("type", out var typeProp))
-            {
-                return typeProp.GetString();
-            }
-        }
-
-        return null;
     }
 }
