@@ -88,6 +88,7 @@ public sealed class InMemorySessionRepository : ISessionRepository
             query = query.Where(s => s.ProjectId == projectId);
         if (retentionStatuses is { Count: > 0 })
             query = query.Where(s => retentionStatuses.Contains(s.RetentionStatus));
+        query = query.Where(s => s.ParentSessionId is null);
         IReadOnlyList<Session> result = [.. query.Skip(offset).Take(limit)];
         return Task.FromResult(result);
     }

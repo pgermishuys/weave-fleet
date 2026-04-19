@@ -46,6 +46,8 @@ public sealed class DapperMessageRepository : IMessageRepository
                 role = excluded.role,
                 parts_json = excluded.parts_json,
                 timestamp = excluded.timestamp,
+                -- created_at is intentionally immutable after the first insert so tail-history
+                -- pagination remains anchored to durable insertion order, not later rewrites.
                 agent_name = COALESCE(excluded.agent_name, messages.agent_name),
                 model_id = COALESCE(excluded.model_id, messages.model_id)
             """,
@@ -98,47 +100,48 @@ public sealed class DapperMessageRepository : IMessageRepository
 
         if (beforeMessageId is null)
         {
-            // No cursor: get the last N messages ordered by timestamp DESC, then reverse
+            // No cursor: get the last N persisted messages ordered by durable write time DESC,
+            // then reverse for oldest-first delivery within the page.
             results = await conn.QueryAsync<PersistedMessage>(
                 """
                 SELECT m.*
                 FROM messages m
                 INNER JOIN sessions s ON s.id = m.session_id
                 WHERE m.session_id = @SessionId AND s.user_id = @UserId
-                ORDER BY m.timestamp DESC, m.id DESC
+                ORDER BY m.created_at DESC, m.id DESC
                 LIMIT @Limit
                 """,
                 new { SessionId = sessionId, Limit = limit, UserId = _userContext.UserId });
         }
         else
         {
-            // Cursor: first look up the cursor message's timestamp
-            var cursorTimestamp = await conn.ExecuteScalarAsync<string?>(
+            // Cursor: first look up the cursor message's durable write time.
+            var cursorCreatedAt = await conn.ExecuteScalarAsync<string?>(
                 """
-                SELECT m.timestamp
+                SELECT m.created_at
                 FROM messages m
                 INNER JOIN sessions s ON s.id = m.session_id
                 WHERE m.session_id = @SessionId AND m.id = @Id AND s.user_id = @UserId
                 """,
                 new { SessionId = sessionId, Id = beforeMessageId, UserId = _userContext.UserId });
 
-            if (cursorTimestamp is null)
+            if (cursorCreatedAt is null)
             {
-                // Cursor not found — fall back to no-cursor behavior
+                // Cursor not found — fall back to the latest persisted page.
                 results = await conn.QueryAsync<PersistedMessage>(
                     """
                     SELECT m.*
                     FROM messages m
                     INNER JOIN sessions s ON s.id = m.session_id
                     WHERE m.session_id = @SessionId AND s.user_id = @UserId
-                    ORDER BY m.timestamp DESC, m.id DESC
+                    ORDER BY m.created_at DESC, m.id DESC
                     LIMIT @Limit
                     """,
                     new { SessionId = sessionId, Limit = limit, UserId = _userContext.UserId });
             }
             else
             {
-                // Compound comparison for deterministic cursor behavior
+                // Compound comparison for deterministic cursor behavior on persisted order.
                 results = await conn.QueryAsync<PersistedMessage>(
                     """
                     SELECT m.*
@@ -146,12 +149,12 @@ public sealed class DapperMessageRepository : IMessageRepository
                     INNER JOIN sessions s ON s.id = m.session_id
                     WHERE m.session_id = @SessionId
                       AND s.user_id = @UserId
-                      AND (m.timestamp < @CursorTimestamp
-                           OR (m.timestamp = @CursorTimestamp AND m.id < @CursorId))
-                    ORDER BY m.timestamp DESC, m.id DESC
+                      AND (m.created_at < @CursorCreatedAt
+                           OR (m.created_at = @CursorCreatedAt AND m.id < @CursorId))
+                    ORDER BY m.created_at DESC, m.id DESC
                     LIMIT @Limit
                     """,
-                    new { SessionId = sessionId, CursorTimestamp = cursorTimestamp, CursorId = beforeMessageId, Limit = limit, UserId = _userContext.UserId });
+                    new { SessionId = sessionId, CursorCreatedAt = cursorCreatedAt, CursorId = beforeMessageId, Limit = limit, UserId = _userContext.UserId });
             }
         }
 

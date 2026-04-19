@@ -810,7 +810,7 @@ public sealed partial class SessionOrchestrator(
         var rows = await messageRepository.GetBySessionAsync(sessionId, limit + 1, query?.Before);
 
         var hasMore = rows.Count > limit;
-        var pageRows = hasMore ? rows.Take(limit).ToList() : (IReadOnlyList<PersistedMessage>)rows;
+        var pageRows = hasMore ? rows.Skip(rows.Count - limit).ToList() : (IReadOnlyList<PersistedMessage>)rows;
 
         var messages = MessagePersistenceService.ToHarnessMessages(pageRows);
         return Result.Success(new MessagePage(messages, hasMore));

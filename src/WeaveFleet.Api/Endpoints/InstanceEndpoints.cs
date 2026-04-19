@@ -23,6 +23,7 @@ public static class InstanceEndpoints
                 return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
 
             var providers = await instance.GetProvidersAsync(ct);
+            var prefixOpenCodeProvider = string.Equals(instance.HarnessType, "opencode", StringComparison.Ordinal);
             // Return AvailableProvider[] — the frontend hook expects a bare array
             var result = providers.Select(p => new
             {
@@ -30,7 +31,11 @@ public static class InstanceEndpoints
                 name = p.Name ?? p.Id,
                 models = p.Models.Select(m => new
                 {
-                    id = m.Id,
+                    id = prefixOpenCodeProvider && !p.Id.Contains('/', StringComparison.Ordinal)
+                        ? m.Id.Contains('/', StringComparison.Ordinal)
+                            ? $"openrouter/{m.Id}"
+                            : $"openrouter/{p.Id}/{m.Id}"
+                        : $"{p.Id}/{m.Id}",
                     name = m.Name ?? m.Id,
                 }),
             });

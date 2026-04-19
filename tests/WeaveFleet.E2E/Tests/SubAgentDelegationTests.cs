@@ -165,6 +165,7 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                         new Microsoft.Playwright.PageAssertionsToHaveURLOptions { Timeout = 5_000 });
                 await initialChildMessagesResponse;
                 await detail.WaitForLoadedAsync();
+                await Task.Delay(500); // Allow any in-flight requests to settle
 
                 var breadcrumbLink = Page.Locator(
                     $"a[href=\"/sessions/{Uri.EscapeDataString(parentSessionId)}?instanceId={Uri.EscapeDataString(parentInstanceId)}\"]")

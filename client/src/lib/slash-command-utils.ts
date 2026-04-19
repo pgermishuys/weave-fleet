@@ -49,12 +49,12 @@ export function isSlashCommand(text: string): boolean {
 }
 
 /**
- * Extracts the slash command text from a React node (e.g. the children of an
- * inline `<code>` element).  Returns the trimmed slash command string (e.g.
+ * Extracts the slash command text from a render node (e.g. the children of an
+ * inline `<code>` element). Returns the trimmed slash command string (e.g.
  * `"/start-work"` or `"/compact arg1 arg2"`) if the node's text content is
  * exactly a valid slash command, or `null` otherwise.
  *
- * Uses `extractText` from markdown-utils to recursively flatten React node trees
+ * Uses `extractText` from markdown-utils to recursively flatten node trees
  * to a plain string before parsing.
  */
 export function extractSlashCommandText(children: unknown): string | null {

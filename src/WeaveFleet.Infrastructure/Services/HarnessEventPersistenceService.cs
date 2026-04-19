@@ -255,11 +255,20 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
             if (evt.Type == EventTypes.MessageUpdated)
             {
                 var base_ = existing ?? persisted;
-                var merged = ApplyBufferedTextDeltaIfPresent(fleetSessionId, base_, persisted.Id, persisted.Role, persisted.AgentName);
+                var mergedBase = existing is null
+                    ? persisted
+                    : MessagePersistenceService.MergeTimestampAndMetadata(
+                        existing,
+                        persisted.Timestamp,
+                        persisted.Role,
+                        persisted.AgentName,
+                        persisted.ModelId);
+                var merged = ApplyBufferedTextDeltaIfPresent(fleetSessionId, mergedBase, persisted.Id, persisted.Role, persisted.AgentName);
                 if (existing is null
                     || existing.Role != merged.Role
                     || existing.AgentName != merged.AgentName
                     || existing.PartsJson != merged.PartsJson
+                    || existing.Timestamp != merged.Timestamp
                     || modelIdChanged)
                 {
                     await WriteDurableEventAsync(fleetSessionId, ownerUserId, evt, merged).ConfigureAwait(false);

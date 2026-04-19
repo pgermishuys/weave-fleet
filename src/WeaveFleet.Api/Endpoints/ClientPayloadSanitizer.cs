@@ -18,14 +18,6 @@ internal static class ClientPayloadSanitizer
             var message = messages[i];
             var sanitizedMessage = SanitizeMessage(message);
 
-            if (sanitizedMessage is null)
-            {
-                sanitized ??= new List<HarnessMessage>(messages.Count);
-                for (int j = 0; j < i; j++)
-                    sanitized.Add(messages[j]);
-                continue;
-            }
-
             if (sanitized is null)
             {
                 if (!ReferenceEquals(sanitizedMessage, message))
@@ -66,7 +58,7 @@ internal static class ClientPayloadSanitizer
             : payloadValue.Clone();
     }
 
-    private static HarnessMessage? SanitizeMessage(HarnessMessage message)
+    private static HarnessMessage SanitizeMessage(HarnessMessage message)
     {
         if (message.Parts.Count == 0)
             return message;
@@ -90,8 +82,6 @@ internal static class ClientPayloadSanitizer
         if (sanitizedParts is null)
             return message;
 
-        return sanitizedParts.Count == 0
-            ? null
-            : message with { Parts = sanitizedParts };
+        return message with { Parts = sanitizedParts };
     }
 }

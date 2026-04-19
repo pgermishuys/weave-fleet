@@ -397,6 +397,36 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task GetSessionMessages_WhenHasMore_KeepsNewestMessagesInFetchedWindow()
+    {
+        var session = MakeSession("s2-tail", "inst-missing");
+        _builder.SessionRepository.Seed(session);
+
+        var rows = Enumerable.Range(0, 11)
+            .Select(i => new Domain.Entities.PersistedMessage
+            {
+                Id = $"msg-{i}",
+                SessionId = "s2-tail",
+                Role = "assistant",
+                PartsJson = $"[{{\"type\":\"text\",\"text\":\"message-{i}\"}}]",
+                Timestamp = DateTimeOffset.UtcNow.AddMinutes(i).ToString("O"),
+                CreatedAt = DateTimeOffset.UtcNow.AddMinutes(i).ToString("O"),
+            })
+            .ToList();
+
+        _builder.MessageRepository.GetBySessionBehavior = (_, _, _) =>
+            Task.FromResult<IReadOnlyList<PersistedMessage>>(rows);
+
+        var result = await _sut.GetSessionMessagesAsync("s2-tail");
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.HasMore.ShouldBeTrue();
+        result.Value.Messages.Count.ShouldBe(10);
+        result.Value.Messages[0].Id.ShouldBe("msg-1");
+        result.Value.Messages[^1].Id.ShouldBe("msg-10");
+    }
+
+    [Fact]
     public async Task GetSessionMessages_UsesHistoryPageSizeEvenForLiveInstance()
     {
         var session = MakeSession("s3", "inst-1");

@@ -32,7 +32,7 @@ public sealed class ClientPayloadSanitizerTests
     }
 
     [Fact]
-    public void SanitizeMessages_DropsMessagesThatOnlyContainReasoning()
+    public void SanitizeMessages_PreservesMessagesThatOnlyContainReasoningAsEmpty()
     {
         var messages = new[]
         {
@@ -54,8 +54,10 @@ public sealed class ClientPayloadSanitizerTests
 
         var sanitized = ClientPayloadSanitizer.SanitizeMessages(messages);
 
-        sanitized.Count.ShouldBe(1);
-        sanitized[0].Id.ShouldBe("msg-2");
+        sanitized.Count.ShouldBe(2);
+        sanitized[0].Id.ShouldBe("msg-1");
+        sanitized[0].Parts.ShouldBeEmpty();
+        sanitized[1].Id.ShouldBe("msg-2");
     }
 
     [Fact]
@@ -150,7 +152,7 @@ public sealed class ClientPayloadSanitizerTests
     }
 
     [Fact]
-    public void SanitizeEventPayload_DropsReasoningOnlyAssistantMessageUpdatedPayload()
+    public void SanitizeEventPayload_PreservesReasoningOnlyAssistantMessageUpdatedPayloadAsEmpty()
     {
         var payload = JsonSerializer.SerializeToElement(new
         {
@@ -167,6 +169,7 @@ public sealed class ClientPayloadSanitizerTests
 
         var sanitized = ClientPayloadSanitizer.SanitizeEventPayload("message.updated", payload);
 
-        sanitized.HasValue.ShouldBeFalse();
+        sanitized.HasValue.ShouldBeTrue();
+        sanitized.Value.GetProperty("parts").GetArrayLength().ShouldBe(0);
     }
 }

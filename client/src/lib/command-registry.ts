@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+import type { Component } from "vue";
 
 export type CommandCategory = "Session" | "Navigation" | "View" | "Fleet";
 
@@ -13,7 +13,7 @@ export interface Command {
   id: string;
   label: string;
   description?: string;
-  icon?: LucideIcon;
+  icon?: Component;
   category: CommandCategory;
   paletteHotkey?: string;
   globalShortcut?: GlobalShortcut;

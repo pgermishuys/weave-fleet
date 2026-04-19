@@ -14,7 +14,7 @@ public static class ReasoningFilter
 
     /// <summary>
     /// Filters reasoning parts from a <c>message.created</c> or <c>message.updated</c> payload.
-    /// Returns <c>null</c> if the message is an assistant message with only reasoning parts (suppress entirely).
+    /// Returns an empty <c>parts</c> array if the message contains only reasoning parts.
     /// Returns the original payload clone if no reasoning parts are present.
     /// </summary>
     public static JsonElement? FilterMessageEventPayload(JsonElement payload)
@@ -42,16 +42,6 @@ public static class ReasoningFilter
 
         if (!removedAny)
             return payload.Clone();
-
-        var role = payload.TryGetProperty("info", out var infoElement)
-            && infoElement.ValueKind == JsonValueKind.Object
-            && infoElement.TryGetProperty("role", out var roleElement)
-            && roleElement.ValueKind == JsonValueKind.String
-                ? roleElement.GetString()
-                : null;
-
-        if (sanitizedParts is null && string.Equals(role, "assistant", StringComparison.Ordinal))
-            return null;
 
         var payloadNode = JsonNode.Parse(payload.GetRawText())?.AsObject();
         if (payloadNode is null)

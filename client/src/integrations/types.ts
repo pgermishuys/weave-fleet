@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import type { Component } from "vue";
 import type { FleetPluginTrustLevel } from "@/plugins/types";
 import type { SessionSourceSelection } from "@/lib/api-types";
 
@@ -23,10 +23,10 @@ export interface ContextSource {
 export interface IntegrationManifest {
   id: string; // "github"
   name: string; // "GitHub"
-  icon: ComponentType<{ size?: number }>; // Lucide icon or custom
-  browserComponent: ComponentType; // Main browser UI
+  icon: Component; // Lucide icon or custom
+  browserComponent: Component; // Main browser UI
   isConfigured: () => boolean; // Checks if token/config exists
-  settingsComponent?: ComponentType; // Settings panel for this integration
+  settingsComponent?: Component; // Settings panel for this integration
   resolveContext: (url: string) => Promise<ContextSource | null>; // URL → context
   pluginDescriptor?: {
     trustLevel?: FleetPluginTrustLevel;

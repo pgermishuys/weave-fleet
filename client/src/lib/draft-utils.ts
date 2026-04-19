@@ -1,5 +1,3 @@
-import { removePersistedKey } from "@/hooks/use-persisted-state";
-
 const DRAFT_PREFIX = "weave:draft:";
 
 export interface DraftValue {
@@ -9,6 +7,14 @@ export interface DraftValue {
 
 export function buildDraftKey(sessionId: string): string {
   return `${DRAFT_PREFIX}${sessionId}`;
+}
+
+function removePersistedKey(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // localStorage unavailable
+  }
 }
 
 /**
@@ -23,7 +29,12 @@ export function pruneDrafts(maxCount: number = 20): void {
       const key = localStorage.key(i);
       if (!key?.startsWith(DRAFT_PREFIX)) continue;
       try {
-        const val = JSON.parse(localStorage.getItem(key)!) as Partial<DraftValue>;
+        const rawValue = localStorage.getItem(key);
+        if (!rawValue) {
+          drafts.push({ key, updatedAt: 0 });
+          continue;
+        }
+        const val = JSON.parse(rawValue) as Partial<DraftValue>;
         drafts.push({ key, updatedAt: val.updatedAt ?? 0 });
       } catch {
         // Corrupt entry — treat as oldest

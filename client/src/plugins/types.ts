@@ -1,5 +1,5 @@
-import type { ComponentType, LazyExoticComponent, ReactNode } from "react";
-import type { RouteObject } from "react-router";
+import type { RouteOptions } from "@tanstack/vue-router";
+import type { Component, VNodeChild } from "vue";
 import type { ContextSource } from "@/integrations/types";
 
 export type FleetPluginTrustLevel = "built-in";
@@ -33,18 +33,36 @@ export interface FleetPluginStatus {
 export interface FleetPluginSidebarItem {
   viewId: FleetPluginViewId;
   label: string;
-  icon: ComponentType<{ className?: string; size?: number }>;
+  icon: Component;
   defaultPath: string;
   order?: number;
 }
 
 export interface FleetPluginSidebarPanel {
   viewId: FleetPluginViewId;
-  component: ComponentType;
+  component: Component;
   order?: number;
 }
 
-export type FleetPluginRoute = RouteObject & {
+type TanStackPluginRouteDefinition = RouteOptions<
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any
+>;
+
+export type FleetPluginRoute = TanStackPluginRouteDefinition & {
   pluginId: string;
   viewId?: FleetPluginViewId;
 };
@@ -52,14 +70,20 @@ export type FleetPluginRoute = RouteObject & {
 export interface FleetPluginSettingsSection {
   id: string;
   title: string;
-  component: ComponentType;
-  icon?: ComponentType<{ size?: number; className?: string }>;
+  component: Component;
+  icon?: Component;
   order?: number;
+}
+
+export interface FleetPluginConfigPage {
+  title: string;
+  component: Component;
+  icon?: Component;
 }
 
 export interface FleetPluginStartupHook {
   id: string;
-  component: ComponentType;
+  component: Component;
   order?: number;
 }
 
@@ -83,9 +107,9 @@ export interface FleetPluginSessionSourceContribution {
   sourceKey: FleetPluginSessionSourceKey;
   label?: string;
   description?: string;
-  icon?: ComponentType<{ className?: string; size?: number }>;
+  icon?: Component;
   order?: number;
-  formComponent?: ComponentType<FleetPluginSessionSourceFormProps>;
+  formComponent?: Component;
 }
 
 export interface FleetPluginContributions {
@@ -93,6 +117,7 @@ export interface FleetPluginContributions {
   sidebarPanels?: readonly FleetPluginSidebarPanel[];
   routes?: readonly FleetPluginRoute[];
   settingsSections?: readonly FleetPluginSettingsSection[];
+  configPage?: FleetPluginConfigPage;
   startupHooks?: readonly FleetPluginStartupHook[];
   contextResolvers?: readonly FleetPluginContextResolver[];
   sessionSources?: readonly FleetPluginSessionSourceContribution[];
@@ -113,6 +138,5 @@ export interface FleetPluginRenderProps {
 }
 
 export type FleetPluginRenderable =
-  | ReactNode
-  | ComponentType<FleetPluginRenderProps>
-  | LazyExoticComponent<ComponentType<FleetPluginRenderProps>>;
+  | VNodeChild
+  | Component;

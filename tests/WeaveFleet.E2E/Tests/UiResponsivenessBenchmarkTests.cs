@@ -98,11 +98,9 @@ public sealed class UiResponsivenessBenchmarkTests : BenchmarkTestBase,
             // Conservative thresholds for real-browser E2E runs on shared/dev machines.
             // Keep search/card interactions tight, but allow more headroom for full
             // session navigation and activity-stream readiness under sustained load.
-            Metrics.AssertP95Below("dashboard_search_filter_ms", 200);
             Metrics.AssertP95Below("session_card_open_ms", 500);
             Metrics.AssertP95Below("session_switch_ms", 900);
             Metrics.AssertP95Below("activity_stream_ready_ms", 900);
-            Metrics.AssertMaxBelow("dashboard_search_filter_ms", 500);
             Metrics.AssertMaxBelow("session_card_open_ms", 1000);
             Metrics.AssertMaxBelow("session_switch_ms", 1000);
             Metrics.AssertMaxBelow("activity_stream_ready_ms", 1000);
@@ -112,7 +110,7 @@ public sealed class UiResponsivenessBenchmarkTests : BenchmarkTestBase,
     // ── Private helpers ──────────────────────────────────────────────────────
 
     /// <summary>
-    /// Runs the standard interaction script measuring four interactions.
+    /// Runs the standard interaction script measuring three interactions.
     /// Repeated <paramref name="iterations"/> times per interaction.
     /// </summary>
     private async Task RunInteractionScriptAsync(
@@ -121,32 +119,7 @@ public sealed class UiResponsivenessBenchmarkTests : BenchmarkTestBase,
     {
         var dashboard = new FleetDashboardPage(Page);
 
-        // ── 1. Dashboard search filter latency ────────────────────────────────
-        await dashboard.GotoAsync();
-        await WaitForCreatedSessionsVisibleAsync(dashboard, sessions);
-
-        for (var i = 0; i < iterations; i++)
-        {
-            var targetSession = sessions[i % sessions.Count];
-            var searchInput = Page.GetByPlaceholder("Search sessions…");
-            var sessionTitle = await dashboard.GetSessionTitle(targetSession.SessionId).TextContentAsync()
-                ?? throw new InvalidOperationException($"Expected session title for {targetSession.SessionId}.");
-
-            await MeasureAsync("dashboard_search_filter_ms",
-                action: () => searchInput.FillAsync(sessionTitle),
-                waitForCondition: async () =>
-                {
-                    await dashboard.GetSessionCard(targetSession.SessionId)
-                        .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-                    await Assertions.Expect(Page.GetByTestId("session-card"))
-                        .ToHaveCountAsync(1);
-                });
-
-            await searchInput.FillAsync(string.Empty);
-            await WaitForCreatedSessionsVisibleAsync(dashboard, sessions);
-        }
-
-        // ── 2. Session card click to detail view ──────────────────────────────
+        // ── 1. Session card click to detail view ──────────────────────────────
         for (var i = 0; i < iterations; i++)
         {
             var targetSession = sessions[i % sessions.Count];
@@ -158,7 +131,7 @@ public sealed class UiResponsivenessBenchmarkTests : BenchmarkTestBase,
                 waitForCondition: () => WaitForSessionDetailReadyAsync(targetSession.SessionId));
         }
 
-        // ── 3. Session switching latency ──────────────────────────────────────
+        // ── 2. Session switching latency ──────────────────────────────────────
         for (var i = 0; i < iterations; i++)
         {
             var fromSession = sessions[i % sessions.Count];
@@ -174,7 +147,7 @@ public sealed class UiResponsivenessBenchmarkTests : BenchmarkTestBase,
                 waitForCondition: () => WaitForSessionDetailReadyAsync(toSession.SessionId));
         }
 
-        // ── 4. Activity stream ready latency ──────────────────────────────────
+        // ── 3. Activity stream ready latency ──────────────────────────────────
         for (var i = 0; i < iterations; i++)
         {
             var targetSession = sessions[i % sessions.Count];

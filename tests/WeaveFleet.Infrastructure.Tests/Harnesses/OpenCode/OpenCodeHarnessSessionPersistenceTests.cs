@@ -975,6 +975,59 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     }
 
     [Fact]
+    public async Task SubscribeAsync_MessageUpdated_OverwritesPlaceholderTimestampWithHarnessTime()
+    {
+        var fleetSessionId = "fleet-authoritative-timestamp-1";
+        var messageId = "msg-authoritative-time-1";
+
+        var placeholderTimestamp = DateTimeOffset.UtcNow.ToString("O");
+        var placeholderCreatedAt = DateTimeOffset.UtcNow.ToString("O");
+
+        var (instance, messageRepo, persistenceService) = await CreateInstanceWithSseLines(
+            fleetSessionId,
+            [
+                BuildPartUpdatedSseLine(messageId, "oc-session", "placeholder text", "assistant", "loom"),
+                BuildMessageUpdatedSseLine("assistant", messageId, "loom")
+            ],
+            repo =>
+            {
+                repo.GetByIdBehavior = (id, sessionId) =>
+                {
+                    if (id != messageId || sessionId != fleetSessionId)
+                        return Task.FromResult<PersistedMessage?>(null);
+
+                    var latest = repo.All.LastOrDefault(message => message.Id == id && message.SessionId == sessionId);
+                    if (latest is not null)
+                        return Task.FromResult<PersistedMessage?>(latest);
+
+                    return Task.FromResult<PersistedMessage?>(new PersistedMessage
+                    {
+                        Id = messageId,
+                        SessionId = fleetSessionId,
+                        Role = "assistant",
+                        PartsJson = """[{"type":"text","text":"placeholder text"}]""",
+                        Timestamp = placeholderTimestamp,
+                        CreatedAt = placeholderCreatedAt,
+                        AgentName = "loom",
+                    });
+                };
+            });
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token, persistenceService, fleetSessionId);
+
+        await Task.Delay(300);
+        await cts.CancelAsync();
+        await consumeTask;
+
+        var persisted = messageRepo.All.Last(message => message.Id == messageId && message.SessionId == fleetSessionId);
+        persisted.Timestamp.ShouldBe(DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000).ToString("O"));
+        persisted.CreatedAt.ShouldBe(placeholderCreatedAt);
+
+        await instance.DisposeAsync();
+    }
+
+    [Fact]
     public async Task SubscribeAsync_MessagePartUpdated_StepFinishPart_PersistsIncrementally()
     {
         var fleetSessionId = "fleet-step-persist-1";

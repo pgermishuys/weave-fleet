@@ -1,5 +1,6 @@
 import { getPlugins } from "./registry";
 import type {
+  FleetPluginConfigPage,
   FleetPluginContextResolver,
   FleetPluginManifest,
   FleetPluginRoute,
@@ -14,6 +15,7 @@ export type RegisteredSidebarItem = FleetPluginSidebarItem & { pluginId: string 
 export type RegisteredSidebarPanel = FleetPluginSidebarPanel & { pluginId: string };
 export type RegisteredRoute = FleetPluginRoute & { pluginId: string };
 export type RegisteredSettingsSection = FleetPluginSettingsSection & { pluginId: string };
+export type RegisteredConfigPage = FleetPluginConfigPage & { pluginId: string };
 export type RegisteredStartupHook = FleetPluginStartupHook & { pluginId: string };
 export type RegisteredContextResolver = FleetPluginContextResolver & { pluginId: string };
 export type RegisteredSessionSourceContribution = FleetPluginSessionSourceContribution & { pluginId: string };
@@ -69,6 +71,21 @@ export function getSettingsSections(manifests?: readonly FleetPluginManifest[]):
     ),
     (section) => section.order
   );
+}
+
+export function getConfigPage(
+  pluginId: string,
+  manifests?: readonly FleetPluginManifest[]
+): RegisteredConfigPage | undefined {
+  const manifest = getSourceManifests(manifests).find((candidate) => candidate.descriptor.id === pluginId);
+  const configPage = manifest?.contributions?.configPage;
+
+  return configPage
+    ? {
+        ...configPage,
+        pluginId: manifest.descriptor.id,
+      }
+    : undefined;
 }
 
 export function getStartupHooks(manifests?: readonly FleetPluginManifest[]): RegisteredStartupHook[] {

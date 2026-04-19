@@ -10,6 +10,11 @@ import type {
   AccumulatedToolPart,
   AccumulatedFilePart,
 } from "@/lib/api-types";
+import { sortAccumulatedMessagesChronologically } from "@/lib/pagination-utils";
+
+function sortMessagesChronologically(messages: AccumulatedMessage[]): AccumulatedMessage[] {
+  return sortAccumulatedMessagesChronologically(messages);
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function ensureMessage(
@@ -34,7 +39,7 @@ export function ensureMessage(
     modelID: info.modelID,
     parentID: info.parentID,
   };
-  return [...prev, newMsg];
+  return sortMessagesChronologically([...prev, newMsg]);
 }
 
 /**
@@ -45,11 +50,12 @@ export function ensureMessage(
 export function mergeMessageUpdate(
   prev: AccumulatedMessage[],
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  info: { id: string; time?: { completed?: number }; cost?: number; tokens?: { input: number; output: number; reasoning: number }; parts?: Array<Record<string, unknown>>; [key: string]: unknown }
+  info: { id: string; time?: { created?: number; completed?: number }; cost?: number; tokens?: { input: number; output: number; reasoning: number }; parts?: Array<Record<string, unknown>>; [key: string]: unknown }
 ): AccumulatedMessage[] {
   const index = prev.findIndex((m) => m.messageId === info.id);
   if (index === -1) return prev; // message not found, no-op
   const existing = prev[index];
+  const createdAt = info.time?.created;
   const completedAt = info.time?.completed;
 
   // Merge tokens and cost from the message-level info.
@@ -69,6 +75,7 @@ export function mergeMessageUpdate(
   const mergedCost = Math.max(existing.cost ?? 0, infoCost);
 
   const hasNewCompletedAt = completedAt && !existing.completedAt;
+  const hasNewCreatedAt = typeof createdAt === "number" && existing.createdAt !== createdAt;
   const hasNewTokens = mergedTokens && !existing.tokens;
   const hasUpdatedTokens =
     mergedTokens &&
@@ -85,7 +92,7 @@ export function mergeMessageUpdate(
   const mergedSnapshotParts = snapshotParts ? mergeCommittedSnapshotParts(existing.parts, snapshotParts) : null;
   const hasSnapshotParts = mergedSnapshotParts != null;
 
-  if (!hasNewCompletedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts) {
+  if (!hasNewCompletedAt && !hasNewCreatedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts) {
     return prev; // nothing new to merge
   }
 
@@ -93,11 +100,12 @@ export function mergeMessageUpdate(
   updated[index] = {
     ...existing,
     ...(hasSnapshotParts ? { parts: mergedSnapshotParts } : {}),
+    ...(hasNewCreatedAt ? { createdAt } : {}),
     ...(hasNewCompletedAt ? { completedAt } : {}),
     tokens: mergedTokens,
     cost: mergedCost,
   };
-  return updated;
+  return sortMessagesChronologically(updated);
 }
 
 function mapCommittedSnapshotPart(
