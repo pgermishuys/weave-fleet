@@ -27,5 +27,10 @@ const items = computed(() => {
 </script>
 
 <template>
-  <SelectorDropdown v-model="selectedModelId" label="Model selector" placeholder="Select model" :items="items" />
+  <SelectorDropdown
+    v-model="selectedModelId"
+    label="Model selector"
+    placeholder="Select model"
+    :items="items"
+  />
 </template>

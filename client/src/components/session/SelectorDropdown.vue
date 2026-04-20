@@ -86,7 +86,11 @@ function selectItem(itemId: string): void {
 </script>
 
 <template>
-  <div ref="root" class="selector-dropdown-root" @keydown.escape.prevent="closeDropdown">
+  <div
+    ref="root"
+    class="selector-dropdown-root"
+    @keydown.escape.prevent="closeDropdown"
+  >
     <button
       type="button"
       class="selector-btn"
@@ -96,10 +100,18 @@ function selectItem(itemId: string): void {
       @click="toggleOpen"
     >
       <span class="selector-btn__label">{{ selectedItem?.label ?? placeholder }}</span>
-      <ChevronDown class="selector-btn__icon" :class="{ 'selector-btn__icon--open': isOpen }" />
+      <ChevronDown
+        class="selector-btn__icon"
+        :class="{ 'selector-btn__icon--open': isOpen }"
+      />
     </button>
 
-    <div v-if="isOpen" class="selector-dropdown" role="listbox" :aria-label="label">
+    <div
+      v-if="isOpen"
+      class="selector-dropdown"
+      role="listbox"
+      :aria-label="label"
+    >
       <div class="selector-dropdown__filter-wrap">
         <input
           ref="filterInput"
@@ -109,7 +121,7 @@ function selectItem(itemId: string): void {
           :placeholder="filterPlaceholder"
           :aria-label="filterAriaLabel"
           @keydown.escape.prevent="closeDropdown"
-        />
+        >
       </div>
 
       <button
@@ -123,12 +135,23 @@ function selectItem(itemId: string): void {
       >
         <span class="selector-dropdown__copy">
           <span class="selector-dropdown__item-label">{{ item.label }}</span>
-          <span v-if="item.description" class="selector-dropdown__item-description">{{ item.description }}</span>
+          <span
+            v-if="item.description"
+            class="selector-dropdown__item-description"
+          >{{ item.description }}</span>
         </span>
-        <span v-if="item.meta" class="selector-dropdown__item-meta">{{ item.meta }}</span>
+        <span
+          v-if="item.meta"
+          class="selector-dropdown__item-meta"
+        >{{ item.meta }}</span>
       </button>
 
-      <div v-if="filteredItems.length === 0" class="selector-dropdown__empty">No matching options</div>
+      <div
+        v-if="filteredItems.length === 0"
+        class="selector-dropdown__empty"
+      >
+        No matching options
+      </div>
     </div>
   </div>
 </template>

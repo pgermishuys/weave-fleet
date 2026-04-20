@@ -308,8 +308,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="activity-feed" aria-label="Board activity feed">
-    <p v-if="orderedEntries.length === 0" class="activity-feed-empty">
+  <section
+    class="activity-feed"
+    aria-label="Board activity feed"
+  >
+    <p
+      v-if="orderedEntries.length === 0"
+      class="activity-feed-empty"
+    >
       Waiting for activity events.
     </p>
 
@@ -323,11 +329,17 @@ onUnmounted(() => {
         <span class="af-session">{{ entry.sessionTitle }}</span>
       </div>
 
-      <p class="af-action" :class="`af-action--${entry.tone}`">
+      <p
+        class="af-action"
+        :class="`af-action--${entry.tone}`"
+      >
         {{ entry.action }}
       </p>
 
-      <p v-if="entry.projectName" class="af-project">
+      <p
+        v-if="entry.projectName"
+        class="af-project"
+      >
         {{ entry.projectName }}
       </p>
     </article>

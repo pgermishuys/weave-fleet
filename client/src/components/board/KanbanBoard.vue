@@ -97,7 +97,10 @@ function handleNewSession(): void {
 </script>
 
 <template>
-  <section class="kanban-container" aria-label="Kanban board">
+  <section
+    class="kanban-container"
+    aria-label="Kanban board"
+  >
     <header class="kanban-header">
       <div class="kanban-header__copy">
         <p class="kanban-header__eyebrow">
@@ -113,12 +116,19 @@ function handleNewSession(): void {
         </div>
       </div>
 
-      <button type="button" class="kanban-header__button" @click="handleNewSession">
+      <button
+        type="button"
+        class="kanban-header__button"
+        @click="handleNewSession"
+      >
         New Session
       </button>
     </header>
 
-    <section class="kanban-summary" aria-label="Visible session summary">
+    <section
+      class="kanban-summary"
+      aria-label="Visible session summary"
+    >
       <div class="kanban-summary__item">
         <span class="kanban-summary__value">{{ quickStats.visible }}</span>
         <span class="kanban-summary__label">Visible</span>

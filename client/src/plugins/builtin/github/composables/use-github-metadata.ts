@@ -43,7 +43,7 @@ export interface UseGitHubRepoMetadataResult<T> {
   refresh: () => Promise<void>;
 }
 
-interface GitHubMetadataConfig<T> {
+interface GitHubMetadataConfig {
   name: string;
   endpoint: (owner: string, repo: string) => string;
 }
@@ -75,7 +75,7 @@ function isEntryStale(entry: RepoMetadataCacheEntry<unknown>): boolean {
   return entry.lastUpdated === null || Date.now() - entry.lastUpdated > CACHE_TTL_MS;
 }
 
-export function createGitHubMetadataComposable<T>(config: GitHubMetadataConfig<T>) {
+export function createGitHubMetadataComposable<T>(config: GitHubMetadataConfig) {
   const store = createStore<T>();
 
   function getEntry(key: string): RepoMetadataCacheEntry<T> {

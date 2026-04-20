@@ -83,7 +83,6 @@ const detailEndpoint = computed(() => {
   return `/api/integrations/github/repos/${encodeURIComponent(props.owner)}/${encodeURIComponent(props.repo)}/${pathType}/${encodeURIComponent(props.number)}`;
 });
 const commentsEndpoint = computed(() => {
-  const pathType = isPullRequest.value ? "pulls" : "issues";
   return `${detailEndpoint.value}/comments`;
 });
 
@@ -240,29 +239,65 @@ async function handleRefresh(): Promise<void> {
 </script>
 
 <template>
-  <section class="detail-page" :aria-busy="isLoading || isRefreshing">
-    <div v-if="isLoading" class="detail-state detail-state--loading">
-      <LoaderCircle :size="18" class="detail-state__icon detail-state__icon--spin" aria-hidden="true" />
+  <section
+    class="detail-page"
+    :aria-busy="isLoading || isRefreshing"
+  >
+    <div
+      v-if="isLoading"
+      class="detail-state detail-state--loading"
+    >
+      <LoaderCircle
+        :size="18"
+        class="detail-state__icon detail-state__icon--spin"
+        aria-hidden="true"
+      />
       <span>Loading GitHub {{ detailLabel }}…</span>
     </div>
 
-    <div v-else-if="errorMessage" class="detail-state detail-state--error" role="alert">
-      <TriangleAlert :size="18" class="detail-state__icon" aria-hidden="true" />
+    <div
+      v-else-if="errorMessage"
+      class="detail-state detail-state--error"
+      role="alert"
+    >
+      <TriangleAlert
+        :size="18"
+        class="detail-state__icon"
+        aria-hidden="true"
+      />
       <div class="detail-state__copy">
-        <p class="detail-state__title">Unable to load GitHub {{ detailLabel }}</p>
+        <p class="detail-state__title">
+          Unable to load GitHub {{ detailLabel }}
+        </p>
         <p>{{ errorMessage }}</p>
       </div>
-      <button type="button" class="detail-action-button" @click="handleRefresh">
-        <RefreshCw :size="14" :class="{ 'detail-state__icon--spin': isRefreshing }" aria-hidden="true" />
+      <button
+        type="button"
+        class="detail-action-button"
+        @click="handleRefresh"
+      >
+        <RefreshCw
+          :size="14"
+          :class="{ 'detail-state__icon--spin': isRefreshing }"
+          aria-hidden="true"
+        />
         Retry
       </button>
     </div>
 
-    <article v-else-if="detail" class="detail-shell">
+    <article
+      v-else-if="detail"
+      class="detail-shell"
+    >
       <header class="detail-hero">
         <div class="detail-hero__content">
           <div class="detail-status-row">
-            <component :is="statusIcon" :class="statusClassName" :size="16" aria-hidden="true" />
+            <component
+              :is="statusIcon"
+              :class="statusClassName"
+              :size="16"
+              aria-hidden="true"
+            />
             <span class="detail-status-row__state">{{ resolvedState }}</span>
             <span aria-hidden="true">•</span>
             <span>{{ repoFullName }}</span>
@@ -270,9 +305,14 @@ async function handleRefresh(): Promise<void> {
             <span>#{{ detail.number }}</span>
           </div>
 
-          <h1 class="detail-title">{{ title }}</h1>
+          <h1 class="detail-title">
+            {{ title }}
+          </h1>
 
-          <div class="detail-labels" aria-label="GitHub labels">
+          <div
+            class="detail-labels"
+            aria-label="GitHub labels"
+          >
             <span
               v-for="label in labels"
               :key="label.name"
@@ -285,23 +325,48 @@ async function handleRefresh(): Promise<void> {
         </div>
 
         <div class="detail-actions">
-          <button type="button" class="detail-action-button" :disabled="isRefreshing" @click="handleRefresh">
-            <RefreshCw :size="14" :class="{ 'detail-state__icon--spin': isRefreshing }" aria-hidden="true" />
+          <button
+            type="button"
+            class="detail-action-button"
+            :disabled="isRefreshing"
+            @click="handleRefresh"
+          >
+            <RefreshCw
+              :size="14"
+              :class="{ 'detail-state__icon--spin': isRefreshing }"
+              aria-hidden="true"
+            />
             Refresh
           </button>
 
-          <a class="detail-link-button" :href="htmlUrl" target="_blank" rel="noreferrer noopener">
-            <ExternalLink :size="14" aria-hidden="true" />
+          <a
+            class="detail-link-button"
+            :href="htmlUrl"
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            <ExternalLink
+              :size="14"
+              aria-hidden="true"
+            />
             Open on GitHub
           </a>
         </div>
       </header>
 
-      <section class="detail-panel detail-metadata" :aria-label="`${detailHeading} metadata`">
+      <section
+        class="detail-panel detail-metadata"
+        :aria-label="`${detailHeading} metadata`"
+      >
         <div class="detail-meta-item">
           <span class="detail-meta-item__label">Author</span>
           <div class="detail-author">
-            <img v-if="authorAvatarUrl" class="detail-author__avatar" :src="authorAvatarUrl" :alt="`${authorLogin} avatar`">
+            <img
+              v-if="authorAvatarUrl"
+              class="detail-author__avatar"
+              :src="authorAvatarUrl"
+              :alt="`${authorLogin} avatar`"
+            >
             <span class="detail-author__name">{{ authorLogin }}</span>
           </div>
         </div>
@@ -327,7 +392,10 @@ async function handleRefresh(): Promise<void> {
             <span class="detail-meta-item__label">Branches</span>
             <div class="detail-branch-list">
               <span>{{ pullRequestStats.headRef }}</span>
-              <GitCommitHorizontal :size="14" aria-hidden="true" />
+              <GitCommitHorizontal
+                :size="14"
+                aria-hidden="true"
+              />
               <span>{{ pullRequestStats.baseRef }}</span>
             </div>
           </div>
@@ -343,35 +411,75 @@ async function handleRefresh(): Promise<void> {
         </template>
       </section>
 
-      <section class="detail-panel" aria-label="Overview">
-        <h2 class="detail-panel__title">Overview</h2>
+      <section
+        class="detail-panel"
+        aria-label="Overview"
+      >
+        <h2 class="detail-panel__title">
+          Overview
+        </h2>
 
-        <div v-if="bodyHtml" class="detail-markdown" v-html="bodyHtml" />
-        <p v-else class="detail-panel__empty">No description was provided for this {{ detailLabel }}.</p>
+        <!-- eslint-disable-next-line vue/no-v-html -->
+        <div
+          v-if="bodyHtml"
+          class="detail-markdown"
+          v-html="bodyHtml"
+        />
+        <p
+          v-else
+          class="detail-panel__empty"
+        >
+          No description was provided for this {{ detailLabel }}.
+        </p>
       </section>
 
-      <section class="detail-panel" aria-label="Comments">
+      <section
+        class="detail-panel"
+        aria-label="Comments"
+      >
         <div class="detail-panel__header">
-          <h2 class="detail-panel__title">Comments</h2>
+          <h2 class="detail-panel__title">
+            Comments
+          </h2>
           <span class="detail-panel__count">
-            <MessageSquare :size="14" aria-hidden="true" />
+            <MessageSquare
+              :size="14"
+              aria-hidden="true"
+            />
             {{ commentsCountLabel }}
           </span>
         </div>
 
-        <p v-if="commentsError" class="detail-panel__banner detail-panel__banner--warning">
+        <p
+          v-if="commentsError"
+          class="detail-panel__banner detail-panel__banner--warning"
+        >
           {{ commentsError }}
         </p>
 
-        <p v-if="comments.length === 0" class="detail-panel__empty">
+        <p
+          v-if="comments.length === 0"
+          class="detail-panel__empty"
+        >
           No comments yet.
         </p>
 
-        <div v-else class="detail-comment-list">
-          <article v-for="comment in comments" :key="comment.id" class="detail-comment">
+        <div
+          v-else
+          class="detail-comment-list"
+        >
+          <article
+            v-for="comment in comments"
+            :key="comment.id"
+            class="detail-comment"
+          >
             <header class="detail-comment__header">
               <div class="detail-author">
-                <img class="detail-author__avatar" :src="comment.user.avatar_url" :alt="`${comment.user.login} avatar`">
+                <img
+                  class="detail-author__avatar"
+                  :src="comment.user.avatar_url"
+                  :alt="`${comment.user.login} avatar`"
+                >
                 <span class="detail-author__name">{{ comment.user.login }}</span>
               </div>
 
@@ -382,11 +490,25 @@ async function handleRefresh(): Promise<void> {
               </div>
             </header>
 
-            <div v-if="renderMarkdown(comment.body)" class="detail-markdown" v-html="renderMarkdown(comment.body)" />
-            <p v-else class="detail-panel__empty">Comment body is empty.</p>
+            <!-- eslint-disable-next-line vue/no-v-html -->
+            <div
+              v-if="renderMarkdown(comment.body)"
+              class="detail-markdown"
+              v-html="renderMarkdown(comment.body)"
+            />
+            <p
+              v-else
+              class="detail-panel__empty"
+            >
+              Comment body is empty.
+            </p>
 
             <footer class="detail-comment__footer">
-              <a :href="comment.html_url" target="_blank" rel="noreferrer noopener">View on GitHub</a>
+              <a
+                :href="comment.html_url"
+                target="_blank"
+                rel="noreferrer noopener"
+              >View on GitHub</a>
             </footer>
           </article>
         </div>

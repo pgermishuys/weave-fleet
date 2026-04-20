@@ -29,7 +29,10 @@ function cycleEffort(): void {
     @click="cycleEffort"
   >
     <span class="effort-toggle__label">{{ effortLabel }}</span>
-    <span class="effort-toggle__dots" aria-hidden="true">
+    <span
+      class="effort-toggle__dots"
+      aria-hidden="true"
+    >
       <span
         v-for="dotIndex in 3"
         :key="dotIndex"

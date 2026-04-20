@@ -65,17 +65,26 @@ const connectionClassName = computed(() => {
 </script>
 
 <template>
-  <section class="simple-panel" aria-label="Sentry panel">
+  <section
+    class="simple-panel"
+    aria-label="Sentry panel"
+  >
     <header class="simple-panel-header">
       <div class="simple-panel-title-row">
-        <BadgeAlert :size="16" aria-hidden="true" />
+        <BadgeAlert
+          :size="16"
+          aria-hidden="true"
+        />
         <h2 class="simple-panel-title">
           Sentry
         </h2>
       </div>
 
       <div class="simple-panel-status-row">
-        <span class="badge-count" aria-label="Open Sentry issues">
+        <span
+          class="badge-count"
+          aria-label="Open Sentry issues"
+        >
           {{ errorCount }}
         </span>
         <span :class="connectionClassName">
@@ -85,7 +94,11 @@ const connectionClassName = computed(() => {
     </header>
 
     <div class="simple-panel-content">
-      <article v-for="errorItem in errors" :key="errorItem.id" class="error-item">
+      <article
+        v-for="errorItem in errors"
+        :key="errorItem.id"
+        class="error-item"
+      >
         <div class="error-item-header">
           <p class="error-title">
             {{ errorItem.title }}

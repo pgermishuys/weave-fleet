@@ -16,7 +16,7 @@ function sortMessagesChronologically(messages: AccumulatedMessage[]): Accumulate
   return sortAccumulatedMessagesChronologically(messages);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export function ensureMessage(
   prev: AccumulatedMessage[],
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,7 +49,7 @@ export function ensureMessage(
  */
 export function mergeMessageUpdate(
   prev: AccumulatedMessage[],
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   info: { id: string; time?: { created?: number; completed?: number }; cost?: number; tokens?: { input: number; output: number; reasoning: number }; parts?: Array<Record<string, unknown>>; [key: string]: unknown }
 ): AccumulatedMessage[] {
   const index = prev.findIndex((m) => m.messageId === info.id);

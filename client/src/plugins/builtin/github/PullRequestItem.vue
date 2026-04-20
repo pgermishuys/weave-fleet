@@ -110,20 +110,31 @@ function handleKeydown(event: KeyboardEvent): void {
     @click="openPullRequest"
     @keydown="handleKeydown"
   >
-    <component :is="statusIcon" :class="statusClassName" :size="15" aria-hidden="true" />
+    <component
+      :is="statusIcon"
+      :class="statusClassName"
+      :size="15"
+      aria-hidden="true"
+    />
 
     <div class="pull-request-body">
       <div class="pull-request-row pull-request-row--title">
         <p class="pull-request-title">
           {{ item.title }}
         </p>
-        <span v-if="item.draft" class="pull-request-draft">Draft</span>
+        <span
+          v-if="item.draft"
+          class="pull-request-draft"
+        >Draft</span>
         <span class="pull-request-number">#{{ item.number }}</span>
       </div>
 
       <div class="pull-request-row pull-request-row--meta">
         <span class="pull-request-repo">{{ item.repoFullName }}</span>
-        <div class="pull-request-labels" aria-label="Pull request labels">
+        <div
+          class="pull-request-labels"
+          aria-label="Pull request labels"
+        >
           <span
             v-for="label in item.labels"
             :key="label.name"
@@ -136,7 +147,11 @@ function handleKeydown(event: KeyboardEvent): void {
       </div>
 
       <div class="pull-request-row pull-request-row--footer">
-        <img class="pull-request-avatar" :src="item.user.avatarUrl" :alt="`${item.user.login} avatar`">
+        <img
+          class="pull-request-avatar"
+          :src="item.user.avatarUrl"
+          :alt="`${item.user.login} avatar`"
+        >
         <span class="pull-request-user">{{ item.user.login }}</span>
         <span class="pull-request-time">{{ relativeTime }}</span>
       </div>

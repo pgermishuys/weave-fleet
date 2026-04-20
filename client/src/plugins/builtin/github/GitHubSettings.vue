@@ -121,16 +121,32 @@ async function handleRefreshRepos(): Promise<void> {
 
 <template>
   <div class="space-y-4">
-    <div v-if="isLoadingStatus" class="flex items-center gap-2 text-sm text-muted">
-      <LoaderCircle :size="16" class="animate-spin" aria-hidden="true" />
+    <div
+      v-if="isLoadingStatus"
+      class="flex items-center gap-2 text-sm text-muted"
+    >
+      <LoaderCircle
+        :size="16"
+        class="animate-spin"
+        aria-hidden="true"
+      />
       <span>Checking GitHub connection…</span>
     </div>
 
-    <div v-else-if="isConnected" class="space-y-3 rounded-card border border-green-500/30 bg-green-500/10 p-4">
+    <div
+      v-else-if="isConnected"
+      class="space-y-3 rounded-card border border-green-500/30 bg-green-500/10 p-4"
+    >
       <div class="flex items-start gap-3">
-        <CheckCircle2 :size="18" class="mt-0.5 text-green-300" aria-hidden="true" />
+        <CheckCircle2
+          :size="18"
+          class="mt-0.5 text-green-300"
+          aria-hidden="true"
+        />
         <div>
-          <p class="text-sm font-semibold text-text">GitHub is connected</p>
+          <p class="text-sm font-semibold text-text">
+            GitHub is connected
+          </p>
           <p class="mt-1 text-xs text-muted">
             Repositories and issue context are available to plugin surfaces that depend on GitHub.
           </p>
@@ -140,11 +156,16 @@ async function handleRefreshRepos(): Promise<void> {
       <div class="rounded-card border border-border/70 bg-main-bg/70 p-3">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="space-y-1">
-            <p class="text-sm font-medium text-text">Repository cache</p>
+            <p class="text-sm font-medium text-text">
+              Repository cache
+            </p>
             <p class="text-xs text-muted">
               {{ repoCacheSummary }}
             </p>
-            <p v-if="reposError && repos.length > 0" class="text-xs text-red-200">
+            <p
+              v-if="reposError && repos.length > 0"
+              class="text-xs text-red-200"
+            >
               {{ reposError }}
             </p>
           </div>
@@ -155,8 +176,17 @@ async function handleRefreshRepos(): Promise<void> {
             :disabled="isLoadingRepos || isDisconnecting"
             @click="handleRefreshRepos"
           >
-            <LoaderCircle v-if="isLoadingRepos" :size="16" class="animate-spin" aria-hidden="true" />
-            <Github v-else :size="16" aria-hidden="true" />
+            <LoaderCircle
+              v-if="isLoadingRepos"
+              :size="16"
+              class="animate-spin"
+              aria-hidden="true"
+            />
+            <Github
+              v-else
+              :size="16"
+              aria-hidden="true"
+            />
             <span>{{ isLoadingRepos ? "Refreshing…" : "Refresh repos" }}</span>
           </button>
         </div>
@@ -168,18 +198,36 @@ async function handleRefreshRepos(): Promise<void> {
         :disabled="isDisconnecting"
         @click="handleDisconnectGitHub"
       >
-        <LoaderCircle v-if="isDisconnecting" :size="16" class="animate-spin" aria-hidden="true" />
-        <Unplug v-else :size="16" aria-hidden="true" />
+        <LoaderCircle
+          v-if="isDisconnecting"
+          :size="16"
+          class="animate-spin"
+          aria-hidden="true"
+        />
+        <Unplug
+          v-else
+          :size="16"
+          aria-hidden="true"
+        />
         <span>{{ isDisconnecting ? "Disconnecting…" : "Disconnect" }}</span>
       </button>
     </div>
 
-    <div v-else class="space-y-4">
+    <div
+      v-else
+      class="space-y-4"
+    >
       <div class="rounded-card border border-border bg-card-bg p-4">
         <div class="flex items-start gap-3">
-          <Github :size="18" class="mt-0.5 text-text" aria-hidden="true" />
+          <Github
+            :size="18"
+            class="mt-0.5 text-text"
+            aria-hidden="true"
+          />
           <div>
-            <p class="text-sm font-semibold text-text">Connect with device flow</p>
+            <p class="text-sm font-semibold text-text">
+              Connect with device flow
+            </p>
             <p class="mt-1 text-xs text-muted">
               The recommended option. Authorize in your browser and Weave finishes the connection automatically.
             </p>
@@ -193,7 +241,10 @@ async function handleRefreshRepos(): Promise<void> {
             :class="buttonPrimaryClass"
             @click="connectWithDeviceFlow"
           >
-            <PlugZap :size="16" aria-hidden="true" />
+            <PlugZap
+              :size="16"
+              aria-hidden="true"
+            />
             Connect with GitHub
           </button>
 
@@ -203,20 +254,36 @@ async function handleRefreshRepos(): Promise<void> {
             :class="buttonPrimaryClass"
             disabled
           >
-            <LoaderCircle :size="16" class="animate-spin" aria-hidden="true" />
+            <LoaderCircle
+              :size="16"
+              class="animate-spin"
+              aria-hidden="true"
+            />
             Starting authorization…
           </button>
 
-          <div v-else-if="isAwaitingAuthorization && deviceState.status === 'awaiting-auth'" class="space-y-3 rounded-card border border-border bg-main-bg p-4">
+          <div
+            v-else-if="isAwaitingAuthorization && deviceState.status === 'awaiting-auth'"
+            class="space-y-3 rounded-card border border-border bg-main-bg p-4"
+          >
             <div class="space-y-2">
-              <p class="text-xs font-medium uppercase tracking-wide text-muted">Device code</p>
+              <p class="text-xs font-medium uppercase tracking-wide text-muted">
+                Device code
+              </p>
               <div class="flex flex-wrap items-center gap-2">
                 <code class="rounded-btn border border-border bg-card-bg px-3 py-2 text-sm font-semibold tracking-[0.2em] text-text">
                   {{ deviceState.userCode }}
                 </code>
 
-                <button type="button" :class="buttonSecondaryClass" @click="copyUserCode(deviceState.userCode)">
-                  <Copy :size="16" aria-hidden="true" />
+                <button
+                  type="button"
+                  :class="buttonSecondaryClass"
+                  @click="copyUserCode(deviceState.userCode)"
+                >
+                  <Copy
+                    :size="16"
+                    aria-hidden="true"
+                  />
                   Copy code
                 </button>
               </div>
@@ -228,16 +295,27 @@ async function handleRefreshRepos(): Promise<void> {
               rel="noreferrer noopener"
               class="inline-flex items-center gap-2 text-sm font-medium text-text underline-offset-4 hover:underline"
             >
-              <ExternalLink :size="16" aria-hidden="true" />
+              <ExternalLink
+                :size="16"
+                aria-hidden="true"
+              />
               Open GitHub
             </a>
 
             <div class="flex items-center gap-2 text-sm text-muted">
-              <LoaderCircle :size="16" class="animate-spin" aria-hidden="true" />
+              <LoaderCircle
+                :size="16"
+                class="animate-spin"
+                aria-hidden="true"
+              />
               <span>{{ pollStatusLabel }}</span>
             </div>
 
-            <button type="button" :class="buttonSecondaryClass" @click="resetDeviceFlow">
+            <button
+              type="button"
+              :class="buttonSecondaryClass"
+              @click="resetDeviceFlow"
+            >
               Cancel
             </button>
           </div>
@@ -246,7 +324,11 @@ async function handleRefreshRepos(): Promise<void> {
             v-else-if="deviceState.status === 'complete'"
             class="flex items-start gap-2 rounded-card border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-300"
           >
-            <CheckCircle2 :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
+            <CheckCircle2
+              :size="16"
+              class="mt-0.5 shrink-0"
+              aria-hidden="true"
+            />
             <span>GitHub connected successfully.</span>
           </div>
 
@@ -255,7 +337,11 @@ async function handleRefreshRepos(): Promise<void> {
             class="space-y-3"
           >
             <div class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-              <AlertCircle :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
+              <AlertCircle
+                :size="16"
+                class="mt-0.5 shrink-0"
+                aria-hidden="true"
+              />
               <span>
                 {{
                   deviceState.status === 'expired'
@@ -267,7 +353,11 @@ async function handleRefreshRepos(): Promise<void> {
               </span>
             </div>
 
-            <button type="button" :class="buttonSecondaryClass" @click="resetDeviceFlow">
+            <button
+              type="button"
+              :class="buttonSecondaryClass"
+              @click="resetDeviceFlow"
+            >
               Try again
             </button>
           </div>
@@ -289,7 +379,10 @@ async function handleRefreshRepos(): Promise<void> {
           />
         </button>
 
-        <div v-if="patOpen" class="mt-4 space-y-3">
+        <div
+          v-if="patOpen"
+          class="mt-4 space-y-3"
+        >
           <p class="text-xs text-muted">
             Use a PAT when device flow is unavailable. The token is validated before it is stored server-side.
           </p>
@@ -309,8 +402,18 @@ async function handleRefreshRepos(): Promise<void> {
               ? 'border border-red-500/30 bg-red-500/10 text-red-200'
               : 'border border-green-500/30 bg-green-500/10 text-green-300'"
           >
-            <AlertCircle v-if="isPatMessageError" :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
-            <CheckCircle2 v-else :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
+            <AlertCircle
+              v-if="isPatMessageError"
+              :size="16"
+              class="mt-0.5 shrink-0"
+              aria-hidden="true"
+            />
+            <CheckCircle2
+              v-else
+              :size="16"
+              class="mt-0.5 shrink-0"
+              aria-hidden="true"
+            />
             <span>{{ patMessage }}</span>
           </div>
 

@@ -12,7 +12,10 @@ defineProps<{
 </script>
 
 <template>
-  <div class="diff-view" aria-label="Diff view">
+  <div
+    class="diff-view"
+    aria-label="Diff view"
+  >
     <div
       v-for="(line, index) in lines"
       :key="`${index}-${line.content}`"

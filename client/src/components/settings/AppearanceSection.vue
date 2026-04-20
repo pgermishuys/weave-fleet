@@ -44,7 +44,9 @@ function selectTheme(theme: ThemeMode): void {
 <template>
   <section class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
     <div class="flex flex-col gap-1">
-      <h2 class="text-lg font-semibold text-text">Appearance</h2>
+      <h2 class="text-lg font-semibold text-text">
+        Appearance
+      </h2>
       <p class="text-sm text-muted">
         Choose how Weave should look across the workspace shell.
       </p>
@@ -63,7 +65,11 @@ function selectTheme(theme: ThemeMode): void {
       >
         <div class="flex items-start justify-between gap-3">
           <div class="rounded-btn border border-border bg-main-bg p-2 text-text">
-            <component :is="option.icon" :size="16" aria-hidden="true" />
+            <component
+              :is="option.icon"
+              :size="16"
+              aria-hidden="true"
+            />
           </div>
           <Check
             v-if="activeTheme === option.value"
@@ -74,8 +80,12 @@ function selectTheme(theme: ThemeMode): void {
         </div>
 
         <div class="space-y-1">
-          <p class="text-sm font-semibold text-text">{{ option.label }}</p>
-          <p class="text-xs text-muted">{{ option.description }}</p>
+          <p class="text-sm font-semibold text-text">
+            {{ option.label }}
+          </p>
+          <p class="text-xs text-muted">
+            {{ option.description }}
+          </p>
         </div>
       </button>
     </div>

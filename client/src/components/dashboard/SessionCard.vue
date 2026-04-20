@@ -169,13 +169,20 @@ function openDeleteDialog(): void {
             <p class="text-sm font-medium text-muted-foreground">
               {{ statusLabel }}
             </p>
-            <Badge v-if="isArchived" data-testid="session-card-archived-badge" variant="secondary">
+            <Badge
+              v-if="isArchived"
+              data-testid="session-card-archived-badge"
+              variant="secondary"
+            >
               Archived
             </Badge>
           </div>
 
           <div class="space-y-1">
-            <h3 data-testid="session-title" class="truncate text-lg font-semibold tracking-tight text-foreground">
+            <h3
+              data-testid="session-title"
+              class="truncate text-lg font-semibold tracking-tight text-foreground"
+            >
               {{ displayTitle }}
             </h3>
             <p class="truncate text-sm text-muted-foreground">

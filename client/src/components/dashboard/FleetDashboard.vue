@@ -6,7 +6,7 @@ import { LoaderCircle, Plus } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { useActivityStream } from "@/composables/use-activity-stream";
 import { useSessions } from "@/composables/use-sessions";
-import type { CreateSessionResponse, SessionListItem } from "@/lib/api-types";
+import type { SessionListItem } from "@/lib/api-types";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import RetentionFilter from "./RetentionFilter.vue";
@@ -60,19 +60,6 @@ onUnmounted(() => {
   }
 });
 
-function handleNewSessionCreated(response: CreateSessionResponse): void {
-  void refetch().finally(() => {
-    void router.navigate({
-      to: "/sessions/$id",
-      params: { id: response.session.id },
-      search: {
-        instanceId: response.instanceId,
-        parentSessionId: undefined,
-      },
-    });
-  });
-}
-
 function handleSessionSelect(session: SessionListItem): void {
   void router.navigate({
     to: "/sessions/$id",
@@ -107,7 +94,10 @@ function handleSessionChanged(): void {
       <div class="flex flex-wrap items-center gap-3">
         <RetentionFilter v-model="retentionStatus" />
 
-        <Button data-testid="new-session-button" @click="workspaceUiStore.openNewSessionDialog(null)">
+        <Button
+          data-testid="new-session-button"
+          @click="workspaceUiStore.openNewSessionDialog(null)"
+        >
           <Plus class="h-4 w-4" />
           New Session
         </Button>
@@ -122,12 +112,19 @@ function handleSessionChanged(): void {
       {{ error }}
     </div>
 
-    <div v-if="isLoading && sessions.length === 0" class="flex items-center justify-center rounded-xl border border-dashed border-border px-6 py-16">
+    <div
+      v-if="isLoading && sessions.length === 0"
+      class="flex items-center justify-center rounded-xl border border-dashed border-border px-6 py-16"
+    >
       <LoaderCircle class="h-5 w-5 animate-spin text-muted-foreground" />
       <span class="ml-2 text-sm text-muted-foreground">Loading sessions…</span>
     </div>
 
-    <div v-else-if="isEmpty" data-testid="empty-state" class="rounded-xl border border-dashed border-border px-6 py-16 text-center">
+    <div
+      v-else-if="isEmpty"
+      data-testid="empty-state"
+      class="rounded-xl border border-dashed border-border px-6 py-16 text-center"
+    >
       <h2 class="text-lg font-semibold text-foreground">
         No sessions yet
       </h2>
@@ -136,7 +133,10 @@ function handleSessionChanged(): void {
       </p>
     </div>
 
-    <div v-else class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div
+      v-else
+      class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+    >
       <SessionCard
         v-for="session in sessions"
         :key="session.session.id"

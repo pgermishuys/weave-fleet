@@ -18,7 +18,7 @@ import {
 } from "@/composables/use-session-actions";
 import { useDiffs } from "@/composables/use-diffs";
 import { apiFetch } from "@/lib/api-client";
-import type { AccumulatedMessage, SessionListItem } from "@/lib/api-types";
+import type { SessionListItem } from "@/lib/api-types";
 import { extractLatestTodos } from "@/lib/todo-utils";
 import { useSessionsStore } from "@/stores/sessions";
 
@@ -56,11 +56,6 @@ interface SessionApiDetail {
   harnessType?: string;
   workspaceId?: string;
   projectId?: string | null;
-}
-
-interface LatestMessageMetadata {
-  agent: string | null;
-  model: string | null;
 }
 
 const props = defineProps<{
@@ -106,7 +101,6 @@ const effectiveSessionStatus = computed(() => props.session?.sessionStatus
   ?? remoteSessionDetail.value?.status
   ?? null);
 const { messages: sessionMessages } = useSessionEvents(todoSessionId, todoInstanceId);
-const latestMessageMetadata = computed(() => extractLatestMessageMetadata(sessionMessages.value));
 const effectiveLifecycleStatus = computed(() => normalizeLifecycleStatus(
   props.session?.lifecycleStatus
     ?? remoteSessionDetail.value?.lifecycleStatus
@@ -388,23 +382,6 @@ function refreshPanelData(): void {
   refreshVersion.value += 1;
 }
 
-function extractLatestMessageMetadata(messages: readonly AccumulatedMessage[]): LatestMessageMetadata | null {
-  let agent: string | null = null;
-  let model: string | null = null;
-
-  for (let index = messages.length - 1; index >= 0 && (!agent || !model); index -= 1) {
-    const message = messages[index];
-    agent ??= normalizeString(message.agent);
-    model ??= normalizeString(message.modelID);
-  }
-
-  if (!agent && !model) {
-    return null;
-  }
-
-  return { agent, model };
-}
-
 function normalizeString(value: string | null | undefined): string | null {
   if (!value) {
     return null;
@@ -467,47 +444,6 @@ function formatIsolationStrategy(strategy: string | null | undefined): string {
   }
 }
 
-function toTimestamp(value: number | string | null | undefined): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? null : parsed;
-}
-
-function formatDuration(
-  startedAt: number | string | null | undefined,
-  endedAt: number | string | null | undefined,
-  currentStatus: string,
-): string {
-  const startTimestamp = toTimestamp(startedAt);
-  if (startTimestamp === null) {
-    return currentStatus;
-  }
-
-  const endTimestamp = toTimestamp(endedAt) ?? Date.now();
-  const durationMinutes = Math.max(Math.round((endTimestamp - startTimestamp) / 60_000), 0);
-
-  if (durationMinutes < 1) {
-    return currentStatus;
-  }
-
-  if (durationMinutes < 60) {
-    return `${durationMinutes}m ${currentStatus.toLowerCase()}`;
-  }
-
-  const hours = Math.floor(durationMinutes / 60);
-  const minutes = durationMinutes % 60;
-  return minutes === 0
-    ? `${hours}h ${currentStatus.toLowerCase()}`
-    : `${hours}h ${minutes}m ${currentStatus.toLowerCase()}`;
-}
-
 function formatNumber(value: number | null): string {
   if (value === null) {
     return "—";
@@ -531,7 +467,10 @@ function formatCurrency(amount: number | null): string {
 </script>
 
 <template>
-  <section class="session-detail-panel" aria-label="Session details">
+  <section
+    class="session-detail-panel"
+    aria-label="Session details"
+  >
     <article class="session-section-card">
       <div class="session-section-card__header">
         <p class="session-section-card__title">
@@ -565,7 +504,11 @@ function formatCurrency(amount: number | null): string {
           :aria-busy="isAborting ? 'true' : 'false'"
           @click="handleAbort"
         >
-          <span v-if="isAborting" class="session-action-button__spinner" aria-hidden="true" />
+          <span
+            v-if="isAborting"
+            class="session-action-button__spinner"
+            aria-hidden="true"
+          />
           <span>{{ isAborting ? "Aborting..." : "Abort" }}</span>
         </button>
 
@@ -578,7 +521,11 @@ function formatCurrency(amount: number | null): string {
           :aria-busy="isResumingCurrentSession ? 'true' : 'false'"
           @click="handleResume"
         >
-          <span v-if="isResumingCurrentSession" class="session-action-button__spinner" aria-hidden="true" />
+          <span
+            v-if="isResumingCurrentSession"
+            class="session-action-button__spinner"
+            aria-hidden="true"
+          />
           <span>{{ isResumingCurrentSession ? "Resuming..." : "Resume" }}</span>
         </button>
 
@@ -591,7 +538,11 @@ function formatCurrency(amount: number | null): string {
           :aria-busy="isTerminating ? 'true' : 'false'"
           @click="handleStop"
         >
-          <span v-if="isTerminating" class="session-action-button__spinner" aria-hidden="true" />
+          <span
+            v-if="isTerminating"
+            class="session-action-button__spinner"
+            aria-hidden="true"
+          />
           <span>{{ isTerminating ? "Stopping..." : "Stop" }}</span>
         </button>
 
@@ -613,7 +564,11 @@ function formatCurrency(amount: number | null): string {
           :aria-busy="isRenaming ? 'true' : 'false'"
           @click="handleRename"
         >
-          <span v-if="isRenaming" class="session-action-button__spinner" aria-hidden="true" />
+          <span
+            v-if="isRenaming"
+            class="session-action-button__spinner"
+            aria-hidden="true"
+          />
           <span>{{ isRenaming ? "Renaming..." : "Rename" }}</span>
         </button>
 
@@ -625,7 +580,11 @@ function formatCurrency(amount: number | null): string {
           :aria-busy="isDeleting ? 'true' : 'false'"
           @click="handleDelete"
         >
-          <span v-if="isDeleting" class="session-action-button__spinner" aria-hidden="true" />
+          <span
+            v-if="isDeleting"
+            class="session-action-button__spinner"
+            aria-hidden="true"
+          />
           <span>{{ isDeleting ? "Deleting..." : "Delete" }}</span>
         </button>
 
@@ -638,7 +597,11 @@ function formatCurrency(amount: number | null): string {
           :aria-busy="isArchiving ? 'true' : 'false'"
           @click="handleArchive"
         >
-          <span v-if="isArchiving" class="session-action-button__spinner" aria-hidden="true" />
+          <span
+            v-if="isArchiving"
+            class="session-action-button__spinner"
+            aria-hidden="true"
+          />
           <span>{{ isArchiving ? "Archiving..." : "Archive" }}</span>
         </button>
 
@@ -651,7 +614,11 @@ function formatCurrency(amount: number | null): string {
           :aria-busy="isUnarchiving ? 'true' : 'false'"
           @click="handleUnarchive"
         >
-          <span v-if="isUnarchiving" class="session-action-button__spinner" aria-hidden="true" />
+          <span
+            v-if="isUnarchiving"
+            class="session-action-button__spinner"
+            aria-hidden="true"
+          />
           <span>{{ isUnarchiving ? "Updating..." : "Unarchive" }}</span>
         </button>
       </div>
@@ -667,7 +634,10 @@ function formatCurrency(amount: number | null): string {
     </article>
 
     <article class="session-section-card">
-      <p v-if="filesChangedError && !isLoadingFilesChanged" class="session-section-card__note">
+      <p
+        v-if="filesChangedError && !isLoadingFilesChanged"
+        class="session-section-card__note"
+      >
         File diff data is unavailable right now.
       </p>
 

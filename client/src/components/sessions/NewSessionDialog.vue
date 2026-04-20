@@ -423,7 +423,10 @@ watch(repositoryQuery, (value) => {
 </script>
 
 <template>
-  <Dialog :open="open" @update:open="handleOpenChange">
+  <Dialog
+    :open="open"
+    @update:open="handleOpenChange"
+  >
     <DialogContent
       class="sm:max-w-2xl"
       data-testid="new-session-dialog"
@@ -436,9 +439,17 @@ watch(repositoryQuery, (value) => {
         </DialogDescription>
       </DialogHeader>
 
-      <form class="space-y-5" @submit.prevent="handleSubmit">
-        <fieldset class="space-y-3" aria-label="Source">
-          <legend class="text-sm font-medium text-foreground">Source</legend>
+      <form
+        class="space-y-5"
+        @submit.prevent="handleSubmit"
+      >
+        <fieldset
+          class="space-y-3"
+          aria-label="Source"
+        >
+          <legend class="text-sm font-medium text-foreground">
+            Source
+          </legend>
 
           <div class="grid gap-3 sm:grid-cols-2">
             <label
@@ -455,8 +466,14 @@ watch(repositoryQuery, (value) => {
                 class="mt-0.5"
               >
               <div class="space-y-1">
-                <span id="source-label-repository" class="block font-medium text-foreground">Repository</span>
-                <p id="session-source-repository-description" class="text-muted-foreground">
+                <span
+                  id="source-label-repository"
+                  class="block font-medium text-foreground"
+                >Repository</span>
+                <p
+                  id="session-source-repository-description"
+                  class="text-muted-foreground"
+                >
                   Choose a scanned repository and optional branch strategy.
                 </p>
               </div>
@@ -477,8 +494,14 @@ watch(repositoryQuery, (value) => {
                 class="mt-0.5"
               >
               <div class="space-y-1">
-                <span id="source-label-directory" class="block font-medium text-foreground">Directory</span>
-                <p id="session-source-directory-description" class="text-muted-foreground">
+                <span
+                  id="source-label-directory"
+                  class="block font-medium text-foreground"
+                >Directory</span>
+                <p
+                  id="session-source-directory-description"
+                  class="text-muted-foreground"
+                >
                   Use an existing local directory as the workspace.
                 </p>
               </div>
@@ -486,9 +509,15 @@ watch(repositoryQuery, (value) => {
           </div>
         </fieldset>
 
-        <div v-if="sourceKind === 'repository'" class="grid gap-5 md:grid-cols-2">
+        <div
+          v-if="sourceKind === 'repository'"
+          class="grid gap-5 md:grid-cols-2"
+        >
           <div class="space-y-2 md:col-span-2">
-            <label for="new-session-repository" class="text-sm font-medium text-foreground">Repository</label>
+            <label
+              for="new-session-repository"
+              class="text-sm font-medium text-foreground"
+            >Repository</label>
 
             <div class="relative">
               <Input
@@ -528,7 +557,10 @@ watch(repositoryQuery, (value) => {
                   />
                 </button>
 
-                <p v-if="filteredRepositories.length === 0" class="px-3 py-2 text-sm text-muted-foreground">
+                <p
+                  v-if="filteredRepositories.length === 0"
+                  class="px-3 py-2 text-sm text-muted-foreground"
+                >
                   No repositories match your search.
                 </p>
               </div>
@@ -536,23 +568,44 @@ watch(repositoryQuery, (value) => {
           </div>
 
           <div class="space-y-2">
-            <label for="new-session-isolation" class="text-sm font-medium text-foreground">Isolation Strategy</label>
+            <label
+              for="new-session-isolation"
+              class="text-sm font-medium text-foreground"
+            >Isolation Strategy</label>
 
-            <Select v-model="isolationStrategy" :disabled="isCreating">
-              <SelectTrigger id="new-session-isolation" class="w-full">
+            <Select
+              v-model="isolationStrategy"
+              :disabled="isCreating"
+            >
+              <SelectTrigger
+                id="new-session-isolation"
+                class="w-full"
+              >
                 <SelectValue placeholder="Select a strategy" />
               </SelectTrigger>
 
               <SelectContent>
-                <SelectItem value="worktree">Worktree</SelectItem>
-                <SelectItem value="clone">Clone</SelectItem>
-                <SelectItem value="existing">Existing</SelectItem>
+                <SelectItem value="worktree">
+                  Worktree
+                </SelectItem>
+                <SelectItem value="clone">
+                  Clone
+                </SelectItem>
+                <SelectItem value="existing">
+                  Existing
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <div v-if="isolationStrategy === 'worktree'" class="space-y-2">
-            <label for="new-session-branch" class="text-sm font-medium text-foreground">Branch</label>
+          <div
+            v-if="isolationStrategy === 'worktree'"
+            class="space-y-2"
+          >
+            <label
+              for="new-session-branch"
+              class="text-sm font-medium text-foreground"
+            >Branch</label>
             <Input
               id="new-session-branch"
               :model-value="effectiveBranch"
@@ -569,8 +622,14 @@ watch(repositoryQuery, (value) => {
           </div>
         </div>
 
-        <div v-else class="space-y-2">
-          <label for="new-session-directory" class="text-sm font-medium text-foreground">Directory</label>
+        <div
+          v-else
+          class="space-y-2"
+        >
+          <label
+            for="new-session-directory"
+            class="text-sm font-medium text-foreground"
+          >Directory</label>
 
           <div class="flex gap-2">
             <Input
@@ -582,7 +641,12 @@ watch(repositoryQuery, (value) => {
 
             <Popover v-model:open="isDirectoryPickerOpen">
               <PopoverTrigger as-child>
-                <Button type="button" variant="outline" :disabled="isCreating" @click="openDirectoryPicker">
+                <Button
+                  type="button"
+                  variant="outline"
+                  :disabled="isCreating"
+                  @click="openDirectoryPicker"
+                >
                   <Folder class="h-4 w-4" />
                   Browse
                 </Button>
@@ -596,8 +660,12 @@ watch(repositoryQuery, (value) => {
                 <div class="border-b border-border bg-card-bg p-3">
                   <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
-                      <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Directory picker</p>
-                      <p class="truncate font-mono text-xs text-foreground">{{ directoryPickerLocation }}</p>
+                      <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Directory picker
+                      </p>
+                      <p class="truncate font-mono text-xs text-foreground">
+                        {{ directoryPickerLocation }}
+                      </p>
                     </div>
 
                     <div class="flex items-center gap-1">
@@ -631,7 +699,10 @@ watch(repositoryQuery, (value) => {
                     @update:model-value="handleDirectorySearchUpdate"
                   />
 
-                  <div v-if="directoryRoots.length > 1" class="mt-3 flex flex-wrap gap-2">
+                  <div
+                    v-if="directoryRoots.length > 1"
+                    class="mt-3 flex flex-wrap gap-2"
+                  >
                     <Button
                       v-for="root in directoryRoots"
                       :key="root"
@@ -647,42 +718,48 @@ watch(repositoryQuery, (value) => {
                 </div>
 
                 <div class="max-h-72 overflow-y-auto bg-card-bg p-2">
-                    <button
-                      v-for="entry in directoryEntries"
-                      :key="entry.path"
-                      type="button"
-                      class="flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-                      @click="handleDirectorySelected(entry.path)"
-                    >
-                      <span class="min-w-0 flex-1">
-                        <span class="flex items-center gap-2 font-medium">
-                          <FolderGit2 v-if="entry.isGitRepo" class="h-4 w-4 shrink-0" />
-                          <Folder v-else class="h-4 w-4 shrink-0" />
-                          <span class="truncate">{{ entry.name }}</span>
-                        </span>
-                        <span class="mt-1 block truncate font-mono text-xs text-muted-foreground">{{ entry.path }}</span>
+                  <button
+                    v-for="entry in directoryEntries"
+                    :key="entry.path"
+                    type="button"
+                    class="flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                    @click="handleDirectorySelected(entry.path)"
+                  >
+                    <span class="min-w-0 flex-1">
+                      <span class="flex items-center gap-2 font-medium">
+                        <FolderGit2
+                          v-if="entry.isGitRepo"
+                          class="h-4 w-4 shrink-0"
+                        />
+                        <Folder
+                          v-else
+                          class="h-4 w-4 shrink-0"
+                        />
+                        <span class="truncate">{{ entry.name }}</span>
                       </span>
+                      <span class="mt-1 block truncate font-mono text-xs text-muted-foreground">{{ entry.path }}</span>
+                    </span>
 
-                      <Check
-                        v-if="directory.trim() === entry.path"
-                        class="mt-0.5 h-4 w-4 shrink-0 text-primary"
-                      />
-                    </button>
+                    <Check
+                      v-if="directory.trim() === entry.path"
+                      class="mt-0.5 h-4 w-4 shrink-0 text-primary"
+                    />
+                  </button>
 
-                    <div
-                      v-if="isDirectoryBrowserLoading"
-                      class="flex items-center gap-2 px-3 py-6 text-sm text-muted-foreground"
-                    >
-                      <LoaderCircle class="h-4 w-4 animate-spin" />
-                      <span>Loading directories…</span>
-                    </div>
+                  <div
+                    v-if="isDirectoryBrowserLoading"
+                    class="flex items-center gap-2 px-3 py-6 text-sm text-muted-foreground"
+                  >
+                    <LoaderCircle class="h-4 w-4 animate-spin" />
+                    <span>Loading directories…</span>
+                  </div>
 
-                    <p
-                      v-else-if="directoryEntries.length === 0"
-                      class="px-3 py-6 text-sm text-muted-foreground"
-                    >
-                      No directories found.
-                    </p>
+                  <p
+                    v-else-if="directoryEntries.length === 0"
+                    class="px-3 py-6 text-sm text-muted-foreground"
+                  >
+                    No directories found.
+                  </p>
                 </div>
               </PopoverContent>
             </Popover>
@@ -695,43 +772,82 @@ watch(repositoryQuery, (value) => {
 
         <div class="grid gap-5 md:grid-cols-2">
           <div class="space-y-2">
-            <label for="session-title" class="text-sm font-medium text-foreground">Title</label>
+            <label
+              for="session-title"
+              class="text-sm font-medium text-foreground"
+            >Title</label>
             <Input
               id="session-title"
               v-model="title"
               placeholder="What are you working on?"
               :disabled="isCreating"
             />
-            <p class="text-xs text-muted-foreground">Optional session name.</p>
+            <p class="text-xs text-muted-foreground">
+              Optional session name.
+            </p>
           </div>
 
-          <div v-if="showProjectSelect" class="space-y-2">
-            <label for="new-session-project" class="text-sm font-medium text-foreground">Project</label>
+          <div
+            v-if="showProjectSelect"
+            class="space-y-2"
+          >
+            <label
+              for="new-session-project"
+              class="text-sm font-medium text-foreground"
+            >Project</label>
 
-            <Select v-model="selectedProjectId" :disabled="isCreating">
-              <SelectTrigger id="new-session-project" class="w-full">
+            <Select
+              v-model="selectedProjectId"
+              :disabled="isCreating"
+            >
+              <SelectTrigger
+                id="new-session-project"
+                class="w-full"
+              >
                 <SelectValue placeholder="Ungrouped" />
               </SelectTrigger>
 
               <SelectContent>
-                <SelectItem :value="UNGROUPED_PROJECT_ID">Ungrouped</SelectItem>
-                <SelectItem v-for="project in userProjects" :key="project.id" :value="project.id">
+                <SelectItem :value="UNGROUPED_PROJECT_ID">
+                  Ungrouped
+                </SelectItem>
+                <SelectItem
+                  v-for="project in userProjects"
+                  :key="project.id"
+                  :value="project.id"
+                >
                   {{ project.name }}
                 </SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <div v-if="showHarnessSelect" class="space-y-2">
-            <label for="new-session-harness" class="text-sm font-medium text-foreground">Harness</label>
+          <div
+            v-if="showHarnessSelect"
+            class="space-y-2"
+          >
+            <label
+              for="new-session-harness"
+              class="text-sm font-medium text-foreground"
+            >Harness</label>
 
-            <Select v-model="selectedHarnessType" :disabled="isCreating">
-              <SelectTrigger id="new-session-harness" class="w-full">
+            <Select
+              v-model="selectedHarnessType"
+              :disabled="isCreating"
+            >
+              <SelectTrigger
+                id="new-session-harness"
+                class="w-full"
+              >
                 <SelectValue placeholder="Select a harness" />
               </SelectTrigger>
 
               <SelectContent>
-                <SelectItem v-for="harness in availableHarnesses" :key="harness.type" :value="harness.type">
+                <SelectItem
+                  v-for="harness in availableHarnesses"
+                  :key="harness.type"
+                  :value="harness.type"
+                >
                   {{ harness.displayName }}
                 </SelectItem>
               </SelectContent>
@@ -750,12 +866,24 @@ watch(repositoryQuery, (value) => {
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" :disabled="isCreating" @click="open = false">
+          <Button
+            type="button"
+            variant="outline"
+            :disabled="isCreating"
+            @click="open = false"
+          >
             Cancel
           </Button>
 
-          <Button type="submit" data-testid="create-session-submit" :disabled="!canSubmit">
-            <LoaderCircle v-if="isCreating" class="h-4 w-4 animate-spin" />
+          <Button
+            type="submit"
+            data-testid="create-session-submit"
+            :disabled="!canSubmit"
+          >
+            <LoaderCircle
+              v-if="isCreating"
+              class="h-4 w-4 animate-spin"
+            />
             {{ isCreating ? "Spawning…" : "Create Session" }}
           </Button>
         </DialogFooter>

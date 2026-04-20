@@ -676,7 +676,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
           >
             <div class="delegation-link__header">
               <span class="delegation-link__eyebrow">
-                <Bot class="delegation-link__eyebrow-icon" aria-hidden="true" />
+                <Bot
+                  class="delegation-link__eyebrow-icon"
+                  aria-hidden="true"
+                />
                 Subagent task
               </span>
               <span class="delegation-link-status">
@@ -687,7 +690,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
               <span class="delegation-link__title">{{ delegationLink.title }}</span>
               <span class="delegation-link__cta">
                 Open session
-                <ArrowUpRight class="delegation-link__cta-icon" aria-hidden="true" />
+                <ArrowUpRight
+                  class="delegation-link__cta-icon"
+                  aria-hidden="true"
+                />
               </span>
             </div>
           </a>

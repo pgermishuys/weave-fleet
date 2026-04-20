@@ -5,7 +5,6 @@ import { useRouter, useRouterState } from "@tanstack/vue-router";
 import { ArrowLeft, AlertCircle, PlugZap, Settings2 } from "lucide-vue-next";
 import { usePluginRuntime } from "@/plugins/composable";
 import { getConfigPage } from "@/plugins/slots";
-import type { PluginConnectionStatus } from "@/plugins/types";
 
 const buttonSecondaryClass = "inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-2 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60";
 
@@ -125,14 +124,21 @@ function handleBack(): void {
           class="w-fit"
           @click="handleBack"
         >
-          <ArrowLeft :size="16" aria-hidden="true" />
+          <ArrowLeft
+            :size="16"
+            aria-hidden="true"
+          />
           <span>Back to settings</span>
         </button>
 
         <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div class="flex items-start gap-3">
             <div class="rounded-btn border border-border bg-main-bg p-2 text-text">
-              <component :is="pluginIcon" :size="18" aria-hidden="true" />
+              <component
+                :is="pluginIcon"
+                :size="18"
+                aria-hidden="true"
+              />
             </div>
 
             <div class="space-y-2">
@@ -145,11 +151,17 @@ function handleBack(): void {
                 </span>
               </div>
 
-              <p v-if="configPage" class="max-w-3xl text-sm text-muted">
+              <p
+                v-if="configPage"
+                class="max-w-3xl text-sm text-muted"
+              >
                 {{ configPage.title }}
               </p>
 
-              <p v-else class="max-w-3xl text-sm text-muted">
+              <p
+                v-else
+                class="max-w-3xl text-sm text-muted"
+              >
                 {{ fallbackState?.message }}
               </p>
             </div>
@@ -165,7 +177,10 @@ function handleBack(): void {
     >
       <div class="mx-auto flex max-w-xl flex-col items-center gap-4">
         <div class="rounded-full border border-border bg-main-bg p-3 text-muted">
-          <AlertCircle :size="24" aria-hidden="true" />
+          <AlertCircle
+            :size="24"
+            aria-hidden="true"
+          />
         </div>
         <div class="space-y-2">
           <h2 class="text-xl font-semibold tracking-tight text-text">
@@ -180,7 +195,10 @@ function handleBack(): void {
           :class="buttonSecondaryClass"
           @click="handleBack"
         >
-          <PlugZap :size="16" aria-hidden="true" />
+          <PlugZap
+            :size="16"
+            aria-hidden="true"
+          />
           <span>Return to settings</span>
         </button>
       </div>

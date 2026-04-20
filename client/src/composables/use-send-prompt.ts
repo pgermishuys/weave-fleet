@@ -198,7 +198,7 @@ async function readPromptErrorMessage(response: Response): Promise<string> {
   return `HTTP ${response.status}`;
 }
 
-export function useSendPrompt(sessionId: string, _instanceId?: string) {
+export function useSendPrompt(sessionId: string) {
   const sessionsStore = useSessionsStore();
   const { sessions } = storeToRefs(sessionsStore);
   const { defaultAgentId, agentsById } = useAgents();
@@ -240,7 +240,7 @@ export function useSendPrompt(sessionId: string, _instanceId?: string) {
     }
   }
 
-  function sendPrompt(_overrideInstanceId?: string): boolean {
+  function sendPrompt(): boolean {
     const body = draft.text.trim();
     if (!body) {
       return false;

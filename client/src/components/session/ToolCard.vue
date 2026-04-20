@@ -65,7 +65,10 @@ function toggleCollapsed(): void {
 </script>
 
 <template>
-  <article class="tool-card" :class="cardClassName">
+  <article
+    class="tool-card"
+    :class="cardClassName"
+  >
     <button
       type="button"
       class="tool-header"
@@ -73,7 +76,10 @@ function toggleCollapsed(): void {
       :aria-controls="`${id}-body`"
       @click="toggleCollapsed"
     >
-      <ChevronDown class="tool-header__chevron" :class="{ 'tool-header__chevron--collapsed': isCollapsed }" />
+      <ChevronDown
+        class="tool-header__chevron"
+        :class="{ 'tool-header__chevron--collapsed': isCollapsed }"
+      />
       <div class="tool-header__meta">
         <span class="tool-header__kind">{{ kind }}</span>
         <span class="tool-header__title">{{ title }}</span>
@@ -82,14 +88,27 @@ function toggleCollapsed(): void {
     </button>
 
     <Transition name="collapse">
-      <div v-if="!isCollapsed" :id="`${id}-body`" class="tool-body">
-        <p v-if="summary" class="tool-summary">
+      <div
+        v-if="!isCollapsed"
+        :id="`${id}-body`"
+        class="tool-body"
+      >
+        <p
+          v-if="summary"
+          class="tool-summary"
+        >
           {{ summary }}
         </p>
 
-        <DiffView v-if="shouldShowDiff" :lines="diffLines" />
+        <DiffView
+          v-if="shouldShowDiff"
+          :lines="diffLines"
+        />
 
-        <pre v-if="output" class="tool-output"><code>{{ output }}</code></pre>
+        <pre
+          v-if="output"
+          class="tool-output"
+        ><code>{{ output }}</code></pre>
       </div>
     </Transition>
   </article>

@@ -63,10 +63,16 @@ const connectionClassName = computed(() => {
 </script>
 
 <template>
-  <section class="simple-panel" aria-label="Docker panel">
+  <section
+    class="simple-panel"
+    aria-label="Docker panel"
+  >
     <header class="simple-panel-header">
       <div class="simple-panel-title-row">
-        <Boxes :size="16" aria-hidden="true" />
+        <Boxes
+          :size="16"
+          aria-hidden="true"
+        />
         <h2 class="simple-panel-title">
           Docker
         </h2>
@@ -83,8 +89,16 @@ const connectionClassName = computed(() => {
       </p>
 
       <div class="container-list">
-        <article v-for="container in containers" :key="container.id" class="container-item">
-          <span class="container-dot" :style="{ backgroundColor: container.statusColor }" aria-hidden="true" />
+        <article
+          v-for="container in containers"
+          :key="container.id"
+          class="container-item"
+        >
+          <span
+            class="container-dot"
+            :style="{ backgroundColor: container.statusColor }"
+            aria-hidden="true"
+          />
 
           <div class="container-copy">
             <p class="container-name">

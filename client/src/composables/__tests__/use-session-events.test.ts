@@ -50,8 +50,8 @@ vi.mock("@/composables/use-send-prompt", () => ({
   clearSentPrompts: clearSentPromptsMock,
 }))
 
-vi.mock("@/composables/use-message-pagination", () => {
-  const { shallowRef, readonly } = require("vue") as typeof import("vue")
+vi.mock("@/composables/use-message-pagination", async () => {
+  const { shallowRef, readonly } = await import("vue")
   const hasMore = shallowRef(false)
   const isLoadingOlder = shallowRef(false)
   const totalCount = shallowRef<number | null>(null)

@@ -78,15 +78,29 @@ function redirectToLogin(): void {
 </script>
 
 <template>
-  <div v-if="isLoading" class="auth-gate auth-gate--status" role="status" aria-live="polite">
+  <div
+    v-if="isLoading"
+    class="auth-gate auth-gate--status"
+    role="status"
+    aria-live="polite"
+  >
     Checking your session…
   </div>
 
-  <div v-else-if="errorMessage" class="auth-gate auth-gate--status" role="alert">
+  <div
+    v-else-if="errorMessage"
+    class="auth-gate auth-gate--status"
+    role="alert"
+  >
     {{ errorMessage }}
   </div>
 
-  <div v-else-if="!user" class="auth-gate auth-gate--status" role="status" aria-live="polite">
+  <div
+    v-else-if="!user"
+    class="auth-gate auth-gate--status"
+    role="status"
+    aria-live="polite"
+  >
     Redirecting to login…
   </div>
 

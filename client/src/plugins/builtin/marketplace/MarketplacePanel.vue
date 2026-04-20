@@ -108,7 +108,10 @@ function handleInstall(pluginId: string): void {
 </script>
 
 <template>
-  <section class="marketplace-panel" aria-label="Marketplace panel">
+  <section
+    class="marketplace-panel"
+    aria-label="Marketplace panel"
+  >
     <p class="mp-section-label">
       Installed
     </p>
@@ -119,7 +122,10 @@ function handleInstall(pluginId: string): void {
         :key="plugin.id"
         class="mp-installed-item"
       >
-        <div class="mp-plugin-icon" aria-hidden="true">
+        <div
+          class="mp-plugin-icon"
+          aria-hidden="true"
+        >
           <Puzzle :size="16" />
         </div>
 
@@ -127,8 +133,15 @@ function handleInstall(pluginId: string): void {
           <p class="mp-plugin-name">
             {{ plugin.name }}
           </p>
-          <p class="mp-plugin-status" :class="plugin.statusClass">
-            <component :is="plugin.statusIcon" :size="12" aria-hidden="true" />
+          <p
+            class="mp-plugin-status"
+            :class="plugin.statusClass"
+          >
+            <component
+              :is="plugin.statusIcon"
+              :size="12"
+              aria-hidden="true"
+            />
             <span>{{ plugin.statusLabel }}</span>
           </p>
         </div>
@@ -138,7 +151,10 @@ function handleInstall(pluginId: string): void {
           class="mp-link-button"
           @click="handleConfigure(plugin.id)"
         >
-          <Settings2 :size="14" aria-hidden="true" />
+          <Settings2
+            :size="14"
+            aria-hidden="true"
+          />
           <span>{{ plugin.configureLabel }}</span>
         </button>
       </article>
@@ -155,7 +171,10 @@ function handleInstall(pluginId: string): void {
         class="mp-card"
       >
         <div class="mp-card-header">
-          <div class="mp-plugin-icon" aria-hidden="true">
+          <div
+            class="mp-plugin-icon"
+            aria-hidden="true"
+          >
             <Puzzle :size="16" />
           </div>
 
@@ -178,7 +197,11 @@ function handleInstall(pluginId: string): void {
       </article>
     </div>
 
-    <p v-if="installMessage" class="mp-install-message" aria-live="polite">
+    <p
+      v-if="installMessage"
+      class="mp-install-message"
+      aria-live="polite"
+    >
       {{ installMessage }}
     </p>
   </section>

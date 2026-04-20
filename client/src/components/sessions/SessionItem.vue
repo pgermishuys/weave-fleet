@@ -401,9 +401,16 @@ function removeSessionFromStore(): void {
 </script>
 
 <template>
-  <ContextMenu :open="isContextMenuOpen" @update:open="handleContextMenuOpenChange">
+  <ContextMenu
+    :open="isContextMenuOpen"
+    @update:open="handleContextMenuOpenChange"
+  >
     <ContextMenuTrigger as-child>
-      <div class="session-item-shell" data-tree-leaf :data-session-id="session.session.id">
+      <div
+        class="session-item-shell"
+        data-tree-leaf
+        :data-session-id="session.session.id"
+      >
         <button
           v-if="!isInlineEditing"
           type="button"
@@ -412,7 +419,11 @@ function removeSessionFromStore(): void {
           :aria-current="active ? 'true' : undefined"
           @click="handleSelect"
         >
-          <span class="session-dot" :style="{ backgroundColor: statusColor }" aria-hidden="true" />
+          <span
+            class="session-dot"
+            :style="{ backgroundColor: statusColor }"
+            aria-hidden="true"
+          />
 
           <span class="session-copy">
             <span class="session-title">{{ displayTitle }}</span>
@@ -420,10 +431,18 @@ function removeSessionFromStore(): void {
           </span>
         </button>
 
-        <div v-else class="session-item session-item--editing" :class="{ active }">
-          <span class="session-dot" :style="{ backgroundColor: statusColor }" aria-hidden="true" />
+        <div
+          v-else
+          class="session-item session-item--editing"
+          :class="{ active }"
+        >
+          <span
+            class="session-dot"
+            :style="{ backgroundColor: statusColor }"
+            aria-hidden="true"
+          />
 
-            <span class="session-copy">
+          <span class="session-copy">
             <input
               ref="inlineTitle"
               v-model="renameDraft"
@@ -442,37 +461,63 @@ function removeSessionFromStore(): void {
     </ContextMenuTrigger>
 
     <ContextMenuContent class="w-56">
-      <ContextMenuItem :disabled="isAnyActionPending" @select="startRename">
+      <ContextMenuItem
+        :disabled="isAnyActionPending"
+        @select="startRename"
+      >
         <Pencil class="h-4 w-4" />
         Rename
       </ContextMenuItem>
 
-      <ContextMenuItem v-if="canInterrupt" :disabled="isAnyActionPending" @select="handleInterrupt">
+      <ContextMenuItem
+        v-if="canInterrupt"
+        :disabled="isAnyActionPending"
+        @select="handleInterrupt"
+      >
         <OctagonX class="h-4 w-4" />
         Interrupt
       </ContextMenuItem>
 
-      <ContextMenuItem v-if="canStop" :disabled="isAnyActionPending" @select="handleStop">
+      <ContextMenuItem
+        v-if="canStop"
+        :disabled="isAnyActionPending"
+        @select="handleStop"
+      >
         <StopCircle class="h-4 w-4" />
         Stop
       </ContextMenuItem>
 
-      <ContextMenuItem v-if="canResume" :disabled="isAnyActionPending" @select="handleResume">
+      <ContextMenuItem
+        v-if="canResume"
+        :disabled="isAnyActionPending"
+        @select="handleResume"
+      >
         <Play class="h-4 w-4" />
         Resume
       </ContextMenuItem>
 
-      <ContextMenuItem v-if="canArchive" :disabled="isAnyActionPending" @select="handleArchive">
+      <ContextMenuItem
+        v-if="canArchive"
+        :disabled="isAnyActionPending"
+        @select="handleArchive"
+      >
         <Square class="h-4 w-4" />
         Archive
       </ContextMenuItem>
 
-      <ContextMenuItem v-if="canUnarchive" :disabled="isAnyActionPending" @select="handleUnarchive">
+      <ContextMenuItem
+        v-if="canUnarchive"
+        :disabled="isAnyActionPending"
+        @select="handleUnarchive"
+      >
         <Play class="h-4 w-4" />
         Unarchive
       </ContextMenuItem>
 
-      <ContextMenuItem :disabled="isAnyActionPending" @select="handleFork">
+      <ContextMenuItem
+        :disabled="isAnyActionPending"
+        @select="handleFork"
+      >
         <GitFork class="h-4 w-4" />
         Fork
       </ContextMenuItem>
@@ -483,7 +528,10 @@ function removeSessionFromStore(): void {
           Move to Project
         </ContextMenuSubTrigger>
         <ContextMenuSubContent class="w-52">
-          <ContextMenuItem v-if="isProjectsLoading" disabled>
+          <ContextMenuItem
+            v-if="isProjectsLoading"
+            disabled
+          >
             Loading projects…
           </ContextMenuItem>
           <template v-else>
@@ -501,7 +549,10 @@ function removeSessionFromStore(): void {
 
       <ContextMenuSeparator />
 
-      <ContextMenuItem :disabled="isAnyActionPending" @select="handleCopySessionId">
+      <ContextMenuItem
+        :disabled="isAnyActionPending"
+        @select="handleCopySessionId"
+      >
         <Copy class="h-4 w-4" />
         Copy Session ID
       </ContextMenuItem>

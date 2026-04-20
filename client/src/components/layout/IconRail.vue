@@ -158,12 +158,25 @@ function handleSelect(item: RailItem): void {
 </script>
 
 <template>
-  <aside class="rail" aria-label="Primary navigation">
-    <div class="rail-logo" aria-hidden="true">
-      <img :src="weaveLogo" alt="" class="rail-logo-image" />
+  <aside
+    class="rail"
+    aria-label="Primary navigation"
+  >
+    <div
+      class="rail-logo"
+      aria-hidden="true"
+    >
+      <img
+        :src="weaveLogo"
+        alt=""
+        class="rail-logo-image"
+      >
     </div>
 
-    <nav class="rail-nav" aria-label="App sections">
+    <nav
+      class="rail-nav"
+      aria-label="App sections"
+    >
       <button
         v-for="item in topItems"
         :key="item.id"
@@ -174,7 +187,11 @@ function handleSelect(item: RailItem): void {
         :aria-label="item.label"
         @click="handleSelect(item)"
       >
-        <component :is="item.icon" :size="18" aria-hidden="true" />
+        <component
+          :is="item.icon"
+          :size="18"
+          aria-hidden="true"
+        />
       </button>
 
       <div class="rail-divider" />
@@ -189,7 +206,11 @@ function handleSelect(item: RailItem): void {
         :aria-label="item.label"
         @click="handleSelect(item)"
       >
-        <component :is="item.icon" :size="18" aria-hidden="true" />
+        <component
+          :is="item.icon"
+          :size="18"
+          aria-hidden="true"
+        />
         <span
           v-if="item.badge"
           class="rail-badge"
@@ -212,7 +233,11 @@ function handleSelect(item: RailItem): void {
           :aria-label="item.label"
           @click="handleSelect(item)"
         >
-          <component :is="item.icon" :size="18" aria-hidden="true" />
+          <component
+            :is="item.icon"
+            :size="18"
+            aria-hidden="true"
+          />
         </button>
       </div>
     </nav>

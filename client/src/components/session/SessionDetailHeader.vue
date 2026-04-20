@@ -112,7 +112,11 @@ onUnmounted(() => {
                 ? "Disconnected"
                 : "Idle" }}
           </span>
-          <Badge v-if="isArchived" data-testid="session-archived-badge" variant="secondary">
+          <Badge
+            v-if="isArchived"
+            data-testid="session-archived-badge"
+            variant="secondary"
+          >
             Archived
           </Badge>
         </div>

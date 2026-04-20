@@ -123,11 +123,20 @@ const showNotifications = computed(() => config.value.cloudMode);
 
 <template>
   <header class="topbar flex items-center justify-between pr-4">
-    <nav class="breadcrumb flex min-w-0 items-center" aria-label="Breadcrumb">
+    <nav
+      class="breadcrumb flex min-w-0 items-center"
+      aria-label="Breadcrumb"
+    >
       <span class="shrink-0 text-[13px] font-medium text-[var(--text)]">Weave Fleet</span>
 
-      <template v-for="item in breadcrumbItems" :key="item.id">
-        <span class="breadcrumb__separator" aria-hidden="true">/</span>
+      <template
+        v-for="item in breadcrumbItems"
+        :key="item.id"
+      >
+        <span
+          class="breadcrumb__separator"
+          aria-hidden="true"
+        >/</span>
         <span
           class="truncate transition-colors"
           :class="item.current ? 'text-[var(--text)]' : 'text-[var(--muted)]'"
@@ -139,8 +148,14 @@ const showNotifications = computed(() => config.value.cloudMode);
     </nav>
 
     <div class="flex items-center gap-3">
-      <div class="status-pill" :class="statusClassName">
-        <span class="dot" :class="{ 'dot--pulse': statusLabel === 'Running' }" />
+      <div
+        class="status-pill"
+        :class="statusClassName"
+      >
+        <span
+          class="dot"
+          :class="{ 'dot--pulse': statusLabel === 'Running' }"
+        />
         <span>{{ statusLabel }}</span>
       </div>
 

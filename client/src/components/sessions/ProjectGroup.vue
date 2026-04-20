@@ -198,7 +198,10 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 </script>
 
 <template>
-  <section class="project-group" :data-project-id="project.projectId">
+  <section
+    class="project-group"
+    :data-project-id="project.projectId"
+  >
     <ContextMenu
       v-if="canShowContextMenu && !isInlineEditing"
       :open="isContextMenuOpen"
@@ -214,8 +217,15 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
             @click="handleToggle"
             @keydown="handleHeaderKeydown"
           >
-            <ChevronDown class="project-chevron" aria-hidden="true" />
-            <span class="project-dot" :style="{ backgroundColor: project.color }" aria-hidden="true" />
+            <ChevronDown
+              class="project-chevron"
+              aria-hidden="true"
+            />
+            <span
+              class="project-dot"
+              :style="{ backgroundColor: project.color }"
+              aria-hidden="true"
+            />
 
             <span class="project-copy">
               <span class="project-title">{{ project.name }}</span>
@@ -223,7 +233,10 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
             </span>
 
             <span class="project-spacer" />
-            <span class="project-actions" aria-hidden="true">
+            <span
+              class="project-actions"
+              aria-hidden="true"
+            >
               <MoreHorizontal class="project-actions__icon" />
             </span>
           </button>
@@ -231,37 +244,58 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
       </ContextMenuTrigger>
 
       <ContextMenuContent class="w-56">
-        <ContextMenuItem :disabled="isAnyActionPending" @select="handleNewSessionRequest">
+        <ContextMenuItem
+          :disabled="isAnyActionPending"
+          @select="handleNewSessionRequest"
+        >
           <Plus class="h-4 w-4" />
           New Session
         </ContextMenuItem>
 
-        <ContextMenuItem :disabled="isAnyActionPending" @select="startRename">
+        <ContextMenuItem
+          :disabled="isAnyActionPending"
+          @select="startRename"
+        >
           <Pencil class="h-4 w-4" />
           Rename
           <ContextMenuShortcut>F2</ContextMenuShortcut>
         </ContextMenuItem>
 
-        <ContextMenuItem v-if="project.canMoveUp" :disabled="isAnyActionPending" @select="handleMoveUp">
+        <ContextMenuItem
+          v-if="project.canMoveUp"
+          :disabled="isAnyActionPending"
+          @select="handleMoveUp"
+        >
           <ArrowUp class="h-4 w-4" />
           Move Up
         </ContextMenuItem>
 
-        <ContextMenuItem v-if="project.canMoveDown" :disabled="isAnyActionPending" @select="handleMoveDown">
+        <ContextMenuItem
+          v-if="project.canMoveDown"
+          :disabled="isAnyActionPending"
+          @select="handleMoveDown"
+        >
           <ArrowDown class="h-4 w-4" />
           Move Down
         </ContextMenuItem>
 
         <ContextMenuSeparator />
 
-        <ContextMenuItem variant="destructive" :disabled="isAnyActionPending" @select="openDeleteDialog">
+        <ContextMenuItem
+          variant="destructive"
+          :disabled="isAnyActionPending"
+          @select="openDeleteDialog"
+        >
           <Trash2 class="h-4 w-4" />
           Delete
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
 
-    <div v-else class="project-shell">
+    <div
+      v-else
+      class="project-shell"
+    >
       <button
         v-if="!isInlineEditing"
         type="button"
@@ -271,8 +305,15 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
         @click="handleToggle"
         @keydown="handleHeaderKeydown"
       >
-        <ChevronDown class="project-chevron" aria-hidden="true" />
-        <span class="project-dot" :style="{ backgroundColor: project.color }" aria-hidden="true" />
+        <ChevronDown
+          class="project-chevron"
+          aria-hidden="true"
+        />
+        <span
+          class="project-dot"
+          :style="{ backgroundColor: project.color }"
+          aria-hidden="true"
+        />
 
         <span class="project-copy">
           <span class="project-title">{{ project.name }}</span>
@@ -282,9 +323,20 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
         <span class="project-spacer" />
       </button>
 
-      <div v-else class="project-header project-header--editing" :class="{ collapsed: !expanded }">
-        <ChevronDown class="project-chevron" aria-hidden="true" />
-        <span class="project-dot" :style="{ backgroundColor: project.color }" aria-hidden="true" />
+      <div
+        v-else
+        class="project-header project-header--editing"
+        :class="{ collapsed: !expanded }"
+      >
+        <ChevronDown
+          class="project-chevron"
+          aria-hidden="true"
+        />
+        <span
+          class="project-dot"
+          :style="{ backgroundColor: project.color }"
+          aria-hidden="true"
+        />
 
         <span class="project-copy">
           <InlineEdit
@@ -302,7 +354,10 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
     </div>
 
     <Transition name="collapse">
-      <div v-if="expanded" class="project-content">
+      <div
+        v-if="expanded"
+        class="project-content"
+      >
         <div
           v-for="subgroup in project.subgroups"
           :key="subgroup.id"

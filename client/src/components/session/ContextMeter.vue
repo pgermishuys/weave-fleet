@@ -53,7 +53,10 @@ const toneLabel = computed(() => {
 </script>
 
 <template>
-  <section class="context-meter" aria-label="Context window usage">
+  <section
+    class="context-meter"
+    aria-label="Context window usage"
+  >
     <div class="context-meter__header">
       <div class="context-meter__copy">
         <p class="context-meter__label">
@@ -66,11 +69,17 @@ const toneLabel = computed(() => {
 
       <div class="context-meter__summary">
         <span class="context-meter__percent">{{ usagePercent }}%</span>
-        <span class="context-meter__tone" :class="`context-meter__tone--${tone}`">{{ toneLabel }}</span>
+        <span
+          class="context-meter__tone"
+          :class="`context-meter__tone--${tone}`"
+        >{{ toneLabel }}</span>
       </div>
     </div>
 
-    <div class="context-meter-bar" aria-hidden="true">
+    <div
+      class="context-meter-bar"
+      aria-hidden="true"
+    >
       <div
         class="context-meter-fill"
         :class="fillClassName"

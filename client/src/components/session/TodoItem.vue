@@ -45,7 +45,10 @@ const indicator = computed(() => {
 
 <template>
   <li class="todo-item">
-    <span :class="checkClasses" aria-hidden="true">
+    <span
+      :class="checkClasses"
+      aria-hidden="true"
+    >
       {{ indicator }}
     </span>
 

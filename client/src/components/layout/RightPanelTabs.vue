@@ -23,7 +23,11 @@ function handleSelect(tabId: string): void {
 </script>
 
 <template>
-  <div class="right-tabs" role="tablist" aria-label="Right panel tabs">
+  <div
+    class="right-tabs"
+    role="tablist"
+    aria-label="Right panel tabs"
+  >
     <button
       v-for="tab in tabs"
       :key="tab.id"

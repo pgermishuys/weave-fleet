@@ -358,7 +358,10 @@ function getMaxCost(costs: readonly number[]): number {
     </div>
 
     <div class="grid gap-4 xl:grid-cols-2">
-      <Card data-testid="analytics-overview-daily-trend" class="border-border/80 bg-card/70 py-0 backdrop-blur-sm xl:col-span-2">
+      <Card
+        data-testid="analytics-overview-daily-trend"
+        class="border-border/80 bg-card/70 py-0 backdrop-blur-sm xl:col-span-2"
+      >
         <CardHeader class="gap-3 border-b border-border/60 px-5 py-5">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="space-y-1">

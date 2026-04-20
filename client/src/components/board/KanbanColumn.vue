@@ -11,8 +11,14 @@ defineProps<{
 </script>
 
 <template>
-  <section class="kanban-col" :aria-label="`${title} column`">
-    <div class="col-bar" :style="{ backgroundColor: color }" />
+  <section
+    class="kanban-col"
+    :aria-label="`${title} column`"
+  >
+    <div
+      class="col-bar"
+      :style="{ backgroundColor: color }"
+    />
 
     <div class="kanban-col__header">
       <h2 class="kanban-col__title">
@@ -22,9 +28,16 @@ defineProps<{
     </div>
 
     <div class="kanban-col__cards">
-      <KanbanCard v-for="session in sessions" :key="session.id" :session="session" />
+      <KanbanCard
+        v-for="session in sessions"
+        :key="session.id"
+        :session="session"
+      />
 
-      <p v-if="sessions.length === 0" class="kanban-col__empty">
+      <p
+        v-if="sessions.length === 0"
+        class="kanban-col__empty"
+      >
         {{ emptyLabel }}
       </p>
     </div>

@@ -33,7 +33,10 @@ const todos = computed(() => extractLatestTodos(sessionMessages.value));
 </script>
 
 <template>
-  <section class="plan-panel" aria-label="Session plan">
+  <section
+    class="plan-panel"
+    aria-label="Session plan"
+  >
     <header class="plan-header">
       <p class="plan-eyebrow">
         Todos
@@ -43,7 +46,10 @@ const todos = computed(() => extractLatestTodos(sessionMessages.value));
       </h3>
     </header>
 
-    <TodoListView :todos="todos" :aria-label="panelTitle" />
+    <TodoListView
+      :todos="todos"
+      :aria-label="panelTitle"
+    />
   </section>
 </template>
 

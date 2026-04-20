@@ -20,22 +20,38 @@ defineProps<{
         />
 
         <div class="min-w-0 flex-1">
-          <p class="truncate text-sm font-medium text-foreground">{{ item.prompt }}</p>
+          <p class="truncate text-sm font-medium text-foreground">
+            {{ item.prompt }}
+          </p>
           <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span class="font-mono">{{ item.workspaceDir }}</span>
-            <Badge variant="outline" class="px-1.5 py-0 text-[10px]">P{{ item.priority }}</Badge>
+            <Badge
+              variant="outline"
+              class="px-1.5 py-0 text-[10px]"
+            >
+              P{{ item.priority }}
+            </Badge>
           </div>
         </div>
       </div>
 
       <div class="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-        <span v-if="item.tokens != null" class="inline-flex items-center gap-1">
+        <span
+          v-if="item.tokens != null"
+          class="inline-flex items-center gap-1"
+        >
           <Hash :size="12" /> {{ formatTokens(item.tokens) }}
         </span>
-        <span v-if="item.cost != null" class="inline-flex items-center gap-1">
+        <span
+          v-if="item.cost != null"
+          class="inline-flex items-center gap-1"
+        >
           <Coins :size="12" /> {{ formatCost(item.cost) }}
         </span>
-        <span v-if="item.duration != null" class="inline-flex items-center gap-1">
+        <span
+          v-if="item.duration != null"
+          class="inline-flex items-center gap-1"
+        >
           <Clock3 :size="12" /> {{ formatDuration(item.duration) }}
         </span>
       </div>

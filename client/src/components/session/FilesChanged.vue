@@ -11,7 +11,10 @@ defineProps<{
 </script>
 
 <template>
-  <section class="files-changed" aria-label="Files changed">
+  <section
+    class="files-changed"
+    aria-label="Files changed"
+  >
     <div class="files-changed__header">
       <p class="files-changed__title">
         Files changed
@@ -31,7 +34,10 @@ defineProps<{
           <span class="files-changed__path">{{ file.path }}</span>
         </div>
 
-        <div class="files-changed__stats" aria-label="File diff summary">
+        <div
+          class="files-changed__stats"
+          aria-label="File diff summary"
+        >
           <span class="files-changed__stat files-changed__stat--add">+{{ file.additions }}</span>
           <span class="files-changed__stat files-changed__stat--remove">-{{ file.deletions }}</span>
         </div>

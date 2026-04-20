@@ -1,3 +1,4 @@
+import type { AnyRoute } from "@tanstack/router-core";
 import type { RouteOptions } from "@tanstack/vue-router";
 import type { Component, VNodeChild } from "vue";
 import type { ContextSource } from "@/integrations/types";
@@ -45,21 +46,22 @@ export interface FleetPluginSidebarPanel {
 }
 
 type TanStackPluginRouteDefinition = RouteOptions<
-  any,
-  any,
-  any,
-  any,
-  any,
-  any,
-  any,
-  any,
-  any,
-  any,
-  any,
-  any,
-  any,
-  any,
-  any
+  unknown,
+  AnyRoute,
+  string,
+  string,
+  string,
+  string,
+  unknown,
+  Record<string, string>,
+  Record<string, never>,
+  undefined,
+  Record<string, never>,
+  unknown,
+  unknown,
+  unknown,
+  unknown,
+  undefined
 >;
 
 export type FleetPluginRoute = TanStackPluginRouteDefinition & {

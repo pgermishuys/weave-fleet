@@ -89,7 +89,12 @@ function handleKeydown(event: KeyboardEvent): void {
     @click="openIssue"
     @keydown="handleKeydown"
   >
-    <component :is="statusIcon" :class="statusClassName" :size="15" aria-hidden="true" />
+    <component
+      :is="statusIcon"
+      :class="statusClassName"
+      :size="15"
+      aria-hidden="true"
+    />
 
     <div class="issue-body">
       <div class="issue-row issue-row--title">
@@ -101,7 +106,10 @@ function handleKeydown(event: KeyboardEvent): void {
 
       <div class="issue-row issue-row--meta">
         <span class="issue-repo">{{ item.repoFullName }}</span>
-        <div class="issue-labels" aria-label="Issue labels">
+        <div
+          class="issue-labels"
+          aria-label="Issue labels"
+        >
           <span
             v-for="label in item.labels"
             :key="label.name"
@@ -114,7 +122,11 @@ function handleKeydown(event: KeyboardEvent): void {
       </div>
 
       <div class="issue-row issue-row--footer">
-        <img class="issue-avatar" :src="item.user.avatarUrl" :alt="`${item.user.login} avatar`">
+        <img
+          class="issue-avatar"
+          :src="item.user.avatarUrl"
+          :alt="`${item.user.login} avatar`"
+        >
         <span class="issue-user">{{ item.user.login }}</span>
         <span class="issue-time">{{ relativeTime }}</span>
       </div>

@@ -35,7 +35,10 @@ function handleConfirm(): void {
 </script>
 
 <template>
-  <AlertDialog :open="open" @update:open="handleOpenChange">
+  <AlertDialog
+    :open="open"
+    @update:open="handleOpenChange"
+  >
     <AlertDialogContent>
       <AlertDialogHeader>
         <AlertDialogTitle class="flex items-center gap-2">

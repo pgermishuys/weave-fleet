@@ -144,7 +144,10 @@ function handleInputKeyDown(event: KeyboardEvent): void {
       <CommandEmpty>No commands found.</CommandEmpty>
 
       <CommandGroup v-if="subStack.length > 0">
-        <CommandItem value="__back__" @select="goBack">
+        <CommandItem
+          value="__back__"
+          @select="goBack"
+        >
           <ChevronLeft class="h-4 w-4" />
           <span>Back</span>
         </CommandItem>
@@ -163,10 +166,17 @@ function handleInputKeyDown(event: KeyboardEvent): void {
           :data-disabled="command.disabled ? 'true' : undefined"
           @select="handleSelect(command)"
         >
-          <component :is="command.icon" v-if="command.icon" class="h-4 w-4" />
+          <component
+            :is="command.icon"
+            v-if="command.icon"
+            class="h-4 w-4"
+          />
           <span class="flex-1">{{ command.label }}</span>
 
-          <span v-if="command.description" class="mr-2 text-xs text-muted-foreground">
+          <span
+            v-if="command.description"
+            class="mr-2 text-xs text-muted-foreground"
+          >
             {{ command.description }}
           </span>
 

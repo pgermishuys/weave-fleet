@@ -25,7 +25,11 @@ const progressStyle = computed(() => ({
 </script>
 
 <template>
-  <article class="k-card" :class="cardClassName" :style="cardStyle">
+  <article
+    class="k-card"
+    :class="cardClassName"
+    :style="cardStyle"
+  >
     <div class="k-card__header">
       <h3 class="k-card__title">
         {{ session.title }}
@@ -36,7 +40,11 @@ const progressStyle = computed(() => ({
     </div>
 
     <div class="k-card__project-row">
-      <span class="k-card__project-dot" :style="{ backgroundColor: session.projectColor }" aria-hidden="true" />
+      <span
+        class="k-card__project-dot"
+        :style="{ backgroundColor: session.projectColor }"
+        aria-hidden="true"
+      />
       <span class="k-card__project-name">{{ session.projectName }}</span>
     </div>
 
@@ -71,8 +79,14 @@ const progressStyle = computed(() => ({
       </div>
     </dl>
 
-    <div class="k-card__progress-track" aria-hidden="true">
-      <div class="k-progress" :style="progressStyle" />
+    <div
+      class="k-card__progress-track"
+      aria-hidden="true"
+    >
+      <div
+        class="k-progress"
+        :style="progressStyle"
+      />
     </div>
   </article>
 </template>

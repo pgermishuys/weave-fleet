@@ -88,7 +88,10 @@ watch(open, async (isOpen) => {
 </script>
 
 <template>
-  <Dialog :open="open" @update:open="handleOpenChange">
+  <Dialog
+    :open="open"
+    @update:open="handleOpenChange"
+  >
     <DialogContent class="sm:max-w-lg">
       <DialogHeader>
         <DialogTitle>New Project</DialogTitle>
@@ -97,9 +100,15 @@ watch(open, async (isOpen) => {
         </DialogDescription>
       </DialogHeader>
 
-      <form class="space-y-5" @submit.prevent="handleSubmit">
+      <form
+        class="space-y-5"
+        @submit.prevent="handleSubmit"
+      >
         <div class="space-y-2">
-          <label for="new-project-name" class="text-sm font-medium text-foreground">Name</label>
+          <label
+            for="new-project-name"
+            class="text-sm font-medium text-foreground"
+          >Name</label>
           <Input
             id="new-project-name"
             v-model="name"
@@ -110,7 +119,10 @@ watch(open, async (isOpen) => {
         </div>
 
         <div class="space-y-2">
-          <label for="new-project-description" class="text-sm font-medium text-foreground">Description</label>
+          <label
+            for="new-project-description"
+            class="text-sm font-medium text-foreground"
+          >Description</label>
           <Textarea
             id="new-project-description"
             v-model="description"
@@ -129,12 +141,23 @@ watch(open, async (isOpen) => {
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" :disabled="isCreating" @click="open = false">
+          <Button
+            type="button"
+            variant="outline"
+            :disabled="isCreating"
+            @click="open = false"
+          >
             Cancel
           </Button>
 
-          <Button type="submit" :disabled="!canSubmit">
-            <LoaderCircle v-if="isCreating" class="h-4 w-4 animate-spin" />
+          <Button
+            type="submit"
+            :disabled="!canSubmit"
+          >
+            <LoaderCircle
+              v-if="isCreating"
+              class="h-4 w-4 animate-spin"
+            />
             {{ isCreating ? "Creating…" : "Create Project" }}
           </Button>
         </DialogFooter>

@@ -53,7 +53,10 @@ const metrics = computed<SummaryMetric[]>(() => {
 </script>
 
 <template>
-  <Card data-testid="summary-bar" class="border-border/80 bg-card/70 py-0 backdrop-blur-sm">
+  <Card
+    data-testid="summary-bar"
+    class="border-border/80 bg-card/70 py-0 backdrop-blur-sm"
+  >
     <CardContent class="grid gap-4 px-5 py-4 sm:grid-cols-2 xl:grid-cols-5">
       <div
         v-for="metric in metrics"
@@ -63,7 +66,10 @@ const metrics = computed<SummaryMetric[]>(() => {
         <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
           {{ metric.label }}
         </p>
-        <p :data-testid="metric.testId" class="text-2xl font-semibold tracking-tight text-foreground">
+        <p
+          :data-testid="metric.testId"
+          class="text-2xl font-semibold tracking-tight text-foreground"
+        >
           {{ metric.value }}
         </p>
       </div>

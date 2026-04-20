@@ -99,6 +99,7 @@ const displayAuthor = computed(() => {
     </div>
 
     <div class="msg-body">
+      <!-- eslint-disable-next-line vue/no-v-html -->
       <div
         v-if="body"
         class="msg-body__content"

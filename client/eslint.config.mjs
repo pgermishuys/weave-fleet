@@ -26,7 +26,23 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  globalIgnores(["dist/**"]),
+  {
+    files: ["src/components/ui/**/*.vue"],
+    rules: {
+      "vue/multi-word-component-names": "off",
+      "vue/require-default-prop": "off",
+    },
+  },
+  {
+    files: [
+      "src/components/pages/GitHubWorkItemDetailPage.vue",
+      "src/components/session/MessageBubble.vue",
+    ],
+    rules: {
+      "vue/no-v-html": "off",
+    },
+  },
+  globalIgnores([".next/**", "dist/**", "src/routeTree.gen.ts"]),
 ]);
 
 export default eslintConfig;

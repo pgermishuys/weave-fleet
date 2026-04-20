@@ -45,13 +45,20 @@ function selectOption(value: RetentionFilterValue): void {
 <template>
   <DropdownMenu>
     <DropdownMenuTrigger as-child>
-      <Button data-testid="retention-filter-trigger" variant="outline" class="justify-between gap-2">
+      <Button
+        data-testid="retention-filter-trigger"
+        variant="outline"
+        class="justify-between gap-2"
+      >
         <span>Show: {{ selectedLabel }}</span>
         <ChevronDown class="h-4 w-4 text-muted-foreground" />
       </Button>
     </DropdownMenuTrigger>
 
-    <DropdownMenuContent align="end" class="w-48">
+    <DropdownMenuContent
+      align="end"
+      class="w-48"
+    >
       <DropdownMenuItem
         v-for="option in options"
         :key="option.key"
@@ -60,7 +67,10 @@ function selectOption(value: RetentionFilterValue): void {
         @select="selectOption(option.key)"
       >
         <span>{{ option.label }}</span>
-        <Check v-if="props.modelValue === option.key" class="h-4 w-4" />
+        <Check
+          v-if="props.modelValue === option.key"
+          class="h-4 w-4"
+        />
       </DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu>

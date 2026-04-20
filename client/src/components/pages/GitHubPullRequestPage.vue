@@ -366,7 +366,10 @@ const commentSummary = computed(() => {
       v-if="isLoadingPullRequest && !effectivePullRequest"
       class="flex flex-1 items-center justify-center gap-3 rounded-xl border border-border bg-card p-8 text-sm text-muted-foreground"
     >
-      <LoaderCircle :size="18" class="animate-spin" />
+      <LoaderCircle
+        :size="18"
+        class="animate-spin"
+      />
       <span>Loading pull request details…</span>
     </div>
 
@@ -378,7 +381,10 @@ const commentSummary = computed(() => {
       <div
         class="flex items-start gap-3"
       >
-        <AlertCircle :size="18" class="mt-0.5 shrink-0" />
+        <AlertCircle
+          :size="18"
+          class="mt-0.5 shrink-0"
+        />
         <div>
           <p class="font-medium">
             Unable to load pull request details
@@ -497,7 +503,10 @@ const commentSummary = computed(() => {
           class="flex flex-row items-center justify-between gap-3 space-y-0"
         >
           <div class="flex items-center gap-2">
-            <MessageSquare :size="18" class="text-muted-foreground" />
+            <MessageSquare
+              :size="18"
+              class="text-muted-foreground"
+            />
             <CardTitle>Comments</CardTitle>
           </div>
 
@@ -525,11 +534,17 @@ const commentSummary = computed(() => {
             v-if="isLoadingComments && renderedComments.length === 0"
             class="flex items-center gap-2 text-sm text-muted-foreground"
           >
-            <LoaderCircle :size="16" class="animate-spin" />
+            <LoaderCircle
+              :size="16"
+              class="animate-spin"
+            />
             <span>Loading comments…</span>
           </div>
 
-          <ol v-else-if="renderedComments.length > 0" class="space-y-4">
+          <ol
+            v-else-if="renderedComments.length > 0"
+            class="space-y-4"
+          >
             <li
               v-for="comment in renderedComments"
               :key="comment.key"

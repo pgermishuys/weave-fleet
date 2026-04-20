@@ -32,12 +32,20 @@ function isSafeReturnUrl(value: string): boolean {
     <section class="w-full max-w-sm text-center">
       <div class="flex flex-col items-center gap-6 rounded-card border border-border bg-card-bg px-8 py-10 shadow-sm">
         <div class="flex h-18 w-18 items-center justify-center rounded-card bg-accent p-3 shadow-sm">
-          <img :src="weaveLogo" alt="Weave logo" class="logo-mark" />
+          <img
+            :src="weaveLogo"
+            alt="Weave logo"
+            class="logo-mark"
+          >
         </div>
 
         <div>
-          <h1 class="font-mono text-3xl font-bold tracking-tight text-text">Weave</h1>
-          <p class="mt-1 font-mono text-sm text-muted">Agent Fleet</p>
+          <h1 class="font-mono text-3xl font-bold tracking-tight text-text">
+            Weave
+          </h1>
+          <p class="mt-1 font-mono text-sm text-muted">
+            Agent Fleet
+          </p>
         </div>
 
         <p class="text-sm leading-relaxed text-muted">

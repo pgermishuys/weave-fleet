@@ -43,15 +43,30 @@ const priorityStyle = computed(() => ({ color: priorityColors[props.ticket.prior
 </script>
 
 <template>
-  <article class="ticket-item" tabindex="0" role="button" :aria-label="`${ticket.id} ${ticket.title}`">
-    <span class="ticket-priority" :style="priorityStyle" :title="priorityLabel" aria-hidden="true">●</span>
+  <article
+    class="ticket-item"
+    tabindex="0"
+    role="button"
+    :aria-label="`${ticket.id} ${ticket.title}`"
+  >
+    <span
+      class="ticket-priority"
+      :style="priorityStyle"
+      :title="priorityLabel"
+      aria-hidden="true"
+    >●</span>
     <span class="ticket-id">{{ ticket.id }}</span>
 
     <div class="ticket-body">
-      <p class="ticket-title">{{ ticket.title }}</p>
+      <p class="ticket-title">
+        {{ ticket.title }}
+      </p>
     </div>
 
-    <span class="ticket-status" :class="ticket.status">{{ statusLabel }}</span>
+    <span
+      class="ticket-status"
+      :class="ticket.status"
+    >{{ statusLabel }}</span>
   </article>
 </template>
 

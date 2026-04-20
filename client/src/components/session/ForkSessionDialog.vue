@@ -77,24 +77,41 @@ watch(
 </script>
 
 <template>
-  <Dialog :open="props.open" @update:open="handleOpenChange">
-    <DialogContent class="sm:max-w-lg" data-testid="fork-session-dialog">
+  <Dialog
+    :open="props.open"
+    @update:open="handleOpenChange"
+  >
+    <DialogContent
+      class="sm:max-w-lg"
+      data-testid="fork-session-dialog"
+    >
       <DialogHeader>
         <DialogTitle data-testid="fork-session-dialog-title">
           Fork Session
         </DialogTitle>
       </DialogHeader>
 
-      <form class="space-y-4" @submit.prevent="void handleSubmit()">
+      <form
+        class="space-y-4"
+        @submit.prevent="void handleSubmit()"
+      >
         <div class="space-y-2">
-          <p class="text-sm font-medium text-foreground">Source session</p>
-          <p data-testid="fork-session-source-title" class="text-sm text-muted-foreground">
+          <p class="text-sm font-medium text-foreground">
+            Source session
+          </p>
+          <p
+            data-testid="fork-session-source-title"
+            class="text-sm text-muted-foreground"
+          >
             {{ resolvedSourceTitle }}
           </p>
         </div>
 
         <div class="space-y-2">
-          <label for="fork-session-title" class="text-sm font-medium text-foreground">
+          <label
+            for="fork-session-title"
+            class="text-sm font-medium text-foreground"
+          >
             New session title
           </label>
           <Input

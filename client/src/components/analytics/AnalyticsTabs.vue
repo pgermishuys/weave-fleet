@@ -34,8 +34,14 @@ function handleSelect(tabId: AnalyticsTabId): void {
 </script>
 
 <template>
-  <nav class="analytics-tabs" aria-label="Analytics views">
-    <div class="analytics-tabs__list" role="tablist">
+  <nav
+    class="analytics-tabs"
+    aria-label="Analytics views"
+  >
+    <div
+      class="analytics-tabs__list"
+      role="tablist"
+    >
       <button
         v-for="tab in ANALYTICS_TABS"
         :key="tab.id"

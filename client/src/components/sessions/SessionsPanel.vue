@@ -423,29 +423,52 @@ function handleSessionSelect(session: SessionListItem): void {
     :initial-project-id="newSessionDialogProjectId"
     @created="handleSessionCreated"
   />
-  <NewProjectDialog v-model:open="isNewProjectDialogOpen" @created="handleProjectCreated" />
+  <NewProjectDialog
+    v-model:open="isNewProjectDialogOpen"
+    @created="handleProjectCreated"
+  />
 
-  <section class="sessions-panel" aria-label="Sessions context panel">
+  <section
+    class="sessions-panel"
+    aria-label="Sessions context panel"
+  >
     <div class="panel-header-row">
       <p class="panel-header">
         Sessions Context
       </p>
 
       <div class="panel-actions">
-        <button type="button" class="panel-action-button" @click="handleNewSession">
-          <Plus class="panel-action-button__icon" aria-hidden="true" />
+        <button
+          type="button"
+          class="panel-action-button"
+          @click="handleNewSession"
+        >
+          <Plus
+            class="panel-action-button__icon"
+            aria-hidden="true"
+          />
           <span>New Session</span>
         </button>
 
-        <button type="button" class="panel-action-button panel-action-button--secondary" @click="handleNewProject">
-          <Plus class="panel-action-button__icon" aria-hidden="true" />
+        <button
+          type="button"
+          class="panel-action-button panel-action-button--secondary"
+          @click="handleNewProject"
+        >
+          <Plus
+            class="panel-action-button__icon"
+            aria-hidden="true"
+          />
           <span>New Project</span>
         </button>
       </div>
     </div>
 
     <div class="panel-search">
-      <Search class="panel-search__icon" aria-hidden="true" />
+      <Search
+        class="panel-search__icon"
+        aria-hidden="true"
+      />
       <input
         v-model="searchQuery"
         type="search"
@@ -455,17 +478,32 @@ function handleSessionSelect(session: SessionListItem): void {
     </div>
 
     <div class="sessions-list">
-      <div v-if="errorMessage && hasSessions" class="sessions-feedback-banner" aria-live="polite">
+      <div
+        v-if="errorMessage && hasSessions"
+        class="sessions-feedback-banner"
+        aria-live="polite"
+      >
         <p class="sessions-feedback-banner__copy">
           Showing cached sessions. Refresh failed: {{ errorMessage }}
         </p>
-        <button type="button" class="sessions-feedback-banner__button" @click="handleRetry">
+        <button
+          type="button"
+          class="sessions-feedback-banner__button"
+          @click="handleRetry"
+        >
           Retry
         </button>
       </div>
 
-      <div v-if="isLoading && !hasSessions" class="sessions-feedback-state" aria-live="polite">
-        <LoaderCircle class="sessions-feedback-state__icon sessions-feedback-state__icon--spinning" aria-hidden="true" />
+      <div
+        v-if="isLoading && !hasSessions"
+        class="sessions-feedback-state"
+        aria-live="polite"
+      >
+        <LoaderCircle
+          class="sessions-feedback-state__icon sessions-feedback-state__icon--spinning"
+          aria-hidden="true"
+        />
         <p class="sessions-feedback-state__title">
           Loading sessions
         </p>
@@ -474,21 +512,29 @@ function handleSessionSelect(session: SessionListItem): void {
         </p>
       </div>
 
-      <div v-else-if="errorMessage && !hasSessions" class="sessions-feedback-state sessions-feedback-state--error" aria-live="polite">
+      <div
+        v-else-if="errorMessage && !hasSessions"
+        class="sessions-feedback-state sessions-feedback-state--error"
+        aria-live="polite"
+      >
         <p class="sessions-feedback-state__title">
           Unable to load sessions
         </p>
         <p class="sessions-feedback-state__copy">
           {{ errorMessage }}
         </p>
-        <button type="button" class="sessions-feedback-state__button" @click="handleRetry">
+        <button
+          type="button"
+          class="sessions-feedback-state__button"
+          @click="handleRetry"
+        >
           Retry
         </button>
       </div>
 
       <ProjectGroup
-        v-else
         v-for="project in filteredProjectGroups"
+        v-else
         :key="project.id"
         :project="project"
         :expanded="expandedProjects[project.id] ?? true"
@@ -500,7 +546,10 @@ function handleSessionSelect(session: SessionListItem): void {
         @select-session="handleSessionSelect"
       />
 
-      <div v-if="!isLoading && !errorMessage && filteredProjectGroups.length === 0" class="sessions-empty-state">
+      <div
+        v-if="!isLoading && !errorMessage && filteredProjectGroups.length === 0"
+        class="sessions-empty-state"
+      >
         <p class="sessions-empty-state__title">
           No sessions found
         </p>

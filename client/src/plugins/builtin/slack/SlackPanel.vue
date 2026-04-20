@@ -31,10 +31,16 @@ const connectionClassName = computed(() => {
 </script>
 
 <template>
-  <section class="simple-panel" aria-label="Slack panel">
+  <section
+    class="simple-panel"
+    aria-label="Slack panel"
+  >
     <header class="simple-panel-header">
       <div class="simple-panel-title-row">
-        <Slack :size="16" aria-hidden="true" />
+        <Slack
+          :size="16"
+          aria-hidden="true"
+        />
         <h2 class="simple-panel-title">
           Slack
         </h2>

@@ -26,5 +26,10 @@ const items = computed(() => {
 </script>
 
 <template>
-  <SelectorDropdown v-model="selectedAgentId" label="Agent selector" placeholder="Select agent" :items="items" />
+  <SelectorDropdown
+    v-model="selectedAgentId"
+    label="Agent selector"
+    placeholder="Select agent"
+    :items="items"
+  />
 </template>

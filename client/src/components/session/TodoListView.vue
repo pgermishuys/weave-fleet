@@ -53,8 +53,14 @@ function getStatusIndicatorClass(status: TodoEntry["status"]): string {
 </script>
 
 <template>
-  <section class="todo-list-view" :aria-label="ariaLabel">
-    <div v-if="todos.length > 0" class="todo-list-view__summary-row">
+  <section
+    class="todo-list-view"
+    :aria-label="ariaLabel"
+  >
+    <div
+      v-if="todos.length > 0"
+      class="todo-list-view__summary-row"
+    >
       <p class="todo-list-view__summary">
         {{ todoSummary }}
       </p>
@@ -63,13 +69,23 @@ function getStatusIndicatorClass(status: TodoEntry["status"]): string {
       </p>
     </div>
 
-    <Progress v-if="todos.length > 0" :model-value="percentComplete" class="todo-list-view__progress" />
+    <Progress
+      v-if="todos.length > 0"
+      :model-value="percentComplete"
+      class="todo-list-view__progress"
+    />
 
-    <p v-if="todos.length === 0" class="todo-list-view__empty">
+    <p
+      v-if="todos.length === 0"
+      class="todo-list-view__empty"
+    >
       {{ emptyMessage }}
     </p>
 
-    <ul v-else class="todo-list-view__list">
+    <ul
+      v-else
+      class="todo-list-view__list"
+    >
       <li
         v-for="item in todos"
         :key="`${item.content}-${item.status}-${item.priority}`"
@@ -92,7 +108,10 @@ function getStatusIndicatorClass(status: TodoEntry["status"]): string {
           {{ item.content }}
         </span>
 
-        <Badge variant="outline" :class="getPriorityBadgeClass(item.priority)">
+        <Badge
+          variant="outline"
+          :class="getPriorityBadgeClass(item.priority)"
+        >
           {{ item.priority }}
         </Badge>
       </li>

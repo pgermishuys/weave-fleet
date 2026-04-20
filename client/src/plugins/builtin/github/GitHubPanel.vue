@@ -389,9 +389,16 @@ function handleRepoSelect(repoFullName: string): void {
 </script>
 
 <template>
-  <section class="github-panel" aria-label="GitHub context panel">
+  <section
+    class="github-panel"
+    aria-label="GitHub context panel"
+  >
     <header class="plugin-header">
-      <Github class="plugin-header-icon" :size="16" aria-hidden="true" />
+      <Github
+        class="plugin-header-icon"
+        :size="16"
+        aria-hidden="true"
+      />
       <h2 class="plugin-header-title">
         GitHub
       </h2>
@@ -404,12 +411,18 @@ function handleRepoSelect(repoFullName: string): void {
         aria-label="Open GitHub settings"
         @click="handleOpenSettings"
       >
-        <Settings :size="14" aria-hidden="true" />
+        <Settings
+          :size="14"
+          aria-hidden="true"
+        />
       </button>
     </header>
 
     <div class="repo-selector-shell">
-      <label class="repo-selector-label" for="github-repo">Repository</label>
+      <label
+        class="repo-selector-label"
+        for="github-repo"
+      >Repository</label>
       <div
         ref="repoCombobox"
         class="repo-combobox"
@@ -462,28 +475,46 @@ function handleRepoSelect(repoFullName: string): void {
             </div>
           </template>
 
-          <p v-else class="repo-selector-empty-state">
+          <p
+            v-else
+            class="repo-selector-empty-state"
+          >
             No repositories match "{{ repoFilterQuery.trim() }}".
           </p>
         </div>
       </div>
 
-      <p v-if="selectedRepoFullName" class="repo-selector-message">
+      <p
+        v-if="selectedRepoFullName"
+        class="repo-selector-message"
+      >
         Selected: {{ selectedRepoFullName }}
       </p>
 
-      <p v-if="reposError && repos.length > 0" class="repo-selector-message repo-selector-message--error">
+      <p
+        v-if="reposError && repos.length > 0"
+        class="repo-selector-message repo-selector-message--error"
+      >
         {{ reposError }}
       </p>
-      <p v-else-if="bookmarksError" class="repo-selector-message">
+      <p
+        v-else-if="bookmarksError"
+        class="repo-selector-message"
+      >
         Bookmarks are unavailable right now.
       </p>
-      <p v-else-if="isLoadingBookmarks" class="repo-selector-message">
+      <p
+        v-else-if="isLoadingBookmarks"
+        class="repo-selector-message"
+      >
         Loading bookmarks…
       </p>
     </div>
 
-    <nav class="plugin-tabs" aria-label="GitHub tabs">
+    <nav
+      class="plugin-tabs"
+      aria-label="GitHub tabs"
+    >
       <button
         v-for="tab in panelTabs"
         :key="tab.id"
@@ -497,7 +528,11 @@ function handleRepoSelect(repoFullName: string): void {
     </nav>
 
     <div class="plugin-search">
-      <Search class="plugin-search__icon" :size="14" aria-hidden="true" />
+      <Search
+        class="plugin-search__icon"
+        :size="14"
+        aria-hidden="true"
+      />
       <input
         v-model="searchQuery"
         class="plugin-search__input"
@@ -508,65 +543,119 @@ function handleRepoSelect(repoFullName: string): void {
       >
     </div>
 
-    <div v-if="isLoadingStatus" class="plugin-message-state">
+    <div
+      v-if="isLoadingStatus"
+      class="plugin-message-state"
+    >
       Checking GitHub connection…
     </div>
 
-    <div v-else-if="!isConnected" class="plugin-message-state plugin-message-state--empty">
+    <div
+      v-else-if="!isConnected"
+      class="plugin-message-state plugin-message-state--empty"
+    >
       <p class="plugin-message-copy">
         Connect GitHub in settings to load issues and pull requests.
       </p>
-      <button type="button" class="plugin-action-button" @click="handleOpenSettings">
+      <button
+        type="button"
+        class="plugin-action-button"
+        @click="handleOpenSettings"
+      >
         Open settings
       </button>
     </div>
 
-    <div v-else-if="reposError && repos.length === 0" class="plugin-message-state plugin-message-state--error">
+    <div
+      v-else-if="reposError && repos.length === 0"
+      class="plugin-message-state plugin-message-state--error"
+    >
       <p class="plugin-message-copy">
         {{ reposError }}
       </p>
-      <button type="button" class="plugin-action-button" @click="retryCurrentState">
+      <button
+        type="button"
+        class="plugin-action-button"
+        @click="retryCurrentState"
+      >
         Try again
       </button>
     </div>
 
-    <div v-else-if="isLoadingRepos && repos.length === 0" class="plugin-message-state">
+    <div
+      v-else-if="isLoadingRepos && repos.length === 0"
+      class="plugin-message-state"
+    >
       Loading repositories…
     </div>
 
-    <div v-else-if="repos.length === 0" class="plugin-message-state plugin-message-state--empty">
+    <div
+      v-else-if="repos.length === 0"
+      class="plugin-message-state plugin-message-state--empty"
+    >
       <p class="plugin-message-copy">
         No repositories are cached yet. Refresh repos in GitHub settings to load them.
       </p>
-      <button type="button" class="plugin-action-button" @click="handleOpenSettings">
+      <button
+        type="button"
+        class="plugin-action-button"
+        @click="handleOpenSettings"
+      >
         Open settings
       </button>
     </div>
 
-    <div v-else-if="!selectedRepoFullName" class="plugin-message-state plugin-message-state--empty">
+    <div
+      v-else-if="!selectedRepoFullName"
+      class="plugin-message-state plugin-message-state--empty"
+    >
       <p class="plugin-message-copy">
         Select a repository to view issues and pull requests.
       </p>
     </div>
 
-    <div v-else-if="currentTabError && currentTabIsEmpty" class="plugin-message-state plugin-message-state--error">
+    <div
+      v-else-if="currentTabError && currentTabIsEmpty"
+      class="plugin-message-state plugin-message-state--error"
+    >
       <p class="plugin-message-copy">
         {{ currentTabError }}
       </p>
-      <button type="button" class="plugin-action-button" @click="retryCurrentState">
+      <button
+        type="button"
+        class="plugin-action-button"
+        @click="retryCurrentState"
+      >
         Retry
       </button>
     </div>
 
-    <div v-else-if="currentTabLoading && currentTabIsEmpty" class="plugin-message-state">
+    <div
+      v-else-if="currentTabLoading && currentTabIsEmpty"
+      class="plugin-message-state"
+    >
       Loading {{ currentTabLabel }}…
     </div>
 
-    <div v-else class="plugin-list" :data-tab="activeTab">
-      <div v-if="currentTabError" class="plugin-banner plugin-banner--error">
+    <div
+      v-else
+      class="plugin-list"
+      :data-tab="activeTab"
+    >
+      <div
+        v-if="currentTabError"
+        class="plugin-banner plugin-banner--error"
+      >
         <span>{{ currentTabError }}</span>
-        <button type="button" class="plugin-banner-button" @click="retryCurrentState">
-          <RefreshCw :size="12" aria-hidden="true" />
+        <button
+          type="button"
+          class="plugin-banner-button"
+          @click="retryCurrentState"
+        >
+          <RefreshCw
+            :size="12"
+            aria-hidden="true"
+          />
           Retry
         </button>
       </div>
@@ -578,7 +667,10 @@ function handleRepoSelect(repoFullName: string): void {
           :item="issue"
         />
 
-        <p v-if="issueItems.length === 0" class="plugin-empty-state">
+        <p
+          v-if="issueItems.length === 0"
+          class="plugin-empty-state"
+        >
           No issues found for {{ selectedRepoFullName }}.
         </p>
       </template>
@@ -590,12 +682,18 @@ function handleRepoSelect(repoFullName: string): void {
           :item="pullRequest"
         />
 
-        <p v-if="filteredPullRequests.length === 0" class="plugin-empty-state">
+        <p
+          v-if="filteredPullRequests.length === 0"
+          class="plugin-empty-state"
+        >
           {{ normalizedSearchQuery ? "No pull requests match the current search." : `No pull requests found for ${selectedRepoFullName}.` }}
         </p>
       </template>
 
-      <div v-if="currentTabHasMore" class="plugin-footer">
+      <div
+        v-if="currentTabHasMore"
+        class="plugin-footer"
+      >
         <button
           type="button"
           class="plugin-action-button"

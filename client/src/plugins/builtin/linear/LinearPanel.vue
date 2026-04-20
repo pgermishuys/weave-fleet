@@ -34,7 +34,10 @@ const connectionClassName = computed(() => {
 </script>
 
 <template>
-  <section class="linear-panel" aria-label="Linear panel">
+  <section
+    class="linear-panel"
+    aria-label="Linear panel"
+  >
     <header class="linear-panel-header">
       <p class="linear-panel-eyebrow">
         Plugin
@@ -50,14 +53,20 @@ const connectionClassName = computed(() => {
           </p>
         </div>
 
-        <span class="linear-panel-connection" :class="connectionClassName">
+        <span
+          class="linear-panel-connection"
+          :class="connectionClassName"
+        >
           {{ connectionLabel }}
         </span>
       </div>
     </header>
 
     <div class="linear-panel-empty-state">
-      <div class="linear-panel-empty-icon" aria-hidden="true">
+      <div
+        class="linear-panel-empty-icon"
+        aria-hidden="true"
+      >
         <PlugZap :size="20" />
       </div>
       <p class="linear-panel-empty-title">
@@ -66,7 +75,11 @@ const connectionClassName = computed(() => {
       <p class="linear-panel-empty-description">
         Linear integration is not set up yet. Connect your workspace to view issues and triage work from this panel.
       </p>
-      <Button type="button" class="linear-panel-empty-action" disabled>
+      <Button
+        type="button"
+        class="linear-panel-empty-action"
+        disabled
+      >
         Connect
       </Button>
     </div>

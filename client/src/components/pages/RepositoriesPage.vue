@@ -77,27 +77,49 @@ function goToSettings(): void {
   <section class="flex h-full flex-col gap-6 overflow-auto p-6">
     <header class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <div>
-        <h1 class="text-2xl font-semibold tracking-tight text-foreground">Repositories</h1>
-        <p class="mt-1 text-sm text-muted-foreground">Browse local git repositories discovered from configured workspace roots.</p>
+        <h1 class="text-2xl font-semibold tracking-tight text-foreground">
+          Repositories
+        </h1>
+        <p class="mt-1 text-sm text-muted-foreground">
+          Browse local git repositories discovered from configured workspace roots.
+        </p>
       </div>
 
       <div class="flex flex-wrap items-center gap-3">
         <span class="text-xs text-muted-foreground">Last scan: {{ scannedAtLabel }}</span>
 
-        <Button variant="outline" size="sm" :disabled="isLoading || isRefreshing" @click="loadRepositories(true)">
-          <RefreshCw :size="14" :class="isRefreshing ? 'animate-spin' : ''" />
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="isLoading || isRefreshing"
+          @click="loadRepositories(true)"
+        >
+          <RefreshCw
+            :size="14"
+            :class="isRefreshing ? 'animate-spin' : ''"
+          />
           Refresh
         </Button>
 
-        <Button variant="outline" size="sm" @click="goToSettings">
+        <Button
+          variant="outline"
+          size="sm"
+          @click="goToSettings"
+        >
           <Settings2 :size="14" />
           Workspace settings
         </Button>
       </div>
     </header>
 
-    <div v-if="isLoading" class="flex flex-1 items-center justify-center gap-3 rounded-xl border border-border bg-card p-8 text-sm text-muted-foreground">
-      <LoaderCircle :size="18" class="animate-spin" />
+    <div
+      v-if="isLoading"
+      class="flex flex-1 items-center justify-center gap-3 rounded-xl border border-border bg-card p-8 text-sm text-muted-foreground"
+    >
+      <LoaderCircle
+        :size="18"
+        class="animate-spin"
+      />
       <span>Loading repositories…</span>
     </div>
 
@@ -106,43 +128,77 @@ function goToSettings(): void {
       class="flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200"
       role="alert"
     >
-      <TriangleAlert :size="18" class="mt-0.5 shrink-0" />
+      <TriangleAlert
+        :size="18"
+        class="mt-0.5 shrink-0"
+      />
       <div class="space-y-2">
-        <p class="font-medium">Unable to load repositories</p>
+        <p class="font-medium">
+          Unable to load repositories
+        </p>
         <p>{{ errorMessage }}</p>
       </div>
     </div>
 
-    <div v-else-if="sortedRepositories.length === 0" class="flex flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border bg-card/40 p-8 text-center">
-      <FolderGit2 :size="44" class="text-muted-foreground/50" />
+    <div
+      v-else-if="sortedRepositories.length === 0"
+      class="flex flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border bg-card/40 p-8 text-center"
+    >
+      <FolderGit2
+        :size="44"
+        class="text-muted-foreground/50"
+      />
       <div class="space-y-1">
-        <p class="text-sm font-medium text-foreground">No repositories found</p>
-        <p class="text-sm text-muted-foreground">Add workspace roots in Settings to enable repository discovery.</p>
+        <p class="text-sm font-medium text-foreground">
+          No repositories found
+        </p>
+        <p class="text-sm text-muted-foreground">
+          Add workspace roots in Settings to enable repository discovery.
+        </p>
       </div>
-      <Button variant="outline" size="sm" @click="goToSettings">
+      <Button
+        variant="outline"
+        size="sm"
+        @click="goToSettings"
+      >
         <Settings2 :size="14" />
         Open settings
       </Button>
     </div>
 
-    <div v-else class="grid gap-4 xl:grid-cols-2">
-      <Card v-for="repository in sortedRepositories" :key="repository.path" class="gap-4 py-5">
+    <div
+      v-else
+      class="grid gap-4 xl:grid-cols-2"
+    >
+      <Card
+        v-for="repository in sortedRepositories"
+        :key="repository.path"
+        class="gap-4 py-5"
+      >
         <CardHeader class="gap-2 px-5">
           <div class="flex items-start gap-3">
             <div class="rounded-lg border border-border bg-muted/30 p-2 text-muted-foreground">
               <FolderGit2 :size="16" />
             </div>
             <div class="min-w-0 flex-1">
-              <CardTitle class="truncate text-base">{{ repository.name }}</CardTitle>
-              <p class="mt-1 truncate text-xs text-muted-foreground">{{ repository.path }}</p>
+              <CardTitle class="truncate text-base">
+                {{ repository.name }}
+              </CardTitle>
+              <p class="mt-1 truncate text-xs text-muted-foreground">
+                {{ repository.path }}
+              </p>
             </div>
           </div>
         </CardHeader>
 
         <CardContent class="px-5 pt-0">
           <dl class="grid gap-2 text-sm sm:grid-cols-[auto_1fr] sm:items-start">
-            <dt class="text-muted-foreground">Workspace root</dt>
-            <dd class="break-all text-foreground">{{ repository.parentRoot }}</dd>
+            <dt class="text-muted-foreground">
+              Workspace root
+            </dt>
+            <dd class="break-all text-foreground">
+              {{ repository.parentRoot }}
+            </dd>
           </dl>
         </CardContent>
       </Card>

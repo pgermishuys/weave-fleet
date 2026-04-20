@@ -50,16 +50,23 @@ async function handleRemove(skillName: string): Promise<void> {
 <template>
   <section class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
     <div class="flex flex-col gap-1">
-      <h2 class="text-lg font-semibold text-text">Skills</h2>
+      <h2 class="text-lg font-semibold text-text">
+        Skills
+      </h2>
       <p class="text-sm text-muted">
         Manage installed skills and add new ones from a remote URL.
       </p>
     </div>
 
     <div class="mt-5 rounded-card border border-border bg-main-bg p-4">
-      <form class="space-y-3" @submit.prevent="submitInstall">
+      <form
+        class="space-y-3"
+        @submit.prevent="submitInstall"
+      >
         <div>
-          <h3 class="text-sm font-semibold text-text">Install skill</h3>
+          <h3 class="text-sm font-semibold text-text">
+            Install skill
+          </h3>
           <p class="mt-1 text-xs text-muted">
             Paste a skill URL to install it into the local workspace.
           </p>
@@ -81,20 +88,44 @@ async function handleRemove(skillName: string): Promise<void> {
           class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
           role="alert"
         >
-          <AlertCircle :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
+          <AlertCircle
+            :size="16"
+            class="mt-0.5 shrink-0"
+            aria-hidden="true"
+          />
           <span>{{ formError }}</span>
         </div>
 
-        <button type="submit" :class="buttonPrimaryClass" :disabled="isInstalling">
-          <LoaderCircle v-if="isInstalling" :size="16" class="animate-spin" aria-hidden="true" />
-          <Download v-else :size="16" aria-hidden="true" />
+        <button
+          type="submit"
+          :class="buttonPrimaryClass"
+          :disabled="isInstalling"
+        >
+          <LoaderCircle
+            v-if="isInstalling"
+            :size="16"
+            class="animate-spin"
+            aria-hidden="true"
+          />
+          <Download
+            v-else
+            :size="16"
+            aria-hidden="true"
+          />
           <span>{{ isInstalling ? "Installing…" : "Install Skill" }}</span>
         </button>
       </form>
     </div>
 
-    <div v-if="isLoading" class="mt-5 flex items-center gap-2 text-sm text-muted">
-      <LoaderCircle :size="16" class="animate-spin" aria-hidden="true" />
+    <div
+      v-if="isLoading"
+      class="mt-5 flex items-center gap-2 text-sm text-muted"
+    >
+      <LoaderCircle
+        :size="16"
+        class="animate-spin"
+        aria-hidden="true"
+      />
       <span>Loading skills…</span>
     </div>
 
@@ -103,19 +134,35 @@ async function handleRemove(skillName: string): Promise<void> {
       class="mt-5 flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
       role="alert"
     >
-      <AlertCircle :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
+      <AlertCircle
+        :size="16"
+        class="mt-0.5 shrink-0"
+        aria-hidden="true"
+      />
       <span>{{ error }}</span>
     </div>
 
-    <div v-else-if="!hasSkills" class="mt-5 rounded-card border border-dashed border-border p-6 text-center">
-      <Brain :size="28" class="mx-auto text-muted" aria-hidden="true" />
-      <p class="mt-3 text-sm font-medium text-text">No skills installed</p>
+    <div
+      v-else-if="!hasSkills"
+      class="mt-5 rounded-card border border-dashed border-border p-6 text-center"
+    >
+      <Brain
+        :size="28"
+        class="mx-auto text-muted"
+        aria-hidden="true"
+      />
+      <p class="mt-3 text-sm font-medium text-text">
+        No skills installed
+      </p>
       <p class="mt-1 text-xs text-muted">
         Install a skill to make it available to compatible agents.
       </p>
     </div>
 
-    <div v-else class="mt-5 grid gap-3">
+    <div
+      v-else
+      class="mt-5 grid gap-3"
+    >
       <article
         v-for="skill in skills"
         :key="skill.name"
@@ -124,12 +171,22 @@ async function handleRemove(skillName: string): Promise<void> {
         <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
-              <Brain :size="16" class="shrink-0 text-muted" aria-hidden="true" />
-              <h3 class="truncate text-sm font-semibold text-text">{{ skill.name }}</h3>
+              <Brain
+                :size="16"
+                class="shrink-0 text-muted"
+                aria-hidden="true"
+              />
+              <h3 class="truncate text-sm font-semibold text-text">
+                {{ skill.name }}
+              </h3>
             </div>
 
-            <p class="mt-2 text-sm text-muted">{{ skill.description }}</p>
-            <p class="mt-3 break-all font-mono text-xs text-muted">{{ skill.path }}</p>
+            <p class="mt-2 text-sm text-muted">
+              {{ skill.description }}
+            </p>
+            <p class="mt-3 break-all font-mono text-xs text-muted">
+              {{ skill.path }}
+            </p>
           </div>
 
           <button
@@ -144,7 +201,11 @@ async function handleRemove(skillName: string): Promise<void> {
               class="animate-spin"
               aria-hidden="true"
             />
-            <Trash2 v-else :size="16" aria-hidden="true" />
+            <Trash2
+              v-else
+              :size="16"
+              aria-hidden="true"
+            />
             <span>{{ removingSkillName === skill.name ? "Removing…" : "Remove" }}</span>
           </button>
         </div>
@@ -156,7 +217,11 @@ async function handleRemove(skillName: string): Promise<void> {
       class="mt-4 flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
       role="alert"
     >
-      <AlertCircle :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
+      <AlertCircle
+        :size="16"
+        class="mt-0.5 shrink-0"
+        aria-hidden="true"
+      />
       <span>{{ error }}</span>
     </div>
   </section>

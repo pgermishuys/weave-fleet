@@ -11,6 +11,10 @@ import { useModels } from "@/composables/use-models";
 import { useSendPrompt } from "@/composables/use-send-prompt";
 import { useSessionsStore } from "@/stores/sessions";
 
+defineOptions({
+  name: "SessionComposer",
+});
+
 const props = defineProps<{
   sessionId: string;
   instanceId?: string;
@@ -27,7 +31,7 @@ const { draft, setText, setAgentId, setModelId } = useDraftState(props.sessionId
   agentId: "",
   modelId: "",
 });
-const { canSend, error: sendPromptError, sendPrompt } = useSendPrompt(props.sessionId, props.instanceId);
+const { canSend, error: sendPromptError, sendPrompt } = useSendPrompt(props.sessionId);
 
 const sessionsStore = useSessionsStore();
 const { sessions, sessionStateOverrides } = storeToRefs(sessionsStore);
@@ -156,7 +160,7 @@ const { queue, enqueue } = useMessageQueue(
   async (text) => {
     setText(text);
     await nextTick();
-    if (sendPrompt(props.instanceId)) {
+    if (sendPrompt()) {
       optimisticBusy.value = true;
       emit("promptSent");
     }
@@ -292,7 +296,7 @@ function handleSend(): void {
     return;
   }
 
-  if (!sendPrompt(props.instanceId)) {
+  if (!sendPrompt()) {
     return;
   }
 
@@ -324,9 +328,19 @@ function handleKeydown(event: KeyboardEvent): void {
 </script>
 
 <template>
-  <section class="composer" aria-label="Message composer">
-    <div v-show="statusIndicatorVisible" class="composer-status" aria-live="polite">
-      <span class="composer-status__dot" aria-hidden="true" />
+  <section
+    class="composer"
+    aria-label="Message composer"
+  >
+    <div
+      v-show="statusIndicatorVisible"
+      class="composer-status"
+      aria-live="polite"
+    >
+      <span
+        class="composer-status__dot"
+        aria-hidden="true"
+      />
       <span class="composer-status__label">{{ busyStatusLabel }}</span>
     </div>
 
@@ -353,8 +367,14 @@ function handleKeydown(event: KeyboardEvent): void {
       />
 
       <div class="composer-toolbar">
-        <AgentSelector v-model="selectedAgentId" :agents="agents" />
-        <ModelSelector v-model="selectedModelId" :models="models" />
+        <AgentSelector
+          v-model="selectedAgentId"
+          :agents="agents"
+        />
+        <ModelSelector
+          v-model="selectedModelId"
+          :models="models"
+        />
 
         <button
           type="button"
@@ -366,7 +386,11 @@ function handleKeydown(event: KeyboardEvent): void {
           <Send class="send-btn__icon" />
           <span>Send</span>
         </button>
-        <span v-if="queue.length > 0" class="queue-badge" :title="`${queue.length} message(s) queued`">
+        <span
+          v-if="queue.length > 0"
+          class="queue-badge"
+          :title="`${queue.length} message(s) queued`"
+        >
           {{ queue.length }} queued
         </span>
       </div>

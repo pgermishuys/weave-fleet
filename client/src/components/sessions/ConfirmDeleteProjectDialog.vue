@@ -53,7 +53,10 @@ function handleConfirm(): void {
 </script>
 
 <template>
-  <AlertDialog :open="open" @update:open="handleOpenChange">
+  <AlertDialog
+    :open="open"
+    @update:open="handleOpenChange"
+  >
     <AlertDialogContent>
       <AlertDialogHeader>
         <AlertDialogTitle class="flex items-center gap-2">
@@ -104,10 +107,20 @@ function handleConfirm(): void {
       </div>
 
       <AlertDialogFooter>
-        <Button type="button" variant="outline" :disabled="isDeleting" @click="handleCancel">
+        <Button
+          type="button"
+          variant="outline"
+          :disabled="isDeleting"
+          @click="handleCancel"
+        >
           Cancel
         </Button>
-        <Button type="button" variant="destructive" :disabled="isDeleting" @click="handleConfirm">
+        <Button
+          type="button"
+          variant="destructive"
+          :disabled="isDeleting"
+          @click="handleConfirm"
+        >
           {{ isDeleting ? "Deleting…" : "Delete Project" }}
         </Button>
       </AlertDialogFooter>

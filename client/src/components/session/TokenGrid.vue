@@ -12,7 +12,10 @@ defineProps<{
 </script>
 
 <template>
-  <section class="token-grid" aria-label="Token usage">
+  <section
+    class="token-grid"
+    aria-label="Token usage"
+  >
     <article
       v-for="metric in metrics"
       :key="metric.id"

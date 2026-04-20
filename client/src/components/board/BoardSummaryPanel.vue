@@ -107,7 +107,10 @@ const liveFleetSummaryLabel = computed(() => {
 </script>
 
 <template>
-  <section class="board-summary" aria-label="Board summary panel">
+  <section
+    class="board-summary"
+    aria-label="Board summary panel"
+  >
     <article class="summary-card">
       <p class="summary-big">
         {{ totalSessionsCount }}
@@ -132,7 +135,10 @@ const liveFleetSummaryLabel = computed(() => {
       >
         <span class="bar-label">{{ status.label }}</span>
         <span class="bar-value">{{ status.count }}</span>
-        <div class="bar-track" aria-hidden="true">
+        <div
+          class="bar-track"
+          aria-hidden="true"
+        >
           <div
             class="bar-fill"
             :style="{ width: status.width, backgroundColor: status.color }"
@@ -147,7 +153,10 @@ const liveFleetSummaryLabel = computed(() => {
         Spend by agent
       </h3>
 
-      <div class="stacked-bar" aria-label="Visible session spend distribution">
+      <div
+        class="stacked-bar"
+        aria-label="Visible session spend distribution"
+      >
         <div
           v-for="agent in spendSegments"
           :key="agent.agent"
@@ -157,7 +166,10 @@ const liveFleetSummaryLabel = computed(() => {
         />
       </div>
 
-      <div class="agents-list" aria-label="Agent session counts">
+      <div
+        class="agents-list"
+        aria-label="Agent session counts"
+      >
         <div
           v-for="agent in agentStats"
           :key="agent.agent"
@@ -192,18 +204,30 @@ const liveFleetSummaryLabel = computed(() => {
         <span class="metric-label">Visible session tokens</span>
         <span class="metric-value">{{ formatLargeNumber(visibleTokensTotal) }}</span>
       </div>
-      <div v-if="queuedTasksCount !== undefined" class="metric-row">
+      <div
+        v-if="queuedTasksCount !== undefined"
+        class="metric-row"
+      >
         <span class="metric-label">Queued tasks</span>
         <span class="metric-value">{{ queuedTasksCount }}</span>
       </div>
 
-      <p v-if="liveFleetSummaryLabel" class="summary-footnote">
+      <p
+        v-if="liveFleetSummaryLabel"
+        class="summary-footnote"
+      >
         {{ liveFleetSummaryLabel }}
       </p>
-      <p v-else-if="isLoading" class="summary-footnote">
+      <p
+        v-else-if="isLoading"
+        class="summary-footnote"
+      >
         Loading live fleet summary…
       </p>
-      <p v-else-if="error" class="summary-footnote summary-footnote--error">
+      <p
+        v-else-if="error"
+        class="summary-footnote summary-footnote--error"
+      >
         Live fleet summary unavailable: {{ error }}
       </p>
     </article>

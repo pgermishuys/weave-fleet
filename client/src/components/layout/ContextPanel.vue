@@ -106,8 +106,14 @@ const activePanelKey = computed(() => {
 </script>
 
 <template>
-  <aside class="context-panel" aria-label="Context panel">
-    <component :is="activePanel" :key="activePanelKey" />
+  <aside
+    class="context-panel"
+    aria-label="Context panel"
+  >
+    <component
+      :is="activePanel"
+      :key="activePanelKey"
+    />
   </aside>
 </template>
 

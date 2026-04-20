@@ -48,16 +48,27 @@ function handleGroupByChange(value: BoardGroupBy): void {
 </script>
 
 <template>
-  <section class="board-controls" aria-label="Board controls panel">
+  <section
+    class="board-controls"
+    aria-label="Board controls panel"
+  >
     <div class="bc-section">
       <p class="bc-label">
         Project
       </p>
-      <select v-model="selectedProjectModel" class="bc-select" aria-label="Filter by project">
+      <select
+        v-model="selectedProjectModel"
+        class="bc-select"
+        aria-label="Filter by project"
+      >
         <option value="all">
           All projects
         </option>
-        <option v-for="project in availableProjects" :key="project" :value="project">
+        <option
+          v-for="project in availableProjects"
+          :key="project"
+          :value="project"
+        >
           {{ project }}
         </option>
       </select>
@@ -67,13 +78,21 @@ function handleGroupByChange(value: BoardGroupBy): void {
       <p class="bc-label">
         Status
       </p>
-      <label v-for="status in boardStatusOptions" :key="status.value" class="bc-check">
+      <label
+        v-for="status in boardStatusOptions"
+        :key="status.value"
+        class="bc-check"
+      >
         <input
           :checked="statusFilters[status.value]"
           type="checkbox"
           @change="handleStatusChange(status.value, $event)"
         >
-        <span class="bc-status-dot" :style="{ backgroundColor: status.color }" aria-hidden="true" />
+        <span
+          class="bc-status-dot"
+          :style="{ backgroundColor: status.color }"
+          aria-hidden="true"
+        />
         <span>{{ status.label }}</span>
       </label>
     </div>
@@ -82,7 +101,11 @@ function handleGroupByChange(value: BoardGroupBy): void {
       <p class="bc-label">
         Agents
       </p>
-      <label v-for="agent in availableAgents" :key="agent" class="bc-check">
+      <label
+        v-for="agent in availableAgents"
+        :key="agent"
+        class="bc-check"
+      >
         <input
           :checked="agentFilters[agent]"
           type="checkbox"
@@ -96,7 +119,11 @@ function handleGroupByChange(value: BoardGroupBy): void {
       <p class="bc-label">
         Group by
       </p>
-      <div class="radio-pills" role="radiogroup" aria-label="Group board cards by">
+      <div
+        class="radio-pills"
+        role="radiogroup"
+        aria-label="Group board cards by"
+      >
         <button
           v-for="option in groupByOptions"
           :key="option"
@@ -115,8 +142,16 @@ function handleGroupByChange(value: BoardGroupBy): void {
       <p class="bc-label">
         Sort
       </p>
-      <select v-model="sortByModel" class="bc-select" aria-label="Sort board cards">
-        <option v-for="option in boardSortOptions" :key="option.value" :value="option.value">
+      <select
+        v-model="sortByModel"
+        class="bc-select"
+        aria-label="Sort board cards"
+      >
+        <option
+          v-for="option in boardSortOptions"
+          :key="option.value"
+          :value="option.value"
+        >
           {{ option.label }}
         </option>
       </select>
@@ -130,7 +165,10 @@ function handleGroupByChange(value: BoardGroupBy): void {
         {{ filterSummary }}
       </p>
 
-      <div class="bc-quick-stats" aria-label="Board quick stats">
+      <div
+        class="bc-quick-stats"
+        aria-label="Board quick stats"
+      >
         <div class="bc-stat">
           <span class="bc-stat__value">{{ quickStats.visible }}</span>
           <span class="bc-stat__label">Visible</span>

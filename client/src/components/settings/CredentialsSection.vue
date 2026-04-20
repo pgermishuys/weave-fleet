@@ -208,7 +208,9 @@ async function removeCredential(id: string): Promise<void> {
   <section class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
     <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div class="space-y-1">
-        <h2 class="text-lg font-semibold text-text">Credentials</h2>
+        <h2 class="text-lg font-semibold text-text">
+          Credentials
+        </h2>
         <p class="text-sm text-muted">
           Store encrypted provider credentials for sessions that require authenticated access.
         </p>
@@ -220,22 +222,32 @@ async function removeCredential(id: string): Promise<void> {
         :class="buttonPrimaryClass"
         @click="openAddForm"
       >
-        <Plus :size="16" aria-hidden="true" />
+        <Plus
+          :size="16"
+          aria-hidden="true"
+        />
         Add API Key
       </button>
     </div>
 
-    <div v-if="showAddForm" class="mt-5 rounded-card border border-border bg-main-bg p-4">
+    <div
+      v-if="showAddForm"
+      class="mt-5 rounded-card border border-border bg-main-bg p-4"
+    >
       <div class="space-y-4">
         <div>
-          <h3 class="text-sm font-semibold text-text">Add API key</h3>
+          <h3 class="text-sm font-semibold text-text">
+            Add API key
+          </h3>
           <p class="mt-1 text-xs text-muted">
             The secret value is never returned after it is saved.
           </p>
         </div>
 
         <div class="space-y-2">
-          <p class="text-xs font-medium uppercase tracking-wide text-muted">Quick select</p>
+          <p class="text-xs font-medium uppercase tracking-wide text-muted">
+            Quick select
+          </p>
           <div class="flex flex-wrap gap-2">
             <button
               v-for="preset in commonProviders"
@@ -249,7 +261,10 @@ async function removeCredential(id: string): Promise<void> {
           </div>
         </div>
 
-        <form class="grid gap-3" @submit.prevent="storeCredential">
+        <form
+          class="grid gap-3"
+          @submit.prevent="storeCredential"
+        >
           <label class="grid gap-1 text-sm text-text">
             <span class="text-xs font-medium uppercase tracking-wide text-muted">Label</span>
             <input
@@ -301,17 +316,35 @@ async function removeCredential(id: string): Promise<void> {
             class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
             role="alert"
           >
-            <AlertCircle :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
+            <AlertCircle
+              :size="16"
+              class="mt-0.5 shrink-0"
+              aria-hidden="true"
+            />
             <span>{{ formError }}</span>
           </div>
 
           <div class="flex flex-wrap gap-2">
-            <button type="submit" :class="buttonPrimaryClass" :disabled="isSaving">
-              <LoaderCircle v-if="isSaving" :size="16" class="animate-spin" aria-hidden="true" />
+            <button
+              type="submit"
+              :class="buttonPrimaryClass"
+              :disabled="isSaving"
+            >
+              <LoaderCircle
+                v-if="isSaving"
+                :size="16"
+                class="animate-spin"
+                aria-hidden="true"
+              />
               <span>{{ isSaving ? "Saving…" : "Save API Key" }}</span>
             </button>
 
-            <button type="button" :class="buttonSecondaryClass" :disabled="isSaving" @click="closeAddForm">
+            <button
+              type="button"
+              :class="buttonSecondaryClass"
+              :disabled="isSaving"
+              @click="closeAddForm"
+            >
               Cancel
             </button>
           </div>
@@ -319,8 +352,15 @@ async function removeCredential(id: string): Promise<void> {
       </div>
     </div>
 
-    <div v-if="isLoading" class="mt-5 flex items-center gap-2 text-sm text-muted">
-      <LoaderCircle :size="16" class="animate-spin" aria-hidden="true" />
+    <div
+      v-if="isLoading"
+      class="mt-5 flex items-center gap-2 text-sm text-muted"
+    >
+      <LoaderCircle
+        :size="16"
+        class="animate-spin"
+        aria-hidden="true"
+      />
       <span>Loading credentials…</span>
     </div>
 
@@ -329,19 +369,35 @@ async function removeCredential(id: string): Promise<void> {
       class="mt-5 flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
       role="alert"
     >
-      <AlertCircle :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
+      <AlertCircle
+        :size="16"
+        class="mt-0.5 shrink-0"
+        aria-hidden="true"
+      />
       <span>{{ loadError }}</span>
     </div>
 
-    <div v-else-if="!hasCredentials && !showAddForm" class="mt-5 rounded-card border border-dashed border-border p-6 text-center">
-      <KeyRound :size="28" class="mx-auto text-muted" aria-hidden="true" />
-      <p class="mt-3 text-sm font-medium text-text">No API keys stored</p>
+    <div
+      v-else-if="!hasCredentials && !showAddForm"
+      class="mt-5 rounded-card border border-dashed border-border p-6 text-center"
+    >
+      <KeyRound
+        :size="28"
+        class="mx-auto text-muted"
+        aria-hidden="true"
+      />
+      <p class="mt-3 text-sm font-medium text-text">
+        No API keys stored
+      </p>
       <p class="mt-1 text-xs text-muted">
         Add a credential to unlock provider-backed sessions and integrations.
       </p>
     </div>
 
-    <div v-else-if="hasCredentials" class="mt-5 grid gap-3 xl:grid-cols-2">
+    <div
+      v-else-if="hasCredentials"
+      class="mt-5 grid gap-3 xl:grid-cols-2"
+    >
       <article
         v-for="credential in credentials"
         :key="credential.id"
@@ -350,8 +406,14 @@ async function removeCredential(id: string): Promise<void> {
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <div class="flex items-center gap-2">
-              <KeyRound :size="16" class="shrink-0 text-muted" aria-hidden="true" />
-              <h3 class="truncate text-sm font-semibold text-text">{{ credential.label }}</h3>
+              <KeyRound
+                :size="16"
+                class="shrink-0 text-muted"
+                aria-hidden="true"
+              />
+              <h3 class="truncate text-sm font-semibold text-text">
+                {{ credential.label }}
+              </h3>
             </div>
             <p class="mt-1 truncate text-xs text-muted">
               {{ credential.namespace }} · {{ credential.kind }}
@@ -363,9 +425,14 @@ async function removeCredential(id: string): Promise<void> {
           </span>
         </div>
 
-        <p class="mt-4 font-mono text-xs text-muted">{{ getHintText(credential) }}</p>
+        <p class="mt-4 font-mono text-xs text-muted">
+          {{ getHintText(credential) }}
+        </p>
 
-        <div v-if="editingId === credential.id" class="mt-4 space-y-3">
+        <div
+          v-if="editingId === credential.id"
+          class="mt-4 space-y-3"
+        >
           <label class="grid gap-1 text-sm text-text">
             <span class="text-xs font-medium uppercase tracking-wide text-muted">New value</span>
             <input
@@ -382,7 +449,11 @@ async function removeCredential(id: string): Promise<void> {
             class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
             role="alert"
           >
-            <AlertCircle :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
+            <AlertCircle
+              :size="16"
+              class="mt-0.5 shrink-0"
+              aria-hidden="true"
+            />
             <span>{{ actionError }}</span>
           </div>
 
@@ -399,25 +470,42 @@ async function removeCredential(id: string): Promise<void> {
                 class="animate-spin"
                 aria-hidden="true"
               />
-              <Check v-else :size="16" aria-hidden="true" />
+              <Check
+                v-else
+                :size="16"
+                aria-hidden="true"
+              />
               <span>{{ updatingId === credential.id ? "Saving…" : "Save" }}</span>
             </button>
 
-            <button type="button" :class="buttonSecondaryClass" @click="cancelEdit">
-              <X :size="16" aria-hidden="true" />
+            <button
+              type="button"
+              :class="buttonSecondaryClass"
+              @click="cancelEdit"
+            >
+              <X
+                :size="16"
+                aria-hidden="true"
+              />
               Cancel
             </button>
           </div>
         </div>
 
-        <div v-else class="mt-4 flex flex-wrap gap-2">
+        <div
+          v-else
+          class="mt-4 flex flex-wrap gap-2"
+        >
           <button
             type="button"
             :class="buttonSecondaryClass"
             :disabled="deletingId === credential.id"
             @click="beginEdit(credential.id)"
           >
-            <Pencil :size="16" aria-hidden="true" />
+            <Pencil
+              :size="16"
+              aria-hidden="true"
+            />
             Update key
           </button>
 
@@ -433,7 +521,11 @@ async function removeCredential(id: string): Promise<void> {
               class="animate-spin"
               aria-hidden="true"
             />
-            <Trash2 v-else :size="16" aria-hidden="true" />
+            <Trash2
+              v-else
+              :size="16"
+              aria-hidden="true"
+            />
             <span>{{ deletingId === credential.id ? "Removing…" : "Remove" }}</span>
           </button>
         </div>
@@ -445,7 +537,11 @@ async function removeCredential(id: string): Promise<void> {
       class="mt-4 flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
       role="alert"
     >
-      <AlertCircle :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
+      <AlertCircle
+        :size="16"
+        class="mt-0.5 shrink-0"
+        aria-hidden="true"
+      />
       <span>{{ actionError }}</span>
     </div>
   </section>

@@ -191,7 +191,10 @@ function handleTabSelect(tabId: string): void {
 </script>
 
 <template>
-  <aside class="right-panel" aria-label="Right panel">
+  <aside
+    class="right-panel"
+    aria-label="Right panel"
+  >
     <RightPanelTabs
       :tabs="availableTabs"
       :active-tab="activeTab.id"
@@ -199,9 +202,18 @@ function handleTabSelect(tabId: string): void {
     />
 
     <div class="right-content">
-      <Transition name="panel-swap" mode="out-in">
-        <div :key="activeContentKey" class="right-content__panel">
-          <section v-if="shouldRenderPanelIntro" class="right-section">
+      <Transition
+        name="panel-swap"
+        mode="out-in"
+      >
+        <div
+          :key="activeContentKey"
+          class="right-content__panel"
+        >
+          <section
+            v-if="shouldRenderPanelIntro"
+            class="right-section"
+          >
             <p class="right-section__eyebrow">
               {{ activeTab.eyebrow }}
             </p>
@@ -222,7 +234,11 @@ function handleTabSelect(tabId: string): void {
 
           <BoardActivityPanel v-else-if="shouldRenderBoardActivityPanel" />
 
-          <section v-else class="right-placeholder-list" aria-label="Panel placeholder content">
+          <section
+            v-else
+            class="right-placeholder-list"
+            aria-label="Panel placeholder content"
+          >
             <article
               v-for="(item, index) in activeTab.items"
               :key="`${activeTab.id}-${index}`"

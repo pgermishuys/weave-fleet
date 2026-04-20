@@ -183,10 +183,15 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
     <div class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
       <div class="flex items-start gap-3">
         <div class="rounded-btn border border-border bg-main-bg p-2 text-text">
-          <Settings2 :size="18" aria-hidden="true" />
+          <Settings2
+            :size="18"
+            aria-hidden="true"
+          />
         </div>
         <div class="space-y-2">
-          <h1 class="text-2xl font-semibold tracking-tight text-text">Settings</h1>
+          <h1 class="text-2xl font-semibold tracking-tight text-text">
+            Settings
+          </h1>
           <p class="max-w-3xl text-sm text-muted">
             Manage credentials, workspace preferences, appearance, skills, and any extra settings contributed by registered plugins.
           </p>
@@ -200,7 +205,9 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
 
         <section class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
           <div class="flex flex-col gap-1">
-            <h2 class="text-lg font-semibold text-text">Workspace settings</h2>
+            <h2 class="text-lg font-semibold text-text">
+              Workspace settings
+            </h2>
             <p class="text-sm text-muted">
               Control local workspace roots and the defaults used when browsing repositories.
             </p>
@@ -219,9 +226,16 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
 
             <label class="grid gap-1 text-sm text-text">
               <span class="text-xs font-medium uppercase tracking-wide text-muted">Preferred root</span>
-              <select v-model="workspacePreferences.preferredRootPath" :class="selectClass">
+              <select
+                v-model="workspacePreferences.preferredRootPath"
+                :class="selectClass"
+              >
                 <option value="">Use first available root</option>
-                <option v-for="root in workspaceRoots" :key="root.id ?? root.path" :value="root.path">
+                <option
+                  v-for="root in workspaceRoots"
+                  :key="root.id ?? root.path"
+                  :value="root.path"
+                >
                   {{ root.path }}
                 </option>
               </select>
@@ -243,7 +257,9 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
           </label>
 
           <div class="mt-6 flex items-center justify-between gap-3">
-            <h3 class="text-sm font-semibold text-text">Configured roots</h3>
+            <h3 class="text-sm font-semibold text-text">
+              Configured roots
+            </h3>
             <button
               type="button"
               :class="buttonSecondaryClass"
@@ -259,8 +275,15 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
             </button>
           </div>
 
-          <div v-if="workspaceRootsLoading" class="mt-4 flex items-center gap-2 text-sm text-muted">
-            <LoaderCircle :size="16" class="animate-spin" aria-hidden="true" />
+          <div
+            v-if="workspaceRootsLoading"
+            class="mt-4 flex items-center gap-2 text-sm text-muted"
+          >
+            <LoaderCircle
+              :size="16"
+              class="animate-spin"
+              aria-hidden="true"
+            />
             <span>Loading workspace roots…</span>
           </div>
 
@@ -269,26 +292,44 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
             class="mt-4 flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
             role="alert"
           >
-            <AlertCircle :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
+            <AlertCircle
+              :size="16"
+              class="mt-0.5 shrink-0"
+              aria-hidden="true"
+            />
             <span>{{ workspaceRootsError }}</span>
           </div>
 
-          <div v-else-if="workspaceRoots.length === 0" class="mt-4 rounded-card border border-dashed border-border p-6 text-center">
-            <FolderGit2 :size="28" class="mx-auto text-muted" aria-hidden="true" />
-            <p class="mt-3 text-sm font-medium text-text">No workspace roots configured</p>
+          <div
+            v-else-if="workspaceRoots.length === 0"
+            class="mt-4 rounded-card border border-dashed border-border p-6 text-center"
+          >
+            <FolderGit2
+              :size="28"
+              class="mx-auto text-muted"
+              aria-hidden="true"
+            />
+            <p class="mt-3 text-sm font-medium text-text">
+              No workspace roots configured
+            </p>
             <p class="mt-1 text-xs text-muted">
               Add a local directory to enable repository browsing and workspace-backed sessions.
             </p>
           </div>
 
-          <div v-else class="mt-4 grid gap-3">
+          <div
+            v-else
+            class="mt-4 grid gap-3"
+          >
             <article
               v-for="root in workspaceRoots"
               :key="root.id ?? root.path"
               class="flex flex-col gap-3 rounded-card border border-border bg-main-bg p-4 md:flex-row md:items-center md:justify-between"
             >
               <div class="min-w-0">
-                <p class="truncate text-sm font-medium text-text">{{ root.path }}</p>
+                <p class="truncate text-sm font-medium text-text">
+                  {{ root.path }}
+                </p>
                 <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
                   <span class="rounded-full border border-border px-2 py-1">
                     {{ root.source === "env" ? "Environment" : "Custom" }}
@@ -315,7 +356,11 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
                   class="animate-spin"
                   aria-hidden="true"
                 />
-                <Trash2 v-else :size="16" aria-hidden="true" />
+                <Trash2
+                  v-else
+                  :size="16"
+                  aria-hidden="true"
+                />
                 <span>{{ deletingRootId === root.id ? "Removing…" : "Remove" }}</span>
               </button>
             </article>
@@ -324,7 +369,9 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
           <div class="mt-6 rounded-card border border-border bg-main-bg p-4">
             <div class="space-y-3">
               <div>
-                <h3 class="text-sm font-semibold text-text">Add workspace root</h3>
+                <h3 class="text-sm font-semibold text-text">
+                  Add workspace root
+                </h3>
                 <p class="mt-1 text-xs text-muted">
                   Provide an absolute path that Weave can use for directory discovery.
                 </p>
@@ -352,7 +399,11 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
                     class="animate-spin"
                     aria-hidden="true"
                   />
-                  <Plus v-else :size="16" aria-hidden="true" />
+                  <Plus
+                    v-else
+                    :size="16"
+                    aria-hidden="true"
+                  />
                   <span>{{ isAddingWorkspaceRoot ? "Adding…" : "Add root" }}</span>
                 </button>
               </div>
@@ -362,7 +413,11 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
                 class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
                 role="alert"
               >
-                <AlertCircle :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
+                <AlertCircle
+                  :size="16"
+                  class="mt-0.5 shrink-0"
+                  aria-hidden="true"
+                />
                 <span>{{ addWorkspaceRootError }}</span>
               </div>
             </div>
@@ -376,14 +431,23 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
 
         <section class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
           <div class="flex flex-col gap-1">
-            <h2 class="text-lg font-semibold text-text">Configuration overview</h2>
+            <h2 class="text-lg font-semibold text-text">
+              Configuration overview
+            </h2>
             <p class="text-sm text-muted">
               Review the active user config, installed skills, and provider connectivity reported by the API.
             </p>
           </div>
 
-          <div v-if="isConfigLoading" class="mt-5 flex items-center gap-2 text-sm text-muted">
-            <LoaderCircle :size="16" class="animate-spin" aria-hidden="true" />
+          <div
+            v-if="isConfigLoading"
+            class="mt-5 flex items-center gap-2 text-sm text-muted"
+          >
+            <LoaderCircle
+              :size="16"
+              class="animate-spin"
+              aria-hidden="true"
+            />
             <span>Loading configuration…</span>
           </div>
 
@@ -392,56 +456,95 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
             class="mt-5 flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
             role="alert"
           >
-            <AlertCircle :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />
+            <AlertCircle
+              :size="16"
+              class="mt-0.5 shrink-0"
+              aria-hidden="true"
+            />
             <span>{{ configError }}</span>
           </div>
 
-          <div v-else class="mt-5 space-y-4">
+          <div
+            v-else
+            class="mt-5 space-y-4"
+          >
             <div class="grid gap-3 sm:grid-cols-2">
               <article class="rounded-card border border-border bg-main-bg p-4">
-                <p class="text-xs font-medium uppercase tracking-wide text-muted">User config</p>
-                <p class="mt-2 break-all text-sm text-text">{{ paths?.userConfig ?? "Unavailable" }}</p>
+                <p class="text-xs font-medium uppercase tracking-wide text-muted">
+                  User config
+                </p>
+                <p class="mt-2 break-all text-sm text-text">
+                  {{ paths?.userConfig ?? "Unavailable" }}
+                </p>
               </article>
 
               <article class="rounded-card border border-border bg-main-bg p-4">
-                <p class="text-xs font-medium uppercase tracking-wide text-muted">Skills directory</p>
-                <p class="mt-2 break-all text-sm text-text">{{ paths?.skillsDir ?? "Unavailable" }}</p>
+                <p class="text-xs font-medium uppercase tracking-wide text-muted">
+                  Skills directory
+                </p>
+                <p class="mt-2 break-all text-sm text-text">
+                  {{ paths?.skillsDir ?? "Unavailable" }}
+                </p>
               </article>
 
               <article class="rounded-card border border-border bg-main-bg p-4">
-                <p class="text-xs font-medium uppercase tracking-wide text-muted">Configured agents</p>
-                <p class="mt-2 text-2xl font-semibold text-text">{{ configuredAgentCount }}</p>
+                <p class="text-xs font-medium uppercase tracking-wide text-muted">
+                  Configured agents
+                </p>
+                <p class="mt-2 text-2xl font-semibold text-text">
+                  {{ configuredAgentCount }}
+                </p>
               </article>
 
               <article class="rounded-card border border-border bg-main-bg p-4">
-                <p class="text-xs font-medium uppercase tracking-wide text-muted">Installed skills</p>
-                <p class="mt-2 text-2xl font-semibold text-text">{{ installedSkills.length }}</p>
+                <p class="text-xs font-medium uppercase tracking-wide text-muted">
+                  Installed skills
+                </p>
+                <p class="mt-2 text-2xl font-semibold text-text">
+                  {{ installedSkills.length }}
+                </p>
               </article>
 
               <article class="rounded-card border border-border bg-main-bg p-4">
-                <p class="text-xs font-medium uppercase tracking-wide text-muted">Connected providers</p>
-                <p class="mt-2 text-2xl font-semibold text-text">{{ connectedProviderCount }}</p>
+                <p class="text-xs font-medium uppercase tracking-wide text-muted">
+                  Connected providers
+                </p>
+                <p class="mt-2 text-2xl font-semibold text-text">
+                  {{ connectedProviderCount }}
+                </p>
               </article>
 
               <article class="rounded-card border border-border bg-main-bg p-4">
-                <p class="text-xs font-medium uppercase tracking-wide text-muted">Available models</p>
-                <p class="mt-2 text-2xl font-semibold text-text">{{ totalModelCount }}</p>
+                <p class="text-xs font-medium uppercase tracking-wide text-muted">
+                  Available models
+                </p>
+                <p class="mt-2 text-2xl font-semibold text-text">
+                  {{ totalModelCount }}
+                </p>
               </article>
             </div>
 
             <div class="rounded-card border border-border bg-main-bg p-4">
               <div class="flex flex-col gap-1">
-                <h3 class="text-sm font-semibold text-text">Provider status</h3>
+                <h3 class="text-sm font-semibold text-text">
+                  Provider status
+                </h3>
                 <p class="text-xs text-muted">
                   Shows connectivity and advertised models returned by <code>/api/config</code>.
                 </p>
               </div>
 
-              <div v-if="providers.length === 0" class="mt-4 rounded-card border border-dashed border-border p-4 text-sm text-muted">
+              <div
+                v-if="providers.length === 0"
+                class="mt-4 rounded-card border border-dashed border-border p-4 text-sm text-muted"
+              >
                 No provider status reported.
               </div>
 
-              <div v-else class="mt-4 grid gap-3">
+              <div
+                v-else
+                class="mt-4 grid gap-3"
+              >
                 <article
                   v-for="provider in providers"
                   :key="provider.id"
@@ -449,7 +552,9 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
                 >
                   <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h4 class="text-sm font-semibold text-text">{{ provider.name }}</h4>
+                      <h4 class="text-sm font-semibold text-text">
+                        {{ provider.name }}
+                      </h4>
                       <p class="mt-1 text-xs text-muted">
                         {{ provider.authType ?? "No auth type reported" }} · {{ provider.models.length }} models
                       </p>
@@ -471,20 +576,30 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
 
         <section class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
           <div class="flex flex-col gap-1">
-            <h2 class="text-lg font-semibold text-text">Plugin settings</h2>
+            <h2 class="text-lg font-semibold text-text">
+              Plugin settings
+            </h2>
             <p class="text-sm text-muted">
               Extra sections registered by installed plugins appear here automatically.
             </p>
           </div>
 
-          <div v-if="pluginSections.length === 0" class="mt-5 rounded-card border border-dashed border-border p-6 text-center">
-            <p class="text-sm font-medium text-text">No plugin settings available</p>
+          <div
+            v-if="pluginSections.length === 0"
+            class="mt-5 rounded-card border border-dashed border-border p-6 text-center"
+          >
+            <p class="text-sm font-medium text-text">
+              No plugin settings available
+            </p>
             <p class="mt-1 text-xs text-muted">
               Registered plugins can contribute settings sections through <code>getSettingsSections()</code>.
             </p>
           </div>
 
-          <div v-else class="mt-5 grid gap-4">
+          <div
+            v-else
+            class="mt-5 grid gap-4"
+          >
             <article
               v-for="section in pluginSections"
               :key="section.id"
@@ -492,13 +607,26 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
             >
               <div class="mb-4 flex items-start gap-3">
                 <div class="rounded-btn border border-border bg-card-bg p-2 text-text">
-                  <component :is="section.icon" v-if="section.icon" :size="16" aria-hidden="true" />
-                  <Settings2 v-else :size="16" aria-hidden="true" />
+                  <component
+                    :is="section.icon"
+                    v-if="section.icon"
+                    :size="16"
+                    aria-hidden="true"
+                  />
+                  <Settings2
+                    v-else
+                    :size="16"
+                    aria-hidden="true"
+                  />
                 </div>
 
                 <div>
-                  <h3 class="text-sm font-semibold text-text">{{ section.displayName }}</h3>
-                  <p class="mt-1 text-xs text-muted">{{ section.title }}</p>
+                  <h3 class="text-sm font-semibold text-text">
+                    {{ section.displayName }}
+                  </h3>
+                  <p class="mt-1 text-xs text-muted">
+                    {{ section.title }}
+                  </p>
                 </div>
               </div>
 
