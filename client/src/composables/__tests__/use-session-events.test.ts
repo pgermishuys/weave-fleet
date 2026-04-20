@@ -10,7 +10,9 @@ import { flushAll, mountComposable } from "./test-utils"
 const {
   apiFetchMock,
   subscribeMock,
+  isWeaveSocketConnectedMock,
   onReconnectMock,
+  onDisconnectMock,
   clearPendingPromptsMock,
   clearSentPromptsMock,
   loadInitialMessagesMock,
@@ -21,7 +23,9 @@ const {
 } = vi.hoisted(() => ({
   apiFetchMock: vi.fn(),
   subscribeMock: vi.fn(),
+  isWeaveSocketConnectedMock: vi.fn(() => true),
   onReconnectMock: vi.fn(),
+  onDisconnectMock: vi.fn(),
   clearPendingPromptsMock: vi.fn(),
   clearSentPromptsMock: vi.fn(),
   loadInitialMessagesMock: vi.fn(),
@@ -33,6 +37,7 @@ const {
 
 let socketCallback: ((topic: string, data: unknown) => void) | null = null
 let reconnectCallback: (() => void) | null = null
+let disconnectCallback: (() => void) | null = null
 
 vi.mock("@/lib/api-client", () => ({
   apiFetch: apiFetchMock,
@@ -42,7 +47,9 @@ vi.mock("@/composables/use-weave-socket", () => ({
   useWeaveSocket: () => ({
     subscribe: subscribeMock,
   }),
+  isWeaveSocketConnected: isWeaveSocketConnectedMock,
   onReconnect: onReconnectMock,
+  onDisconnect: onDisconnectMock,
 }))
 
 vi.mock("@/composables/use-send-prompt", () => ({
@@ -118,10 +125,13 @@ describe("useSessionEvents", () => {
     sessionCache.clear()
     socketCallback = null
     reconnectCallback = null
+    disconnectCallback = null
 
     apiFetchMock.mockReset()
     subscribeMock.mockReset()
+    isWeaveSocketConnectedMock.mockReset()
     onReconnectMock.mockReset()
+    onDisconnectMock.mockReset()
     clearPendingPromptsMock.mockReset()
     clearSentPromptsMock.mockReset()
     loadInitialMessagesMock.mockReset()
@@ -132,6 +142,7 @@ describe("useSessionEvents", () => {
 
     loadInitialMessagesMock.mockResolvedValue([])
     loadOlderMessagesMock.mockResolvedValue([])
+    isWeaveSocketConnectedMock.mockReturnValue(true)
     subscribeMock.mockImplementation((_topics: string[], callback: (topic: string, data: unknown) => void) => {
       socketCallback = callback
       return () => {
@@ -142,6 +153,12 @@ describe("useSessionEvents", () => {
       reconnectCallback = callback
       return () => {
         reconnectCallback = null
+      }
+    })
+    onDisconnectMock.mockImplementation((callback: () => void) => {
+      disconnectCallback = callback
+      return () => {
+        disconnectCallback = null
       }
     })
     apiFetchMock.mockImplementation((url: string) => {
@@ -201,6 +218,8 @@ describe("useSessionEvents", () => {
     await flushAll()
 
     expect(apiFetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/sessions/session-1/committed-events?afterSequenceNumber=7",
+      "/api/sessions/session-1/delegations",
       "/api/sessions/session-1/committed-events?afterSequenceNumber=7",
       "/api/sessions/session-1/delegations",
       "/api/sessions/session-1/committed-events?afterSequenceNumber=7",

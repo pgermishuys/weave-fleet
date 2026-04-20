@@ -1,5 +1,5 @@
-import { computed, readonly, shallowRef, type ComputedRef, type ShallowRef } from "vue";
-import { getActivePinia } from "pinia";
+import { computed, hasInjectionContext, inject, readonly, shallowRef, type ComputedRef, type ShallowRef } from "vue";
+import { getActivePinia, piniaSymbol, type Pinia } from "pinia";
 import type {
   CreateProjectRequest,
   CreateSessionRequest,
@@ -178,7 +178,11 @@ function createMutationState() {
 }
 
 function getSessionsStoreSafely() {
-  return getActivePinia() ? useSessionsStore() : null;
+  const injectedPinia = hasInjectionContext()
+    ? inject<Pinia | null>(piniaSymbol, null)
+    : null;
+  const pinia = injectedPinia ?? getActivePinia();
+  return pinia ? useSessionsStore(pinia) : null;
 }
 
 function buildForkedSessionListItem(

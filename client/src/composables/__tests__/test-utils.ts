@@ -1,4 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
+import { getActivePinia } from "pinia";
 import { defineComponent, nextTick } from "vue";
 
 export async function flushAll(): Promise<void> {
@@ -20,6 +21,11 @@ export async function mountComposable<T>(useComposable: () => T): Promise<{
         return () => null;
       },
     }),
+    {
+      global: {
+        plugins: getActivePinia() ? [getActivePinia()!] : [],
+      },
+    },
   );
 
   await flushAll();
