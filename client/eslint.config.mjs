@@ -42,7 +42,7 @@ const eslintConfig = defineConfig([
       "vue/no-v-html": "off",
     },
   },
-  globalIgnores([".next/**", "dist/**", "src/routeTree.gen.ts"]),
+  globalIgnores([".next/**", "coverage/**", "dist/**", "src/routeTree.gen.ts"]),
 ]);
 
 export default eslintConfig;

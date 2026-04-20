@@ -37,7 +37,6 @@ const {
 
 let socketCallback: ((topic: string, data: unknown) => void) | null = null
 let reconnectCallback: (() => void) | null = null
-let disconnectCallback: (() => void) | null = null
 
 vi.mock("@/lib/api-client", () => ({
   apiFetch: apiFetchMock,
@@ -125,8 +124,6 @@ describe("useSessionEvents", () => {
     sessionCache.clear()
     socketCallback = null
     reconnectCallback = null
-    disconnectCallback = null
-
     apiFetchMock.mockReset()
     subscribeMock.mockReset()
     isWeaveSocketConnectedMock.mockReset()
@@ -155,12 +152,7 @@ describe("useSessionEvents", () => {
         reconnectCallback = null
       }
     })
-    onDisconnectMock.mockImplementation((callback: () => void) => {
-      disconnectCallback = callback
-      return () => {
-        disconnectCallback = null
-      }
-    })
+    onDisconnectMock.mockImplementation(() => vi.fn())
     apiFetchMock.mockImplementation((url: string) => {
       if (url.includes("/delegations")) {
         return Promise.resolve(createJsonResponse([]))
