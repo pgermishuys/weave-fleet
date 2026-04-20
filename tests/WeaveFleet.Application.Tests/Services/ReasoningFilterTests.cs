@@ -63,7 +63,7 @@ public sealed class ReasoningFilterTests
     }
 
     [Fact]
-    public void FilterMessageEventPayload_AssistantMessageWithOnlyReasoningParts_ReturnsNull()
+    public void FilterMessageEventPayload_AssistantMessageWithOnlyReasoningParts_ReturnsEmptyParts()
     {
         var payload = JsonSerializer.SerializeToElement(new
         {
@@ -72,7 +72,8 @@ public sealed class ReasoningFilterTests
         });
 
         var result = ReasoningFilter.FilterMessageEventPayload(payload);
-        result.ShouldBeNull();
+        result.ShouldNotBeNull();
+        result!.Value.GetProperty("parts").GetArrayLength().ShouldBe(0);
     }
 
     [Fact]

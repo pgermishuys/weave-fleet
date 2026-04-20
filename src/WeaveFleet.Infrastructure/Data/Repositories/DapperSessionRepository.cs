@@ -106,7 +106,7 @@ public sealed class DapperSessionRepository(
     {
         using var conn = connectionFactory.CreateConnection();
 
-        var sql = new StringBuilder("SELECT * FROM sessions WHERE user_id = @UserId");
+        var sql = new StringBuilder("SELECT * FROM sessions WHERE user_id = @UserId AND parent_session_id IS NULL");
         var conditions = new List<string>();
 
         if (statuses is { Count: > 0 })

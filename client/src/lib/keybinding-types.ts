@@ -31,7 +31,6 @@ export const DEFAULT_KEYBINDINGS: KeyBindingsConfig = {
   "toggle-sidebar":     { paletteHotkey: "b", globalShortcut: { key: "b", platformModifier: true } },
   "toggle-activity-filter": { paletteHotkey: null, globalShortcut: null },
   "cycle-theme":        { paletteHotkey: null, globalShortcut: { key: "t", platformModifier: true, metaKey: true } },
-  "toggle-todo-panel":  { paletteHotkey: null, globalShortcut: null },
   "toggle-fullscreen":  { paletteHotkey: null, globalShortcut: null },
   "zoom-in":            { paletteHotkey: null, globalShortcut: { key: "=", platformModifier: true } },
   "zoom-out":           { paletteHotkey: null, globalShortcut: { key: "-", platformModifier: true } },

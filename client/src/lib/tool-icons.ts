@@ -1,11 +1,12 @@
 /**
  * Icon lookup map — maps icon name strings (from the server API)
- * to Lucide React components.
+ * to Lucide Vue components.
  *
- * The server sends `iconName` as a string because React components
+ * The server sends `iconName` as a string because component references
  * can't be serialized to JSON. This module bridges the gap.
  */
 
+import type { Component } from "vue";
 import {
   Code2,
   MousePointer2,
@@ -17,9 +18,9 @@ import {
   SquareTerminal,
   AppWindow,
   Wrench,
-} from "lucide-react";
+} from "lucide-vue-next";
 
-type IconComponent = React.ComponentType<{ className?: string }>;
+type IconComponent = Component;
 
 const TOOL_ICON_MAP: Record<string, IconComponent> = {
   "code-2": Code2,

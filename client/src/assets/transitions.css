@@ -1,0 +1,44 @@
+.panel-swap-enter-active,
+.panel-swap-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.panel-swap-enter-from,
+.panel-swap-leave-to {
+  opacity: 0;
+  transform: translateX(12px);
+}
+
+.panel-swap-leave-to {
+  transform: translateX(-12px);
+}
+
+.collapse-enter-active,
+.collapse-leave-active {
+  overflow: hidden;
+  transition: opacity 0.25s ease, transform 0.25s ease, max-height 0.25s ease;
+}
+
+.collapse-enter-from,
+.collapse-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+  max-height: 0;
+}
+
+.collapse-enter-to,
+.collapse-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+  max-height: 1000px;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}

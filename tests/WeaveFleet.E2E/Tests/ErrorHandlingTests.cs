@@ -7,6 +7,7 @@ namespace WeaveFleet.E2E.Tests;
 /// E2E tests for error handling: harness spawn failure and prompt failure.
 /// </summary>
 [Trait("Category", "E2E")]
+[Trait("Lane", "Regression")]
 public sealed class ErrorHandlingTests : E2ETestBase,
     IClassFixture<FleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>
@@ -36,16 +37,12 @@ public sealed class ErrorHandlingTests : E2ETestBase,
             var submitButton = Page.GetByTestId("create-session-submit");
             await submitButton.ClickAsync();
 
-            // Wait a moment for the error to propagate
-            await Page.WaitForTimeoutAsync(2_000);
+            var errorLocator = Page.GetByTestId("new-session-error");
+            await Microsoft.Playwright.Assertions.Expect(errorLocator).ToBeVisibleAsync();
+            await Microsoft.Playwright.Assertions.Expect(errorLocator).ToContainTextAsync("An unexpected error occurred.");
 
             // Should still be on the dashboard (no redirect to session detail)
             Page.Url.ShouldNotContain("/sessions/");
-
-            // An error message should appear in the dialog or on the page
-            var errorLocator = Page.GetByText("error", new Microsoft.Playwright.PageGetByTextOptions { Exact = false })
-                .Or(Page.GetByText("failed", new Microsoft.Playwright.PageGetByTextOptions { Exact = false }))
-                .Or(Page.GetByText("spawn", new Microsoft.Playwright.PageGetByTextOptions { Exact = false }));
 
             // At minimum, no crash — the page should still be interactive
             await Microsoft.Playwright.Assertions.Expect(Page.GetByTestId("new-session-button")).ToBeVisibleAsync();
@@ -75,8 +72,9 @@ public sealed class ErrorHandlingTests : E2ETestBase,
             // Attempt to send a prompt — this should trigger an error
             await detail.SendPromptAsync("This will fail");
 
-            // Wait for potential error display
-            await Page.WaitForTimeoutAsync(2_000);
+            var errorLocator = Page.GetByTestId("send-prompt-error");
+            await Microsoft.Playwright.Assertions.Expect(errorLocator).ToBeVisibleAsync();
+            await Microsoft.Playwright.Assertions.Expect(errorLocator).ToContainTextAsync("configured to fail on SendPromptAsync");
 
             // The page should still be interactive (no crash/hang)
             // and the prompt input should still be visible

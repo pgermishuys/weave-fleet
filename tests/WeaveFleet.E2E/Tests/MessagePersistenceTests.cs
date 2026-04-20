@@ -17,6 +17,7 @@ namespace WeaveFleet.E2E.Tests;
 /// (e.g. "Loom", "Thread") instead of the generic "Assistant" fallback.
 /// </summary>
 [Trait("Category", "E2E")]
+[Trait("Lane", "Workflow")]
 public sealed class MessagePersistenceTests : E2ETestBase,
     IClassFixture<FleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>

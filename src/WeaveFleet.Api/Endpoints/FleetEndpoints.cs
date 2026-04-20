@@ -215,10 +215,6 @@ public static class FleetEndpoints
         })
         .WithName("GetIntegrations");
 
-        // GET /api/skills — stub (Phase 7 task 44 will implement)
-        group.MapGet("/skills", () => Results.Ok(Array.Empty<object>()))
-        .WithName("GetSkills");
-
         // GET /api/available-tools — stub
         group.MapGet("/available-tools", () => Results.Ok(Array.Empty<object>()))
         .WithName("GetAvailableTools");

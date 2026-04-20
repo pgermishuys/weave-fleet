@@ -5,6 +5,7 @@ using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Endpoints;
 
@@ -36,10 +37,38 @@ public static class SessionEndpoints
         .WithName("GetSessions");
 
         // GET /api/sessions/{id}
-        group.MapGet("/{id}", async (string id, SessionService sessionService) =>
+        group.MapGet("/{id}", async (string id, SessionService sessionService, IWorkspaceRepository workspaceRepository) =>
         {
             var result = await sessionService.GetSessionAsync(id);
-            return result.ToApiResult();
+            return await result.Match<Task<IResult>>(
+                async session =>
+                {
+                    var workspace = await workspaceRepository.GetByIdAsync(session.WorkspaceId);
+
+                    return Results.Ok(new
+                    {
+                        id = session.Id,
+                        instanceId = session.InstanceId,
+                        workspaceId = session.WorkspaceId,
+                        workspaceDirectory = workspace?.Directory ?? session.Directory,
+                        workspaceDisplayName = workspace?.DisplayName,
+                        sourceDirectory = workspace?.SourceDirectory,
+                        isolationStrategy = workspace?.IsolationStrategy ?? "existing",
+                        branch = workspace?.Branch,
+                        title = session.Title,
+                        createdAt = session.CreatedAt,
+                        stoppedAt = session.StoppedAt,
+                        activityStatus = session.ActivityStatus,
+                        lifecycleStatus = session.LifecycleStatus,
+                        retentionStatus = session.RetentionStatus,
+                        archivedAt = session.ArchivedAt,
+                        totalTokens = session.TotalTokens > 0 ? session.TotalTokens : (int?)null,
+                        totalCost = session.TotalCost > 0 ? session.TotalCost : (double?)null,
+                        harnessType = session.HarnessType,
+                        projectId = session.ProjectId
+                    });
+                },
+                error => Task.FromResult(error.ToSessionApiResult()));
         })
         .WithName("GetSession");
 

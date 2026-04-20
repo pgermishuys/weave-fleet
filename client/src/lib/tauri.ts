@@ -1,7 +1,7 @@
 /**
  * Tauri detection and interop utilities.
  *
- * These helpers dynamically import @tauri-apps/api so that the same Next.js
+ * These helpers dynamically import @tauri-apps/api so that the same Vite
  * bundle works in both the browser and the Tauri webview. When running outside
  * Tauri the functions gracefully return null / no-op.
  */
@@ -19,10 +19,13 @@ export async function tauriListen<T>(
   event: string,
   handler: (payload: T) => void,
 ): Promise<(() => void) | null> {
-  if (!isTauri()) return null;
+  if (!isTauri()) {
+    return null;
+  }
+
   try {
     const { listen } = await import("@tauri-apps/api/event");
-    const unlisten = await listen<T>(event, (e) => handler(e.payload));
+    const unlisten = await listen<T>(event, (eventPayload) => handler(eventPayload.payload));
     return unlisten;
   } catch {
     return null;
@@ -36,7 +39,10 @@ export async function tauriInvoke<T>(
   command: string,
   args?: Record<string, unknown>,
 ): Promise<T> {
-  if (!isTauri()) throw new Error("Not running in Tauri");
+  if (!isTauri()) {
+    throw new Error("Not running in Tauri");
+  }
+
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<T>(command, args);
 }

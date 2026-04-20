@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1440">
+<title>Fleet — Plugin Top Bar Tabs + Contextual Drawer</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#0a0a0b;--card:#141416;--border:#1e1e22;--text:#e4e4e7;--muted:#71717a;
+    --accent:#6366f1;--accent-dim:rgba(99,102,241,.15);
+    --running:#22c55e;--idle:#f59e0b;--complete:#3b82f6;--error:#ef4444;--queued:#8b5cf6;
+    --radius:8px;--radius-sm:6px;--radius-lg:12px;
+  }
+  body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;font-size:13px;display:flex;flex-direction:column}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;font-size:inherit}
+  input,textarea{font-family:inherit;background:none;border:none;color:inherit;outline:none;font-size:inherit}
+
+  /* TOP BAR */
+  .topbar{height:48px;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:12px;flex-shrink:0;background:var(--card)}
+  .breadcrumb{display:flex;align-items:center;gap:6px;font-size:13px;flex-shrink:0}
+  .breadcrumb span{color:var(--muted)}
+  .breadcrumb .sep{font-size:11px}
+  .breadcrumb .current{color:var(--text);font-weight:500}
+  .plugin-pills{display:flex;align-items:center;gap:6px;margin:0 auto}
+  .plugin-pill{display:flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:16px;font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap;position:relative}
+  .plugin-pill:hover{background:rgba(255,255,255,.08);border-color:var(--muted)}
+  .plugin-pill.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
+  .plugin-pill.disconnected{opacity:.45}
+  .plugin-pill.disconnected:hover{opacity:.7}
+  .plugin-pill .p-icon{font-size:12px}
+  .plugin-pill .p-count{font-weight:600}
+  .plugin-pill .p-status{font-size:10px}
+  .plugin-pill .p-error{color:var(--error);font-weight:600}
+  .topbar-right{display:flex;align-items:center;gap:12px;flex-shrink:0}
+  .status-pill{display:flex;align-items:center;gap:6px;padding:4px 10px;background:rgba(34,197,94,.1);border-radius:20px;font-size:11px;color:var(--running)}
+  .status-pill .dot{width:6px;height:6px;border-radius:50%;background:var(--running);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .avatar{width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600}
+
+  .layout{display:flex;flex:1;overflow:hidden}
+
+  /* LEFT SIDEBAR - same as mockup-d */
+  .sidebar-left{width:300px;border-right:1px solid var(--border);display:flex;flex-direction:column;background:var(--card);flex-shrink:0}
+  .sidebar-header{padding:12px 16px;border-bottom:1px solid var(--border)}
+  .sidebar-search{padding:0 0 8px}
+  .sidebar-search input{width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;color:var(--text)}
+  .sidebar-search input::placeholder{color:var(--muted)}
+  .sidebar-search input:focus{border-color:var(--accent)}
+  .sidebar-btn-row{display:flex;gap:6px}
+  .btn-new-session{flex:1;padding:7px 0;background:var(--accent);color:#fff;border-radius:var(--radius-sm);font-size:12px;font-weight:500;text-align:center}
+  .btn-new-session:hover{opacity:.85}
+  .btn-new-project-ghost{flex:1;padding:7px 0;color:var(--muted);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-weight:500;text-align:center}
+  .btn-new-project-ghost:hover{color:var(--text);border-color:var(--muted)}
+  .project-list{flex:1;overflow-y:auto;padding:4px 0}
+  .project-list::-webkit-scrollbar{width:4px}
+  .project-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  .project-group{margin-bottom:4px}
+  .project-group-header{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;transition:background .15s;user-select:none}
+  .project-group-header:hover{background:rgba(255,255,255,.04)}
+  .project-group-header .chevron{font-size:10px;color:var(--muted);width:12px;text-align:center;flex-shrink:0}
+  .project-group-header .pg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .project-group-header .pg-name{font-weight:600;font-size:13px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pg-active-badge{font-size:10px;color:var(--running);display:flex;align-items:center;gap:3px;flex-shrink:0}
+  .pg-active-badge .pg-active-dot{width:5px;height:5px;border-radius:50%;background:var(--running)}
+  .pg-count{font-size:11px;color:var(--muted);flex-shrink:0;margin-left:2px}
+  .pg-menu{font-size:14px;color:var(--muted);opacity:0;transition:opacity .15s;flex-shrink:0;padding:0 2px;cursor:pointer}
+  .project-group-header:hover .pg-menu{opacity:1}
+  .project-group-body{overflow:hidden;transition:max-height .25s ease;padding-bottom:4px}
+  .project-group-body.collapsed{max-height:0 !important}
+  .pg-subgroup-label{font-size:10px;color:var(--muted);padding:10px 12px 4px 36px;font-weight:500;letter-spacing:.3px}
+  .pg-session{display:flex;align-items:center;gap:8px;padding:7px 10px 7px 48px;cursor:pointer;transition:background .15s}
+  .pg-session:hover{background:rgba(255,255,255,.04)}
+  .pg-session.active{background:var(--accent-dim)}
+  .pg-session .session-status{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .pg-session .session-info{flex:1;min-width:0}
+  .pg-session .session-title{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pg-session .session-meta{display:flex;gap:8px;font-size:10px;color:var(--muted);margin-top:1px}
+  .pg-divider{height:1px;background:var(--border);margin:8px 12px}
+
+  /* CENTER */
+  .center{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
+  .activity-stream{flex:1;overflow-y:auto;padding:24px 32px}
+  .activity-stream::-webkit-scrollbar{width:4px}
+  .activity-stream::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  .message{margin-bottom:20px;display:flex;gap:12px}
+  .msg-avatar{width:32px;height:32px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0}
+  .msg-avatar.agent{background:var(--accent-dim);color:var(--accent)}
+  .msg-avatar.user{background:rgba(255,255,255,.08);color:var(--text)}
+  .msg-body{flex:1;min-width:0}
+  .msg-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .msg-name{font-weight:600;font-size:13px}
+  .msg-time{font-size:11px;color:var(--muted)}
+  .msg-model{font-size:10px;padding:2px 6px;background:var(--accent-dim);color:var(--accent);border-radius:10px}
+  .msg-text{color:var(--text);line-height:1.55;font-size:13px}
+  .msg-text code{background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px;font-size:12px}
+  .tool-card{margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .tool-header{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;font-size:12px;color:var(--muted)}
+  .tool-header:hover{background:rgba(255,255,255,.02)}
+  .tool-header .icon{font-size:14px}
+  .tool-header .label{font-weight:500;color:var(--text)}
+  .tool-header .file{flex:1;text-align:right;font-size:11px}
+  .tool-body{padding:12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);display:none}
+  .tool-body.open{display:block}
+  .diff-line{font-family:'SF Mono',Menlo,monospace;font-size:11px;padding:1px 0}
+  .diff-add{color:var(--running)}
+  .diff-remove{color:var(--error)}
+
+  /* DRAWER */
+  .drawer{position:absolute;bottom:0;left:0;right:0;height:0;background:var(--card);border-top:1px solid var(--border);overflow:hidden;transition:height .25s ease;z-index:10}
+  .drawer.open{height:300px}
+  .drawer-header{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border)}
+  .drawer-title{font-weight:600;font-size:13px;flex:1}
+  .drawer-close{color:var(--muted);cursor:pointer;font-size:16px;padding:2px 6px;border-radius:4px;transition:background .15s}
+  .drawer-close:hover{background:rgba(255,255,255,.06);color:var(--text)}
+  .drawer-tabs{display:flex;gap:0;border-bottom:1px solid var(--border)}
+  .drawer-tab{padding:7px 14px;font-size:11px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+  .drawer-tab.active{color:var(--text);border-bottom-color:var(--accent)}
+  .drawer-tab:hover{color:var(--text)}
+  .drawer-body{flex:1;overflow-y:auto;padding:12px 16px;height:calc(300px - 85px);overflow-y:auto}
+  .drawer-body::-webkit-scrollbar{width:4px}
+  .drawer-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  .drawer-actions{display:flex;gap:6px;margin-bottom:12px}
+  .drawer-action-btn{padding:5px 12px;font-size:11px;font-weight:500;border-radius:var(--radius-sm);transition:all .15s}
+  .drawer-action-btn.primary{background:var(--accent);color:#fff}
+  .drawer-action-btn.primary:hover{opacity:.85}
+  .drawer-action-btn.secondary{background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--muted)}
+  .drawer-action-btn.secondary:hover{color:var(--text);border-color:var(--muted)}
+
+  .drawer-issue{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+  .drawer-issue:last-child{border-bottom:none}
+  .drawer-issue-icon{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;margin-top:1px}
+  .drawer-issue-icon.open{background:rgba(34,197,94,.15);color:var(--running)}
+  .drawer-issue-icon.merged{background:rgba(139,92,246,.15);color:var(--queued)}
+  .drawer-issue-body{flex:1;min-width:0}
+  .drawer-issue-title{font-size:12px;font-weight:500}
+  .drawer-issue-meta{font-size:10px;color:var(--muted);margin-top:2px}
+  .drawer-commit{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
+  .drawer-commit:last-child{border-bottom:none}
+  .drawer-commit-hash{font-family:'SF Mono',Menlo,monospace;font-size:11px;color:var(--accent);flex-shrink:0}
+  .drawer-commit-msg{font-size:12px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .drawer-commit-time{font-size:10px;color:var(--muted);flex-shrink:0}
+
+  .sentry-error{padding:10px;background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.15);border-radius:var(--radius-sm);margin-bottom:8px}
+  .sentry-error-title{font-size:12px;font-weight:500;color:var(--error)}
+  .sentry-error-meta{font-size:10px;color:var(--muted);margin-top:3px}
+  .sentry-error-stack{font-family:'SF Mono',Menlo,monospace;font-size:10px;color:var(--muted);margin-top:6px;background:var(--bg);padding:6px 8px;border-radius:4px;line-height:1.5}
+  .sentry-investigate{font-size:10px;padding:3px 10px;background:var(--accent);color:#fff;border-radius:10px;margin-top:6px;display:inline-block}
+
+  .docker-container{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:6px}
+  .docker-container-name{font-size:12px;font-weight:500;flex:1}
+  .docker-container-status{font-size:10px}
+  .docker-container-stats{font-size:10px;color:var(--muted)}
+
+  /* COMPOSER */
+  .composer{padding:16px 32px 20px;border-top:1px solid var(--border);position:relative;z-index:11}
+  .composer-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;transition:border-color .15s}
+  .composer-box:focus-within{border-color:var(--accent)}
+  .composer-input{width:100%;padding:12px 16px;min-height:44px;resize:none;font-size:13px;line-height:1.5;background:transparent}
+  .composer-input::placeholder{color:var(--muted)}
+  .composer-toolbar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--border)}
+  .pill{display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;transition:background .15s}
+  .pill-model{background:var(--accent-dim);color:var(--accent)}
+  .pill-model:hover{background:rgba(99,102,241,.25)}
+  .effort-toggle{display:flex;gap:3px;padding:4px 8px}
+  .effort-dot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:background .15s;cursor:pointer}
+  .effort-dot.on{background:var(--accent)}
+  .pill-agent{background:rgba(255,255,255,.06);color:var(--muted)}
+  .btn-send{margin-left:auto;padding:6px 16px;background:var(--accent);color:#fff;border-radius:20px;font-size:12px;font-weight:500}
+  .btn-send:hover{opacity:.85}
+
+  /* RIGHT SIDEBAR */
+  .sidebar-right{width:280px;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--card);flex-shrink:0}
+  .right-tabs{display:flex;border-bottom:1px solid var(--border)}
+  .right-tab{flex:1;padding:10px;text-align:center;font-size:12px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+  .right-tab.active{color:var(--text);border-bottom-color:var(--accent)}
+  .right-tab:hover{color:var(--text)}
+  .right-content{flex:1;overflow-y:auto;padding:16px}
+  .right-content::-webkit-scrollbar{width:4px}
+  .right-content::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  .tab-pane{display:none}
+  .tab-pane.active{display:block}
+  .project-name-edit{font-size:16px;font-weight:700;width:100%;padding:4px 0;border-bottom:1px solid transparent;transition:border-color .15s}
+  .project-name-edit:focus{border-bottom-color:var(--accent)}
+  .project-desc{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4}
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}
+  .stat-card{background:var(--bg);border-radius:var(--radius-sm);padding:10px}
+  .stat-value{font-size:18px;font-weight:700}
+  .stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+  .recent-sessions-label{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-top:20px;margin-bottom:8px;font-weight:600}
+  .recent-session{padding:8px 10px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:6px;cursor:pointer;transition:background .15s}
+  .recent-session:hover{background:rgba(255,255,255,.05)}
+  .recent-session .title{font-size:12px;font-weight:500}
+  .recent-session .meta{font-size:10px;color:var(--muted);margin-top:3px;display:flex;gap:8px}
+
+  .integrations-section{margin-top:20px}
+  .integrations-label{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:8px;font-weight:600}
+  .integrations-row{display:flex;gap:8px;flex-wrap:wrap}
+  .integration-badge{display:flex;align-items:center;gap:5px;padding:4px 8px;background:var(--bg);border-radius:var(--radius-sm);font-size:10px}
+  .integration-badge .int-dot{width:5px;height:5px;border-radius:50%}
+
+  .todo-item{display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
+  .todo-item:last-child{border-bottom:none}
+  .todo-cb{width:16px;height:16px;border:1.5px solid var(--border);border-radius:3px;flex-shrink:0;margin-top:1px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .todo-cb.checked{background:var(--accent);border-color:var(--accent)}
+  .todo-cb.checked::after{content:'✓';font-size:10px;color:#fff}
+  .todo-text{font-size:12px;line-height:1.4}
+  .todo-text.done{text-decoration:line-through;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR with plugin pills -->
+<div class="topbar">
+  <div class="breadcrumb">
+    <span>Weave Fleet</span><span class="sep">›</span>
+    <span>OAuth Integration</span><span class="sep">›</span>
+    <span class="current">Implement token refresh</span>
+  </div>
+
+  <div class="plugin-pills">
+    <div class="plugin-pill" data-drawer="github" onclick="toggleDrawer('github')">
+      <span class="p-icon">&#128025;</span>
+      <span>GitHub</span>
+      <span class="p-count">&middot; 3</span>
+    </div>
+    <div class="plugin-pill" data-drawer="linear" onclick="toggleDrawer('linear')">
+      <span class="p-icon">&#9670;</span>
+      <span>Linear</span>
+      <span class="p-count">&middot; 1</span>
+    </div>
+    <div class="plugin-pill" data-drawer="docker" onclick="toggleDrawer('docker')">
+      <span class="p-icon">&#128051;</span>
+      <span>Docker</span>
+      <span class="p-status" style="color:var(--running)">&middot; Running</span>
+    </div>
+    <div class="plugin-pill" data-drawer="sentry" onclick="toggleDrawer('sentry')">
+      <span class="p-icon">&#128065;</span>
+      <span>Sentry</span>
+      <span class="p-error">&middot; 2 errors</span>
+    </div>
+    <div class="plugin-pill disconnected">
+      <span class="p-icon">#</span>
+      <span>Slack</span>
+    </div>
+  </div>
+
+  <div class="topbar-right">
+    <div class="status-pill"><span class="dot"></span>Running</div>
+    <div class="avatar">PG</div>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- LEFT SIDEBAR -->
+  <div class="sidebar-left">
+    <div class="sidebar-header">
+      <div class="sidebar-search"><input placeholder="Search projects &amp; sessions..."></div>
+      <div class="sidebar-btn-row">
+        <button class="btn-new-session">+ New Session</button>
+        <button class="btn-new-project-ghost">+ New Project</button>
+      </div>
+    </div>
+    <div class="project-list">
+      <div class="project-group">
+        <div class="project-group-header" onclick="toggleGroup(this)">
+          <span class="chevron">▾</span><span class="pg-dot" style="background:var(--accent)"></span>
+          <span class="pg-name">OAuth Integration</span>
+          <span class="pg-active-badge"><span class="pg-active-dot"></span>3</span>
+          <span class="pg-count">[8]</span><span class="pg-menu">⋯</span>
+        </div>
+        <div class="project-group-body" style="max-height:600px">
+          <div class="pg-subgroup-label">src/auth</div>
+          <div class="pg-session active"><span class="session-status" style="background:var(--running)"></span><div class="session-info"><div class="session-title">Implement token refresh</div><div class="session-meta"><span>Tapestry</span><span>2m</span></div></div></div>
+          <div class="pg-session"><span class="session-status" style="background:var(--running)"></span><div class="session-info"><div class="session-title">Add PKCE support</div><div class="session-meta"><span>Shuttle</span><span>5m</span></div></div></div>
+          <div class="pg-session"><span class="session-status" style="background:var(--complete)"></span><div class="session-info"><div class="session-title">OAuth state validation</div><div class="session-meta"><span>Thread</span><span>18m</span></div></div></div>
+          <div class="pg-session"><span class="session-status" style="background:var(--complete)"></span><div class="session-info"><div class="session-title">Authorization code flow</div><div class="session-meta"><span>Warp</span><span>1h</span></div></div></div>
+          <div class="pg-subgroup-label">src/middleware</div>
+          <div class="pg-session"><span class="session-status" style="background:var(--idle)"></span><div class="session-info"><div class="session-title">Token introspection middleware</div><div class="session-meta"><span>Pattern</span><span>12m</span></div></div></div>
+          <div class="pg-session"><span class="session-status" style="background:var(--complete)"></span><div class="session-info"><div class="session-title">Rate limiting per client</div><div class="session-meta"><span>Weft</span><span>45m</span></div></div></div>
+          <div class="pg-subgroup-label">tests</div>
+          <div class="pg-session"><span class="session-status" style="background:var(--queued)"></span><div class="session-info"><div class="session-title">Integration test suite</div><div class="session-meta"><span>Spindle</span><span>3m</span></div></div></div>
+          <div class="pg-session"><span class="session-status" style="background:var(--complete)"></span><div class="session-info"><div class="session-title">Mock OAuth provider</div><div class="session-meta"><span>Tapestry</span><span>2h</span></div></div></div>
+        </div>
+      </div>
+      <div class="project-group">
+        <div class="project-group-header" onclick="toggleGroup(this)">
+          <span class="chevron">▸</span><span class="pg-dot" style="background:var(--running)"></span>
+          <span class="pg-name">Database Refactor</span>
+          <span class="pg-active-badge"><span class="pg-active-dot"></span>1</span>
+          <span class="pg-count">[5]</span><span class="pg-menu">⋯</span>
+        </div>
+        <div class="project-group-body collapsed" style="max-height:400px"></div>
+      </div>
+      <div class="project-group">
+        <div class="project-group-header" onclick="toggleGroup(this)">
+          <span class="chevron">▸</span><span class="pg-dot" style="background:var(--idle)"></span>
+          <span class="pg-name">CI/CD Pipeline</span>
+          <span class="pg-count">[3]</span><span class="pg-menu">⋯</span>
+        </div>
+        <div class="project-group-body collapsed" style="max-height:300px"></div>
+      </div>
+      <div class="project-group">
+        <div class="project-group-header" onclick="toggleGroup(this)">
+          <span class="chevron">▸</span><span class="pg-dot" style="background:var(--complete)"></span>
+          <span class="pg-name">API v2 Migration</span>
+          <span class="pg-active-badge"><span class="pg-active-dot"></span>4</span>
+          <span class="pg-count">[12]</span><span class="pg-menu">⋯</span>
+        </div>
+        <div class="project-group-body collapsed" style="max-height:800px"></div>
+      </div>
+      <div class="project-group">
+        <div class="project-group-header" onclick="toggleGroup(this)">
+          <span class="chevron">▸</span><span class="pg-dot" style="background:var(--error)"></span>
+          <span class="pg-name">Frontend Redesign</span>
+          <span class="pg-active-badge"><span class="pg-active-dot"></span>2</span>
+          <span class="pg-count">[6]</span><span class="pg-menu">⋯</span>
+        </div>
+        <div class="project-group-body collapsed" style="max-height:500px"></div>
+      </div>
+      <div class="pg-divider"></div>
+      <div class="project-group">
+        <div class="project-group-header" onclick="toggleGroup(this)">
+          <span class="chevron">▸</span><span class="pg-name" style="color:var(--muted)">Ungrouped</span>
+          <span class="pg-count">[2]</span><span class="pg-menu">⋯</span>
+        </div>
+        <div class="project-group-body collapsed" style="max-height:200px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER -->
+  <div class="center">
+    <div class="activity-stream">
+      <div class="message">
+        <div class="msg-avatar user">PG</div>
+        <div class="msg-body">
+          <div class="msg-header"><span class="msg-name">You</span><span class="msg-time">2 min ago</span></div>
+          <div class="msg-text">Implement automatic token refresh with a sliding window. The refresh should happen 30 seconds before expiry and use the existing <code>TokenStore</code> interface.</div>
+        </div>
+      </div>
+      <div class="message">
+        <div class="msg-avatar agent">T</div>
+        <div class="msg-body">
+          <div class="msg-header"><span class="msg-name">Tapestry</span><span class="msg-model">Claude Sonnet 4</span><span class="msg-time">2 min ago</span></div>
+          <div class="msg-text">I'll implement the token refresh mechanism. Let me start by examining the current <code>TokenStore</code> interface and the existing auth flow.</div>
+          <div class="tool-card">
+            <div class="tool-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="icon">&#128196;</span><span class="label">Read File</span><span class="file">src/auth/token_store.go</span><span>&#9662;</span></div>
+            <div class="tool-body">
+              <div class="diff-line" style="color:var(--muted)">type TokenStore interface {</div>
+              <div class="diff-line" style="color:var(--muted)">&nbsp; Get(ctx context.Context, key string) (*Token, error)</div>
+              <div class="diff-line" style="color:var(--muted)">&nbsp; Set(ctx context.Context, key string, token *Token) error</div>
+              <div class="diff-line" style="color:var(--muted)">}</div>
+            </div>
+          </div>
+          <div class="tool-card" style="margin-top:6px">
+            <div class="tool-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="icon">&#9999;&#65039;</span><span class="label">Edit File</span><span class="file">src/auth/refresh.go</span><span>&#9662;</span></div>
+            <div class="tool-body open">
+              <div class="diff-add">+ func NewRefreshScheduler(store TokenStore, opts ...RefreshOption) *RefreshScheduler {</div>
+              <div class="diff-add">+   s := &amp;RefreshScheduler{</div>
+              <div class="diff-add">+     store:    store,</div>
+              <div class="diff-add">+     window:   30 * time.Second,</div>
+              <div class="diff-add">+     interval: 5 * time.Second,</div>
+              <div class="diff-add">+   }</div>
+              <div class="diff-add">+   for _, opt := range opts {</div>
+              <div class="diff-add">+     opt(s)</div>
+              <div class="diff-add">+   }</div>
+              <div class="diff-add">+   return s</div>
+              <div class="diff-add">+ }</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="message">
+        <div class="msg-avatar agent">T</div>
+        <div class="msg-body">
+          <div class="msg-header"><span class="msg-name">Tapestry</span><span class="msg-model">Claude Sonnet 4</span><span class="msg-time">1 min ago</span></div>
+          <div class="msg-text">I've created the <code>RefreshScheduler</code> with a configurable sliding window. Now adding error handling with exponential backoff...</div>
+          <div class="tool-card">
+            <div class="tool-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="icon">&#129514;</span><span class="label">Run Tests</span><span class="file">go test ./src/auth/...</span><span>&#9662;</span></div>
+            <div class="tool-body">
+              <div class="diff-line" style="color:var(--running)">PASS: TestRefreshScheduler_SlidingWindow (0.02s)</div>
+              <div class="diff-line" style="color:var(--running)">PASS: TestRefreshScheduler_Backoff (0.01s)</div>
+              <div class="diff-line" style="color:var(--running)">PASS: TestRefreshScheduler_ConcurrentAccess (0.03s)</div>
+              <div class="diff-line" style="color:var(--muted)">ok  	src/auth	0.06s</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DRAWERS -->
+    <div class="drawer" id="drawer-github">
+      <div class="drawer-header">
+        <span style="font-size:14px">&#128025;</span>
+        <span class="drawer-title">GitHub — OAuth Integration</span>
+        <button class="drawer-close" onclick="closeDrawer()">&times;</button>
+      </div>
+      <div class="drawer-tabs">
+        <div class="drawer-tab active">Linked Issues</div>
+        <div class="drawer-tab">Pull Requests</div>
+        <div class="drawer-tab">Commits</div>
+      </div>
+      <div class="drawer-body">
+        <div class="drawer-actions">
+          <button class="drawer-action-btn primary">Link Issue</button>
+          <button class="drawer-action-btn primary">Create PR</button>
+          <button class="drawer-action-btn secondary">View on GitHub</button>
+        </div>
+        <div class="drawer-issue">
+          <div class="drawer-issue-icon open">&#9679;</div>
+          <div class="drawer-issue-body">
+            <div class="drawer-issue-title">Token refresh fails silently on network timeout</div>
+            <div class="drawer-issue-meta">#142 &middot; weave-fleet/gateway &middot; opened 3h ago by @pgermishuys</div>
+          </div>
+        </div>
+        <div class="drawer-issue">
+          <div class="drawer-issue-icon open">&#9679;</div>
+          <div class="drawer-issue-body">
+            <div class="drawer-issue-title">Add PKCE support for public OAuth clients</div>
+            <div class="drawer-issue-meta">#138 &middot; weave-fleet/gateway &middot; opened 1d ago by @mkeller</div>
+          </div>
+        </div>
+        <div class="drawer-issue">
+          <div class="drawer-issue-icon merged">&#9679;</div>
+          <div class="drawer-issue-body">
+            <div class="drawer-issue-title">OAuth state parameter not validated correctly</div>
+            <div class="drawer-issue-meta">#98 &middot; weave-fleet/gateway &middot; closed 2d ago</div>
+          </div>
+        </div>
+        <div style="margin-top:16px;font-size:11px;text-transform:uppercase;color:var(--muted);letter-spacing:.5px;font-weight:600;margin-bottom:8px">Recent Commits</div>
+        <div class="drawer-commit"><span class="drawer-commit-hash">a3f7b21</span><span class="drawer-commit-msg">feat: add RefreshScheduler with sliding window</span><span class="drawer-commit-time">2m ago</span></div>
+        <div class="drawer-commit"><span class="drawer-commit-hash">e91c4d8</span><span class="drawer-commit-msg">refactor: extract TokenStore interface</span><span class="drawer-commit-time">15m ago</span></div>
+        <div class="drawer-commit"><span class="drawer-commit-hash">7b2e0f3</span><span class="drawer-commit-msg">test: add OAuth state validation tests</span><span class="drawer-commit-time">22m ago</span></div>
+        <div class="drawer-commit"><span class="drawer-commit-hash">4d8a1c6</span><span class="drawer-commit-msg">fix: validate state parameter in callback</span><span class="drawer-commit-time">1h ago</span></div>
+      </div>
+    </div>
+
+    <div class="drawer" id="drawer-sentry">
+      <div class="drawer-header">
+        <span style="font-size:14px">&#128065;</span>
+        <span class="drawer-title">Sentry — 2 Unresolved Errors</span>
+        <button class="drawer-close" onclick="closeDrawer()">&times;</button>
+      </div>
+      <div class="drawer-tabs">
+        <div class="drawer-tab active">Errors</div>
+        <div class="drawer-tab">Performance</div>
+      </div>
+      <div class="drawer-body">
+        <div class="sentry-error">
+          <div class="sentry-error-title">NullPointerException in TokenStore.Get</div>
+          <div class="sentry-error-meta">14 events &middot; 3 users &middot; First seen 2h ago &middot; Last 5m ago</div>
+          <div class="sentry-error-stack">at auth.TokenStore.Get(token_store.go:42)
+at auth.RefreshScheduler.check(refresh.go:78)
+at auth.RefreshScheduler.Run(refresh.go:31)</div>
+          <button class="sentry-investigate">Investigate in New Session</button>
+        </div>
+        <div class="sentry-error">
+          <div class="sentry-error-title">ConnectionTimeout in pool.Acquire</div>
+          <div class="sentry-error-meta">8 events &middot; 5 users &middot; First seen 1h ago &middot; Last 12m ago</div>
+          <div class="sentry-error-stack">at db.Pool.Acquire(pool.go:156)
+at db.Repository.Query(repository.go:23)</div>
+          <button class="sentry-investigate">Investigate in New Session</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="drawer" id="drawer-linear">
+      <div class="drawer-header">
+        <span style="font-size:14px">&#9670;</span>
+        <span class="drawer-title">Linear — Linked Ticket</span>
+        <button class="drawer-close" onclick="closeDrawer()">&times;</button>
+      </div>
+      <div class="drawer-body">
+        <div style="background:var(--bg);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px">
+          <div style="font-size:10px;color:var(--muted);font-weight:600">ENG-142</div>
+          <div style="font-size:13px;font-weight:600;margin:4px 0">Implement OAuth token refresh with sliding window</div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+            <span style="font-size:10px;padding:2px 6px;background:rgba(245,158,11,.12);color:var(--idle);border-radius:8px">In Progress</span>
+            <span style="font-size:10px;color:var(--muted)">Urgent</span>
+            <span style="font-size:10px;color:var(--muted)">Assigned to PG</span>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.4">Implement automatic token refresh using a sliding window approach. Should refresh 30s before expiry with exponential backoff on failure.</div>
+        </div>
+        <div class="drawer-actions">
+          <button class="drawer-action-btn secondary">Update Status</button>
+          <button class="drawer-action-btn secondary">Add Comment</button>
+          <button class="drawer-action-btn secondary">Open in Linear</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="drawer" id="drawer-docker">
+      <div class="drawer-header">
+        <span style="font-size:14px">&#128051;</span>
+        <span class="drawer-title">Docker — 3 Running Containers</span>
+        <button class="drawer-close" onclick="closeDrawer()">&times;</button>
+      </div>
+      <div class="drawer-tabs">
+        <div class="drawer-tab active">Containers</div>
+        <div class="drawer-tab">Logs</div>
+        <div class="drawer-tab">Resources</div>
+      </div>
+      <div class="drawer-body">
+        <div class="docker-container"><span class="docker-container-name">gateway-api</span><span class="docker-container-status" style="color:var(--running)">&#9679; Running</span><span class="docker-container-stats">128MB &middot; 2.1% CPU &middot; Up 2h</span></div>
+        <div class="docker-container"><span class="docker-container-name">postgres-15</span><span class="docker-container-status" style="color:var(--running)">&#9679; Running</span><span class="docker-container-stats">256MB &middot; 1.8% CPU &middot; Up 4h</span></div>
+        <div class="docker-container"><span class="docker-container-name">redis-cluster</span><span class="docker-container-status" style="color:var(--running)">&#9679; Running</span><span class="docker-container-stats">64MB &middot; 0.3% CPU &middot; Up 4h</span></div>
+        <div class="docker-container"><span class="docker-container-name">nginx-proxy</span><span class="docker-container-status" style="color:var(--muted)">&#9679; Stopped</span><span class="docker-container-stats">Exited 30m ago</span></div>
+      </div>
+    </div>
+
+    <div class="composer">
+      <div class="composer-box">
+        <textarea class="composer-input" placeholder="Message Tapestry..." rows="1"></textarea>
+        <div class="composer-toolbar">
+          <div class="pill pill-model">Claude Sonnet 4 &#9662;</div>
+          <div class="effort-toggle"><span class="effort-dot on"></span><span class="effort-dot on"></span><span class="effort-dot"></span></div>
+          <div class="pill pill-agent">Tapestry</div>
+          <button class="btn-send">Send &#8629;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT SIDEBAR -->
+  <div class="sidebar-right">
+    <div class="right-tabs">
+      <div class="right-tab active" onclick="switchRightTab(0)">Project</div>
+      <div class="right-tab" onclick="switchRightTab(1)">Plan / TODO</div>
+    </div>
+    <div class="right-content">
+      <div class="tab-pane active" id="rpane0">
+        <input class="project-name-edit" value="OAuth Integration">
+        <div class="project-desc">Implement OAuth 2.0 with PKCE flow, token refresh, and client credential management for the API gateway.</div>
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-value">8</div><div class="stat-label">Sessions</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--running)">3</div><div class="stat-label">Active</div></div>
+          <div class="stat-card"><div class="stat-value">450K</div><div class="stat-label">Tokens Used</div></div>
+          <div class="stat-card"><div class="stat-value">$2.18</div><div class="stat-label">Cost</div></div>
+        </div>
+
+        <!-- Integrations section -->
+        <div class="integrations-section">
+          <div class="integrations-label">Integrations</div>
+          <div class="integrations-row">
+            <div class="integration-badge"><span class="int-dot" style="background:var(--running)"></span>&#128025; GitHub</div>
+            <div class="integration-badge"><span class="int-dot" style="background:var(--running)"></span>&#9670; Linear</div>
+            <div class="integration-badge"><span class="int-dot" style="background:var(--running)"></span>&#128051; Docker</div>
+            <div class="integration-badge"><span class="int-dot" style="background:var(--error)"></span>&#128065; Sentry</div>
+            <div class="integration-badge" style="opacity:.45"><span class="int-dot" style="background:var(--muted)"></span># Slack</div>
+          </div>
+        </div>
+
+        <div class="recent-sessions-label">Recent Sessions</div>
+        <div class="recent-session"><div class="title">Implement token refresh</div><div class="meta"><span style="color:var(--running)">&#9679; Running</span><span>Tapestry</span><span>2m</span></div></div>
+        <div class="recent-session"><div class="title">Add PKCE support</div><div class="meta"><span style="color:var(--running)">&#9679; Running</span><span>Shuttle</span><span>5m</span></div></div>
+        <div class="recent-session"><div class="title">Token introspection middleware</div><div class="meta"><span style="color:var(--idle)">&#9679; Idle</span><span>Pattern</span><span>12m</span></div></div>
+      </div>
+      <div class="tab-pane" id="rpane1">
+        <div style="font-weight:600;font-size:14px;margin-bottom:12px">Token Refresh Implementation</div>
+        <div class="todo-item"><div class="todo-cb checked"></div><div class="todo-text done">Read existing TokenStore interface</div></div>
+        <div class="todo-item"><div class="todo-cb checked"></div><div class="todo-text done">Create RefreshScheduler struct</div></div>
+        <div class="todo-item"><div class="todo-cb checked"></div><div class="todo-text done">Implement sliding window check</div></div>
+        <div class="todo-item"><div class="todo-cb" style="border-color:var(--accent)"></div><div class="todo-text">Add exponential backoff on failure</div></div>
+        <div class="todo-item"><div class="todo-cb"></div><div class="todo-text">Handle concurrent refresh requests</div></div>
+        <div class="todo-item"><div class="todo-cb"></div><div class="todo-text">Add metrics and logging</div></div>
+        <div class="todo-item"><div class="todo-cb"></div><div class="todo-text">Write integration tests</div></div>
+        <div class="todo-item"><div class="todo-cb"></div><div class="todo-text">Update documentation</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let activeDrawer=null;
+function toggleDrawer(name){
+  if(activeDrawer===name){closeDrawer();return;}
+  closeDrawer();
+  activeDrawer=name;
+  document.getElementById('drawer-'+name).classList.add('open');
+  document.querySelectorAll('.plugin-pill').forEach(p=>p.classList.remove('active'));
+  const pill=document.querySelector(`.plugin-pill[data-drawer="${name}"]`);
+  if(pill)pill.classList.add('active');
+}
+function closeDrawer(){
+  document.querySelectorAll('.drawer').forEach(d=>d.classList.remove('open'));
+  document.querySelectorAll('.plugin-pill').forEach(p=>p.classList.remove('active'));
+  activeDrawer=null;
+}
+function toggleGroup(header){
+  const body=header.nextElementSibling;
+  const chevron=header.querySelector('.chevron');
+  if(body.classList.contains('collapsed')){body.classList.remove('collapsed');chevron.textContent='▾';}
+  else{body.classList.add('collapsed');chevron.textContent='▸';}
+}
+function switchRightTab(idx){
+  document.querySelectorAll('.right-tab').forEach((t,i)=>t.classList.toggle('active',i===idx));
+  document.querySelectorAll('.tab-pane').forEach((p,i)=>p.classList.toggle('active',i===idx));
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrawer();});
+</script>
+</body>
+</html>

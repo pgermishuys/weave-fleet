@@ -1,6 +1,6 @@
 /**
  * Utility functions for markdown rendering.
- * Pure functions with no React dependencies — safe to import anywhere and test in isolation.
+ * Pure functions with no framework dependencies — safe to import anywhere and test in isolation.
  */
 
 /**
@@ -19,10 +19,10 @@ export function extractLanguage(className: string | undefined): string {
 }
 
 /**
- * Recursively extracts plain text content from a React node tree.
+ * Recursively extracts plain text content from a render node tree.
  * Used to obtain the raw code string for clipboard operations.
  *
- * @param node - Any React node (string, number, array, element, or null/undefined).
+ * @param node - Any renderable node (string, number, array, element-like object, or null/undefined).
  * @returns The concatenated plain-text content.
  */
 export function extractText(node: unknown): string {
@@ -30,9 +30,19 @@ export function extractText(node: unknown): string {
   if (typeof node === "number") return String(node);
   if (!node) return "";
   if (Array.isArray(node)) return (node as unknown[]).map(extractText).join("");
-  if (typeof node === "object" && node !== null && "props" in node) {
-    const el = node as { props?: { children?: unknown } };
-    return extractText(el.props?.children);
+  if (typeof node === "object" && node !== null) {
+    const vnodeLike = node as {
+      children?: unknown;
+      props?: { children?: unknown };
+    };
+
+    if ("children" in vnodeLike) {
+      return extractText(vnodeLike.children);
+    }
+
+    if (vnodeLike.props && "children" in vnodeLike.props) {
+      return extractText(vnodeLike.props.children);
+    }
   }
   return "";
 }

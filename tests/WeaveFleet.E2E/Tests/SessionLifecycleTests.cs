@@ -8,6 +8,7 @@ namespace WeaveFleet.E2E.Tests;
 /// E2E tests for session lifecycle: creation, message history, abort, delete, rename.
 /// </summary>
 [Trait("Category", "E2E")]
+[Trait("Lane", "Workflow")]
 public sealed class SessionLifecycleTests : E2ETestBase,
     IClassFixture<FleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>
@@ -133,19 +134,13 @@ public sealed class SessionLifecycleTests : E2ETestBase,
             await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
             await dialog.SetTitleAsync("Delete Me");
 
-            // Submit and go to session detail
-            var detail = await dialog.SubmitAsync();
-            await detail.WaitForLoadedAsync();
+            await dialog.SubmitAsync();
 
             var sessionId = new Uri(Page.Url).AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
 
-            await detail.ClickStopAsync();
-            await detail.ConfirmStopAsync();
-            await detail.WaitForStoppedBannerAsync();
-
-            // Navigate back to dashboard
             await Page.GotoAsync("/");
             await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
+            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToBeVisibleAsync();
 
             await dashboard.ClickDeleteSessionAsync(sessionId);
 
@@ -153,9 +148,9 @@ public sealed class SessionLifecycleTests : E2ETestBase,
             var confirmButton = Page.GetByTestId("delete-dialog-confirm");
             await Microsoft.Playwright.Assertions.Expect(confirmButton).ToBeVisibleAsync();
 
-            // Cancel to avoid actually deleting
-            var cancelButton = Page.GetByTestId("delete-dialog-cancel");
-            await cancelButton.ClickAsync();
+            await confirmButton.ClickAsync();
+
+            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToHaveCountAsync(0);
         });
     }
 
@@ -177,11 +172,12 @@ public sealed class SessionLifecycleTests : E2ETestBase,
             await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
             await dialog.SetTitleAsync("My Titled Session");
 
-            await dialog.SubmitAsync();
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
 
-            // The header should show the session title (or at least the session ID)
-            var header = Page.Locator("header h2");
+            var header = Page.GetByRole(AriaRole.Heading, new() { Name = "My Titled Session", Exact = true });
             await Microsoft.Playwright.Assertions.Expect(header).ToBeVisibleAsync();
+            await Microsoft.Playwright.Assertions.Expect(header).ToHaveTextAsync("My Titled Session");
         });
     }
 
@@ -432,48 +428,68 @@ public sealed class SessionLifecycleTests : E2ETestBase,
     }
 
     [Fact]
-    public async Task Sidebar_ArchiveUnarchiveDelete_Flows()
+    public async Task Sidebar_Archive_HidesSessionFromActiveView()
     {
         await WithFailureCapture(async () =>
         {
-            ConfigureScenario(b =>
-                b.WithSimpleTextResponse("_placeholder_", "msg-sidebar-1", "Sidebar flow"));
-
             var dashboard = new FleetDashboardPage(Page);
             var sidebar = new FleetSidebarPage(Page);
-            await dashboard.GotoAsync();
-
-            var dialog = await dashboard.ClickNewSessionAsync();
-            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
-            await dialog.SetTitleAsync("Sidebar Lifecycle Session");
-
-            var detail = await dialog.SubmitAsync();
-            await detail.WaitForLoadedAsync();
-
-            var sessionId = new Uri(Page.Url).AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
-
-            await detail.ClickStopAsync();
-            await detail.ConfirmStopAsync();
-            await detail.WaitForStoppedBannerAsync();
+            var sessionId = await CreateStoppedSessionAsync("Sidebar Archive Session", "msg-sidebar-archive-1", "Sidebar archive flow");
 
             await Page.GotoAsync("/");
             await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
-
             await sidebar.ClickSessionMenuItemAsync(sessionId, "Archive");
+
             await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToHaveCountAsync(0);
+            await sidebar.ExpectSessionHiddenAsync(sessionId);
 
             await dashboard.SetRetentionFilterAsync("Archived");
+            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToBeVisibleAsync();
             await sidebar.ExpectSessionVisibleAsync(sessionId);
+        });
+    }
 
+    [Fact]
+    public async Task Sidebar_Unarchive_RestoresSessionToActiveView()
+    {
+        await WithFailureCapture(async () =>
+        {
+            var dashboard = new FleetDashboardPage(Page);
+            var sidebar = new FleetSidebarPage(Page);
+            var sessionId = await CreateStoppedSessionAsync("Sidebar Unarchive Session", "msg-sidebar-unarchive-1", "Sidebar unarchive flow");
+
+            await ArchiveSessionFromSidebarAsync(dashboard, sidebar, sessionId);
+            await dashboard.SetRetentionFilterAsync("Archived");
             await sidebar.ClickSessionMenuItemAsync(sessionId, "Unarchive");
+
+            await sidebar.ExpectSessionHiddenAsync(sessionId);
+
             await dashboard.SetRetentionFilterAsync("Active");
             await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToBeVisibleAsync();
+            await sidebar.ExpectSessionVisibleAsync(sessionId);
+        });
+    }
 
+    [Fact]
+    public async Task Sidebar_PermanentDelete_RemovesSessionEntirely()
+    {
+        await WithFailureCapture(async () =>
+        {
+            var dashboard = new FleetDashboardPage(Page);
+            var sidebar = new FleetSidebarPage(Page);
+            var detail = new SessionDetailPage(Page);
+            var sessionId = await CreateStoppedSessionAsync("Sidebar Delete Session", "msg-sidebar-delete-1", "Sidebar delete flow");
+
+            await Page.GotoAsync("/");
+            await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
             await sidebar.ClickSessionMenuItemAsync(sessionId, "Permanently Delete");
             await detail.ConfirmDeleteAsync();
 
             await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToHaveCountAsync(0);
             await sidebar.ExpectSessionHiddenAsync(sessionId);
+
+            await dashboard.SetRetentionFilterAsync("All");
+            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToHaveCountAsync(0);
         });
     }
 
@@ -566,6 +582,49 @@ public sealed class SessionLifecycleTests : E2ETestBase,
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────
+
+    private async Task<string> CreateStoppedSessionAsync(string title, string messageId, string responseText)
+    {
+        ConfigureScenario(b =>
+            b.WithSimpleTextResponse("_placeholder_", messageId, responseText));
+
+        var dashboard = new FleetDashboardPage(Page);
+        await CreateSessionAsync(dashboard, title);
+        var sessionId = new Uri(Page.Url).AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+
+        await Page.GotoAsync("/");
+        await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
+        await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToBeVisibleAsync();
+
+        await dashboard.ClickTerminateSessionAsync(sessionId);
+
+        var sessionCard = dashboard.GetSessionCard(sessionId);
+        await sessionCard.HoverAsync();
+        await Microsoft.Playwright.Assertions.Expect(sessionCard.GetByTestId("session-archive-button")).ToBeVisibleAsync();
+
+        return sessionId;
+    }
+
+    private static async Task<SessionDetailPage> CreateSessionAsync(FleetDashboardPage dashboard, string title)
+    {
+        await dashboard.GotoAsync();
+
+        var dialog = await dashboard.ClickNewSessionAsync();
+        await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+        await dialog.SetTitleAsync(title);
+
+        var detail = await dialog.SubmitAsync();
+        await detail.WaitForLoadedAsync();
+        return detail;
+    }
+
+    private async Task ArchiveSessionFromSidebarAsync(FleetDashboardPage dashboard, FleetSidebarPage sidebar, string sessionId)
+    {
+        await Page.GotoAsync("/");
+        await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
+        await sidebar.ClickSessionMenuItemAsync(sessionId, "Archive");
+        await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToHaveCountAsync(0);
+    }
 
     private sealed record ProjectApiResponse(string Id, string Name, string? Description, string Type, int Position, int SessionCount, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
 }

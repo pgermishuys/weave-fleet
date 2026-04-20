@@ -12,6 +12,7 @@ using WeaveFleet.TestHarness;
 namespace WeaveFleet.E2E.Tests;
 
 [Trait("Category", "E2E")]
+[Trait("Lane", "Workflow")]
 public sealed class SubAgentDelegationTests : E2ETestBase,
     IClassFixture<FleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>
@@ -165,6 +166,7 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                         new Microsoft.Playwright.PageAssertionsToHaveURLOptions { Timeout = 5_000 });
                 await initialChildMessagesResponse;
                 await detail.WaitForLoadedAsync();
+                await Task.Delay(500); // Allow any in-flight requests to settle
 
                 var breadcrumbLink = Page.Locator(
                     $"a[href=\"/sessions/{Uri.EscapeDataString(parentSessionId)}?instanceId={Uri.EscapeDataString(parentInstanceId)}\"]")

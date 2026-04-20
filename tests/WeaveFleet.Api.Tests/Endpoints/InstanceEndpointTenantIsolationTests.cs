@@ -1,6 +1,9 @@
 using System.Net;
+using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -9,6 +12,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using WeaveFleet.Application.Data;
+using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
@@ -97,11 +102,115 @@ public sealed class InstanceEndpointTenantIsolationTests : IAsyncLifetime
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task GetInstanceModels_DoesNotDoublePrefixQualifiedOpenCodeProviders()
+    {
+        var tracker = _factory!.Services.GetRequiredService<InstanceTracker>();
+        tracker.Register(
+            "inst-test",
+            new ProviderListingHarnessSession(
+                "inst-test",
+                "opencode",
+                [
+                    new ProviderInfo
+                    {
+                        Id = "anthropic",
+                        Name = "Anthropic",
+                        Models =
+                        [
+                            new ModelInfo { Id = "claude-opus-4.6", Name = "Claude Opus 4.6" }
+                        ]
+                    },
+                    new ProviderInfo
+                    {
+                        Id = "openrouter",
+                        Name = "OpenRouter",
+                        Models =
+                        [
+                            new ModelInfo { Id = "anthropic/claude-opus-4.6", Name = "Claude Opus 4.6" }
+                        ]
+                    },
+                    new ProviderInfo
+                    {
+                        Id = "openrouter/anthropic",
+                        Name = "OpenRouter Anthropic",
+                        Models =
+                        [
+                            new ModelInfo { Id = "claude-sonnet-4", Name = "Claude Sonnet 4" }
+                        ]
+                    }
+                ]));
+
+        var response = await _client!.GetAsync("/api/instances/inst-test/models");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var providers = await response.Content.ReadFromJsonAsync<JsonElement[]>(JsonSerializerOptions.Web);
+
+        providers.ShouldNotBeNull();
+        providers.Length.ShouldBe(3);
+
+        var modelIds = providers
+            .SelectMany(static provider => provider.GetProperty("models").EnumerateArray())
+            .Select(static model => model.GetProperty("id").GetString())
+            .ToArray();
+
+        modelIds.ShouldContain("openrouter/anthropic/claude-opus-4.6");
+        modelIds.ShouldContain("openrouter/anthropic/claude-sonnet-4");
+        modelIds.ShouldContain("openrouter/anthropic/claude-opus-4.6");
+        modelIds.ShouldNotContain("openrouter/openrouter/anthropic/claude-sonnet-4");
+        modelIds.ShouldNotContain("openrouter/openrouter/anthropic/claude-opus-4.6");
+    }
+
     private static void ExecuteNonQuery(System.Data.IDbConnection conn, string sql)
     {
         using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.ExecuteNonQuery();
+    }
+
+    private sealed class ProviderListingHarnessSession(
+        string instanceId,
+        string harnessType,
+        IReadOnlyList<ProviderInfo> providers) : IHarnessSession
+    {
+        public string InstanceId { get; } = instanceId;
+        public int? ProcessId => null;
+        public string? ResumeToken => null;
+        public string HarnessType { get; } = harnessType;
+        public HarnessSessionStatus Status => HarnessSessionStatus.Running;
+
+        public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
+
+        public Task DeleteAsync(CancellationToken ct) => Task.CompletedTask;
+
+        public Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct) => Task.CompletedTask;
+
+        public Task SendCommandAsync(CommandOptions options, CancellationToken ct) => Task.CompletedTask;
+
+        public Task AbortAsync(CancellationToken ct) => Task.CompletedTask;
+
+        public Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct)
+            => Task.FromResult(new MessagePage([], false));
+
+        public async IAsyncEnumerable<HarnessEvent> SubscribeAsync([EnumeratorCancellation] CancellationToken ct)
+        {
+            yield break;
+        }
+
+        public Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct)
+            => Task.FromResult(new HealthCheckResult(true, null));
+
+        public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<AgentInfo>>([]);
+
+        public Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<CommandInfo>>([]);
+
+        public Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
+            => Task.FromResult(providers);
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private sealed class InstanceIsolationFactory : WebApplicationFactory<Program>

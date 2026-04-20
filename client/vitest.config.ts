@@ -1,23 +1,29 @@
+import { fileURLToPath, URL } from "node:url";
+import vue from "@vitejs/plugin-vue";
+import vueJsx from "@vitejs/plugin-vue-jsx";
 import { defineConfig } from "vitest/config";
-import { resolve } from "path";
 
 export default defineConfig({
-  // Force React (and react-dom) to load their development bundles in tests.
-  // Without this, a shell NODE_ENV=production causes react/index.js to pick
-  // the production CJS bundle, which omits React.act and breaks
-  // @testing-library/react's renderHook/act helpers.
-  define: {
-    "process.env.NODE_ENV": JSON.stringify("test"),
-  },
-  test: {
-    globals: true,
-    environment: "jsdom",
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
-    setupFiles: ["src/test-setup.ts"],
-  },
+  plugins: [vue(), vueJsx()],
   resolve: {
     alias: {
-      "@": resolve(__dirname, "./src"),
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./src/test-setup.ts"],
+    coverage: {
+      enabled: true,
+      provider: "v8",
+      reporter: ["text", "html"],
+      include: ["src/composables/**/*.ts", "src/stores/**/*.ts"],
+      exclude: [
+        "src/**/*.d.ts",
+        "src/**/__tests__/**",
+        "src/test-setup.ts",
+      ],
     },
   },
 });

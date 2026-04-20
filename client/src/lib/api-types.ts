@@ -152,11 +152,9 @@ export interface ForkSessionResponse {
 }
 
 export interface SendPromptRequest {
-  instanceId: string;
   text: string;
   agent?: string;
   model?: string;
-  attachments?: ImageAttachment[];
 }
 
 /** An image attachment sent alongside a prompt (base64-encoded). */

@@ -1,0 +1,100 @@
+{
+  "sessionId": "ses_2632fd62bffeNVIbuHa1aHMK6u",
+  "generatedAt": "2026-04-17T19:00:25.358Z",
+  "repoRoot": "/Users/pgermishuys/source/weave-fleet-vue-ui",
+  "diffContext": {
+    "mode": "staged",
+    "target": "staged",
+    "changedFiles": [],
+    "truncated": false,
+    "diffText": "",
+    "summary": {
+      "filesChanged": 0,
+      "additions": 0,
+      "deletions": 0
+    }
+  },
+  "intent": {
+    "summary": "Understand the current change before submission.",
+    "motivation": "Validate understanding of the diff.",
+    "aiDisclosure": {
+      "used": false,
+      "contributionLevel": "none"
+    }
+  },
+  "risk": {
+    "level": "medium",
+    "categories": [
+      "refactor"
+    ],
+    "requiresHumanEscalation": false,
+    "rationale": [
+      "No explicit risk pattern matched; treating as refactor.",
+      "Business logic or multi-file behavior detected."
+    ]
+  },
+  "questions": [
+    {
+      "id": "fallback-q1",
+      "prompt": "How does the main change in this diff work end to end?",
+      "kind": "how_it_works",
+      "source": "deterministic"
+    },
+    {
+      "id": "fallback-q2",
+      "prompt": "What assumption or edge case matters most in the changed code?",
+      "kind": "assumptions",
+      "source": "deterministic"
+    },
+    {
+      "id": "fallback-q3",
+      "prompt": "What would you inspect first if this failed after merge?",
+      "kind": "failure_mode",
+      "source": "deterministic"
+    }
+  ],
+  "answers": [
+    {
+      "questionId": "fallback-q1",
+      "answer": "I think it's a rebuild of the Fleet UI?",
+      "answeredAt": "2026-04-17T19:00:25.358Z"
+    },
+    {
+      "questionId": "fallback-q2",
+      "answer": "I have no idea",
+      "answeredAt": "2026-04-17T19:00:25.358Z"
+    },
+    {
+      "questionId": "fallback-q3",
+      "answer": "We don't have packages installed?",
+      "answeredAt": "2026-04-17T19:00:25.358Z"
+    }
+  ],
+  "ratings": [
+    {
+      "questionId": "fallback-q1",
+      "rating": "partial",
+      "rationale": "Deterministic fallback found some useful detail but not enough depth."
+    },
+    {
+      "questionId": "fallback-q2",
+      "rating": "weak",
+      "rationale": "Deterministic fallback judged this answer too short to show understanding."
+    },
+    {
+      "questionId": "fallback-q3",
+      "rating": "partial",
+      "rationale": "Deterministic fallback found some useful detail but not enough depth."
+    }
+  ],
+  "verdict": "NEEDS_FOLLOWUP",
+  "rationale": [
+    "Attest session ses_2632fd62bffeNVIbuHa1aHMK6u completed.",
+    "Deterministic policy classified this change as medium risk.",
+    "Captured 3 interview questions.",
+    "LLM evaluation fallback used deterministic scoring after a malformed response: Error: [object Object]",
+    "No explicit risk pattern matched; treating as refactor.",
+    "Business logic or multi-file behavior detected."
+  ],
+  "escalationFlags": []
+}

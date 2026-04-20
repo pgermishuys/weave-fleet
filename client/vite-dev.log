@@ -1,0 +1,8 @@
+
+> weave-fleet-client-vue@0.14.0 dev
+> vite --port 3002 --host 127.0.0.1
+
+
+  VITE v8.0.8  ready in 142 ms
+
+  ➜  Local:   http://127.0.0.1:3002/

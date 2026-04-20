@@ -1,26 +1,32 @@
+import pluginVue from "eslint-plugin-vue";
 import { defineConfig, globalIgnores } from "eslint/config";
 import tseslint from "typescript-eslint";
-import reactPlugin from "eslint-plugin-react";
-import reactHooksPlugin from "eslint-plugin-react-hooks";
+import vueParser from "vue-eslint-parser";
 
 const eslintConfig = defineConfig([
+  ...pluginVue.configs["flat/recommended"],
   ...tseslint.configs.recommended,
   {
-    plugins: { react: reactPlugin },
-    settings: { react: { version: "detect" } },
+    files: ["**/*.{ts,vue}"],
+    languageOptions: {
+      parser: vueParser,
+      parserOptions: {
+        parser: tseslint.parser,
+        extraFileExtensions: [".vue"],
+        projectService: true,
+        sourceType: "module",
+      },
+    },
+    rules: {
+      "vue/block-order": [
+        "error",
+        {
+          order: ["script", "template", "style"],
+        },
+      ],
+    },
   },
-  {
-    plugins: { "react-hooks": reactHooksPlugin },
-    rules: reactHooksPlugin.configs.recommended.rules,
-  },
-  globalIgnores([
-    // Weave internal files (plans, spikes, state):
-    ".weave/**",
-    // Build artifacts:
-    "dist/**",
-    // Stale Next.js build cache (delete with task 35):
-    ".next/**",
-  ]),
+  globalIgnores(["dist/**"]),
 ]);
 
 export default eslintConfig;

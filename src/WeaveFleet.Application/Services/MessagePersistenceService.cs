@@ -327,4 +327,28 @@ public sealed class MessagePersistenceService
             ModelId = existing.ModelId,
         };
     }
+
+    /// <summary>
+    /// Preserves durable insertion time while updating authoritative harness timestamp and metadata.
+    /// Used when a placeholder row was created before the full message snapshot arrived.
+    /// </summary>
+    public static PersistedMessage MergeTimestampAndMetadata(
+        PersistedMessage existing,
+        string timestamp,
+        string role,
+        string? agentName,
+        string? modelId)
+    {
+        return new PersistedMessage
+        {
+            Id = existing.Id,
+            SessionId = existing.SessionId,
+            Role = role,
+            PartsJson = existing.PartsJson,
+            Timestamp = timestamp,
+            CreatedAt = existing.CreatedAt,
+            AgentName = agentName ?? existing.AgentName,
+            ModelId = modelId ?? existing.ModelId,
+        };
+    }
 }

@@ -242,6 +242,22 @@ export function convertFleetMessageToAccumulated(msg: FleetMessage): Accumulated
   };
 }
 
+export function sortAccumulatedMessagesChronologically(messages: readonly AccumulatedMessage[]): AccumulatedMessage[] {
+  return [...messages]
+    .map((message, index) => ({ message, index }))
+    .sort((left, right) => {
+      const leftCreatedAt = left.message.createdAt ?? Number.MAX_SAFE_INTEGER
+      const rightCreatedAt = right.message.createdAt ?? Number.MAX_SAFE_INTEGER
+
+      if (leftCreatedAt !== rightCreatedAt) {
+        return leftCreatedAt - rightCreatedAt
+      }
+
+      return left.index - right.index
+    })
+    .map(({ message }) => message)
+}
+
 function mapToolState(state?: number): unknown {
   // ToolUseState enum: 0=Pending, 1=Running, 2=Completed, 3=Error
   const statusMap: Record<number, string> = { 0: "pending", 1: "running", 2: "completed", 3: "error" };

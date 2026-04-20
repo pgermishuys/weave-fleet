@@ -1,95 +1,122 @@
-/**
- * Utilities for parsing and extracting todo items from `todowrite` tool calls.
- * These are pure functions with no React dependencies — safe to import anywhere.
- */
-
 import type { AccumulatedMessage } from "@/lib/api-types";
 
-// ─── Types ─────────────────────────────────────────────────────────────────
+const TODO_STATUSES = ["pending", "in_progress", "completed", "cancelled"] as const;
+const TODO_PRIORITIES = ["high", "medium", "low"] as const;
 
 export interface TodoItem {
   content: string;
-  status: "pending" | "in_progress" | "completed" | "cancelled";
-  priority: "high" | "medium" | "low";
+  status: (typeof TODO_STATUSES)[number];
+  priority: (typeof TODO_PRIORITIES)[number];
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
-
-/** Case-insensitive match for all known todowrite tool name variants. */
-export function isTodoWriteTool(toolName: string): boolean {
-  const lower = toolName.toLowerCase();
-  return lower === "todowrite" || lower === "todo_write";
-}
-
-/**
- * Safely parses a todowrite tool output string into a `TodoItem[]`.
- * Returns `null` if the value is missing, not valid JSON, or not a valid array.
- */
-export function parseTodoOutput(output: unknown): TodoItem[] | null {
-  if (typeof output !== "string" || output.trim() === "") return null;
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(output);
-  } catch {
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
 
-  if (!Array.isArray(parsed)) return null;
+  return value as Record<string, unknown>;
+}
 
-  const items: TodoItem[] = [];
-  for (const item of parsed) {
-    if (
-      item === null ||
-      typeof item !== "object" ||
-      typeof (item as Record<string, unknown>).content !== "string"
-    ) {
+function isTodoStatus(value: unknown): value is TodoItem["status"] {
+  return typeof value === "string" && TODO_STATUSES.includes(value as TodoItem["status"]);
+}
+
+function isTodoPriority(value: unknown): value is TodoItem["priority"] {
+  return typeof value === "string" && TODO_PRIORITIES.includes(value as TodoItem["priority"]);
+}
+
+function normalizeTodoItem(value: unknown): TodoItem | null {
+  const item = asRecord(value);
+  if (!item || typeof item.content !== "string") {
+    return null;
+  }
+
+  return {
+    content: item.content,
+    status: isTodoStatus(item.status) ? item.status : "pending",
+    priority: isTodoPriority(item.priority) ? item.priority : "medium",
+  };
+}
+
+function normalizeTodoList(value: unknown): TodoItem[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const todos: TodoItem[] = [];
+
+  for (const item of value) {
+    const normalized = normalizeTodoItem(item);
+    if (!normalized) {
       return null;
     }
 
-    const raw = item as Record<string, unknown>;
-    const status = raw.status;
-    const priority = raw.priority;
-
-    const validStatuses = ["pending", "in_progress", "completed", "cancelled"];
-    const validPriorities = ["high", "medium", "low"];
-
-    items.push({
-      content: raw.content as string,
-      status: validStatuses.includes(status as string)
-        ? (status as TodoItem["status"])
-        : "pending",
-      priority: validPriorities.includes(priority as string)
-        ? (priority as TodoItem["priority"])
-        : "medium",
-    });
+    todos.push(normalized);
   }
 
-  return items;
+  return todos;
 }
 
-/**
- * Scans all accumulated messages in reverse to find the most recent
- * `todowrite` tool part with a completed state and valid output.
- * Returns the parsed todos or `null` if none found.
- */
-export function extractLatestTodos(
-  messages: AccumulatedMessage[]
-): TodoItem[] | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    for (let j = msg.parts.length - 1; j >= 0; j--) {
-      const part = msg.parts[j];
-      if (part.type !== "tool") continue;
-      if (!isTodoWriteTool(part.tool)) continue;
+function getToolOutput(state: unknown): unknown {
+  const record = asRecord(state);
+  if (!record) {
+    return state;
+  }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const state = part.state as any;
-      if (state?.status !== "completed") continue;
+  if ("output" in record) {
+    return record.output;
+  }
 
-      const todos = parseTodoOutput(state?.output);
-      if (todos !== null) return todos;
+  return state;
+}
+
+export function isTodoWriteTool(toolName: string): boolean {
+  const lowerName = toolName.toLowerCase();
+  return lowerName === "todowrite" || lowerName === "todo_write";
+}
+
+export function parseTodoOutput(output: unknown): TodoItem[] | null {
+  if (Array.isArray(output)) {
+    return normalizeTodoList(output);
+  }
+
+  if (typeof output !== "string") {
+    return null;
+  }
+
+  const trimmedOutput = output.trim();
+  if (!trimmedOutput) {
+    return null;
+  }
+
+  try {
+    return normalizeTodoList(JSON.parse(trimmedOutput));
+  } catch {
+    return null;
+  }
+}
+
+export function extractLatestTodos(messages: readonly AccumulatedMessage[]): TodoItem[] {
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const message = messages[messageIndex];
+
+    for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex -= 1) {
+      const part = message.parts[partIndex];
+      if (part.type !== "tool" || !isTodoWriteTool(part.tool)) {
+        continue;
+      }
+
+      const state = asRecord(part.state);
+      if (typeof state?.status === "string" && state.status !== "completed") {
+        continue;
+      }
+
+      const todos = parseTodoOutput(getToolOutput(part.state));
+      if (todos) {
+        return todos;
+      }
     }
   }
-  return null;
+
+  return [];
 }

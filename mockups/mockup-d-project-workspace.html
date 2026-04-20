@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1440">
+<title>Fleet — Project-First Workspace</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#0a0a0b;--card:#141416;--border:#1e1e22;--text:#e4e4e7;--muted:#71717a;
+    --accent:#6366f1;--accent-dim:rgba(99,102,241,.15);
+    --running:#22c55e;--idle:#f59e0b;--complete:#3b82f6;--error:#ef4444;--queued:#8b5cf6;
+    --radius:8px;--radius-sm:6px;--radius-lg:12px;
+  }
+  body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;font-size:13px;display:flex;flex-direction:column}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;font-size:inherit}
+  input,textarea{font-family:inherit;background:none;border:none;color:inherit;outline:none;font-size:inherit}
+
+  /* TOP BAR */
+  .topbar{height:48px;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0;background:var(--card)}
+  .breadcrumb{display:flex;align-items:center;gap:6px;font-size:13px}
+  .breadcrumb span{color:var(--muted)}
+  .breadcrumb .sep{font-size:11px}
+  .breadcrumb .current{color:var(--text);font-weight:500}
+  .topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+  .status-pill{display:flex;align-items:center;gap:6px;padding:4px 10px;background:rgba(34,197,94,.1);border-radius:20px;font-size:11px;color:var(--running)}
+  .status-pill .dot{width:6px;height:6px;border-radius:50%;background:var(--running);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .avatar{width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600}
+
+  /* LAYOUT */
+  .layout{display:flex;flex:1;overflow:hidden}
+
+  /* LEFT SIDEBAR */
+  .sidebar-left{width:300px;border-right:1px solid var(--border);display:flex;flex-direction:column;background:var(--card);flex-shrink:0}
+  .sidebar-header{padding:12px 16px;border-bottom:1px solid var(--border)}
+  .sidebar-search{padding:0 0 8px}
+  .sidebar-search input{width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;color:var(--text)}
+  .sidebar-search input::placeholder{color:var(--muted)}
+  .sidebar-search input:focus{border-color:var(--accent)}
+  .sidebar-btn-row{display:flex;gap:6px}
+  .btn-new-session{flex:1;padding:7px 0;background:var(--accent);color:#fff;border-radius:var(--radius-sm);font-size:12px;font-weight:500;transition:opacity .15s;text-align:center}
+  .btn-new-session:hover{opacity:.85}
+  .btn-new-project-ghost{flex:1;padding:7px 0;background:none;color:var(--muted);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-weight:500;transition:color .15s,border-color .15s;text-align:center}
+  .btn-new-project-ghost:hover{color:var(--text);border-color:var(--muted)}
+
+  /* PROJECT GROUPS */
+  .project-list{flex:1;overflow-y:auto;padding:4px 0}
+  .project-list::-webkit-scrollbar{width:4px}
+  .project-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+  .project-group{margin-bottom:4px}
+  .project-group-header{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;transition:background .15s;user-select:none;position:relative}
+  .project-group-header:hover{background:rgba(255,255,255,.04)}
+  .project-group-header .chevron{font-size:10px;color:var(--muted);width:12px;text-align:center;flex-shrink:0}
+  .project-group-header .pg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .project-group-header .pg-name{font-weight:600;font-size:13px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pg-active-badge{font-size:10px;color:var(--running);display:flex;align-items:center;gap:3px;flex-shrink:0}
+  .pg-active-badge .pg-active-dot{width:5px;height:5px;border-radius:50%;background:var(--running)}
+  .pg-count{font-size:11px;color:var(--muted);flex-shrink:0;margin-left:2px}
+  .pg-menu{font-size:14px;color:var(--muted);opacity:0;transition:opacity .15s;flex-shrink:0;padding:0 2px;cursor:pointer}
+  .project-group-header:hover .pg-menu{opacity:1}
+
+  .project-group-body{overflow:hidden;transition:max-height .25s ease;will-change:max-height;padding-bottom:4px}
+  .project-group-body.collapsed{max-height:0 !important}
+
+  .pg-subgroup-label{font-size:10px;color:var(--muted);padding:10px 12px 4px 36px;font-weight:500;letter-spacing:.3px}
+
+  .pg-session{display:flex;align-items:center;gap:8px;padding:7px 10px 7px 48px;cursor:pointer;transition:background .15s;border-radius:0}
+  .pg-session:hover{background:rgba(255,255,255,.04)}
+  .pg-session.active{background:var(--accent-dim)}
+  .pg-session .session-status{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .pg-session .session-info{flex:1;min-width:0}
+  .pg-session .session-title{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pg-session .session-meta{display:flex;gap:8px;font-size:10px;color:var(--muted);margin-top:1px}
+
+  /* tree lines */
+  .pg-tree-area{position:relative;padding-left:20px}
+  .pg-tree-area::before{content:'';position:absolute;left:24px;top:0;bottom:0;width:1px;background:var(--border)}
+
+  .pg-divider{height:1px;background:var(--border);margin:8px 12px}
+
+  /* SESSION LIST (legacy compat) */
+  .session-list{flex:1;overflow-y:auto;padding:8px}
+  .session-list::-webkit-scrollbar{width:4px}
+  .session-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+  /* CENTER */
+  .center{flex:1;display:flex;flex-direction:column;min-width:0}
+  .activity-stream{flex:1;overflow-y:auto;padding:24px 32px}
+  .activity-stream::-webkit-scrollbar{width:4px}
+  .activity-stream::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  .message{margin-bottom:20px;display:flex;gap:12px}
+  .msg-avatar{width:32px;height:32px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0}
+  .msg-avatar.agent{background:var(--accent-dim);color:var(--accent)}
+  .msg-avatar.user{background:rgba(255,255,255,.08);color:var(--text)}
+  .msg-body{flex:1;min-width:0}
+  .msg-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .msg-name{font-weight:600;font-size:13px}
+  .msg-time{font-size:11px;color:var(--muted)}
+  .msg-model{font-size:10px;padding:2px 6px;background:var(--accent-dim);color:var(--accent);border-radius:10px}
+  .msg-text{color:var(--text);line-height:1.55;font-size:13px}
+  .msg-text code{background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px;font-size:12px}
+  .tool-card{margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .tool-header{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;font-size:12px;color:var(--muted)}
+  .tool-header:hover{background:rgba(255,255,255,.02)}
+  .tool-header .icon{font-size:14px}
+  .tool-header .label{font-weight:500;color:var(--text)}
+  .tool-header .file{flex:1;text-align:right;font-size:11px}
+  .tool-body{padding:12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);display:none}
+  .tool-body.open{display:block}
+  .diff-line{font-family:'SF Mono',Menlo,monospace;font-size:11px;padding:1px 0}
+  .diff-add{color:var(--running)}
+  .diff-remove{color:var(--error)}
+
+  /* COMPOSER */
+  .composer{padding:16px 32px 20px;border-top:1px solid var(--border)}
+  .composer-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;transition:border-color .15s}
+  .composer-box:focus-within{border-color:var(--accent)}
+  .composer-input{width:100%;padding:12px 16px;min-height:44px;resize:none;font-size:13px;line-height:1.5;background:transparent}
+  .composer-input::placeholder{color:var(--muted)}
+  .composer-toolbar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--border)}
+  .pill{display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;transition:background .15s}
+  .pill-model{background:var(--accent-dim);color:var(--accent)}
+  .pill-model:hover{background:rgba(99,102,241,.25)}
+  .effort-toggle{display:flex;gap:3px;padding:4px 8px}
+  .effort-dot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:background .15s;cursor:pointer}
+  .effort-dot.on{background:var(--accent)}
+  .pill-agent{background:rgba(255,255,255,.06);color:var(--muted)}
+  .btn-send{margin-left:auto;padding:6px 16px;background:var(--accent);color:#fff;border-radius:20px;font-size:12px;font-weight:500;transition:opacity .15s}
+  .btn-send:hover{opacity:.85}
+
+  /* RIGHT SIDEBAR */
+  .sidebar-right{width:280px;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--card);flex-shrink:0}
+  .right-tabs{display:flex;border-bottom:1px solid var(--border)}
+  .right-tab{flex:1;padding:10px;text-align:center;font-size:12px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+  .right-tab.active{color:var(--text);border-bottom-color:var(--accent)}
+  .right-tab:hover{color:var(--text)}
+  .right-content{flex:1;overflow-y:auto;padding:16px}
+  .right-content::-webkit-scrollbar{width:4px}
+  .right-content::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+  .tab-pane{display:none}
+  .tab-pane.active{display:block}
+  .project-name-edit{font-size:16px;font-weight:700;width:100%;padding:4px 0;border-bottom:1px solid transparent;transition:border-color .15s}
+  .project-name-edit:focus{border-bottom-color:var(--accent)}
+  .project-desc{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4}
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}
+  .stat-card{background:var(--bg);border-radius:var(--radius-sm);padding:10px}
+  .stat-value{font-size:18px;font-weight:700}
+  .stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+  .recent-sessions-label{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-top:20px;margin-bottom:8px;font-weight:600}
+  .recent-session{padding:8px 10px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:6px;cursor:pointer;transition:background .15s}
+  .recent-session:hover{background:rgba(255,255,255,.05)}
+  .recent-session .title{font-size:12px;font-weight:500}
+  .recent-session .meta{font-size:10px;color:var(--muted);margin-top:3px;display:flex;gap:8px}
+
+  /* TODO TAB */
+  .todo-item{display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
+  .todo-item:last-child{border-bottom:none}
+  .todo-cb{width:16px;height:16px;border:1.5px solid var(--border);border-radius:3px;flex-shrink:0;margin-top:1px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center}
+  .todo-cb.checked{background:var(--accent);border-color:var(--accent)}
+  .todo-cb.checked::after{content:'✓';font-size:10px;color:#fff}
+  .todo-text{font-size:12px;line-height:1.4}
+  .todo-text.done{text-decoration:line-through;color:var(--muted)}
+
+  /* CREATE PROJECT DIALOG */
+  .dialog-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:1000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .18s}
+  .dialog-backdrop.open{opacity:1;pointer-events:auto}
+  .dialog-card{width:480px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;transform:scale(.96);transition:transform .18s}
+  .dialog-backdrop.open .dialog-card{transform:scale(1)}
+  .dialog-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
+  .dialog-header h2{font-size:15px;font-weight:600}
+  .dialog-close{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);font-size:18px;color:var(--muted);transition:background .15s,color .15s}
+  .dialog-close:hover{background:rgba(255,255,255,.08);color:var(--text)}
+  .dialog-body{padding:20px}
+  .dialog-body .field{margin-bottom:16px}
+  .dialog-body .field:last-child{margin-bottom:0}
+  .dialog-body label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:6px;font-weight:600}
+  .dialog-body label .optional{text-transform:none;letter-spacing:0;font-weight:400;font-size:10px;opacity:.6}
+  .dialog-input{width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;color:var(--text);transition:border-color .15s}
+  .dialog-input::placeholder{color:var(--muted)}
+  .dialog-input:focus{border-color:var(--accent);outline:none}
+  textarea.dialog-input{resize:vertical;line-height:1.45}
+  .color-picker{display:flex;gap:8px;align-items:center}
+  .color-swatch{width:24px;height:24px;border-radius:50%;cursor:pointer;transition:box-shadow .15s;border:2px solid transparent}
+  .color-swatch:hover{box-shadow:0 0 0 2px rgba(255,255,255,.15)}
+  .color-swatch.selected{border-color:var(--text);box-shadow:0 0 0 2px rgba(255,255,255,.1)}
+  .repo-field{display:flex;gap:6px}
+  .repo-field .dialog-input{flex:1}
+  .btn-browse{padding:8px 12px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;color:var(--muted);transition:background .15s,color .15s;white-space:nowrap}
+  .btn-browse:hover{background:rgba(255,255,255,.1);color:var(--text)}
+  .dialog-select{width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--text);appearance:none;-webkit-appearance:none;cursor:pointer;transition:border-color .15s;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6' fill='%2371717a'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+  .dialog-select:focus{border-color:var(--accent);outline:none}
+  .dialog-footer{display:flex;justify-content:flex-end;gap:8px;padding:16px 20px;border-top:1px solid var(--border)}
+  .btn-cancel{padding:7px 16px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;color:var(--muted);transition:color .15s,background .15s}
+  .btn-cancel:hover{color:var(--text);background:rgba(255,255,255,.06)}
+  .btn-create{padding:7px 20px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;background:var(--accent);color:#fff;transition:opacity .15s}
+  .btn-create:hover:not(:disabled){opacity:.85}
+  .btn-create:disabled{opacity:.35;cursor:not-allowed}
+  .dialog-success{display:none;flex-direction:column;align-items:center;justify-content:center;padding:48px 20px;text-align:center;animation:fadeInSuccess .25s}
+  .dialog-success .check{width:48px;height:48px;border-radius:50%;background:rgba(34,197,94,.15);display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:12px}
+  .dialog-success .label{font-size:14px;font-weight:600;margin-bottom:4px}
+  .dialog-success .sub{font-size:12px;color:var(--muted)}
+  @keyframes fadeInSuccess{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="breadcrumb" id="breadcrumb">
+    <span>Weave Fleet</span><span class="sep">›</span>
+    <span>OAuth Integration</span><span class="sep">›</span>
+    <span class="current">Implement token refresh</span>
+  </div>
+  <div class="topbar-right">
+    <div class="status-pill"><span class="dot"></span>Running</div>
+    <div class="avatar">PG</div>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- LEFT SIDEBAR -->
+  <div class="sidebar-left">
+    <div class="sidebar-header">
+      <div class="sidebar-search">
+        <input id="sidebarSearch" placeholder="Search projects &amp; sessions…" oninput="filterSidebar(this.value)">
+      </div>
+      <div class="sidebar-btn-row">
+        <button class="btn-new-session">+ New Session</button>
+        <button class="btn-new-project-ghost" onclick="openCreateProjectDialog(event)">+ New Project</button>
+      </div>
+    </div>
+
+    <div class="project-list" id="projectList">
+
+      <!-- OAuth Integration (expanded) -->
+      <div class="project-group" data-project="oauth" data-project-name="OAuth Integration" data-color="var(--accent)">
+        <div class="project-group-header" onclick="toggleGroup(this)">
+          <span class="chevron">▾</span>
+          <span class="pg-dot" style="background:var(--accent)"></span>
+          <span class="pg-name">OAuth Integration</span>
+          <span class="pg-active-badge"><span class="pg-active-dot"></span>3</span>
+          <span class="pg-count">[8]</span>
+          <span class="pg-menu">⋯</span>
+        </div>
+        <div class="project-group-body" style="max-height:600px">
+          <div class="pg-subgroup-label">src/auth</div>
+          <div class="pg-session active" data-session="Implement token refresh" data-project="oauth" onclick="selectSession(this,'OAuth Integration','var(--accent)')">
+            <span class="session-status" style="background:var(--running)"></span>
+            <div class="session-info">
+              <div class="session-title">Implement token refresh</div>
+              <div class="session-meta"><span>Tapestry</span><span>2m</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Add PKCE support" data-project="oauth" onclick="selectSession(this,'OAuth Integration','var(--accent)')">
+            <span class="session-status" style="background:var(--running)"></span>
+            <div class="session-info">
+              <div class="session-title">Add PKCE support</div>
+              <div class="session-meta"><span>Shuttle</span><span>5m</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="OAuth state validation" data-project="oauth" onclick="selectSession(this,'OAuth Integration','var(--accent)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">OAuth state validation</div>
+              <div class="session-meta"><span>Thread</span><span>18m</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Authorization code flow" data-project="oauth" onclick="selectSession(this,'OAuth Integration','var(--accent)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Authorization code flow</div>
+              <div class="session-meta"><span>Warp</span><span>1h</span></div>
+            </div>
+          </div>
+          <div class="pg-subgroup-label">src/middleware</div>
+          <div class="pg-session" data-session="Token introspection middleware" data-project="oauth" onclick="selectSession(this,'OAuth Integration','var(--accent)')">
+            <span class="session-status" style="background:var(--idle)"></span>
+            <div class="session-info">
+              <div class="session-title">Token introspection middleware</div>
+              <div class="session-meta"><span>Pattern</span><span>12m</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Rate limiting per client" data-project="oauth" onclick="selectSession(this,'OAuth Integration','var(--accent)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Rate limiting per client</div>
+              <div class="session-meta"><span>Weft</span><span>45m</span></div>
+            </div>
+          </div>
+          <div class="pg-subgroup-label">tests</div>
+          <div class="pg-session" data-session="Integration test suite" data-project="oauth" onclick="selectSession(this,'OAuth Integration','var(--accent)')">
+            <span class="session-status" style="background:var(--queued)"></span>
+            <div class="session-info">
+              <div class="session-title">Integration test suite</div>
+              <div class="session-meta"><span>Spindle</span><span>3m</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Mock OAuth provider" data-project="oauth" onclick="selectSession(this,'OAuth Integration','var(--accent)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Mock OAuth provider</div>
+              <div class="session-meta"><span>Tapestry</span><span>2h</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Database Refactor (collapsed) -->
+      <div class="project-group" data-project="database" data-project-name="Database Refactor" data-color="var(--running)">
+        <div class="project-group-header" onclick="toggleGroup(this)">
+          <span class="chevron">▸</span>
+          <span class="pg-dot" style="background:var(--running)"></span>
+          <span class="pg-name">Database Refactor</span>
+          <span class="pg-active-badge"><span class="pg-active-dot"></span>1</span>
+          <span class="pg-count">[5]</span>
+          <span class="pg-menu">⋯</span>
+        </div>
+        <div class="project-group-body collapsed" style="max-height:400px">
+          <div class="pg-subgroup-label">src/db</div>
+          <div class="pg-session" data-session="Connection pool setup" data-project="database" onclick="selectSession(this,'Database Refactor','var(--running)')">
+            <span class="session-status" style="background:var(--running)"></span>
+            <div class="session-info">
+              <div class="session-title">Connection pool setup</div>
+              <div class="session-meta"><span>Warp</span><span>15m</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Repository interface" data-project="database" onclick="selectSession(this,'Database Refactor','var(--running)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Repository interface</div>
+              <div class="session-meta"><span>Pattern</span><span>30m</span></div>
+            </div>
+          </div>
+          <div class="pg-subgroup-label">migrations</div>
+          <div class="pg-session" data-session="Migration scripts" data-project="database" onclick="selectSession(this,'Database Refactor','var(--running)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Migration scripts</div>
+              <div class="session-meta"><span>Weft</span><span>1h</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Seed data generation" data-project="database" onclick="selectSession(this,'Database Refactor','var(--running)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Seed data generation</div>
+              <div class="session-meta"><span>Shuttle</span><span>2h</span></div>
+            </div>
+          </div>
+          <div class="pg-subgroup-label">tests</div>
+          <div class="pg-session" data-session="DB integration tests" data-project="database" onclick="selectSession(this,'Database Refactor','var(--running)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">DB integration tests</div>
+              <div class="session-meta"><span>Spindle</span><span>3h</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CI/CD Pipeline (collapsed) -->
+      <div class="project-group" data-project="cicd" data-project-name="CI/CD Pipeline" data-color="var(--idle)">
+        <div class="project-group-header" onclick="toggleGroup(this)">
+          <span class="chevron">▸</span>
+          <span class="pg-dot" style="background:var(--idle)"></span>
+          <span class="pg-name">CI/CD Pipeline</span>
+          <span class="pg-count">[3]</span>
+          <span class="pg-menu">⋯</span>
+        </div>
+        <div class="project-group-body collapsed" style="max-height:300px">
+          <div class="pg-subgroup-label">.github/workflows</div>
+          <div class="pg-session" data-session="Workflow templates" data-project="cicd" onclick="selectSession(this,'CI/CD Pipeline','var(--idle)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Workflow templates</div>
+              <div class="session-meta"><span>Spindle</span><span>1h</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Docker build stage" data-project="cicd" onclick="selectSession(this,'CI/CD Pipeline','var(--idle)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Docker build stage</div>
+              <div class="session-meta"><span>Thread</span><span>2h</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Deploy scripts" data-project="cicd" onclick="selectSession(this,'CI/CD Pipeline','var(--idle)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Deploy scripts</div>
+              <div class="session-meta"><span>Weft</span><span>3h</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- API v2 Migration (expanded) -->
+      <div class="project-group" data-project="apiv2" data-project-name="API v2 Migration" data-color="var(--complete)">
+        <div class="project-group-header" onclick="toggleGroup(this)">
+          <span class="chevron">▾</span>
+          <span class="pg-dot" style="background:var(--complete)"></span>
+          <span class="pg-name">API v2 Migration</span>
+          <span class="pg-active-badge"><span class="pg-active-dot"></span>4</span>
+          <span class="pg-count">[12]</span>
+          <span class="pg-menu">⋯</span>
+        </div>
+        <div class="project-group-body" style="max-height:800px">
+          <div class="pg-subgroup-label">src/api/v2</div>
+          <div class="pg-session" data-session="Migrate user endpoints" data-project="apiv2" onclick="selectSession(this,'API v2 Migration','var(--complete)')">
+            <span class="session-status" style="background:var(--running)"></span>
+            <div class="session-info">
+              <div class="session-title">Migrate user endpoints</div>
+              <div class="session-meta"><span>Tapestry</span><span>30s</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Convert response schemas" data-project="apiv2" onclick="selectSession(this,'API v2 Migration','var(--complete)')">
+            <span class="session-status" style="background:var(--running)"></span>
+            <div class="session-info">
+              <div class="session-title">Convert response schemas</div>
+              <div class="session-meta"><span>Shuttle</span><span>2m</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Deprecation headers" data-project="apiv2" onclick="selectSession(this,'API v2 Migration','var(--complete)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Deprecation headers</div>
+              <div class="session-meta"><span>Thread</span><span>20m</span></div>
+            </div>
+          </div>
+          <div class="pg-subgroup-label">src/api/compat</div>
+          <div class="pg-session" data-session="Backward compat layer" data-project="apiv2" onclick="selectSession(this,'API v2 Migration','var(--complete)')">
+            <span class="session-status" style="background:var(--running)"></span>
+            <div class="session-info">
+              <div class="session-title">Backward compat layer</div>
+              <div class="session-meta"><span>Pattern</span><span>5m</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Version negotiation" data-project="apiv2" onclick="selectSession(this,'API v2 Migration','var(--complete)')">
+            <span class="session-status" style="background:var(--running)"></span>
+            <div class="session-info">
+              <div class="session-title">Version negotiation</div>
+              <div class="session-meta"><span>Warp</span><span>1m</span></div>
+            </div>
+          </div>
+          <div class="pg-subgroup-label">src/api/middleware</div>
+          <div class="pg-session" data-session="Request validation v2" data-project="apiv2" onclick="selectSession(this,'API v2 Migration','var(--complete)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Request validation v2</div>
+              <div class="session-meta"><span>Weft</span><span>25m</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Response transform pipeline" data-project="apiv2" onclick="selectSession(this,'API v2 Migration','var(--complete)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Response transform pipeline</div>
+              <div class="session-meta"><span>Spindle</span><span>40m</span></div>
+            </div>
+          </div>
+          <div class="pg-subgroup-label">docs</div>
+          <div class="pg-session" data-session="Migration guide" data-project="apiv2" onclick="selectSession(this,'API v2 Migration','var(--complete)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Migration guide</div>
+              <div class="session-meta"><span>Thread</span><span>1h</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="OpenAPI spec update" data-project="apiv2" onclick="selectSession(this,'API v2 Migration','var(--complete)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">OpenAPI spec update</div>
+              <div class="session-meta"><span>Tapestry</span><span>1h</span></div>
+            </div>
+          </div>
+          <div class="pg-subgroup-label">tests</div>
+          <div class="pg-session" data-session="API v2 contract tests" data-project="apiv2" onclick="selectSession(this,'API v2 Migration','var(--complete)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">API v2 contract tests</div>
+              <div class="session-meta"><span>Weft</span><span>15m</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Compat layer e2e tests" data-project="apiv2" onclick="selectSession(this,'API v2 Migration','var(--complete)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Compat layer e2e tests</div>
+              <div class="session-meta"><span>Spindle</span><span>30m</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Load testing v2 endpoints" data-project="apiv2" onclick="selectSession(this,'API v2 Migration','var(--complete)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Load testing v2 endpoints</div>
+              <div class="session-meta"><span>Warp</span><span>2h</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Frontend Redesign (collapsed) -->
+      <div class="project-group" data-project="frontend" data-project-name="Frontend Redesign" data-color="var(--error)">
+        <div class="project-group-header" onclick="toggleGroup(this)">
+          <span class="chevron">▸</span>
+          <span class="pg-dot" style="background:var(--error)"></span>
+          <span class="pg-name">Frontend Redesign</span>
+          <span class="pg-active-badge"><span class="pg-active-dot"></span>2</span>
+          <span class="pg-count">[6]</span>
+          <span class="pg-menu">⋯</span>
+        </div>
+        <div class="project-group-body collapsed" style="max-height:500px">
+          <div class="pg-subgroup-label">src/components</div>
+          <div class="pg-session" data-session="Component library" data-project="frontend" onclick="selectSession(this,'Frontend Redesign','var(--error)')">
+            <span class="session-status" style="background:var(--running)"></span>
+            <div class="session-info">
+              <div class="session-title">Component library</div>
+              <div class="session-meta"><span>Pattern</span><span>8m</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Dark mode tokens" data-project="frontend" onclick="selectSession(this,'Frontend Redesign','var(--error)')">
+            <span class="session-status" style="background:var(--running)"></span>
+            <div class="session-info">
+              <div class="session-title">Dark mode tokens</div>
+              <div class="session-meta"><span>Weft</span><span>12m</span></div>
+            </div>
+          </div>
+          <div class="pg-subgroup-label">src/layout</div>
+          <div class="pg-session" data-session="Layout grid system" data-project="frontend" onclick="selectSession(this,'Frontend Redesign','var(--error)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Layout grid system</div>
+              <div class="session-meta"><span>Tapestry</span><span>30m</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Navigation redesign" data-project="frontend" onclick="selectSession(this,'Frontend Redesign','var(--error)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Navigation redesign</div>
+              <div class="session-meta"><span>Shuttle</span><span>1h</span></div>
+            </div>
+          </div>
+          <div class="pg-subgroup-label">tests</div>
+          <div class="pg-session" data-session="Visual regression tests" data-project="frontend" onclick="selectSession(this,'Frontend Redesign','var(--error)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Visual regression tests</div>
+              <div class="session-meta"><span>Spindle</span><span>2h</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Accessibility audit" data-project="frontend" onclick="selectSession(this,'Frontend Redesign','var(--error)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Accessibility audit</div>
+              <div class="session-meta"><span>Thread</span><span>3h</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div class="pg-divider"></div>
+
+      <!-- Ungrouped -->
+      <div class="project-group" data-project="ungrouped" data-project-name="Ungrouped" data-color="var(--muted)">
+        <div class="project-group-header" onclick="toggleGroup(this)">
+          <span class="chevron">▸</span>
+          <span class="pg-name" style="color:var(--muted)">Ungrouped</span>
+          <span class="pg-count">[2]</span>
+          <span class="pg-menu">⋯</span>
+        </div>
+        <div class="project-group-body collapsed" style="max-height:200px">
+          <div class="pg-session" data-session="Quick scratch pad" data-project="ungrouped" onclick="selectSession(this,'Ungrouped','var(--muted)')">
+            <span class="session-status" style="background:var(--idle)"></span>
+            <div class="session-info">
+              <div class="session-title">Quick scratch pad</div>
+              <div class="session-meta"><span>Tapestry</span><span>4h</span></div>
+            </div>
+          </div>
+          <div class="pg-session" data-session="Dependency audit" data-project="ungrouped" onclick="selectSession(this,'Ungrouped','var(--muted)')">
+            <span class="session-status" style="background:var(--complete)"></span>
+            <div class="session-info">
+              <div class="session-title">Dependency audit</div>
+              <div class="session-meta"><span>Weft</span><span>1d</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CENTER -->
+  <div class="center">
+    <div class="activity-stream" id="activityStream">
+      <div class="message">
+        <div class="msg-avatar user">PG</div>
+        <div class="msg-body">
+          <div class="msg-header"><span class="msg-name">You</span><span class="msg-time">2 min ago</span></div>
+          <div class="msg-text">Implement automatic token refresh with a sliding window. The refresh should happen 30 seconds before expiry and use the existing <code>TokenStore</code> interface.</div>
+        </div>
+      </div>
+
+      <div class="message">
+        <div class="msg-avatar agent">T</div>
+        <div class="msg-body">
+          <div class="msg-header">
+            <span class="msg-name">Tapestry</span>
+            <span class="msg-model">Claude Sonnet 4</span>
+            <span class="msg-time">2 min ago</span>
+          </div>
+          <div class="msg-text">I'll implement the token refresh mechanism. Let me start by examining the current <code>TokenStore</code> interface and the existing auth flow.</div>
+          <div class="tool-card">
+            <div class="tool-header" onclick="this.nextElementSibling.classList.toggle('open')">
+              <span class="icon">📄</span>
+              <span class="label">Read File</span>
+              <span class="file">src/auth/token_store.go</span>
+              <span>▾</span>
+            </div>
+            <div class="tool-body">
+              <div class="diff-line" style="color:var(--muted)">type TokenStore interface {</div>
+              <div class="diff-line" style="color:var(--muted)">  Get(ctx context.Context, key string) (*Token, error)</div>
+              <div class="diff-line" style="color:var(--muted)">  Set(ctx context.Context, key string, token *Token) error</div>
+              <div class="diff-line" style="color:var(--muted)">}</div>
+            </div>
+          </div>
+          <div class="tool-card" style="margin-top:6px">
+            <div class="tool-header" onclick="this.nextElementSibling.classList.toggle('open')">
+              <span class="icon">✏️</span>
+              <span class="label">Edit File</span>
+              <span class="file">src/auth/refresh.go</span>
+              <span>▾</span>
+            </div>
+            <div class="tool-body open">
+              <div class="diff-add">+ func NewRefreshScheduler(store TokenStore, opts ...RefreshOption) *RefreshScheduler {</div>
+              <div class="diff-add">+   s := &RefreshScheduler{</div>
+              <div class="diff-add">+     store:    store,</div>
+              <div class="diff-add">+     window:   30 * time.Second,</div>
+              <div class="diff-add">+     interval: 5 * time.Second,</div>
+              <div class="diff-add">+   }</div>
+              <div class="diff-add">+   for _, opt := range opts {</div>
+              <div class="diff-add">+     opt(s)</div>
+              <div class="diff-add">+   }</div>
+              <div class="diff-add">+   return s</div>
+              <div class="diff-add">+ }</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="message">
+        <div class="msg-avatar agent">T</div>
+        <div class="msg-body">
+          <div class="msg-header">
+            <span class="msg-name">Tapestry</span>
+            <span class="msg-model">Claude Sonnet 4</span>
+            <span class="msg-time">1 min ago</span>
+          </div>
+          <div class="msg-text">I've created the <code>RefreshScheduler</code> with a configurable sliding window. It checks token expiry on a 5-second interval and refreshes 30 seconds before expiry by default. Now adding error handling with exponential backoff…</div>
+          <div class="tool-card">
+            <div class="tool-header" onclick="this.nextElementSibling.classList.toggle('open')">
+              <span class="icon">🧪</span>
+              <span class="label">Run Tests</span>
+              <span class="file">go test ./src/auth/...</span>
+              <span>▾</span>
+            </div>
+            <div class="tool-body">
+              <div class="diff-line" style="color:var(--running)">PASS: TestRefreshScheduler_SlidingWindow (0.02s)</div>
+              <div class="diff-line" style="color:var(--running)">PASS: TestRefreshScheduler_Backoff (0.01s)</div>
+              <div class="diff-line" style="color:var(--running)">PASS: TestRefreshScheduler_ConcurrentAccess (0.03s)</div>
+              <div class="diff-line" style="color:var(--muted)">ok  	src/auth	0.06s</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMPOSER -->
+    <div class="composer">
+      <div class="composer-box">
+        <textarea class="composer-input" placeholder="Message Tapestry…" rows="1"></textarea>
+        <div class="composer-toolbar">
+          <div class="pill pill-model">Claude Sonnet 4 ▾</div>
+          <div class="effort-toggle" title="Reasoning effort">
+            <span class="effort-dot on"></span>
+            <span class="effort-dot on"></span>
+            <span class="effort-dot"></span>
+          </div>
+          <div class="pill pill-agent">Tapestry</div>
+          <button class="btn-send">Send ↵</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT SIDEBAR -->
+  <div class="sidebar-right">
+    <div class="right-tabs">
+      <div class="right-tab active" onclick="switchRightTab(0)">Project</div>
+      <div class="right-tab" onclick="switchRightTab(1)">Plan / TODO</div>
+    </div>
+    <div class="right-content">
+      <div class="tab-pane active" id="rpane0">
+        <input class="project-name-edit" id="rightProjectName" value="OAuth Integration">
+        <div class="project-desc" id="rightProjectDesc">Implement OAuth 2.0 with PKCE flow, token refresh, and client credential management for the API gateway.</div>
+        <div class="stat-grid" id="rightProjectStats">
+          <div class="stat-card"><div class="stat-value">8</div><div class="stat-label">Sessions</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--running)">3</div><div class="stat-label">Active</div></div>
+          <div class="stat-card"><div class="stat-value">450K</div><div class="stat-label">Tokens Used</div></div>
+          <div class="stat-card"><div class="stat-value">$2.18</div><div class="stat-label">Cost</div></div>
+        </div>
+        <div class="recent-sessions-label">Recent Sessions</div>
+        <div id="rightRecentSessions">
+          <div class="recent-session"><div class="title">Implement token refresh</div><div class="meta"><span style="color:var(--running)">● Running</span><span>Tapestry</span><span>2m</span></div></div>
+          <div class="recent-session"><div class="title">Add PKCE support</div><div class="meta"><span style="color:var(--running)">● Running</span><span>Shuttle</span><span>5m</span></div></div>
+          <div class="recent-session"><div class="title">Token introspection middleware</div><div class="meta"><span style="color:var(--idle)">● Idle</span><span>Pattern</span><span>12m</span></div></div>
+          <div class="recent-session"><div class="title">OAuth state validation</div><div class="meta"><span style="color:var(--complete)">● Complete</span><span>Thread</span><span>18m</span></div></div>
+          <div class="recent-session"><div class="title">Integration test suite</div><div class="meta"><span style="color:var(--queued)">● Queued</span><span>Spindle</span><span>3m</span></div></div>
+        </div>
+      </div>
+      <div class="tab-pane" id="rpane1">
+        <div style="font-weight:600;font-size:14px;margin-bottom:12px">Token Refresh Implementation</div>
+        <div class="todo-item"><div class="todo-cb checked"></div><div class="todo-text done">Read existing TokenStore interface</div></div>
+        <div class="todo-item"><div class="todo-cb checked"></div><div class="todo-text done">Create RefreshScheduler struct</div></div>
+        <div class="todo-item"><div class="todo-cb checked"></div><div class="todo-text done">Implement sliding window check</div></div>
+        <div class="todo-item"><div class="todo-cb" style="border-color:var(--accent)"></div><div class="todo-text">Add exponential backoff on failure</div></div>
+        <div class="todo-item"><div class="todo-cb"></div><div class="todo-text">Handle concurrent refresh requests</div></div>
+        <div class="todo-item"><div class="todo-cb"></div><div class="todo-text">Add metrics and logging</div></div>
+        <div class="todo-item"><div class="todo-cb"></div><div class="todo-text">Write integration tests</div></div>
+        <div class="todo-item"><div class="todo-cb"></div><div class="todo-text">Update documentation</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CREATE PROJECT DIALOG -->
+<div class="dialog-backdrop" id="createProjectDialog">
+  <div class="dialog-card">
+    <div class="dialog-form-content">
+      <div class="dialog-header">
+        <h2>Create Project</h2>
+        <button class="dialog-close" onclick="closeCreateProjectDialog()">&times;</button>
+      </div>
+      <div class="dialog-body">
+        <div class="field">
+          <label>Project Name</label>
+          <input class="dialog-input" id="projectNameInput" placeholder="e.g. OAuth Integration" autofocus>
+        </div>
+        <div class="field">
+          <label>Description <span class="optional">(optional)</span></label>
+          <textarea class="dialog-input" rows="3" placeholder="What is this project about?"></textarea>
+        </div>
+        <div class="field">
+          <label>Color</label>
+          <div class="color-picker">
+            <span class="color-swatch selected" data-color="#6366f1" style="background:#6366f1" onclick="pickColor(this)"></span>
+            <span class="color-swatch" data-color="#22c55e" style="background:#22c55e" onclick="pickColor(this)"></span>
+            <span class="color-swatch" data-color="#f59e0b" style="background:#f59e0b" onclick="pickColor(this)"></span>
+            <span class="color-swatch" data-color="#3b82f6" style="background:#3b82f6" onclick="pickColor(this)"></span>
+            <span class="color-swatch" data-color="#ef4444" style="background:#ef4444" onclick="pickColor(this)"></span>
+            <span class="color-swatch" data-color="#8b5cf6" style="background:#8b5cf6" onclick="pickColor(this)"></span>
+            <span class="color-swatch" data-color="#ec4899" style="background:#ec4899" onclick="pickColor(this)"></span>
+            <span class="color-swatch" data-color="#06b6d4" style="background:#06b6d4" onclick="pickColor(this)"></span>
+          </div>
+        </div>
+        <div class="field">
+          <label>Repository <span class="optional">(optional)</span></label>
+          <div class="repo-field">
+            <input class="dialog-input" placeholder="Link a repository path…">
+            <button class="btn-browse">Browse</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Default Model <span class="optional">(optional)</span></label>
+          <select class="dialog-select">
+            <option>None — use session default</option>
+            <option>Claude Sonnet 4</option>
+            <option>Claude Opus 4</option>
+            <option>Claude Haiku 3.5</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Default Agent <span class="optional">(optional)</span></label>
+          <select class="dialog-select">
+            <option>None — use session default</option>
+            <option>Tapestry</option>
+            <option>Shuttle</option>
+            <option>Thread</option>
+            <option>Pattern</option>
+            <option>Weft</option>
+            <option>Spindle</option>
+            <option>Warp</option>
+          </select>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn-cancel" onclick="closeCreateProjectDialog()">Cancel</button>
+        <button class="btn-create" id="btnCreate" disabled onclick="createProject()">Create Project</button>
+      </div>
+    </div>
+    <div class="dialog-success" id="dialogSuccess">
+      <div class="check">✓</div>
+      <div class="label">Project created</div>
+      <div class="sub" id="successProjectName"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Right tab switching
+function switchRightTab(idx){
+  document.querySelectorAll('.right-tab').forEach((t,i)=>t.classList.toggle('active',i===idx));
+  document.querySelectorAll('.tab-pane').forEach((p,i)=>p.classList.toggle('active',i===idx));
+}
+
+// Project group expand/collapse
+function toggleGroup(header){
+  const body=header.nextElementSibling;
+  const chevron=header.querySelector('.chevron');
+  if(body.classList.contains('collapsed')){
+    body.classList.remove('collapsed');
+    chevron.textContent='▾';
+  }else{
+    body.classList.add('collapsed');
+    chevron.textContent='▸';
+  }
+}
+
+// Project info data for right sidebar
+const projectInfo={
+  'OAuth Integration':{desc:'Implement OAuth 2.0 with PKCE flow, token refresh, and client credential management for the API gateway.',sessions:8,active:3,tokens:'450K',cost:'$2.18'},
+  'Database Refactor':{desc:'Migrate from legacy ORM to repository pattern with connection pooling and query optimization.',sessions:5,active:1,tokens:'280K',cost:'$1.35'},
+  'CI/CD Pipeline':{desc:'Set up GitHub Actions workflows for automated testing, building, and deployment to staging and production.',sessions:3,active:0,tokens:'120K',cost:'$0.58'},
+  'API v2 Migration':{desc:'Migrate REST endpoints to v2 with breaking change documentation, versioned routes, and backward compatibility layer.',sessions:12,active:4,tokens:'890K',cost:'$4.30'},
+  'Frontend Redesign':{desc:'Redesign the dashboard UI with new component library, dark mode support, and improved accessibility.',sessions:6,active:2,tokens:'410K',cost:'$1.99'},
+  'Ungrouped':{desc:'Sessions not assigned to any project.',sessions:2,active:0,tokens:'30K',cost:'$0.12'}
+};
+
+// Select a session
+function selectSession(el,projectName,projectColor){
+  // Remove active from all sessions
+  document.querySelectorAll('.pg-session.active').forEach(s=>s.classList.remove('active'));
+  el.classList.add('active');
+
+  const sessionName=el.querySelector('.session-title').textContent;
+
+  // Update breadcrumb
+  document.getElementById('breadcrumb').innerHTML=
+    `<span>Weave Fleet</span><span class="sep">›</span><span>${projectName}</span><span class="sep">›</span><span class="current">${sessionName}</span>`;
+
+  // Update right sidebar project tab
+  const info=projectInfo[projectName];
+  if(info){
+    document.getElementById('rightProjectName').value=projectName;
+    document.getElementById('rightProjectDesc').textContent=info.desc;
+    document.getElementById('rightProjectStats').innerHTML=`
+      <div class="stat-card"><div class="stat-value">${info.sessions}</div><div class="stat-label">Sessions</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--running)">${info.active}</div><div class="stat-label">Active</div></div>
+      <div class="stat-card"><div class="stat-value">${info.tokens}</div><div class="stat-label">Tokens Used</div></div>
+      <div class="stat-card"><div class="stat-value">${info.cost}</div><div class="stat-label">Cost</div></div>`;
+  }
+}
+
+// Search/filter sidebar
+function filterSidebar(query){
+  const q=query.toLowerCase();
+  document.querySelectorAll('.project-group').forEach(group=>{
+    const name=group.dataset.projectName||'';
+    const nameMatch=name.toLowerCase().includes(q);
+    const sessions=group.querySelectorAll('.pg-session');
+    let anySessionMatch=false;
+    sessions.forEach(s=>{
+      const title=s.querySelector('.session-title').textContent.toLowerCase();
+      const match=title.includes(q)||nameMatch;
+      s.style.display=match?'':'none';
+      if(title.includes(q))anySessionMatch=true;
+    });
+    // Show/hide subgroup labels based on whether their next sessions are visible
+    group.querySelectorAll('.pg-subgroup-label').forEach(label=>{
+      let next=label.nextElementSibling;
+      let hasVisible=false;
+      while(next&&!next.classList.contains('pg-subgroup-label')){
+        if(next.classList.contains('pg-session')&&next.style.display!=='none')hasVisible=true;
+        next=next.nextElementSibling;
+      }
+      label.style.display=hasVisible?'':'none';
+    });
+
+    const hasMatch=nameMatch||anySessionMatch;
+    group.style.display=hasMatch?'':'none';
+
+    // Auto-expand if session matches inside
+    if(q&&anySessionMatch){
+      const body=group.querySelector('.project-group-body');
+      const chevron=group.querySelector('.chevron');
+      if(body&&body.classList.contains('collapsed')){
+        body.classList.remove('collapsed');
+        chevron.textContent='▾';
+      }
+    }
+  });
+  // If query cleared, reset visibility but don't re-collapse
+  if(!q){
+    document.querySelectorAll('.project-group').forEach(g=>g.style.display='');
+    document.querySelectorAll('.pg-session').forEach(s=>s.style.display='');
+    document.querySelectorAll('.pg-subgroup-label').forEach(l=>l.style.display='');
+  }
+}
+
+// Create project dialog
+let selectedColor='#6366f1';
+
+function openCreateProjectDialog(e){
+  if(e)e.stopPropagation();
+  const d=document.getElementById('createProjectDialog');
+  d.querySelector('.dialog-form-content').style.display='';
+  d.querySelector('.dialog-success').style.display='none';
+  document.getElementById('projectNameInput').value='';
+  document.getElementById('btnCreate').disabled=true;
+  document.querySelectorAll('.color-swatch').forEach((s,i)=>s.classList.toggle('selected',i===0));
+  selectedColor='#6366f1';
+  d.classList.add('open');
+  setTimeout(()=>document.getElementById('projectNameInput').focus(),50);
+}
+
+function closeCreateProjectDialog(){
+  document.getElementById('createProjectDialog').classList.remove('open');
+}
+
+function pickColor(el){
+  document.querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedColor=el.dataset.color;
+}
+
+document.getElementById('projectNameInput').addEventListener('input',function(){
+  document.getElementById('btnCreate').disabled=!this.value.trim();
+});
+
+function createProject(){
+  const name=document.getElementById('projectNameInput').value.trim();
+  if(!name)return;
+  const formContent=document.querySelector('.dialog-form-content');
+  const success=document.getElementById('dialogSuccess');
+  document.getElementById('successProjectName').textContent=name;
+  formContent.style.display='none';
+  success.style.display='flex';
+
+  setTimeout(()=>{
+    closeCreateProjectDialog();
+    // Add new collapsed project group to sidebar
+    const list=document.getElementById('projectList');
+    const divider=list.querySelector('.pg-divider');
+    const newGroup=document.createElement('div');
+    newGroup.className='project-group';
+    newGroup.dataset.project=name.toLowerCase().replace(/\s+/g,'-');
+    newGroup.dataset.projectName=name;
+    newGroup.dataset.color=selectedColor;
+    newGroup.innerHTML=`
+      <div class="project-group-header" onclick="toggleGroup(this)">
+        <span class="chevron">▸</span>
+        <span class="pg-dot" style="background:${selectedColor}"></span>
+        <span class="pg-name">${name}</span>
+        <span class="pg-count">[0]</span>
+        <span class="pg-menu">⋯</span>
+      </div>
+      <div class="project-group-body collapsed" style="max-height:200px"></div>`;
+    divider.before(newGroup);
+  },1000);
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')closeCreateProjectDialog();
+});
+
+document.getElementById('createProjectDialog').addEventListener('click',function(e){
+  if(e.target===this)closeCreateProjectDialog();
+});
+</script>
+</body>
+</html>
