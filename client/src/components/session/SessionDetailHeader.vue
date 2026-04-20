@@ -25,6 +25,13 @@ const sessionTitle = computed(() => props.title?.trim() || "Untitled session");
 const projectLabel = computed(() => props.projectName?.trim() || "Ungrouped");
 const effectiveLifecycleStatus = computed(() => props.lifecycleStatus);
 const effectiveActivityStatus = computed(() => props.activityStatus);
+const sessionStatusIndicator = computed(() => {
+  if (effectiveLifecycleStatus.value === "disconnected") {
+    return "disconnected";
+  }
+
+  return effectiveActivityStatus.value === "busy" ? "working" : "idle";
+});
 const isArchived = computed(() => props.retentionStatus === "archived");
 const showStoppedBanner = computed(() => {
   switch (effectiveLifecycleStatus.value) {
@@ -94,6 +101,17 @@ onUnmounted(() => {
           <h2 class="truncate text-xl font-semibold tracking-tight text-foreground">
             {{ sessionTitle }}
           </h2>
+          <span
+            :data-status="sessionStatusIndicator"
+            data-testid="session-status-indicator"
+            class="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground"
+          >
+            {{ sessionStatusIndicator === "working"
+              ? "Working"
+              : sessionStatusIndicator === "disconnected"
+                ? "Disconnected"
+                : "Idle" }}
+          </span>
           <Badge v-if="isArchived" data-testid="session-archived-badge" variant="secondary">
             Archived
           </Badge>
@@ -111,7 +129,9 @@ onUnmounted(() => {
       class="rounded-lg border border-border bg-muted/40 px-4 py-3"
     >
       <p class="text-sm text-muted-foreground">
-        This session is no longer running. Use Session actions in the right panel to resume or archive it.
+        {{ effectiveLifecycleStatus === "disconnected"
+          ? "Connection to this session was lost. Weave will reconnect automatically when the backend becomes reachable again, or you can resume the session from Session actions."
+          : "This session is no longer running. Use Session actions in the right panel to resume or archive it." }}
       </p>
     </div>
 
@@ -121,7 +141,7 @@ onUnmounted(() => {
       class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3"
     >
       <p class="text-sm text-foreground">
-        This session is archived. Unarchive it from Session actions in the right panel before resuming or sending prompts.
+        This session is archived. Unarchive before resuming or sending prompts from Session actions in the right panel.
       </p>
     </div>
   </div>

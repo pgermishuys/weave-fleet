@@ -10,6 +10,7 @@ namespace WeaveFleet.E2E.Tests;
 #pragma warning disable CA1001 // Types that own disposable fields should implement IDisposable — disposal handled by IAsyncLifetime
 [Trait("Category", "E2E")]
 [Trait("Category", "AuthE2E")]
+[Trait("Lane", "Regression")]
 public sealed class GitHubEndpointSecurityTests : AuthE2ETestBase,
     IClassFixture<AuthFleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>

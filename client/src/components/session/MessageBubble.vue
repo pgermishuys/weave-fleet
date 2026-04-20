@@ -84,7 +84,7 @@ const displayAuthor = computed(() => {
       class="msg-header"
     >
       <span
-        v-if="showIdentity && role !== 'user'"
+        v-if="showIdentity"
         class="msg-author"
         data-testid="message-sender-name"
       >

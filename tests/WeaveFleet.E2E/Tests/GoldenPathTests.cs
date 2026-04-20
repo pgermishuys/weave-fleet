@@ -8,6 +8,7 @@ namespace WeaveFleet.E2E.Tests;
 /// If this fails, all other E2E tests are likely broken too.
 /// </summary>
 [Trait("Category", "E2E")]
+[Trait("Lane", "Smoke")]
 public sealed class GoldenPathTests : E2ETestBase,
     IClassFixture<FleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>

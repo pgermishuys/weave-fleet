@@ -12,7 +12,7 @@ public sealed class NewSessionDialog(IPage page)
     // ── Selectors ────────────────────────────────────────────────────────────
 
     private ILocator Dialog => _page.GetByTestId("new-session-dialog");
-    private ILocator DirectoryInput => _page.GetByLabel("Directory");
+    private ILocator DirectoryInput => Dialog.GetByRole(AriaRole.Textbox, new LocatorGetByRoleOptions { Name = "Directory" });
     private ILocator TitleInput => Dialog.Locator("#session-title");
     private ILocator SubmitButton => _page.GetByTestId("create-session-submit");
     private ILocator SourceGroup => _page.GetByLabel("Source");

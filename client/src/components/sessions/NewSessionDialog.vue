@@ -741,6 +741,7 @@ watch(repositoryQuery, (value) => {
 
         <div
           v-if="dialogError"
+          data-testid="new-session-error"
           class="flex items-start gap-3 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
           role="alert"
         >

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
+import ConfirmDeleteSessionDialog from "@/components/sessions/ConfirmDeleteSessionDialog.vue";
 import FilesChanged from "@/components/session/FilesChanged.vue";
+import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
 import TodoListView from "@/components/session/TodoListView.vue";
 import TokenGrid from "@/components/session/TokenGrid.vue";
 import { useSessionEvents } from "@/composables/use-session-events";
@@ -9,7 +11,6 @@ import {
   useAbortSession,
   useArchiveSession,
   useDeleteSession,
-  useForkSession,
   useRenameSession,
   useResumeSession,
   useTerminateSession,
@@ -19,6 +20,7 @@ import { useDiffs } from "@/composables/use-diffs";
 import { apiFetch } from "@/lib/api-client";
 import type { AccumulatedMessage, SessionListItem } from "@/lib/api-types";
 import { extractLatestTodos } from "@/lib/todo-utils";
+import { useSessionsStore } from "@/stores/sessions";
 
 interface TokenMetric {
   id: string;
@@ -66,16 +68,11 @@ const props = defineProps<{
 }>();
 
 const router = useRouter();
+const sessionsStore = useSessionsStore();
 
 const { abortSession, isAborting, error: abortError } = useAbortSession();
 const { archiveSession, isArchiving, error: archiveError } = useArchiveSession();
 const { deleteSession, isDeleting, error: deleteError } = useDeleteSession();
-const {
-  forkSession,
-  isForking,
-  forkingSessionId,
-  error: forkError,
-} = useForkSession();
 const { renameSession, isLoading: isRenaming, error: renameError } = useRenameSession();
 const {
   resumeSession,
@@ -89,6 +86,8 @@ const { unarchiveSession, isUnarchiving, error: unarchiveError } = useUnarchiveS
 const remoteSessionDetail = ref<SessionApiDetail | null>(null);
 const filesChanged = ref<ChangedFile[]>([]);
 const refreshVersion = shallowRef(0);
+const isDeleteDialogOpen = shallowRef(false);
+const isForkDialogOpen = shallowRef(false);
 
 const isLoadingFilesChanged = shallowRef(false);
 const filesChangedError = shallowRef<string | null>(null);
@@ -101,6 +100,7 @@ const totalTokens = computed(() => props.session?.totalTokens ?? remoteSessionDe
 const totalCostUsd = computed(() => props.session?.totalCost ?? remoteSessionDetail.value?.totalCost ?? null);
 const effectiveIsolationStrategy = computed(() => props.session?.isolationStrategy ?? remoteSessionDetail.value?.isolationStrategy);
 const isolationLabel = computed(() => formatIsolationStrategy(effectiveIsolationStrategy.value));
+const sessionTitle = computed(() => normalizeString(props.session?.session.title) ?? normalizeString(remoteSessionDetail.value?.title) ?? "Untitled session");
 const effectiveSessionStatus = computed(() => props.session?.sessionStatus
   ?? remoteSessionDetail.value?.lifecycleStatus
   ?? remoteSessionDetail.value?.status
@@ -137,12 +137,10 @@ const canResume = computed(() => {
 const canStop = computed(() => isRunningSession.value);
 const canArchive = computed(() => effectiveRetentionStatus.value !== "archived" && !isRunningSession.value);
 const canUnarchive = computed(() => effectiveRetentionStatus.value === "archived");
-const isForkingCurrentSession = computed(() => isForking.value && forkingSessionId.value === sessionId.value);
 const isResumingCurrentSession = computed(() => isResuming.value && resumingSessionId.value === sessionId.value);
 const isAnyActionPending = computed(() => isAborting.value
   || isArchiving.value
   || isDeleting.value
-  || isForkingCurrentSession.value
   || isRenaming.value
   || isResumingCurrentSession.value
   || isTerminating.value
@@ -151,7 +149,6 @@ const actionErrors = computed(() => [
   abortError.value,
   archiveError.value,
   deleteError.value,
-  forkError.value,
   renameError.value,
   resumeError.value,
   terminateError.value,
@@ -289,6 +286,11 @@ async function handleStop(): Promise<void> {
 
   try {
     await terminateSession(sessionId.value, resolvedInstanceId.value);
+    sessionsStore.patchSession(sessionId.value, {
+      activityStatus: "idle",
+      lifecycleStatus: "stopped",
+      sessionStatus: "stopped",
+    });
     refreshPanelData();
   } catch {
     // Error is exposed inline by the composable.
@@ -300,19 +302,7 @@ async function handleFork(): Promise<void> {
     return;
   }
 
-  try {
-    const response = await forkSession(sessionId.value);
-    await router.navigate({
-      to: "/sessions/$id",
-      params: { id: response.session.id },
-      search: {
-        instanceId: response.instanceId,
-        parentSessionId: undefined,
-      },
-    });
-  } catch {
-    // Error is exposed inline by the composable.
-  }
+  isForkDialogOpen.value = true;
 }
 
 async function handleDelete(): Promise<void> {
@@ -320,13 +310,17 @@ async function handleDelete(): Promise<void> {
     return;
   }
 
-  const confirmed = window.confirm(`Delete session \"${sessionTitle.value}\"? This action cannot be undone.`);
-  if (!confirmed) {
+  isDeleteDialogOpen.value = true;
+}
+
+async function handleDeleteConfirmed(): Promise<void> {
+  if (!sessionId.value || !resolvedInstanceId.value) {
     return;
   }
 
   try {
     await deleteSession(sessionId.value, resolvedInstanceId.value);
+    isDeleteDialogOpen.value = false;
     await router.navigate({ to: "/" });
   } catch {
     // Error is exposed inline by the composable.
@@ -365,6 +359,9 @@ async function handleArchive(): Promise<void> {
 
   try {
     await archiveSession(sessionId.value);
+    sessionsStore.patchSession(sessionId.value, {
+      retentionStatus: "archived",
+    });
     refreshPanelData();
   } catch {
     // Error is exposed inline by the composable.
@@ -378,6 +375,9 @@ async function handleUnarchive(): Promise<void> {
 
   try {
     await unarchiveSession(sessionId.value);
+    sessionsStore.patchSession(sessionId.value, {
+      retentionStatus: "active",
+    });
     refreshPanelData();
   } catch {
     // Error is exposed inline by the composable.
@@ -559,6 +559,7 @@ function formatCurrency(amount: number | null): string {
         <button
           v-if="canAbort"
           type="button"
+          data-testid="abort-button"
           class="session-action-button session-action-button--danger"
           :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
           :aria-busy="isAborting ? 'true' : 'false'"
@@ -571,6 +572,7 @@ function formatCurrency(amount: number | null): string {
         <button
           v-if="canResume"
           type="button"
+          data-testid="session-resume-button"
           class="session-action-button"
           :disabled="isAnyActionPending || !sessionId"
           :aria-busy="isResumingCurrentSession ? 'true' : 'false'"
@@ -583,6 +585,7 @@ function formatCurrency(amount: number | null): string {
         <button
           v-if="canStop"
           type="button"
+          data-testid="session-stop-button"
           class="session-action-button session-action-button--danger"
           :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
           :aria-busy="isTerminating ? 'true' : 'false'"
@@ -594,13 +597,13 @@ function formatCurrency(amount: number | null): string {
 
         <button
           type="button"
+          data-testid="session-archived-fork-button"
           class="session-action-button"
           :disabled="isAnyActionPending || !sessionId"
-          :aria-busy="isForkingCurrentSession ? 'true' : 'false'"
+          :aria-busy="false"
           @click="handleFork"
         >
-          <span v-if="isForkingCurrentSession" class="session-action-button__spinner" aria-hidden="true" />
-          <span>{{ isForkingCurrentSession ? "Forking..." : "Fork" }}</span>
+          <span>Fork</span>
         </button>
 
         <button
@@ -616,6 +619,7 @@ function formatCurrency(amount: number | null): string {
 
         <button
           type="button"
+          data-testid="session-delete-button"
           class="session-action-button session-action-button--danger"
           :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
           :aria-busy="isDeleting ? 'true' : 'false'"
@@ -628,6 +632,7 @@ function formatCurrency(amount: number | null): string {
         <button
           v-if="canArchive"
           type="button"
+          data-testid="session-archive-banner-button"
           class="session-action-button"
           :disabled="isAnyActionPending || !sessionId"
           :aria-busy="isArchiving ? 'true' : 'false'"
@@ -640,6 +645,7 @@ function formatCurrency(amount: number | null): string {
         <button
           v-if="canUnarchive"
           type="button"
+          data-testid="session-unarchive-button"
           class="session-action-button"
           :disabled="isAnyActionPending || !sessionId"
           :aria-busy="isUnarchiving ? 'true' : 'false'"
@@ -667,6 +673,20 @@ function formatCurrency(amount: number | null): string {
 
       <FilesChanged :files="filesChanged" />
     </article>
+
+    <ConfirmDeleteSessionDialog
+      v-model:open="isDeleteDialogOpen"
+      :is-deleting="isDeleting"
+      :session-title="sessionTitle"
+      @confirm="void handleDeleteConfirmed()"
+    />
+
+    <ForkSessionDialog
+      :open="isForkDialogOpen"
+      :session-id="sessionId ?? ''"
+      :source-title="sessionTitle"
+      @update:open="isForkDialogOpen = $event"
+    />
   </section>
 </template>
 

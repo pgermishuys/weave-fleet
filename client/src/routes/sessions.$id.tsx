@@ -113,6 +113,7 @@ const SessionDetailPage = defineComponent({
     watch(
       () => params.value.id,
       async (sessionId, _previousSessionId, onCleanup) => {
+        sessionsStore.setActiveSessionId(sessionId ?? null);
         remoteSession.value = null;
 
         if (!sessionId) {
@@ -395,19 +396,41 @@ const SessionDetailPage = defineComponent({
                   >
                     Delegated subagent session
                   </span>
-                  <span
-                    style={{
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      fontSize: "0.95rem",
-                      fontWeight: 600,
-                      color: "var(--foreground, var(--text))",
-                    }}
-                    title={parentSessionLabel.value}
-                  >
-                    {parentSessionHref.value ? `From ${parentSessionLabel.value}` : "Opened from a parent session"}
-                  </span>
+                  {parentSessionHref.value ? (
+                    <a
+                      href={parentSessionHref.value}
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        fontSize: "0.95rem",
+                        fontWeight: 600,
+                        color: "var(--foreground, var(--text))",
+                        textDecoration: "none",
+                      }}
+                      title={parentSessionLabel.value}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        void handleBackToParent();
+                      }}
+                    >
+                      {`From ${parentSessionLabel.value}`}
+                    </a>
+                  ) : (
+                    <span
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        fontSize: "0.95rem",
+                        fontWeight: 600,
+                        color: "var(--foreground, var(--text))",
+                      }}
+                      title={parentSessionLabel.value}
+                    >
+                      Opened from a parent session
+                    </span>
+                  )}
                 </div>
               </div>
 

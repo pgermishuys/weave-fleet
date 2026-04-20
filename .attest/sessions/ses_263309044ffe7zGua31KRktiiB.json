@@ -1,0 +1,58 @@
+{
+  "sessionId": "ses_263309044ffe7zGua31KRktiiB",
+  "createdAt": "2026-04-17T18:58:53.571Z",
+  "updatedAt": "2026-04-17T18:58:53.571Z",
+  "diffContext": {
+    "mode": "staged",
+    "target": "staged",
+    "changedFiles": [],
+    "truncated": false,
+    "diffText": "",
+    "summary": {
+      "filesChanged": 0,
+      "additions": 0,
+      "deletions": 0
+    }
+  },
+  "intent": {
+    "summary": "Understand the current change before submission.",
+    "motivation": "Validate understanding of the diff.",
+    "aiDisclosure": {
+      "used": false,
+      "contributionLevel": "none"
+    }
+  },
+  "risk": {
+    "level": "medium",
+    "categories": [
+      "refactor"
+    ],
+    "requiresHumanEscalation": false,
+    "rationale": [
+      "No explicit risk pattern matched; treating as refactor.",
+      "Business logic or multi-file behavior detected."
+    ]
+  },
+  "questions": [
+    {
+      "id": "fallback-q1",
+      "prompt": "How does the main change in this diff work end to end?",
+      "kind": "how_it_works",
+      "source": "deterministic"
+    },
+    {
+      "id": "fallback-q2",
+      "prompt": "What assumption or edge case matters most in the changed code?",
+      "kind": "assumptions",
+      "source": "deterministic"
+    },
+    {
+      "id": "fallback-q3",
+      "prompt": "What would you inspect first if this failed after merge?",
+      "kind": "failure_mode",
+      "source": "deterministic"
+    }
+  ],
+  "answers": [],
+  "status": "asking_questions"
+}

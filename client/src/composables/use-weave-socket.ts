@@ -8,18 +8,34 @@ export interface WeaveSocketAPI {
   subscribe: (topics: string[], callback: TopicCallback) => Unsubscribe
 }
 
+interface WeaveSocketTestAPI {
+  suspend: () => void
+  resume: () => void
+  isSuspended: () => boolean
+  hasOpenSocket: () => boolean
+}
+
+declare global {
+  interface Window {
+    __WEAVE_SOCKET_TEST_API?: WeaveSocketTestAPI
+  }
+}
+
 const WS_PATH = "/ws"
 const BASE_DELAY_MS = 1_000
 const MAX_DELAY_MS = 30_000
 
 const topicListeners = new Map<string, Set<TopicCallback>>()
 const reconnectCallbacks = new Map<string, () => void>()
+const disconnectCallbacks = new Map<string, () => void>()
 
 let reconnectCallbackNextId = 0
+let disconnectCallbackNextId = 0
 let ws: WebSocket | null = null
 let subscriberCount = 0
 let reconnectDelay = BASE_DELAY_MS
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let suspendConnectionsForTesting = false
 
 function dispatch(topic: string, data: unknown): void {
   const callbacks = topicListeners.get(topic)
@@ -29,6 +45,12 @@ function dispatch(topic: string, data: unknown): void {
 
   for (const callback of callbacks) {
     callback(topic, data)
+  }
+}
+
+function notifyDisconnected(): void {
+  for (const callback of disconnectCallbacks.values()) {
+    callback()
   }
 }
 
@@ -64,6 +86,14 @@ function scheduleReconnect(): void {
 
 function connect(): void {
   if (ws !== null || typeof WebSocket === "undefined") {
+    return
+  }
+
+  if (suspendConnectionsForTesting) {
+    if (subscriberCount > 0) {
+      scheduleReconnect()
+    }
+
     return
   }
 
@@ -103,6 +133,8 @@ function connect(): void {
     if (ws === socket) {
       ws = null
     }
+
+    notifyDisconnected()
 
     if (subscriberCount > 0) {
       scheduleReconnect()
@@ -183,8 +215,11 @@ function decrementSubscribers(): void {
 export function _resetForTesting(): void {
   disconnect()
   subscriberCount = 0
+  suspendConnectionsForTesting = false
   topicListeners.clear()
   reconnectCallbacks.clear()
+  disconnectCallbacks.clear()
+  syncTestApi()
 }
 
 export function _getSubscriberCount(): number {
@@ -193,6 +228,10 @@ export function _getSubscriberCount(): number {
 
 export function _isConnected(): boolean {
   return ws !== null
+}
+
+export function isWeaveSocketConnected(): boolean {
+  return ws?.readyState === WebSocket.OPEN
 }
 
 export function onReconnect(callback: () => void): () => void {
@@ -204,11 +243,46 @@ export function onReconnect(callback: () => void): () => void {
   }
 }
 
+export function onDisconnect(callback: () => void): () => void {
+  const id = String(disconnectCallbackNextId++)
+  disconnectCallbacks.set(id, callback)
+
+  return () => {
+    disconnectCallbacks.delete(id)
+  }
+}
+
 const stableSubscribe = (topics: string[], callback: TopicCallback): Unsubscribe =>
   addTopicListeners(topics, callback)
 
+function syncTestApi(): void {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  window.__WEAVE_SOCKET_TEST_API = {
+    suspend: () => {
+      suspendConnectionsForTesting = true
+      disconnect()
+      notifyDisconnected()
+      if (subscriberCount > 0) {
+        scheduleReconnect()
+      }
+    },
+    resume: () => {
+      suspendConnectionsForTesting = false
+      if (subscriberCount > 0) {
+        connect()
+      }
+    },
+    isSuspended: () => suspendConnectionsForTesting,
+    hasOpenSocket: () => ws?.readyState === WebSocket.OPEN,
+  }
+}
+
 export function useWeaveSocket(): WeaveSocketAPI {
   onMounted(() => {
+    syncTestApi()
     incrementSubscribers()
   })
 

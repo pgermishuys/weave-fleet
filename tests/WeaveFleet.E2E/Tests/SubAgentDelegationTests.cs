@@ -12,6 +12,7 @@ using WeaveFleet.TestHarness;
 namespace WeaveFleet.E2E.Tests;
 
 [Trait("Category", "E2E")]
+[Trait("Lane", "Workflow")]
 public sealed class SubAgentDelegationTests : E2ETestBase,
     IClassFixture<FleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>

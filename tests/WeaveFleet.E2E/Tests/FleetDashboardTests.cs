@@ -7,40 +7,44 @@ namespace WeaveFleet.E2E.Tests;
 /// E2E tests for the Fleet Dashboard page.
 /// </summary>
 [Trait("Category", "E2E")]
+[Trait("Lane", "Workflow")]
 public sealed class FleetDashboardTests : E2ETestBase,
-    IClassFixture<FleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>
 {
-    public FleetDashboardTests(FleetWebApplicationFactory factory, PlaywrightFixture playwright)
-        : base(factory, playwright) { }
+    private readonly FleetWebApplicationFactory _factory;
+
+    public FleetDashboardTests(PlaywrightFixture playwright)
+        : this(new FleetWebApplicationFactory(), playwright)
+    {
+    }
+
+    private FleetDashboardTests(FleetWebApplicationFactory factory, PlaywrightFixture playwright)
+        : base(factory, playwright)
+    {
+        _factory = factory;
+    }
+
+    public override async Task DisposeAsync()
+    {
+        try
+        {
+            await base.DisposeAsync();
+        }
+        finally
+        {
+            await _factory.DisposeAsync();
+        }
+    }
 
     /// <summary>
     /// Task 14: Dashboard loads successfully with no sessions and shows the empty state and summary bar.
-    /// Cleans up any sessions that may exist from other tests sharing this factory.
+    /// Uses a dedicated app factory per test so state is isolated from other dashboard tests.
     /// </summary>
     [Fact]
     public async Task Dashboard_WithNoSessions_ShowsEmptyStateAndSummaryBar()
     {
         await WithFailureCapture(async () =>
         {
-            // Clean up sessions left by other tests in this class (shared factory/DB)
-            var sessionsResponse = await Page.APIRequest.GetAsync("/api/sessions");
-            if (sessionsResponse.Ok)
-            {
-                var body = await sessionsResponse.JsonAsync();
-                if (body?.ValueKind == System.Text.Json.JsonValueKind.Array)
-                {
-                    foreach (var item in body.Value.EnumerateArray())
-                    {
-                        if (item.TryGetProperty("session", out var session) &&
-                            session.TryGetProperty("id", out var idProp))
-                        {
-                            await Page.APIRequest.DeleteAsync($"/api/sessions/{idProp.GetString()}");
-                        }
-                    }
-                }
-            }
-
             var dashboard = new FleetDashboardPage(Page);
             await dashboard.GotoAsync();
 
@@ -49,6 +53,8 @@ public sealed class FleetDashboardTests : E2ETestBase,
 
             // Summary bar should be visible
             await dashboard.WaitForSummaryBarAsync();
+            var summaryBar = dashboard.GetSummaryBar();
+            await Microsoft.Playwright.Assertions.Expect(summaryBar).ToBeVisibleAsync();
 
             // No session cards should exist
             var cards = await dashboard.GetSessionCardsAsync();
@@ -88,22 +94,4 @@ public sealed class FleetDashboardTests : E2ETestBase,
         });
     }
 
-    /// <summary>
-    /// Task 16 (simplified): Dashboard real-time update — creating a session via UI and returning
-    /// to dashboard shows the card without stale state.
-    /// </summary>
-    [Fact]
-    public async Task Dashboard_SummaryBar_IsVisible()
-    {
-        await WithFailureCapture(async () =>
-        {
-            var dashboard = new FleetDashboardPage(Page);
-            await dashboard.GotoAsync();
-
-            await dashboard.WaitForSummaryBarAsync();
-
-            var summaryBar = dashboard.GetSummaryBar();
-            await Microsoft.Playwright.Assertions.Expect(summaryBar).ToBeVisibleAsync();
-        });
-    }
 }

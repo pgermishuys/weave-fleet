@@ -1,0 +1,100 @@
+{
+  "sessionId": "ses_2632fd62bffeNVIbuHa1aHMK6u",
+  "generatedAt": "2026-04-17T19:02:10.553Z",
+  "repoRoot": "/Users/pgermishuys/source/weave-fleet-vue-ui",
+  "diffContext": {
+    "mode": "staged",
+    "target": "staged",
+    "changedFiles": [],
+    "truncated": false,
+    "diffText": "",
+    "summary": {
+      "filesChanged": 0,
+      "additions": 0,
+      "deletions": 0
+    }
+  },
+  "intent": {
+    "summary": "Understand the current change before submission.",
+    "motivation": "Validate understanding of the diff.",
+    "aiDisclosure": {
+      "used": false,
+      "contributionLevel": "none"
+    }
+  },
+  "risk": {
+    "level": "medium",
+    "categories": [
+      "refactor"
+    ],
+    "requiresHumanEscalation": false,
+    "rationale": [
+      "No explicit risk pattern matched; treating as refactor.",
+      "Business logic or multi-file behavior detected."
+    ]
+  },
+  "questions": [
+    {
+      "id": "fallback-q1",
+      "prompt": "How does the main change in this diff work end to end?",
+      "kind": "how_it_works",
+      "source": "deterministic"
+    },
+    {
+      "id": "fallback-q2",
+      "prompt": "What assumption or edge case matters most in the changed code?",
+      "kind": "assumptions",
+      "source": "deterministic"
+    },
+    {
+      "id": "fallback-q3",
+      "prompt": "What would you inspect first if this failed after merge?",
+      "kind": "failure_mode",
+      "source": "deterministic"
+    }
+  ],
+  "answers": [
+    {
+      "questionId": "fallback-q1",
+      "answer": "It introduces a rebuild of the Fleet UI based on the tanstack, vue, shadcn with tailwind",
+      "answeredAt": "2026-04-17T19:02:10.553Z"
+    },
+    {
+      "questionId": "fallback-q2",
+      "answer": "Websockets in Vue is a bit sketchy",
+      "answeredAt": "2026-04-17T19:02:10.553Z"
+    },
+    {
+      "questionId": "fallback-q3",
+      "answer": "Very likely a frontend build might fail the CI, running the app would likely be that the npm packages aren't installed and then after that, likely websockets aren't connecting, or it fails to connect to the backend api server.",
+      "answeredAt": "2026-04-17T19:02:10.553Z"
+    }
+  ],
+  "ratings": [
+    {
+      "questionId": "fallback-q1",
+      "rating": "strong",
+      "rationale": "Deterministic fallback judged this answer detailed enough to be grounded."
+    },
+    {
+      "questionId": "fallback-q2",
+      "rating": "partial",
+      "rationale": "Deterministic fallback found some useful detail but not enough depth."
+    },
+    {
+      "questionId": "fallback-q3",
+      "rating": "strong",
+      "rationale": "Deterministic fallback judged this answer detailed enough to be grounded."
+    }
+  ],
+  "verdict": "PASS_WITH_WARNINGS",
+  "rationale": [
+    "Attest session ses_2632fd62bffeNVIbuHa1aHMK6u completed.",
+    "Deterministic policy classified this change as medium risk.",
+    "Captured 3 interview questions.",
+    "LLM evaluation fallback used deterministic scoring after a malformed response: Error: [object Object]",
+    "No explicit risk pattern matched; treating as refactor.",
+    "Business logic or multi-file behavior detected."
+  ],
+  "escalationFlags": []
+}

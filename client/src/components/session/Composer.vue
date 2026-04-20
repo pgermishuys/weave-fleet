@@ -27,7 +27,7 @@ const { draft, setText, setAgentId, setModelId } = useDraftState(props.sessionId
   agentId: "",
   modelId: "",
 });
-const { canSend, sendPrompt } = useSendPrompt(props.sessionId, props.instanceId);
+const { canSend, error: sendPromptError, sendPrompt } = useSendPrompt(props.sessionId, props.instanceId);
 
 const sessionsStore = useSessionsStore();
 const { sessions, sessionStateOverrides } = storeToRefs(sessionsStore);
@@ -330,6 +330,15 @@ function handleKeydown(event: KeyboardEvent): void {
       <span class="composer-status__label">{{ busyStatusLabel }}</span>
     </div>
 
+    <div
+      v-if="sendPromptError"
+      data-testid="send-prompt-error"
+      class="composer-error"
+      role="alert"
+    >
+      {{ sendPromptError }}
+    </div>
+
     <div class="composer-box">
       <textarea
         ref="textarea"
@@ -381,6 +390,17 @@ function handleKeydown(event: KeyboardEvent): void {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.composer-error {
+  margin: 0 0 10px;
+  border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+  color: var(--error);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .composer-status__dot {

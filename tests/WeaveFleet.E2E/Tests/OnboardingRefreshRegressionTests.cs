@@ -12,6 +12,7 @@ namespace WeaveFleet.E2E.Tests;
 #pragma warning disable CA1001 // Types that own disposable fields should implement IDisposable — disposal handled by IAsyncLifetime
 [Trait("Category", "E2E")]
 [Trait("Category", "AuthE2E")]
+[Trait("Lane", "Regression")]
 public sealed class OnboardingRefreshRegressionTests : AuthE2ETestBase,
     IClassFixture<AuthFleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>
@@ -82,10 +83,9 @@ public sealed class OnboardingRefreshRegressionTests : AuthE2ETestBase,
             // Browser refresh — simulates F5 after onboarding is done
             await Page.ReloadAsync(new Microsoft.Playwright.PageReloadOptions { WaitUntil = WaitUntilState.NetworkIdle });
 
-            // Give the SPA time to fetch /api/user/me and evaluate OnboardingGate
-            await Page.WaitForTimeoutAsync(2_000);
+            await Microsoft.Playwright.Assertions.Expect(Page.GetByTestId("summary-bar")).ToBeVisibleAsync();
 
-            // Wizard should NOT reappear
+            // Wizard should NOT reappear once the dashboard shell is rendered
             wizard = new OnboardingWizardPage(Page);
             await wizard.WaitForHiddenAsync();
         });

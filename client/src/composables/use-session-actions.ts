@@ -123,9 +123,29 @@ export interface UseReorderProjectResult {
 }
 
 async function readErrorMessage(response: Response): Promise<string> {
-  const body = await response.json().catch(() => null);
-  if (body && typeof body === "object" && "error" in body && typeof body.error === "string") {
-    return body.error;
+  const bodyText = await response.text().catch(() => "");
+  if (!bodyText) {
+    return `HTTP ${response.status}`;
+  }
+
+  try {
+    const body = JSON.parse(bodyText) as Record<string, unknown>;
+
+    if (typeof body.error === "string" && body.error.trim().length > 0) {
+      return body.error;
+    }
+
+    if (typeof body.detail === "string" && body.detail.trim().length > 0) {
+      return body.detail;
+    }
+
+    if (typeof body.title === "string" && body.title.trim().length > 0) {
+      return body.title;
+    }
+  } catch {
+    if (bodyText.trim().length > 0) {
+      return bodyText.trim();
+    }
   }
 
   return `HTTP ${response.status}`;

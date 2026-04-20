@@ -17,6 +17,7 @@ namespace WeaveFleet.E2E.Tests;
 /// </summary>
 [Trait("Category", "E2E")]
 [Trait("Category", "Benchmark")]
+[Trait("Lane", "Regression")]
 public sealed class UiResponsivenessBenchmarkTests : BenchmarkTestBase,
     IClassFixture<FleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>

@@ -1,5 +1,5 @@
 import { storeToRefs } from "pinia";
-import { computed, reactive } from "vue";
+import { computed, reactive, readonly, shallowRef } from "vue";
 import { useAgents } from "@/composables/use-agents";
 import { useDraftState, type EffortLevel } from "@/composables/use-draft-state";
 import { useModels } from "@/composables/use-models";
@@ -169,11 +169,41 @@ interface BackendSendPromptRequest {
   model?: string;
 }
 
+async function readPromptErrorMessage(response: Response): Promise<string> {
+  const bodyText = await response.text().catch(() => "");
+  if (!bodyText) {
+    return `HTTP ${response.status}`;
+  }
+
+  try {
+    const body = JSON.parse(bodyText) as Record<string, unknown>;
+
+    if (typeof body.error === "string" && body.error.trim().length > 0) {
+      return body.error;
+    }
+
+    if (typeof body.detail === "string" && body.detail.trim().length > 0) {
+      return body.detail;
+    }
+
+    if (typeof body.title === "string" && body.title.trim().length > 0) {
+      return body.title;
+    }
+  } catch {
+    if (bodyText.trim().length > 0) {
+      return bodyText.trim();
+    }
+  }
+
+  return `HTTP ${response.status}`;
+}
+
 export function useSendPrompt(sessionId: string, _instanceId?: string) {
   const sessionsStore = useSessionsStore();
   const { sessions } = storeToRefs(sessionsStore);
   const { defaultAgentId, agentsById } = useAgents();
   const { defaultModelId, modelsById } = useModels(sessionId);
+  const sendError = shallowRef<string | undefined>(undefined);
   const { draft, resetText } = useDraftState(sessionId, {
     agentId: "",
     modelId: "",
@@ -197,12 +227,16 @@ export function useSendPrompt(sessionId: string, _instanceId?: string) {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw new Error(await readPromptErrorMessage(response));
       }
-    } catch (error) {
+
+      sendError.value = undefined;
+    } catch (caughtError) {
       removeSentPrompt(sessionId, promptId);
       decrementPendingPrompts(sessionId);
-      console.error("Failed to send prompt", error);
+      const message = caughtError instanceof Error ? caughtError.message : "Failed to send prompt";
+      sendError.value = message;
+      console.error("Failed to send prompt", caughtError);
     }
   }
 
@@ -211,6 +245,8 @@ export function useSendPrompt(sessionId: string, _instanceId?: string) {
     if (!body) {
       return false;
     }
+
+    sendError.value = undefined;
 
     const agent = agentsById.value[draft.agentId] ?? agentsById.value[defaultAgentId.value];
     const model = modelsById.value[draft.modelId] ?? modelsById.value[defaultModelId.value];
@@ -259,6 +295,7 @@ export function useSendPrompt(sessionId: string, _instanceId?: string) {
 
   return {
     canSend,
+    error: readonly(sendError),
     sendPrompt,
     sentPrompts,
   };

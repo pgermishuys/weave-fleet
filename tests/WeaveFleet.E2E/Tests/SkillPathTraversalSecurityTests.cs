@@ -8,6 +8,7 @@ namespace WeaveFleet.E2E.Tests;
 /// from authentication concerns.
 /// </summary>
 [Trait("Category", "E2E")]
+[Trait("Lane", "Regression")]
 public sealed class SkillPathTraversalSecurityTests : E2ETestBase,
     IClassFixture<FleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>

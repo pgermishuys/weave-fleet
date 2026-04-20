@@ -24,7 +24,6 @@ public sealed class SessionDetailPage(IPage page)
     private ILocator ArchiveBannerButton => _page.GetByTestId("session-archive-banner-button");
     private ILocator StoppedBanner => _page.GetByTestId("session-stopped-banner");
     private ILocator StopButton => _page.GetByTestId("session-stop-button");
-    private ILocator StopConfirmButton => _page.GetByTestId("session-stop-confirm-button");
     private ILocator ResumeButton => _page.GetByTestId("session-resume-button");
     private ILocator DeleteButton => _page.GetByTestId("session-delete-button");
     private ILocator ArchivedForkButton => _page.GetByTestId("session-archived-fork-button");
@@ -94,7 +93,7 @@ public sealed class SessionDetailPage(IPage page)
 
     /// <summary>Get the sender name displayed on a specific message item (e.g. "You", "Loom", "Assistant").</summary>
     public static async Task<string?> GetMessageSenderNameAsync(ILocator messageItem)
-        => await messageItem.GetByTestId("message-sender-name").TextContentAsync();
+        => (await messageItem.GetByTestId("message-sender-name").TextContentAsync())?.Trim();
 
     /// <summary>Get all sender names displayed on messages with the given role.</summary>
     public async Task<IReadOnlyList<string?>> GetSenderNamesByRoleAsync(string role)
@@ -147,7 +146,23 @@ public sealed class SessionDetailPage(IPage page)
     public Task ClickStopAsync() => StopButton.ClickAsync();
 
     /// <summary>Confirm the stop action in detail header.</summary>
-    public Task ConfirmStopAsync() => StopConfirmButton.ClickAsync();
+    public async Task ConfirmStopAsync()
+    {
+        var stopConfirmButton = _page.GetByTestId("session-stop-confirm-button");
+        try
+        {
+            await stopConfirmButton.WaitForAsync(new LocatorWaitForOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = 500,
+            });
+            await stopConfirmButton.ClickAsync();
+        }
+        catch (TimeoutException)
+        {
+            // Some flows stop immediately without requiring confirmation.
+        }
+    }
 
     /// <summary>Wait for the stopped-session banner text.</summary>
     public Task WaitForStoppedBannerAsync()

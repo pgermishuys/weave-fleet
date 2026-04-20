@@ -23,7 +23,7 @@ import { sessionCache } from "@/lib/session-cache"
 import { addSessionSyncListener } from "@/lib/session-sync"
 import { useMessagePagination } from "@/composables/use-message-pagination"
 import { clearPendingPrompts, clearSentPrompts } from "@/composables/use-send-prompt"
-import { onReconnect, useWeaveSocket } from "@/composables/use-weave-socket"
+import { isWeaveSocketConnected, onDisconnect, onReconnect, useWeaveSocket } from "@/composables/use-weave-socket"
 import { useSessionsStore } from "@/stores/sessions"
 
 export type SessionConnectionStatus =
@@ -287,6 +287,7 @@ export function useSessionEvents(
       loadCommittedEventsSinceRef.value = loadCommittedEventsSince
       loadDelegationsRef.value = loadDelegations
       clearIdleFallback()
+      skipInitialGapFill = !isWeaveSocketConnected()
 
       messages.value = []
       delegations.value = []
@@ -420,7 +421,21 @@ export function useSessionEvents(
         void Promise.all([
           loadCommittedEventsSince(lastSequenceNumber.value),
           loadDelegations(),
-        ])
+        ]).finally(() => {
+          if (isActive()) {
+            stateSyncRunning(activeSessionId, sessionStatus.value)
+          }
+        })
+      })
+
+      const unsubscribeDisconnect = onDisconnect(() => {
+        if (!isActive()) {
+          return
+        }
+
+        status.value = "disconnected"
+        error.value = undefined
+        stateSyncDisconnected(activeSessionId)
       })
 
       onCleanup(() => {
@@ -430,6 +445,7 @@ export function useSessionEvents(
         unsubscribeTopic()
         unsubscribeSessionSync()
         unsubscribeReconnect()
+        unsubscribeDisconnect()
 
         if (loadCommittedEventsSinceRef.value === loadCommittedEventsSince) {
           loadCommittedEventsSinceRef.value = null
@@ -490,6 +506,25 @@ export function useSessionEvents(
     Object.assign(session, patch)
   }
 
+  function stateSyncDisconnected(targetSessionId: string | undefined): void {
+    syncSessionStore(targetSessionId, {
+      activityStatus: "idle",
+      lifecycleStatus: "disconnected",
+      sessionStatus: "disconnected",
+    })
+  }
+
+  function stateSyncRunning(
+    targetSessionId: string | undefined,
+    currentSessionStatus: "idle" | "busy",
+  ): void {
+    syncSessionStore(targetSessionId, {
+      activityStatus: currentSessionStatus,
+      lifecycleStatus: "running",
+      sessionStatus: currentSessionStatus === "busy" ? "active" : "idle",
+    })
+  }
+
   async function loadOlderMessages(): Promise<void> {
     if (!currentSessionId.value || !currentInstanceId.value) {
       return
@@ -530,6 +565,7 @@ export function useSessionEvents(
       loadDelegationsRef.value?.(),
     ]).then(() => {
       if (currentSessionId.value && currentInstanceId.value) {
+        stateSyncRunning(currentSessionId.value, sessionStatus.value)
         status.value = "connected"
         error.value = undefined
       }

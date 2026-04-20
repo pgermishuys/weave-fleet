@@ -8,6 +8,7 @@ namespace WeaveFleet.E2E.Tests;
 /// and real-time status updates via WebSocket.
 /// </summary>
 [Trait("Category", "E2E")]
+[Trait("Lane", "Workflow")]
 public sealed class SessionMessageTests : E2ETestBase,
     IClassFixture<FleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>
@@ -61,7 +62,63 @@ public sealed class SessionMessageTests : E2ETestBase,
     }
 
     /// <summary>
-    /// Task 23: Send a prompt and verify the response contains content (text or tool parts).
+    /// Task 23: When a second prompt is sent while the session is still busy,
+    /// the UI shows explicit queue feedback and eventually delivers that prompt.
+    /// This verifies the current product behavior is queueing rather than silently dropping input.
+    /// </summary>
+    [Fact]
+    public async Task SendSecondPromptWhileBusy_QueuesPromptWithVisibleFeedback()
+    {
+        await WithFailureCapture(async () =>
+        {
+            ConfigureScenario(b => b
+                .WithSimpleTextResponse(
+                    "_placeholder_",
+                    "msg-queue-1",
+                    "First queued response",
+                    TimeSpan.FromMilliseconds(1_200))
+                .WithSimpleTextResponse(
+                    "_placeholder_",
+                    "msg-queue-2",
+                    "Second queued response",
+                    TimeSpan.FromMilliseconds(200)));
+
+            var dashboard = new FleetDashboardPage(Page);
+            await dashboard.GotoAsync();
+
+            var dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+
+            await detail.SendPromptAsync("First prompt");
+            await detail.WaitForBusyAsync();
+            await detail.WaitForMessageTextAsync("First prompt", 10_000);
+
+            await detail.SendPromptAsync("Second prompt while busy");
+
+            var queuedBadge = Page.GetByText("1 queued");
+            await Microsoft.Playwright.Assertions.Expect(queuedBadge).ToBeVisibleAsync();
+
+            var userMessages = detail.GetMessagesByRole("user");
+            await Microsoft.Playwright.Assertions.Expect(userMessages).ToHaveCountAsync(1,
+                new Microsoft.Playwright.LocatorAssertionsToHaveCountOptions { Timeout = 1_000 });
+
+            await detail.WaitForMessageTextAsync("First queued response", 10_000);
+            await detail.WaitForMessageTextAsync("Second prompt while busy", 10_000);
+            await detail.WaitForMessageTextAsync("Second queued response", 10_000);
+            await detail.WaitForMessageCountAsync(4, 10_000);
+            await detail.WaitForIdleAsync(10_000);
+
+            await Microsoft.Playwright.Assertions.Expect(queuedBadge).ToBeHiddenAsync();
+            await Microsoft.Playwright.Assertions.Expect(userMessages).ToHaveCountAsync(2,
+                new Microsoft.Playwright.LocatorAssertionsToHaveCountOptions { Timeout = 5_000 });
+        });
+    }
+
+    /// <summary>
+    /// Send a prompt and verify the response contains content (text or tool parts).
     /// The TestHarness emits a simple text response so we check for assistant messages.
     /// </summary>
     [Fact]
