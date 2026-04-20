@@ -614,8 +614,21 @@ public sealed partial class SessionOrchestrator(
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 
-        await instanceResult.Value.SendPromptAsync(text, options, ct);
-        return Unit.Value;
+        try
+        {
+            await instanceResult.Value.SendPromptAsync(text, options, ct);
+            return Unit.Value;
+        }
+        catch (InvalidOperationException ex)
+        {
+            LogPromptFailed(ex, id);
+            return new FleetError("Session.PromptFailed", ex.Message);
+        }
+        catch (Exception ex)
+        {
+            LogPromptUnexpectedFailure(ex, id);
+            return FleetError.Unexpected;
+        }
     }
 
     public async Task<Result<ContextEnvelope>> PreviewAddSourceToSessionAsync(
@@ -1157,6 +1170,14 @@ public sealed partial class SessionOrchestrator(
     [LoggerMessage(Level = LogLevel.Error,
         Message = "Failed to retrieve messages for session {SessionId} — returning error result")]
     private partial void LogGetMessagesFailed(Exception ex, string sessionId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Failed to send prompt to session {SessionId}")]
+    private partial void LogPromptFailed(Exception ex, string sessionId);
+
+    [LoggerMessage(Level = LogLevel.Error,
+        Message = "Unexpected failure sending prompt to session {SessionId}")]
+    private partial void LogPromptUnexpectedFailure(Exception ex, string sessionId);
 
     private async Task<string?> ResolveProjectNameAsync(string? projectId)
     {
