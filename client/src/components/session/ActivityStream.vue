@@ -34,6 +34,7 @@ interface ToolCardItem {
 interface ActivityMessage {
   id: string;
   author: string;
+  modelId?: string;
   senderKey: string;
   role: AccumulatedMessage["role"];
   timestamp: string;
@@ -111,6 +112,7 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
       return {
         id: message.messageId,
         author,
+        modelId: message.modelID,
         senderKey: getSenderKey(message.role, message.agent),
         role: message.role,
         timestamp: formatTimestamp(message.createdAt),
@@ -130,6 +132,7 @@ const optimisticMessages = computed<ActivityMessage[]>(() => {
   return sentPrompts.value.map((prompt): ActivityMessage => ({
     id: `optimistic-${prompt.id}`,
     author: "You",
+    modelId: undefined,
     senderKey: "user",
     role: "user",
     timestamp: prompt.timestamp,
@@ -654,6 +657,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
       >
         <MessageBubble
           :author="message.author"
+          :model-id="message.modelId"
           :role="message.role"
           :timestamp="message.timestamp"
           :body="message.body"

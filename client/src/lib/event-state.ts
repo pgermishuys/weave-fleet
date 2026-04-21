@@ -28,6 +28,11 @@ export function ensureMessage(
 
   const role: "user" | "assistant" =
     info.role === "user" ? "user" : "assistant";
+  const modelID = typeof info.modelID === "string"
+    ? info.modelID
+    : typeof info.modelId === "string"
+      ? info.modelId
+      : undefined;
   const newMsg: AccumulatedMessage = {
     messageId,
     sessionId: info.sessionID ?? "",
@@ -36,7 +41,7 @@ export function ensureMessage(
     createdAt: info.time?.created,
     // v2: both UserMessage and AssistantMessage have agent: string
     agent: info.agent,
-    modelID: info.modelID,
+    modelID,
     parentID: info.parentID,
   };
   return sortMessagesChronologically([...prev, newMsg]);
@@ -57,6 +62,11 @@ export function mergeMessageUpdate(
   const existing = prev[index];
   const createdAt = info.time?.created;
   const completedAt = info.time?.completed;
+  const modelID = typeof info.modelID === "string"
+    ? info.modelID
+    : typeof info.modelId === "string"
+      ? info.modelId
+      : undefined;
 
   // Merge tokens and cost from the message-level info.
   // step-finish parts accumulate these during streaming, but if any were
@@ -91,8 +101,9 @@ export function mergeMessageUpdate(
     : null;
   const mergedSnapshotParts = snapshotParts ? mergeCommittedSnapshotParts(existing.parts, snapshotParts) : null;
   const hasSnapshotParts = mergedSnapshotParts != null;
+  const hasNewModelID = Boolean(modelID && modelID !== existing.modelID);
 
-  if (!hasNewCompletedAt && !hasNewCreatedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts) {
+  if (!hasNewCompletedAt && !hasNewCreatedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts && !hasNewModelID) {
     return prev; // nothing new to merge
   }
 
@@ -102,6 +113,7 @@ export function mergeMessageUpdate(
     ...(hasSnapshotParts ? { parts: mergedSnapshotParts } : {}),
     ...(hasNewCreatedAt ? { createdAt } : {}),
     ...(hasNewCompletedAt ? { completedAt } : {}),
+    ...(hasNewModelID ? { modelID } : {}),
     tokens: mergedTokens,
     cost: mergedCost,
   };

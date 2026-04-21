@@ -41,10 +41,13 @@ const optimisticBusy = shallowRef(false);
 const localDisabledOverride = shallowRef<boolean | null>(null);
 const statusIndicatorVisible = shallowRef(false);
 const statusIndicatorPhase = shallowRef<"thinking" | "responding">("thinking");
+const statusIndicatorDotCount = shallowRef(1);
 let disabledStateObserver: MutationObserver | null = null;
 let statusIndicatorTimer: ReturnType<typeof setTimeout> | null = null;
+let statusIndicatorDotsTimer: ReturnType<typeof setInterval> | null = null;
 
 const STATUS_INDICATOR_LINGER_MS = 1600;
+const STATUS_INDICATOR_DOTS_INTERVAL_MS = 400;
 
 const selectedSession = computed(() => {
   return sessions.value.find((session) => session.session.id === props.sessionId) ?? null;
@@ -155,6 +158,7 @@ onUnmounted(() => {
   disabledStateObserver?.disconnect();
   disabledStateObserver = null;
   clearStatusIndicatorTimer();
+  stopStatusIndicatorDots();
 });
 
 const { queue, enqueue } = useMessageQueue(
@@ -175,11 +179,12 @@ const { queue, enqueue } = useMessageQueue(
 
 const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
 const cursorPosition = shallowRef(0);
-const autocompleteEnabled = computed(() => Boolean(props.instanceId?.trim()));
+const normalizedInstanceId = props.instanceId?.trim() ?? "";
+const autocompleteEnabled = computed(() => normalizedInstanceId.length > 0);
 const autocomplete = useAutocomplete({
   value: computed(() => draft.text),
   setValue: setText,
-  instanceId: props.instanceId ?? "",
+  instanceId: normalizedInstanceId,
   inputRef: textareaRef,
   cursorPosition,
 });
@@ -206,9 +211,11 @@ const busyAgentName = computed(() => {
 
 const busyStatusLabel = computed(() => {
   return statusIndicatorPhase.value === "responding"
-    ? `${busyAgentName.value} is responding…`
-    : `${busyAgentName.value} is thinking…`;
+    ? `${busyAgentName.value} is responding`
+    : `${busyAgentName.value} is thinking`;
 });
+
+const busyStatusDots = computed(() => ".".repeat(statusIndicatorDotCount.value));
 
 function clearStatusIndicatorTimer(): void {
   if (statusIndicatorTimer === null) {
@@ -218,6 +225,31 @@ function clearStatusIndicatorTimer(): void {
   clearTimeout(statusIndicatorTimer);
   statusIndicatorTimer = null;
 }
+
+function stopStatusIndicatorDots(): void {
+  if (statusIndicatorDotsTimer !== null) {
+    clearInterval(statusIndicatorDotsTimer);
+    statusIndicatorDotsTimer = null;
+  }
+
+  statusIndicatorDotCount.value = 1;
+}
+
+function startStatusIndicatorDots(): void {
+  stopStatusIndicatorDots();
+  statusIndicatorDotsTimer = setInterval(() => {
+    statusIndicatorDotCount.value = statusIndicatorDotCount.value === 3 ? 1 : statusIndicatorDotCount.value + 1;
+  }, STATUS_INDICATOR_DOTS_INTERVAL_MS);
+}
+
+watch(statusIndicatorVisible, (visible) => {
+  if (visible) {
+    startStatusIndicatorDots();
+    return;
+  }
+
+  stopStatusIndicatorDots();
+});
 
 watch(
   sessionStatus,
@@ -331,10 +363,12 @@ function handleKeydown(event: KeyboardEvent): void {
     return;
   }
 
+  const autocompleteWasOpen = autocompleteEnabled.value && autocomplete.isOpen.value;
+
   if (autocompleteEnabled.value) {
     autocomplete.onKeyDown(event);
 
-    if (autocomplete.isOpen.value && ["Enter", "Tab", "Escape"].includes(event.key)) {
+    if (autocompleteWasOpen && ["Enter", "Tab", "Escape"].includes(event.key)) {
       return;
     }
   }
@@ -367,6 +401,10 @@ function handleKeydown(event: KeyboardEvent): void {
         aria-hidden="true"
       />
       <span class="composer-status__label">{{ busyStatusLabel }}</span>
+      <span
+        class="composer-status__dots"
+        aria-hidden="true"
+      >{{ busyStatusDots }}</span>
     </div>
 
     <div
@@ -473,6 +511,12 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .composer-status__label {
+  color: var(--muted);
+}
+
+.composer-status__dots {
+  display: inline-block;
+  min-width: 20px;
   color: var(--muted);
 }
 

@@ -24,6 +24,7 @@ interface ToolCardItem {
 
 const props = defineProps<{
   author: string;
+  modelId?: string;
   role: "user" | "assistant";
   timestamp: string;
   body: string;
@@ -66,6 +67,10 @@ const displayAuthor = computed(() => {
 
   return author.charAt(0).toUpperCase() + author.slice(1);
 });
+
+const displayModelId = computed(() => {
+  return props.role === "assistant" ? props.modelId?.trim() ?? "" : "";
+});
 </script>
 
 <template>
@@ -89,6 +94,13 @@ const displayAuthor = computed(() => {
         data-testid="message-sender-name"
       >
         {{ displayAuthor }}
+      </span>
+      <span
+        v-if="showIdentity && displayModelId"
+        class="msg-model"
+        data-testid="message-model-id"
+      >
+        · {{ displayModelId }}
       </span>
       <span
         v-if="timestamp"
@@ -190,6 +202,12 @@ const displayAuthor = computed(() => {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
+}
+
+.msg-model {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .msg-timestamp {
