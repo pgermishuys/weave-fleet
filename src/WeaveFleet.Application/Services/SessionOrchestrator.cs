@@ -518,6 +518,7 @@ public sealed partial class SessionOrchestrator(
             OpencodeSessionId = childHarnessSessionId,
             Title = string.IsNullOrWhiteSpace(title) ? "Delegated Session" : title,
             Status = "active",
+            ActivityStatus = "idle",
             Directory = parent.Directory,
             CreatedAt = DateTime.UtcNow.ToString("O"),
             ParentSessionId = parent.Id,

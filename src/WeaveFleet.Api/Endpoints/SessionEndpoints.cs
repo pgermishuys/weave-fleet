@@ -18,6 +18,8 @@ public static class SessionEndpoints
         // GET /api/sessions?limit=&offset=&status=&projectId=
         group.MapGet("/", async (
             SessionService sessionService,
+            ISessionRepository sessionRepository,
+            IProjectRepository projectRepository,
             int limit = 100,
             int offset = 0,
             string? status = null,
@@ -29,9 +31,17 @@ public static class SessionEndpoints
                 : null;
 
             var result = await sessionService.ListSessionsAsync(limit, offset, statuses, projectId, retentionStatus);
-            return result.Match(
-                sessions => Results.Ok(sessions.Select(ToListResponse).ToList()),
-                error => Results.Problem(error.Description));
+            return await result.Match<Task<IResult>>(async sessions =>
+                {
+                    var projectNamesById = (await projectRepository.ListAsync())
+                        .ToDictionary(project => project.Id, project => project.Name, StringComparer.Ordinal);
+
+                    var parentIdsWithBusyChildren = (await sessionRepository.GetIdsWithActiveChildrenAsync())
+                        .ToHashSet(StringComparer.Ordinal);
+
+                    return Results.Ok(sessions.Select(session => ToListResponse(session, parentIdsWithBusyChildren, projectNamesById)).ToList());
+                },
+                error => Task.FromResult(Results.Problem(error.Description) as IResult));
         })
         .Produces<List<SessionListResponse>>(200)
         .WithName("GetSessions");
@@ -338,13 +348,16 @@ public static class SessionEndpoints
     /// Maps a domain <see cref="Session"/> to a <see cref="SessionListResponse"/> DTO.
     /// Workspace/instance details are embedded inline for now; Phase 4 will enrich with joins.
     /// </summary>
-    private static SessionListResponse ToListResponse(Session s)
+    private static SessionListResponse ToListResponse(
+        Session s,
+        HashSet<string> parentIdsWithBusyChildren,
+        Dictionary<string, string> projectNamesById)
     {
         // Parse created_at to Unix ms for the frontend
         var createdMs = TryParseUnixMs(s.CreatedAt);
         var updatedMs = createdMs; // Sessions don't have an updated_at; use created_at
 
-        var sessionStatus = DeriveSessionStatus(s);
+        var sessionStatus = DeriveAggregatedSessionStatus(s, parentIdsWithBusyChildren);
         var lifecycleStatus = s.LifecycleStatus ?? "running";
         var activityStatus = s.ActivityStatus;
 
@@ -372,7 +385,9 @@ public static class SessionEndpoints
             TotalTokens: s.TotalTokens > 0 ? s.TotalTokens : null,
             TotalCost: s.TotalCost > 0 ? s.TotalCost : null,
             ProjectId: s.ProjectId,
-            ProjectName: null);               // enriched in Phase 3 project endpoints
+            ProjectName: s.ProjectId is not null && projectNamesById.TryGetValue(s.ProjectId, out var projectName)
+                ? projectName
+                : null);
     }
 
     private static string DeriveSessionStatus(Session s) =>
@@ -387,6 +402,18 @@ public static class SessionEndpoints
                 _ => "active"
             }
         };
+
+    private static string DeriveAggregatedSessionStatus(Session session, HashSet<string> parentIdsWithBusyChildren)
+    {
+        if (session.Status is "stopped" or "completed" or "error" or "disconnected")
+        {
+            return session.Status;
+        }
+
+        return parentIdsWithBusyChildren.Contains(session.Id)
+            ? "active"
+            : DeriveSessionStatus(session);
+    }
 
     private static long TryParseUnixMs(string? iso)
     {
