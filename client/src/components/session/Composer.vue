@@ -9,8 +9,10 @@ import { useAgents } from "@/composables/use-agents";
 import { useAutocomplete } from "@/composables/use-autocomplete";
 import { useDraftState } from "@/composables/use-draft-state";
 import { useMessageQueue } from "@/composables/use-message-queue";
+import { useSendCommand } from "@/composables/use-send-command";
 import { useModels } from "@/composables/use-models";
 import { useSendPrompt } from "@/composables/use-send-prompt";
+import { parseSlashCommand } from "@/lib/slash-command-utils";
 import { useSessionsStore } from "@/stores/sessions";
 
 defineOptions({
@@ -34,6 +36,7 @@ const { draft, setText, setAgentId, setModelId } = useDraftState(props.sessionId
   modelId: "",
 });
 const { canSend, error: sendPromptError, sendPrompt } = useSendPrompt(props.sessionId);
+const { error: sendCommandError, sendCommand } = useSendCommand(props.sessionId);
 
 const sessionsStore = useSessionsStore();
 const { sessions, sessionStateOverrides } = storeToRefs(sessionsStore);
@@ -42,6 +45,7 @@ const localDisabledOverride = shallowRef<boolean | null>(null);
 const statusIndicatorVisible = shallowRef(false);
 const statusIndicatorPhase = shallowRef<"thinking" | "responding">("thinking");
 const statusIndicatorDotCount = shallowRef(1);
+const sendError = computed(() => sendCommandError.value ?? sendPromptError.value);
 let disabledStateObserver: MutationObserver | null = null;
 let statusIndicatorTimer: ReturnType<typeof setTimeout> | null = null;
 let statusIndicatorDotsTimer: ReturnType<typeof setInterval> | null = null;
@@ -166,7 +170,7 @@ const { queue, enqueue } = useMessageQueue(
   async (text) => {
     setText(text);
     await nextTick();
-    if (sendPrompt()) {
+    if (sendCurrentDraft()) {
       optimisticBusy.value = true;
       emit("promptSent");
     }
@@ -325,6 +329,15 @@ function handleCursorPositionChange(event: Event): void {
   cursorPosition.value = target.selectionStart ?? target.value.length;
 }
 
+function sendCurrentDraft(): boolean {
+  const parsedCommand = parseSlashCommand(draft.text);
+  if (parsedCommand) {
+    return sendCommand(parsedCommand.command, parsedCommand.args);
+  }
+
+  return sendPrompt();
+}
+
 function handleSend(): void {
   if (isDisabled.value) {
     return;
@@ -345,7 +358,7 @@ function handleSend(): void {
     return;
   }
 
-  if (!sendPrompt()) {
+  if (!sendCurrentDraft()) {
     return;
   }
 
@@ -408,12 +421,12 @@ function handleKeydown(event: KeyboardEvent): void {
     </div>
 
     <div
-      v-if="sendPromptError"
+      v-if="sendError"
       data-testid="send-prompt-error"
       class="composer-error"
       role="alert"
     >
-      {{ sendPromptError }}
+      {{ sendError }}
     </div>
 
     <div class="composer-box">

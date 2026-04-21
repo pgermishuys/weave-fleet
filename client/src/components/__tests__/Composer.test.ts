@@ -91,6 +91,10 @@ function configureApiFetch(): void {
       return createJsonResponse({}, 200);
     }
 
+    if (url.endsWith("/command") && options?.method === "POST") {
+      return createJsonResponse({}, 202);
+    }
+
     throw new Error(`Unhandled apiFetch call: ${url}`);
   });
 }
@@ -163,6 +167,27 @@ describe("Composer", () => {
 
     expect(enterEvent.defaultPrevented).toBe(true);
     expect(apiFetchMock.mock.calls.some(([url, options]) => String(url).endsWith("/prompt") && options?.method === "POST")).toBe(true);
+    expect(wrapper.emitted("promptSent")).toHaveLength(1);
+  });
+
+  it("routes slash commands to the command endpoint", async () => {
+    const wrapper = mountComposer();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("/start-work now");
+
+    const enterEvent = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true,
+    });
+
+    textarea.element.dispatchEvent(enterEvent);
+    await flushPromises();
+
+    expect(enterEvent.defaultPrevented).toBe(true);
+    expect(apiFetchMock.mock.calls.some(([url, options]) => String(url).endsWith("/command") && options?.method === "POST")).toBe(true);
+    expect(apiFetchMock.mock.calls.some(([url, options]) => String(url).endsWith("/prompt") && options?.method === "POST")).toBe(false);
     expect(wrapper.emitted("promptSent")).toHaveLength(1);
   });
 
