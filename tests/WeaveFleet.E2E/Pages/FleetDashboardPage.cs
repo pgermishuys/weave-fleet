@@ -9,6 +9,7 @@ namespace WeaveFleet.E2E.Pages;
 public sealed class FleetDashboardPage(IPage page)
 {
     private readonly IPage _page = page;
+    private ILocator RetentionFilterTrigger => _page.GetByTestId("retention-filter-trigger");
 
     // ── Selectors ────────────────────────────────────────────────────────────
 
@@ -138,7 +139,7 @@ public sealed class FleetDashboardPage(IPage page)
         for (var attempt = 0; attempt < 3; attempt++)
         {
             var option = _page.GetByTestId($"retention-filter-option-{key}");
-            await _page.GetByTestId("retention-filter-trigger").ClickAsync(new LocatorClickOptions { Force = true });
+            await RetentionFilterTrigger.ClickAsync(new LocatorClickOptions { Force = true });
 
             try
             {
@@ -151,6 +152,7 @@ public sealed class FleetDashboardPage(IPage page)
                     Timeout = 2_000,
                 });
 
+                await WaitForRetentionFilterAppliedAsync(label);
                 return;
             }
             catch when (attempt < 2)
@@ -162,6 +164,26 @@ public sealed class FleetDashboardPage(IPage page)
         var finalOption = _page.GetByTestId($"retention-filter-option-{key}");
         await Assertions.Expect(finalOption).ToBeVisibleAsync();
         await finalOption.ClickAsync(new LocatorClickOptions { Force = true });
+        await WaitForRetentionFilterAppliedAsync(label);
+    }
+
+    private async Task WaitForRetentionFilterAppliedAsync(string label)
+    {
+        await Assertions.Expect(RetentionFilterTrigger).ToContainTextAsync($"Show: {label}");
+
+        try
+        {
+            await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new PageWaitForLoadStateOptions
+            {
+                Timeout = 5_000,
+            });
+        }
+        catch (TimeoutException)
+        {
+            // The app may keep websocket traffic open; the visible trigger text is
+            // the primary synchronization signal, and downstream assertions will
+            // still validate the resulting dashboard/sidebar state.
+        }
     }
 
     /// <summary>Click a session card to navigate to the session detail page.</summary>
