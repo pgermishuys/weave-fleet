@@ -144,13 +144,79 @@ internal sealed record OpenCodeMessageTime
 /// <remarks>
 /// Fields are nullable and non-required because OpenCode may return messages where
 /// the <c>model</c> object has missing or null fields (e.g., <c>"model": {}</c>).
-/// OpenCode responses use <c>providerID</c> / <c>modelID</c> (uppercase D).
+/// OpenCode responses may use either <c>providerID</c> / <c>modelID</c> or
+/// <c>providerId</c> / <c>modelId</c> depending on endpoint/version.
 /// For the write/request path see <see cref="OpenCodeModelRefRequest"/>.
 /// </remarks>
+[JsonConverter(typeof(OpenCodeModelRefJsonConverter))]
 internal sealed record OpenCodeModelRef
 {
-    [JsonPropertyName("providerID")] public string? ProviderId { get; init; }
-    [JsonPropertyName("modelID")] public string? ModelId { get; init; }
+    public string? ProviderId { get; init; }
+    public string? ModelId { get; init; }
+}
+
+internal sealed class OpenCodeModelRefJsonConverter : JsonConverter<OpenCodeModelRef>
+{
+    public override OpenCodeModelRef? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Null)
+        {
+            return null;
+        }
+
+        using var document = JsonDocument.ParseValue(ref reader);
+        var root = document.RootElement;
+
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            throw new JsonException("Expected OpenCode model reference to be a JSON object.");
+        }
+
+        return new OpenCodeModelRef
+        {
+            ProviderId = ReadString(root, "providerID", "providerId"),
+            ModelId = ReadString(root, "modelID", "modelId"),
+        };
+    }
+
+    public override void Write(Utf8JsonWriter writer, OpenCodeModelRef value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+
+        if (value.ProviderId is not null)
+        {
+            writer.WriteString("providerID", value.ProviderId);
+        }
+
+        if (value.ModelId is not null)
+        {
+            writer.WriteString("modelID", value.ModelId);
+        }
+
+        writer.WriteEndObject();
+    }
+
+    private static string? ReadString(JsonElement root, string primaryName, string alternateName)
+    {
+        if (TryReadString(root, primaryName, out var value) || TryReadString(root, alternateName, out value))
+        {
+            return value;
+        }
+
+        return null;
+    }
+
+    private static bool TryReadString(JsonElement root, string propertyName, out string? value)
+    {
+        if (root.TryGetProperty(propertyName, out var property))
+        {
+            value = property.ValueKind == JsonValueKind.Null ? null : property.GetString();
+            return true;
+        }
+
+        value = null;
+        return false;
+    }
 }
 
 /// <summary>Model reference (provider + model IDs) — <b>write/request</b> path.</summary>
