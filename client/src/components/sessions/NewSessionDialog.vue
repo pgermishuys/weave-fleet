@@ -188,6 +188,18 @@ const directoryPickerLocation = computed(() => {
   return directoryRoots.value[0] ?? "Workspace roots";
 });
 
+const filteredDirectoryEntries = computed(() => {
+  const query = directorySearch.value.trim().toLowerCase();
+  if (!query) {
+    return directoryEntries.value;
+  }
+
+  return directoryEntries.value.filter((entry) => {
+    const searchableText = `${entry.name} ${entry.path}`.toLowerCase();
+    return searchableText.includes(query);
+  });
+});
+
 const sessionSource = computed<SessionSourceSelection | undefined>(() => {
   if (sourceKind.value === "repository") {
     if (!selectedRepository.value) {
@@ -695,7 +707,6 @@ watch(repositoryQuery, (value) => {
                     class="mt-3"
                     :model-value="directorySearch"
                     placeholder="Search directories"
-                    :disabled="isDirectoryBrowserLoading"
                     @update:model-value="handleDirectorySearchUpdate"
                   />
 
@@ -719,7 +730,7 @@ watch(repositoryQuery, (value) => {
 
                 <div class="max-h-72 overflow-y-auto bg-card-bg p-2">
                   <button
-                    v-for="entry in directoryEntries"
+                    v-for="entry in filteredDirectoryEntries"
                     :key="entry.path"
                     type="button"
                     class="flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
@@ -755,7 +766,7 @@ watch(repositoryQuery, (value) => {
                   </div>
 
                   <p
-                    v-else-if="directoryEntries.length === 0"
+                    v-else-if="filteredDirectoryEntries.length === 0"
                     class="px-3 py-6 text-sm text-muted-foreground"
                   >
                     No directories found.

@@ -2,9 +2,11 @@
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { Send } from "lucide-vue-next";
+import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
 import AgentSelector from "@/components/session/AgentSelector.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
 import { useAgents } from "@/composables/use-agents";
+import { useAutocomplete } from "@/composables/use-autocomplete";
 import { useDraftState } from "@/composables/use-draft-state";
 import { useMessageQueue } from "@/composables/use-message-queue";
 import { useModels } from "@/composables/use-models";
@@ -172,6 +174,15 @@ const { queue, enqueue } = useMessageQueue(
 );
 
 const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
+const cursorPosition = shallowRef(0);
+const autocompleteEnabled = computed(() => Boolean(props.instanceId?.trim()));
+const autocomplete = useAutocomplete({
+  value: computed(() => draft.text),
+  setValue: setText,
+  instanceId: props.instanceId ?? "",
+  inputRef: textareaRef,
+  cursorPosition,
+});
 
 const selectedAgentId = computed({
   get: () => draft.agentId,
@@ -272,8 +283,14 @@ function handleInput(event: Event): void {
   }
 
   const target = event.target as HTMLTextAreaElement;
+  cursorPosition.value = target.selectionStart ?? target.value.length;
   setText(target.value);
   resizeTextarea();
+}
+
+function handleCursorPositionChange(event: Event): void {
+  const target = event.target as HTMLTextAreaElement;
+  cursorPosition.value = target.selectionStart ?? target.value.length;
 }
 
 function handleSend(): void {
@@ -312,6 +329,14 @@ function handleSend(): void {
 function handleKeydown(event: KeyboardEvent): void {
   if (isDisabled.value) {
     return;
+  }
+
+  if (autocompleteEnabled.value) {
+    autocomplete.onKeyDown(event);
+
+    if (autocomplete.isOpen.value && ["Enter", "Tab", "Escape"].includes(event.key)) {
+      return;
+    }
   }
 
   if (event.key !== "Enter") {
@@ -354,6 +379,15 @@ function handleKeydown(event: KeyboardEvent): void {
     </div>
 
     <div class="composer-box">
+      <AutocompletePopup
+        :open="autocompleteEnabled && autocomplete.isOpen.value"
+        :items="autocompleteEnabled ? autocomplete.items.value : []"
+        :is-loading="autocompleteEnabled ? autocomplete.isLoading.value : false"
+        :selected-value="autocompleteEnabled ? autocomplete.selectedValue.value : null"
+        :error="autocompleteEnabled ? autocomplete.error.value : undefined"
+        :on-select="autocomplete.onSelect"
+      />
+
       <textarea
         ref="textarea"
         class="composer-box__textarea"
@@ -364,6 +398,8 @@ function handleKeydown(event: KeyboardEvent): void {
         placeholder="Type a message…"
         @input="handleInput"
         @keydown="handleKeydown"
+        @keyup="handleCursorPositionChange"
+        @click="handleCursorPositionChange"
       />
 
       <div class="composer-toolbar">
@@ -458,6 +494,7 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .composer-box {
+  position: relative;
   border: 1px solid var(--border);
   border-radius: var(--radius-panel);
   background: var(--card-bg);
@@ -477,8 +514,8 @@ function handleKeydown(event: KeyboardEvent): void {
   color: var(--text);
   resize: none;
   outline: none;
-  font: inherit;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .composer-box__textarea::placeholder {
@@ -504,6 +541,8 @@ function handleKeydown(event: KeyboardEvent): void {
   border-radius: 20px;
   background: var(--accent);
   color: #fff;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -518,8 +557,8 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .send-btn__icon {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
 .queue-badge {

@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">68.18% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/22</span>
+                <span class='fraction'>15/22</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">60% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/10</span>
+                <span class='fraction'>6/10</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">50% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/8</span>
+                <span class='fraction'>4/8</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">68.18% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/22</span>
+                <span class='fraction'>15/22</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line low'></div>
+    <div class='status-line medium'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -166,42 +166,38 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">5x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">5x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -216,7 +212,11 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -252,38 +252,38 @@ interface DraftDefaults {
   effort?: EffortLevel;
 }
 &nbsp;
-const <span class="cstat-no" title="statement not covered" >draftRegistry = reactive&lt;Record&lt;string, DraftState&gt;&gt;({});</span>
+const draftRegistry = reactive&lt;Record&lt;string, DraftState&gt;&gt;({});
 &nbsp;
-function <span class="fstat-no" title="function not covered" >ensureDraft(s</span>essionId: string, defaults: DraftDefaults): DraftState {
-  const existingDraft = <span class="cstat-no" title="statement not covered" >draftRegistry[sessionId];</span>
-<span class="cstat-no" title="statement not covered" >  if (existingDraft) {</span>
-<span class="cstat-no" title="statement not covered" >    if (!existingDraft.agentId) {</span>
-<span class="cstat-no" title="statement not covered" >      existingDraft.agentId = defaults.agentId;</span>
+function ensureDraft(sessionId: string, defaults: DraftDefaults): DraftState {
+  const existingDraft = draftRegistry[sessionId];
+  if (existingDraft) {
+    <span class="missing-if-branch" title="else path not taken" >E</span>if (!existingDraft.agentId) {
+      existingDraft.agentId = defaults.agentId;
     }
 &nbsp;
-<span class="cstat-no" title="statement not covered" >    if (!existingDraft.modelId) {</span>
-<span class="cstat-no" title="statement not covered" >      existingDraft.modelId = defaults.modelId;</span>
+    <span class="missing-if-branch" title="else path not taken" >E</span>if (!existingDraft.modelId) {
+      existingDraft.modelId = defaults.modelId;
     }
 &nbsp;
-<span class="cstat-no" title="statement not covered" >    return existingDraft;</span>
+    return existingDraft;
   }
 &nbsp;
-  const draftState: DraftState = <span class="cstat-no" title="statement not covered" >{</span>
+  const draftState: DraftState = {
     text: "",
     agentId: defaults.agentId,
     modelId: defaults.modelId,
     effort: defaults.effort ?? "medium",
   };
 &nbsp;
-<span class="cstat-no" title="statement not covered" >  draftRegistry[sessionId] = draftState;</span>
-<span class="cstat-no" title="statement not covered" >  return draftRegistry[sessionId];</span>
+  draftRegistry[sessionId] = draftState;
+  return draftRegistry[sessionId];
 }
 &nbsp;
-export function <span class="fstat-no" title="function not covered" >useDraftState(s</span>essionId: string, defaults: DraftDefaults) {
-  const draft = <span class="cstat-no" title="statement not covered" >ensureDraft(sessionId, defaults);</span>
+export function useDraftState(sessionId: string, defaults: DraftDefaults) {
+  const draft = ensureDraft(sessionId, defaults);
 &nbsp;
-  function <span class="fstat-no" title="function not covered" >setText(t</span>ext: string): void {
-<span class="cstat-no" title="statement not covered" >    draft.text = text;</span>
+  function setText(text: string): void {
+    draft.text = text;
   }
 &nbsp;
   function <span class="fstat-no" title="function not covered" >setAgentId(a</span>gentId: string): void {
@@ -298,11 +298,11 @@ export function <span class="fstat-no" title="function not covered" >useDraftSta
 <span class="cstat-no" title="statement not covered" >    draft.effort = effort;</span>
   }
 &nbsp;
-  function <span class="fstat-no" title="function not covered" >resetText(): void {</span>
-<span class="cstat-no" title="statement not covered" >    draft.text = "";</span>
+  function resetText(): void {
+    draft.text = "";
   }
 &nbsp;
-<span class="cstat-no" title="statement not covered" >  return {</span>
+  return {
     draft,
     setText,
     setAgentId,
@@ -328,7 +328,7 @@ export function <span class="fstat-no" title="function not covered" >clearDraftT
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-04-19T17:21:40.772Z
+                at 2026-04-21T05:56:38.403Z
             </div>
         <script src="../prettify.js"></script>
         <script>

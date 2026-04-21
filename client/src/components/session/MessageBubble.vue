@@ -128,7 +128,7 @@ const displayAuthor = computed(() => {
 .message {
   width: var(--activity-bubble-width, 100%);
   box-sizing: border-box;
-  padding: 10px 12px 12px;
+  padding: 8px 10px 10px;
   border: 1px solid transparent;
   border-radius: 18px;
   background: transparent;
@@ -178,7 +178,7 @@ const displayAuthor = computed(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .message--user .msg-header {
@@ -187,18 +187,19 @@ const displayAuthor = computed(() => {
 
 .msg-author {
   color: var(--text);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
 
 .msg-timestamp {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .msg-body {
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.45;
   color: #d4d4d8;
 }
 
@@ -207,7 +208,7 @@ const displayAuthor = computed(() => {
 }
 
 .message--identity-hidden .msg-header {
-  margin-bottom: 2px;
+  margin-bottom: 1px;
 }
 
 .message--user .msg-body__content {
@@ -223,16 +224,20 @@ const displayAuthor = computed(() => {
 .msg-body__content :deep(ol),
 .msg-body__content :deep(pre),
 .msg-body__content :deep(blockquote) {
-  margin: 0 0 12px;
+  margin: 0 0 8px;
+}
+
+.msg-body__content :deep(*:last-child) {
+  margin-bottom: 0;
 }
 
 .msg-body__content :deep(ul),
 .msg-body__content :deep(ol) {
-  padding-left: 18px;
+  padding-left: 16px;
 }
 
 .msg-body__content :deep(li + li) {
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .msg-body__content :deep(a) {
@@ -244,8 +249,8 @@ const displayAuthor = computed(() => {
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.06);
   color: #f4f4f5;
-  font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 0.92em;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.88em;
 }
 
 .msg-body__content :deep(pre) {
@@ -256,12 +261,12 @@ const displayAuthor = computed(() => {
 
 .msg-body__content :deep(pre code) {
   display: block;
-  padding: 12px 14px;
-  font-size: 12px;
+  padding: 10px 12px;
+  font-size: 11px;
 }
 
 .msg-body__content :deep(blockquote) {
-  padding-left: 12px;
+  padding-left: 10px;
   border-left: 2px solid rgba(255, 255, 255, 0.12);
   color: #c4c4cc;
 }

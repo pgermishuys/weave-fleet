@@ -720,7 +720,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-  padding: 20px 24px;
+  padding: 16px 20px;
 }
 
 .jump-to-latest {
@@ -749,8 +749,8 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   display: flex;
   flex-direction: column;
   width: 100%;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 6px;
+  margin-bottom: 12px;
 }
 
 .activity-message--assistant {
@@ -763,7 +763,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 .activity-message--first,
 .activity-message--middle {
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .delegation-links {
@@ -771,9 +771,9 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   flex-direction: column;
   width: var(--activity-bubble-width);
   box-sizing: border-box;
-  gap: 6px;
-  margin-top: 2px;
-  padding: 0 12px;
+  gap: 4px;
+  margin-top: 1px;
+  padding: 0 10px;
 }
 
 .delegation-links--user {

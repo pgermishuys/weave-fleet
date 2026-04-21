@@ -25,28 +25,28 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/16</span>
+                <span class='fraction'>0/13</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/5</span>
+                <span class='fraction'>0/3</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/8</span>
+                <span class='fraction'>0/6</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/16</span>
+                <span class='fraction'>0/13</span>
             </div>
         
             
@@ -107,38 +107,13 @@
 <a name='L42'></a><a href='#L42'>42</a>
 <a name='L43'></a><a href='#L43'>43</a>
 <a name='L44'></a><a href='#L44'>44</a>
-<a name='L45'></a><a href='#L45'>45</a>
-<a name='L46'></a><a href='#L46'>46</a>
-<a name='L47'></a><a href='#L47'>47</a>
-<a name='L48'></a><a href='#L48'>48</a>
-<a name='L49'></a><a href='#L49'>49</a>
-<a name='L50'></a><a href='#L50'>50</a>
-<a name='L51'></a><a href='#L51'>51</a>
-<a name='L52'></a><a href='#L52'>52</a>
-<a name='L53'></a><a href='#L53'>53</a>
-<a name='L54'></a><a href='#L54'>54</a>
-<a name='L55'></a><a href='#L55'>55</a>
-<a name='L56'></a><a href='#L56'>56</a>
-<a name='L57'></a><a href='#L57'>57</a>
-<a name='L58'></a><a href='#L58'>58</a>
-<a name='L59'></a><a href='#L59'>59</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L45'></a><a href='#L45'>45</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -166,9 +141,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -182,11 +154,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { defineStore } from "pinia";
 import { shallowRef } from "vue";
 &nbsp;
-export type SessionRightPanelTab = "session" | "plan";
-&nbsp;
 export const <span class="cstat-no" title="statement not covered" >useWorkspaceUiStore = defineStore(<span class="fstat-no" title="function not covered" >"workspace-ui", () =&gt; {</span></span>
   const <span class="cstat-no" title="statement not covered" >inlineToolDiffs = shallowRef(false);</span>
-  const <span class="cstat-no" title="statement not covered" >sessionRightPanelTab = shallowRef&lt;SessionRightPanelTab&gt;("session");</span>
   const <span class="cstat-no" title="statement not covered" >newSessionDialogOpen = shallowRef(false);</span>
   const <span class="cstat-no" title="statement not covered" >newSessionDialogProjectId = shallowRef&lt;string | null&gt;(null);</span>
 &nbsp;
@@ -196,14 +165,6 @@ export const <span class="cstat-no" title="statement not covered" >useWorkspaceU
 &nbsp;
   function <span class="fstat-no" title="function not covered" >toggleInlineToolDiffs(): void {</span>
 <span class="cstat-no" title="statement not covered" >    inlineToolDiffs.value = !inlineToolDiffs.value;</span>
-  }
-&nbsp;
-  function <span class="fstat-no" title="function not covered" >setSessionRightPanelTab(t</span>ab: SessionRightPanelTab): void {
-<span class="cstat-no" title="statement not covered" >    sessionRightPanelTab.value = tab;</span>
-  }
-&nbsp;
-  function <span class="fstat-no" title="function not covered" >toggleSessionRightPanelTab(): void {</span>
-<span class="cstat-no" title="statement not covered" >    sessionRightPanelTab.value = sessionRightPanelTab.value === "session" ? "plan" : "session";</span>
   }
 &nbsp;
   function <span class="fstat-no" title="function not covered" >openNewSessionDialog(p</span>rojectId: string | null = <span class="branch-0 cbranch-no" title="branch not covered" >null): void {</span>
@@ -225,13 +186,10 @@ export const <span class="cstat-no" title="statement not covered" >useWorkspaceU
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  return {</span>
     inlineToolDiffs,
-    sessionRightPanelTab,
     newSessionDialogOpen,
     newSessionDialogProjectId,
     setInlineToolDiffs,
     toggleInlineToolDiffs,
-    setSessionRightPanelTab,
-    toggleSessionRightPanelTab,
     openNewSessionDialog,
     closeNewSessionDialog,
     setNewSessionDialogOpen,
@@ -244,7 +202,7 @@ export const <span class="cstat-no" title="statement not covered" >useWorkspaceU
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-04-19T17:21:40.772Z
+                at 2026-04-21T05:56:38.403Z
             </div>
         <script src="../prettify.js"></script>
         <script>
