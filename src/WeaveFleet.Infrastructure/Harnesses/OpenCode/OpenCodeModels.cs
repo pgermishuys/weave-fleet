@@ -144,13 +144,13 @@ internal sealed record OpenCodeMessageTime
 /// <remarks>
 /// Fields are nullable and non-required because OpenCode may return messages where
 /// the <c>model</c> object has missing or null fields (e.g., <c>"model": {}</c>).
-/// OpenCode responses use camelCase (<c>providerId</c> / <c>modelId</c>).
+/// OpenCode responses use <c>providerID</c> / <c>modelID</c> (uppercase D).
 /// For the write/request path see <see cref="OpenCodeModelRefRequest"/>.
 /// </remarks>
 internal sealed record OpenCodeModelRef
 {
-    [JsonPropertyName("providerId")] public string? ProviderId { get; init; }
-    [JsonPropertyName("modelId")] public string? ModelId { get; init; }
+    [JsonPropertyName("providerID")] public string? ProviderId { get; init; }
+    [JsonPropertyName("modelID")] public string? ModelId { get; init; }
 }
 
 /// <summary>Model reference (provider + model IDs) — <b>write/request</b> path.</summary>
