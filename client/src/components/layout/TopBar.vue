@@ -119,6 +119,7 @@ const avatarInitials = computed(() => {
 });
 
 const showNotifications = computed(() => config.value.cloudMode);
+const showUserAvatar = computed(() => config.value.authEnabled);
 </script>
 
 <template>
@@ -168,7 +169,10 @@ const showNotifications = computed(() => config.value.cloudMode);
         <Bell class="h-4 w-4" />
       </button>
 
-      <Avatar class="h-8 w-8 border border-[var(--border)] bg-[var(--panel-bg)]">
+      <Avatar
+        v-if="showUserAvatar"
+        class="h-8 w-8 border border-[var(--border)] bg-[var(--panel-bg)]"
+      >
         <AvatarFallback class="bg-[rgba(124,58,237,0.15)] text-[11px] font-semibold tracking-[0.08em] text-[var(--text)]">
           {{ avatarInitials }}
         </AvatarFallback>
