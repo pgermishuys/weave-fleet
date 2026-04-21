@@ -37,6 +37,7 @@ Thumbs.db
 # Test results
 test-results/
 client/test-results/
+client/coverage/
 
 # Local databases
 *.db
