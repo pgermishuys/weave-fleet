@@ -6,7 +6,7 @@ import FilesChanged from "@/components/session/FilesChanged.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
 import TodoListView from "@/components/session/TodoListView.vue";
 import TokenGrid from "@/components/session/TokenGrid.vue";
-import { useSessionEvents } from "@/composables/use-session-events";
+import { useSessionTodos } from "@/composables/use-session-todos";
 import {
   useAbortSession,
   useArchiveSession,
@@ -19,7 +19,6 @@ import {
 import { useDiffs } from "@/composables/use-diffs";
 import { apiFetch } from "@/lib/api-client";
 import type { SessionListItem } from "@/lib/api-types";
-import { extractLatestTodos } from "@/lib/todo-utils";
 import { useSessionsStore } from "@/stores/sessions";
 
 interface TokenMetric {
@@ -100,7 +99,7 @@ const effectiveSessionStatus = computed(() => props.session?.sessionStatus
   ?? remoteSessionDetail.value?.lifecycleStatus
   ?? remoteSessionDetail.value?.status
   ?? null);
-const { messages: sessionMessages } = useSessionEvents(todoSessionId, todoInstanceId);
+const { todos } = useSessionTodos(todoSessionId, todoInstanceId);
 const effectiveLifecycleStatus = computed(() => normalizeLifecycleStatus(
   props.session?.lifecycleStatus
     ?? remoteSessionDetail.value?.lifecycleStatus
@@ -148,8 +147,6 @@ const actionErrors = computed(() => [
   terminateError.value,
   unarchiveError.value,
 ].filter((message): message is string => Boolean(message)));
-
-const todos = computed(() => extractLatestTodos(sessionMessages.value));
 
 const tokenMetrics = computed<readonly TokenMetric[]>(() => [
   {

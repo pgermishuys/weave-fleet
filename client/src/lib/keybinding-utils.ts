@@ -34,7 +34,8 @@ export function detectGlobalConflict(
       gs.key === newShortcut.key &&
       !!gs.platformModifier === !!newShortcut.platformModifier &&
       !!gs.metaKey === !!newShortcut.metaKey &&
-      !!gs.ctrlKey === !!newShortcut.ctrlKey
+      !!gs.ctrlKey === !!newShortcut.ctrlKey &&
+      !!gs.shiftKey === !!newShortcut.shiftKey
     ) {
       return { type: "global", conflictingCommandId: id, key: newShortcut.key };
     }
@@ -51,7 +52,9 @@ export function formatShortcut(shortcut: GlobalShortcut, isMac: boolean): string
   } else if (shortcut.ctrlKey) {
     modifier = "Ctrl+";
   }
-  return `${modifier}${shortcut.key.toUpperCase()}`;
+
+  const shiftModifier = shortcut.shiftKey ? (isMac ? "⇧" : "Shift+") : "";
+  return `${modifier}${shiftModifier}${shortcut.key.toUpperCase()}`;
 }
 
 export function mergeWithDefaults(

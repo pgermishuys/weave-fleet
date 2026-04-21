@@ -188,6 +188,10 @@ function handleTabSelect(tabId: string): void {
     activeTabId.value = selectedTab.id;
   }
 }
+
+function handleCollapse(): void {
+  sidebarStore.setRightPanelCollapsed(true);
+}
 </script>
 
 <template>
@@ -199,6 +203,7 @@ function handleTabSelect(tabId: string): void {
       :tabs="availableTabs"
       :active-tab="activeTab.id"
       @select="handleTabSelect"
+      @collapse="handleCollapse"
     />
 
     <div class="right-content">

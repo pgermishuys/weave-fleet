@@ -2,8 +2,7 @@
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
 import TodoListView from "@/components/session/TodoListView.vue";
-import { useSessionEvents } from "@/composables/use-session-events";
-import { extractLatestTodos } from "@/lib/todo-utils";
+import { useSessionTodos } from "@/composables/use-session-todos";
 import { useSessionsStore } from "@/stores/sessions";
 
 const props = defineProps<{
@@ -26,10 +25,9 @@ const selectedSession = computed(() => {
 const resolvedSessionId = computed(() => props.sessionId ?? "");
 const resolvedInstanceId = computed(() => props.instanceId ?? selectedSession.value?.instanceId ?? "");
 
-const { messages: sessionMessages } = useSessionEvents(resolvedSessionId, resolvedInstanceId);
+const { todos } = useSessionTodos(resolvedSessionId, resolvedInstanceId);
 
 const panelTitle = computed(() => props.sessionTitle ? `${props.sessionTitle} Plan` : "Execution Plan");
-const todos = computed(() => extractLatestTodos(sessionMessages.value));
 </script>
 
 <template>

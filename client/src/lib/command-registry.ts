@@ -7,6 +7,7 @@ export interface GlobalShortcut {
   platformModifier?: boolean;
   metaKey?: boolean;
   ctrlKey?: boolean;
+  shiftKey?: boolean;
 }
 
 export interface Command {

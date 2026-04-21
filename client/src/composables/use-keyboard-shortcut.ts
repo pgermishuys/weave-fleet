@@ -5,6 +5,7 @@ export interface KeyboardShortcutOptions {
   metaKey?: boolean;
   ctrlKey?: boolean;
   platformModifier?: boolean;
+  shiftKey?: boolean;
   enabled?: MaybeRefOrGetter<boolean>;
   allowInEditable?: boolean;
 }
@@ -31,6 +32,10 @@ export function matchesKeyboardShortcut(event: KeyboardEvent, shortcut: GlobalSh
     return false;
   }
 
+   if (Boolean(shortcut.shiftKey) !== event.shiftKey) {
+    return false;
+  }
+
   if (shortcut.platformModifier) {
     return isApplePlatform() ? event.metaKey : event.ctrlKey;
   }
@@ -53,6 +58,7 @@ function resolveShortcut(input: KeyboardShortcutInput, options: KeyboardShortcut
       metaKey: options.metaKey,
       ctrlKey: options.ctrlKey,
       platformModifier: options.platformModifier,
+      shiftKey: options.shiftKey,
     };
   }
 

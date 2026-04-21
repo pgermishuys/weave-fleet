@@ -52,7 +52,9 @@ function formatGlobalShortcut(shortcut: GlobalShortcut): string {
     modifier = "Ctrl+";
   }
 
-  return `${modifier}${shortcut.key.toUpperCase()}`;
+  const shiftModifier = shortcut.shiftKey ? (isApplePlatform() ? "⇧" : "Shift+") : "";
+
+  return `${modifier}${shiftModifier}${shortcut.key.toUpperCase()}`;
 }
 
 function handleOpenChange(open: boolean): void {

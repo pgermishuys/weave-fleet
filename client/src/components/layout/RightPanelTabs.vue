@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { PanelRightClose } from "lucide-vue-next";
+
 interface RightPanelTabOption {
   id: string;
   label: string;
@@ -11,6 +13,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [tabId: string];
+  collapse: [];
 }>();
 
 function handleSelect(tabId: string): void {
@@ -19,6 +22,10 @@ function handleSelect(tabId: string): void {
   }
 
   emit("select", tabId);
+}
+
+function handleCollapse(): void {
+  emit("collapse");
 }
 </script>
 
@@ -40,12 +47,22 @@ function handleSelect(tabId: string): void {
     >
       {{ tab.label }}
     </button>
+
+    <button
+      type="button"
+      class="right-tabs__collapse"
+      aria-label="Collapse right panel"
+      @click="handleCollapse"
+    >
+      <PanelRightClose :size="14" aria-hidden="true" />
+    </button>
   </div>
 </template>
 
 <style scoped>
 .right-tabs {
   display: flex;
+  align-items: stretch;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -71,5 +88,28 @@ function handleSelect(tabId: string): void {
 .right-tab.active {
   color: var(--text);
   border-bottom-color: var(--accent);
+}
+
+.right-tabs__collapse {
+  width: 38px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.right-tabs__collapse:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.right-tabs__collapse:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 </style>
