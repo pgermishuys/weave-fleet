@@ -256,6 +256,7 @@ const issueStatusClassName = computed(() => {
 });
 const issueStatusLabel = computed(() => (effectiveIssue.value?.state === "closed" ? "Closed" : "Open"));
 const issueBody = computed(() => effectiveIssue.value?.body?.trim() || "No description provided.");
+const githubActionButtonClass = "self-start rounded-[var(--radius-btn)] border-border bg-white/[0.04] px-2.5 text-xs font-medium text-foreground shadow-none hover:bg-white/[0.08] hover:text-foreground";
 const renderedComments = computed(() => {
   return effectiveComments.value.map((comment) => ({
     ...comment,
@@ -308,6 +309,7 @@ const commentSummary = computed(() => {
       <Button
         variant="outline"
         size="sm"
+        :class="githubActionButtonClass"
         @click="retryIssueLoad"
       >
         <RefreshCw :size="14" />
@@ -380,6 +382,7 @@ const commentSummary = computed(() => {
         <Button
           variant="outline"
           size="sm"
+          :class="githubActionButtonClass"
           @click="openIssueOnGitHub"
         >
           <ExternalLink :size="14" />
@@ -424,6 +427,7 @@ const commentSummary = computed(() => {
             <Button
               variant="outline"
               size="sm"
+              :class="githubActionButtonClass"
               @click="retryCommentsLoad"
             >
               <RefreshCw :size="14" />

@@ -598,24 +598,41 @@ async function handleRefresh(): Promise<void> {
 .detail-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   gap: 10px;
 }
 
 .detail-action-button,
 .detail-link-button {
   display: inline-flex;
+  box-sizing: border-box;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 34px;
-  padding: 0 12px;
+  min-height: 32px;
+  height: 32px;
+  padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-btn);
-  background: transparent;
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
+  line-height: 1;
   text-decoration: none;
+  white-space: nowrap;
+}
+
+.detail-action-button:hover,
+.detail-link-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.detail-action-button:focus-visible,
+.detail-link-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .detail-action-button:disabled {
