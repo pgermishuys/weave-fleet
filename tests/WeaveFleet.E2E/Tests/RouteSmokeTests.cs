@@ -32,7 +32,7 @@ public sealed class RouteSmokeTests : E2ETestBase,
 
             using var errorMonitor = CreateErrorMonitor();
 
-            await Page.GotoAsync(route, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+            await Page.GotoAsync(route, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
 
             Page.Url.ShouldContain(route);
 
@@ -44,7 +44,7 @@ public sealed class RouteSmokeTests : E2ETestBase,
                     Exact = true
                 })).ToBeVisibleAsync();
 
-            await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+            await Page.WaitForLoadStateAsync(LoadState.Load);
             errorMonitor.AssertNoClientErrors(route);
         });
     }
@@ -56,7 +56,7 @@ public sealed class RouteSmokeTests : E2ETestBase,
         {
             using var errorMonitor = CreateErrorMonitor();
 
-            await Page.GotoAsync("/login", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+            await Page.GotoAsync("/login", new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
 
             var signInLink = Page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "Sign in", Exact = true });
             var signUpLink = Page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "Sign up", Exact = true });
@@ -67,7 +67,7 @@ public sealed class RouteSmokeTests : E2ETestBase,
             await Microsoft.Playwright.Assertions.Expect(signUpLink).ToBeVisibleAsync();
             await Microsoft.Playwright.Assertions.Expect(Page.GetByText("Agent Fleet", new PageGetByTextOptions { Exact = true })).ToBeVisibleAsync();
 
-            await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+            await Page.WaitForLoadStateAsync(LoadState.Load);
             errorMonitor.AssertNoClientErrors("/login");
         });
     }
@@ -81,7 +81,7 @@ public sealed class RouteSmokeTests : E2ETestBase,
 
             using var errorMonitor = CreateErrorMonitor();
 
-            await Page.GotoAsync("/settings/plugins/github", new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+            await Page.GotoAsync("/settings/plugins/github", new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
 
             Page.Url.ShouldContain("/settings/plugins/github");
 
@@ -92,7 +92,7 @@ public sealed class RouteSmokeTests : E2ETestBase,
             await Microsoft.Playwright.Assertions.Expect(
                 Page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Connect with GitHub", Exact = true })).ToBeVisibleAsync();
 
-            await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+            await Page.WaitForLoadStateAsync(LoadState.Load);
             errorMonitor.AssertNoClientErrors("/settings/plugins/github");
         });
     }

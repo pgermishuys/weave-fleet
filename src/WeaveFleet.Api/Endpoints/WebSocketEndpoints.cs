@@ -144,6 +144,12 @@ public static class WebSocketEndpoints
                                 continue;
                             }
 
+                            // Use derived effective status so that a parent session shows "busy"
+                            // when any of its delegated child sessions are busy.
+                            var effectiveActivityStatus =
+                                activityTracker.GetEffectiveActivityStatus(snapshot.FleetSessionId)
+                                ?? snapshot.ActivityStatus;
+
                             var initialEvent = JsonSerializer.Serialize(new
                             {
                                 type = "event",
@@ -155,7 +161,7 @@ public static class WebSocketEndpoints
                                     properties = new
                                     {
                                         sessionId = snapshot.FleetSessionId,
-                                        activityStatus = snapshot.ActivityStatus
+                                        activityStatus = effectiveActivityStatus
                                     }
                                 }
                             });

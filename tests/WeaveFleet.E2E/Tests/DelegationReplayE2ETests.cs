@@ -378,6 +378,56 @@ public sealed class DelegationReplayE2ETests : E2ETestBase,
         });
     }
 
+    // -----------------------------------------------------------------------
+    // Task 14 — Parent shows busy when only child is busy (derived from child)
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task DelegationReplayE2E_Parent_ShowsBusyWhenChildBusy_DerivedFromChildActivity()
+    {
+        await WithFailureCapture(async () =>
+        {
+            var scenario = await SeedDelegationScenarioAsync();
+            var detail = new SessionDetailPage(Page);
+            await detail.GotoAsync(scenario.ParentSessionId, scenario.ParentInstanceId);
+
+            // Parent has NOT emitted a busy event — it is idle by itself.
+            // Child emits session.status busy → EphemeralEventRelayService should propagate
+            // the derived busy status to the parent's session topic.
+            await scenario.ChildHarness.PushEventAsync(new HarnessEvent
+            {
+                Type = EventTypes.SessionStatus,
+                SessionId = scenario.ChildHarnessSessionId,
+                FleetSessionId = scenario.ChildSessionId,
+                Timestamp = DateTimeOffset.UtcNow,
+                Payload = JsonSerializer.SerializeToElement(new
+                {
+                    sessionID = scenario.ChildHarnessSessionId,
+                    status = new { type = "busy" },
+                }),
+            });
+
+            // Parent detail view should show Working, driven by child activity propagation
+            await detail.WaitForBusyAsync(8_000);
+
+            // Child goes idle → parent reverts to idle
+            await scenario.ChildHarness.PushEventAsync(new HarnessEvent
+            {
+                Type = EventTypes.SessionStatus,
+                SessionId = scenario.ChildHarnessSessionId,
+                FleetSessionId = scenario.ChildSessionId,
+                Timestamp = DateTimeOffset.UtcNow,
+                Payload = JsonSerializer.SerializeToElement(new
+                {
+                    sessionID = scenario.ChildHarnessSessionId,
+                    status = new { type = "idle" },
+                }),
+            });
+
+            await detail.WaitForIdleAsync(8_000);
+        });
+    }
+
     private static string GetRequiredQueryValue(Uri uri, string key)
     {
         var value = System.Web.HttpUtility.ParseQueryString(uri.Query)[key];

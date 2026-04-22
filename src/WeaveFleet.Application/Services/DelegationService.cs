@@ -8,7 +8,8 @@ public sealed class DelegationService(
     IDelegationRepository delegationRepository,
     IEventBroadcaster eventBroadcaster,
     IUserContext userContext,
-    SessionActivityWriteService? sessionActivityWriteService)
+    SessionActivityWriteService? sessionActivityWriteService,
+    SessionActivityTracker? activityTracker)
 {
     private static readonly HashSet<string> TerminalStatuses = new(StringComparer.Ordinal)
     {
@@ -21,7 +22,7 @@ public sealed class DelegationService(
         IDelegationRepository delegationRepository,
         IEventBroadcaster eventBroadcaster,
         IUserContext userContext)
-        : this(delegationRepository, eventBroadcaster, userContext, sessionActivityWriteService: null)
+        : this(delegationRepository, eventBroadcaster, userContext, sessionActivityWriteService: null, activityTracker: null)
     {
     }
 
@@ -134,6 +135,9 @@ public sealed class DelegationService(
                 CancellationToken.None);
         }
 
+        if (shouldUpdateChild)
+            activityTracker?.RegisterChild(childSessionId, parentSessionId);
+
         return ToDto(delegation);
     }
 
@@ -183,6 +187,9 @@ public sealed class DelegationService(
                 },
                 CancellationToken.None);
         }
+
+        if (delegation.ChildSessionId is not null)
+            activityTracker?.UnregisterChild(delegation.ChildSessionId);
 
         return ToDto(delegation);
     }

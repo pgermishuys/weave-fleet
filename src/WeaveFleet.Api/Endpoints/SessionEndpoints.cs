@@ -21,6 +21,7 @@ public static class SessionEndpoints
             ISessionRepository sessionRepository,
             ISessionSourceUsageRepository sessionSourceUsageRepository,
             IProjectRepository projectRepository,
+            SessionActivityTracker activityTracker,
             int limit = 100,
             int offset = 0,
             string? status = null,
@@ -43,7 +44,7 @@ public static class SessionEndpoints
                     var originsBySessionId = await sessionSourceUsageRepository.GetPrimaryBySessionIdsAsync(
                         sessions.Select(session => session.Id).ToArray());
 
-                    return Results.Ok(sessions.Select(session => ToListResponse(session, parentIdsWithBusyChildren, projectNamesById, originsBySessionId)).ToList());
+                    return Results.Ok(sessions.Select(session => ToListResponse(session, parentIdsWithBusyChildren, projectNamesById, originsBySessionId, activityTracker)).ToList());
                 },
                 error => Task.FromResult(Results.Problem(error.Description) as IResult));
         })
@@ -395,7 +396,8 @@ public static class SessionEndpoints
         Session s,
         HashSet<string> parentIdsWithBusyChildren,
         Dictionary<string, string> projectNamesById,
-        IReadOnlyDictionary<string, SessionSourceUsage> originsBySessionId)
+        IReadOnlyDictionary<string, SessionSourceUsage> originsBySessionId,
+        SessionActivityTracker activityTracker)
     {
         // Parse created_at to Unix ms for the frontend
         var createdMs = TryParseUnixMs(s.CreatedAt);
@@ -403,7 +405,10 @@ public static class SessionEndpoints
 
         var sessionStatus = DeriveAggregatedSessionStatus(s, parentIdsWithBusyChildren);
         var lifecycleStatus = s.LifecycleStatus ?? "running";
-        var activityStatus = s.ActivityStatus;
+
+        // Prefer the tracker's derived effective activity status (child busy → parent busy)
+        // over the DB-persisted value, which may lag real-time state.
+        var activityStatus = activityTracker.GetEffectiveActivityStatus(s.Id) ?? s.ActivityStatus;
         var origin = originsBySessionId.TryGetValue(s.Id, out var sessionSourceUsage)
             ? ToOriginDto(sessionSourceUsage)
             : null;

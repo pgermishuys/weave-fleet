@@ -100,6 +100,137 @@ public sealed class SessionActivityTrackerTests
         snapshot.UserId.ShouldBeNull();
     }
 
+    // ── Parent-child relationship tests ──────────────────────────────────────
+
+    [Fact]
+    public void RegisterChild_WhenChildBecomesbusy_GetEffectiveActivityStatus_ReturnsParentBusy()
+    {
+        var sut = new SessionActivityTracker();
+        sut.Update("child-1", "busy", "user-1");
+
+        sut.RegisterChild("child-1", "parent-1");
+
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe("busy");
+    }
+
+    [Fact]
+    public void GetEffectiveActivityStatus_WhenChildIdleAndParentIdle_ReturnsIdle()
+    {
+        var sut = new SessionActivityTracker();
+        sut.Update("parent-1", "idle", "user-1");
+        sut.Update("child-1", "idle", "user-1");
+        sut.RegisterChild("child-1", "parent-1");
+
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe("idle");
+    }
+
+    [Fact]
+    public void GetEffectiveActivityStatus_WhenParentBusyAndChildIdle_ReturnsBusy()
+    {
+        var sut = new SessionActivityTracker();
+        sut.Update("parent-1", "busy", "user-1");
+        sut.Update("child-1", "idle", "user-1");
+        sut.RegisterChild("child-1", "parent-1");
+
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe("busy");
+    }
+
+    [Fact]
+    public void GetEffectiveActivityStatus_WhenMultipleChildren_RemainsbuysyUntilLastChildGoesIdle()
+    {
+        var sut = new SessionActivityTracker();
+        sut.Update("parent-1", "idle", "user-1");
+        sut.Update("child-1", "busy", "user-1");
+        sut.Update("child-2", "busy", "user-1");
+        sut.RegisterChild("child-1", "parent-1");
+        sut.RegisterChild("child-2", "parent-1");
+
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe("busy");
+
+        // One child goes idle — still busy because of child-2
+        sut.Update("child-1", "idle", "user-1");
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe("busy");
+
+        // Last child goes idle — parent reverts to its own idle status
+        sut.Update("child-2", "idle", "user-1");
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe("idle");
+    }
+
+    [Fact]
+    public void UnregisterChild_WhenChildUnregistered_ParentReverts()
+    {
+        var sut = new SessionActivityTracker();
+        sut.Update("parent-1", "idle", "user-1");
+        sut.Update("child-1", "busy", "user-1");
+        sut.RegisterChild("child-1", "parent-1");
+
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe("busy");
+
+        sut.UnregisterChild("child-1");
+
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe("idle");
+    }
+
+    [Fact]
+    public void GetParentSessionId_ReturnsParentForRegisteredChild()
+    {
+        var sut = new SessionActivityTracker();
+        sut.RegisterChild("child-1", "parent-1");
+
+        sut.GetParentSessionId("child-1").ShouldBe("parent-1");
+    }
+
+    [Fact]
+    public void GetParentSessionId_ReturnsNullForUnregisteredSession()
+    {
+        var sut = new SessionActivityTracker();
+
+        sut.GetParentSessionId("unknown").ShouldBeNull();
+    }
+
+    [Fact]
+    public void GetEffectiveActivityStatus_WhenSessionNotTracked_ReturnsNull()
+    {
+        var sut = new SessionActivityTracker();
+
+        sut.GetEffectiveActivityStatus("nonexistent").ShouldBeNull();
+    }
+
+    [Fact]
+    public void Remove_WhenChildRemoved_ParentReverts()
+    {
+        var sut = new SessionActivityTracker();
+        sut.Update("parent-1", "idle", "user-1");
+        sut.Update("child-1", "busy", "user-1");
+        sut.RegisterChild("child-1", "parent-1");
+
+        sut.Remove("child-1");
+
+        sut.GetEffectiveActivityStatus("parent-1").ShouldBe("idle");
+        sut.GetParentSessionId("child-1").ShouldBeNull();
+    }
+
+    [Fact]
+    public void Remove_WhenParentRemoved_ChildToParentMappingCleaned()
+    {
+        var sut = new SessionActivityTracker();
+        sut.Update("parent-1", "busy", "user-1");
+        sut.Update("child-1", "idle", "user-1");
+        sut.RegisterChild("child-1", "parent-1");
+
+        sut.Remove("parent-1");
+
+        sut.GetParentSessionId("child-1").ShouldBeNull();
+    }
+
+    [Fact]
+    public void UnregisterChild_OnUnknownChild_DoesNotThrow()
+    {
+        var sut = new SessionActivityTracker();
+
+        Should.NotThrow(() => sut.UnregisterChild("nonexistent"));
+    }
+
     [Fact]
     public async Task ConcurrentUpdatesDoNotThrow()
     {

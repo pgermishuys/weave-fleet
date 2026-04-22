@@ -144,4 +144,91 @@ public sealed class DelegationServiceTests
 
         await Should.ThrowAsync<InvalidOperationException>(act);
     }
+
+    // ── Activity tracker integration ──────────────────────────────────────────
+
+    [Fact]
+    public async Task HandleChildLinkedAsync_WithActivityTracker_RegistersChildParentRelationship()
+    {
+        var activityTracker = new SessionActivityTracker();
+        var sut = new DelegationService(
+            _delegationRepository, _eventBroadcaster, _userContext,
+            sessionActivityWriteService: null, activityTracker: activityTracker);
+
+        _delegationRepository.Seed(new Delegation
+        {
+            Id = "del-1",
+            ParentSessionId = "parent-1",
+            ParentToolCallId = "tool-1",
+            Title = "Subagent",
+            Status = "pending",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UpdatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        await sut.HandleChildLinkedAsync("parent-1", "tool-1", "child-1");
+
+        activityTracker.GetParentSessionId("child-1").ShouldBe("parent-1");
+    }
+
+    [Fact]
+    public async Task HandleChildLinkedAsync_WithActivityTracker_ParentBusyWhenChildBusy()
+    {
+        var activityTracker = new SessionActivityTracker();
+        var sut = new DelegationService(
+            _delegationRepository, _eventBroadcaster, _userContext,
+            sessionActivityWriteService: null, activityTracker: activityTracker);
+
+        _delegationRepository.Seed(new Delegation
+        {
+            Id = "del-1",
+            ParentSessionId = "parent-1",
+            ParentToolCallId = "tool-1",
+            Title = "Subagent",
+            Status = "pending",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UpdatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        activityTracker.Update("parent-1", "idle", "user-1");
+        activityTracker.Update("child-1", "busy", "user-1");
+
+        await sut.HandleChildLinkedAsync("parent-1", "tool-1", "child-1");
+
+        activityTracker.GetEffectiveActivityStatus("parent-1").ShouldBe("busy");
+    }
+
+    [Fact]
+    public async Task HandleDelegationFinishedAsync_WithActivityTracker_UnregistersChildOnCompletion()
+    {
+        var activityTracker = new SessionActivityTracker();
+        var sut = new DelegationService(
+            _delegationRepository, _eventBroadcaster, _userContext,
+            sessionActivityWriteService: null, activityTracker: activityTracker);
+
+        _delegationRepository.Seed(new Delegation
+        {
+            Id = "del-1",
+            ParentSessionId = "parent-1",
+            ParentToolCallId = "tool-1",
+            ChildSessionId = "child-1",
+            Title = "Subagent",
+            Status = "running",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UpdatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        activityTracker.Update("parent-1", "idle", "user-1");
+        activityTracker.Update("child-1", "busy", "user-1");
+        activityTracker.RegisterChild("child-1", "parent-1");
+
+        activityTracker.GetEffectiveActivityStatus("parent-1").ShouldBe("busy",
+            "Parent should be busy before delegation finishes");
+
+        await sut.HandleDelegationFinishedAsync("del-1", "completed");
+
+        activityTracker.GetEffectiveActivityStatus("parent-1").ShouldBe("idle",
+            "Parent should revert to idle after child delegation completes");
+        activityTracker.GetParentSessionId("child-1").ShouldBeNull();
+    }
 }

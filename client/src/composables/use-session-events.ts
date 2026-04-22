@@ -625,6 +625,32 @@ export function handleEvent(
     return
   }
 
+  if (type === "activity_status") {
+    const rawActivityStatus = properties?.activityStatus
+
+    if (rawActivityStatus === "idle") {
+      clearSentPrompts(sessionId)
+      clearPendingPrompts(sessionId)
+      clearIdleFallbackForState(state)
+      state.sessionStatus.value = "idle"
+      state.syncSessionStore?.({
+        activityStatus: "idle",
+        lifecycleStatus: "running",
+        sessionStatus: "idle",
+      })
+    } else if (rawActivityStatus === "busy" || rawActivityStatus === "working") {
+      state.sessionStatus.value = "busy"
+      scheduleIdleFallbackForState(state)
+      state.syncSessionStore?.({
+        activityStatus: "busy",
+        lifecycleStatus: "running",
+        sessionStatus: "active",
+      })
+    }
+
+    return
+  }
+
   if (type === "session.status") {
     const rawStatus = properties?.status
     const statusType = typeof rawStatus === "string"

@@ -15,12 +15,17 @@ public sealed class ApiWebApplicationFactory(bool authEnabled, bool useTestAuthe
 {
     private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"weave-fleet-api-tests-{Guid.NewGuid():N}.db");
     private readonly string _analyticsDbPath = Path.Combine(Path.GetTempPath(), $"weave-fleet-api-tests-analytics-{Guid.NewGuid():N}.db");
+    private readonly string _natsDataDir = Path.Combine(Path.GetTempPath(), $"weave-fleet-api-tests-nats-{Guid.NewGuid():N}");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        Directory.CreateDirectory(_natsDataDir);
         builder.UseEnvironment("Testing");
         builder.UseSetting("Fleet:DatabasePath", _dbPath);
         builder.UseSetting("Fleet:AnalyticsDatabasePath", _analyticsDbPath);
+        builder.UseSetting("Fleet:Nats:DataDirectory", _natsDataDir);
+        builder.UseSetting("Fleet:Nats:StreamName", $"fleet-api-{Guid.NewGuid():N}".Substring(0, 24));
+        builder.UseSetting("Fleet:Nats:TenantPrefix", $"tenant.api-{Guid.NewGuid().ToString("N").Substring(0, 8)}");
         builder.UseSetting("Fleet:AnalyticsEnabled", "false");
         builder.UseSetting("Fleet:Port", "0");
         builder.UseSetting("Fleet:Auth:Enabled", authEnabled ? "true" : "false");
@@ -62,6 +67,7 @@ public sealed class ApiWebApplicationFactory(bool authEnabled, bool useTestAuthe
         TryDelete(_analyticsDbPath);
         TryDelete($"{_dbPath}-wal");
         TryDelete($"{_dbPath}-shm");
+        TryDeleteDirectory(_natsDataDir);
     }
 
     private static void TryDelete(string path)
@@ -70,6 +76,18 @@ public sealed class ApiWebApplicationFactory(bool authEnabled, bool useTestAuthe
         {
             if (File.Exists(path))
                 File.Delete(path);
+        }
+        catch
+        {
+        }
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
         }
         catch
         {
