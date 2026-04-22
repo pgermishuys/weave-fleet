@@ -154,8 +154,8 @@ public sealed class AnalyticsRepository(
 
         var whereClause = "WHERE " + string.Join(" AND ", conditions);
 
-        // Join token_events to get live token/cost totals instead of relying on
-        // the snapshot values which are only set at session creation (0) and deletion.
+        // Join token_events to get live token/cost totals and aggregate model ids
+        // instead of relying on snapshot fields that may be stale or empty.
         var rows = await conn.QueryAsync<SessionSnapshotRow>(
             $"""
             SELECT
@@ -163,14 +163,16 @@ public sealed class AnalyticsRepository(
                 CAST(COALESCE(te.agg_tokens, ss.total_tokens) AS REAL) AS total_tokens,
                 CAST(COALESCE(te.agg_cost, ss.total_cost) AS REAL) AS total_cost,
                 CAST(COALESCE(te.agg_estimated_cost, ss.total_estimated_cost) AS REAL) AS total_estimated_cost,
-                ss.model_ids, ss.duration_seconds, ss.created_at
+                COALESCE(te.model_ids, ss.model_ids) AS model_ids,
+                ss.duration_seconds, ss.created_at
             FROM session_snapshots ss
             LEFT JOIN (
                 SELECT session_id,
                        user_id,
                        SUM(tokens_total) AS agg_tokens,
                        SUM(cost) AS agg_cost,
-                       SUM(COALESCE(estimated_cost, 0)) AS agg_estimated_cost
+                       SUM(COALESCE(estimated_cost, 0)) AS agg_estimated_cost,
+                       json_group_array(DISTINCT model_id) FILTER (WHERE model_id IS NOT NULL AND model_id != '') AS model_ids
                 FROM token_events
                 WHERE user_id = @UserId
                 GROUP BY session_id, user_id

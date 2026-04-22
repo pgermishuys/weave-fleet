@@ -136,6 +136,41 @@ public sealed class AnalyticsRepositoryTests : IAsyncLifetime
         sessions[0].SessionId.ShouldBe("sess-2");
     }
 
+    [Fact]
+    public async Task GetSessionsAsync_UsesTokenEventModelsWhenSnapshotModelIdsAreEmpty()
+    {
+        using var conn = _factory!.CreateConnection();
+        await conn.ExecuteAsync("""
+            INSERT INTO token_events (event_id, session_id, project_id, project_name,
+                workspace_directory, model_id, provider_id,
+                tokens_input, tokens_output, tokens_reasoning,
+                tokens_cache_read, tokens_cache_write, tokens_total,
+                cost, estimated_cost, created_at, user_id)
+            VALUES
+              ('evt-4','sess-3','proj-c','Gamma','/ws3','gpt-4.1','openai',
+               20,40,0,0,0,60, 0.003, 0.003, '2026-01-17T10:00:00+00:00','local-user'),
+              ('evt-5','sess-3','proj-c','Gamma','/ws3','claude-3-7-sonnet','anthropic',
+               30,50,0,0,0,80, 0.004, 0.004, '2026-01-17T10:05:00+00:00','local-user')
+            """);
+
+        await conn.ExecuteAsync("""
+            INSERT INTO session_snapshots (session_id, project_id, project_name,
+                workspace_directory, title, status,
+                total_tokens, total_cost, total_estimated_cost,
+                message_count, model_ids, created_at, user_id)
+            VALUES
+              ('sess-3','proj-c','Gamma','/ws3','Session C','active',
+               0, 0.0, 0.0, 0, '[]', '2026-01-17T10:00:00+00:00','local-user')
+            """);
+
+        var sessions = await _repo!.GetSessionsAsync(null, null, null, 50);
+        var session = sessions.Single(s => s.SessionId == "sess-3");
+
+        session.Models.Count.ShouldBe(2);
+        session.Models.ShouldContain("gpt-4.1");
+        session.Models.ShouldContain("claude-3-7-sonnet");
+    }
+
     // ── GetModelsAsync ─────────────────────────────────────────────────────────
 
     [Fact]
