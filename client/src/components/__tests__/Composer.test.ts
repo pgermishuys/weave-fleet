@@ -125,8 +125,11 @@ function mountComposer(instanceId: string | undefined = "instance-1") {
           props: ["modelValue", "models"],
           emits: ["update:modelValue"],
           methods: {
-            handleChange(event) {
-              this.$emit("update:modelValue", event.target.value);
+            handleChange(event: Event) {
+              this.$emit(
+                "update:modelValue",
+                (event.target as HTMLSelectElement).value,
+              );
             },
           },
           template: `
