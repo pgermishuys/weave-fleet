@@ -14,6 +14,18 @@ public sealed class FleetSidebarPage(IPage page)
     public ILocator GetSessionLeaf(string sessionId)
         => _page.Locator($"[data-tree-leaf][data-session-id='{sessionId}']");
 
+    public async Task<SessionDetailPage> ClickSessionAsync(string sessionId)
+    {
+        await GetSessionLeaf(sessionId).ClickAsync();
+        await _page.WaitForURLAsync(
+            url => url.Contains($"/sessions/{sessionId}", StringComparison.Ordinal),
+            new PageWaitForURLOptions { Timeout = 5_000 });
+
+        var detail = new SessionDetailPage(_page);
+        await detail.WaitForLoadedAsync();
+        return detail;
+    }
+
     public async Task OpenSessionContextMenuAsync(string sessionId)
         => await GetSessionLeaf(sessionId).ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
 

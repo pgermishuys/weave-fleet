@@ -389,6 +389,74 @@ public sealed class MessagePersistenceTests : E2ETestBase,
         });
     }
 
+    [Fact]
+    public async Task SwitchingFromAnotherSession_ReplaysMissedCommittedEvents_ViaSequenceGapFill()
+    {
+        await WithFailureCapture(async () =>
+        {
+            var dashboard = new FleetDashboardPage(Page);
+            var sidebar = new FleetSidebarPage(Page);
+            await dashboard.GotoAsync();
+
+            var dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+            await dialog.SetTitleAsync("Session A");
+
+            var sessionADetail = await dialog.SubmitAsync();
+            await sessionADetail.WaitForLoadedAsync();
+
+            var sessionAUri = new Uri(Page.Url);
+            var sessionAId = sessionAUri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+            var sessionAInstanceId = GetRequiredQueryValue(sessionAUri, "instanceId");
+
+            var tracker = _factory.KestrelServices.GetRequiredService<InstanceTracker>();
+            var sessionAHarness = tracker.Get(sessionAInstanceId).ShouldBeOfType<TestHarnessSession>();
+            var sessionAHarnessId = sessionAHarness.InstanceId;
+
+            await PushDurableAssistantMessageAsync(
+                sessionAHarness,
+                sessionAHarnessId,
+                sessionAId,
+                "msg-a-online-1",
+                "Initial committed message in session A");
+
+            await sessionADetail.WaitForMessageTextAsync("Initial committed message in session A", 10_000);
+
+            await Page.GoBackAsync();
+            await dashboard.WaitForLoadedAsync();
+            await dashboard.GetSessionCard(sessionAId)
+                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+
+            dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+            await dialog.SetTitleAsync("Session B");
+
+            var sessionBDetail = await dialog.SubmitAsync();
+            await sessionBDetail.WaitForLoadedAsync();
+
+            await sidebar.ExpectSessionVisibleAsync(sessionAId);
+
+            await PushDurableAssistantMessageAsync(
+                sessionAHarness,
+                sessionAHarnessId,
+                sessionAId,
+                "msg-a-gapfill-1",
+                "Recovered final message after switching from session B");
+
+            var afterSequenceNumberResponse = Page.WaitForResponseAsync(response =>
+                response.Url.Contains($"/api/sessions/{sessionAId}/committed-events", StringComparison.Ordinal)
+                && response.Url.Contains("afterSequenceNumber=", StringComparison.Ordinal)
+                && response.Ok,
+                new PageWaitForResponseOptions { Timeout = 10_000 });
+
+            sessionADetail = await sidebar.ClickSessionAsync(sessionAId);
+
+            var gapFillResponse = await afterSequenceNumberResponse;
+            gapFillResponse.Url.ShouldContain("afterSequenceNumber=");
+            await sessionADetail.WaitForMessageTextAsync("Recovered final message after switching from session B", 10_000);
+        });
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static async Task PushDurableAssistantMessageAsync(
