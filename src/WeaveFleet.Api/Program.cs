@@ -59,24 +59,28 @@ builder.Services.AddCors(options =>
         {
             // Cloud mode: restrict to explicitly configured origins, allow credentials for cookies
             policy.WithOrigins(fleetOptions.Auth.AllowedOrigins)
-                  .AllowAnyMethod()
-                  .AllowAnyHeader()
-                  .AllowCredentials();
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .AllowCredentials();
         }
         else if (builder.Environment.IsDevelopment())
         {
             // Allow localhost frontend dev servers during split-mode development
-            policy.WithOrigins("http://localhost:3001", "https://localhost:3001")
-                  .AllowAnyMethod()
-                  .AllowAnyHeader()
-                  .AllowCredentials();
+            policy.WithOrigins(
+                    "http://localhost:3001",
+                    "https://localhost:3001",
+                    "http://localhost:3002",
+                    "https://localhost:3002")
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .AllowCredentials();
         }
         else
         {
             // Production local mode: same-origin only (SPA is served from the same host)
             policy.WithOrigins($"http://{fleetOptions.Host}:{fleetOptions.Port}")
-                  .AllowAnyMethod()
-                  .AllowAnyHeader();
+                .AllowAnyMethod()
+                .AllowAnyHeader();
         }
     });
 });
@@ -88,59 +92,61 @@ if (fleetOptions.Auth.Enabled)
 {
     // Cloud mode: cookie auth (default) + OIDC challenge scheme
     builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    })
-    .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
-    {
-        options.Cookie.Name = fleetOptions.Auth.CookieName;
-        options.Cookie.HttpOnly = true;
-        options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-        options.ExpireTimeSpan = TimeSpan.FromMinutes(fleetOptions.Auth.CookieExpirationMinutes);
-        options.SlidingExpiration = true;
-        options.LoginPath = "/auth/login";
+        {
+            options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+            options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        })
+        .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
+        {
+            options.Cookie.Name = fleetOptions.Auth.CookieName;
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            options.ExpireTimeSpan = TimeSpan.FromMinutes(fleetOptions.Auth.CookieExpirationMinutes);
+            options.SlidingExpiration = true;
+            options.LoginPath = "/auth/login";
 
-        // Return 401/403 for API and WebSocket requests instead of redirecting to IdP.
-        // WebSocket handshakes cannot follow HTML login redirects, so redirects surface
-        // in the browser as opaque connection failures rather than actionable auth errors.
-        options.Events.OnRedirectToLogin = context =>
-        {
-            if (IsApiOrWebSocketRequest(context.Request.Path))
+            // Return 401/403 for API and WebSocket requests instead of redirecting to IdP.
+            // WebSocket handshakes cannot follow HTML login redirects, so redirects surface
+            // in the browser as opaque connection failures rather than actionable auth errors.
+            options.Events.OnRedirectToLogin = context =>
             {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                if (IsApiOrWebSocketRequest(context.Request.Path))
+                {
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return Task.CompletedTask;
+                }
+
+                context.Response.Redirect(context.RedirectUri);
                 return Task.CompletedTask;
-            }
-            context.Response.Redirect(context.RedirectUri);
-            return Task.CompletedTask;
-        };
-        options.Events.OnRedirectToAccessDenied = context =>
-        {
-            if (IsApiOrWebSocketRequest(context.Request.Path))
+            };
+            options.Events.OnRedirectToAccessDenied = context =>
             {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                if (IsApiOrWebSocketRequest(context.Request.Path))
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return Task.CompletedTask;
+                }
+
+                context.Response.Redirect(context.RedirectUri);
                 return Task.CompletedTask;
-            }
-            context.Response.Redirect(context.RedirectUri);
-            return Task.CompletedTask;
-        };
-    })
-    .AddOpenIdConnect(OpenIdConnectDefaults.AuthenticationScheme, options =>
-    {
-        options.Authority = fleetOptions.Auth.Authority;
-        options.ClientId = fleetOptions.Auth.ClientId;
-        options.ClientSecret = fleetOptions.Auth.ClientSecret;
-        options.CallbackPath = fleetOptions.Auth.CallbackPath;
-        options.SignedOutCallbackPath = fleetOptions.Auth.SignedOutCallbackPath;
-        options.ResponseType = "code";
-        options.SaveTokens = false;  // no bearer tokens stored in browser
-        options.GetClaimsFromUserInfoEndpoint = true;
-        options.Scope.Clear();
-        options.Scope.Add("openid");
-        options.Scope.Add("profile");
-        options.Scope.Add("email");
-    });
+            };
+        })
+        .AddOpenIdConnect(OpenIdConnectDefaults.AuthenticationScheme, options =>
+        {
+            options.Authority = fleetOptions.Auth.Authority;
+            options.ClientId = fleetOptions.Auth.ClientId;
+            options.ClientSecret = fleetOptions.Auth.ClientSecret;
+            options.CallbackPath = fleetOptions.Auth.CallbackPath;
+            options.SignedOutCallbackPath = fleetOptions.Auth.SignedOutCallbackPath;
+            options.ResponseType = "code";
+            options.SaveTokens = false; // no bearer tokens stored in browser
+            options.GetClaimsFromUserInfoEndpoint = true;
+            options.Scope.Clear();
+            options.Scope.Add("openid");
+            options.Scope.Add("profile");
+            options.Scope.Add("email");
+        });
 
     builder.Services.AddAuthorization(options =>
     {
@@ -254,7 +260,7 @@ app.Use(async (context, next) =>
     }
 
     var requiresAntiforgery = context.Request.Path.StartsWithSegments("/api")
-        || context.Request.Path.StartsWithSegments("/auth/logout");
+                              || context.Request.Path.StartsWithSegments("/auth/logout");
 
     if (!requiresAntiforgery)
     {
@@ -323,8 +329,8 @@ app.MapAuthEndpoints(fleetOptions);
 app.MapFleetEndpoints();
 
 // Static file serving (SPA)
-app.UseDefaultFiles();   // Serves index.html for "/"
-app.UseStaticFiles();    // Serves files from wwwroot/
+app.UseDefaultFiles(); // Serves index.html for "/"
+app.UseStaticFiles(); // Serves files from wwwroot/
 
 // SPA fallback — any unmatched route serves index.html for client-side routing
 app.MapFallbackToFile("index.html");
@@ -397,4 +403,6 @@ internal static partial class StartupLog
 }
 
 // Expose Program for WebApplicationFactory in E2E tests
-public partial class Program { }
+public partial class Program
+{
+}
