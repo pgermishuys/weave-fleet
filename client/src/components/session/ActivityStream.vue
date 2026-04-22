@@ -717,7 +717,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 .activity-stream {
-  --activity-bubble-width: min(95%, 1040px);
+  --activity-bubble-width: min(96%, 80rem);
   flex: 1;
   display: flex;
   flex-direction: column;
