@@ -676,6 +676,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
             class="delegation-link"
             :class="`delegation-link--${delegationLink.statusKey}`"
             :href="delegationLink.href"
+            data-testid="delegation-link"
             @click="handleDelegationLinkClick($event, delegationLink)"
           >
             <div class="delegation-link__header">
@@ -684,14 +685,14 @@ function asRecord(value: unknown): Record<string, unknown> | null {
                   class="delegation-link__eyebrow-icon"
                   aria-hidden="true"
                 />
-                {{ delegationLink.title }}
+                <span data-testid="delegation-link-title">{{ delegationLink.title }}</span>
               </span>
               <span class="delegation-link__meta">
                 <ArrowUpRight
                   class="delegation-link__status-icon"
                   aria-hidden="true"
                 />
-                <span class="delegation-link-status">
+                <span class="delegation-link-status" data-testid="delegation-link-status">
                   {{ delegationLink.status }}
                 </span>
               </span>
