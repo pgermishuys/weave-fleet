@@ -46,6 +46,14 @@ function isEditableTarget(target: EventTarget | null): boolean {
     || (target instanceof HTMLElement && target.isContentEditable);
 }
 
+function isModalContentTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  return target.closest('[data-slot="dialog-content"], [data-slot="sheet-content"], [data-slot="alert-dialog-content"]') !== null;
+}
+
 function getCurrentSessionId(pathname: string, activeSessionId: string | null): string | null {
   if (pathname.startsWith("/sessions/")) {
     const sessionId = pathname.slice("/sessions/".length).split("/")[0];
@@ -612,7 +620,15 @@ export function useCommands() {
   );
 
   function handleGlobalKeyDown(event: KeyboardEvent): void {
+    if (event.defaultPrevented) {
+      return;
+    }
+
     if (event.key === "Escape") {
+      if (isModalContentTarget(event.target)) {
+        return;
+      }
+
       const escapeCommand = commandStore.commands.find((command) => {
         return command.globalShortcut?.key === "Escape";
       });
