@@ -684,21 +684,20 @@ function asRecord(value: unknown): Record<string, unknown> | null {
                   class="delegation-link__eyebrow-icon"
                   aria-hidden="true"
                 />
-                Subagent task
+                {{ delegationLink.title }}
               </span>
-              <span class="delegation-link-status">
-                {{ delegationLink.status }}
+              <span class="delegation-link__meta">
+                <ArrowUpRight
+                  class="delegation-link__status-icon"
+                  aria-hidden="true"
+                />
+                <span class="delegation-link-status">
+                  {{ delegationLink.status }}
+                </span>
               </span>
             </div>
             <div class="delegation-link__body">
-              <span class="delegation-link__title">{{ delegationLink.title }}</span>
-              <span class="delegation-link__cta">
-                Open session
-                <ArrowUpRight
-                  class="delegation-link__cta-icon"
-                  aria-hidden="true"
-                />
-              </span>
+              <span class="delegation-link__title">Subagent task</span>
             </div>
           </a>
         </div>
@@ -775,36 +774,37 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   flex-direction: column;
   width: var(--activity-bubble-width);
   box-sizing: border-box;
-  gap: 4px;
+  gap: 6px;
   margin-top: 1px;
-  padding: 0 10px;
+  padding: 0 8px;
 }
 
 .delegation-links--user {
   align-items: flex-end;
-  text-align: right;
 }
 
 .delegation-link {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-width: min(100%, 320px);
-  max-width: min(100%, 420px);
-  padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--card, var(--panel-bg)) 88%, white 12%);
+  gap: 6px;
+  min-width: min(100%, 280px);
+  max-width: min(100%, 380px);
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  border-radius: calc(var(--radius-card) + 2px);
+  background: color-mix(in srgb, var(--card-bg, var(--panel-bg)) 96%, var(--accent-dim) 4%);
   color: inherit;
   text-decoration: none;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
-  transition: border-color 140ms ease, background-color 140ms ease, transform 140ms ease;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease,
+    transform 140ms ease;
 }
 
 .delegation-link:hover {
   transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--primary, #6366f1) 45%, var(--border));
-  background: color-mix(in srgb, var(--card, var(--panel-bg)) 78%, white 22%);
+  border-color: color-mix(in srgb, var(--primary, #6366f1) 24%, var(--border));
+  background: color-mix(in srgb, var(--card-bg, var(--panel-bg)) 88%, var(--accent-dim) 12%);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.1);
 }
 
 .delegation-link:focus-visible {
@@ -817,41 +817,44 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: nowrap;
 }
 
 .delegation-link__eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: var(--muted-foreground, var(--color-text-muted, #6b7280));
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  gap: 5px;
+  color: var(--text, #f4f4f5);
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .delegation-link__eyebrow-icon,
-.delegation-link__cta-icon {
+.delegation-link__status-icon {
   width: 0.9rem;
   height: 0.9rem;
 }
 
-.delegation-link__title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  line-height: 1.35;
-  color: var(--foreground, var(--text, #f4f4f5));
-}
-
-.delegation-link__cta {
+.delegation-link__meta {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex-shrink: 0;
-  color: color-mix(in srgb, var(--primary, #6366f1) 78%, white 22%);
-  font-size: 0.78rem;
+}
+
+.delegation-link__title {
+  min-width: 0;
+  font-size: 0.75rem;
   font-weight: 600;
+  line-height: 1.2;
+  color: var(--muted, #6b7280);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .delegation-link-status {
@@ -859,27 +862,44 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  padding: 4px 8px;
+  padding: 3px 7px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--muted) 78%, transparent);
-  color: var(--muted-foreground, var(--color-text-muted, #6b7280));
-  font-size: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  background: color-mix(in srgb, var(--panel-bg) 86%, var(--muted) 14%);
+  color: var(--muted, #6b7280);
+  font-size: 0.68rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .delegation-link--running .delegation-link-status {
-  background: color-mix(in srgb, var(--primary, #6366f1) 18%, transparent);
-  color: color-mix(in srgb, var(--primary, #6366f1) 70%, white 30%);
+  border-color: color-mix(in srgb, var(--primary, #6366f1) 20%, var(--border));
+  background: color-mix(in srgb, var(--primary, #6366f1) 10%, var(--panel-bg));
+  color: color-mix(in srgb, var(--primary, #6366f1) 72%, white 28%);
 }
 
 .delegation-link--completed .delegation-link-status {
-  background: color-mix(in srgb, #22c55e 18%, transparent);
-  color: #16a34a;
+  border-color: color-mix(in srgb, #22c55e 20%, var(--border));
+  background: color-mix(in srgb, #22c55e 10%, var(--panel-bg));
+  color: #22c55e;
 }
 
 .delegation-link--error .delegation-link-status,
 .delegation-link--cancelled .delegation-link-status {
-  background: color-mix(in srgb, #ef4444 18%, transparent);
-  color: #dc2626;
+  border-color: color-mix(in srgb, #ef4444 20%, var(--border));
+  background: color-mix(in srgb, #ef4444 10%, var(--panel-bg));
+  color: #ef4444;
+}
+
+.delegation-links--user .delegation-link {
+  align-items: flex-end;
+}
+
+.delegation-links--user .delegation-link__title {
+  text-align: right;
+}
+
+.delegation-links--user .delegation-link__meta {
+  flex-direction: row-reverse;
 }
 </style>
