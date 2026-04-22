@@ -166,7 +166,7 @@ function formatTimestamp(date: Date): string {
 interface BackendSendPromptRequest {
   text: string;
   agent?: string;
-  model?: string;
+  model?: { providerID: string; modelID: string };
 }
 
 async function readPromptErrorMessage(response: Response): Promise<string> {
@@ -202,7 +202,7 @@ export function useSendPrompt(sessionId: string) {
   const sessionsStore = useSessionsStore();
   const { sessions } = storeToRefs(sessionsStore);
   const { defaultAgentId, agentsById } = useAgents();
-  const { defaultModelId, modelsById } = useModels(sessionId);
+  const { defaultModelKey, modelsByKey } = useModels(sessionId);
   const sendError = shallowRef<string | undefined>(undefined);
   const { draft, resetText } = useDraftState(sessionId, {
     agentId: "",
@@ -249,11 +249,11 @@ export function useSendPrompt(sessionId: string) {
     sendError.value = undefined;
 
     const agent = agentsById.value[draft.agentId] ?? agentsById.value[defaultAgentId.value];
-    const model = modelsById.value[draft.modelId] ?? modelsById.value[defaultModelId.value];
+    const model = modelsByKey.value[draft.modelId] ?? modelsByKey.value[defaultModelKey.value];
     const now = new Date();
     const promptId = `${sessionId}-${now.getTime()}`;
     const resolvedAgentId = agent?.id ?? draft.agentId ?? defaultAgentId.value;
-    const resolvedModelId = model?.id ?? defaultModelId.value;
+    const resolvedModelId = model?.id ?? "";
     const usesDefaultAgent = !draft.agentId;
     const usesDefaultModel = !draft.modelId;
 
@@ -285,7 +285,7 @@ export function useSendPrompt(sessionId: string) {
     }
 
     if (resolvedModelId && !usesDefaultModel) {
-      request.model = resolvedModelId;
+      request.model = { providerID: model?.providerId ?? "", modelID: resolvedModelId };
     }
 
     void postPrompt(promptId, request);

@@ -17,7 +17,7 @@ const items = computed(() => {
       description: "Use the session default model",
     },
     ...props.models.map((model) => ({
-      id: model.id,
+      id: model.selectionKey,
       label: model.name,
       description: model.description,
       meta: model.provider,

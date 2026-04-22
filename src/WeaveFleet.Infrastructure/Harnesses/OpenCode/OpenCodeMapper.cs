@@ -239,7 +239,7 @@ internal static class OpenCodeMapper
                 || roleEl.GetString() is not "assistant")
                 return null;
 
-            var assistant = infoEl.Deserialize<OpenCodeAssistantMessage>(OpenCodeJsonOptions.Default);
+            var assistant = OpenCodeMessageDeserializer.DeserializeAssistantMessage(infoEl);
             if (assistant is null)
                 return null;
 
@@ -286,6 +286,39 @@ internal static class OpenCodeMapper
             // Silent failure — analytics must never crash sessions
             return null;
         }
+    }
+
+    internal static TokenEventData WithModelInfo(
+        TokenEventData tokenEvent,
+        string? modelId,
+        string? providerId)
+    {
+        var resolvedModelId = string.IsNullOrWhiteSpace(modelId)
+            ? tokenEvent.ModelId
+            : modelId;
+
+        var resolvedProviderId = string.IsNullOrWhiteSpace(providerId)
+            ? tokenEvent.ProviderId
+            : providerId;
+
+        if (resolvedProviderId is null && !string.IsNullOrWhiteSpace(resolvedModelId))
+        {
+            var slash = resolvedModelId.IndexOf('/', StringComparison.Ordinal);
+            if (slash > 0)
+                resolvedProviderId = resolvedModelId[..slash];
+        }
+
+        return tokenEvent with
+        {
+            ModelId = resolvedModelId,
+            ProviderId = resolvedProviderId,
+            EstimatedCost = ModelPricing.EstimateCost(
+                resolvedModelId,
+                tokenEvent.TokensInput,
+                tokenEvent.TokensOutput,
+                tokenEvent.TokensReasoning,
+                tokenEvent.TokensCacheRead)
+        };
     }
 
     internal static DelegationExtraction? TryExtractDelegation(OpenCodeSseEvent evt, string parentSessionId)

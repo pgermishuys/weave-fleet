@@ -184,12 +184,16 @@ public static class SessionEndpoints
         .WithName("AddSessionSource");
 
         // POST /api/sessions/{id}/prompt
-        group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionOrchestrator orchestrator) =>
+        group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionOrchestrator orchestrator, SessionService sessionService, InstanceTracker tracker, CancellationToken ct) =>
         {
+            var modelResolution = await ResolveSessionModelAsync(id, req.Model, sessionService, tracker, ct);
+            if (modelResolution.ErrorResult is not null)
+                return modelResolution.ErrorResult;
+
             var options = req.Agent is not null || req.Model is not null
-                ? new PromptOptions { Agent = req.Agent, ModelId = req.Model }
+                ? new PromptOptions { Agent = req.Agent, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId }
                 : null;
-            var result = await orchestrator.PromptSessionAsync(id, req.Text, options);
+            var result = await orchestrator.PromptSessionAsync(id, req.Text, options, ct);
             return result.Match(_ => Results.Ok(), err => err.ToSessionApiResult());
         })
         .WithName("PromptSession");
@@ -318,21 +322,26 @@ public static class SessionEndpoints
         .WithName("GetSessionStatus");
 
         // POST /api/sessions/{id}/command
-        group.MapPost("/{id}/command", async (string id, SendCommandApiRequest req, SessionOrchestrator orchestrator) =>
+        group.MapPost("/{id}/command", async (string id, SendCommandApiRequest req, SessionOrchestrator orchestrator, SessionService sessionService, InstanceTracker tracker, CancellationToken ct) =>
         {
+            var modelResolution = await ResolveSessionModelAsync(id, req.Model, sessionService, tracker, ct);
+            if (modelResolution.ErrorResult is not null)
+                return modelResolution.ErrorResult;
+
             var options = new CommandOptions
             {
                 Command = req.Command,
                 Arguments = req.Arguments,
                 Agent = req.Agent,
-                ModelId = req.Model,
+                ProviderId = modelResolution.ProviderId,
+                ModelId = modelResolution.ModelId,
             };
 
             var validationError = options.Validate();
             if (validationError is not null)
                 return Results.BadRequest(new { error = validationError });
 
-            var result = await orchestrator.CommandSessionAsync(id, options);
+            var result = await orchestrator.CommandSessionAsync(id, options, ct);
             return result.Match(_ => Results.Accepted(), err => err.ToSessionApiResult());
         })
         .WithName("SendSessionCommand");
@@ -482,6 +491,30 @@ public static class SessionEndpoints
             return new DateTimeOffset(dt).ToUnixTimeMilliseconds();
         return 0;
     }
+
+    private static async Task<ModelResolutionResult> ResolveSessionModelAsync(
+        string sessionId,
+        ModelRef? model,
+        SessionService sessionService,
+        InstanceTracker tracker,
+        CancellationToken ct)
+    {
+        if (model is null)
+            return ModelResolutionResult.Empty;
+
+        var sessionResult = await sessionService.GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return new ModelResolutionResult(null, null, sessionResult.Error.ToSessionApiResult());
+
+        var instance = tracker.Get(sessionResult.Value.InstanceId);
+        if (instance is null)
+            return new ModelResolutionResult(null, null, Results.NotFound(new { error = $"Instance '{sessionResult.Value.InstanceId}' not found or not running." }));
+
+        var providers = await instance.GetProvidersAsync(ct);
+        return ModelRef.TryResolve(model, providers, out var resolved, out var error)
+            ? new ModelResolutionResult(resolved.ProviderId, resolved.ModelId, null)
+            : new ModelResolutionResult(null, null, Results.BadRequest(new { error }));
+    }
 }
 
 // ── Request record types ────────────────────────────────────────────────────
@@ -507,7 +540,7 @@ internal sealed record PreviewSessionSourceApiRequest(SessionSourceSelection Sou
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record AddSessionSourceApiRequest(SessionSourceSelection Source, bool Confirm);
 
-internal sealed record SendPromptApiRequest(string Text, string? Agent, string? Model);
+internal sealed record SendPromptApiRequest(string Text, string? Agent, ModelRef? Model);
 
 internal sealed record ForkSessionApiRequest(string? Title);
 
@@ -515,7 +548,7 @@ internal sealed record SendCommandApiRequest(
     string Command,
     string? Arguments,
     string? Agent,
-    string? Model);
+    ModelRef? Model);
 
 internal sealed record SessionOriginRecordDto(
     string SourceType,
@@ -526,6 +559,192 @@ internal sealed record SessionOriginRecordDto(
     string ActionId,
     string? Summary,
     string CreatedAt);
+
+internal sealed record ModelResolutionResult(string? ProviderId, string? ModelId, IResult? ErrorResult)
+{
+    public static ModelResolutionResult Empty { get; } = new(null, null, null);
+}
+
+// ── ModelRef — accepts either a plain string or { providerID, modelID } object ──
+
+/// <summary>
+/// Represents a model reference that can be deserialized from either a plain string
+/// (backward-compat: split on first '/') or an object <c>{ providerID, modelID }</c>.
+/// </summary>
+[JsonConverter(typeof(ModelRefJsonConverter))]
+internal sealed record ModelRef
+{
+    public string? ProviderId { get; init; }
+    public string? ModelId { get; init; }
+    public string? LegacyValue { get; init; }
+
+    /// <summary>Creates a <see cref="ModelRef"/> from an object payload.</summary>
+    public static ModelRef FromObject(string? providerId, string? modelId) =>
+        new() { ProviderId = providerId, ModelId = modelId };
+
+    /// <summary>Creates a <see cref="ModelRef"/> from a backward-compat plain string.</summary>
+    public static ModelRef FromString(string value) =>
+        new() { LegacyValue = value };
+
+    public static bool TryResolve(
+        ModelRef? model,
+        IReadOnlyList<ProviderInfo> providers,
+        out ResolvedModelRef resolved,
+        out string? error)
+    {
+        if (model is null)
+        {
+            resolved = ResolvedModelRef.Empty;
+            error = null;
+            return true;
+        }
+
+        return TryResolveCore(model, providers, out resolved, out error);
+    }
+
+    private static bool TryResolveCore(
+        ModelRef model,
+        IReadOnlyList<ProviderInfo> providers,
+        out ResolvedModelRef resolved,
+        out string? error)
+    {
+        if (model.LegacyValue is null)
+            return TryResolveStructuredValue(model.ProviderId, model.ModelId, providers, out resolved, out error);
+
+        return TryResolveLegacyValue(model.LegacyValue, providers, out resolved, out error);
+    }
+
+    private static bool TryResolveStructuredValue(
+        string? providerId,
+        string? modelId,
+        IReadOnlyList<ProviderInfo> providers,
+        out ResolvedModelRef resolved,
+        out string? error)
+    {
+        if (string.IsNullOrWhiteSpace(providerId) && string.IsNullOrWhiteSpace(modelId))
+        {
+            resolved = ResolvedModelRef.Empty;
+            error = null;
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(providerId) || string.IsNullOrWhiteSpace(modelId))
+        {
+            resolved = ResolvedModelRef.Empty;
+            error = "Model must include both providerID and modelID.";
+            return false;
+        }
+
+        var exists = providers.Any(provider =>
+            string.Equals(provider.Id, providerId, StringComparison.Ordinal)
+            && provider.Models.Any(model => string.Equals(model.Id, modelId, StringComparison.Ordinal)));
+
+        if (!exists)
+        {
+            resolved = ResolvedModelRef.Empty;
+            error = $"Unknown model '{providerId}/{modelId}'.";
+            return false;
+        }
+
+        resolved = new ResolvedModelRef(providerId, modelId);
+        error = null;
+        return true;
+    }
+
+    private static bool TryResolveLegacyValue(
+        string legacyValue,
+        IReadOnlyList<ProviderInfo> providers,
+        out ResolvedModelRef resolved,
+        out string? error)
+    {
+        var exactMatches = providers
+            .SelectMany(static provider => provider.Models.Select(model => new ResolvedModelRef(provider.Id, model.Id)))
+            .Where(candidate => string.Equals($"{candidate.ProviderId}/{candidate.ModelId}", legacyValue, StringComparison.Ordinal))
+            .ToArray();
+
+        if (exactMatches.Length == 1)
+        {
+            resolved = exactMatches[0];
+            error = null;
+            return true;
+        }
+
+        if (exactMatches.Length > 1)
+        {
+            resolved = ResolvedModelRef.Empty;
+            error = $"Model '{legacyValue}' is ambiguous. Send model as {{ providerID, modelID }}.";
+            return false;
+        }
+
+        var rawMatches = providers
+            .SelectMany(static provider => provider.Models.Select(model => new ResolvedModelRef(provider.Id, model.Id)))
+            .Where(candidate => string.Equals(candidate.ModelId, legacyValue, StringComparison.Ordinal))
+            .ToArray();
+
+        if (rawMatches.Length == 1)
+        {
+            resolved = rawMatches[0];
+            error = null;
+            return true;
+        }
+
+        if (rawMatches.Length > 1)
+        {
+            resolved = ResolvedModelRef.Empty;
+            error = $"Model '{legacyValue}' is ambiguous. Send model as {{ providerID, modelID }}.";
+            return false;
+        }
+
+        resolved = ResolvedModelRef.Empty;
+        error = $"Unknown model '{legacyValue}'. Send model as {{ providerID, modelID }}.";
+        return false;
+    }
+}
+
+internal sealed record ResolvedModelRef(string? ProviderId, string? ModelId)
+{
+    public static ResolvedModelRef Empty { get; } = new(null, null);
+}
+
+internal sealed class ModelRefJsonConverter : JsonConverter<ModelRef>
+{
+    public override ModelRef Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.String)
+            return ModelRef.FromString(reader.GetString()!);
+
+        if (reader.TokenType != JsonTokenType.StartObject)
+            throw new JsonException("Expected string or object for model.");
+
+        string? providerId = null;
+        string? modelId = null;
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+                continue;
+
+            var propName = reader.GetString();
+            reader.Read();
+            if (string.Equals(propName, "providerID", StringComparison.Ordinal))
+                providerId = reader.GetString();
+            else if (string.Equals(propName, "modelID", StringComparison.Ordinal))
+                modelId = reader.GetString();
+            else
+                reader.Skip();
+        }
+
+        return ModelRef.FromObject(providerId, modelId);
+    }
+
+    public override void Write(Utf8JsonWriter writer, ModelRef value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+        writer.WriteString("providerID", value.ProviderId);
+        writer.WriteString("modelID", value.ModelId);
+        writer.WriteEndObject();
+    }
+}
 
 // ── FleetError → IResult helper ─────────────────────────────────────────────
 

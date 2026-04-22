@@ -7,8 +7,14 @@ import { useSessionsStore } from "@/stores/sessions";
 export interface ModelOption {
   id: string;
   name: string;
+  providerId: string;
+  selectionKey: string;
   provider: string;
   description: string;
+}
+
+export function createModelSelectionKey(providerId: string, modelId: string): string {
+  return JSON.stringify([providerId, modelId]);
 }
 
 function toModelOptions(providers: readonly AvailableProvider[]): ModelOption[] {
@@ -16,6 +22,8 @@ function toModelOptions(providers: readonly AvailableProvider[]): ModelOption[] 
     return provider.models.map((model) => ({
       id: model.id,
       name: model.name,
+      providerId: provider.id,
+      selectionKey: createModelSelectionKey(provider.id, model.id),
       provider: provider.name,
       description: "",
     }));
@@ -27,7 +35,7 @@ export function useModels(sessionId?: string) {
   const { sessions, activeSessionId } = storeToRefs(sessionsStore);
 
   const models = ref<ModelOption[]>([]);
-  const modelsById = ref<Record<string, ModelOption>>({});
+  const modelsByKey = ref<Record<string, ModelOption>>({});
   const isLoading = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);
 
@@ -35,18 +43,18 @@ export function useModels(sessionId?: string) {
   const instanceId = computed(() => {
     return sessions.value.find((session) => session.session.id === resolvedSessionId.value)?.instanceId ?? "";
   });
-  const defaultModelId = computed(() => models.value[0]?.id ?? "");
+  const defaultModelKey = computed(() => models.value[0]?.selectionKey ?? "");
 
   watch(
     instanceId,
     async (nextInstanceId, _previous, onCleanup) => {
-      if (!nextInstanceId) {
-        models.value = [];
-        modelsById.value = {};
-        isLoading.value = false;
-        error.value = undefined;
-        return;
-      }
+        if (!nextInstanceId) {
+          models.value = [];
+          modelsByKey.value = {};
+          isLoading.value = false;
+          error.value = undefined;
+          return;
+        }
 
       const controller = new AbortController();
       onCleanup(() => {
@@ -71,14 +79,14 @@ export function useModels(sessionId?: string) {
         const nextModels = toModelOptions(providers);
 
         models.value = nextModels;
-        modelsById.value = Object.fromEntries(nextModels.map((model) => [model.id, model])) as Record<string, ModelOption>;
+        modelsByKey.value = Object.fromEntries(nextModels.map((model) => [model.selectionKey, model])) as Record<string, ModelOption>;
       } catch (fetchError) {
         if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
           return;
         }
 
         models.value = [];
-        modelsById.value = {};
+        modelsByKey.value = {};
         error.value = fetchError instanceof Error ? fetchError.message : "Failed to load models";
       } finally {
         isLoading.value = false;
@@ -89,8 +97,8 @@ export function useModels(sessionId?: string) {
 
   return {
     models: readonly(models),
-    modelsById: readonly(modelsById),
-    defaultModelId,
+    modelsByKey: readonly(modelsByKey),
+    defaultModelKey,
     isLoading: readonly(isLoading),
     error: readonly(error),
   };

@@ -132,6 +132,7 @@ public sealed record HarnessAttachment(string Mime, string Filename, string Data
 public sealed record PromptOptions
 {
     public string? Agent { get; init; }
+    public string? ProviderId { get; init; }
     public string? ModelId { get; init; }
     public IReadOnlyList<HarnessAttachment>? Attachments { get; init; }
 }
@@ -148,6 +149,7 @@ public sealed record CommandOptions
     public required string Command { get; init; }
     public string? Arguments { get; init; }
     public string? Agent { get; init; }
+    public string? ProviderId { get; init; }
     public string? ModelId { get; init; }
 
     /// <summary>

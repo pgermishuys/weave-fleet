@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionsStore } from "@/stores/sessions";
 import Composer from "@/components/session/Composer.vue";
 import type { SessionListItem } from "@/lib/api-types";
+import { createModelSelectionKey } from "@/composables/use-models";
 
 const { apiFetchMock } = vi.hoisted(() => ({
   apiFetchMock: vi.fn(),
@@ -64,8 +65,13 @@ function configureApiFetch(): void {
         providers: [
           {
             id: "provider-1",
-            name: "Provider",
-            models: [{ id: "model-1", name: "Model 1" }],
+            name: "Provider One",
+            models: [{ id: "shared-model", name: "Model 1" }],
+          },
+          {
+            id: "provider-2",
+            name: "Provider Two",
+            models: [{ id: "shared-model", name: "Model 1" }],
           },
         ],
       });
@@ -116,7 +122,25 @@ function mountComposer(instanceId: string | undefined = "instance-1") {
           template: "<div data-testid=\"agent-selector\" />",
         },
         ModelSelector: {
-          template: "<div data-testid=\"model-selector\" />",
+          props: ["modelValue", "models"],
+          emits: ["update:modelValue"],
+          methods: {
+            handleChange(event) {
+              this.$emit("update:modelValue", event.target.value);
+            },
+          },
+          template: `
+            <select
+              data-testid="model-selector"
+              :value="modelValue"
+              @change="handleChange"
+            >
+              <option value="">Default</option>
+              <option v-for="model in models" :key="model.selectionKey" :value="model.selectionKey">
+                {{ model.providerId }}::{{ model.id }}
+              </option>
+            </select>
+          `,
         },
       },
     },
@@ -189,6 +213,32 @@ describe("Composer", () => {
     expect(apiFetchMock.mock.calls.some(([url, options]) => String(url).endsWith("/command") && options?.method === "POST")).toBe(true);
     expect(apiFetchMock.mock.calls.some(([url, options]) => String(url).endsWith("/prompt") && options?.method === "POST")).toBe(false);
     expect(wrapper.emitted("promptSent")).toHaveLength(1);
+  });
+
+  it("preserves the selected provider when providers share a model id", async () => {
+    const wrapper = mountComposer();
+    await flushPromises();
+
+    const modelSelector = wrapper.get("[data-testid='model-selector']");
+    await modelSelector.setValue(createModelSelectionKey("provider-2", "shared-model"));
+
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+    await textarea.setValue("Hello there");
+
+    const enterEvent = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true,
+    });
+
+    textarea.element.dispatchEvent(enterEvent);
+    await flushPromises();
+
+    const promptCall = apiFetchMock.mock.calls.find(([url, options]) => String(url).endsWith("/prompt") && options?.method === "POST");
+    expect(promptCall).toBeTruthy();
+    const [, options] = promptCall!;
+    const body = JSON.parse(String(options?.body)) as { model?: { providerID: string; modelID: string } };
+    expect(body.model).toEqual({ providerID: "provider-2", modelID: "shared-model" });
   });
 
   it("does not intercept Shift+Enter and does not render autocomplete when instanceId is blank", async () => {

@@ -548,6 +548,38 @@ public sealed class OpenCodeMapperTests
     }
 
     [Fact]
+    public void TryExtractTokenEvent_UppercaseIdAliases_ReturnsTokenEventData()
+    {
+        var evt = MakeMessageUpdatedEvent("""
+            {
+              "info": {
+                "id": "msg-1",
+                "sessionID": "oc-sess-1",
+                "role": "assistant",
+                "time": { "created": 1000000 },
+                "modelID": "gpt-5.4",
+                "providerID": "github-copilot",
+                "tokens": {
+                  "input": 100,
+                  "output": 200,
+                  "reasoning": 10,
+                  "cache": { "read": 50, "write": 0 },
+                  "total": 360
+                },
+                "cost": 0.005
+              }
+            }
+            """);
+
+        var result = OpenCodeMapper.TryExtractTokenEvent(
+            evt, "fleet-sess-1", "proj-1", "MyProject", "/workspace");
+
+        result.ShouldNotBeNull();
+        result.ModelId.ShouldBe("gpt-5.4");
+        result.ProviderId.ShouldBe("github-copilot");
+    }
+
+    [Fact]
     public void TryExtractTokenEvent_UserMessage_ReturnsNull()
     {
         var evt = MakeMessageUpdatedEvent("""

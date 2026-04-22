@@ -155,11 +155,11 @@ public sealed class InstanceEndpointTenantIsolationTests : IAsyncLifetime
             .Select(static model => model.GetProperty("id").GetString())
             .ToArray();
 
-        modelIds.ShouldContain("openrouter/anthropic/claude-opus-4.6");
-        modelIds.ShouldContain("openrouter/anthropic/claude-sonnet-4");
-        modelIds.ShouldContain("openrouter/anthropic/claude-opus-4.6");
-        modelIds.ShouldNotContain("openrouter/openrouter/anthropic/claude-sonnet-4");
-        modelIds.ShouldNotContain("openrouter/openrouter/anthropic/claude-opus-4.6");
+        modelIds.ShouldContain("claude-opus-4.6");
+        modelIds.ShouldContain("anthropic/claude-opus-4.6");
+        modelIds.ShouldContain("claude-sonnet-4");
+        modelIds.ShouldNotContain("openrouter/anthropic/claude-opus-4.6");
+        modelIds.ShouldNotContain("openrouter/claude-sonnet-4");
     }
 
     private static void ExecuteNonQuery(System.Data.IDbConnection conn, string sql)

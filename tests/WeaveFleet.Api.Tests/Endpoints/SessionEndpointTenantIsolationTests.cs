@@ -11,6 +11,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using WeaveFleet.Application.Data;
+using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
@@ -127,6 +130,125 @@ public sealed class SessionEndpointTenantIsolationTests : IAsyncLifetime
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task SendCommand_WithLegacyUnqualifiedModel_ResolvesUniqueProviderFromCatalog()
+    {
+        var tracker = _factory!.Services.GetRequiredService<InstanceTracker>();
+        var harness = new FakeHarnessSession("inst-test");
+        tracker.Register("inst-test", harness);
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/sessions/sess-test-1/command")
+        {
+            Content = JsonContent.Create(new
+            {
+                command = "start-work",
+                model = "claude-sonnet-4"
+            })
+        };
+        AddCsrfHeader(request);
+
+        var instance = tracker.Get("inst-test");
+        instance.ShouldNotBeNull();
+
+        var providerSession = new ProviderListingHarnessSession(
+            [
+                new ProviderInfo
+                {
+                    Id = "openrouter",
+                    Name = "OpenRouter",
+                    Models = [new ModelInfo { Id = "claude-sonnet-4", Name = "Claude Sonnet 4" }]
+                }
+            ],
+            harness);
+
+        tracker.Register("inst-test", providerSession);
+
+        var response = await _client!.SendAsync(request);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        harness.SendCommandCalls.Count.ShouldBe(1);
+        harness.SendCommandCalls[0].ProviderId.ShouldBe("openrouter");
+        harness.SendCommandCalls[0].ModelId.ShouldBe("claude-sonnet-4");
+    }
+
+    [Fact]
+    public async Task SendCommand_WithAmbiguousLegacyModel_ReturnsBadRequest()
+    {
+        var tracker = _factory!.Services.GetRequiredService<InstanceTracker>();
+        var harness = new FakeHarnessSession("inst-test");
+        tracker.Register(
+            "inst-test",
+            new ProviderListingHarnessSession(
+                [
+                    new ProviderInfo
+                    {
+                        Id = "openrouter",
+                        Name = "OpenRouter",
+                        Models = [new ModelInfo { Id = "claude-sonnet-4", Name = "Claude Sonnet 4" }]
+                    },
+                    new ProviderInfo
+                    {
+                        Id = "anthropic",
+                        Name = "Anthropic",
+                        Models = [new ModelInfo { Id = "claude-sonnet-4", Name = "Claude Sonnet 4" }]
+                    }
+                ],
+                harness));
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/sessions/sess-test-1/command")
+        {
+            Content = JsonContent.Create(new
+            {
+                command = "start-work",
+                model = "claude-sonnet-4"
+            })
+        };
+        AddCsrfHeader(request);
+
+        var response = await _client!.SendAsync(request);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        harness.SendCommandCalls.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task SendCommand_WithUnknownStructuredModel_ReturnsBadRequest()
+    {
+        var tracker = _factory!.Services.GetRequiredService<InstanceTracker>();
+        var harness = new FakeHarnessSession("inst-test");
+        tracker.Register(
+            "inst-test",
+            new ProviderListingHarnessSession(
+                [
+                    new ProviderInfo
+                    {
+                        Id = "openrouter",
+                        Name = "OpenRouter",
+                        Models = [new ModelInfo { Id = "claude-sonnet-4", Name = "Claude Sonnet 4" }]
+                    }
+                ],
+                harness));
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/sessions/sess-test-1/command")
+        {
+            Content = JsonContent.Create(new
+            {
+                command = "start-work",
+                model = new
+                {
+                    providerID = "openrouter",
+                    modelID = "does-not-exist"
+                }
+            })
+        };
+        AddCsrfHeader(request);
+
+        var response = await _client!.SendAsync(request);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        harness.SendCommandCalls.ShouldBeEmpty();
+    }
+
     /// <summary>
     /// Adds the CSRF token header to a mutating request.
     /// The client stores the antiforgery state cookie (HandleCookies=true), so only
@@ -165,6 +287,30 @@ public sealed class SessionEndpointTenantIsolationTests : IAsyncLifetime
         using var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
         cmd.ExecuteNonQuery();
+    }
+
+    private sealed class ProviderListingHarnessSession(
+        IReadOnlyList<ProviderInfo> providers,
+        FakeHarnessSession inner) : IHarnessSession
+    {
+        public string InstanceId => inner.InstanceId;
+        public int? ProcessId => inner.ProcessId;
+        public string? ResumeToken => inner.ResumeToken;
+        public string HarnessType => inner.HarnessType;
+        public HarnessSessionStatus Status => inner.Status;
+
+        public ValueTask DisposeAsync() => inner.DisposeAsync();
+        public Task StopAsync(CancellationToken ct) => inner.StopAsync(ct);
+        public Task DeleteAsync(CancellationToken ct) => inner.DeleteAsync(ct);
+        public Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct) => inner.SendPromptAsync(text, options, ct);
+        public Task SendCommandAsync(CommandOptions options, CancellationToken ct) => inner.SendCommandAsync(options, ct);
+        public Task AbortAsync(CancellationToken ct) => inner.AbortAsync(ct);
+        public Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct) => inner.GetMessagesAsync(query, ct);
+        public IAsyncEnumerable<HarnessEvent> SubscribeAsync(CancellationToken ct) => inner.SubscribeAsync(ct);
+        public Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct) => inner.CheckHealthAsync(ct);
+        public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct) => inner.GetAgentsAsync(ct);
+        public Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct) => inner.GetCommandsAsync(ct);
+        public Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct) => Task.FromResult(providers);
     }
 
     private sealed class SessionIsolationFactory : WebApplicationFactory<Program>

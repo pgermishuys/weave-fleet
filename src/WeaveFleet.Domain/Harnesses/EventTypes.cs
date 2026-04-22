@@ -10,6 +10,7 @@ public static class EventTypes
     public const string MessageRemoved = "message.removed";
     public const string MessagePartRemoved = "message.part.removed";
 
+    public const string SessionCreated = "session.created";
     public const string SessionUpdated = "session.updated";
     public const string SessionError = "session.error";
     public const string SessionCompacted = "session.compacted";

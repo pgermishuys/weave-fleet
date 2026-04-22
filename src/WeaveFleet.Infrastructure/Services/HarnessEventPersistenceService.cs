@@ -219,8 +219,8 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
                 return false;
 
             OpenCodeMessageInfo? info = role == "assistant"
-                ? infoEl.Deserialize<OpenCodeAssistantMessage>(OpenCodeJsonOptions.Default)
-                : infoEl.Deserialize<OpenCodeUserMessage>(OpenCodeJsonOptions.Default);
+                ? OpenCodeMessageDeserializer.DeserializeAssistantMessage(infoEl)
+                : OpenCodeMessageDeserializer.DeserializeUserMessage(infoEl);
             if (info is null) return false;
 
             IReadOnlyList<OpenCodeMessagePart> parts = [];

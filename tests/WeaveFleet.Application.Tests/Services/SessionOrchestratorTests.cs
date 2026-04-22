@@ -346,6 +346,55 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task PromptSessionAsync_WithExplicitProviderAndModel_SendsStructuredPromptOptions()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active",
+            Directory = "/tmp", CreatedAt = "2026-01-01", RetentionStatus = "active"
+        });
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.PromptSessionAsync("s1", "hello", new PromptOptions
+        {
+            ProviderId = "openrouter",
+            ModelId = "anthropic/claude-sonnet-4"
+        });
+
+        result.IsSuccess.ShouldBeTrue();
+        _defaultSession.SendPromptCalls.Count.ShouldBe(1);
+        var promptOptions = _defaultSession.SendPromptCalls[0].Options;
+        promptOptions.ShouldNotBeNull();
+        promptOptions.ProviderId.ShouldBe("openrouter");
+        promptOptions.ModelId.ShouldBe("anthropic/claude-sonnet-4");
+    }
+
+    [Fact]
+    public async Task CommandSessionAsync_WithUnqualifiedLegacyModel_KeepsProviderNull()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active",
+            Directory = "/tmp", CreatedAt = "2026-01-01", RetentionStatus = "active"
+        });
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.CommandSessionAsync("s1", new CommandOptions
+        {
+            Command = "start-work",
+            ProviderId = null,
+            ModelId = "claude-sonnet-4"
+        });
+
+        result.IsSuccess.ShouldBeTrue();
+        _defaultSession.SendCommandCalls.Count.ShouldBe(1);
+        _defaultSession.SendCommandCalls[0].ProviderId.ShouldBeNull();
+        _defaultSession.SendCommandCalls[0].ModelId.ShouldBe("claude-sonnet-4");
+    }
+
+    [Fact]
     public async Task PromptSessionAsync_WhenArchived_ReturnsValidationFailure()
     {
         _builder.SessionRepository.Seed(new Session

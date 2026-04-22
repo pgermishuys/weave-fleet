@@ -232,8 +232,8 @@ internal sealed class OpenCodeHttpClient
                 continue;
 
             OpenCodeMessageInfo? info = role == "assistant"
-                ? infoEl.Deserialize<OpenCodeAssistantMessage>(OpenCodeJsonOptions.Default)
-                : infoEl.Deserialize<OpenCodeUserMessage>(OpenCodeJsonOptions.Default);
+                ? OpenCodeMessageDeserializer.DeserializeAssistantMessage(infoEl)
+                : OpenCodeMessageDeserializer.DeserializeUserMessage(infoEl);
 
             if (info is null)
                 continue;

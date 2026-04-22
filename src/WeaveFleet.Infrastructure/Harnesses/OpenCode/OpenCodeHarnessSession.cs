@@ -70,9 +70,9 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     private string? _openCodeSessionId;
     private HarnessSessionStatus _status = HarnessSessionStatus.Starting;
     private bool _disposed;
+    private Dictionary<string, OpenCodeAgentModelInfo>? _agentModelCache;
 
-    /// <summary>Cached agent-name → modelId mapping, populated lazily from the agents endpoint.</summary>
-    private Dictionary<string, string>? _agentModelCache;
+    private sealed record OpenCodeAgentModelInfo(string? ProviderId, string? ModelId);
 
     /// <summary>Initialises the instance with all required dependencies.</summary>
     public OpenCodeHarnessSession(
@@ -156,22 +156,17 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             }
         }
 
+        var requestedModel = ResolveRequestedModel(options?.ProviderId, options?.ModelId);
+
         OpenCodeModelRefRequest? modelRef = null;
-        if (options?.ModelId is { } modelId)
+        if (!string.IsNullOrWhiteSpace(requestedModel.ProviderId)
+            && !string.IsNullOrWhiteSpace(requestedModel.ModelId))
         {
-            var slash = modelId.IndexOf('/', StringComparison.Ordinal);
-            if (slash > 0)
+            modelRef = new OpenCodeModelRefRequest
             {
-                modelRef = new OpenCodeModelRefRequest
-                {
-                    ProviderId = modelId[..slash],
-                    ModelId = modelId[(slash + 1)..],
-                };
-            }
-            else
-            {
-                modelRef = new OpenCodeModelRefRequest { ProviderId = modelId, ModelId = modelId };
-            }
+                ProviderId = requestedModel.ProviderId!,
+                ModelId = requestedModel.ModelId!,
+            };
         }
 
         var request = new OpenCodePromptRequest
@@ -199,12 +194,15 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         // OpenCode's CommandInput expects "model" as a plain string (e.g. "provider/model"),
         // unlike the prompt endpoint which accepts { providerID, modelID }.
         // It also requires "arguments" as a non-optional string.
+        var requestedModel = ResolveRequestedModel(options.ProviderId, options.ModelId);
+        var commandModel = ToCombinedModelId(requestedModel.ProviderId, requestedModel.ModelId);
+
         var request = new OpenCodeCommandRequest
         {
             Command = options.Command,
             Arguments = options.Arguments ?? string.Empty,
             Agent = options.Agent,
-            Model = options.ModelId,
+            Model = commandModel,
         };
 
         LogSendCommand(_logger, InstanceId, null);
@@ -256,18 +254,24 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             string? routedFleetSessionId = null;
             if (!isParentEvent && !string.IsNullOrWhiteSpace(resolvedOpenCodeSessionId))
             {
+                // session.created: when a child session is announced, await child fleet session
+                // creation synchronously so subsequent child events are not silently dropped.
+                // This fixes the early-child-event race: without an await here, child events
+                // arriving in the same SSE batch as session.created would be dropped because
+                // TryResolveChildFleetSessionIdAsync finds no matching session in the DB yet.
+                if (sseEvt.Type == EventTypes.SessionCreated)
+                    await TryEnsureChildSessionFromCreatedEventAsync(sseEvt, resolvedOpenCodeSessionId).ConfigureAwait(false);
+
                 routedFleetSessionId = await TryResolveChildFleetSessionIdAsync(resolvedOpenCodeSessionId).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(routedFleetSessionId))
                     continue;
             }
 
-            // Fire-and-forget analytics intercept — never blocks or throws
+            TokenEventData? tokenEvent = null;
             if (isParentEvent && _analyticsCollector is not null)
             {
-                var tokenEvent = OpenCodeMapper.TryExtractTokenEvent(
+                tokenEvent = OpenCodeMapper.TryExtractTokenEvent(
                     sseEvt, _fleetSessionId, _projectId, _projectName, _workingDirectory, _ownerUserId);
-                if (tokenEvent is not null)
-                    _analyticsCollector.AcceptTokenEvent(tokenEvent);
             }
 
             var harnessEvent = OpenCodeMapper.ToHarnessEvent(
@@ -277,10 +281,15 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 FleetSessionId = !isParentEvent ? routedFleetSessionId : null
             };
 
-            // Enrich message events with modelId from the agent config cache.
-            // OpenCode SSE events don't include modelId — only the REST API does.
             if (harnessEvent.Type is EventTypes.MessageCreated or EventTypes.MessageUpdated)
-                harnessEvent = await EnrichWithModelIdAsync(harnessEvent, ct).ConfigureAwait(false);
+                harnessEvent = await EnrichWithModelInfoWhenMissingAsync(harnessEvent, ct).ConfigureAwait(false);
+
+            if (tokenEvent is not null)
+            {
+                var modelInfo = ExtractModelInfo(harnessEvent.Payload);
+                tokenEvent = OpenCodeMapper.WithModelInfo(tokenEvent, modelInfo.ModelId, modelInfo.ProviderId);
+                _analyticsCollector!.AcceptTokenEvent(tokenEvent);
+            }
 
             // Fire-and-forget delegation detection for message.part.updated events.
             // This must remain in the session because it needs access to the raw SSE event
@@ -290,83 +299,6 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
             yield return harnessEvent;
         }
-    }
-
-    /// <summary>
-    /// Enriches a message event payload with <c>modelId</c> from the cached agent→model mapping.
-    /// OpenCode SSE events don't include <c>modelId</c> — only the REST API does.
-    /// </summary>
-    private async Task<HarnessEvent> EnrichWithModelIdAsync(HarnessEvent evt, CancellationToken ct)
-    {
-        if (!evt.Payload.HasValue || evt.Payload.Value.ValueKind != JsonValueKind.Object)
-            return evt;
-
-        var payload = evt.Payload.Value;
-        if (!payload.TryGetProperty("info", out var infoEl) || infoEl.ValueKind != JsonValueKind.Object)
-            return evt;
-
-        // Already has modelId — nothing to do
-        if (infoEl.TryGetProperty("modelId", out var existingModelId)
-            && existingModelId.ValueKind == JsonValueKind.String
-            && !string.IsNullOrEmpty(existingModelId.GetString()))
-            return evt;
-
-        // Only enrich assistant messages
-        if (!infoEl.TryGetProperty("role", out var roleEl) || roleEl.GetString() is not "assistant")
-            return evt;
-
-        // Look up agent name → model from cache
-        var agentName = infoEl.TryGetProperty("agent", out var agentEl) ? agentEl.GetString() : null;
-        var modelId = await ResolveModelIdForAgentAsync(agentName, ct).ConfigureAwait(false);
-        if (string.IsNullOrEmpty(modelId))
-            return evt;
-
-        // Inject modelId into the info block
-        var payloadNode = System.Text.Json.Nodes.JsonNode.Parse(payload.GetRawText())?.AsObject();
-        if (payloadNode is null)
-            return evt;
-
-        var infoNode = payloadNode["info"]?.AsObject();
-        if (infoNode is null)
-            return evt;
-
-        infoNode["modelId"] = modelId;
-        return evt with { Payload = JsonSerializer.SerializeToElement(payloadNode) };
-    }
-
-    /// <summary>
-    /// Resolves the model ID for a given agent name, using a lazily-populated cache.
-    /// Falls back to the default agent's model if the specific agent is not found.
-    /// </summary>
-    private async Task<string?> ResolveModelIdForAgentAsync(string? agentName, CancellationToken ct)
-    {
-        if (_agentModelCache is null)
-        {
-            try
-            {
-                var agents = await _httpClient.GetAgentsAsync(_workingDirectory, ct).ConfigureAwait(false);
-                _agentModelCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var agent in agents)
-                {
-                    if (agent.Name is not null && agent.Model?.ModelId is not null)
-                        _agentModelCache[agent.Name] = agent.Model.ModelId;
-                }
-            }
-            catch
-            {
-                // Best-effort — don't block event processing
-                return null;
-            }
-        }
-
-        // Try exact agent match first, then fall back to "default" agent
-        if (agentName is not null && _agentModelCache.TryGetValue(agentName, out var model))
-            return model;
-
-        if (_agentModelCache.TryGetValue("default", out var defaultModel))
-            return defaultModel;
-
-        return _agentModelCache.Values.FirstOrDefault();
     }
 
     private async Task<string?> TryResolveChildFleetSessionIdAsync(string openCodeSessionId)
@@ -382,6 +314,126 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             return null;
 
         return session.Id;
+    }
+
+    private async Task<HarnessEvent> EnrichWithModelInfoWhenMissingAsync(HarnessEvent evt, CancellationToken ct)
+    {
+        if (!evt.Payload.HasValue || evt.Payload.Value.ValueKind != JsonValueKind.Object)
+            return evt;
+
+        var payload = evt.Payload.Value;
+        if (!payload.TryGetProperty("info", out var infoEl) || infoEl.ValueKind != JsonValueKind.Object)
+            return evt;
+
+        if (!infoEl.TryGetProperty("role", out var roleEl) || roleEl.GetString() is not "assistant")
+            return evt;
+
+        var existing = ExtractModelInfo(evt.Payload);
+        if (!string.IsNullOrWhiteSpace(existing.ModelId) || !string.IsNullOrWhiteSpace(existing.ProviderId))
+            return evt;
+
+        var agentName = TryGetStringProperty(infoEl, "agent");
+        if (string.IsNullOrWhiteSpace(agentName))
+            return evt;
+
+        var fallback = await ResolveModelInfoForAgentAsync(agentName, ct).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(fallback?.ModelId) && string.IsNullOrWhiteSpace(fallback?.ProviderId))
+            return evt;
+
+        var payloadNode = System.Text.Json.Nodes.JsonNode.Parse(payload.GetRawText())?.AsObject();
+        var infoNode = payloadNode?["info"]?.AsObject();
+        if (infoNode is null)
+            return evt;
+
+        if (!string.IsNullOrWhiteSpace(fallback?.ModelId))
+            infoNode["modelId"] = fallback.ModelId;
+
+        if (!string.IsNullOrWhiteSpace(fallback?.ProviderId))
+            infoNode["providerId"] = fallback.ProviderId;
+
+        return evt with { Payload = JsonSerializer.SerializeToElement(payloadNode) };
+    }
+
+    private async Task<OpenCodeAgentModelInfo?> ResolveModelInfoForAgentAsync(string agentName, CancellationToken ct)
+    {
+        if (_agentModelCache is null)
+        {
+            try
+            {
+                var agents = await _httpClient.GetAgentsAsync(_workingDirectory, ct).ConfigureAwait(false);
+                _agentModelCache = new Dictionary<string, OpenCodeAgentModelInfo>(StringComparer.OrdinalIgnoreCase);
+                foreach (var agent in agents)
+                {
+                    if (string.IsNullOrWhiteSpace(agent.Name))
+                        continue;
+
+                    _agentModelCache[agent.Name] = new OpenCodeAgentModelInfo(agent.Model?.ProviderId, agent.Model?.ModelId);
+                }
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        return _agentModelCache.TryGetValue(agentName, out var modelInfo) ? modelInfo : null;
+    }
+
+    private static OpenCodeAgentModelInfo ExtractModelInfo(JsonElement? payload)
+    {
+        if (payload is not { ValueKind: JsonValueKind.Object } payloadObject)
+            return new OpenCodeAgentModelInfo(null, null);
+
+        if (!payloadObject.TryGetProperty("info", out var infoEl) || infoEl.ValueKind != JsonValueKind.Object)
+            return new OpenCodeAgentModelInfo(null, null);
+
+        return new OpenCodeAgentModelInfo(
+            ProviderId: TryGetStringProperty(infoEl, "providerId", "providerID", "provider_id"),
+            ModelId: TryGetStringProperty(infoEl, "modelId", "modelID", "model_id"));
+    }
+
+    private static string? TryGetStringProperty(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.String)
+                continue;
+
+            return property.GetString();
+        }
+
+        return null;
+    }
+
+    private static (string? ProviderId, string? ModelId) ResolveRequestedModel(string? providerId, string? modelId)
+    {
+        if (string.IsNullOrWhiteSpace(modelId))
+            return (providerId, modelId);
+
+        var slashIndex = modelId.IndexOf('/', StringComparison.Ordinal);
+        if (slashIndex <= 0)
+            return (providerId, modelId);
+
+        var qualifiedProviderId = modelId[..slashIndex];
+        var qualifiedModelId = modelId[(slashIndex + 1)..];
+
+        if (string.IsNullOrWhiteSpace(providerId))
+            return (qualifiedProviderId, qualifiedModelId);
+
+        return string.Equals(providerId, qualifiedProviderId, StringComparison.Ordinal)
+            ? (providerId, qualifiedModelId)
+            : (providerId, modelId);
+    }
+
+    private static string? ToCombinedModelId(string? providerId, string? modelId)
+    {
+        if (string.IsNullOrWhiteSpace(modelId))
+            return null;
+
+        if (string.IsNullOrWhiteSpace(providerId) || modelId.Contains('/', StringComparison.Ordinal))
+            return modelId;
+
+        return $"{providerId}/{modelId}";
     }
 
     /// <inheritdoc />
@@ -626,6 +678,61 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         {
             LogDelegationFailed(_logger, _fleetSessionId, ex);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Handles a <c>session.created</c> event by ensuring the child fleet session exists
+    /// in the DB before any subsequent child events are routed.
+    /// This eliminates the early-child-event drop race where child events arriving in the
+    /// same SSE batch as <c>session.created</c> were silently dropped because the child
+    /// fleet session had not yet been persisted.
+    /// </summary>
+    private async Task TryEnsureChildSessionFromCreatedEventAsync(OpenCodeSseEvent sseEvt, string childOpenCodeSessionId)
+    {
+        try
+        {
+            if (sseEvt.Properties.ValueKind != JsonValueKind.Object)
+                return;
+
+            if (!sseEvt.Properties.TryGetProperty("info", out var infoEl) || infoEl.ValueKind != JsonValueKind.Object)
+                return;
+
+            // Only handle child sessions whose parentID matches our parent OpenCode session ID.
+            if (!infoEl.TryGetProperty("parentID", out var parentIdEl)
+                || parentIdEl.ValueKind != JsonValueKind.String)
+                return;
+
+            var ocParentId = parentIdEl.GetString();
+            if (string.IsNullOrWhiteSpace(ocParentId))
+                return;
+
+            // The parentID in the event is the OpenCode session ID of the parent.
+            // We need to verify this belongs to our parent fleet session.
+            if (!string.IsNullOrWhiteSpace(_openCodeSessionId)
+                && !string.Equals(ocParentId, _openCodeSessionId, StringComparison.Ordinal))
+                return;
+
+            // Extract the child session title for delegation creation.
+            infoEl.TryGetProperty("title", out var titleEl);
+            var title = titleEl.ValueKind == JsonValueKind.String
+                ? titleEl.GetString() ?? childOpenCodeSessionId
+                : childOpenCodeSessionId;
+
+            using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
+            using var scope = _scopeFactory.CreateScope();
+            var sessionOrchestrator = scope.ServiceProvider.GetService<SessionOrchestrator>();
+            if (sessionOrchestrator is null)
+                return;
+
+            await sessionOrchestrator.EnsureDelegatedChildSessionAsync(
+                _fleetSessionId,
+                childOpenCodeSessionId,
+                title).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            LogDelegationFailed(_logger, _fleetSessionId, ex);
         }
     }
 }

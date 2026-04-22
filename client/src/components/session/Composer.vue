@@ -30,7 +30,7 @@ const emit = defineEmits<{
 }>();
 
 const { agents, defaultAgentId } = useAgents();
-const { models, defaultModelId } = useModels(props.sessionId);
+const { models, defaultModelKey } = useModels(props.sessionId);
 const { draft, setText, setAgentId, setModelId } = useDraftState(props.sessionId, {
   agentId: "",
   modelId: "",
@@ -300,13 +300,13 @@ watch(
 );
 
 watch(
-  [models, defaultModelId],
-  ([nextModels, nextDefaultModelId]) => {
-    if (!nextDefaultModelId) {
+  [models, defaultModelKey],
+  ([nextModels, nextDefaultModelKey]) => {
+    if (!nextDefaultModelKey) {
       return;
     }
 
-    if (draft.modelId && !nextModels.some((model) => model.id === draft.modelId)) {
+    if (draft.modelId && !nextModels.some((model) => model.selectionKey === draft.modelId)) {
       setModelId("");
     }
   },

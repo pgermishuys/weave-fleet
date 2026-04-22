@@ -148,6 +148,8 @@ public sealed partial class AnalyticsWriterService : BackgroundService
                         @Cost, @EstimatedCost, @CreatedAt, @UserId
                     )
                     ON CONFLICT(event_id) DO UPDATE SET
+                        model_id         = COALESCE(excluded.model_id, token_events.model_id),
+                        provider_id      = COALESCE(excluded.provider_id, token_events.provider_id),
                         tokens_input     = CASE WHEN excluded.tokens_total > token_events.tokens_total THEN excluded.tokens_input     ELSE token_events.tokens_input     END,
                         tokens_output    = CASE WHEN excluded.tokens_total > token_events.tokens_total THEN excluded.tokens_output    ELSE token_events.tokens_output    END,
                         tokens_reasoning = CASE WHEN excluded.tokens_total > token_events.tokens_total THEN excluded.tokens_reasoning ELSE token_events.tokens_reasoning END,

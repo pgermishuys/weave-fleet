@@ -117,6 +117,32 @@ public sealed class OpenCodeModelsSerializationTests
     }
 
     [Fact]
+    public void AssistantMessage_DeserializesUppercaseIdAliases()
+    {
+        const string json = """
+        {
+          "role":"assistant",
+          "id":"msg-2",
+          "sessionID":"sess-1",
+          "time":{"created":2000000,"completed":2500000},
+          "providerID":"github-copilot",
+          "modelID":"gpt-5.4",
+          "agent":"Loom (Main Orchestrator)",
+          "cost":0.001,
+          "finish":"end_turn"
+        }
+        """;
+
+        var result = OpenCodeMessageDeserializer.DeserializeAssistantMessage(JsonDocument.Parse(json).RootElement);
+
+        result.ShouldNotBeNull();
+        result.SessionId.ShouldBe("sess-1");
+        result.ModelId.ShouldBe("gpt-5.4");
+        result.ProviderId.ShouldBe("github-copilot");
+        result.Time.Completed.ShouldBe(2500000L);
+    }
+
+    [Fact]
     public void MessageParts_TextPart_Deserializes()
     {
         const string json = """

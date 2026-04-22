@@ -76,6 +76,14 @@ public static class EventTypeMetadata
             RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
+        EventTypes.SessionCreated => new EventClassification
+        {
+            IsKnown = true,
+            IsDurable = false,
+            IsEphemeralRelay = true,
+            RequiresReasoningFilter = false,
+            IsActivitySignal = false,
+        },
         EventTypes.SessionUpdated => new EventClassification
         {
             IsKnown = true,

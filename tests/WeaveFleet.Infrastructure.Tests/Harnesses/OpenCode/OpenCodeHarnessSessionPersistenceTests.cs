@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Net.Http.Headers;
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
@@ -285,6 +286,29 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             }
         });
 
+    private static string BuildAssistantMessageUpdatedSseLineWithUppercaseModelIds(
+        string messageId,
+        string modelId,
+        string providerId) =>
+        "data: " + JsonSerializer.Serialize(new
+        {
+            type = "message.updated",
+            properties = new
+            {
+                info = new
+                {
+                    id = messageId,
+                    sessionID = "oc-session",
+                    role = "assistant",
+                    agent = "loom",
+                    modelID = modelId,
+                    providerID = providerId,
+                    time = new { created = 1700000000L }
+                },
+                parts = new[] { new { type = "text", id = "p1", sessionID = "oc-session", messageID = messageId, text = "Hello" } }
+            }
+        });
+
     /// <summary>
     /// Creates an <see cref="OpenCodeHarnessSession"/> backed by a fake SSE HTTP handler
     /// that streams the provided SSE lines. Also returns a <see cref="HarnessEventPersistenceService"/>
@@ -411,6 +435,63 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
 
         await cts.CancelAsync();
         await consumeTask;
+
+        await instance.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_MessageUpdatedEvent_WithUppercaseModelIds_PersistsModelIdentity()
+    {
+        var fleetSessionId = "fleet-persist-model-1";
+        var persistSignal = new TaskCompletionSource();
+
+        var (instance, messageRepo, persistenceService) = await CreateInstanceWithSseLines(
+            fleetSessionId,
+            [BuildAssistantMessageUpdatedSseLineWithUppercaseModelIds("msg-1", "gpt-5.4", "github-copilot")],
+            repo =>
+            {
+                repo.UpsertBehavior = _ =>
+                {
+                    persistSignal.TrySetResult();
+                    return Task.CompletedTask;
+                };
+            });
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var consumeTask = ConsumeEventsAsync(instance, cts.Token, persistenceService, fleetSessionId);
+
+        await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(200);
+
+        messageRepo.UpsertCalls.ShouldContain(m =>
+            m.Id == "msg-1"
+            && m.SessionId == fleetSessionId
+            && m.ModelId == "gpt-5.4");
+
+        await cts.CancelAsync();
+        await consumeTask;
+        await instance.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_MessageUpdatedEvent_WithoutModelId_DoesNotInjectModelMetadata()
+    {
+        var fleetSessionId = "fleet-persist-model-2";
+
+        var (instance, _, _) = await CreateInstanceWithSseLines(
+            fleetSessionId,
+            [BuildMessageUpdatedSseLine("assistant", "msg-1", "loom")]);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        var events = await ConsumeEventsAsync(instance, cts.Token);
+
+        var messageUpdated = events.Last(evt => evt.Type == EventTypes.MessageUpdated);
+        var info = messageUpdated.Payload!.Value.GetProperty("info");
+
+        info.TryGetProperty("modelId", out _).ShouldBeFalse();
+        info.TryGetProperty("modelID", out _).ShouldBeFalse();
+        info.TryGetProperty("providerId", out _).ShouldBeFalse();
+        info.TryGetProperty("providerID", out _).ShouldBeFalse();
 
         await instance.DisposeAsync();
     }
@@ -1883,12 +1964,19 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     private sealed class RecordingHttpMessageHandler : HttpMessageHandler
     {
         public List<string> RequestPaths { get; } = [];
+        public List<string> RequestBodies { get; } = [];
+        public string AgentsResponseJson { get; set; } = "[]";
+
+        public Task<HttpResponseMessage> SendCoreAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => SendAsync(request, cancellationToken);
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             RequestPaths.Add(request.RequestUri?.PathAndQuery ?? string.Empty);
+            if (request.Content is not null)
+                RequestBodies.Add(request.Content.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult());
 
             if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/session")
             {
@@ -1907,11 +1995,16 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent));
             }
 
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/agent")
+            {
+                return Task.FromResult(CreateJsonResponse(AgentsResponseJson));
+            }
+
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
         }
 
-        private static HttpResponseMessage CreateJsonResponse(string json)
-        {
+    private static HttpResponseMessage CreateJsonResponse(string json)
+    {
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(json, Encoding.UTF8)
@@ -1920,6 +2013,132 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
                 }
             };
         }
+    }
+
+    private sealed class CompositeHttpMessageHandler(string sseBody, RecordingHttpMessageHandler delegateHandler) : HttpMessageHandler
+    {
+        private int _eventResponsesServed;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/event")
+            {
+                if (Interlocked.Increment(ref _eventResponsesServed) > 1)
+                    throw new OperationCanceledException(cancellationToken);
+
+                var content = new StringContent(sseBody, Encoding.UTF8, "text/event-stream");
+                var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+                return Task.FromResult(response);
+            }
+
+            return delegateHandler.SendCoreAsync(request, cancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task SendPromptAsync_WithQualifiedModelId_SendsSplitModelReference()
+    {
+        var handler = new RecordingHttpMessageHandler();
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
+        var openCodeHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
+        var instance = new OpenCodeHarnessSession(
+            instanceId: "test-instance",
+            fleetSessionId: "fleet-session",
+            httpClient: openCodeHttpClient,
+            processManager: new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance),
+            portAllocator: new PortAllocator(10000, 10099),
+            allocatedPort: 0,
+            workingDirectory: "/tmp",
+            shutdownTimeout: TimeSpan.FromSeconds(1),
+            scopeFactory: BuildPersistenceDependencies().ScopeFactory,
+            logger: NullLogger<OpenCodeHarnessSession>.Instance,
+            ownerUserId: TestUserContext.DefaultUserId,
+            openCodeSessionId: "oc-session");
+
+        await instance.SendPromptAsync("Hello", new PromptOptions { ModelId = "github-copilot/gpt-5.4" }, CancellationToken.None);
+
+        var body = handler.RequestBodies.Last();
+        body.ShouldContain("\"providerID\":\"github-copilot\"");
+        body.ShouldContain("\"modelID\":\"gpt-5.4\"");
+        await instance.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task SendCommandAsync_WithProviderAndBareModel_SendsCombinedModelString()
+    {
+        var handler = new RecordingHttpMessageHandler();
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
+        var openCodeHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
+        var instance = new OpenCodeHarnessSession(
+            instanceId: "test-instance",
+            fleetSessionId: "fleet-session",
+            httpClient: openCodeHttpClient,
+            processManager: new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance),
+            portAllocator: new PortAllocator(10000, 10099),
+            allocatedPort: 0,
+            workingDirectory: "/tmp",
+            shutdownTimeout: TimeSpan.FromSeconds(1),
+            scopeFactory: BuildPersistenceDependencies().ScopeFactory,
+            logger: NullLogger<OpenCodeHarnessSession>.Instance,
+            ownerUserId: TestUserContext.DefaultUserId,
+            openCodeSessionId: "oc-session");
+
+        await instance.SendCommandAsync(new CommandOptions { Command = "test", ProviderId = "github-copilot", ModelId = "gpt-5.4" }, CancellationToken.None);
+
+        var body = handler.RequestBodies.Last();
+        body.ShouldContain("\"model\":\"github-copilot/gpt-5.4\"");
+        await instance.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task SubscribeAsync_MessageUpdatedEvent_WithoutModelId_UsesExactAgentFallbackOnly()
+    {
+        var handler = new RecordingHttpMessageHandler
+        {
+            AgentsResponseJson = "[{\"name\":\"loom\",\"model\":{\"providerId\":\"github-copilot\",\"modelId\":\"gpt-5.4\"}}]"
+        };
+
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
+        var openCodeHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
+        var instance = new OpenCodeHarnessSession(
+            instanceId: "test-instance",
+            fleetSessionId: "fleet-session",
+            httpClient: openCodeHttpClient,
+            processManager: new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance),
+            portAllocator: new PortAllocator(10000, 10099),
+            allocatedPort: 0,
+            workingDirectory: "/tmp",
+            shutdownTimeout: TimeSpan.FromSeconds(1),
+            scopeFactory: BuildPersistenceDependencies().ScopeFactory,
+            logger: NullLogger<OpenCodeHarnessSession>.Instance,
+            ownerUserId: TestUserContext.DefaultUserId,
+            openCodeSessionId: "oc-session");
+
+        var messageUpdated = BuildEvent(EventTypes.MessageUpdated, new
+        {
+            info = new
+            {
+                id = "msg-1",
+                sessionId = "oc-session",
+                role = "assistant",
+                agent = "loom",
+                time = new { created = 1700000000L }
+            }
+        });
+
+        var method = typeof(OpenCodeHarnessSession).GetMethod(
+            "EnrichWithModelInfoWhenMissingAsync",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        method.ShouldNotBeNull();
+        var enrichTask = (Task<HarnessEvent>)method.Invoke(instance, [messageUpdated, CancellationToken.None])!;
+        var enriched = await enrichTask;
+        var info = enriched.Payload!.Value.GetProperty("info");
+
+        info.GetProperty("modelId").GetString().ShouldBe("gpt-5.4");
+        info.GetProperty("providerId").GetString().ShouldBe("github-copilot");
+
+        await instance.DisposeAsync();
     }
 
     [Fact]

@@ -23,19 +23,15 @@ public static class InstanceEndpoints
                 return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
 
             var providers = await instance.GetProvidersAsync(ct);
-            var prefixOpenCodeProvider = string.Equals(instance.HarnessType, "opencode", StringComparison.Ordinal);
             // Return AvailableProvider[] — the frontend hook expects a bare array
+            // Model IDs are returned raw (no prefix rewriting); the frontend carries providerId separately.
             var result = providers.Select(p => new
             {
                 id = p.Id,
                 name = p.Name ?? p.Id,
                 models = p.Models.Select(m => new
                 {
-                    id = prefixOpenCodeProvider && !p.Id.Contains('/', StringComparison.Ordinal)
-                        ? m.Id.Contains('/', StringComparison.Ordinal)
-                            ? $"openrouter/{m.Id}"
-                            : $"openrouter/{p.Id}/{m.Id}"
-                        : $"{p.Id}/{m.Id}",
+                    id = m.Id,
                     name = m.Name ?? m.Id,
                 }),
             });
@@ -73,12 +69,17 @@ public static class InstanceEndpoints
             if (!await IsOwnerAsync(instanceService, userContext, id))
                 return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
 
+            var providers = await instance.GetProvidersAsync(ct);
+            if (!ModelRef.TryResolve(req.Model, providers, out var resolvedModel, out var modelError))
+                return Results.BadRequest(new { error = modelError });
+
             var options = new CommandOptions
             {
                 Command = req.Command,
                 Arguments = req.Arguments,
                 Agent = req.Agent,
-                ModelId = req.Model,
+                ProviderId = resolvedModel.ProviderId,
+                ModelId = resolvedModel.ModelId,
             };
 
             var validationError = options.Validate();
