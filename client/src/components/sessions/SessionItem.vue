@@ -48,6 +48,8 @@ interface Props {
 
 interface Emits {
   select: [session: SessionListItem];
+  dragSessionStart: [sessionId: string, projectId: string | null];
+  dragSessionEnd: [];
 }
 
 const props = defineProps<Props>();
@@ -149,6 +151,29 @@ const isAnyActionPending = computed(() =>
   || isTerminating.value
   || isUnarchiving.value,
 );
+
+const isDraggable = computed(() => !isInlineEditing.value && !isAnyActionPending.value);
+const isDragging = shallowRef(false);
+
+function handleDragStart(event: DragEvent): void {
+  if (!isDraggable.value || !event.dataTransfer) {
+    event.preventDefault();
+    return;
+  }
+
+  event.dataTransfer.effectAllowed = "move";
+  // Safari requires at least one setData call or the drag is cancelled
+  event.dataTransfer.setData("text/plain", sessionId.value);
+  event.dataTransfer.setData("application/weave-session-id", sessionId.value);
+  event.dataTransfer.setData("application/weave-source-project-id", props.session.projectId ?? "");
+  isDragging.value = true;
+  emit("dragSessionStart", sessionId.value, props.session.projectId ?? null);
+}
+
+function handleDragEnd(): void {
+  isDragging.value = false;
+  emit("dragSessionEnd");
+}
 
 const projectTargets = computed(() => {
   const targets = projects.value.map((project) => ({
@@ -415,8 +440,13 @@ function removeSessionFromStore(): void {
     <ContextMenuTrigger as-child>
       <div
         class="session-item-shell"
+        :class="{ 'session-item-shell--dragging': isDragging }"
         data-tree-leaf
         :data-session-id="session.session.id"
+        :draggable="isDraggable"
+        aria-roledescription="draggable session"
+        @dragstart="handleDragStart"
+        @dragend="handleDragEnd"
       >
         <template v-if="!isInlineEditing">
           <button
@@ -599,6 +629,11 @@ function removeSessionFromStore(): void {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.session-item-shell--dragging {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 .session-item {

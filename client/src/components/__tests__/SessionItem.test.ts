@@ -78,4 +78,62 @@ describe("SessionItem", () => {
     expect(wrapper.emitted("select")).toEqual([[session]]);
     expect(wrapper.get(".session-meta").text()).toBe("Completed");
   });
+
+  it("sets draggable to true when not editing and no action is pending", () => {
+    const wrapper = mount(SessionItem, {
+      props: {
+        active: false,
+        session: createSession(),
+      },
+    });
+
+    expect(wrapper.get(".session-item-shell").attributes("draggable")).toBe("true");
+  });
+
+  it("sets the correct dataTransfer values on dragstart", async () => {
+    const session = createSession({ projectId: "project-1" });
+    const wrapper = mount(SessionItem, {
+      props: {
+        active: false,
+        session,
+      },
+    });
+
+    const dataMap = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: "none",
+      setData: (type: string, value: string) => {
+        dataMap.set(type, value);
+      },
+      types: [],
+    } as unknown as DataTransfer;
+
+    await wrapper.get(".session-item-shell").trigger("dragstart", { dataTransfer });
+
+    expect(dataMap.get("text/plain")).toBe("session-1");
+    expect(dataMap.get("application/weave-session-id")).toBe("session-1");
+    expect(dataMap.get("application/weave-source-project-id")).toBe("project-1");
+  });
+
+  it("adds the dragging class during drag and removes it on dragend", async () => {
+    const wrapper = mount(SessionItem, {
+      props: {
+        active: false,
+        session: createSession(),
+      },
+    });
+
+    const shell = wrapper.get(".session-item-shell");
+    const dataTransfer = {
+      effectAllowed: "none",
+      setData: () => {},
+      types: [],
+    } as unknown as DataTransfer;
+
+    await shell.trigger("dragstart", { dataTransfer });
+    expect(shell.classes()).toContain("session-item-shell--dragging");
+
+    await shell.trigger("dragend");
+    expect(shell.classes()).not.toContain("session-item-shell--dragging");
+  });
 });

@@ -44,6 +44,8 @@ interface Props {
   project: ProjectGroupModel;
   expanded: boolean;
   activeSessionId: string | null;
+  activeDragSessionId: string | null;
+  activeDragProjectId: string | null;
 }
 
 interface Emits {
@@ -52,6 +54,9 @@ interface Emits {
   newSession: [projectId: string];
   projectChanged: [];
   sessionChanged: [];
+  moveSession: [sessionId: string, targetProjectId: string | null];
+  dragSessionStart: [sessionId: string, projectId: string | null];
+  dragSessionEnd: [];
 }
 
 const props = defineProps<Props>();
@@ -77,6 +82,71 @@ const {
 const canShowContextMenu = computed(() => !props.project.isUngrouped && props.project.projectId !== null);
 const sessionCountLabel = computed(() => `${props.project.sessionCount} session${props.project.sessionCount === 1 ? "" : "s"}`);
 const isAnyActionPending = computed(() => isUpdating.value || isReordering.value || isDeleting.value);
+
+// Drag-and-drop drop target state
+const dragEnterCount = shallowRef(0);
+const isDropTarget = computed(() => dragEnterCount.value > 0);
+
+function handleSessionDragStart(sessionId: string, projectId: string | null): void {
+  emit("dragSessionStart", sessionId, projectId);
+}
+
+function handleSessionDragEnd(): void {
+  emit("dragSessionEnd");
+}
+
+function handleDragOver(event: DragEvent): void {
+  // Must prevent default to allow drop
+  if (props.activeDragSessionId) {
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "move";
+    }
+  }
+}
+
+function handleDragEnter(event: DragEvent): void {
+  if (props.activeDragSessionId) {
+    dragEnterCount.value++;
+  }
+}
+
+function handleDragLeave(event: DragEvent): void {
+  if (props.activeDragSessionId) {
+    dragEnterCount.value = Math.max(0, dragEnterCount.value - 1);
+  }
+}
+
+function handleDrop(event: DragEvent): void {
+  dragEnterCount.value = 0;
+
+  if (!props.activeDragSessionId) {
+    return;
+  }
+
+  event.preventDefault();
+
+  const sessionId = props.activeDragSessionId;
+  const sourceProjectId = props.activeDragProjectId;
+
+  if (!sessionId) {
+    return;
+  }
+
+  const targetProjectId = props.project.projectId;
+
+  // No-op: same project
+  if (sourceProjectId === targetProjectId) {
+    return;
+  }
+
+  emit("moveSession", sessionId, targetProjectId);
+
+  // Auto-expand the target project if it is currently collapsed
+  if (!props.expanded) {
+    emit("toggle", props.project.id);
+  }
+}
 
 function handleToggle(): void {
   emit("toggle", props.project.id);
@@ -201,6 +271,10 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
   <section
     class="project-group"
     :data-project-id="project.projectId"
+    @dragover="handleDragOver"
+    @dragenter="handleDragEnter"
+    @dragleave="handleDragLeave"
+    @drop="handleDrop"
   >
     <ContextMenu
       v-if="canShowContextMenu && !isInlineEditing"
@@ -212,8 +286,9 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           <button
             type="button"
             class="project-header"
-            :class="{ collapsed: !expanded }"
+            :class="{ collapsed: !expanded, 'project-header--drop-target': isDropTarget }"
             :aria-expanded="expanded"
+            :aria-dropeffect="isDropTarget ? 'move' : 'none'"
             @click="handleToggle"
             @keydown="handleHeaderKeydown"
           >
@@ -300,8 +375,9 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
         v-if="!isInlineEditing"
         type="button"
         class="project-header"
-        :class="{ collapsed: !expanded }"
+        :class="{ collapsed: !expanded, 'project-header--drop-target': isDropTarget }"
         :aria-expanded="expanded"
+        :aria-dropeffect="isDropTarget ? 'move' : 'none'"
         @click="handleToggle"
         @keydown="handleHeaderKeydown"
       >
@@ -374,6 +450,8 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
             :active="session.session.id === activeSessionId"
             @changed="emit('sessionChanged')"
             @select="handleSessionSelect"
+            @drag-session-start="handleSessionDragStart"
+            @drag-session-end="handleSessionDragEnd"
           />
         </div>
       </div>
@@ -422,6 +500,12 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 
 .project-header--editing:hover {
   background: transparent;
+}
+
+.project-header--drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.08);
 }
 
 .project-header:focus-visible {

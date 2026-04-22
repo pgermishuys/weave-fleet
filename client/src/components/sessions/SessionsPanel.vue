@@ -7,6 +7,7 @@ import type { CreateSessionResponse, ProjectResponse, SessionListItem } from "@/
 import { useActivityStream } from "@/composables/use-activity-stream";
 import { useProjects } from "@/composables/use-projects";
 import { useSessions } from "@/composables/use-sessions";
+import { useMoveSession } from "@/composables/use-session-actions";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
@@ -39,6 +40,11 @@ interface ProjectTreeGroup {
   subgroups: ProjectTreeSubgroup[];
 }
 
+interface ActiveSessionDrag {
+  sessionId: string;
+  projectId: string | null;
+}
+
 const PROJECT_COLOR_PALETTE = [
   "#8b5cf6",
   "#22c55e",
@@ -58,6 +64,8 @@ const router = useRouter();
 const pathname = useLocation({
   select: (location) => location.pathname,
 });
+
+const { moveSession } = useMoveSession();
 
 const { activeSessionId, retentionStatus } = storeToRefs(sessionsStore);
 const {
@@ -144,15 +152,17 @@ const errorMessage = computed(() => sessionsError.value ?? projectsError.value);
 const hasSessions = computed(() => sessions.value.length > 0);
 
 function getProjectDisplayName(session: SessionListItem): string {
+  if (!session.projectId) {
+    return "Ungrouped";
+  }
+
   if (session.projectName?.trim()) {
     return session.projectName;
   }
 
-  if (session.projectId) {
-    const project = projectsById.value.get(session.projectId);
-    if (project) {
-      return project.name;
-    }
+  const project = projectsById.value.get(session.projectId);
+  if (project) {
+    return project.name;
   }
 
   return "Ungrouped";
@@ -415,6 +425,87 @@ function handleSessionSelect(session: SessionListItem): void {
   });
 }
 
+const dragAnnouncement = shallowRef("");
+const isDragMovePending = shallowRef(false);
+const activeSessionDrag = shallowRef<ActiveSessionDrag | null>(null);
+
+function handleSessionDragStart(sessionId: string, projectId: string | null): void {
+  const sessionExists = sessionsStore.sessions.some((session) => session.session.id === sessionId);
+  if (!sessionExists) {
+    activeSessionDrag.value = null;
+    return;
+  }
+
+  activeSessionDrag.value = { sessionId, projectId };
+}
+
+function handleSessionDragEnd(): void {
+  activeSessionDrag.value = null;
+}
+
+async function handleMoveSession(sessionId: string, targetProjectId: string | null): Promise<void> {
+  // Suppress moves while a search filter is active to avoid confusion with filtered views
+  if (normalizedQuery.value) {
+    return;
+  }
+
+  if (activeSessionDrag.value?.sessionId !== sessionId) {
+    return;
+  }
+
+  const session = sessionsStore.sessions.find((candidate) => candidate.session.id === sessionId);
+  if (!session) {
+    activeSessionDrag.value = null;
+    return;
+  }
+
+  const isKnownTarget = targetProjectId === null || projectsById.value.has(targetProjectId);
+  if (!isKnownTarget) {
+    activeSessionDrag.value = null;
+    return;
+  }
+
+  // Prevent concurrent drag moves
+  if (isDragMovePending.value) {
+    return;
+  }
+
+  // Optimistically update the store so the UI moves the session immediately
+  const previousProjectId = session.projectId ?? null;
+  const previousProjectName = session.projectName ?? null;
+  const targetProjectName = targetProjectId === null
+    ? null
+    : (projectsById.value.get(targetProjectId)?.name ?? previousProjectName);
+  sessionsStore.patchSession(sessionId, {
+    projectId: targetProjectId,
+    projectName: targetProjectName,
+  });
+
+  isDragMovePending.value = true;
+
+  try {
+    await moveSession(sessionId, targetProjectId);
+    await refetchSessions();
+
+    // Build announcement text for screen readers
+    const targetProject = targetProjectId
+      ? (projectsById.value.get(targetProjectId)?.name ?? "a project")
+      : "Ungrouped";
+    const sessionTitle = sessionsStore.sessions.find((s) => s.session.id === sessionId)?.session.title ?? "Session";
+    dragAnnouncement.value = `Moved ${sessionTitle} to ${targetProject}`;
+  } catch {
+    // Rollback optimistic update on failure
+    sessionsStore.patchSession(sessionId, {
+      projectId: previousProjectId,
+      projectName: previousProjectName,
+    });
+    dragAnnouncement.value = "Move failed. Session returned to original project.";
+  } finally {
+    isDragMovePending.value = false;
+    activeSessionDrag.value = null;
+  }
+}
+
 </script>
 
 <template>
@@ -540,11 +631,16 @@ function handleSessionSelect(session: SessionListItem): void {
         :project="project"
         :expanded="expandedProjects[project.id] ?? true"
         :active-session-id="activeSessionId"
+        :active-drag-session-id="activeSessionDrag?.sessionId ?? null"
+        :active-drag-project-id="activeSessionDrag?.projectId ?? null"
         @new-session="handleProjectSessionCreate"
         @project-changed="handleProjectChanged"
         @session-changed="handleRetry"
         @toggle="handleToggleProject"
         @select-session="handleSessionSelect"
+        @drag-session-start="handleSessionDragStart"
+        @drag-session-end="handleSessionDragEnd"
+        @move-session="handleMoveSession"
       />
 
       <div
@@ -558,6 +654,15 @@ function handleSessionSelect(session: SessionListItem): void {
           Try a different search term or clear the filter.
         </p>
       </div>
+    </div>
+
+    <!-- Screen reader live region for drag-and-drop announcements -->
+    <div
+      aria-live="polite"
+      aria-atomic="true"
+      class="sessions-sr-only"
+    >
+      {{ dragAnnouncement }}
     </div>
   </section>
 </template>
@@ -779,5 +884,17 @@ function handleSessionSelect(session: SessionListItem): void {
   to {
     transform: rotate(360deg);
   }
+}
+
+.sessions-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>
