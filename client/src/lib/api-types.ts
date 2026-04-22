@@ -182,6 +182,20 @@ export interface SendCommandResponse {
 
 // ─── Session List ──────────────────────────────────────────────────────────
 
+export interface SessionOrigin {
+  sourceType: string;
+  title: string | null;
+  resourceUrl: string | null;
+  resourceId: string | null;
+  providerId: string;
+}
+
+export interface SessionProvenanceRecord extends SessionOrigin {
+  actionId: string;
+  summary: string | null;
+  createdAt: string;
+}
+
 export interface SessionListItem {
   instanceId: string;
   workspaceId: string;
@@ -242,6 +256,7 @@ export interface SessionListItem {
    * The display name of the project (populated when available).
    */
   projectName?: string | null;
+  origin?: SessionOrigin | null;
 }
 
 // ─── Projects ──────────────────────────────────────────────────────────────

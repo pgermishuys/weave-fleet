@@ -19,6 +19,7 @@ public static class SessionEndpoints
         group.MapGet("/", async (
             SessionService sessionService,
             ISessionRepository sessionRepository,
+            ISessionSourceUsageRepository sessionSourceUsageRepository,
             IProjectRepository projectRepository,
             int limit = 100,
             int offset = 0,
@@ -39,7 +40,10 @@ public static class SessionEndpoints
                     var parentIdsWithBusyChildren = (await sessionRepository.GetIdsWithActiveChildrenAsync())
                         .ToHashSet(StringComparer.Ordinal);
 
-                    return Results.Ok(sessions.Select(session => ToListResponse(session, parentIdsWithBusyChildren, projectNamesById)).ToList());
+                    var originsBySessionId = await sessionSourceUsageRepository.GetPrimaryBySessionIdsAsync(
+                        sessions.Select(session => session.Id).ToArray());
+
+                    return Results.Ok(sessions.Select(session => ToListResponse(session, parentIdsWithBusyChildren, projectNamesById, originsBySessionId)).ToList());
                 },
                 error => Task.FromResult(Results.Problem(error.Description) as IResult));
         })
@@ -47,13 +51,18 @@ public static class SessionEndpoints
         .WithName("GetSessions");
 
         // GET /api/sessions/{id}
-        group.MapGet("/{id}", async (string id, SessionService sessionService, IWorkspaceRepository workspaceRepository) =>
+        group.MapGet("/{id}", async (
+            string id,
+            SessionService sessionService,
+            IWorkspaceRepository workspaceRepository,
+            ISessionSourceUsageRepository sessionSourceUsageRepository) =>
         {
             var result = await sessionService.GetSessionAsync(id);
             return await result.Match<Task<IResult>>(
                 async session =>
                 {
                     var workspace = await workspaceRepository.GetByIdAsync(session.WorkspaceId);
+                    var primaryOrigin = await sessionSourceUsageRepository.GetPrimaryBySessionIdAsync(session.Id);
 
                     return Results.Ok(new
                     {
@@ -75,12 +84,37 @@ public static class SessionEndpoints
                         totalTokens = session.TotalTokens > 0 ? session.TotalTokens : (int?)null,
                         totalCost = session.TotalCost > 0 ? session.TotalCost : (double?)null,
                         harnessType = session.HarnessType,
-                        projectId = session.ProjectId
+                        projectId = session.ProjectId,
+                        origin = primaryOrigin is not null ? ToOriginDto(primaryOrigin) : null
                     });
                 },
                 error => Task.FromResult(error.ToSessionApiResult()));
         })
         .WithName("GetSession");
+
+        // GET /api/sessions/{id}/origin
+        group.MapGet("/{id}/origin", async (
+            string id,
+            SessionService sessionService,
+            ISessionSourceUsageRepository sessionSourceUsageRepository) =>
+        {
+            var sessionResult = await sessionService.GetSessionAsync(id);
+            return await sessionResult.Match<Task<IResult>>(
+                async _ =>
+                {
+                    var usages = await sessionSourceUsageRepository.ListBySessionIdAsync(id);
+                    var provenance = usages
+                        .OrderBy(usage => TryParseUnixMs(usage.CreatedAt))
+                        .Select(ToOriginRecordDto)
+                        .ToList();
+
+                    return Results.Ok(provenance);
+                },
+                error => Task.FromResult(error.ToSessionApiResult()));
+        })
+        .Produces<IReadOnlyList<SessionOriginRecordDto>>(200)
+        .Produces(404)
+        .WithName("GetSessionOrigin");
 
         // GET /api/sessions/{id}/delegations
         group.MapGet("/{id}/delegations", async (
@@ -351,7 +385,8 @@ public static class SessionEndpoints
     private static SessionListResponse ToListResponse(
         Session s,
         HashSet<string> parentIdsWithBusyChildren,
-        Dictionary<string, string> projectNamesById)
+        Dictionary<string, string> projectNamesById,
+        IReadOnlyDictionary<string, SessionSourceUsage> originsBySessionId)
     {
         // Parse created_at to Unix ms for the frontend
         var createdMs = TryParseUnixMs(s.CreatedAt);
@@ -360,6 +395,9 @@ public static class SessionEndpoints
         var sessionStatus = DeriveAggregatedSessionStatus(s, parentIdsWithBusyChildren);
         var lifecycleStatus = s.LifecycleStatus ?? "running";
         var activityStatus = s.ActivityStatus;
+        var origin = originsBySessionId.TryGetValue(s.Id, out var sessionSourceUsage)
+            ? ToOriginDto(sessionSourceUsage)
+            : null;
 
         return new SessionListResponse(
             InstanceId: s.InstanceId,
@@ -387,8 +425,30 @@ public static class SessionEndpoints
             ProjectId: s.ProjectId,
             ProjectName: s.ProjectId is not null && projectNamesById.TryGetValue(s.ProjectId, out var projectName)
                 ? projectName
-                : null);
+                : null)
+        {
+            Origin = origin
+        };
     }
+
+    private static SessionOriginDto ToOriginDto(SessionSourceUsage usage) =>
+        new(
+            SourceType: usage.SourceType,
+            Title: usage.Title,
+            ResourceUrl: usage.ResourceUrl,
+            ResourceId: usage.ResourceId,
+            ProviderId: usage.ProviderId);
+
+    private static SessionOriginRecordDto ToOriginRecordDto(SessionSourceUsage usage) =>
+        new(
+            SourceType: usage.SourceType,
+            Title: usage.Title,
+            ResourceUrl: usage.ResourceUrl,
+            ResourceId: usage.ResourceId,
+            ProviderId: usage.ProviderId,
+            ActionId: usage.ActionId,
+            Summary: usage.Summary,
+            CreatedAt: usage.CreatedAt);
 
     private static string DeriveSessionStatus(Session s) =>
         s.Status switch
@@ -456,6 +516,16 @@ internal sealed record SendCommandApiRequest(
     string? Arguments,
     string? Agent,
     string? Model);
+
+internal sealed record SessionOriginRecordDto(
+    string SourceType,
+    string? Title,
+    string? ResourceUrl,
+    string? ResourceId,
+    string ProviderId,
+    string ActionId,
+    string? Summary,
+    string CreatedAt);
 
 // ── FleetError → IResult helper ─────────────────────────────────────────────
 

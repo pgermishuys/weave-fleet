@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.DTOs;
@@ -90,6 +91,85 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         result.Value.Session.UserId.ShouldBe("user-1");
         _builder.SessionRepository.InsertedSessions
             .ShouldContain(s => s.Title == "My Session" && s.ProjectId == "scratch-1" && s.UserId == "user-1");
+    }
+
+    [Fact]
+    public async Task CreateSessionAsync_WithHybridSource_IncludesContextInInitialPrompt()
+    {
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
+
+        var sut = BuildSutWithTracker(new StubSessionSourceProvider(
+            new SessionSourceDescriptor(
+                new SessionSourceKey
+                {
+                    ProviderId = SessionSourceProviderIds.GitHub,
+                    SourceType = SessionSourceTypeNames.GitHubIssue,
+                    ActionId = SessionSourceActions.StartSession,
+                    ContractVersion = 1
+                },
+                "GitHub issue",
+                SessionSourceKinds.Hybrid,
+                [],
+                ProducesWorkspace: true,
+                ProducesContext: true,
+                RequiresConfirmation: false),
+            new ResolvedSessionSource(
+                new SessionSourceDescriptor(
+                    new SessionSourceKey
+                    {
+                        ProviderId = SessionSourceProviderIds.GitHub,
+                        SourceType = SessionSourceTypeNames.GitHubIssue,
+                        ActionId = SessionSourceActions.StartSession,
+                        ContractVersion = 1
+                    },
+                    "GitHub issue",
+                    SessionSourceKinds.Hybrid,
+                    [],
+                    ProducesWorkspace: true,
+                    ProducesContext: true,
+                    RequiresConfirmation: false),
+                new ResolvedSessionInput(
+                    new WorkspaceIntent(tempDirectory.Path, "existing", null),
+                    new ContextEnvelope("GitHub issue #42", "Issue context body", false, 18),
+                    new ProvenanceRecord(
+                        SessionSourceProviderIds.GitHub,
+                        SessionSourceTypeNames.GitHubIssue,
+                        SessionSourceActions.StartSession,
+                        "acme/rocket#42",
+                        "https://github.com/acme/rocket/issues/42",
+                        "GitHub issue",
+                        null,
+                        DateTime.UtcNow.ToString("O"))))));
+
+        var result = await sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Source = new SessionSourceSelection
+            {
+                Key = new SessionSourceKey
+                {
+                    ProviderId = SessionSourceProviderIds.GitHub,
+                    SourceType = SessionSourceTypeNames.GitHubIssue,
+                    ActionId = SessionSourceActions.StartSession,
+                    ContractVersion = 1
+                },
+                Input = JsonSerializer.SerializeToElement(new
+                {
+                    owner = "acme",
+                    repo = "rocket",
+                    number = 42,
+                    repositoryPath = tempDirectory.Path
+                })
+            }
+        });
+
+        result.IsSuccess.ShouldBeTrue();
+        var runtime = _builder.HarnessRegistry.GetRuntimeByType("opencode").ShouldBeOfType<FakeHarnessRuntime>();
+        runtime.SpawnCalls.Any(call => call.InitialPrompt is not null && call.InitialPrompt.Contains("[Source: GitHub issue #42]", StringComparison.Ordinal)).ShouldBeTrue();
+        runtime.SpawnCalls.Any(call => call.InitialPrompt is not null && call.InitialPrompt.Contains("Issue context body", StringComparison.Ordinal)).ShouldBeTrue();
+        _builder.SessionSourceUsageRepository.All.ShouldContain(usage =>
+            usage.ProviderId == SessionSourceProviderIds.GitHub
+            && usage.ActionId == SessionSourceActions.StartSession);
     }
 
     [Fact]
@@ -887,7 +967,7 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     /// Builds a new SessionOrchestrator using the same builder fakes but with the pre-configured tracker.
     /// Used for tests that need to pre-register instances in the tracker.
     /// </summary>
-    private SessionOrchestrator BuildSutWithTracker()
+    private SessionOrchestrator BuildSutWithTracker(params ISessionSourceProvider[] additionalProviders)
     {
         var userContext = new TestUserContext("user-1");
         var options = new FleetOptions();
@@ -900,7 +980,8 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         var instanceService = new InstanceService(_builder.InstanceRepository, _builder.SessionRepository, userContext);
         var sessionSourceResolutionService = new SessionSourceResolutionService([
             new LocalDirectorySessionSourceProvider(workspaceRootService),
-            new ManagedWorkspaceSessionSourceProvider(options)
+            new ManagedWorkspaceSessionSourceProvider(options),
+            .. additionalProviders
         ], options);
         var delegationService = new DelegationService(_builder.DelegationRepository, _builder.EventBroadcaster, userContext);
 
@@ -925,6 +1006,18 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
             options,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance,
             sessionActivityWriteService: null);
+    }
+
+    private sealed class StubSessionSourceProvider(SessionSourceDescriptor descriptor, ResolvedSessionSource resolved) : ISessionSourceProvider
+    {
+        public string ProviderId => descriptor.Key.ProviderId;
+
+        public IReadOnlyList<SessionSourceDescriptor> GetDescriptors() => [descriptor];
+
+        public Task<Result<ResolvedSessionSource>> ResolveAsync(SessionSourceSelection selection, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<Result<ResolvedSessionSource>>(resolved);
+        }
     }
 
     private sealed class TempDirectory : IDisposable

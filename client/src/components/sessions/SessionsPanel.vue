@@ -89,7 +89,7 @@ const sessions = computed(() => {
 const searchQuery = shallowRef("");
 const expandedProjects = reactive<Record<string, boolean>>({});
 const isNewProjectDialogOpen = shallowRef(false);
-const { newSessionDialogOpen, newSessionDialogProjectId } = storeToRefs(workspaceUiStore);
+const { newSessionDialogOpen, newSessionDialogProjectId, newSessionDialogInitialSource } = storeToRefs(workspaceUiStore);
 
 const sessionActivityEvents = [
   "session.created",
@@ -421,6 +421,7 @@ function handleSessionSelect(session: SessionListItem): void {
   <NewSessionDialog
     v-model:open="newSessionDialogOpen"
     :initial-project-id="newSessionDialogProjectId"
+    :initial-source="newSessionDialogInitialSource"
     @created="handleSessionCreated"
   />
   <NewProjectDialog

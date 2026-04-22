@@ -125,6 +125,210 @@ public sealed class DapperSessionSourceUsageRepositoryTests
     }
 
     [Fact]
+    public async Task GetPrimaryBySessionIdAsync_ReturnsEarliestStartSessionUsage()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var graph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, TestUserContext.DefaultUserId);
+
+        await repo.InsertAsync(new SessionSourceUsage
+        {
+            Id = Guid.NewGuid().ToString(),
+            SessionId = graph.Session.Id,
+            WorkspaceId = graph.Workspace.Id,
+            ProviderId = "provider",
+            SourceType = "repository",
+            ActionId = "add-to-session",
+            CreatedAt = "2026-01-03T00:00:00.0000000Z"
+        });
+
+        var expected = new SessionSourceUsage
+        {
+            Id = Guid.NewGuid().ToString(),
+            SessionId = graph.Session.Id,
+            WorkspaceId = graph.Workspace.Id,
+            ProviderId = "provider-a",
+            SourceType = "repository",
+            ActionId = "start-session",
+            CreatedAt = "2026-01-01T00:00:00.0000000Z"
+        };
+
+        await repo.InsertAsync(expected);
+
+        await repo.InsertAsync(new SessionSourceUsage
+        {
+            Id = Guid.NewGuid().ToString(),
+            SessionId = graph.Session.Id,
+            WorkspaceId = graph.Workspace.Id,
+            ProviderId = "provider-b",
+            SourceType = "directory",
+            ActionId = "start-session",
+            CreatedAt = "2026-01-02T00:00:00.0000000Z"
+        });
+
+        var usage = await repo.GetPrimaryBySessionIdAsync(graph.Session.Id);
+
+        usage.ShouldNotBeNull();
+        usage.Id.ShouldBe(expected.Id);
+        usage.ProviderId.ShouldBe("provider-a");
+    }
+
+    [Fact]
+    public async Task GetPrimaryBySessionIdAsync_ReturnsNullWhenNoStartSessionUsageExists()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var graph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, TestUserContext.DefaultUserId);
+
+        await repo.InsertAsync(new SessionSourceUsage
+        {
+            Id = Guid.NewGuid().ToString(),
+            SessionId = graph.Session.Id,
+            WorkspaceId = graph.Workspace.Id,
+            ProviderId = "provider",
+            SourceType = "repository",
+            ActionId = "add-to-session",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        var usage = await repo.GetPrimaryBySessionIdAsync(graph.Session.Id);
+
+        usage.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task GetPrimaryBySessionIdsAsync_ReturnsEarliestStartSessionUsagePerSession()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var firstGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, TestUserContext.DefaultUserId);
+        var secondGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, TestUserContext.DefaultUserId);
+
+        var firstExpected = new SessionSourceUsage
+        {
+            Id = Guid.NewGuid().ToString(),
+            SessionId = firstGraph.Session.Id,
+            WorkspaceId = firstGraph.Workspace.Id,
+            ProviderId = "provider-a",
+            SourceType = "repository",
+            ActionId = "start-session",
+            CreatedAt = "2026-01-01T00:00:00.0000000Z"
+        };
+
+        var secondExpected = new SessionSourceUsage
+        {
+            Id = Guid.NewGuid().ToString(),
+            SessionId = secondGraph.Session.Id,
+            WorkspaceId = secondGraph.Workspace.Id,
+            ProviderId = "provider-b",
+            SourceType = "directory",
+            ActionId = "start-session",
+            CreatedAt = "2026-01-02T00:00:00.0000000Z"
+        };
+
+        await repo.InsertAsync(new SessionSourceUsage
+        {
+            Id = Guid.NewGuid().ToString(),
+            SessionId = firstGraph.Session.Id,
+            WorkspaceId = firstGraph.Workspace.Id,
+            ProviderId = "provider-late",
+            SourceType = "directory",
+            ActionId = "start-session",
+            CreatedAt = "2026-01-03T00:00:00.0000000Z"
+        });
+
+        await repo.InsertAsync(firstExpected);
+        await repo.InsertAsync(secondExpected);
+
+        await repo.InsertAsync(new SessionSourceUsage
+        {
+            Id = Guid.NewGuid().ToString(),
+            SessionId = secondGraph.Session.Id,
+            WorkspaceId = secondGraph.Workspace.Id,
+            ProviderId = "provider-non-primary",
+            SourceType = "repository",
+            ActionId = "add-to-session",
+            CreatedAt = "2026-01-01T00:00:00.0000000Z"
+        });
+
+        var usages = await repo.GetPrimaryBySessionIdsAsync([firstGraph.Session.Id, secondGraph.Session.Id]);
+
+        usages.Count.ShouldBe(2);
+        usages[firstGraph.Session.Id].Id.ShouldBe(firstExpected.Id);
+        usages[secondGraph.Session.Id].Id.ShouldBe(secondExpected.Id);
+    }
+
+    [Fact]
+    public async Task GetPrimaryBySessionIdsAsync_DoesNotReturnOtherUsersUsage()
+    {
+        var (conn, _, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
+        var ownerRepo = new DapperSessionSourceUsageRepository(factory, new TestUserContext("owner-user"));
+        await ownerRepo.InsertAsync(new SessionSourceUsage
+        {
+            Id = Guid.NewGuid().ToString(),
+            SessionId = ownerGraph.Session.Id,
+            WorkspaceId = ownerGraph.Workspace.Id,
+            ProviderId = "provider",
+            SourceType = "repository",
+            ActionId = "start-session",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        var repo = new DapperSessionSourceUsageRepository(factory, new TestUserContext());
+        var usages = await repo.GetPrimaryBySessionIdsAsync([ownerGraph.Session.Id]);
+
+        usages.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task GetPrimaryBySessionIdsAsync_ReturnsOnlySessionsWithStartSessionUsageWhenBatchIsMixed()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var sessionWithOrigin = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, TestUserContext.DefaultUserId);
+        var sessionWithoutOrigin = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, TestUserContext.DefaultUserId);
+
+        var expected = new SessionSourceUsage
+        {
+            Id = Guid.NewGuid().ToString(),
+            SessionId = sessionWithOrigin.Session.Id,
+            WorkspaceId = sessionWithOrigin.Workspace.Id,
+            ProviderId = "provider-a",
+            SourceType = "repository",
+            ActionId = "start-session",
+            Title = "origin-title",
+            CreatedAt = "2026-01-01T00:00:00.0000000Z"
+        };
+
+        await repo.InsertAsync(expected);
+
+        await repo.InsertAsync(new SessionSourceUsage
+        {
+            Id = Guid.NewGuid().ToString(),
+            SessionId = sessionWithoutOrigin.Session.Id,
+            WorkspaceId = sessionWithoutOrigin.Workspace.Id,
+            ProviderId = "provider-b",
+            SourceType = "directory",
+            ActionId = "add-to-session",
+            Title = "non-primary-origin",
+            CreatedAt = "2026-01-02T00:00:00.0000000Z"
+        });
+
+        var usages = await repo.GetPrimaryBySessionIdsAsync([sessionWithOrigin.Session.Id, sessionWithoutOrigin.Session.Id]);
+
+        usages.Count.ShouldBe(1);
+        usages[sessionWithOrigin.Session.Id].Id.ShouldBe(expected.Id);
+        usages.ContainsKey(sessionWithoutOrigin.Session.Id).ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task InsertAsync_DoesNotWriteToOtherUsersSession()
     {
         var (conn, _, factory) = await CreateAsync();

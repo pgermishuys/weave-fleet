@@ -1,10 +1,12 @@
 import { defineStore } from "pinia";
 import { shallowRef } from "vue";
+import type { GitHubSessionSourcePreset } from "@/lib/github-session-source";
 
 export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
   const inlineToolDiffs = shallowRef(false);
   const newSessionDialogOpen = shallowRef(false);
   const newSessionDialogProjectId = shallowRef<string | null>(null);
+  const newSessionDialogInitialSource = shallowRef<GitHubSessionSourcePreset | null>(null);
 
   function setInlineToolDiffs(enabled: boolean): void {
     inlineToolDiffs.value = enabled;
@@ -14,8 +16,9 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
     inlineToolDiffs.value = !inlineToolDiffs.value;
   }
 
-  function openNewSessionDialog(projectId: string | null = null): void {
+  function openNewSessionDialog(projectId: string | null = null, initialSource: GitHubSessionSourcePreset | null = null): void {
     newSessionDialogProjectId.value = projectId;
+    newSessionDialogInitialSource.value = initialSource;
     newSessionDialogOpen.value = true;
   }
 
@@ -28,6 +31,7 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
 
     if (!open) {
       newSessionDialogProjectId.value = null;
+      newSessionDialogInitialSource.value = null;
     }
   }
 
@@ -35,6 +39,7 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
     inlineToolDiffs,
     newSessionDialogOpen,
     newSessionDialogProjectId,
+    newSessionDialogInitialSource,
     setInlineToolDiffs,
     toggleInlineToolDiffs,
     openNewSessionDialog,

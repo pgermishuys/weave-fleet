@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, shallowRef, watch } from "vue";
-import { AlertCircle, ArrowUp, Check, Folder, FolderGit2, LoaderCircle, RefreshCw } from "lucide-vue-next";
+import { AlertCircle, ArrowUp, Check, ExternalLink, Folder, FolderGit2, LoaderCircle, RefreshCw } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,7 +32,13 @@ import type {
   ScannedRepository,
   SessionSourceSelection,
 } from "@/lib/api-types";
+import {
+  buildGitHubSessionSourceSelection,
+  findRepositoryForGitHubPreset,
+  type GitHubSessionSourcePreset,
+} from "@/lib/github-session-source";
 import { readWorkspacePreferences } from "@/lib/workspace-preferences";
+import { cn } from "@/lib/utils";
 import { useAppShellStore } from "@/stores/app-shell";
 
 type SessionSourceKind = "repository" | "directory";
@@ -40,12 +46,14 @@ type IsolationStrategy = "existing" | "worktree" | "clone";
 
 interface Props {
   initialProjectId?: string | null;
+  initialSource?: GitHubSessionSourcePreset | null;
 }
 
 const UNGROUPED_PROJECT_ID = "__ungrouped__";
 
 const props = withDefaults(defineProps<Props>(), {
   initialProjectId: null,
+  initialSource: null,
 });
 
 const open = defineModel<boolean>("open", { default: false });
@@ -70,6 +78,7 @@ const branchManuallyEdited = shallowRef(false);
 const selectedProjectId = shallowRef(props.initialProjectId ?? UNGROUPED_PROJECT_ID);
 const selectedHarnessType = shallowRef("");
 const submitAttempted = shallowRef(false);
+const activeGitHubPreset = shallowRef<GitHubSessionSourcePreset | null>(null);
 
 const {
   repositories,
@@ -206,6 +215,15 @@ const sessionSource = computed<SessionSourceSelection | undefined>(() => {
       return undefined;
     }
 
+    if (activeGitHubPreset.value) {
+      return buildGitHubSessionSourceSelection(
+        activeGitHubPreset.value,
+        selectedRepository.value.path,
+        isolationStrategy.value,
+        isolationStrategy.value === "existing" ? undefined : effectiveBranch.value || undefined,
+      );
+    }
+
     return {
       key: {
         providerId: "builtin.repository",
@@ -276,6 +294,27 @@ const canSubmit = computed(() => {
   return !isCreating.value && sessionSource.value !== undefined && validationMessage.value === null;
 });
 
+const gitHubContextPreview = computed(() => {
+  const body = activeGitHubPreset.value?.body?.trim();
+  if (!body) {
+    return "";
+  }
+
+  const compactBody = body.replace(/\s+/g, " ").trim();
+  const maxLength = 280;
+  if (compactBody.length <= maxLength) {
+    return compactBody;
+  }
+
+  const truncatedBody = compactBody.slice(0, maxLength);
+  const lastWhitespaceIndex = truncatedBody.lastIndexOf(" ");
+  if (lastWhitespaceIndex < Math.floor(maxLength * 0.6)) {
+    return `${truncatedBody.trimEnd()}…`;
+  }
+
+  return `${truncatedBody.slice(0, lastWhitespaceIndex).trimEnd()}…`;
+});
+
 function getInitialProjectSelection(): string {
   return props.initialProjectId ?? UNGROUPED_PROJECT_ID;
 }
@@ -294,6 +333,25 @@ function resetForm(): void {
   selectedProjectId.value = getInitialProjectSelection();
   selectedHarnessType.value = "";
   submitAttempted.value = false;
+  activeGitHubPreset.value = null;
+}
+
+function applyInitialSource(): void {
+  activeGitHubPreset.value = props.initialSource;
+
+  if (!props.initialSource) {
+    return;
+  }
+
+  sourceKind.value = "repository";
+  title.value = props.initialSource.title;
+  isolationStrategy.value = "worktree";
+  branch.value = props.initialSource.suggestedBranch?.trim() ?? "";
+  branchManuallyEdited.value = Boolean(props.initialSource.suggestedBranch?.trim());
+}
+
+function clearGitHubPreset(): void {
+  activeGitHubPreset.value = null;
 }
 
 function selectRepository(repository: ScannedRepository): void {
@@ -394,6 +452,7 @@ watch(open, async (isOpen) => {
   if (isOpen) {
     submitAttempted.value = false;
     selectedProjectId.value = getInitialProjectSelection();
+    applyInitialSource();
     void refreshRepositories();
     await nextTick();
     document.getElementById("session-title")?.focus();
@@ -404,10 +463,18 @@ watch(open, async (isOpen) => {
 });
 
 watch(
-  [open, sourceKind, repositories],
-  ([isOpen, nextSourceKind, nextRepositories]) => {
+  [open, sourceKind, repositories, activeGitHubPreset],
+  ([isOpen, nextSourceKind, nextRepositories, nextGitHubPreset]) => {
     if (!isOpen || nextSourceKind !== "repository" || selectedRepositoryPath.value || nextRepositories.length === 0) {
       return;
+    }
+
+    if (nextGitHubPreset) {
+      const matchingRepository = findRepositoryForGitHubPreset(nextGitHubPreset, nextRepositories);
+      if (matchingRepository) {
+        selectRepository(matchingRepository);
+        return;
+      }
     }
 
     selectRepository(nextRepositories[0]);
@@ -417,6 +484,11 @@ watch(
 
 watch(sourceKind, (nextSourceKind) => {
   if (nextSourceKind !== "repository") {
+    if (activeGitHubPreset.value) {
+      sourceKind.value = "repository";
+      return;
+    }
+
     isRepositoryListOpen.value = false;
     syncDirectoryBrowser();
     return;
@@ -432,6 +504,17 @@ watch(repositoryQuery, (value) => {
 
   selectedRepositoryPath.value = null;
 });
+
+watch(
+  () => props.initialSource,
+  (nextInitialSource) => {
+    if (!open.value) {
+      return;
+    }
+
+    activeGitHubPreset.value = nextInitialSource;
+  },
+);
 </script>
 
 <template>
@@ -444,21 +527,65 @@ watch(repositoryQuery, (value) => {
       data-testid="new-session-dialog"
       @interact-outside="handleDialogInteractOutside"
     >
-      <DialogHeader>
-        <DialogTitle>New Session</DialogTitle>
-        <DialogDescription>
-          Start a session from a repository or local directory.
-        </DialogDescription>
-      </DialogHeader>
+        <DialogHeader>
+          <DialogTitle>New Session</DialogTitle>
+          <DialogDescription>
+            {{ activeGitHubPreset ? "Start a session from a repository with GitHub context." : "Start a session from a repository or local directory." }}
+          </DialogDescription>
+        </DialogHeader>
 
-      <form
-        class="space-y-5"
-        @submit.prevent="handleSubmit"
-      >
-        <fieldset
-          class="space-y-3"
-          aria-label="Source"
+        <form
+          class="space-y-5"
+          @submit.prevent="handleSubmit"
         >
+          <div
+            v-if="activeGitHubPreset"
+            class="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3"
+          >
+            <div class="min-w-0 flex-1 space-y-2">
+              <a
+                :href="activeGitHubPreset.htmlUrl"
+                target="_blank"
+                rel="noreferrer noopener"
+                class="inline-flex max-w-full items-center gap-1 text-sm font-medium text-primary hover:underline"
+              >
+                <span class="truncate">{{ activeGitHubPreset.htmlUrl }}</span>
+                <ExternalLink class="h-3.5 w-3.5 shrink-0" />
+              </a>
+
+              <p class="text-sm font-medium text-foreground">
+                GitHub {{ activeGitHubPreset.sourceType === 'github-pull-request' ? 'pull request' : 'issue' }} context
+              </p>
+              <p class="text-sm text-muted-foreground">
+                {{ activeGitHubPreset.repoFullName }} #{{ activeGitHubPreset.number }}
+              </p>
+              <p class="text-sm text-muted-foreground">
+                {{ activeGitHubPreset.title }}
+              </p>
+
+              <p
+                v-if="gitHubContextPreview"
+                class="rounded-md border border-border/60 bg-background/70 px-3 py-2 text-sm text-muted-foreground"
+              >
+                {{ gitHubContextPreview }}
+              </p>
+            </div>
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              :disabled="isCreating"
+              @click="clearGitHubPreset"
+            >
+              Clear
+            </Button>
+          </div>
+
+          <fieldset
+            class="space-y-3"
+            aria-label="Source"
+          >
           <legend class="text-sm font-medium text-foreground">
             Source
           </legend>
@@ -494,7 +621,10 @@ watch(repositoryQuery, (value) => {
             <label
               v-if="!isCloudMode"
               for="session-source-directory"
-              class="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-muted/20 p-3 text-sm transition-colors hover:bg-muted/40"
+              :class="cn(
+                'flex items-start gap-3 rounded-lg border border-border bg-muted/20 p-3 text-sm transition-colors',
+                activeGitHubPreset ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-muted/40',
+              )"
             >
               <input
                 id="session-source-directory"
@@ -504,6 +634,7 @@ watch(repositoryQuery, (value) => {
                 title="Directory"
                 aria-describedby="session-source-directory-description"
                 class="mt-0.5"
+                :disabled="Boolean(activeGitHubPreset)"
               >
               <div class="space-y-1">
                 <span

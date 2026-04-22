@@ -24,7 +24,20 @@ public sealed record SessionListResponse(
     int? TotalTokens,
     double? TotalCost,
     string? ProjectId,
-    string? ProjectName);
+    string? ProjectName)
+{
+    public SessionOriginDto? Origin { get; init; }
+}
+
+/// <summary>
+/// Lightweight origin metadata for a session.
+/// </summary>
+public sealed record SessionOriginDto(
+    string SourceType,
+    string? Title,
+    string? ResourceUrl,
+    string? ResourceId,
+    string ProviderId);
 
 /// <summary>
 /// The nested session object within SessionListResponse — matches the FleetSession shape.

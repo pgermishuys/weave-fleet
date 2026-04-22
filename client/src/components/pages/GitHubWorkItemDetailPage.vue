@@ -15,9 +15,13 @@ import {
   RefreshCw,
   TriangleAlert,
 } from "lucide-vue-next";
+import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api-client";
 import { formatRelativeTime } from "@/lib/format-utils";
+import { createGitHubSessionSourcePreset } from "@/lib/github-session-source";
 import type { GitHubIssue, GitHubPullRequest } from "@/plugins/builtin/github/composables/github-types";
+import { useSidebarStore } from "@/stores/sidebar";
+import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
 interface GitHubComment {
   id: number;
@@ -39,6 +43,8 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+const sidebarStore = useSidebarStore();
+const workspaceUiStore = useWorkspaceUiStore();
 
 const detail = shallowRef<GitHubIssue | GitHubPullRequest | null>(null);
 const comments = shallowRef<readonly GitHubComment[]>([]);
@@ -152,6 +158,24 @@ const pullRequestStats = computed(() => {
   };
 });
 
+const createSessionPreset = computed(() => {
+  if (!detail.value) {
+    return null;
+  }
+
+  return createGitHubSessionSourcePreset({
+    sourceType: isPullRequest.value ? "github-pull-request" : "github-issue",
+    owner: props.owner,
+    repo: props.repo,
+    number: detail.value.number,
+    title: detail.value.title,
+    body: detail.value.body,
+    htmlUrl: detail.value.html_url,
+    repoFullName: repoFullName.value,
+    suggestedBranch: isPullRequest.value ? pullRequestStats.value?.headRef ?? null : null,
+  });
+});
+
 function renderMarkdown(markdown: string | null | undefined): string {
   if (!markdown || !markdown.trim()) {
     return "";
@@ -235,6 +259,16 @@ async function handleRefresh(): Promise<void> {
   isRefreshing.value = true;
   await fetchDetail();
   isRefreshing.value = false;
+}
+
+function handleCreateSession(): void {
+  if (!createSessionPreset.value) {
+    return;
+  }
+
+  sidebarStore.setPanelCollapsed(false);
+  sidebarStore.setActiveRail("sessions");
+  workspaceUiStore.openNewSessionDialog(null, createSessionPreset.value);
 }
 </script>
 
@@ -325,6 +359,16 @@ async function handleRefresh(): Promise<void> {
         </div>
 
         <div class="detail-actions">
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            :disabled="isRefreshing || !createSessionPreset"
+            @click="handleCreateSession"
+          >
+            Create Session
+          </Button>
+
           <button
             type="button"
             class="detail-action-button"

@@ -7,7 +7,7 @@ import Composer from "@/components/session/Composer.vue";
 import SessionDetailHeader from "@/components/session/SessionDetailHeader.vue";
 import { incrementPendingPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { apiFetch } from "@/lib/api-client";
-import type { SessionListItem } from "@/lib/api-types";
+import type { SessionListItem, SessionOrigin } from "@/lib/api-types";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
 
@@ -29,6 +29,7 @@ interface SessionDetailResponse {
   activityStatus?: string | null;
   lifecycleStatus?: string | null;
   retentionStatus?: string | null;
+  origin?: SessionOrigin | null;
 }
 
 function getStringField(
@@ -47,6 +48,19 @@ function normalizeSessionDetailResponse(payload: unknown): SessionDetailResponse
 
   const value = payload as Record<string, unknown>;
 
+  const originPayload = value.origin ?? value.Origin;
+  const origin = originPayload && typeof originPayload === "object"
+    ? {
+      sourceType: getStringField(originPayload as Record<string, unknown>, "sourceType", "SourceType") ?? "",
+      title: getStringField(originPayload as Record<string, unknown>, "title", "Title") ?? null,
+      resourceUrl: getStringField(originPayload as Record<string, unknown>, "resourceUrl", "ResourceUrl") ?? null,
+      resourceId: getStringField(originPayload as Record<string, unknown>, "resourceId", "ResourceId") ?? null,
+      providerId: getStringField(originPayload as Record<string, unknown>, "providerId", "ProviderId") ?? "",
+    } satisfies SessionOrigin
+    : originPayload == null
+      ? null
+      : undefined;
+
   return {
     id: getStringField(value, "id", "Id"),
     instanceId: getStringField(value, "instanceId", "InstanceId"),
@@ -61,6 +75,7 @@ function normalizeSessionDetailResponse(payload: unknown): SessionDetailResponse
     activityStatus: getStringField(value, "activityStatus", "ActivityStatus"),
     lifecycleStatus: getStringField(value, "lifecycleStatus", "LifecycleStatus"),
     retentionStatus: getStringField(value, "retentionStatus", "RetentionStatus"),
+    origin,
   };
 }
 
@@ -173,6 +188,7 @@ const SessionDetailPage = defineComponent({
             totalCost: selectedSession.value?.totalCost,
             projectId: selectedSession.value?.projectId ?? null,
             projectName: selectedSession.value?.projectName ?? null,
+            origin: nextRemoteSession.origin ?? selectedSession.value?.origin ?? null,
           } satisfies SessionListItem;
 
           sessionsStore.upsertSession(nextSession);
@@ -340,6 +356,7 @@ const SessionDetailPage = defineComponent({
           <SessionDetailHeader
             id={params.value.id}
             instanceId={instanceId.value}
+            origin={selectedSession.value?.origin ?? null}
             title={selectedSession.value?.session.title ?? remoteSession.value?.title}
             projectName={selectedSession.value?.projectName ?? null}
             activityStatus={effectiveActivityStatus.value}

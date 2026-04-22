@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, onUnmounted, watch } from "vue";
+import SessionOriginBadge from "@/components/SessionOriginBadge.vue";
 import { Badge } from "@/components/ui/badge";
+import type { SessionOrigin } from "@/lib/api-types";
 
 interface Props {
   id: string;
   instanceId?: string;
+  origin?: SessionOrigin | null;
   title?: string | null;
   projectName?: string | null;
   activityStatus?: string | null;
@@ -124,6 +127,7 @@ onUnmounted(() => {
         <p class="text-sm text-muted-foreground">
           {{ projectLabel }}
         </p>
+        <SessionOriginBadge :origin="props.origin" />
       </div>
     </header>
 

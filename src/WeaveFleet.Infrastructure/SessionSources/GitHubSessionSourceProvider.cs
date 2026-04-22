@@ -42,8 +42,10 @@ public sealed class GitHubSessionSourceProvider(
 
     public IReadOnlyList<SessionSourceDescriptor> GetDescriptors() =>
     [
-        BuildDescriptor(SessionSourceTypeNames.GitHubIssue),
-        BuildDescriptor(SessionSourceTypeNames.GitHubPullRequest)
+        BuildDescriptor(SessionSourceTypeNames.GitHubIssue, SessionSourceActions.StartSession),
+        BuildDescriptor(SessionSourceTypeNames.GitHubPullRequest, SessionSourceActions.StartSession),
+        BuildDescriptor(SessionSourceTypeNames.GitHubIssue, SessionSourceActions.AddToSession),
+        BuildDescriptor(SessionSourceTypeNames.GitHubPullRequest, SessionSourceActions.AddToSession)
     ];
 
     public async Task<Result<ResolvedSessionSource>> ResolveAsync(SessionSourceSelection selection, CancellationToken cancellationToken)
@@ -55,11 +57,12 @@ public sealed class GitHubSessionSourceProvider(
                 "Session source input must be a JSON object.");
         }
 
-        if (!string.Equals(selection.Key.ActionId, SessionSourceActions.AddToSession, StringComparison.Ordinal))
+        if (!string.Equals(selection.Key.ActionId, SessionSourceActions.AddToSession, StringComparison.Ordinal)
+            && !string.Equals(selection.Key.ActionId, SessionSourceActions.StartSession, StringComparison.Ordinal))
         {
             return FleetError.ValidationError(
                 "SessionSource.ActionId",
-                "GitHub session sources currently support only add-to-session.");
+                "GitHub session sources currently support start-session and add-to-session.");
         }
 
         if (selection.Key.SourceType is not (SessionSourceTypeNames.GitHubIssue or SessionSourceTypeNames.GitHubPullRequest))
@@ -86,6 +89,14 @@ public sealed class GitHubSessionSourceProvider(
             return FleetError.ValidationError(
                 "SessionSource.Input",
                 "GitHub session sources require owner, repo, and number.");
+        }
+
+        var requiresWorkspace = string.Equals(selection.Key.ActionId, SessionSourceActions.StartSession, StringComparison.Ordinal);
+        if (requiresWorkspace && string.IsNullOrWhiteSpace(input.RepositoryPath))
+        {
+            return FleetError.ValidationError(
+                "SessionSource.Input.RepositoryPath",
+                "GitHub start-session sources require a repositoryPath.");
         }
 
         var token = await gitHubService.GetTokenAsync(
@@ -132,9 +143,14 @@ public sealed class GitHubSessionSourceProvider(
             : markdown;
 
         return new ResolvedSessionSource(
-            BuildDescriptor(selection.Key.SourceType),
+            BuildDescriptor(selection.Key.SourceType, selection.Key.ActionId),
             new ResolvedSessionInput(
-                null,
+                requiresWorkspace
+                    ? new WorkspaceIntent(
+                        input.RepositoryPath!.Trim(),
+                        NormalizeIsolationStrategy(input.IsolationStrategy),
+                        NormalizeBranch(input.Branch, input.IsolationStrategy))
+                    : null,
                 new ContextEnvelope(
                     OriginLabel: $"GitHub {GetKindLabel(selection.Key.SourceType)} #{input.Number}",
                     Content: preview,
@@ -143,7 +159,7 @@ public sealed class GitHubSessionSourceProvider(
                 new ProvenanceRecord(
                     ProviderId,
                     selection.Key.SourceType,
-                    SessionSourceActions.AddToSession,
+                    selection.Key.ActionId,
                     $"{input.Owner}/{input.Repo}#{input.Number}",
                     htmlUrl,
                     BuildTitle(selection.Key.SourceType, input.Owner, input.Repo, input.Number),
@@ -151,30 +167,65 @@ public sealed class GitHubSessionSourceProvider(
                     DateTime.UtcNow.ToString("O"))));
     }
 
-    private static SessionSourceDescriptor BuildDescriptor(string sourceType)
+    private static SessionSourceDescriptor BuildDescriptor(string sourceType, string actionId)
     {
         var displayName = string.Equals(sourceType, SessionSourceTypeNames.GitHubPullRequest, StringComparison.Ordinal)
             ? "GitHub pull request"
             : "GitHub issue";
+        var isStartSession = string.Equals(actionId, SessionSourceActions.StartSession, StringComparison.Ordinal);
 
         return new SessionSourceDescriptor(
             new SessionSourceKey
             {
                 ProviderId = SessionSourceProviderIds.GitHub,
                 SourceType = sourceType,
-                ActionId = SessionSourceActions.AddToSession,
+                ActionId = actionId,
                 ContractVersion = 1
             },
             displayName,
-            SessionSourceKinds.Context,
-            [
-                new SessionSourceInputField("owner", "string", true, null, "GitHub repository owner."),
-                new SessionSourceInputField("repo", "string", true, null, "GitHub repository name."),
-                new SessionSourceInputField("number", "number", true, null, "Issue or pull request number.")
-            ],
-            ProducesWorkspace: false,
+            isStartSession ? SessionSourceKinds.Hybrid : SessionSourceKinds.Context,
+            isStartSession
+                ?
+                [
+                    new SessionSourceInputField("owner", "string", true, null, "GitHub repository owner."),
+                    new SessionSourceInputField("repo", "string", true, null, "GitHub repository name."),
+                    new SessionSourceInputField("number", "number", true, null, "Issue or pull request number."),
+                    new SessionSourceInputField("repositoryPath", "string", true, null, "Canonical local repository directory path."),
+                    new SessionSourceInputField("isolationStrategy", "string", false, ["existing", "worktree", "clone"], "Repository workspace isolation mode."),
+                    new SessionSourceInputField("branch", "string", false, null, "Optional branch for isolated workspaces.")
+                ]
+                :
+                [
+                    new SessionSourceInputField("owner", "string", true, null, "GitHub repository owner."),
+                    new SessionSourceInputField("repo", "string", true, null, "GitHub repository name."),
+                    new SessionSourceInputField("number", "number", true, null, "Issue or pull request number.")
+                ],
+            ProducesWorkspace: isStartSession,
             ProducesContext: true,
-            RequiresConfirmation: true);
+            RequiresConfirmation: !isStartSession);
+    }
+
+    private static string NormalizeIsolationStrategy(string? isolationStrategy)
+    {
+        var normalized = string.IsNullOrWhiteSpace(isolationStrategy)
+            ? "worktree"
+            : isolationStrategy.Trim();
+
+        return normalized is "existing" or "worktree" or "clone"
+            ? normalized
+            : "worktree";
+    }
+
+    private static string? NormalizeBranch(string? branch, string? isolationStrategy)
+    {
+        if (string.Equals(NormalizeIsolationStrategy(isolationStrategy), "existing", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return string.IsNullOrWhiteSpace(branch)
+            ? null
+            : branch.Trim();
     }
 
     private static string BuildMarkdown(string sourceType, string owner, string repo, int number, string title, string body, JsonArray comments)
@@ -299,5 +350,8 @@ public sealed class GitHubSessionSourceProvider(
         public string? Owner { get; init; }
         public string? Repo { get; init; }
         public int Number { get; init; }
+        public string? RepositoryPath { get; init; }
+        public string? IsolationStrategy { get; init; }
+        public string? Branch { get; init; }
     }
 }

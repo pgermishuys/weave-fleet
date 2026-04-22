@@ -38,6 +38,7 @@ import type { SessionListItem } from "@/lib/api-types";
 import { sessionCache } from "@/lib/session-cache";
 import { dispatchSessionRemoved } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
+import SessionOriginBadge from "@/components/SessionOriginBadge.vue";
 import ConfirmDeleteSessionDialog from "./ConfirmDeleteSessionDialog.vue";
 
 interface Props {
@@ -111,6 +112,12 @@ const sessionId = computed(() => props.session.session.id);
 const instanceId = computed(() => props.session.instanceId);
 const rawTitle = computed(() => props.session.session.title ?? "");
 const displayTitle = computed(() => props.session.session.title?.trim() || "Untitled session");
+const hasOriginBadge = computed(() => {
+  const origin = props.session.origin;
+  const resourceUrl = origin?.resourceUrl?.trim();
+  const label = origin?.title?.trim() || origin?.resourceId?.trim() || resourceUrl;
+  return Boolean(origin && resourceUrl && label);
+});
 
 const isRunningSession = computed(() => props.session.lifecycleStatus === "running");
 const isBusySession = computed(() => props.session.activityStatus === "busy");
@@ -411,25 +418,35 @@ function removeSessionFromStore(): void {
         data-tree-leaf
         :data-session-id="session.session.id"
       >
-        <button
-          v-if="!isInlineEditing"
-          type="button"
-          class="session-item"
-          :class="{ active }"
-          :aria-current="active ? 'true' : undefined"
-          @click="handleSelect"
-        >
-          <span
-            class="session-dot"
-            :style="{ backgroundColor: statusColor }"
-            aria-hidden="true"
-          />
+        <template v-if="!isInlineEditing">
+          <button
+            type="button"
+            class="session-item"
+            :class="{ active }"
+            :aria-current="active ? 'true' : undefined"
+            @click="handleSelect"
+          >
+            <span
+              class="session-dot"
+              :style="{ backgroundColor: statusColor }"
+              aria-hidden="true"
+            />
 
-          <span class="session-copy">
-            <span class="session-title">{{ displayTitle }}</span>
-            <span class="session-meta">{{ statusLabel }}</span>
-          </span>
-        </button>
+            <span class="session-copy">
+              <span class="session-title">{{ displayTitle }}</span>
+              <span class="session-meta">{{ statusLabel }}</span>
+              <span
+                v-if="hasOriginBadge"
+                class="session-origin-badge"
+              >
+                <SessionOriginBadge
+                  :origin="session.origin"
+                  compact
+                />
+              </span>
+            </span>
+          </button>
+        </template>
 
         <div
           v-else
@@ -579,10 +596,14 @@ function removeSessionFromStore(): void {
 <style scoped>
 .session-item-shell {
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .session-item {
   width: 100%;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -671,5 +692,12 @@ function removeSessionFromStore(): void {
 
 .session-inline-edit {
   width: 100%;
+}
+
+.session-origin-badge {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  margin-top: 2px;
 }
 </style>

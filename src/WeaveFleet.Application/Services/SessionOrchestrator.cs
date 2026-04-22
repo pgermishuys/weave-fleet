@@ -135,6 +135,10 @@ public sealed partial class SessionOrchestrator(
                 "SessionSource.WorkspaceIntent",
                 "The selected session source cannot start a workspace-backed session.");
 
+        var initialPrompt = BuildCreateSessionInitialPrompt(
+            request.InitialPrompt,
+            sourceResolutionResult.Value.Input.ContextEnvelope);
+
         // Resolve harness
         var harnessType = request.HarnessType ?? DefaultHarnessType;
         var harness = harnessRegistry.GetByType(harnessType);
@@ -197,7 +201,7 @@ public sealed partial class SessionOrchestrator(
                 SessionId = sessionId,
                 WorkingDirectory = workspace.Directory,
                 OwnerUserId = userContext.UserId,
-                InitialPrompt = request.InitialPrompt,
+                InitialPrompt = initialPrompt,
                 Branch = workspaceIntent.Branch,
                 ProjectId = projectId,
                 ProjectName = projectName,
@@ -828,6 +832,26 @@ public sealed partial class SessionOrchestrator(
 
         var messages = MessagePersistenceService.ToHarnessMessages(pageRows);
         return Result.Success(new MessagePage(messages, hasMore));
+    }
+
+    private static string? BuildCreateSessionInitialPrompt(string? initialPrompt, ContextEnvelope? contextEnvelope)
+    {
+        var normalizedInitialPrompt = string.IsNullOrWhiteSpace(initialPrompt)
+            ? null
+            : initialPrompt.Trim();
+
+        if (contextEnvelope is null)
+        {
+            return normalizedInitialPrompt;
+        }
+
+        var sourcePrompt = $"[Source: {contextEnvelope.OriginLabel}]\n\n{contextEnvelope.Content}";
+        if (normalizedInitialPrompt is null)
+        {
+            return sourcePrompt;
+        }
+
+        return $"{sourcePrompt}\n\n{normalizedInitialPrompt}";
     }
 
     // ── Delete ─────────────────────────────────────────────────────────────────

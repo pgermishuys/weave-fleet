@@ -20,6 +20,41 @@ public sealed class GitHubSessionSourceProviderTests
     private const string TestUserId = "test-user";
 
     [Fact]
+    public async Task ResolveAsync_ForStartSession_ReturnsHybridWorkspaceAndContext()
+    {
+        var (provider, _) = CreateProvider();
+
+        var result = await provider.ResolveAsync(new SessionSourceSelection
+        {
+            Key = new SessionSourceKey
+            {
+                ProviderId = SessionSourceProviderIds.GitHub,
+                SourceType = SessionSourceTypeNames.GitHubPullRequest,
+                ActionId = SessionSourceActions.StartSession,
+                ContractVersion = 1
+            },
+            Input = JsonSerializer.SerializeToElement(new
+            {
+                owner = "acme",
+                repo = "rocket",
+                number = 42,
+                repositoryPath = "/tmp/rocket",
+                isolationStrategy = "worktree",
+                branch = "feature/pr-42"
+            })
+        }, CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Descriptor.Kind.ShouldBe(SessionSourceKinds.Hybrid);
+        result.Value.Input.WorkspaceIntent.ShouldNotBeNull();
+        result.Value.Input.WorkspaceIntent.Directory.ShouldBe("/tmp/rocket");
+        result.Value.Input.WorkspaceIntent.IsolationStrategy.ShouldBe("worktree");
+        result.Value.Input.WorkspaceIntent.Branch.ShouldBe("feature/pr-42");
+        result.Value.Input.ContextEnvelope.ShouldNotBeNull();
+        result.Value.Input.Provenance.ActionId.ShouldBe(SessionSourceActions.StartSession);
+    }
+
+    [Fact]
     public async Task ResolveAsync_TruncatesOversizedContextAndLabelsOrigin()
     {
         var (provider, _) = CreateProvider();
@@ -233,6 +268,13 @@ public sealed class GitHubSessionSourceProviderTests
                     ["html_url"] = "https://github.com/acme/rocket/issues/101"
                 },
                 "/repos/acme/rocket/issues/101/comments" => new JsonArray(),
+                "/repos/acme/rocket/pulls/42" => new JsonObject
+                {
+                    ["title"] = "Fix release flow",
+                    ["body"] = "Pull request body",
+                    ["html_url"] = "https://github.com/acme/rocket/pull/42"
+                },
+                "/repos/acme/rocket/pulls/42/comments" => new JsonArray(),
                 _ => new JsonObject()
             };
 

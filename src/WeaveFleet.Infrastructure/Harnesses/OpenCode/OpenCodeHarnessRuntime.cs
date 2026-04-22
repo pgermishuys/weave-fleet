@@ -278,6 +278,11 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime
                 projectId: options.ProjectId,
                 projectName: options.ProjectName);
 
+            if (options.InitialPrompt is not null)
+            {
+                await instance.SendPromptAsync(options.InitialPrompt, null, ct).ConfigureAwait(false);
+            }
+
             LogSpawned(_logger, instanceId, null);
             return instance;
         }
