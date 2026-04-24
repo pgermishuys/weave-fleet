@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, shallowRef, watch } from "vue";
+import { computed, nextTick, shallowRef, watch } from "vue";
 import MarkdownIt from "markdown-it";
 import hljs from "highlight.js";
 import {
@@ -261,13 +261,14 @@ async function handleRefresh(): Promise<void> {
   isRefreshing.value = false;
 }
 
-function handleCreateSession(): void {
+async function handleCreateSession(): Promise<void> {
   if (!createSessionPreset.value) {
     return;
   }
 
   sidebarStore.setPanelCollapsed(false);
   sidebarStore.setActiveRail("sessions");
+  await nextTick();
   workspaceUiStore.openNewSessionDialog(null, createSessionPreset.value);
 }
 </script>

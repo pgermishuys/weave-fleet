@@ -98,6 +98,12 @@ const searchQuery = shallowRef("");
 const expandedProjects = reactive<Record<string, boolean>>({});
 const isNewProjectDialogOpen = shallowRef(false);
 const { newSessionDialogOpen, newSessionDialogProjectId, newSessionDialogInitialSource } = storeToRefs(workspaceUiStore);
+const newSessionDialogModel = computed({
+  get: () => newSessionDialogOpen.value,
+  set: (open: boolean) => {
+    workspaceUiStore.setNewSessionDialogOpen(open);
+  },
+});
 
 const sessionActivityEvents = [
   "session.created",
@@ -510,7 +516,7 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
 
 <template>
   <NewSessionDialog
-    v-model:open="newSessionDialogOpen"
+    v-model:open="newSessionDialogModel"
     :initial-project-id="newSessionDialogProjectId"
     :initial-source="newSessionDialogInitialSource"
     @created="handleSessionCreated"

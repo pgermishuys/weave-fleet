@@ -23,7 +23,7 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
   }
 
   function closeNewSessionDialog(): void {
-    newSessionDialogOpen.value = false;
+    setNewSessionDialogOpen(false);
   }
 
   function setNewSessionDialogOpen(open: boolean): void {
