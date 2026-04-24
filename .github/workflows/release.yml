@@ -1,0 +1,431 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.rid }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runs_on: ubuntu-latest
+            archive_extension: .tar.gz
+          - rid: linux-arm64
+            runs_on: ubuntu-24.04-arm
+            archive_extension: .tar.gz
+          - rid: osx-x64
+            runs_on: macos-13
+            archive_extension: .tar.gz
+          - rid: osx-arm64
+            runs_on: macos-14
+            archive_extension: .tar.gz
+          - rid: win-x64
+            runs_on: windows-latest
+            archive_extension: .zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Enable Corepack npm
+        run: corepack enable
+
+      - name: Install client dependencies
+        run: corepack npm ci
+        working-directory: client
+
+      - name: Build Vue client
+        run: npm run build
+        working-directory: client
+
+      - name: Publish self-contained app
+        shell: bash
+        run: |
+          dotnet publish src/WeaveFleet.Api/WeaveFleet.Api.csproj \
+            --configuration Release \
+            --runtime "${{ matrix.rid }}" \
+            --self-contained true \
+            --output "${{ github.workspace }}/artifacts/publish/${{ matrix.rid }}"
+
+      - name: Package Unix archive
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          package_version="${RELEASE_TAG#v}"
+          bash ./scripts/package.sh \
+            --publish-dir "${{ github.workspace }}/artifacts/publish/${{ matrix.rid }}" \
+            --rid "${{ matrix.rid }}" \
+            --output-dir "${{ github.workspace }}/artifacts/release" \
+            --version "$package_version"
+
+      - name: Package Windows archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $packageVersion = $env:RELEASE_TAG.TrimStart('v')
+          ./scripts/package.ps1 `
+            -PublishDir "${{ github.workspace }}/artifacts/publish/${{ matrix.rid }}" `
+            -Rid "${{ matrix.rid }}" `
+            -OutputDir "${{ github.workspace }}/artifacts/release" `
+            -Version $packageVersion
+
+      - name: Smoke test Unix package
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          package_version="${RELEASE_TAG#v}"
+          asset_base_name="weave-fleet-${RELEASE_TAG}-${{ matrix.rid }}"
+          asset_name="${asset_base_name}${{ matrix.archive_extension }}"
+          archive_path="${{ github.workspace }}/artifacts/release/${asset_name}"
+          extract_dir="${{ runner.temp }}/smoke-${{ matrix.rid }}"
+          log_path="$extract_dir/weave-fleet.log"
+          port="5010"
+
+          rm -rf "$extract_dir"
+          mkdir -p "$extract_dir"
+          tar -xzf "$archive_path" -C "$extract_dir"
+
+          test -d "$extract_dir/$asset_base_name/app"
+          test -d "$extract_dir/$asset_base_name/bin"
+          test -f "$extract_dir/$asset_base_name/VERSION"
+
+          version_output="$($extract_dir/$asset_base_name/bin/weave-fleet version)"
+          test "$version_output" = "$package_version"
+
+          WEAVE_FLEET_HOST="127.0.0.1" WEAVE_FLEET_PORT="$port" "$extract_dir/$asset_base_name/bin/weave-fleet" >"$log_path" 2>&1 &
+          app_pid=$!
+
+          cleanup() {
+            kill "$app_pid" 2>/dev/null || true
+          }
+
+          trap cleanup EXIT
+
+          for _ in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:${port}/healthz" >/dev/null; then
+              kill "$app_pid" 2>/dev/null || true
+              wait "$app_pid" 2>/dev/null || true
+              trap - EXIT
+              exit 0
+            fi
+
+            if ! kill -0 "$app_pid" 2>/dev/null; then
+              if [ -f "$log_path" ]; then
+                cat "$log_path"
+              fi
+
+              exit 1
+            fi
+
+            sleep 1
+          done
+
+          if [ -f "$log_path" ]; then
+            cat "$log_path"
+          fi
+
+          exit 1
+
+      - name: Smoke test Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $packageVersion = $env:RELEASE_TAG.TrimStart('v')
+          $assetBaseName = "weave-fleet-$($env:RELEASE_TAG)-${{ matrix.rid }}"
+          $assetName = "$assetBaseName${{ matrix.archive_extension }}"
+          $archivePath = Join-Path $env:GITHUB_WORKSPACE "artifacts/release/$assetName"
+          $extractDir = Join-Path $env:RUNNER_TEMP "smoke-${{ matrix.rid }}"
+          $logPath = Join-Path $extractDir 'weave-fleet.log'
+          $errorLogPath = Join-Path $extractDir 'weave-fleet.err.log'
+          $port = '5010'
+
+          if (Test-Path -LiteralPath $extractDir) {
+              Remove-Item -Recurse -Force -Path $extractDir
+          }
+
+          $null = New-Item -ItemType Directory -Path $extractDir -Force
+          Expand-Archive -Path $archivePath -DestinationPath $extractDir -Force
+
+          $packageDir = Join-Path $extractDir $assetBaseName
+          if (-not (Test-Path -LiteralPath (Join-Path $packageDir 'app') -PathType Container)) {
+              throw 'Missing packaged app directory.'
+          }
+
+          if (-not (Test-Path -LiteralPath (Join-Path $packageDir 'bin') -PathType Container)) {
+              throw 'Missing packaged bin directory.'
+          }
+
+          if (-not (Test-Path -LiteralPath (Join-Path $packageDir 'VERSION') -PathType Leaf)) {
+              throw 'Missing packaged VERSION file.'
+          }
+
+          $versionOutput = (& (Join-Path $packageDir 'bin/weave-fleet.cmd') version | Out-String).Trim()
+          if ($versionOutput -ne $packageVersion) {
+              throw "Smoke test version mismatch. Expected '$packageVersion' but got '$versionOutput'."
+          }
+
+          $env:WEAVE_FLEET_HOST = '127.0.0.1'
+          $env:WEAVE_FLEET_PORT = $port
+          $process = Start-Process -FilePath (Join-Path $packageDir 'bin/weave-fleet.cmd') -RedirectStandardOutput $logPath -RedirectStandardError $errorLogPath -PassThru
+
+          try {
+              for ($attempt = 0; $attempt -lt 30; $attempt++) {
+                  Start-Sleep -Seconds 1
+
+                  if ($process.HasExited) {
+                      if (Test-Path -LiteralPath $logPath) {
+                          Get-Content -Path $logPath
+                      }
+
+                      if (Test-Path -LiteralPath $errorLogPath) {
+                          Get-Content -Path $errorLogPath
+                      }
+
+                      throw 'Packaged app exited before health check succeeded.'
+                  }
+
+                  try {
+                      $response = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$port/healthz"
+                      if ($response.StatusCode -eq 200) {
+                          break
+                      }
+                  }
+                  catch {
+                  }
+
+                  if ($attempt -eq 29) {
+                      if (Test-Path -LiteralPath $logPath) {
+                          Get-Content -Path $logPath
+                      }
+
+                      if (Test-Path -LiteralPath $errorLogPath) {
+                          Get-Content -Path $errorLogPath
+                      }
+
+                      throw 'Packaged app did not become healthy within the timeout.'
+                  }
+              }
+          }
+          finally {
+              if (-not $process.HasExited) {
+                  Stop-Process -Id $process.Id -Force
+              }
+          }
+
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.rid }}
+          path: |
+            artifacts/release/*${{ matrix.archive_extension }}
+            artifacts/release/*${{ matrix.archive_extension }}.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create merged checksums manifest
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          release_dir = Path('release-assets')
+          lines = []
+
+          for checksum_path in sorted(release_dir.glob('*.sha256')):
+              content = checksum_path.read_text(encoding='utf-8').strip()
+              if content:
+                  lines.append(content)
+
+          if not lines:
+              raise SystemExit('No checksum files were downloaded.')
+
+          release_dir.joinpath('checksums.txt').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
+
+      - name: Stage installer scripts
+        shell: bash
+        run: |
+          cp scripts/install.sh release-assets/install.sh
+          cp scripts/install.ps1 release-assets/install.ps1
+          chmod +x release-assets/install.sh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/*
+
+  deploy-vanity-url:
+    name: Deploy vanity URL installer
+    runs-on: ubuntu-latest
+    needs: release
+    timeout-minutes: 10
+    env:
+      VANITY_URL_TARGET_REPOSITORY: ${{ vars.VANITY_URL_TARGET_REPOSITORY }}
+      VANITY_URL_TARGET_BRANCH: ${{ vars.VANITY_URL_TARGET_BRANCH != '' && vars.VANITY_URL_TARGET_BRANCH || 'gh-pages' }}
+      VANITY_URL_DEPLOY_TOKEN: ${{ secrets.VANITY_URL_DEPLOY_TOKEN }}
+
+    steps:
+      - name: Check deploy prerequisites
+        id: prerequisites
+        shell: bash
+        run: |
+          if [ -z "$VANITY_URL_TARGET_REPOSITORY" ]; then
+            echo "::warning::Skipping vanity URL deployment because repository variable VANITY_URL_TARGET_REPOSITORY is not configured."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "$VANITY_URL_DEPLOY_TOKEN" ]; then
+            echo "::warning::Skipping vanity URL deployment because secret VANITY_URL_DEPLOY_TOKEN is not configured."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Check vanity URL branch
+        if: steps.prerequisites.outputs.configured == 'true'
+        id: branch
+        shell: bash
+        run: |
+          branch_ref=$(git ls-remote --heads "https://x-access-token:${VANITY_URL_DEPLOY_TOKEN}@github.com/${VANITY_URL_TARGET_REPOSITORY}.git" "$VANITY_URL_TARGET_BRANCH")
+          if [ -z "$branch_ref" ]; then
+            echo "::warning::Skipping vanity URL deployment because ${VANITY_URL_TARGET_REPOSITORY}:${VANITY_URL_TARGET_BRANCH} does not exist."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout release source
+        if: steps.prerequisites.outputs.configured == 'true' && steps.branch.outputs.exists == 'true'
+        uses: actions/checkout@v4
+
+      - name: Prepare vanity URL payload
+        if: steps.prerequisites.outputs.configured == 'true' && steps.branch.outputs.exists == 'true'
+        shell: bash
+        run: |
+          mkdir -p vanity-url
+          cp scripts/install.sh vanity-url/fleet.sh
+          chmod +x vanity-url/fleet.sh
+
+      - name: Checkout vanity URL branch
+        if: steps.prerequisites.outputs.configured == 'true' && steps.branch.outputs.exists == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.VANITY_URL_TARGET_REPOSITORY }}
+          ref: ${{ env.VANITY_URL_TARGET_BRANCH }}
+          token: ${{ env.VANITY_URL_DEPLOY_TOKEN }}
+          path: vanity-pages
+
+      - name: Publish fleet.sh
+        if: steps.prerequisites.outputs.configured == 'true' && steps.branch.outputs.exists == 'true'
+        shell: bash
+        working-directory: vanity-pages
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          cp ../vanity-url/fleet.sh ./fleet.sh
+
+          if [ -z "$(git status --short -- fleet.sh)" ]; then
+            echo "fleet.sh is already up to date."
+            exit 0
+          fi
+
+          git add fleet.sh
+          git commit -m "Deploy fleet installer for ${RELEASE_TAG}"
+          git push origin "HEAD:${VANITY_URL_TARGET_BRANCH}"
+
+  notify-website:
+    name: Notify website of Fleet release
+    runs-on: ubuntu-latest
+    needs: release
+    timeout-minutes: 5
+    env:
+      WEBSITE_DISPATCH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
+
+    steps:
+      - name: Check website dispatch prerequisites
+        id: prerequisites
+        shell: bash
+        run: |
+          if [ -z "$WEBSITE_DISPATCH_TOKEN" ]; then
+            echo "::warning::Skipping website notification because secret WEBSITE_DISPATCH_TOKEN is not configured."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Notify weave-website to update Fleet version
+        if: steps.prerequisites.outputs.configured == 'true'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          curl --fail-with-body --silent --show-error -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${WEBSITE_DISPATCH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/pgermishuys/weave-website/dispatches \
+            -d "{\"event_type\":\"fleet-version-update\",\"client_payload\":{\"version\":\"${version}\"}}"
