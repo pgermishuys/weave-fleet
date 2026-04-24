@@ -124,6 +124,7 @@ describe("BoardSourceConfig", () => {
     expect(sourceItems).toHaveLength(1);
     expect(wrapper.text()).toContain("acme/rocket");
     expect(wrapper.text()).toContain("Labels: bug, priority:high");
+    expect(wrapper.text()).toContain("Any assignee");
     expect(wrapper.text()).toContain("Last sync: Not synced yet");
 
     await wrapper.get('[data-testid="board-source-remove"]').trigger("click");
@@ -132,5 +133,27 @@ describe("BoardSourceConfig", () => {
     expect(boardApiMocks.deleteBoardSource).toHaveBeenCalledWith("board-1", "source-1");
     expect(wrapper.findAll('[data-testid="board-source-item"]')).toHaveLength(0);
     expect(wrapper.get('[data-testid="board-source-empty"]').text()).toContain("No configured sources yet.");
+  });
+
+  it("adds an assigned-to-me source with assignee in config json", async () => {
+    const wrapper = mount(BoardSourceConfig, {
+      props: {
+        boardId: "board-1",
+      },
+    });
+
+    await flushPromises();
+
+    await wrapper.get('[data-testid="board-source-repo-select"]').setValue("acme/rocket");
+    await wrapper.get('[data-testid="board-source-assigned-to-me"]').setValue(true);
+    await wrapper.get('[data-testid="board-source-form"]').trigger("submit");
+    await flushPromises();
+
+    expect(boardApiMocks.createBoardSource).toHaveBeenCalledWith("board-1", {
+      providerType: "github",
+      config: JSON.stringify({ repository: "acme/rocket", assignee: "@me" }),
+    });
+
+    expect(wrapper.text()).toContain("Assignee: @me");
   });
 });

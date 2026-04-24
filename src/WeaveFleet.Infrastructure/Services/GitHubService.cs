@@ -71,6 +71,7 @@ public sealed class GitHubService(
         {
             var token = tokenNode.GetValue<string>();
             await StoreTokenAsync(userId, token, "device-flow", ct).ConfigureAwait(false);
+            await UpdateStoredLoginAsync(userId, token, ct).ConfigureAwait(false);
             return new DeviceFlowPollResult(DeviceFlowPollStatus.Complete);
         }
 
@@ -119,18 +120,39 @@ public sealed class GitHubService(
         return credentialProtector.Decrypt(credential.EncryptedValue);
     }
 
+    public async Task<string?> GetGitHubLoginAsync(string userId, CancellationToken ct)
+    {
+        var credential = await GetCredentialAsync(userId, ct).ConfigureAwait(false)
+            ?? await MigrateLegacyTokenAsync(userId, ct).ConfigureAwait(false);
+
+        if (credential is null)
+            return null;
+
+        var login = ReadLogin(credential.Metadata);
+        if (!string.IsNullOrWhiteSpace(login))
+            return login;
+
+        var token = credentialProtector.Decrypt(credential.EncryptedValue);
+        var user = await GetGitHubUserAsync(token, ct).ConfigureAwait(false);
+        login = ReadLogin(user);
+
+        if (string.IsNullOrWhiteSpace(login))
+            return null;
+
+        credential.Metadata = UpdateMetadataLogin(credential.Metadata, login);
+        credential.UpdatedAt = DateTimeOffset.UtcNow.ToString("O");
+
+        await credentialRepository.UpsertAsync(credential).ConfigureAwait(false);
+        return login;
+    }
+
     public async Task<bool> ConnectWithTokenAsync(string userId, string token, CancellationToken ct = default)
     {
-        using var client = httpClientFactory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new("Bearer", token);
-        client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("weave-fleet/1.0");
-
-        var response = await client.GetAsync(UserUrl, ct).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
+        var user = await GetGitHubUserAsync(token, ct).ConfigureAwait(false);
+        if (user is null)
             return false;
 
-        await StoreTokenAsync(userId, token, "manual-token", ct).ConfigureAwait(false);
+        await StoreTokenAsync(userId, token, "manual-token", ReadLogin(user), ct).ConfigureAwait(false);
         return true;
     }
 
@@ -149,6 +171,9 @@ public sealed class GitHubService(
     // ── Private helpers ────────────────────────────────────────────────────────
 
     private async Task StoreTokenAsync(string userId, string token, string source, CancellationToken ct)
+        => await StoreTokenAsync(userId, token, source, null, ct).ConfigureAwait(false);
+
+    private async Task StoreTokenAsync(string userId, string token, string source, string? login, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
         var credential = new UserCredential
@@ -160,13 +185,30 @@ public sealed class GitHubService(
             Label = CredentialLabel,
             EncryptedValue = credentialProtector.Encrypt(token),
             DisplayHint = ComputeDisplayHint(token),
-            Metadata = CreateMetadata(now, source),
+            Metadata = CreateMetadata(now, source, login),
             CreatedAt = now.ToString("O"),
             UpdatedAt = now.ToString("O"),
         };
 
         await credentialRepository.UpsertAsync(credential).ConfigureAwait(false);
         await RemoveLegacyStateAsync(userId, ct).ConfigureAwait(false);
+    }
+
+    private async Task UpdateStoredLoginAsync(string userId, string token, CancellationToken ct)
+    {
+        var user = await GetGitHubUserAsync(token, ct).ConfigureAwait(false);
+        var login = ReadLogin(user);
+        if (string.IsNullOrWhiteSpace(login))
+            return;
+
+        var credential = await GetCredentialAsync(userId, ct).ConfigureAwait(false);
+        if (credential is null)
+            return;
+
+        credential.Metadata = UpdateMetadataLogin(credential.Metadata, login);
+        credential.UpdatedAt = DateTimeOffset.UtcNow.ToString("O");
+
+        await credentialRepository.UpsertAsync(credential).ConfigureAwait(false);
     }
 
     private async Task<UserCredential?> GetCredentialAsync(string userId, CancellationToken ct)
@@ -227,11 +269,59 @@ public sealed class GitHubService(
     }
 
     private static string CreateMetadata(DateTimeOffset connectedAt, string source)
-        => new JsonObject
+        => CreateMetadata(connectedAt, source, null);
+
+    private static string CreateMetadata(DateTimeOffset connectedAt, string source, string? login)
+    {
+        var metadata = new JsonObject
         {
             ["connected_at"] = connectedAt,
             ["source"] = source,
-        }.ToJsonString();
+        };
+
+        if (!string.IsNullOrWhiteSpace(login))
+            metadata["login"] = login;
+
+        return metadata.ToJsonString();
+    }
+
+    private async Task<JsonObject?> GetGitHubUserAsync(string token, CancellationToken ct)
+    {
+        using var client = httpClientFactory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", token);
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("weave-fleet/1.0");
+
+        var response = await client.GetAsync(UserUrl, ct).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        return await response.Content.ReadFromJsonAsync<JsonObject>(ct).ConfigureAwait(false);
+    }
+
+    private static string UpdateMetadataLogin(string? metadata, string login)
+    {
+        JsonObject json;
+
+        if (string.IsNullOrWhiteSpace(metadata))
+        {
+            json = new JsonObject();
+        }
+        else
+        {
+            try
+            {
+                json = JsonNode.Parse(metadata) as JsonObject ?? new JsonObject();
+            }
+            catch (JsonException)
+            {
+                json = new JsonObject();
+            }
+        }
+
+        json["login"] = login;
+        return json.ToJsonString();
+    }
 
     private static DateTimeOffset? ReadConnectedAt(string? metadata)
     {
@@ -248,6 +338,25 @@ public sealed class GitHubService(
             return null;
         }
     }
+
+    private static string? ReadLogin(string? metadata)
+    {
+        if (string.IsNullOrWhiteSpace(metadata))
+            return null;
+
+        try
+        {
+            var node = JsonNode.Parse(metadata) as JsonObject;
+            return ReadLogin(node);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ReadLogin(JsonObject? user)
+        => user?["login"]?.GetValue<string?>();
 
     private static string ComputeDisplayHint(string value)
         => value.Length <= 4

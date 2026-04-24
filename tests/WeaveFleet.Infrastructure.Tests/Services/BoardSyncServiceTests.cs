@@ -13,6 +13,118 @@ namespace WeaveFleet.Infrastructure.Tests.Services;
 public sealed class BoardSyncServiceTests
 {
     [Fact]
+    public async Task ShouldSyncIssuesAssignedToCurrentUserWhenAssigneeIsAtMe()
+    {
+        var handler = new RecordingGitHubHandler(
+            [CreateIssuesPayload(CreateIssue(1, "Issue one", "open", CreateLabels("bug"), "octocat", "2026-04-24T12:00:00Z"))]);
+        var setup = await CreateTestSetupAsync(
+            """{"repository":"acme/rocket","assignee":"@me"}""",
+            """{"login":"octocat"}""",
+            handler);
+
+        using var _ = setup.Keeper;
+
+        var result = await setup.Service.SyncAsync(setup.Board.Id);
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.IssuesFetched.ShouldBe(1);
+        handler.RequestPaths.ShouldContain(path => path.Contains("assignee=octocat", StringComparison.Ordinal));
+        handler.RequestPaths.ShouldNotContain("/user");
+    }
+
+    [Fact]
+    public async Task ShouldSyncIssuesAssignedToExplicitLoginWhenAssigneeIsConfigured()
+    {
+        var handler = new RecordingGitHubHandler(
+            [CreateIssuesPayload(CreateIssue(1, "Issue one", "open", CreateLabels(), "hubot", "2026-04-24T12:00:00Z"))]);
+        var setup = await CreateTestSetupAsync(
+            """{"repository":"acme/rocket","assignee":"hubot"}""",
+            null,
+            handler);
+
+        using var _ = setup.Keeper;
+
+        var result = await setup.Service.SyncAsync(setup.Board.Id);
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.IssuesFetched.ShouldBe(1);
+        handler.RequestPaths.ShouldContain(path => path.Contains("assignee=hubot", StringComparison.Ordinal));
+        handler.RequestPaths.ShouldNotContain("/user");
+    }
+
+    [Fact]
+    public async Task ShouldSyncWithoutAssigneeFilterForBackwardCompatibility()
+    {
+        var handler = new RecordingGitHubHandler(
+            [CreateIssuesPayload(CreateIssue(1, "Issue one", "open", CreateLabels(), null, "2026-04-24T12:00:00Z"))]);
+        var setup = await CreateTestSetupAsync(
+            """{"repository":"acme/rocket"}""",
+            null,
+            handler);
+
+        using var _ = setup.Keeper;
+
+        var result = await setup.Service.SyncAsync(setup.Board.Id);
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.IssuesFetched.ShouldBe(1);
+        handler.RequestPaths.ShouldContain(path => path.Contains("/repos/acme/rocket/issues?", StringComparison.Ordinal));
+        handler.RequestPaths.ShouldNotContain(path => path.Contains("assignee=", StringComparison.Ordinal));
+        handler.RequestPaths.ShouldNotContain("/user");
+    }
+
+    [Fact]
+    public async Task ShouldReturnErrorWhenAssigneeIsAtMeWithoutStoredLogin()
+    {
+        var handler = new RecordingGitHubHandler([], new JsonObject());
+        var setup = await CreateTestSetupAsync(
+            """{"repository":"acme/rocket","assignee":"@me"}""",
+            null,
+            handler);
+
+        using var _ = setup.Keeper;
+
+        var result = await setup.Service.SyncAsync(setup.Board.Id);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe("Validation.Config");
+        result.Error.Description.ShouldContain("requires a stored GitHub login");
+        handler.RequestPaths.ShouldContain("/user");
+        handler.RequestPaths.ShouldNotContain(path => path.Contains("/repos/acme/rocket/issues", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetGitHubLoginAsyncShouldReadLoginFromMetadata()
+    {
+        var credentialRepository = new InMemoryUserCredentialRepository();
+        credentialRepository.Seed(new UserCredential
+        {
+            Id = "cred-1",
+            UserId = TestUserContext.DefaultUserId,
+            Namespace = "github",
+            Kind = "oauth-access-token",
+            Label = "GitHub",
+            EncryptedValue = "ENC:token",
+            DisplayHint = "...oken",
+            Metadata = """{"login":"octocat"}""",
+            CreatedAt = UtcNow(),
+            UpdatedAt = UtcNow()
+        });
+
+        var handler = new RecordingGitHubHandler([]);
+        var service = new GitHubService(
+            new TestHttpClientFactory(handler),
+            new FakePluginStateStore(),
+            credentialRepository,
+            new FakeCredentialProtector());
+
+        var login = await service.GetGitHubLoginAsync(TestUserContext.DefaultUserId, CancellationToken.None);
+
+        login.ShouldBe("octocat");
+        handler.RequestPaths.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task ShouldCreateNewIssuesInInboxLaneWithGitHubSourceKeys()
     {
         var setup = await CreateTestSetupAsync(
@@ -172,6 +284,15 @@ public sealed class BoardSyncServiceTests
     }
 
     private static async Task<TestSetup> CreateTestSetupAsync(params JsonArray[] syncResponses)
+        => await CreateTestSetupAsync(
+            """{"repository":"acme/rocket"}""",
+            null,
+            new SequencedGitHubIssuesHandler(syncResponses)).ConfigureAwait(false);
+
+    private static async Task<TestSetup> CreateTestSetupAsync(
+        string sourceConfig,
+        string? credentialMetadata,
+        HttpMessageHandler handler)
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
         var userContext = new TestUserContext();
@@ -185,7 +306,7 @@ public sealed class BoardSyncServiceTests
         await boardRepository.InsertLaneAsync(inboxLane);
         await boardRepository.InsertLaneAsync(doingLane);
 
-        var source = CreateSource(board.Id, "github", """{"repository":"acme/rocket"}""");
+        var source = CreateSource(board.Id, "github", sourceConfig);
         await boardRepository.InsertSourceAsync(source);
 
         var credentialRepository = new InMemoryUserCredentialRepository();
@@ -198,11 +319,11 @@ public sealed class BoardSyncServiceTests
             Label = "GitHub",
             EncryptedValue = "ENC:token",
             DisplayHint = "...oken",
+            Metadata = credentialMetadata,
             CreatedAt = UtcNow(),
             UpdatedAt = UtcNow()
         });
 
-        var handler = new SequencedGitHubIssuesHandler(syncResponses);
         var httpClientFactory = new TestHttpClientFactory(handler);
         var gitHubService = new GitHubService(
             httpClientFactory,
@@ -309,6 +430,37 @@ public sealed class BoardSyncServiceTests
             };
 
             return Task.FromResult(response);
+        }
+    }
+
+    private sealed class RecordingGitHubHandler(IReadOnlyList<JsonArray> issueResponses, JsonObject? userResponse = null) : HttpMessageHandler
+    {
+        private readonly IReadOnlyList<JsonArray> issueResponses = issueResponses;
+        private int issueRequestIndex;
+
+        public List<string> RequestPaths { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var requestPath = request.RequestUri?.PathAndQuery ?? string.Empty;
+            RequestPaths.Add(requestPath);
+
+            if (string.Equals(request.RequestUri?.AbsolutePath, "/user", StringComparison.Ordinal))
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent((userResponse ?? new JsonObject()).ToJsonString(), Encoding.UTF8, "application/json")
+                });
+            }
+
+            var responseIndex = Math.Min(issueRequestIndex, Math.Max(issueResponses.Count - 1, 0));
+            var responseBody = issueResponses.Count == 0 ? new JsonArray() : issueResponses[responseIndex];
+            issueRequestIndex++;
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(responseBody.ToJsonString(), Encoding.UTF8, "application/json")
+            });
         }
     }
 }

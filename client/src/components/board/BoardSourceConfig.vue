@@ -11,6 +11,7 @@ interface Props {
 interface ParsedSourceConfig {
   repository: string | null;
   labels: string | null;
+  assignee: string | null;
 }
 
 interface SourceViewModel {
@@ -18,6 +19,7 @@ interface SourceViewModel {
   providerType: string;
   repositoryLabel: string;
   labelsLabel: string | null;
+  assigneeLabel: string | null;
   lastSyncLabel: string;
 }
 
@@ -35,6 +37,7 @@ const pendingDeleteSourceId = shallowRef<string | null>(null);
 const sourceError = shallowRef<string | null>(null);
 const selectedRepository = shallowRef("");
 const labelFilter = shallowRef("");
+const assignedToMe = shallowRef(false);
 
 const {
   bookmarks,
@@ -59,6 +62,7 @@ const sourceViewModels = computed<SourceViewModel[]>(() => {
         providerType: source.providerType,
         repositoryLabel: config.repository ?? "Unknown repository",
         labelsLabel: config.labels,
+        assigneeLabel: config.assignee,
         lastSyncLabel: formatLastSync(source.lastSyncAt),
       };
     })
@@ -66,7 +70,7 @@ const sourceViewModels = computed<SourceViewModel[]>(() => {
 });
 
 const sourceSignatures = computed(() => {
-  return new Set(sourceViewModels.value.map((source) => createSourceSignature(source.repositoryLabel, source.labelsLabel)));
+  return new Set(sourceViewModels.value.map((source) => createSourceSignature(source.repositoryLabel, source.labelsLabel, source.assigneeLabel)));
 });
 
 const normalizedSelectedLabels = computed(() => normalizeLabels(labelFilter.value));
@@ -76,7 +80,7 @@ const isDuplicateSource = computed(() => {
     return false;
   }
 
-  return sourceSignatures.value.has(createSourceSignature(selectedRepository.value, normalizedSelectedLabels.value));
+  return sourceSignatures.value.has(createSourceSignature(selectedRepository.value, normalizedSelectedLabels.value, assignedToMe.value ? "@me" : null));
 });
 
 const canSubmit = computed(() => {
@@ -128,24 +132,29 @@ function parseSourceConfig(config: string): ParsedSourceConfig {
   try {
     const payload = JSON.parse(config) as {
       repository?: unknown;
-      owner?: unknown;
-      repo?: unknown;
-      labels?: unknown;
-    };
+        owner?: unknown;
+        repo?: unknown;
+        labels?: unknown;
+        assignee?: unknown;
+      };
     const repository = typeof payload.repository === "string"
       ? payload.repository.trim()
       : typeof payload.owner === "string" && typeof payload.repo === "string"
         ? `${payload.owner.trim()}/${payload.repo.trim()}`
         : "";
 
-    return {
-      repository: repository.length > 0 ? repository : null,
-      labels: normalizeLabels(payload.labels),
-    };
+      return {
+        repository: repository.length > 0 ? repository : null,
+        labels: normalizeLabels(payload.labels),
+        assignee: typeof payload.assignee === "string" && payload.assignee.trim().length > 0
+          ? payload.assignee.trim()
+          : null,
+      };
   } catch {
     return {
       repository: null,
       labels: null,
+      assignee: null,
     };
   }
 }
@@ -172,8 +181,8 @@ function normalizeLabels(value: unknown): string | null {
   return labels.length > 0 ? labels.join(", ") : null;
 }
 
-function createSourceSignature(repository: string, labels: string | null): string {
-  return `${repository.trim().toLowerCase()}::${labels?.toLowerCase() ?? ""}`;
+function createSourceSignature(repository: string, labels: string | null, assignee: string | null): string {
+  return `${repository.trim().toLowerCase()}::${labels?.toLowerCase() ?? ""}::${assignee?.toLowerCase() ?? ""}`;
 }
 
 function formatLastSync(value: string | null): string {
@@ -209,6 +218,7 @@ async function handleAddSource(): Promise<void> {
     const config = {
       repository: selectedRepository.value.trim(),
       ...(normalizedSelectedLabels.value ? { labels: normalizedSelectedLabels.value } : {}),
+      ...(assignedToMe.value ? { assignee: "@me" } : {}),
     };
 
     const createdSource = await createBoardSource(props.boardId, {
@@ -218,6 +228,7 @@ async function handleAddSource(): Promise<void> {
 
     sources.value = [...sources.value, createdSource];
     labelFilter.value = "";
+    assignedToMe.value = false;
   } catch (error) {
     sourceError.value = toErrorMessage(error, "Failed to create board source.");
   } finally {
@@ -326,6 +337,20 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
           >
         </label>
 
+        <label class="board-source-config__toggle-field">
+          <input
+            v-model="assignedToMe"
+            data-testid="board-source-assigned-to-me"
+            type="checkbox"
+            class="board-source-config__checkbox"
+            :disabled="isLoadingSources || isCreatingSource || pendingDeleteSourceId !== null"
+          >
+          <span class="board-source-config__toggle-copy">
+            <span class="board-source-config__label">Assigned to me</span>
+            <span class="board-source-config__toggle-description">Only sync issues assigned to you.</span>
+          </span>
+        </label>
+
         <button
           type="submit"
           class="board-source-config__button"
@@ -374,6 +399,9 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
             <p class="board-source-config__meta">
               <span v-if="source.labelsLabel">Labels: {{ source.labelsLabel }}</span>
               <span v-else>No label filter</span>
+              <span>•</span>
+              <span v-if="source.assigneeLabel">Assignee: {{ source.assigneeLabel }}</span>
+              <span v-else>Any assignee</span>
               <span>•</span>
               <span>Last sync: {{ source.lastSyncLabel }}</span>
             </p>
@@ -454,7 +482,7 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
 
 .board-source-config__form {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.9fr) auto;
   gap: 12px;
   align-items: end;
 }
@@ -471,6 +499,36 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  color: var(--muted);
+}
+
+.board-source-config__toggle-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.board-source-config__checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.board-source-config__toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.board-source-config__toggle-description {
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--muted);
 }
 
@@ -506,7 +564,8 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
 .board-source-config__button:disabled,
 .board-source-config__ghost-button:disabled,
 .board-source-config__select:disabled,
-.board-source-config__input:disabled {
+.board-source-config__input:disabled,
+.board-source-config__checkbox:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

@@ -175,11 +175,15 @@ public sealed class BoardSyncService(
         if (string.IsNullOrWhiteSpace(token))
             return FleetError.Unauthorized;
 
+        var assigneeResult = await ResolveAssigneeAsync(config.Assignee, cancellationToken).ConfigureAwait(false);
+        if (assigneeResult.IsFailure)
+            return assigneeResult.Error;
+
         var issues = new List<GitHubIssueCard>();
 
         for (var page = 1; ; page++)
         {
-            var path = BuildGitHubIssuesPath(config, page);
+            var path = BuildGitHubIssuesPath(config, assigneeResult.Value, page);
             var response = await gitHubApiProxy.FetchAsync(token, path, "GET", null, cancellationToken).ConfigureAwait(false);
             if (response is not JsonArray issueArray)
             {
@@ -200,6 +204,20 @@ public sealed class BoardSyncService(
         }
 
         return Result.Success<IReadOnlyList<GitHubIssueCard>>(issues);
+    }
+
+    private async Task<Result<string?>> ResolveAssigneeAsync(string? assignee, CancellationToken cancellationToken)
+    {
+        if (!string.Equals(assignee, "@me", StringComparison.Ordinal))
+            return Result.Success(assignee);
+
+        var gitHubLogin = await gitHubService.GetGitHubLoginAsync(userContext.UserId, cancellationToken).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(gitHubLogin))
+            return Result.Success<string?>(gitHubLogin);
+
+        return FleetError.ValidationError(
+            nameof(BoardSource.Config),
+            "GitHub board source 'assignee' value '@me' requires a stored GitHub login.");
     }
 
     private static Result<GitHubBoardSourceConfig> ParseGitHubSourceConfig(string config)
@@ -247,8 +265,11 @@ public sealed class BoardSyncService(
             state = "open";
 
         var labels = ParseLabels(json["labels"]);
+        var assigneeResult = ParseAssignee(json["assignee"]);
+        if (assigneeResult.IsFailure)
+            return assigneeResult.Error;
 
-        return Result.Success(new GitHubBoardSourceConfig(repositoryParts[0], repositoryParts[1], repository, state, labels));
+        return Result.Success(new GitHubBoardSourceConfig(repositoryParts[0], repositoryParts[1], repository, state, labels, assigneeResult.Value));
     }
 
     private static string? ParseLabels(JsonNode? labelsNode)
@@ -272,6 +293,55 @@ public sealed class BoardSyncService(
             .ToList();
 
         return labels.Count == 0 ? null : string.Join(',', labels);
+    }
+
+    private static Result<string?> ParseAssignee(JsonNode? assigneeNode)
+    {
+        if (assigneeNode is null)
+            return Result.Success<string?>(null);
+
+        if (assigneeNode is not JsonValue)
+        {
+            return FleetError.ValidationError(
+                nameof(BoardSource.Config),
+                "GitHub board source 'assignee' must be a string when provided.");
+        }
+
+        var assignee = assigneeNode.GetValue<string>()?.Trim();
+        if (string.IsNullOrWhiteSpace(assignee))
+            return Result.Success<string?>(null);
+
+        if (string.Equals(assignee, "@me", StringComparison.Ordinal))
+            return Result.Success<string?>(assignee);
+
+        if (IsValidGitHubLogin(assignee))
+            return Result.Success<string?>(assignee);
+
+        return FleetError.ValidationError(
+            nameof(BoardSource.Config),
+            $"GitHub board source 'assignee' must be '@me' or a valid GitHub login. Received '{assignee}'.");
+    }
+
+    private static bool IsValidGitHubLogin(string assignee)
+    {
+        if (assignee.Length is 0 or > 39)
+            return false;
+
+        if (assignee[0] == '-' || assignee[^1] == '-')
+            return false;
+
+        for (var index = 0; index < assignee.Length; index++)
+        {
+            var character = assignee[index];
+            var isLetterOrDigit = char.IsLetterOrDigit(character);
+            if (!isLetterOrDigit && character != '-')
+                return false;
+
+            if (character == '-' && index > 0 && assignee[index - 1] == '-')
+                return false;
+        }
+
+        return true;
     }
 
     private static GitHubIssueCard? ParseIssueCard(JsonNode? node, GitHubBoardSourceConfig config)
@@ -332,9 +402,10 @@ public sealed class BoardSyncService(
         return new StaleMetadataResult(json.ToJsonString(), true);
     }
 
-    private static string BuildGitHubIssuesPath(GitHubBoardSourceConfig config, int page)
+    private static string BuildGitHubIssuesPath(GitHubBoardSourceConfig config, string? assignee, int page)
     {
         var query = BuildQuery(
+            ("assignee", assignee),
             ("state", config.State),
             ("labels", config.Labels),
             ("page", page.ToString(CultureInfo.InvariantCulture)),
@@ -382,7 +453,8 @@ public sealed class BoardSyncService(
         string Repo,
         string Repository,
         string State,
-        string? Labels);
+        string? Labels,
+        string? Assignee);
 
     private sealed record GitHubIssueCard(string Title, string SourceKey, string Metadata);
 
