@@ -17,14 +17,18 @@ const boardApiMocks = vi.hoisted(() => ({
   createBoard: vi.fn(),
   createBoardCard: vi.fn(),
   createBoardLane: vi.fn(),
+  createBoardSource: vi.fn(),
   deleteBoard: vi.fn(),
   deleteBoardCard: vi.fn(),
   deleteBoardLane: vi.fn(),
+  deleteBoardSource: vi.fn(),
   listBoardCards: vi.fn(),
   listBoardLanes: vi.fn(),
   listBoards: vi.fn(),
+  listBoardSources: vi.fn(),
   moveBoardCard: vi.fn(),
   reorderBoardLanes: vi.fn(),
+  syncBoard: vi.fn(),
   updateBoard: vi.fn(),
   updateBoardCard: vi.fn(),
   updateBoardLane: vi.fn(),
@@ -35,14 +39,18 @@ vi.mock("@/lib/board-api", () => ({
   createBoard: boardApiMocks.createBoard,
   createBoardCard: boardApiMocks.createBoardCard,
   createBoardLane: boardApiMocks.createBoardLane,
+  createBoardSource: boardApiMocks.createBoardSource,
   deleteBoard: boardApiMocks.deleteBoard,
   deleteBoardCard: boardApiMocks.deleteBoardCard,
   deleteBoardLane: boardApiMocks.deleteBoardLane,
+  deleteBoardSource: boardApiMocks.deleteBoardSource,
   listBoardCards: boardApiMocks.listBoardCards,
   listBoardLanes: boardApiMocks.listBoardLanes,
   listBoards: boardApiMocks.listBoards,
+  listBoardSources: boardApiMocks.listBoardSources,
   moveBoardCard: boardApiMocks.moveBoardCard,
   reorderBoardLanes: boardApiMocks.reorderBoardLanes,
+  syncBoard: boardApiMocks.syncBoard,
   updateBoard: boardApiMocks.updateBoard,
   updateBoardCard: boardApiMocks.updateBoardCard,
   updateBoardLane: boardApiMocks.updateBoardLane,
@@ -191,11 +199,47 @@ function configureBoardApiMocks(): void {
   boardApiMocks.updateBoard.mockResolvedValue(createBoardFixture());
   boardApiMocks.deleteBoard.mockResolvedValue(undefined);
   boardApiMocks.deleteBoardLane.mockResolvedValue(undefined);
+  boardApiMocks.listBoardSources.mockResolvedValue([]);
+  boardApiMocks.createBoardSource.mockResolvedValue(undefined);
+  boardApiMocks.deleteBoardSource.mockResolvedValue(undefined);
   boardApiMocks.reorderBoardLanes.mockImplementation(async (_boardId: string, _request: ReorderBoardLanesRequest) => undefined);
   boardApiMocks.updateBoardCard.mockImplementation(async (_boardId: string, _cardId: string, _request: UpdateBoardCardRequest) => cloneCard(mockState.cards[0] ?? createCardFixture()));
   boardApiMocks.deleteBoardCard.mockResolvedValue(undefined);
   boardApiMocks.archiveBoardCard.mockImplementation(async (_boardId: string, _cardId: string) => cloneCard(mockState.cards[0] ?? createCardFixture()));
   boardApiMocks.moveBoardCard.mockImplementation(async (_boardId: string, _cardId: string, _request: MoveBoardCardRequest) => cloneCard(mockState.cards[0] ?? createCardFixture()));
+  boardApiMocks.syncBoard.mockImplementation(async (boardId: string) => {
+    const syncedCard = createCardFixture({
+      id: "card-synced",
+      boardId,
+      laneId: "lane-backlog",
+      title: "Synced issue card",
+      sourceType: "github",
+      sourceKey: "github:acme/rocket#7",
+      position: POSITION_GAP * 2,
+      createdAt: createTimestamp(14),
+      updatedAt: createTimestamp(14),
+    });
+
+    const existingCard = mockState.cards.find((candidate) => candidate.id === "card-1");
+    if (existingCard) {
+      existingCard.title = "Existing card updated";
+      existingCard.updatedAt = createTimestamp(15);
+    }
+
+    mockState.cards = [
+      ...mockState.cards.filter((candidate) => candidate.id !== syncedCard.id),
+      syncedCard,
+    ];
+
+    return {
+      sourcesProcessed: 1,
+      issuesFetched: 2,
+      cardsCreated: 1,
+      cardsUpdated: 1,
+      cardsMarkedStale: 3,
+      syncedAt: createTimestamp(16),
+    };
+  });
 }
 
 function mountBoard(): VueWrapper {
@@ -274,5 +318,30 @@ describe("KanbanBoard", () => {
 
     expect(boardApiMocks.updateBoardLane).toHaveBeenCalledWith("board-1", createdLaneId, { isInbox: true });
     expect(getButtonByText(wrapper, "Inbox").attributes("disabled")).toBeDefined();
+  });
+
+  it("syncs the board, shows feedback, and refreshes cards", async () => {
+    mockState = {
+      boards: [createBoardFixture()],
+      lanes: [createLaneFixture({ id: "lane-backlog", name: "Backlog", isInbox: true })],
+      cards: [createCardFixture({ laneId: "lane-backlog" })],
+    };
+    configureBoardApiMocks();
+
+    const wrapper = mountBoard();
+    await flushPromises();
+
+    await wrapper.get('[data-testid="kanban-sync-button"]').trigger("click");
+
+    expect(wrapper.get('[data-testid="kanban-sync-button"]').text()).toBe("Syncing…");
+
+    await flushPromises();
+
+    expect(boardApiMocks.syncBoard).toHaveBeenCalledWith("board-1");
+    expect(wrapper.get('[data-testid="kanban-sync-feedback"]').text()).toContain("Board synced");
+    expect(wrapper.get('[data-testid="kanban-sync-feedback"]').text()).toContain("1 added, 1 updated, 3 stale");
+    expect(wrapper.text()).toContain("Existing card updated");
+    expect(wrapper.text()).toContain("Synced issue card");
+    expect(wrapper.get('[data-testid="kanban-sync-button"]').text()).toBe("Sync now");
   });
 });

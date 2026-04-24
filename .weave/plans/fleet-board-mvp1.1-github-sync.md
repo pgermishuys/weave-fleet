@@ -84,25 +84,25 @@ POST   /api/boards/{boardId}/sync                     → SyncResult { added, up
 7. Return counts
 
 ## Deliverables
-- [ ] `BoardSource` entity and migration (016 if MVP 1 shipped, or extend 015)
-- [ ] `BoardSource` repository methods (CRUD)
-- [ ] Sync service: `IBoardSyncService` with upsert logic
-- [ ] Sync API endpoint
-- [ ] Source CRUD API endpoints
-- [ ] Frontend: source configuration UI (repo picker + filter)
-- [ ] Frontend: sync button with result feedback
-- [ ] Frontend: synced card visual treatment (icon, link, stale indicator)
-- [ ] Backend tests for sync upsert logic
-- [ ] Frontend tests for source management
+- [x] `BoardSource` entity and migration (016 if MVP 1 shipped, or extend 015)
+- [x] `BoardSource` repository methods (CRUD)
+- [x] Sync service: `IBoardSyncService` with upsert logic
+- [x] Sync API endpoint
+- [x] Source CRUD API endpoints
+- [x] Frontend: source configuration UI (repo picker + filter)
+- [x] Frontend: sync button with result feedback
+- [x] Frontend: synced card visual treatment (icon, link, stale indicator)
+- [x] Backend tests for sync upsert logic
+- [x] Frontend tests for source management
 
 ### Definition of Done
-- [ ] Can add a GitHub repo as a board source
-- [ ] "Sync now" imports issues into inbox lane
-- [ ] Re-sync updates metadata but preserves lane/position
-- [ ] Removing a source does not delete its cards
-- [ ] Stale cards are visually indicated
-- [ ] `dotnet test` passes
-- [ ] Frontend tests pass
+- [x] Can add a GitHub repo as a board source
+- [x] "Sync now" imports issues into inbox lane
+- [x] Re-sync updates metadata but preserves lane/position
+- [x] Removing a source does not delete its cards
+- [x] Stale cards are visually indicated
+- [x] `dotnet test` passes
+- [x] Frontend tests pass
 
 ### Guardrails (Must NOT)
 - Must NOT add scheduled jobs or background sync
@@ -113,64 +113,64 @@ POST   /api/boards/{boardId}/sync                     → SyncResult { added, up
 
 ## TODOs
 
-- [ ] 1. **BoardSource Migration**
+- [x] 1. **BoardSource Migration**
   **What**: Add `board_sources` table with columns matching the entity. Index on `board_sources(board_id)`. If MVP 1 migration is already applied, create `016_add_board_sources.sql`; otherwise fold into `015`.
   **Files**: `src/WeaveFleet.Infrastructure/Migrations/016_add_board_sources.sql`
   **Acceptance**: Migration applies cleanly.
 
-- [ ] 2. **BoardSource Entity**
+- [x] 2. **BoardSource Entity**
   **What**: Add `BoardSource.cs` to domain entities.
   **Files**: `src/WeaveFleet.Domain/Entities/BoardSource.cs`
   **Acceptance**: Entity compiles, matches migration schema.
 
-- [ ] 3. **BoardSource Repository Methods**
+- [x] 3. **BoardSource Repository Methods**
   **What**: Add source CRUD methods to `IBoardRepository` and implementation. GetByBoardId, Create, Update, Delete.
   **Files**: `src/WeaveFleet.Domain/Repositories/IBoardRepository.cs`, `src/WeaveFleet.Infrastructure/Repositories/BoardRepository.cs`
   **Acceptance**: All CRUD operations work.
 
-- [ ] 4. **Board Sync Service**
+- [x] 4. **Board Sync Service**
   **What**: Create `IBoardSyncService` / `BoardSyncService`. Orchestrates: load sources → fetch issues from GitHub plugin → compute source keys → upsert cards → detect stale → update LastSyncAt → return result.
   **Files**: `src/WeaveFleet.Application/Services/IBoardSyncService.cs`, `src/WeaveFleet.Infrastructure/Services/BoardSyncService.cs`
   **Acceptance**: Upsert creates new cards in inbox lane, updates existing cards preserving lane/position, marks stale cards.
 
-- [ ] 5. **Source & Sync API Endpoints**
+- [x] 5. **Source & Sync API Endpoints**
   **What**: Add source CRUD and sync endpoints to `BoardEndpoints.cs`.
   **Files**: `src/WeaveFleet.Api/Endpoints/BoardEndpoints.cs`
   **Acceptance**: All endpoints callable. Sync returns correct counts.
 
-- [ ] 6. **Backend Sync Tests**
+- [x] 6. **Backend Sync Tests**
   **What**: Test upsert logic: new issue → inbox, existing issue → metadata update only, disappeared issue → stale, lane/position preserved on re-sync.
   **Files**: `tests/WeaveFleet.Tests/Services/BoardSyncServiceTests.cs`
   **Acceptance**: All sync scenarios covered.
 
-- [ ] 7. **Frontend Source Configuration UI**
+- [x] 7. **Frontend Source Configuration UI**
   **What**: UI to add/remove board sources. Repo picker from bookmarked repos. Optional label filter input. Shows configured sources with last sync time.
   **Files**: `client/src/components/board/BoardSourceConfig.vue`
   **Acceptance**: Can add repo source, see it listed, remove it.
 
-- [ ] 8. **Frontend Sync Button & Feedback**
+- [x] 8. **Frontend Sync Button & Feedback**
   **What**: "Sync now" button on board. Shows loading state during sync. Displays result toast (X added, Y updated, Z stale).
   **Files**: `client/src/components/board/KanbanBoard.vue`, `client/src/stores/board.ts`
   **Acceptance**: Sync triggers, board refreshes with new/updated cards.
 
-- [ ] 9. **Frontend Synced Card Treatment**
+- [x] 9. **Frontend Synced Card Treatment**
   **What**: Synced cards show GitHub icon, issue number, link to GitHub. Stale cards show warning indicator. Distinguish manual vs synced cards visually.
   **Files**: `client/src/components/board/KanbanCard.vue`
   **Acceptance**: Visual distinction clear between manual and synced cards.
 
-- [ ] 10. **Frontend API Client Extensions**
+- [x] 10. **Frontend API Client Extensions**
   **What**: Add source CRUD and sync API client functions.
   **Files**: `client/src/lib/board-api.ts`
   **Acceptance**: All new endpoints have typed client functions.
 
-- [ ] 11. **Frontend Tests**
+- [x] 11. **Frontend Tests**
   **What**: Tests for source management store logic and sync flow.
   **Files**: `client/src/stores/__tests__/board.test.ts`
   **Acceptance**: Tests pass with mocked API responses.
 
 ## Verification
-- [ ] `dotnet build src/WeaveFleet.Api` succeeds with no warnings
-- [ ] `dotnet test` — all tests pass
-- [ ] Frontend builds without errors
-- [ ] Frontend tests pass
-- [ ] Manual smoke test: add GitHub repo source → sync → issues appear in inbox → move card to another lane → re-sync → card stays in moved lane with updated metadata
+- [x] `dotnet build src/WeaveFleet.Api` succeeds with no warnings
+- [x] `dotnet test` — all tests pass
+- [x] Frontend builds without errors
+- [x] Frontend tests pass
+- [x] Manual smoke test: add GitHub repo source → sync → issues appear in inbox → move card to another lane → re-sync → card stays in moved lane with updated metadata

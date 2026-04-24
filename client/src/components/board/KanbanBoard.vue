@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import type { BoardSyncResult } from "@/lib/board-api";
 import type { BoardLaneWithCards } from "@/stores/board";
-import { computed, shallowRef } from "vue";
+import { computed, onBeforeUnmount, shallowRef } from "vue";
 import { storeToRefs } from "pinia";
+import BoardSourceConfig from "@/components/board/BoardSourceConfig.vue";
 import KanbanColumn from "@/components/board/KanbanColumn.vue";
 import { useBoardStore } from "@/stores/board";
 
@@ -25,6 +27,11 @@ interface DropCardPayload {
   index: number;
 }
 
+interface SyncFeedback {
+  title: string;
+  message: string;
+}
+
 const boardStore = useBoardStore();
 
 const {
@@ -45,6 +52,10 @@ const laneDraft = shallowRef("");
 const isEditingBoard = shallowRef(false);
 const boardNameDraft = shallowRef("");
 const draggedCard = shallowRef<DraggedCardState | null>(null);
+const isSyncing = shallowRef(false);
+const syncFeedback = shallowRef<SyncFeedback | null>(null);
+
+let syncFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
 
 const boardTitle = computed(() => board.value?.name ?? "Kanban Board");
 
@@ -89,6 +100,31 @@ const summaryItems = computed(() => {
 
 const showLoadingState = computed(() => isLoading.value && !isLoaded.value);
 const showEmptyState = computed(() => isLoaded.value && lanesWithCards.value.length === 0);
+const syncButtonLabel = computed(() => isSyncing.value ? "Syncing…" : "Sync now");
+
+onBeforeUnmount(() => {
+  clearSyncFeedbackTimer();
+});
+
+function clearSyncFeedbackTimer(): void {
+  if (syncFeedbackTimer !== null) {
+    clearTimeout(syncFeedbackTimer);
+    syncFeedbackTimer = null;
+  }
+}
+
+function showSyncFeedback(result: BoardSyncResult): void {
+  syncFeedback.value = {
+    title: "Board synced",
+    message: `${result.cardsCreated} added, ${result.cardsUpdated} updated, ${result.cardsMarkedStale} stale`,
+  };
+
+  clearSyncFeedbackTimer();
+  syncFeedbackTimer = setTimeout(() => {
+    syncFeedback.value = null;
+    syncFeedbackTimer = null;
+  }, 5_000);
+}
 
 function openAddLaneForm(): void {
   isAddingLane.value = true;
@@ -152,6 +188,28 @@ async function handleRetryLoad(): Promise<void> {
 
 function handleDismissError(): void {
   boardStore.clearError();
+}
+
+function handleDismissSyncFeedback(): void {
+  clearSyncFeedbackTimer();
+  syncFeedback.value = null;
+}
+
+async function handleSyncBoard(): Promise<void> {
+  if (!hasBoard.value || isSyncing.value) {
+    return;
+  }
+
+  isSyncing.value = true;
+
+  try {
+    const result = await boardStore.syncBoard();
+    showSyncFeedback(result);
+  } catch {
+    // Store error state is surfaced in the UI.
+  } finally {
+    isSyncing.value = false;
+  }
 }
 
 async function handleCreateCard(payload: CardDraftPayload): Promise<void> {
@@ -340,6 +398,17 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
 
       <div class="kanban-header__actions">
         <button
+          v-if="hasBoard"
+          type="button"
+          class="kanban-header__button"
+          data-testid="kanban-sync-button"
+          :disabled="showLoadingState || isMutating"
+          @click="handleSyncBoard"
+        >
+          {{ syncButtonLabel }}
+        </button>
+
+        <button
           v-if="hasBoard && !isEditingBoard"
           type="button"
           class="kanban-header__button"
@@ -373,6 +442,8 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
         <span class="kanban-summary__label">{{ item.label }}</span>
       </div>
     </section>
+
+    <BoardSourceConfig :board-id="board?.id ?? null" />
 
     <section
       v-if="isAddingLane"
@@ -410,6 +481,31 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
         </div>
       </form>
     </section>
+
+    <div
+      v-if="syncFeedback"
+      class="kanban-toast"
+      role="status"
+      aria-live="polite"
+      data-testid="kanban-sync-feedback"
+    >
+      <div class="kanban-toast__copy">
+        <p class="kanban-toast__title">
+          {{ syncFeedback.title }}
+        </p>
+        <p class="kanban-toast__message">
+          {{ syncFeedback.message }}
+        </p>
+      </div>
+      <button
+        type="button"
+        class="kanban-toast__button"
+        aria-label="Dismiss sync feedback"
+        @click="handleDismissSyncFeedback"
+      >
+        Dismiss
+      </button>
+    </div>
 
     <div
       v-if="error"
@@ -693,6 +789,52 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
   background: rgba(127, 29, 29, 0.22);
 }
 
+.kanban-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 12px 24px 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(96, 165, 250, 0.4);
+  border-radius: var(--radius-card);
+  background: rgba(30, 64, 175, 0.2);
+}
+
+.kanban-toast__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kanban-toast__title,
+.kanban-toast__message {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #dbeafe;
+}
+
+.kanban-toast__title {
+  font-weight: 700;
+}
+
+.kanban-toast__button {
+  border: 1px solid rgba(191, 219, 254, 0.45);
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: #dbeafe;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 14px;
+  cursor: pointer;
+}
+
+.kanban-toast__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .kanban-banner__copy {
   margin: 0;
   font-size: 13px;
@@ -758,6 +900,11 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
   }
 
   .kanban-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .kanban-toast {
     flex-direction: column;
     align-items: stretch;
   }

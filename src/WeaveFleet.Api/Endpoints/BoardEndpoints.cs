@@ -1,5 +1,8 @@
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
+using System.Text.Json;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
@@ -75,6 +78,121 @@ public static class BoardEndpoints
         .Produces(204)
         .Produces(404)
         .WithName("DeleteBoard");
+
+        group.MapGet("/{boardId}/sources", async (string boardId, IBoardRepository boardRepository, IUserContext userContext) =>
+        {
+            var board = await boardRepository.GetByIdAsync(boardId, userContext.UserId);
+            if (board is null)
+                return NotFound("Board not found.");
+
+            var sources = await boardRepository.GetSourcesByBoardIdAsync(boardId, userContext.UserId);
+            return Results.Ok(sources.Select(ToResponse).ToList());
+        })
+        .Produces<List<BoardSourceResponse>>(200)
+        .Produces(404)
+        .WithName("GetBoardSources");
+
+        group.MapPost("/{boardId}/sources", async (string boardId, CreateBoardSourceRequest req, IBoardRepository boardRepository, IUserContext userContext) =>
+        {
+            var board = await boardRepository.GetByIdAsync(boardId, userContext.UserId);
+            if (board is null)
+                return NotFound("Board not found.");
+
+            var providerType = NormalizeRequired(req.ProviderType);
+            if (providerType is null)
+                return Results.BadRequest(new { error = "Source providerType is required." });
+
+            var configResult = NormalizeJsonObject(req.Config, "Source config is required.");
+            if (configResult.IsFailure)
+                return Results.BadRequest(new { error = configResult.Error.Description });
+
+            var now = DateTimeOffset.UtcNow.ToString("O");
+            var source = new BoardSource
+            {
+                Id = Guid.NewGuid().ToString(),
+                BoardId = boardId,
+                ProviderType = providerType,
+                Config = configResult.Value,
+                LastSyncAt = null,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            await boardRepository.InsertSourceAsync(source);
+
+            var createdSource = await GetSourceByIdAsync(boardRepository, boardId, source.Id, userContext.UserId) ?? source;
+            return Results.Created($"/api/boards/{boardId}/sources/{createdSource.Id}", ToResponse(createdSource));
+        })
+        .Produces<BoardSourceResponse>(201)
+        .Produces(400)
+        .Produces(404)
+        .WithName("CreateBoardSource");
+
+        group.MapPatch("/{boardId}/sources/{sourceId}", async (string boardId, string sourceId, UpdateBoardSourceRequest req, IBoardRepository boardRepository, IUserContext userContext) =>
+        {
+            var source = await GetSourceByIdAsync(boardRepository, boardId, sourceId, userContext.UserId);
+            if (source is null)
+                return NotFound("Source not found.");
+
+            if (req.ProviderType is not null && NormalizeRequired(req.ProviderType) is null)
+                return Results.BadRequest(new { error = "Source providerType is required." });
+
+            Result<string>? configResult = null;
+            if (req.Config is not null)
+            {
+                configResult = NormalizeJsonObject(req.Config, "Source config is required.");
+                if (configResult.IsFailure)
+                    return Results.BadRequest(new { error = configResult.Error.Description });
+            }
+
+            var updatedSource = new BoardSource
+            {
+                Id = source.Id,
+                BoardId = source.BoardId,
+                ProviderType = req.ProviderType is null ? source.ProviderType : req.ProviderType.Trim(),
+                Config = configResult?.Value ?? source.Config,
+                LastSyncAt = source.LastSyncAt,
+                CreatedAt = source.CreatedAt,
+                UpdatedAt = DateTimeOffset.UtcNow.ToString("O")
+            };
+
+            await boardRepository.UpdateSourceAsync(updatedSource);
+
+            var persistedSource = await GetSourceByIdAsync(boardRepository, boardId, sourceId, userContext.UserId) ?? updatedSource;
+            return Results.Ok(ToResponse(persistedSource));
+        })
+        .Produces<BoardSourceResponse>(200)
+        .Produces(400)
+        .Produces(404)
+        .WithName("UpdateBoardSource");
+
+        group.MapDelete("/{boardId}/sources/{sourceId}", async (string boardId, string sourceId, IBoardRepository boardRepository, IUserContext userContext) =>
+        {
+            var source = await GetSourceByIdAsync(boardRepository, boardId, sourceId, userContext.UserId);
+            if (source is null)
+                return NotFound("Source not found.");
+
+            var deleted = await boardRepository.DeleteSourceAsync(boardId, sourceId, userContext.UserId);
+            return deleted
+                ? Results.NoContent()
+                : NotFound("Source not found.");
+        })
+        .Produces(204)
+        .Produces(404)
+        .WithName("DeleteBoardSource");
+
+        group.MapPost("/{boardId}/sync", async (string boardId, IBoardSyncService boardSyncService, CancellationToken cancellationToken) =>
+        {
+            var result = await boardSyncService.SyncAsync(boardId, cancellationToken);
+            return result.Match<IResult>(
+                value => Results.Ok(ToResponse(value)),
+                error => error.ToBoardApiResult());
+        })
+        .Produces<BoardSyncResponse>(200)
+        .Produces(400)
+        .Produces(401)
+        .Produces(404)
+        .WithName("SyncBoard");
 
         group.MapGet("/{boardId}/lanes", async (string boardId, IBoardRepository boardRepository, IUserContext userContext) =>
         {
@@ -382,15 +500,48 @@ public static class BoardEndpoints
     private static BoardLaneResponse ToResponse(BoardLane lane) =>
         new(lane.Id, lane.BoardId, lane.Name, lane.Position, lane.IsInbox, lane.CreatedAt, lane.UpdatedAt);
 
+    private static BoardSourceResponse ToResponse(BoardSource source) =>
+        new(source.Id, source.BoardId, source.ProviderType, source.Config, source.LastSyncAt, source.CreatedAt, source.UpdatedAt);
+
     private static BoardCardResponse ToResponse(BoardCard card) =>
         new(card.Id, card.BoardId, card.LaneId, card.Title, card.SourceType, card.SourceKey, card.Metadata, card.Position, card.ArchivedAt, card.CreatedAt, card.UpdatedAt);
+
+    private static BoardSyncResponse ToResponse(BoardSyncResult result) =>
+        new(result.SourcesProcessed, result.IssuesFetched, result.CardsCreated, result.CardsUpdated, result.CardsMarkedStale, result.SyncedAt);
 
     private static IResult NotFound(string message) => Results.NotFound(new { error = message });
 
     private static string? NormalizeRequired(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private static Result<string> NormalizeJsonObject(string? value, string requiredMessage)
+    {
+        var normalized = NormalizeRequired(value);
+        if (normalized is null)
+            return FleetError.ValidationError(nameof(BoardSource.Config), requiredMessage);
+
+        try
+        {
+            if (JsonNode.Parse(normalized) is not JsonObject)
+            {
+                return FleetError.ValidationError(
+                    nameof(BoardSource.Config),
+                    "Source config must be a JSON object.");
+            }
+
+            return Result.Success(normalized);
+        }
+        catch (JsonException ex)
+        {
+            return FleetError.ValidationError(nameof(BoardSource.Config), $"Source config is invalid JSON: {ex.Message}");
+        }
+    }
+
     private static bool IsValidPosition(int? position) => position is null || position.Value >= 0;
+
+    private static async Task<BoardSource?> GetSourceByIdAsync(IBoardRepository boardRepository, string boardId, string sourceId, string userId)
+        => (await boardRepository.GetSourcesByBoardIdAsync(boardId, userId))
+            .FirstOrDefault(source => string.Equals(source.Id, sourceId, StringComparison.Ordinal));
 
     private static async Task ReorderLaneAsync(IBoardRepository boardRepository, string boardId, string laneId, string userId, int position)
     {
@@ -420,6 +571,12 @@ internal sealed record CreateBoardRequest(string? Name);
 internal sealed record UpdateBoardRequest(string? Name);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record CreateBoardSourceRequest(string? ProviderType, string? Config);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record UpdateBoardSourceRequest(string? ProviderType, string? Config);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record CreateBoardLaneRequest(string? Name, int? Position);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -441,6 +598,15 @@ internal sealed record BoardResponse(string Id, string Name, string CreatedAt, s
 
 internal sealed record BoardLaneResponse(string Id, string BoardId, string Name, int Position, bool IsInbox, string CreatedAt, string UpdatedAt);
 
+internal sealed record BoardSourceResponse(
+    string Id,
+    string BoardId,
+    string ProviderType,
+    string Config,
+    string? LastSyncAt,
+    string CreatedAt,
+    string UpdatedAt);
+
 internal sealed record BoardCardResponse(
     string Id,
     string BoardId,
@@ -453,3 +619,28 @@ internal sealed record BoardCardResponse(
     string? ArchivedAt,
     string CreatedAt,
     string UpdatedAt);
+
+internal sealed record BoardSyncResponse(
+    int SourcesProcessed,
+    int IssuesFetched,
+    int CardsCreated,
+    int CardsUpdated,
+    int CardsMarkedStale,
+    string SyncedAt);
+
+file static class BoardFleetErrorExtensions
+{
+    public static IResult ToBoardApiResult(this FleetError error) =>
+        error.Code switch
+        {
+            var code when code.EndsWith(".NotFound", StringComparison.Ordinal) || code == "General.NotFound"
+                => Results.NotFound(new { error = error.Description }),
+            "General.Unauthorized"
+                => Results.Unauthorized(),
+            "General.Conflict"
+                => Results.Conflict(new { error = error.Description }),
+            var code when code.StartsWith("Validation.", StringComparison.Ordinal)
+                => Results.BadRequest(new { error = error.Description }),
+            _ => Results.Problem(error.Description)
+        };
+}

@@ -20,6 +20,18 @@ function createBoardCard(overrides: Partial<BoardCard> = {}): BoardCard {
   };
 }
 
+function createGitHubMetadata(overrides: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    number: 42,
+    state: "open",
+    labels: ["bug", "urgent"],
+    assignee: "hubot",
+    html_url: "https://github.com/acme/rocket/issues/42",
+    updated_at: "2026-02-27T10:03:00Z",
+    ...overrides,
+  });
+}
+
 describe("KanbanCard", () => {
   it("renders the card summary and metadata", () => {
     const wrapper = mount(KanbanCard, {
@@ -49,6 +61,48 @@ describe("KanbanCard", () => {
 
     expect(wrapper.get(".k-card").classes()).toContain("k-card--manual");
     expect(wrapper.get(".k-card").classes()).toContain("k-card--dragging");
+    expect(wrapper.get(".k-card").classes()).not.toContain("k-card--synced");
     expect(wrapper.get(".k-card").attributes("draggable")).toBe("true");
+  });
+
+  it("renders synced GitHub card treatment with outbound link", () => {
+    const wrapper = mount(KanbanCard, {
+      props: {
+        card: createBoardCard({
+          sourceType: "github",
+          sourceKey: "github:acme/rocket#42",
+          metadata: createGitHubMetadata(),
+        }),
+        isDragging: false,
+        isMutating: false,
+      },
+    });
+
+    expect(wrapper.get(".k-card").classes()).toContain("k-card--synced");
+    expect(wrapper.get(".k-card").classes()).not.toContain("k-card--manual");
+    expect(wrapper.get(".k-card__source-pill").text()).toBe("GitHub sync");
+    expect(wrapper.get(".k-card__sync-pill").text()).toContain("Issue #42");
+    expect(wrapper.get(".k-card__github-link").attributes("href")).toBe("https://github.com/acme/rocket/issues/42");
+    expect(wrapper.text()).toContain("open");
+    expect(wrapper.text()).toContain("hubot");
+    expect(wrapper.text()).toContain("bug");
+    expect(wrapper.text()).toContain("urgent");
+  });
+
+  it("shows stale indicator for stale synced cards", () => {
+    const wrapper = mount(KanbanCard, {
+      props: {
+        card: createBoardCard({
+          sourceType: "github",
+          sourceKey: "github:acme/rocket#42",
+          metadata: createGitHubMetadata({ stale: true }),
+        }),
+        isDragging: false,
+        isMutating: false,
+      },
+    });
+
+    expect(wrapper.get(".k-card__stale-pill").text()).toContain("Stale");
+    expect(wrapper.get(".k-card__stale-pill").attributes("aria-label")).toBe("Sync is stale");
   });
 });

@@ -10,6 +10,11 @@ public interface IBoardRepository
     Task UpdateAsync(Board board);
     Task<bool> DeleteAsync(string id, string userId);
 
+    Task<IReadOnlyList<BoardSource>> GetSourcesByBoardIdAsync(string boardId, string userId);
+    Task InsertSourceAsync(BoardSource source);
+    Task UpdateSourceAsync(BoardSource source);
+    Task<bool> DeleteSourceAsync(string boardId, string sourceId, string userId);
+
     Task<BoardLane?> GetLaneByIdAsync(string boardId, string laneId, string userId);
     Task<IReadOnlyList<BoardLane>> ListLanesAsync(string boardId, string userId);
     Task InsertLaneAsync(BoardLane lane);

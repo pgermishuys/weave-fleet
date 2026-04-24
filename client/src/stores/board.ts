@@ -14,6 +14,7 @@ import {
   listBoards,
   moveBoardCard as moveBoardCardRequest,
   reorderBoardLanes as reorderBoardLanesRequest,
+  syncBoard as syncBoardRequest,
   updateBoard as updateBoardRequest,
   updateBoardCard as updateBoardCardRequest,
   updateBoardLane as updateBoardLaneRequest,
@@ -22,6 +23,7 @@ import type {
   Board as ApiBoard,
   BoardCard as ApiBoardCard,
   BoardLane as ApiBoardLane,
+  BoardSyncResult,
   CreateBoardCardRequest,
   CreateBoardLaneRequest,
   MoveBoardCardRequest,
@@ -566,6 +568,15 @@ export const useBoardStore = defineStore("board", () => {
     await loadBoard();
   }
 
+  async function syncBoard(): Promise<BoardSyncResult> {
+    return runMutation(async () => {
+      const nextBoardId = requireBoardId();
+      const syncResult = await syncBoardRequest(nextBoardId);
+      await Promise.all([refreshLanes(), refreshCards()]);
+      return syncResult;
+    });
+  }
+
   function clearError(): void {
     error.value = null;
   }
@@ -804,6 +815,7 @@ export const useBoardStore = defineStore("board", () => {
     pendingMutations,
     loadBoard,
     reloadBoard,
+    syncBoard,
     clearError,
     getLaneById,
     getCardById,

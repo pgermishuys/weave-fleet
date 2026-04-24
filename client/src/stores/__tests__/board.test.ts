@@ -26,6 +26,7 @@ const boardApiMocks = vi.hoisted(() => ({
   listBoards: vi.fn(),
   moveBoardCard: vi.fn(),
   reorderBoardLanes: vi.fn(),
+  syncBoard: vi.fn(),
   updateBoard: vi.fn(),
   updateBoardCard: vi.fn(),
   updateBoardLane: vi.fn(),
@@ -44,6 +45,7 @@ vi.mock("@/lib/board-api", () => ({
   listBoards: boardApiMocks.listBoards,
   moveBoardCard: boardApiMocks.moveBoardCard,
   reorderBoardLanes: boardApiMocks.reorderBoardLanes,
+  syncBoard: boardApiMocks.syncBoard,
   updateBoard: boardApiMocks.updateBoard,
   updateBoardCard: boardApiMocks.updateBoardCard,
   updateBoardLane: boardApiMocks.updateBoardLane,
@@ -394,6 +396,44 @@ function configureBoardApiMocks(): void {
 
     return moveCardInState(cardId, request);
   });
+
+  boardApiMocks.syncBoard.mockImplementation(async (boardId: string) => {
+    const board = mockState.boards.find((candidate) => candidate.id === boardId);
+    if (!board) {
+      throw new Error("Board not found.");
+    }
+
+    const syncedCard = createCardFixture({
+      id: "card-synced",
+      boardId,
+      laneId: "lane-backlog",
+      title: "Synced issue from GitHub",
+      sourceType: "github",
+      sourceKey: "github:acme/rocket#88",
+      position: POSITION_GAP * 2,
+      createdAt: createTimestamp(63),
+      updatedAt: createTimestamp(63),
+    });
+
+    const existingCard = mockState.cards.find((candidate) => candidate.id === "card-doing");
+    if (existingCard) {
+      existingCard.title = "Sync board store with API (updated)";
+      existingCard.updatedAt = createTimestamp(64);
+    }
+
+    mockState.cards.push(syncedCard);
+    normalizeCardPositions("lane-backlog");
+    normalizeCardPositions("lane-doing");
+
+    return {
+      sourcesProcessed: 1,
+      issuesFetched: 2,
+      cardsCreated: 1,
+      cardsUpdated: 1,
+      cardsMarkedStale: 0,
+      syncedAt: createTimestamp(65),
+    };
+  });
 }
 
 describe("useBoardStore", () => {
@@ -509,5 +549,115 @@ describe("useBoardStore", () => {
     expect(store.getCardById("card-backlog")?.laneId).toBe(originalLaneId);
     expect(store.getCardsForLane("lane-review").map((card) => card.id)).toEqual(["card-review"]);
     expect(store.error).toBe("Card move failed.");
+  });
+
+  it("syncs the board and refreshes lanes and cards from the API", async () => {
+    boardApiMocks.syncBoard.mockImplementationOnce(async (boardId: string) => {
+      const board = mockState.boards.find((candidate) => candidate.id === boardId);
+      if (!board) {
+        throw new Error("Board not found.");
+      }
+
+      mockState.lanes = mockState.lanes.map((lane) => {
+        if (lane.id === "lane-backlog") {
+          return {
+            ...lane,
+            name: "Triage",
+            isInbox: false,
+            updatedAt: createTimestamp(63),
+          };
+        }
+
+        if (lane.id === "lane-doing") {
+          return {
+            ...lane,
+            isInbox: true,
+            updatedAt: createTimestamp(64),
+          };
+        }
+
+        return lane;
+      });
+
+      const syncedCard = createCardFixture({
+        id: "card-synced",
+        boardId,
+        laneId: "lane-backlog",
+        title: "Synced issue from GitHub",
+        sourceType: "github",
+        sourceKey: "github:acme/rocket#88",
+        position: POSITION_GAP * 2,
+        createdAt: createTimestamp(65),
+        updatedAt: createTimestamp(65),
+      });
+
+      const existingCard = mockState.cards.find((candidate) => candidate.id === "card-doing");
+      if (existingCard) {
+        existingCard.title = "Sync board store with API (updated)";
+        existingCard.updatedAt = createTimestamp(66);
+      }
+
+      mockState.cards.push(syncedCard);
+      normalizeCardPositions("lane-backlog");
+      normalizeCardPositions("lane-doing");
+
+      return {
+        sourcesProcessed: 1,
+        issuesFetched: 2,
+        cardsCreated: 1,
+        cardsUpdated: 1,
+        cardsMarkedStale: 0,
+        syncedAt: createTimestamp(67),
+      };
+    });
+
+    const store = useBoardStore();
+    await flushPromises();
+
+    const result = await store.syncBoard();
+
+    expect(boardApiMocks.syncBoard).toHaveBeenCalledWith("board-1");
+    expect(boardApiMocks.listBoardLanes).toHaveBeenCalledTimes(2);
+    expect(boardApiMocks.listBoardCards).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({
+      sourcesProcessed: 1,
+      issuesFetched: 2,
+      cardsCreated: 1,
+      cardsUpdated: 1,
+      cardsMarkedStale: 0,
+      syncedAt: createTimestamp(67),
+    });
+    expect(store.inboxLane?.id).toBe("lane-doing");
+    expect(store.sortedLanes.map((lane) => [lane.id, lane.name, lane.isInbox])).toEqual([
+      ["lane-backlog", "Triage", false],
+      ["lane-doing", "In Progress", true],
+      ["lane-review", "Review", false],
+      ["lane-done", "Done", false],
+    ]);
+    expect(store.getCardsForLane("lane-backlog").map((card) => card.title)).toEqual([
+      "Capture manual QA notes",
+      "Synced issue from GitHub",
+    ]);
+    expect(store.getCardById("card-doing")?.title).toBe("Sync board store with API (updated)");
+  });
+
+  it("surfaces sync errors without clearing the current board state", async () => {
+    const store = useBoardStore();
+    await flushPromises();
+
+    boardApiMocks.syncBoard.mockRejectedValueOnce(new Error("Board sync failed."));
+
+    const initialLaneSnapshot = store.sortedLanes.map((lane) => ({ ...lane }));
+    const initialBacklogCards = store.getCardsForLane("lane-backlog").map((card) => ({ ...card }));
+
+    await expect(store.syncBoard()).rejects.toThrow("Board sync failed.");
+
+    expect(boardApiMocks.syncBoard).toHaveBeenCalledWith("board-1");
+    expect(boardApiMocks.listBoardLanes).toHaveBeenCalledTimes(1);
+    expect(boardApiMocks.listBoardCards).toHaveBeenCalledTimes(1);
+    expect(store.error).toBe("Board sync failed.");
+    expect(store.sortedLanes).toEqual(initialLaneSnapshot);
+    expect(store.getCardsForLane("lane-backlog")).toEqual(initialBacklogCards);
+    expect(store.getCardById("card-synced")).toBeNull();
   });
 });

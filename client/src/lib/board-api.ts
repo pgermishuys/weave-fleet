@@ -17,6 +17,16 @@ export interface BoardLane {
   updatedAt: string;
 }
 
+export interface BoardSource {
+  id: string;
+  boardId: string;
+  providerType: string;
+  config: string;
+  lastSyncAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface BoardCard {
   id: string;
   boardId: string;
@@ -31,12 +41,31 @@ export interface BoardCard {
   updatedAt: string;
 }
 
+export interface BoardSyncResult {
+  sourcesProcessed: number;
+  issuesFetched: number;
+  cardsCreated: number;
+  cardsUpdated: number;
+  cardsMarkedStale: number;
+  syncedAt: string;
+}
+
 export interface CreateBoardRequest {
   name: string;
 }
 
 export interface UpdateBoardRequest {
   name: string;
+}
+
+export interface CreateBoardSourceRequest {
+  providerType: string;
+  config: string;
+}
+
+export interface UpdateBoardSourceRequest {
+  providerType?: string;
+  config?: string;
 }
 
 export interface CreateBoardLaneRequest {
@@ -87,6 +116,14 @@ function buildBoardByIdPath(boardId: string): string {
 
 function buildBoardLanesPath(boardId: string): string {
   return `${buildBoardByIdPath(boardId)}/lanes`;
+}
+
+function buildBoardSourcesPath(boardId: string): string {
+  return `${buildBoardByIdPath(boardId)}/sources`;
+}
+
+function buildBoardSourceByIdPath(boardId: string, sourceId: string): string {
+  return `${buildBoardSourcesPath(boardId)}/${encodeURIComponent(sourceId)}`;
 }
 
 function buildBoardLaneByIdPath(boardId: string, laneId: string): string {
@@ -179,6 +216,41 @@ export async function updateBoard(boardId: string, request: UpdateBoardRequest):
 
 export async function deleteBoard(boardId: string): Promise<void> {
   return sendNoContent(buildBoardByIdPath(boardId), "DELETE", "Failed to delete board.");
+}
+
+export async function listBoardSources(boardId: string): Promise<BoardSource[]> {
+  return getJson<BoardSource[]>(buildBoardSourcesPath(boardId), "Failed to load board sources.");
+}
+
+export async function createBoardSource(boardId: string, request: CreateBoardSourceRequest): Promise<BoardSource> {
+  return sendJson<CreateBoardSourceRequest, BoardSource>(
+    buildBoardSourcesPath(boardId),
+    "POST",
+    request,
+    "Failed to create board source.",
+  );
+}
+
+export async function updateBoardSource(boardId: string, sourceId: string, request: UpdateBoardSourceRequest): Promise<BoardSource> {
+  return sendJson<UpdateBoardSourceRequest, BoardSource>(
+    buildBoardSourceByIdPath(boardId, sourceId),
+    "PATCH",
+    request,
+    "Failed to update board source.",
+  );
+}
+
+export async function deleteBoardSource(boardId: string, sourceId: string): Promise<void> {
+  return sendNoContent(buildBoardSourceByIdPath(boardId, sourceId), "DELETE", "Failed to delete board source.");
+}
+
+export async function syncBoard(boardId: string): Promise<BoardSyncResult> {
+  return sendJson<Record<string, never>, BoardSyncResult>(
+    `${buildBoardByIdPath(boardId)}/sync`,
+    "POST",
+    {},
+    "Failed to sync board.",
+  );
 }
 
 export async function listBoardLanes(boardId: string): Promise<BoardLane[]> {

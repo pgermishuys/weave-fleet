@@ -48,6 +48,68 @@ public sealed class BoardRepositoryTests
     }
 
     [Fact]
+    public async Task SourceCrud_RespectsUserScope()
+    {
+        var (keeper, repo) = await CreateAsync();
+        using var _ = keeper;
+
+        var board = CreateBoard("Board");
+        await repo.InsertAsync(board);
+
+        var source = CreateSource(board.Id, "github", "{\"repository\":\"weave/fleet\"}");
+        await repo.InsertSourceAsync(source);
+
+        var insertedSources = await repo.GetSourcesByBoardIdAsync(board.Id, TestUserContext.DefaultUserId);
+        insertedSources.Count.ShouldBe(1);
+        insertedSources[0].Id.ShouldBe(source.Id);
+        insertedSources[0].ProviderType.ShouldBe("github");
+        insertedSources[0].Config.ShouldBe("{\"repository\":\"weave/fleet\"}");
+        insertedSources[0].LastSyncAt.ShouldBeNull();
+
+        var otherUserSources = await repo.GetSourcesByBoardIdAsync(board.Id, "other-user");
+        otherUserSources.ShouldBeEmpty();
+
+        source.ProviderType = "github-enterprise";
+        source.Config = "{\"repository\":\"weave/fleet\",\"label\":\"bug\"}";
+        source.LastSyncAt = UtcNow();
+        source.UpdatedAt = UtcNow();
+        await repo.UpdateSourceAsync(source);
+
+        var updatedSources = await repo.GetSourcesByBoardIdAsync(board.Id, TestUserContext.DefaultUserId);
+        updatedSources.Count.ShouldBe(1);
+        updatedSources[0].ProviderType.ShouldBe("github-enterprise");
+        updatedSources[0].Config.ShouldBe("{\"repository\":\"weave/fleet\",\"label\":\"bug\"}");
+        updatedSources[0].LastSyncAt.ShouldBe(source.LastSyncAt);
+
+        var deletedByOtherUser = await repo.DeleteSourceAsync(board.Id, source.Id, "other-user");
+        deletedByOtherUser.ShouldBeFalse();
+
+        var deleted = await repo.DeleteSourceAsync(board.Id, source.Id, TestUserContext.DefaultUserId);
+        deleted.ShouldBeTrue();
+
+        var remainingSources = await repo.GetSourcesByBoardIdAsync(board.Id, TestUserContext.DefaultUserId);
+        remainingSources.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task InsertSourceAsync_WhenBoardBelongsToAnotherUser_DoesNotPersistSource()
+    {
+        var (keeper, repo) = await CreateAsync();
+        using var _ = keeper;
+
+        var board = CreateBoard("Board");
+        await repo.InsertAsync(board);
+
+        var otherUserRepo = new BoardRepository(CreateFactory(keeper), new TestUserContext("other-user"));
+        var source = CreateSource(board.Id, "github", "{}");
+
+        await otherUserRepo.InsertSourceAsync(source);
+
+        var sources = await repo.GetSourcesByBoardIdAsync(board.Id, TestUserContext.DefaultUserId);
+        sources.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task LaneOperations_MaintainSingleInboxAndRebalanceOrder()
     {
         var (keeper, repo) = await CreateAsync();
@@ -271,6 +333,9 @@ public sealed class BoardRepositoryTests
         return (keeper, repo);
     }
 
+    private static TestDbHelper.SharedCacheFactory CreateFactory(SqliteConnection keeper)
+        => new(keeper.ConnectionString);
+
     private static Board CreateBoard(string name)
         => CreateBoard(Guid.NewGuid().ToString(), TestUserContext.DefaultUserId, name);
 
@@ -292,6 +357,18 @@ public sealed class BoardRepositoryTests
             Name = name,
             Position = 0,
             IsInbox = isInbox,
+            CreatedAt = UtcNow(),
+            UpdatedAt = UtcNow()
+        };
+
+    private static BoardSource CreateSource(string boardId, string providerType, string config)
+        => new()
+        {
+            Id = Guid.NewGuid().ToString(),
+            BoardId = boardId,
+            ProviderType = providerType,
+            Config = config,
+            LastSyncAt = null,
             CreatedAt = UtcNow(),
             UpdatedAt = UtcNow()
         };

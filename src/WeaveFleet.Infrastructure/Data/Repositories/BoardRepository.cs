@@ -80,6 +80,94 @@ public sealed class BoardRepository(
         return rows > 0;
     }
 
+    public async Task<IReadOnlyList<BoardSource>> GetSourcesByBoardIdAsync(string boardId, string userId)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        var results = await conn.QueryAsync<BoardSource>(
+            """
+            SELECT source.*
+            FROM board_sources source
+            INNER JOIN boards board ON board.id = source.board_id
+            WHERE source.board_id = @BoardId
+              AND board.user_id = @UserId
+            ORDER BY source.created_at ASC, source.id ASC
+            """,
+            new { BoardId = boardId, UserId = userId });
+        return results.AsList();
+    }
+
+    public async Task InsertSourceAsync(BoardSource source)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO board_sources (id, board_id, provider_type, config, last_sync_at, created_at, updated_at)
+            SELECT @Id, @BoardId, @ProviderType, @Config, @LastSyncAt, @CreatedAt, @UpdatedAt
+            FROM boards board
+            WHERE board.id = @BoardId
+              AND board.user_id = @UserId
+            """,
+            new
+            {
+                source.Id,
+                source.BoardId,
+                source.ProviderType,
+                source.Config,
+                source.LastSyncAt,
+                source.CreatedAt,
+                source.UpdatedAt,
+                UserId = userContext.UserId
+            });
+    }
+
+    public async Task UpdateSourceAsync(BoardSource source)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteAsync(
+            """
+            UPDATE board_sources
+            SET provider_type = @ProviderType,
+                config = @Config,
+                last_sync_at = @LastSyncAt,
+                updated_at = @UpdatedAt
+            WHERE id = @Id
+              AND board_id = @BoardId
+              AND EXISTS (
+                  SELECT 1
+                  FROM boards board
+                  WHERE board.id = @BoardId
+                    AND board.user_id = @UserId)
+            """,
+            new
+            {
+                source.Id,
+                source.BoardId,
+                source.ProviderType,
+                source.Config,
+                source.LastSyncAt,
+                source.UpdatedAt,
+                UserId = userContext.UserId
+            });
+    }
+
+    public async Task<bool> DeleteSourceAsync(string boardId, string sourceId, string userId)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        var rows = await conn.ExecuteAsync(
+            """
+            DELETE FROM board_sources
+            WHERE id = @SourceId
+              AND board_id = @BoardId
+              AND EXISTS (
+                  SELECT 1
+                  FROM boards board
+                  WHERE board.id = @BoardId
+                    AND board.user_id = @UserId)
+            """,
+            new { BoardId = boardId, SourceId = sourceId, UserId = userId });
+        return rows > 0;
+    }
+
     public async Task<BoardLane?> GetLaneByIdAsync(string boardId, string laneId, string userId)
     {
         using var conn = connectionFactory.CreateConnection();
