@@ -66,6 +66,7 @@ public static class DependencyInjection
         services.AddScoped<IMessageRepository, DapperMessageRepository>();
         services.AddScoped<IOutboxRepository, DapperOutboxRepository>();
         services.AddScoped<IUserRepository, DapperUserRepository>();
+        services.AddScoped<IBoardRepository, BoardRepository>();
 
         // Credential storage — user-scoped repositories and application services
         services.AddScoped<IUserCredentialRepository, DapperUserCredentialRepository>();

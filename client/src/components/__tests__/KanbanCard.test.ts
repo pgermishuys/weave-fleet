@@ -1,60 +1,54 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import KanbanCard from "@/components/board/KanbanCard.vue";
-import type { BoardSession } from "@/stores/board";
+import type { BoardCard } from "@/stores/board";
 
-function createBoardSession(overrides: Partial<BoardSession> = {}): BoardSession {
+function createBoardCard(overrides: Partial<BoardCard> = {}): BoardCard {
   return {
-    id: "session-1",
+    id: "card-1",
+    boardId: "board-1",
+    laneId: "lane-1",
     title: "Ship the Vue migration",
-    projectName: "Frontend",
-    projectColor: "#ff00aa",
-    status: "error",
-    agent: "shuttle",
-    modelName: "GPT-5.4 Mini",
-    createdAt: new Date("2026-02-27T10:00:00Z"),
-    completedAt: new Date("2026-02-27T10:05:00Z"),
-    prompt: "Migrate the board to Vue",
-    totalTokens: 12_300,
-    cost: 1.25,
-    durationSeconds: 125,
-    progressPercent: 82,
-    progressLabel: "9/11 tasks",
+    sourceType: null,
+    sourceKey: "manual-task-1",
+    metadata: "Migrate the board to Vue",
+    position: 1024,
+    archivedAt: null,
+    createdAt: "2026-02-27T10:00:00Z",
+    updatedAt: "2026-02-27T10:05:00Z",
     ...overrides,
   };
 }
 
 describe("KanbanCard", () => {
-  it("renders the session summary and formatted metrics", () => {
+  it("renders the card summary and metadata", () => {
     const wrapper = mount(KanbanCard, {
       props: {
-        session: createBoardSession(),
+        card: createBoardCard(),
+        isDragging: false,
+        isMutating: false,
       },
     });
 
     expect(wrapper.get(".k-card__title").text()).toBe("Ship the Vue migration");
-    expect(wrapper.get(".k-card__status").text()).toBe("Error");
-    expect(wrapper.text()).toContain("Frontend");
-    expect(wrapper.text()).toContain("shuttle");
-    expect(wrapper.text()).toContain("GPT-5.4 Mini");
-    expect(wrapper.text()).toContain("9/11 tasks");
-    expect(wrapper.text()).toContain("82%");
-    expect(wrapper.text()).toContain("12.3k");
-    expect(wrapper.text()).toContain("2m 5s");
-    expect(wrapper.text()).toContain("$1.25");
+    expect(wrapper.get(".k-card__source-pill").text()).toBe("Manual");
+    expect(wrapper.text()).toContain("Migrate the board to Vue");
+    expect(wrapper.text()).toContain("manual-task-1");
+    expect(wrapper.text()).toContain("1024");
+    expect(wrapper.text()).toContain("Updated");
   });
 
-  it("applies status and progress styles for failed cards", () => {
+  it("applies drag and manual styling", () => {
     const wrapper = mount(KanbanCard, {
       props: {
-        session: createBoardSession(),
+        card: createBoardCard(),
+        isDragging: true,
+        isMutating: false,
       },
     });
 
-    expect(wrapper.get(".k-card").classes()).toContain("failed-card");
-    expect(wrapper.get(".k-card").attributes("style")).toContain("border-left-color: var(--error)");
-    expect(wrapper.get(".k-progress").attributes("style")).toContain("width: 82%");
-    expect(wrapper.get(".k-progress").attributes("style")).toContain("background-color: var(--error)");
-    expect(wrapper.get(".k-card__project-dot").attributes("style")).toContain("background-color: rgb(255, 0, 170)");
+    expect(wrapper.get(".k-card").classes()).toContain("k-card--manual");
+    expect(wrapper.get(".k-card").classes()).toContain("k-card--dragging");
+    expect(wrapper.get(".k-card").attributes("draggable")).toBe("true");
   });
 });

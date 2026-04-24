@@ -22,6 +22,7 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
 {
     private readonly string _dbPath;
     private readonly string _analyticsDbPath;
+    private readonly bool _ownsDatabaseFiles;
     private string? _kestrelUrl;
     private IHost? _host;
 
@@ -30,6 +31,14 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
         var guid = Guid.NewGuid().ToString("N");
         _dbPath = Path.Combine(Path.GetTempPath(), $"weave-fleet-test-{guid}.db");
         _analyticsDbPath = Path.Combine(Path.GetTempPath(), $"weave-fleet-analytics-test-{guid}.db");
+        _ownsDatabaseFiles = true;
+    }
+
+    internal FleetWebApplicationFactory(string databasePath, string analyticsDatabasePath)
+    {
+        _dbPath = databasePath;
+        _analyticsDbPath = analyticsDatabasePath;
+        _ownsDatabaseFiles = false;
     }
 
     /// <summary>The <see cref="TestHarness.TestHarness"/> singleton registered in this factory's DI container.</summary>
@@ -217,6 +226,9 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
     public new async ValueTask DisposeAsync()
     {
         await base.DisposeAsync();
+
+        if (!_ownsDatabaseFiles)
+            return;
 
         TryDeleteFile(_dbPath);
         TryDeleteFile($"{_dbPath}-wal");
