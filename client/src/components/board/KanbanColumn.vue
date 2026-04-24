@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { BoardCard, BoardLane } from "@/stores/board";
-import { computed, shallowRef } from "vue";
+import { computed, shallowRef, watch } from "vue";
 import KanbanCard from "@/components/board/KanbanCard.vue";
 
 interface CardDraftPayload {
@@ -23,6 +23,7 @@ interface Props {
   cards: readonly BoardCard[];
   draggedCardId: string | null;
   isMutating: boolean;
+  isManageMode: boolean;
   canMoveLeft: boolean;
   canMoveRight: boolean;
 }
@@ -55,6 +56,14 @@ const activeDropIndex = shallowRef<number | null>(null);
 const cardCountLabel = computed(() => `${props.cards.length} card${props.cards.length === 1 ? "" : "s"}`);
 const emptyLabel = computed(() => props.lane.isInbox ? "Inbox is empty." : "Drop a card here or add one below.");
 const hasDraggedCard = computed(() => props.draggedCardId !== null);
+
+watch(() => props.isManageMode, (value) => {
+  if (value) {
+    return;
+  }
+
+  cancelLaneRename();
+});
 
 function beginCreateCard(): void {
   isCreatingCard.value = true;
@@ -228,7 +237,10 @@ function showDropSlot(index: number): boolean {
           </h2>
         </div>
 
-        <div class="kanban-col__lane-actions">
+        <div
+          v-if="isManageMode"
+          class="kanban-col__lane-actions"
+        >
           <button
             type="button"
             class="kanban-col__action"

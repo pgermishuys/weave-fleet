@@ -34,6 +34,13 @@ const boardApiMocks = vi.hoisted(() => ({
   updateBoardLane: vi.fn(),
 }));
 
+const bookmarkState = vi.hoisted(() => ({
+  bookmarks: null as unknown as { value: Array<{ fullName: string; owner: string; name: string }> },
+  error: null as unknown as { value: string | null },
+  isLoading: null as unknown as { value: boolean },
+  refresh: vi.fn(async () => undefined),
+}));
+
 vi.mock("@/lib/board-api", () => ({
   archiveBoardCard: boardApiMocks.archiveBoardCard,
   createBoard: boardApiMocks.createBoard,
@@ -56,7 +63,33 @@ vi.mock("@/lib/board-api", () => ({
   updateBoardLane: boardApiMocks.updateBoardLane,
 }));
 
+vi.mock("@/plugins/builtin/github/composables/use-github-bookmarks", async () => {
+  const { readonly, shallowRef } = await import("vue");
+
+  bookmarkState.bookmarks = shallowRef([
+    {
+      fullName: "acme/rocket",
+      owner: "acme",
+      name: "rocket",
+    },
+  ]);
+  bookmarkState.error = shallowRef<string | null>(null);
+  bookmarkState.isLoading = shallowRef(false);
+
+  return {
+    useGitHubBookmarks: () => ({
+      bookmarks: readonly(bookmarkState.bookmarks),
+      error: readonly(bookmarkState.error),
+      isLoading: readonly(bookmarkState.isLoading),
+      refresh: bookmarkState.refresh,
+    }),
+  };
+});
+
 import KanbanBoard from "@/components/board/KanbanBoard.vue";
+import { useBoardStore } from "@/stores/board";
+import { useSidebarStore } from "@/stores/sidebar";
+import { nextTick } from "vue";
 
 interface MockBoardState {
   boards: Board[];
@@ -206,7 +239,18 @@ function configureBoardApiMocks(): void {
   boardApiMocks.updateBoardCard.mockImplementation(async (_boardId: string, _cardId: string, _request: UpdateBoardCardRequest) => cloneCard(mockState.cards[0] ?? createCardFixture()));
   boardApiMocks.deleteBoardCard.mockResolvedValue(undefined);
   boardApiMocks.archiveBoardCard.mockImplementation(async (_boardId: string, _cardId: string) => cloneCard(mockState.cards[0] ?? createCardFixture()));
-  boardApiMocks.moveBoardCard.mockImplementation(async (_boardId: string, _cardId: string, _request: MoveBoardCardRequest) => cloneCard(mockState.cards[0] ?? createCardFixture()));
+  boardApiMocks.moveBoardCard.mockImplementation(async (boardId: string, cardId: string, request: MoveBoardCardRequest) => {
+    const card = mockState.cards.find((candidate) => candidate.id === cardId && candidate.boardId === boardId);
+    if (!card) {
+      throw new Error("Card not found.");
+    }
+
+    card.laneId = request.laneId;
+    card.position = request.position;
+    card.updatedAt = createTimestamp(17);
+
+    return cloneCard(card);
+  });
   boardApiMocks.syncBoard.mockImplementation(async (boardId: string) => {
     const syncedCard = createCardFixture({
       id: "card-synced",
@@ -255,6 +299,22 @@ function getButtonByText(wrapper: VueWrapper, label: string) {
   return button;
 }
 
+async function dragCardToLane(wrapper: VueWrapper, sourceColumnIndex: number, targetColumnIndex: number): Promise<void> {
+  const sourceColumn = wrapper.findAll(".kanban-col")[sourceColumnIndex];
+  const targetColumn = wrapper.findAll(".kanban-col")[targetColumnIndex];
+  const dataTransfer = {
+    dropEffect: "none",
+    effectAllowed: "all",
+    setData: vi.fn(),
+  };
+
+  await sourceColumn.get(".k-card").trigger("dragstart", { dataTransfer });
+  await targetColumn.get(".kanban-col__drop-slot").trigger("drop", {
+    preventDefault: vi.fn(),
+  });
+  await flushPromises();
+}
+
 describe("KanbanBoard", () => {
   beforeEach(() => {
     mockState = {
@@ -263,6 +323,16 @@ describe("KanbanBoard", () => {
       cards: [],
     };
     configureBoardApiMocks();
+    bookmarkState.refresh.mockClear();
+    bookmarkState.error.value = null;
+    bookmarkState.isLoading.value = false;
+    bookmarkState.bookmarks.value = [
+      {
+        fullName: "acme/rocket",
+        owner: "acme",
+        name: "rocket",
+      },
+    ];
   });
 
   it("creates a card from the lane composer with mocked API responses", async () => {
@@ -343,5 +413,155 @@ describe("KanbanBoard", () => {
     expect(wrapper.text()).toContain("Existing card updated");
     expect(wrapper.text()).toContain("Synced issue card");
     expect(wrapper.get('[data-testid="kanban-sync-button"]').text()).toBe("Sync now");
+  });
+
+  it("renders work mode by default and exposes manage controls only in manage mode", async () => {
+    mockState = {
+      boards: [createBoardFixture()],
+      lanes: [createLaneFixture({ id: "lane-backlog", name: "Backlog", isInbox: true })],
+      cards: [createCardFixture({ laneId: "lane-backlog" })],
+    };
+    configureBoardApiMocks();
+
+    const wrapper = mountBoard();
+    const boardStore = useBoardStore();
+    await flushPromises();
+
+    expect(boardStore.boardMode).toBe("work");
+    expect(getButtonByText(wrapper, "Edit Board mode").attributes("aria-pressed")).toBe("false");
+    expect(wrapper.text()).not.toContain("Add Lane");
+    expect(wrapper.text()).not.toContain("Rename board");
+    expect(wrapper.find("[data-testid='board-source-form']").exists()).toBe(false);
+    expect(wrapper.text()).toContain("+ Add a card");
+
+    boardStore.setBoardMode("manage");
+    await flushPromises();
+
+    expect(getButtonByText(wrapper, "Save mode").attributes("aria-pressed")).toBe("true");
+    expect(wrapper.text()).toContain("Add Lane");
+    expect(wrapper.text()).toContain("Rename board");
+    expect(wrapper.find("[data-testid='board-source-form']").exists()).toBe(true);
+    expect(wrapper.text()).toContain("+ Add another lane");
+  });
+
+  it("cancels manage-only forms when switching back to work mode", async () => {
+    const wrapper = mountBoard();
+    const boardStore = useBoardStore();
+    await flushPromises();
+
+    boardStore.setBoardMode("manage");
+    await flushPromises();
+
+    await getButtonByText(wrapper, "Add Lane").trigger("click");
+    await wrapper.get(".kanban-lane-creator__input").setValue("Ready");
+    await getButtonByText(wrapper, "Rename board").trigger("click");
+    await wrapper.get(".kanban-header__rename-input").setValue("Renamed board draft");
+
+    boardStore.setBoardMode("work");
+    await flushPromises();
+
+    expect(wrapper.find(".kanban-lane-creator__form").exists()).toBe(false);
+    expect(wrapper.find(".kanban-header__rename-form").exists()).toBe(false);
+    expect(wrapper.text()).toContain("Delivery Board");
+
+    boardStore.setBoardMode("manage");
+    await flushPromises();
+
+    await getButtonByText(wrapper, "Add Lane").trigger("click");
+    expect((wrapper.get(".kanban-lane-creator__input").element as HTMLInputElement).value).toBe("");
+
+    await getButtonByText(wrapper, "Rename board").trigger("click");
+    expect((wrapper.get(".kanban-header__rename-input").element as HTMLInputElement).value).toBe("Delivery Board");
+  });
+
+  it("keeps card drag-and-drop working in work mode", async () => {
+    mockState = {
+      boards: [createBoardFixture()],
+      lanes: [
+        createLaneFixture({ id: "lane-backlog", name: "Backlog", isInbox: true, position: POSITION_GAP }),
+        createLaneFixture({ id: "lane-ready", name: "Ready", position: POSITION_GAP * 2 }),
+      ],
+      cards: [createCardFixture({ id: "card-1", laneId: "lane-backlog", title: "Move me" })],
+    };
+    configureBoardApiMocks();
+
+    const wrapper = mountBoard();
+    const boardStore = useBoardStore();
+    await flushPromises();
+
+    expect(boardStore.boardMode).toBe("work");
+    expect(wrapper.text()).not.toContain("Rename board");
+
+    await dragCardToLane(wrapper, 0, 1);
+
+    expect(boardApiMocks.moveBoardCard).toHaveBeenCalledWith("board-1", "card-1", {
+      laneId: "lane-ready",
+      position: 0,
+    });
+    expect(wrapper.findAll(".kanban-col")[1]!.text()).toContain("Move me");
+  });
+
+  it("shows structural controls and keeps card drag-and-drop working in manage mode", async () => {
+    mockState = {
+      boards: [createBoardFixture()],
+      lanes: [
+        createLaneFixture({ id: "lane-backlog", name: "Backlog", isInbox: true, position: POSITION_GAP }),
+        createLaneFixture({ id: "lane-ready", name: "Ready", position: POSITION_GAP * 2 }),
+      ],
+      cards: [createCardFixture({ id: "card-1", laneId: "lane-backlog", title: "Move me" })],
+    };
+    configureBoardApiMocks();
+
+    const wrapper = mountBoard();
+    const boardStore = useBoardStore();
+    await flushPromises();
+
+    boardStore.setBoardMode("manage");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Rename board");
+    expect(wrapper.text()).toContain("Add Lane");
+    expect(wrapper.text()).toContain("+ Add another lane");
+    expect(wrapper.findAll(".kanban-col__lane-actions")).toHaveLength(2);
+
+    await dragCardToLane(wrapper, 0, 1);
+
+    expect(boardApiMocks.moveBoardCard).toHaveBeenCalledWith("board-1", "card-1", {
+      laneId: "lane-ready",
+      position: 0,
+    });
+    expect(wrapper.findAll(".kanban-col")[1]!.text()).toContain("Move me");
+  });
+
+  it("keeps the mode toggle available during mutations", async () => {
+    const wrapper = mountBoard();
+    const boardStore = useBoardStore();
+    const sidebarStore = useSidebarStore();
+    await flushPromises();
+
+    sidebarStore.setActiveRail("board");
+    boardStore.pendingMutations = 1;
+    await nextTick();
+
+    const toggleButton = getButtonByText(wrapper, "Edit Board mode");
+    expect(toggleButton.attributes("disabled")).toBeUndefined();
+
+    await toggleButton.trigger("click");
+
+    expect(boardStore.boardMode).toBe("manage");
+    expect(getButtonByText(wrapper, "Save mode").attributes("aria-pressed")).toBe("true");
+  });
+
+  it("disables the mode toggle until the board finishes loading", async () => {
+    boardApiMocks.listBoards.mockImplementation(() => new Promise<Board[]>(() => undefined));
+
+    const wrapper = mountBoard();
+    const boardStore = useBoardStore();
+    await nextTick();
+
+    const toggleButton = getButtonByText(wrapper, "Edit Board mode");
+    expect(boardStore.isLoaded).toBe(false);
+    expect(toggleButton.attributes("disabled")).toBeDefined();
+    expect(wrapper.text()).toContain("Loading board…");
   });
 });

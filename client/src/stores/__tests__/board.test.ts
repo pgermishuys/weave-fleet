@@ -472,6 +472,24 @@ describe("useBoardStore", () => {
     ]);
   });
 
+  it("defaults to work mode and updates board mode through store actions", async () => {
+    const store = useBoardStore();
+    await flushPromises();
+
+    expect(store.boardMode).toBe("work");
+    expect(store.isManageMode).toBe(false);
+
+    store.toggleBoardMode();
+
+    expect(store.boardMode).toBe("manage");
+    expect(store.isManageMode).toBe(true);
+
+    store.setBoardMode("work");
+
+    expect(store.boardMode).toBe("work");
+    expect(store.isManageMode).toBe(false);
+  });
+
   it("creates a board, lane, and card through the mocked board API", async () => {
     mockState = createEmptyState();
     configureBoardApiMocks();

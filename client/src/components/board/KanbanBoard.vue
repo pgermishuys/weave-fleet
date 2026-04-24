@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import type { BoardSyncResult } from "@/lib/board-api";
 import type { BoardLaneWithCards } from "@/stores/board";
-import { computed, onBeforeUnmount, shallowRef } from "vue";
+import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import BoardSourceConfig from "@/components/board/BoardSourceConfig.vue";
 import KanbanColumn from "@/components/board/KanbanColumn.vue";
+import { useKeyboardShortcut } from "@/composables/use-keyboard-shortcut";
 import { useBoardStore } from "@/stores/board";
+import { useKeybindingsStore, getBoardModeToggleShortcut } from "@/stores/keybindings";
+import { useSidebarStore } from "@/stores/sidebar";
 
 interface CardDraftPayload {
   laneId: string;
@@ -33,19 +36,25 @@ interface SyncFeedback {
 }
 
 const boardStore = useBoardStore();
+const keybindingsStore = useKeybindingsStore();
+const sidebarStore = useSidebarStore();
 
 const {
   activeCards,
   board,
+  boardMode,
   cardsByLaneId,
   error,
   hasBoard,
   inboxLane,
   isLoaded,
   isLoading,
+  isManageMode,
   isMutating,
   lanesWithCards,
 } = storeToRefs(boardStore);
+const { bindings } = storeToRefs(keybindingsStore);
+const { activeRail } = storeToRefs(sidebarStore);
 
 const isAddingLane = shallowRef(false);
 const laneDraft = shallowRef("");
@@ -101,9 +110,28 @@ const summaryItems = computed(() => {
 const showLoadingState = computed(() => isLoading.value && !isLoaded.value);
 const showEmptyState = computed(() => isLoaded.value && lanesWithCards.value.length === 0);
 const syncButtonLabel = computed(() => isSyncing.value ? "Syncing…" : "Sync now");
+const boardModeLabel = computed(() => boardMode.value === "manage" ? "Save" : "Edit Board");
+const boardModeShortcut = computed(() => getBoardModeToggleShortcut(bindings.value));
+const isBoardModeShortcutEnabled = computed(() => {
+  return activeRail.value === "board"
+    && isLoaded.value;
+});
 
 onBeforeUnmount(() => {
   clearSyncFeedbackTimer();
+});
+
+watch(isManageMode, (value) => {
+  if (value) {
+    return;
+  }
+
+  cancelAddLane();
+  cancelBoardRename();
+});
+
+useKeyboardShortcut(boardModeShortcut, handleToggleBoardMode, {
+  enabled: isBoardModeShortcutEnabled,
 });
 
 function clearSyncFeedbackTimer(): void {
@@ -126,8 +154,24 @@ function showSyncFeedback(result: BoardSyncResult): void {
   }, 5_000);
 }
 
+function handleToggleBoardMode(): void {
+  if (!isLoaded.value) {
+    return;
+  }
+
+  boardStore.toggleBoardMode();
+}
+
 function openAddLaneForm(): void {
   isAddingLane.value = true;
+}
+
+function handleCreateFirstLane(): void {
+  if (!isManageMode.value) {
+    boardStore.setBoardMode("manage");
+  }
+
+  openAddLaneForm();
 }
 
 function cancelAddLane(): void {
@@ -345,7 +389,10 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
     class="kanban-container"
     aria-label="Kanban board"
   >
-    <header class="kanban-header">
+    <header
+      class="kanban-header"
+      :class="{ 'kanban-header--manage': isManageMode }"
+    >
       <div class="kanban-header__copy">
         <p class="kanban-header__eyebrow">
           Persistent board
@@ -398,6 +445,16 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
 
       <div class="kanban-header__actions">
         <button
+          type="button"
+          class="kanban-header__button kanban-header__button--mode"
+          :aria-pressed="isManageMode"
+          :disabled="!isLoaded"
+          @click="handleToggleBoardMode"
+        >
+          {{ boardModeLabel }} mode
+        </button>
+
+        <button
           v-if="hasBoard"
           type="button"
           class="kanban-header__button"
@@ -409,7 +466,7 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
         </button>
 
         <button
-          v-if="hasBoard && !isEditingBoard"
+          v-if="isManageMode && hasBoard && !isEditingBoard"
           type="button"
           class="kanban-header__button"
           :disabled="showLoadingState || isMutating"
@@ -419,10 +476,11 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
         </button>
 
         <button
+          v-if="isManageMode || showEmptyState"
           type="button"
           class="kanban-header__button"
           :disabled="showLoadingState"
-          @click="openAddLaneForm"
+          @click="handleCreateFirstLane"
         >
           Add Lane
         </button>
@@ -443,10 +501,13 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
       </div>
     </section>
 
-    <BoardSourceConfig :board-id="board?.id ?? null" />
+    <BoardSourceConfig
+      v-if="isManageMode"
+      :board-id="board?.id ?? null"
+    />
 
     <section
-      v-if="isAddingLane"
+      v-if="isManageMode && isAddingLane"
       class="kanban-lane-creator"
       aria-label="Create lane"
     >
@@ -560,7 +621,7 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
       <button
         type="button"
         class="kanban-state__button"
-        @click="openAddLaneForm"
+        @click="handleCreateFirstLane"
       >
         Create first lane
       </button>
@@ -577,6 +638,7 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
         :cards="entry.cards"
         :dragged-card-id="draggedCard?.cardId ?? null"
         :is-mutating="isMutating"
+        :is-manage-mode="isManageMode"
         :can-move-left="isLaneMoveEnabled(lanesWithCards, index, 'left')"
         :can-move-right="isLaneMoveEnabled(lanesWithCards, index, 'right')"
         @create-card="handleCreateCard"
@@ -593,7 +655,10 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
         @drop-card="handleDropCard"
       />
 
-      <section class="kanban-board__adder">
+      <section
+        v-if="isManageMode"
+        class="kanban-board__adder"
+      >
         <button
           type="button"
           class="kanban-board__adder-button"
@@ -624,6 +689,13 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
   gap: 16px;
   padding: 16px 24px 12px;
   border-bottom: 1px solid var(--border);
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.kanban-header--manage {
+  border-bottom-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .kanban-header__copy {
@@ -693,6 +765,10 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
   font-weight: 600;
   padding: 9px 14px;
   cursor: pointer;
+}
+
+.kanban-header__button--mode {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
 }
 
 .kanban-header__button:disabled,

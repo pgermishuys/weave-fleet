@@ -41,6 +41,7 @@ export type BoardCard = ApiBoardCard;
 export type BoardStatus = "active" | "idle" | "waiting_input" | "completed" | "error";
 export type BoardGroupBy = "status" | "project" | "agent";
 export type BoardSortBy = "newest" | "oldest" | "title";
+export type BoardMode = "work" | "manage";
 
 export interface BoardSession {
   id: string;
@@ -322,6 +323,7 @@ export const useBoardStore = defineStore("board", () => {
   const selectedProject = shallowRef("all");
   const groupBy = shallowRef<BoardGroupBy>("status");
   const sortBy = shallowRef<BoardSortBy>("newest");
+  const boardMode = shallowRef<BoardMode>("work");
   const statusFilters = reactive<Record<BoardStatus, boolean>>({
     active: true,
     idle: true,
@@ -335,6 +337,7 @@ export const useBoardStore = defineStore("board", () => {
 
   const boardId = computed(() => board.value?.id ?? null);
   const hasBoard = computed(() => board.value !== null);
+  const isManageMode = computed(() => boardMode.value === "manage");
   const isMutating = computed(() => pendingMutations.value > 0);
   const sortedLanes = computed<BoardLane[]>(() => sortBoardLanes(lanes.value));
   const activeCards = computed<BoardCard[]>(() => cards.value.filter((card) => card.archivedAt === null));
@@ -789,6 +792,14 @@ export const useBoardStore = defineStore("board", () => {
     sortBy.value = value;
   }
 
+  function toggleBoardMode(): void {
+    boardMode.value = isManageMode.value ? "work" : "manage";
+  }
+
+  function setBoardMode(value: BoardMode): void {
+    boardMode.value = value;
+  }
+
   void loadBoard().catch(() => {
     // initial load errors are exposed via store state
   });
@@ -843,6 +854,8 @@ export const useBoardStore = defineStore("board", () => {
     agentFilters,
     groupBy,
     sortBy,
+    boardMode,
+    isManageMode,
     availableProjects,
     availableAgents,
     filteredSessions,
@@ -855,5 +868,7 @@ export const useBoardStore = defineStore("board", () => {
     setAgentFilter,
     setGroupBy,
     setSortBy,
+    toggleBoardMode,
+    setBoardMode,
   };
 });
