@@ -132,17 +132,21 @@ public static class DependencyInjection
         services.AddScoped<HarnessEventPersistenceService>();
         services.AddScoped<IHarnessEventPersister>(sp => sp.GetRequiredService<HarnessEventPersistenceService>());
 
-        // NATS event substrate. MessagePersistenceProjection is the sole writer to SQLite +
-        // outbox; the existing outbox dispatcher fans durable events out to WebSocket clients.
-        // EphemeralEventRelayService (below) handles ephemeral events over core NATS.
-        services.AddEventStore(options.Nats, nats =>
+        if (options.Nats.Enabled)
         {
-            nats.AddProjection<WeaveFleet.Application.Projections.MessagePersistenceProjection>(ConsumerScope.Cluster);
-        });
-        services.AddHostedService<WeaveFleet.Infrastructure.Nats.EphemeralEventRelayService>();
+            // NATS event substrate. MessagePersistenceProjection is the sole writer to SQLite +
+            // outbox; the existing outbox dispatcher fans durable events out to WebSocket clients.
+            // EphemeralEventRelayService (below) handles ephemeral events over core NATS.
+            services.AddEventStore(options.Nats, nats =>
+            {
+                nats.AddProjection<WeaveFleet.Application.Projections.MessagePersistenceProjection>(ConsumerScope.Cluster);
+            });
+            services.AddHostedService<WeaveFleet.Infrastructure.Nats.EphemeralEventRelayService>();
 
-        // HarnessEventRelay is now publish-only — relays every harness event to NATS.
-        services.AddHostedService<HarnessEventRelay>();
+            // HarnessEventRelay is now publish-only — relays every harness event to NATS.
+            services.AddHostedService<HarnessEventRelay>();
+        }
+
         services.AddHostedService<OutboxDispatchBackgroundService>();
         services.AddHostedService<OutboxCleanupBackgroundService>();
 

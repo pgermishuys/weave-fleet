@@ -9,6 +9,7 @@ public sealed class NatsOptionsTests
     {
         var options = new NatsOptions();
 
+        options.Enabled.ShouldBeTrue();
         options.ExternalUrl.ShouldBeNull();
         options.CredsFile.ShouldBeNull();
         options.DataDirectory.ShouldBe("./data/nats");

@@ -112,9 +112,7 @@ Rationale:
 | Platform | RID | Archive |
 |---|---|---|
 | macOS arm64 | `osx-arm64` | `.tar.gz` |
-| macOS x64 | `osx-x64` | `.tar.gz` |
 | Linux x64 | `linux-x64` | `.tar.gz` |
-| Linux arm64 | `linux-arm64` | `.tar.gz` |
 | Windows x64 | `win-x64` | `.zip` |
 
 ## CLI / Launcher Strategy

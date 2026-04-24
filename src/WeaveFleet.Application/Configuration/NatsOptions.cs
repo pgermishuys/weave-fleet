@@ -5,6 +5,9 @@ namespace WeaveFleet.Application.Configuration;
 /// </summary>
 public sealed class NatsOptions
 {
+    /// <summary>Enable the NATS event substrate. Default: true.</summary>
+    public bool Enabled { get; set; } = true;
+
     /// <summary>URL of an external NATS broker. When null, Fleet launches its bundled nats-server.</summary>
     public string? ExternalUrl { get; set; }
 

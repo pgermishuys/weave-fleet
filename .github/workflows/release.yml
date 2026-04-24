@@ -24,12 +24,6 @@ jobs:
           - rid: linux-x64
             runs_on: ubuntu-latest
             archive_extension: .tar.gz
-          - rid: linux-arm64
-            runs_on: ubuntu-24.04-arm
-            archive_extension: .tar.gz
-          - rid: osx-x64
-            runs_on: macos-13
-            archive_extension: .tar.gz
           - rid: osx-arm64
             runs_on: macos-14
             archive_extension: .tar.gz
@@ -40,6 +34,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -124,7 +120,7 @@ jobs:
           version_output="$($extract_dir/$asset_base_name/bin/weave-fleet version)"
           test "$version_output" = "$package_version"
 
-          WEAVE_FLEET_HOST="127.0.0.1" WEAVE_FLEET_PORT="$port" "$extract_dir/$asset_base_name/bin/weave-fleet" >"$log_path" 2>&1 &
+          Fleet__Nats__Enabled="false" WEAVE_FLEET_HOST="127.0.0.1" WEAVE_FLEET_PORT="$port" "$extract_dir/$asset_base_name/bin/weave-fleet" >"$log_path" 2>&1 &
           app_pid=$!
 
           cleanup() {
@@ -198,6 +194,7 @@ jobs:
               throw "Smoke test version mismatch. Expected '$packageVersion' but got '$versionOutput'."
           }
 
+          $env:Fleet__Nats__Enabled = 'false'
           $env:WEAVE_FLEET_HOST = '127.0.0.1'
           $env:WEAVE_FLEET_PORT = $port
           $process = Start-Process -FilePath (Join-Path $packageDir 'bin/weave-fleet.cmd') -RedirectStandardOutput $logPath -RedirectStandardError $errorLogPath -PassThru
@@ -265,6 +262,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - name: Download packaged artifacts
         uses: actions/download-artifact@v4
@@ -355,6 +354,8 @@ jobs:
       - name: Checkout release source
         if: steps.prerequisites.outputs.configured == 'true' && steps.branch.outputs.exists == 'true'
         uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - name: Prepare vanity URL payload
         if: steps.prerequisites.outputs.configured == 'true' && steps.branch.outputs.exists == 'true'

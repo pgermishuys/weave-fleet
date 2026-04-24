@@ -53,14 +53,12 @@ GitHub Releases is the primary public distribution channel. The supported instal
 For each tag, the workflow builds and publishes self-contained artifacts for:
 
 - `linux-x64`
-- `linux-arm64`
-- `osx-x64`
 - `osx-arm64`
 - `win-x64`
 
 It then publishes a GitHub Release containing:
 
-- 5 platform archives (`.tar.gz` on Unix, `.zip` on Windows)
+- 3 platform archives (`.tar.gz` on Unix, `.zip` on Windows)
 - per-asset `.sha256` files
 - merged `checksums.txt`
 - `install.sh`
@@ -145,9 +143,9 @@ After the tag is pushed, verify all of the following:
 - [ ] `Directory.Build.props` contains the intended version.
 - [ ] The pushed tag matches that version (`vX.Y.Z` vs `X.Y.Z`).
 - [ ] GitHub Actions `Release` workflow succeeded.
-- [ ] All 5 build matrix jobs succeeded.
+- [ ] All build matrix jobs succeeded.
 - [ ] The GitHub Release exists for the tag.
-- [ ] The release includes all 5 platform archives.
+- [ ] The release includes all 3 platform archives.
 - [ ] The release includes all per-asset checksum files and `checksums.txt`.
 - [ ] The release includes `install.sh` and `install.ps1`.
 - [ ] Packaged smoke tests passed in the workflow.
