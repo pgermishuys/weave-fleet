@@ -97,6 +97,32 @@ function handleDragOver(event: DragEvent, index: number): void {
   activeDropIndex.value = index;
 }
 
+function handleCardsDragOver(event: DragEvent): void {
+  if (!hasDraggedCard.value) {
+    return;
+  }
+
+  event.preventDefault();
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "move";
+  }
+
+  if (activeDropIndex.value === null) {
+    activeDropIndex.value = props.cards.length;
+  }
+}
+
+function handleCardsDragEnter(): void {
+  if (!hasDraggedCard.value) {
+    return;
+  }
+
+  dragEnterCount.value += 1;
+  if (activeDropIndex.value === null) {
+    activeDropIndex.value = props.cards.length;
+  }
+}
+
 function handleDragEnter(index: number): void {
   if (!hasDraggedCard.value) {
     return;
@@ -129,6 +155,10 @@ function handleColumnDrop(event: DragEvent, index: number): void {
     laneId: props.lane.id,
     index,
   });
+}
+
+function handleCardsDrop(event: DragEvent): void {
+  handleColumnDrop(event, activeDropIndex.value ?? props.cards.length);
 }
 
 function handleCardDragStart(cardId: string): void {
@@ -297,6 +327,10 @@ function showDropSlot(index: number): boolean {
       <div
         class="kanban-col__cards"
         :class="{ 'kanban-col__cards--drop-target': dragEnterCount > 0 }"
+        @dragover="handleCardsDragOver"
+        @dragenter="handleCardsDragEnter"
+        @dragleave="handleDragLeave"
+        @drop="handleCardsDrop"
       >
         <div
           class="kanban-col__drop-slot"

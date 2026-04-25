@@ -309,7 +309,13 @@ async function dragCardToLane(wrapper: VueWrapper, sourceColumnIndex: number, ta
   };
 
   await sourceColumn.get(".k-card").trigger("dragstart", { dataTransfer });
-  await targetColumn.get(".kanban-col__drop-slot").trigger("drop", {
+  await targetColumn.get(".kanban-col__cards").trigger("dragenter", { dataTransfer });
+  await targetColumn.get(".kanban-col__cards").trigger("dragover", {
+    dataTransfer,
+    preventDefault: vi.fn(),
+  });
+  await targetColumn.get(".kanban-col__cards").trigger("drop", {
+    dataTransfer,
     preventDefault: vi.fn(),
   });
   await flushPromises();
