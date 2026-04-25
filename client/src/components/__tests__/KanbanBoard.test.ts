@@ -7,8 +7,6 @@ import type {
   CreateBoardCardRequest,
   CreateBoardLaneRequest,
   MoveBoardCardRequest,
-  ReorderBoardLanesRequest,
-  UpdateBoardCardRequest,
   UpdateBoardLaneRequest,
 } from "@/lib/board-api";
 
@@ -235,10 +233,10 @@ function configureBoardApiMocks(): void {
   boardApiMocks.listBoardSources.mockResolvedValue([]);
   boardApiMocks.createBoardSource.mockResolvedValue(undefined);
   boardApiMocks.deleteBoardSource.mockResolvedValue(undefined);
-  boardApiMocks.reorderBoardLanes.mockImplementation(async (_boardId: string, _request: ReorderBoardLanesRequest) => undefined);
-  boardApiMocks.updateBoardCard.mockImplementation(async (_boardId: string, _cardId: string, _request: UpdateBoardCardRequest) => cloneCard(mockState.cards[0] ?? createCardFixture()));
+  boardApiMocks.reorderBoardLanes.mockImplementation(async () => undefined);
+  boardApiMocks.updateBoardCard.mockImplementation(async () => cloneCard(mockState.cards[0] ?? createCardFixture()));
   boardApiMocks.deleteBoardCard.mockResolvedValue(undefined);
-  boardApiMocks.archiveBoardCard.mockImplementation(async (_boardId: string, _cardId: string) => cloneCard(mockState.cards[0] ?? createCardFixture()));
+  boardApiMocks.archiveBoardCard.mockImplementation(async () => cloneCard(mockState.cards[0] ?? createCardFixture()));
   boardApiMocks.moveBoardCard.mockImplementation(async (boardId: string, cardId: string, request: MoveBoardCardRequest) => {
     const card = mockState.cards.find((candidate) => candidate.id === cardId && candidate.boardId === boardId);
     if (!card) {

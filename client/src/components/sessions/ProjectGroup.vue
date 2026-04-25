@@ -105,13 +105,13 @@ function handleDragOver(event: DragEvent): void {
   }
 }
 
-function handleDragEnter(event: DragEvent): void {
+function handleDragEnter(): void {
   if (props.activeDragSessionId) {
     dragEnterCount.value++;
   }
 }
 
-function handleDragLeave(event: DragEvent): void {
+function handleDragLeave(): void {
   if (props.activeDragSessionId) {
     dragEnterCount.value = Math.max(0, dragEnterCount.value - 1);
   }
