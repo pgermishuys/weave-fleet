@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, shallowRef, useTemplateRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { Github, RefreshCw, Search, Settings } from "lucide-vue-next";
+import { Bookmark, Github, RefreshCw, Search, Settings } from "lucide-vue-next";
 import { useSidebarStore } from "@/stores/sidebar";
-import type { CachedGitHubRepo, GitHubIssue, GitHubPullRequest } from "./composables/github-types";
+import type { BookmarkedRepo, CachedGitHubRepo, GitHubIssue, GitHubPullRequest } from "./composables/github-types";
 import { useGitHubAuth } from "./composables/use-github-auth";
 import { useGitHubBookmarks } from "./composables/use-github-bookmarks";
 import { useGitHubIssues } from "./composables/use-github-issues";
@@ -82,7 +82,13 @@ const {
   isLoading: isLoadingBookmarks,
   error: bookmarksError,
   refresh: refreshBookmarks,
+  addBookmark,
+  removeBookmark,
+  hasBookmark,
 } = useGitHubBookmarks();
+
+const bookmarkMutationRepoFullName = shallowRef<string | null>(null);
+const bookmarkMutationError = shallowRef<string | null>(null);
 
 watch(
   isConnected,
@@ -188,6 +194,16 @@ function splitRepoFullName(fullName: string): { owner: string | null; repo: stri
 const selectedRepoParts = computed(() => splitRepoFullName(selectedRepoFullName.value));
 const selectedOwner = computed(() => selectedRepoParts.value.owner);
 const selectedRepo = computed(() => selectedRepoParts.value.repo);
+const selectedRepoData = computed(() => {
+  return repos.value.find((repo) => repo.full_name === selectedRepoFullName.value) ?? null;
+});
+const selectedRepoIsBookmarked = computed(() => {
+  if (!selectedRepoFullName.value) {
+    return false;
+  }
+
+  return hasBookmark(selectedRepoFullName.value);
+});
 const normalizedSearchQuery = computed(() => searchQuery.value.trim().toLowerCase());
 
 const issuesFilter = computed(() => ({
@@ -386,6 +402,40 @@ function handleRepoSelect(repoFullName: string): void {
   repoFilterQuery.value = "";
   isRepoComboboxOpen.value = false;
 }
+
+function toBookmarkedRepo(repo: CachedGitHubRepo): BookmarkedRepo {
+  return {
+    fullName: repo.full_name,
+    owner: repo.owner_login,
+    name: repo.name,
+  };
+}
+
+function isBookmarkMutationPending(repoFullName: string): boolean {
+  return bookmarkMutationRepoFullName.value === repoFullName;
+}
+
+async function handleToggleRepoBookmark(repo: CachedGitHubRepo): Promise<void> {
+  const fullName = repo.full_name;
+  bookmarkMutationRepoFullName.value = fullName;
+  bookmarkMutationError.value = null;
+
+  try {
+    if (hasBookmark(fullName)) {
+      await removeBookmark(fullName);
+      if (selectedRepoFullName.value === fullName && isRepoComboboxOpen.value) {
+        repoFilterQuery.value = "";
+      }
+      return;
+    }
+
+    await addBookmark(toBookmarkedRepo(repo));
+  } catch (error) {
+    bookmarkMutationError.value = error instanceof Error ? error.message : "Failed to update bookmark.";
+  } finally {
+    bookmarkMutationRepoFullName.value = null;
+  }
+}
 </script>
 
 <template>
@@ -460,18 +510,39 @@ function handleRepoSelect(repoFullName: string): void {
                 {{ group.label }}
               </p>
 
-              <button
+              <div
                 v-for="repo in group.repos"
                 :key="repo.id"
-                type="button"
                 class="repo-selector-option"
                 :class="{ 'repo-selector-option--selected': repo.full_name === selectedRepoFullName }"
                 role="option"
                 :aria-selected="repo.full_name === selectedRepoFullName"
-                @click="handleRepoSelect(repo.full_name)"
               >
-                {{ repo.full_name }}
-              </button>
+                <button
+                  type="button"
+                  class="repo-selector-option-button"
+                  @click="handleRepoSelect(repo.full_name)"
+                >
+                  {{ repo.full_name }}
+                </button>
+
+                <button
+                  type="button"
+                  class="repo-bookmark-button"
+                  :class="{ 'repo-bookmark-button--active': hasBookmark(repo.full_name) }"
+                  :aria-label="hasBookmark(repo.full_name) ? `Remove ${repo.full_name} bookmark` : `Bookmark ${repo.full_name}`"
+                  :title="hasBookmark(repo.full_name) ? 'Remove bookmark' : 'Bookmark repository'"
+                  :disabled="isBookmarkMutationPending(repo.full_name)"
+                  :data-testid="`github-bookmark-toggle-${repo.full_name.replace('/', '--')}`"
+                  @click.stop="void handleToggleRepoBookmark(repo)"
+                >
+                  <Bookmark
+                    :size="13"
+                    aria-hidden="true"
+                  />
+                  <span>{{ isBookmarkMutationPending(repo.full_name) ? 'Saving…' : hasBookmark(repo.full_name) ? 'Saved' : 'Save' }}</span>
+                </button>
+              </div>
             </div>
           </template>
 
@@ -484,15 +555,40 @@ function handleRepoSelect(repoFullName: string): void {
         </div>
       </div>
 
-      <p
+      <div
         v-if="selectedRepoFullName"
-        class="repo-selector-message"
+        class="repo-selector-status-row"
       >
-        Selected: {{ selectedRepoFullName }}
-      </p>
+        <p class="repo-selector-message">
+          Selected: {{ selectedRepoFullName }}
+        </p>
+
+        <button
+          v-if="selectedRepoData"
+          type="button"
+          class="repo-selected-bookmark-button"
+          :class="{ 'repo-selected-bookmark-button--active': selectedRepoIsBookmarked }"
+          :aria-label="selectedRepoIsBookmarked ? `Remove ${selectedRepoFullName} bookmark` : `Bookmark ${selectedRepoFullName}`"
+          :disabled="isBookmarkMutationPending(selectedRepoFullName)"
+          data-testid="github-selected-bookmark-toggle"
+          @click="void handleToggleRepoBookmark(selectedRepoData)"
+        >
+          <Bookmark
+            :size="13"
+            aria-hidden="true"
+          />
+          <span>{{ isBookmarkMutationPending(selectedRepoFullName) ? 'Saving…' : selectedRepoIsBookmarked ? 'Bookmarked' : 'Bookmark' }}</span>
+        </button>
+      </div>
 
       <p
-        v-if="reposError && repos.length > 0"
+        v-if="bookmarkMutationError"
+        class="repo-selector-message repo-selector-message--error"
+      >
+        {{ bookmarkMutationError }}
+      </p>
+      <p
+        v-else-if="reposError && repos.length > 0"
         class="repo-selector-message repo-selector-message--error"
       >
         {{ reposError }}
@@ -848,9 +944,25 @@ function handleRepoSelect(repoFullName: string): void {
 }
 
 .repo-selector-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
-  border: 0;
   border-radius: 8px;
+  padding: 0;
+}
+
+.repo-selector-option:hover,
+.repo-selector-option:focus-visible,
+.repo-selector-option--selected {
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.repo-selector-option-button {
+  min-width: 0;
+  flex: 1;
+  border: 0;
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -859,11 +971,55 @@ function handleRepoSelect(repoFullName: string): void {
   text-align: left;
 }
 
-.repo-selector-option:hover,
-.repo-selector-option:focus-visible,
-.repo-selector-option--selected {
-  background: rgba(255, 255, 255, 0.08);
+.repo-selector-option-button:focus-visible {
   outline: none;
+}
+
+.repo-bookmark-button,
+.repo-selected-bookmark-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 8px;
+  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
+}
+
+.repo-bookmark-button {
+  margin-right: 6px;
+  opacity: 0;
+}
+
+.repo-selector-option:hover .repo-bookmark-button,
+.repo-selector-option:focus-within .repo-bookmark-button,
+.repo-bookmark-button--active {
+  opacity: 1;
+}
+
+.repo-bookmark-button:hover,
+.repo-bookmark-button:focus-visible,
+.repo-selected-bookmark-button:hover,
+.repo-selected-bookmark-button:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  outline: none;
+}
+
+.repo-bookmark-button--active,
+.repo-selected-bookmark-button--active {
+  color: var(--accent);
+}
+
+.repo-bookmark-button:disabled,
+.repo-selected-bookmark-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .repo-selector-empty-state {
@@ -877,6 +1033,13 @@ function handleRepoSelect(repoFullName: string): void {
   margin: 0;
   font-size: 11px;
   color: var(--muted);
+}
+
+.repo-selector-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .repo-selector-message--error {

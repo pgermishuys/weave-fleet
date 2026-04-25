@@ -10,6 +10,12 @@ import {
 } from "@/lib/keybinding-utils";
 
 const KEYBINDINGS_STORAGE_KEY = "weave:keybindings";
+const BOARD_MODE_TOGGLE_COMMAND_ID = "board-toggle-mode";
+const BOARD_MODE_TOGGLE_SHORTCUT: GlobalShortcut = {
+  key: "e",
+  platformModifier: true,
+  shiftKey: true,
+};
 
 function isGlobalShortcut(value: unknown): value is GlobalShortcut {
   if (!value || typeof value !== "object") {
@@ -67,6 +73,16 @@ function persistOverrides(overrides: Partial<KeyBindingsConfig>): void {
   } catch {
     // localStorage unavailable
   }
+}
+
+export function getBoardModeToggleShortcut(bindings: KeyBindingsConfig): GlobalShortcut | null {
+  const conflict = detectGlobalConflict(BOARD_MODE_TOGGLE_COMMAND_ID, BOARD_MODE_TOGGLE_SHORTCUT, bindings);
+
+  if (conflict) {
+    return null;
+  }
+
+  return { ...BOARD_MODE_TOGGLE_SHORTCUT };
 }
 
 export const useKeybindingsStore = defineStore("keybindings", () => {

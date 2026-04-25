@@ -11,7 +11,10 @@ using System.Text.Encodings.Web;
 
 namespace WeaveFleet.Api.Tests.Infrastructure;
 
-public sealed class ApiWebApplicationFactory(bool authEnabled, bool useTestAuthentication = false) : WebApplicationFactory<Program>
+public sealed class ApiWebApplicationFactory(
+    bool authEnabled,
+    bool useTestAuthentication = false,
+    Action<IServiceCollection>? configureTestServices = null) : WebApplicationFactory<Program>
 {
     private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"weave-fleet-api-tests-{Guid.NewGuid():N}.db");
     private readonly string _analyticsDbPath = Path.Combine(Path.GetTempPath(), $"weave-fleet-api-tests-analytics-{Guid.NewGuid():N}.db");
@@ -57,6 +60,11 @@ public sealed class ApiWebApplicationFactory(bool authEnabled, bool useTestAuthe
             builder.UseSetting("Authentication:DefaultScheme", "Unauthorized");
             builder.UseSetting("Authentication:DefaultAuthenticateScheme", "Unauthorized");
             builder.UseSetting("Authentication:DefaultChallengeScheme", "Unauthorized");
+        }
+
+        if (configureTestServices is not null)
+        {
+            builder.ConfigureTestServices(configureTestServices);
         }
     }
 
