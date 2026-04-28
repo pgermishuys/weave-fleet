@@ -163,14 +163,14 @@ function handleToggleBoardMode(): void {
 }
 
 function openAddLaneForm(): void {
+  if (!isManageMode.value) {
+    return;
+  }
+
   isAddingLane.value = true;
 }
 
 function handleCreateFirstLane(): void {
-  if (!isManageMode.value) {
-    boardStore.setBoardMode("manage");
-  }
-
   openAddLaneForm();
 }
 
@@ -451,7 +451,7 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
           :disabled="!isLoaded"
           @click="handleToggleBoardMode"
         >
-          {{ boardModeLabel }} mode
+          {{ boardModeLabel }}
         </button>
 
         <button
@@ -476,7 +476,7 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
         </button>
 
         <button
-          v-if="isManageMode || showEmptyState"
+          v-if="isManageMode"
           type="button"
           class="kanban-header__button"
           :disabled="showLoadingState"
@@ -616,9 +616,10 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
         No lanes yet
       </p>
       <p class="kanban-state__copy">
-        Add a lane to create your first board column, then add cards directly inside it.
+        Click Edit Board to unlock lane management, then add your first board column.
       </p>
       <button
+        v-if="isManageMode"
         type="button"
         class="kanban-state__button"
         @click="handleCreateFirstLane"

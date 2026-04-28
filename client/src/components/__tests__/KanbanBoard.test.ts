@@ -367,6 +367,9 @@ describe("KanbanBoard", () => {
     const wrapper = mountBoard();
     await flushPromises();
 
+    await getButtonByText(wrapper, "Edit Board").trigger("click");
+    await flushPromises();
+
     await getButtonByText(wrapper, "Add Lane").trigger("click");
     await wrapper.get(".kanban-lane-creator__input").setValue("Ready");
     await wrapper.get(".kanban-lane-creator__form").trigger("submit");
@@ -432,7 +435,7 @@ describe("KanbanBoard", () => {
     await flushPromises();
 
     expect(boardStore.boardMode).toBe("work");
-    expect(getButtonByText(wrapper, "Edit Board mode").attributes("aria-pressed")).toBe("false");
+    expect(getButtonByText(wrapper, "Edit Board").attributes("aria-pressed")).toBe("false");
     expect(wrapper.text()).not.toContain("Add Lane");
     expect(wrapper.text()).not.toContain("Rename board");
     expect(wrapper.find("[data-testid='board-source-form']").exists()).toBe(false);
@@ -441,7 +444,7 @@ describe("KanbanBoard", () => {
     boardStore.setBoardMode("manage");
     await flushPromises();
 
-    expect(getButtonByText(wrapper, "Save mode").attributes("aria-pressed")).toBe("true");
+    expect(getButtonByText(wrapper, "Save").attributes("aria-pressed")).toBe("true");
     expect(wrapper.text()).toContain("Add Lane");
     expect(wrapper.text()).toContain("Rename board");
     expect(wrapper.find("[data-testid='board-source-form']").exists()).toBe(true);
@@ -547,13 +550,13 @@ describe("KanbanBoard", () => {
     boardStore.pendingMutations = 1;
     await nextTick();
 
-    const toggleButton = getButtonByText(wrapper, "Edit Board mode");
+    const toggleButton = getButtonByText(wrapper, "Edit Board");
     expect(toggleButton.attributes("disabled")).toBeUndefined();
 
     await toggleButton.trigger("click");
 
     expect(boardStore.boardMode).toBe("manage");
-    expect(getButtonByText(wrapper, "Save mode").attributes("aria-pressed")).toBe("true");
+    expect(getButtonByText(wrapper, "Save").attributes("aria-pressed")).toBe("true");
   });
 
   it("disables the mode toggle until the board finishes loading", async () => {
@@ -563,7 +566,7 @@ describe("KanbanBoard", () => {
     const boardStore = useBoardStore();
     await nextTick();
 
-    const toggleButton = getButtonByText(wrapper, "Edit Board mode");
+    const toggleButton = getButtonByText(wrapper, "Edit Board");
     expect(boardStore.isLoaded).toBe(false);
     expect(toggleButton.attributes("disabled")).toBeDefined();
     expect(wrapper.text()).toContain("Loading board…");
