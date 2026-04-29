@@ -62,6 +62,31 @@ public sealed partial class MigrationRunner
         // Get already-applied migrations
         var applied = (await connection.QueryAsync<string>("SELECT name FROM _migrations")).ToHashSet();
 
+        // Detect pre-migration-tracking databases: if _migrations is empty but application
+        // tables already exist, this is a legacy database created before migration tracking
+        // was introduced. Seed all migrations as already applied to avoid re-running DDL
+        // against an existing schema.
+        if (applied.Count == 0)
+        {
+            var legacyTableExists = await connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workspaces'");
+
+            if (legacyTableExists > 0)
+            {
+                LogLegacyDatabaseDetected();
+                foreach (var resourceName in resourceNames)
+                {
+                    var name = ExtractMigrationName(resourceName);
+                    await connection.ExecuteAsync(
+                        "INSERT INTO _migrations (name) VALUES (@Name)",
+                        new { Name = name });
+                    LogSkippingMigration(name);
+                }
+
+                return;
+            }
+        }
+
         foreach (var resourceName in resourceNames)
         {
             var migrationName = ExtractMigrationName(resourceName);
@@ -117,6 +142,9 @@ public sealed partial class MigrationRunner
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "No SQL migration resources found.")]
     private partial void LogNoMigrationsFound();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Legacy database detected — seeding migration history for all existing migrations.")]
+    private partial void LogLegacyDatabaseDetected();
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Skipping already-applied migration: {MigrationName}")]
     private partial void LogSkippingMigration(string migrationName);
