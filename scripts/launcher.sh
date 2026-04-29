@@ -58,7 +58,7 @@ show_help() {
   VERSION="$(read_version)"
   echo "Fleet v${VERSION}"
   echo ""
-  echo "Usage: fleet [command] [--port <port>] [--profile <name>]"
+  echo "Usage: fleet [command] [--port <port>] [--host <host>] [--data-dir <path>] [--profile <name>]"
   echo ""
   echo "Commands:"
   echo "  (none)       Start the Fleet server"
@@ -67,19 +67,24 @@ show_help() {
   echo "  uninstall    Remove Fleet"
   echo "  help         Show this help message"
   echo ""
-  echo "Options when starting the server:"
-  echo "  --port <port>       Override the server port"
-  echo "  --profile <name>    Use a profile-specific data directory"
+echo "Options when starting the server:"
+echo "  --port <port>       Override the server port"
+echo "  --host <host>       Override the bind host"
+echo "  --data-dir <path>   Override the data directory (default: ~/.weave)"
+echo "  --profile <name>    Use a profile-specific data directory"
   echo ""
-  echo "Environment variables:"
-  echo "  WEAVE_FLEET_PORT                Server port (default: 5000)"
-  echo "  WEAVE_FLEET_HOST                Bind host (default: 127.0.0.1)"
-  echo "  Fleet__DatabasePath             SQLite database path override"
+echo "Environment variables:"
+echo "  WEAVE_FLEET_PORT                Server port (default: 5000)"
+echo "  WEAVE_FLEET_HOST                Bind host (default: 127.0.0.1)"
+echo "  WEAVE_FLEET_DATA_DIR            Data directory (default: ~/.weave)"
+echo "  Fleet__DatabasePath             SQLite database path override"
   echo "  Fleet__AnalyticsDatabasePath    Analytics database path override"
   echo "  Fleet__DataProtection__KeyPath  Data protection key directory override"
 }
 
 PORT_OVERRIDE=""
+HOST_OVERRIDE=""
+DATA_DIR_OVERRIDE=""
 PROFILE_NAME=""
 
 while [ "$#" -gt 0 ]; do
@@ -141,6 +146,30 @@ while [ "$#" -gt 0 ]; do
     --port=*)
       PORT_OVERRIDE="${1#--port=}"
       ;;
+    --host)
+      if [ "$#" -lt 2 ]; then
+        echo "Error: --host requires a value." >&2
+        exit 1
+      fi
+      HOST_OVERRIDE="$2"
+      shift 2
+      continue
+      ;;
+    --host=*)
+      HOST_OVERRIDE="${1#--host=}"
+      ;;
+    --data-dir)
+      if [ "$#" -lt 2 ]; then
+        echo "Error: --data-dir requires a value." >&2
+        exit 1
+      fi
+      DATA_DIR_OVERRIDE="$2"
+      shift 2
+      continue
+      ;;
+    --data-dir=*)
+      DATA_DIR_OVERRIDE="${1#--data-dir=}"
+      ;;
     --profile)
       if [ "$#" -lt 2 ]; then
         echo "Error: --profile requires a value." >&2
@@ -183,9 +212,9 @@ fi
 
 VERSION="$(read_version)"
 PORT="${PORT_OVERRIDE:-${WEAVE_FLEET_PORT:-5000}}"
-HOST="${WEAVE_FLEET_HOST:-127.0.0.1}"
+HOST="${HOST_OVERRIDE:-${WEAVE_FLEET_HOST:-127.0.0.1}}"
 LISTEN_URL="http://${HOST}:${PORT}"
-DATA_DIR="${HOME}/.weave"
+DATA_DIR="${DATA_DIR_OVERRIDE:-${WEAVE_FLEET_DATA_DIR:-${HOME}/.weave}}"
 if [ -n "$PROFILE_NAME" ]; then
   DATA_DIR="$DATA_DIR/profiles/$PROFILE_NAME"
 fi

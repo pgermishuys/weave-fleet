@@ -77,7 +77,7 @@ rd /s /q "%ROOT_DIR%" >nul 2>&1 & echo Done. & exit /b 0
 call :read_version
 echo Fleet v!VERSION!
 echo.
-echo Usage: fleet [command] [--port ^<port^>] [--profile ^<name^>]
+echo Usage: fleet [command] [--port ^<port^>] [--host ^<host^>] [--data-dir ^<path^>] [--profile ^<name^>]
 echo.
 echo Commands:
 echo   (none)       Start the Fleet server
@@ -88,11 +88,14 @@ echo   help         Show this help message
 echo.
 echo Options when starting the server:
 echo   --port ^<port^>       Override the server port
+echo   --host ^<host^>       Override the bind host
+echo   --data-dir ^<path^>   Override the data directory (default: %%USERPROFILE%%\.weave)
 echo   --profile ^<name^>    Use a profile-specific data directory
 echo.
 echo Environment variables:
 echo   WEAVE_FLEET_PORT                Server port ^(default: 5000^)
 echo   WEAVE_FLEET_HOST                Bind host ^(default: 127.0.0.1^)
+echo   WEAVE_FLEET_DATA_DIR            Data directory ^(default: %%USERPROFILE%%\.weave^)
 echo   Fleet__DatabasePath             SQLite database path override
 echo   Fleet__AnalyticsDatabasePath    Analytics database path override
 echo   Fleet__DataProtection__KeyPath  Data protection key directory override
@@ -100,6 +103,8 @@ exit /b 0
 
 :parse_args
 set "PORT_OVERRIDE="
+set "HOST_OVERRIDE="
+set "DATA_DIR_OVERRIDE="
 set "PROFILE_NAME="
 
 :parse_args_loop
@@ -124,6 +129,28 @@ if /i "%~1"=="--port" (
     goto :parse_args_loop
 )
 
+if /i "%~1"=="--host" (
+    if "%~2"=="" (
+        echo Error: --host requires a value. >&2
+        exit /b 1
+    )
+    set "HOST_OVERRIDE=%~2"
+    shift
+    shift
+    goto :parse_args_loop
+)
+
+if /i "%~1"=="--data-dir" (
+    if "%~2"=="" (
+        echo Error: --data-dir requires a value. >&2
+        exit /b 1
+    )
+    set "DATA_DIR_OVERRIDE=%~2"
+    shift
+    shift
+    goto :parse_args_loop
+)
+
 if /i "%~1"=="--profile" (
     if "%~2"=="" (
         echo Error: --profile requires a value. >&2
@@ -138,6 +165,18 @@ if /i "%~1"=="--profile" (
 set "ARG=%~1"
 if /i "!ARG:~0,7!"=="--port=" (
     set "PORT_OVERRIDE=!ARG:~7!"
+    shift
+    goto :parse_args_loop
+)
+
+if /i "!ARG:~0,7!"=="--host=" (
+    set "HOST_OVERRIDE=!ARG:~7!"
+    shift
+    goto :parse_args_loop
+)
+
+if /i "!ARG:~0,11!"=="--data-dir=" (
+    set "DATA_DIR_OVERRIDE=!ARG:~11!"
     shift
     goto :parse_args_loop
 )
@@ -201,9 +240,19 @@ if defined PORT_OVERRIDE (
 ) else if not defined WEAVE_FLEET_PORT (
     set "WEAVE_FLEET_PORT=5000"
 )
-if not defined WEAVE_FLEET_HOST set "WEAVE_FLEET_HOST=127.0.0.1"
+if defined HOST_OVERRIDE (
+    set "WEAVE_FLEET_HOST=%HOST_OVERRIDE%"
+) else if not defined WEAVE_FLEET_HOST (
+    set "WEAVE_FLEET_HOST=127.0.0.1"
+)
 set "LISTEN_URL=http://%WEAVE_FLEET_HOST%:%WEAVE_FLEET_PORT%"
-set "DATA_DIR=%USERPROFILE%\.weave"
+if defined DATA_DIR_OVERRIDE (
+    set "DATA_DIR=%DATA_DIR_OVERRIDE%"
+) else if defined WEAVE_FLEET_DATA_DIR (
+    set "DATA_DIR=%WEAVE_FLEET_DATA_DIR%"
+) else (
+    set "DATA_DIR=%USERPROFILE%\.weave"
+)
 if defined PROFILE_NAME set "DATA_DIR=%DATA_DIR%\profiles\%PROFILE_NAME%"
 set "DB_PATH_DEFAULT=%DATA_DIR%\fleet.db"
 set "ANALYTICS_DB_PATH_DEFAULT=%DATA_DIR%\fleet-analytics.db"
