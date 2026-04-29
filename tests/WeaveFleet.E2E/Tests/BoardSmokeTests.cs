@@ -67,6 +67,7 @@ public sealed class BoardSmokeTests : E2ETestBase, IClassFixture<PlaywrightFixtu
 
             await ExpectHeadingAsync(Page, "Kanban Board");
             await Microsoft.Playwright.Assertions.Expect(Page.GetByText("No lanes yet", new PageGetByTextOptions { Exact = true })).ToBeVisibleAsync();
+            await EnsureManageModeAsync(Page);
 
             await CreateLaneAsync(Page, "Triage");
             await CreateLaneAsync(Page, "Working");
@@ -186,6 +187,16 @@ public sealed class BoardSmokeTests : E2ETestBase, IClassFixture<PlaywrightFixtu
         await Microsoft.Playwright.Assertions.Expect(GetLaneColumn(page, laneName)).ToBeVisibleAsync();
     }
 
+    private static async Task EnsureManageModeAsync(IPage page)
+    {
+        var editBoardButton = page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Edit Board", Exact = true });
+        if (await editBoardButton.CountAsync() == 0)
+            return;
+
+        await editBoardButton.ClickAsync();
+        await Microsoft.Playwright.Assertions.Expect(page.Locator(".kanban-header__button--mode")).ToHaveTextAsync("Save");
+    }
+
     private static async Task SetInboxLaneAsync(IPage page, string laneName)
     {
         var lane = GetLaneColumn(page, laneName);
@@ -205,8 +216,8 @@ public sealed class BoardSmokeTests : E2ETestBase, IClassFixture<PlaywrightFixtu
     {
         var lane = GetLaneColumn(page, laneName);
         await lane.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Rename", Exact = true }).ClickAsync();
-        await page.Locator(".kanban-col__rename-input").FillAsync(newLaneName);
-        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Save", Exact = true }).ClickAsync();
+        await lane.Locator(".kanban-col__rename-input").FillAsync(newLaneName);
+        await lane.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Save", Exact = true }).ClickAsync();
         await Microsoft.Playwright.Assertions.Expect(GetLaneColumn(page, newLaneName)).ToBeVisibleAsync();
     }
 
@@ -221,10 +232,15 @@ public sealed class BoardSmokeTests : E2ETestBase, IClassFixture<PlaywrightFixtu
 
     private static async Task RenameCardAsync(IPage page, string laneName, string cardTitle, string newCardTitle)
     {
+        var lane = GetLaneColumn(page, laneName);
         var card = GetCard(page, laneName, cardTitle);
         await card.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Rename", Exact = true }).ClickAsync();
-        await page.Locator(".k-card__rename-input").FillAsync(newCardTitle);
-        await page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Save", Exact = true }).ClickAsync();
+
+        var renameInput = lane.Locator(".k-card__rename-input");
+        await renameInput.FillAsync(newCardTitle);
+
+        var editingCard = renameInput.Locator("xpath=ancestor::article[contains(@class, 'k-card')]");
+        await editingCard.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Save", Exact = true }).ClickAsync();
         await Microsoft.Playwright.Assertions.Expect(GetCard(page, laneName, newCardTitle)).ToBeVisibleAsync();
     }
 
