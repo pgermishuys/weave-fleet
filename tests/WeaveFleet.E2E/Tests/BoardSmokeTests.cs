@@ -16,7 +16,7 @@ public sealed class BoardSmokeTests : E2ETestBase, IClassFixture<PlaywrightFixtu
     private bool _factoryDisposed;
 
     public BoardSmokeTests(PlaywrightFixture playwright)
-        : this(CreateDatabasePath("weave-fleet-board-smoke"), CreateDatabasePath("weave-fleet-board-analytics-smoke"), playwright)
+        : this(CreateDatabasePath("fleet-board-smoke"), CreateDatabasePath("fleet-board-analytics-smoke"), playwright)
     {
     }
 

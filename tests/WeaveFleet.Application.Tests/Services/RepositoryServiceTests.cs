@@ -179,7 +179,7 @@ public sealed class RepositoryServiceTests
     {
         public TempDirectory(bool createGitDirectory = false)
         {
-            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"weave-fleet-{Guid.NewGuid():N}");
+            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"fleet-{Guid.NewGuid():N}");
             Directory.CreateDirectory(Path);
             if (createGitDirectory)
                 Directory.CreateDirectory(System.IO.Path.Combine(Path, ".git"));

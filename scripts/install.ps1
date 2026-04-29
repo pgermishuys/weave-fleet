@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 
 $repo = if ($env:WEAVE_FLEET_GITHUB_REPO) { $env:WEAVE_FLEET_GITHUB_REPO } else { 'pgermishuys/weave-fleet' }
 $homeDirectory = [Environment]::GetFolderPath('UserProfile')
-$installDir = if ($env:WEAVE_FLEET_INSTALL_DIR) { $env:WEAVE_FLEET_INSTALL_DIR } else { Join-Path $homeDirectory '.weave/weave-fleet' }
+$installDir = if ($env:WEAVE_FLEET_INSTALL_DIR) { $env:WEAVE_FLEET_INSTALL_DIR } else { Join-Path $homeDirectory '.weave/fleet' }
 $checksumsName = if ($env:WEAVE_FLEET_CHECKSUMS_NAME) { $env:WEAVE_FLEET_CHECKSUMS_NAME } else { 'checksums.txt' }
 $skipPathUpdate = $env:WEAVE_FLEET_SKIP_PATH_UPDATE -eq '1'
 
@@ -45,7 +45,7 @@ function Get-ReleaseTag {
 
     $release = Invoke-RestMethod -Uri $releaseApiUrl
     if (-not $release.tag_name) {
-        throw 'Could not determine the latest Weave Fleet release tag.'
+        throw 'Could not determine the latest Fleet release tag.'
     }
 
     return Get-NormalizedTag -Version $release.tag_name
@@ -68,7 +68,7 @@ function Get-WindowsAssetBaseName {
         [string] $ReleaseTag
     )
 
-    return "weave-fleet-$ReleaseTag-win-x64"
+    return "fleet-$ReleaseTag-win-x64"
 }
 
 function Get-ExpectedHashFromContent {
@@ -154,7 +154,7 @@ function Get-PackageRoot {
         }
     }
 
-    throw 'Extracted archive did not contain the expected Weave Fleet package layout.'
+    throw 'Extracted archive did not contain the expected Fleet package layout.'
 }
 
 function Update-UserPath {
@@ -282,8 +282,8 @@ try {
     $binDir = Join-Path $installDir 'bin'
     Update-UserPath -BinDir $binDir
 
-    Write-Log "Weave Fleet installed to $installDir."
-    Write-Log 'Start it with: weave-fleet'
+    Write-Log "Fleet installed to $installDir."
+    Write-Log 'Start it with: fleet'
 }
 finally {
     if (Test-Path $workDir) {

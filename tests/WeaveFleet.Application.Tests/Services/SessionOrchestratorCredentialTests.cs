@@ -287,7 +287,7 @@ public sealed class SessionOrchestratorCredentialTests : IAsyncDisposable
     {
         public TempDirectory()
         {
-            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"weave-fleet-credentials-{Guid.NewGuid():N}");
+            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"fleet-credentials-{Guid.NewGuid():N}");
             Directory.CreateDirectory(Path);
         }
 

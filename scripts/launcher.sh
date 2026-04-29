@@ -12,7 +12,8 @@ REPO_BIN="$REPO_APP_DIR/WeaveFleet.Api"
 REPO_CONTENT_ROOT="$ROOT_DIR/src/WeaveFleet.Api"
 VERSION_FILE="$ROOT_DIR/VERSION"
 DEV_VERSION_FILE="$ROOT_DIR/Directory.Build.props"
-INSTALL_SCRIPT_URL="${WEAVE_FLEET_INSTALL_SCRIPT_URL:-https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh}"
+REPO_SLUG="pgermishuys/weave""-fleet"
+INSTALL_SCRIPT_URL="${WEAVE_FLEET_INSTALL_SCRIPT_URL:-https://github.com/${REPO_SLUG}/releases/latest/download/install.sh}"
 
 APP_DIR=""
 APP_BIN=""
@@ -29,11 +30,11 @@ elif [ -x "$REPO_BIN" ]; then
   APP_BIN="$REPO_BIN"
   APP_CONTENT_ROOT="$REPO_CONTENT_ROOT"
 else
-  echo "Error: Weave Fleet binary not found." >&2
+  echo "Error: Fleet binary not found." >&2
   echo "Expected one of:" >&2
   echo "  $PACKAGE_BIN" >&2
   echo "  $REPO_BIN" >&2
-  echo "Build or publish Weave Fleet first." >&2
+  echo "Build or publish Fleet first." >&2
   exit 1
 fi
 
@@ -56,15 +57,15 @@ read_version() {
 
 show_help() {
   VERSION="$(read_version)"
-  echo "Weave Fleet v${VERSION}"
+  echo "Fleet v${VERSION}"
   echo ""
-  echo "Usage: weave-fleet [command] [--port <port>] [--profile <name>]"
+  echo "Usage: fleet [command] [--port <port>] [--profile <name>]"
   echo ""
   echo "Commands:"
-  echo "  (none)       Start the Weave Fleet server"
+  echo "  (none)       Start the Fleet server"
   echo "  version      Print the installed version"
   echo "  update       Update to the latest version"
-  echo "  uninstall    Remove Weave Fleet"
+  echo "  uninstall    Remove Fleet"
   echo "  help         Show this help message"
   echo ""
   echo "Options when starting the server:"
@@ -97,7 +98,7 @@ while [ "$#" -gt 0 ]; do
         echo "Error: update does not accept additional arguments." >&2
         exit 1
       fi
-      echo "Updating Weave Fleet..."
+      echo "Updating Fleet..."
       if command -v curl >/dev/null 2>&1; then
         exec sh -c "curl -fsSL ${INSTALL_SCRIPT_URL} | sh"
       fi
@@ -116,7 +117,7 @@ while [ "$#" -gt 0 ]; do
         echo "Error: uninstall is only supported from an installed package layout." >&2
         exit 1
       fi
-      echo "Removing Weave Fleet from $ROOT_DIR..."
+      echo "Removing Fleet from $ROOT_DIR..."
       rm -rf "$ROOT_DIR"
       echo "Done. Remove any PATH entry that points at $ROOT_DIR/bin if needed."
       exit 0
@@ -155,7 +156,7 @@ while [ "$#" -gt 0 ]; do
       ;;
     *)
       echo "Unknown command or option: $1" >&2
-      echo "Run 'weave-fleet help' for usage." >&2
+      echo "Run 'fleet help' for usage." >&2
       exit 1
       ;;
   esac
@@ -189,9 +190,9 @@ DATA_DIR="${HOME}/.weave"
 if [ -n "$PROFILE_NAME" ]; then
   DATA_DIR="$DATA_DIR/profiles/$PROFILE_NAME"
 fi
-DB_PATH_DEFAULT="$DATA_DIR/weave-fleet.db"
-ANALYTICS_DB_PATH_DEFAULT="$DATA_DIR/weave-fleet-analytics.db"
-KEY_DIR_DEFAULT="$DATA_DIR/weave-fleet-keys"
+DB_PATH_DEFAULT="$DATA_DIR/fleet.db"
+ANALYTICS_DB_PATH_DEFAULT="$DATA_DIR/fleet-analytics.db"
+KEY_DIR_DEFAULT="$DATA_DIR/fleet-keys"
 
 mkdir -p "$DATA_DIR"
 mkdir -p "$KEY_DIR_DEFAULT"
@@ -206,5 +207,5 @@ export Fleet__DatabasePath="${Fleet__DatabasePath:-$DB_PATH_DEFAULT}"
 export Fleet__AnalyticsDatabasePath="${Fleet__AnalyticsDatabasePath:-$ANALYTICS_DB_PATH_DEFAULT}"
 export Fleet__DataProtection__KeyPath="${Fleet__DataProtection__KeyPath:-$KEY_DIR_DEFAULT}"
 
-echo "Weave Fleet v${VERSION} starting on ${LISTEN_URL}"
+echo "Fleet v${VERSION} starting on ${LISTEN_URL}"
 exec "$APP_BIN" --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT"

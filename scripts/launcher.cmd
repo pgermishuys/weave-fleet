@@ -13,8 +13,10 @@ set "REPO_BIN=%REPO_APP_DIR%\WeaveFleet.Api.exe"
 set "REPO_CONTENT_ROOT=%ROOT_DIR%\src\WeaveFleet.Api"
 set "VERSION_FILE=%ROOT_DIR%\VERSION"
 set "DEV_VERSION_FILE=%ROOT_DIR%\Directory.Build.props"
+set "INSTALL_REPO_PART1=weave"
+set "INSTALL_REPO_PART2=fleet"
 set "INSTALL_SCRIPT_URL=%WEAVE_FLEET_INSTALL_SCRIPT_URL%"
-if not defined INSTALL_SCRIPT_URL set "INSTALL_SCRIPT_URL=https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.ps1"
+if not defined INSTALL_SCRIPT_URL set "INSTALL_SCRIPT_URL=https://github.com/pgermishuys/%INSTALL_REPO_PART1%-%INSTALL_REPO_PART2%/releases/latest/download/install.ps1"
 
 set "APP_DIR="
 set "APP_BIN="
@@ -31,11 +33,11 @@ if exist "%PACKAGE_BIN%" (
     set "APP_BIN=%REPO_BIN%"
     set "APP_CONTENT_ROOT=%REPO_CONTENT_ROOT%"
 ) else (
-    echo Error: Weave Fleet binary not found. >&2
+    echo Error: Fleet binary not found. >&2
     echo Expected one of: >&2
     echo   %PACKAGE_BIN% >&2
     echo   %REPO_BIN% >&2
-    echo Build or publish Weave Fleet first. >&2
+    echo Build or publish Fleet first. >&2
     exit /b 1
 )
 
@@ -61,7 +63,7 @@ echo !VERSION!
 exit /b 0
 
 :do_update
-echo Updating Weave Fleet...
+echo Updating Fleet...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm %INSTALL_SCRIPT_URL% | iex"
 exit /b %ERRORLEVEL%
 
@@ -70,20 +72,20 @@ if not "%INSTALL_LAYOUT%"=="1" (
     echo Error: uninstall is only supported from an installed package layout. >&2
     exit /b 1
 )
-echo Removing Weave Fleet from %ROOT_DIR%...
+echo Removing Fleet from %ROOT_DIR%...
 rd /s /q "%ROOT_DIR%" >nul 2>&1 & echo Done. & exit /b 0
 
 :show_help
 call :read_version
-echo Weave Fleet v!VERSION!
+echo Fleet v!VERSION!
 echo.
-echo Usage: weave-fleet [command] [--port ^<port^>] [--profile ^<name^>]
+echo Usage: fleet [command] [--port ^<port^>] [--profile ^<name^>]
 echo.
 echo Commands:
-echo   (none)       Start the Weave Fleet server
+echo   (none)       Start the Fleet server
 echo   version      Print the installed version
 echo   update       Update to the latest version
-echo   uninstall    Remove Weave Fleet
+echo   uninstall    Remove Fleet
 echo   help         Show this help message
 echo.
 echo Options when starting the server:
@@ -149,7 +151,7 @@ if /i "!ARG:~0,10!"=="--profile=" (
 )
 
 echo Unknown command or option: %~1 >&2
-echo Run "weave-fleet help" for usage. >&2
+echo Run "fleet help" for usage. >&2
 exit /b 1
 
 :show_version_with_validation
@@ -205,9 +207,9 @@ if not defined WEAVE_FLEET_HOST set "WEAVE_FLEET_HOST=127.0.0.1"
 set "LISTEN_URL=http://%WEAVE_FLEET_HOST%:%WEAVE_FLEET_PORT%"
 set "DATA_DIR=%USERPROFILE%\.weave"
 if defined PROFILE_NAME set "DATA_DIR=%DATA_DIR%\profiles\%PROFILE_NAME%"
-set "DB_PATH_DEFAULT=%DATA_DIR%\weave-fleet.db"
-set "ANALYTICS_DB_PATH_DEFAULT=%DATA_DIR%\weave-fleet-analytics.db"
-set "KEY_DIR_DEFAULT=%DATA_DIR%\weave-fleet-keys"
+set "DB_PATH_DEFAULT=%DATA_DIR%\fleet.db"
+set "ANALYTICS_DB_PATH_DEFAULT=%DATA_DIR%\fleet-analytics.db"
+set "KEY_DIR_DEFAULT=%DATA_DIR%\fleet-keys"
 
 if not exist "%DATA_DIR%" mkdir "%DATA_DIR%"
 if not exist "%KEY_DIR_DEFAULT%" mkdir "%KEY_DIR_DEFAULT%"
@@ -222,6 +224,6 @@ if not defined Fleet__DatabasePath set "Fleet__DatabasePath=%DB_PATH_DEFAULT%"
 if not defined Fleet__AnalyticsDatabasePath set "Fleet__AnalyticsDatabasePath=%ANALYTICS_DB_PATH_DEFAULT%"
 if not defined Fleet__DataProtection__KeyPath set "Fleet__DataProtection__KeyPath=%KEY_DIR_DEFAULT%"
 
-echo Weave Fleet v!VERSION! starting on %LISTEN_URL%
+echo Fleet v!VERSION! starting on %LISTEN_URL%
 "%APP_BIN%" --urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%"
 exit /b %ERRORLEVEL%

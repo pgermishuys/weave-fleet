@@ -149,7 +149,7 @@ After the tag is pushed, verify all of the following:
 - [ ] The release includes all per-asset checksum files and `checksums.txt`.
 - [ ] The release includes `install.sh` and `install.ps1`.
 - [ ] Packaged smoke tests passed in the workflow.
-- [ ] A downloaded package reports the expected version with `weave-fleet version`.
+- [ ] A downloaded package reports the expected version with `fleet version`.
 - [ ] A downloaded package starts and serves `/healthz` successfully.
 
 ## Recommended post-release spot checks
@@ -158,9 +158,9 @@ After the tag is pushed, verify all of the following:
 
 ```bash
 curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh | sh
-export PATH="$HOME/.weave/weave-fleet/bin:$PATH"
-weave-fleet version
-weave-fleet
+export PATH="$HOME/.weave/fleet/bin:$PATH"
+fleet version
+fleet
 curl -fsS http://127.0.0.1:5000/healthz
 ```
 
@@ -168,8 +168,8 @@ curl -fsS http://127.0.0.1:5000/healthz
 
 ```powershell
 irm https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.ps1 | iex
-weave-fleet version
-weave-fleet
+fleet version
+fleet
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5000/healthz
 ```
 

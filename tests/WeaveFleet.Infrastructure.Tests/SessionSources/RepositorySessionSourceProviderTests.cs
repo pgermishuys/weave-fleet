@@ -96,7 +96,7 @@ public sealed class RepositorySessionSourceProviderTests
     {
         public GitRepositoryFixture()
         {
-            ParentPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"weave-fleet-root-{Guid.NewGuid():N}");
+            ParentPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"fleet-root-{Guid.NewGuid():N}");
             Path = System.IO.Path.Combine(ParentPath, "repo");
             Directory.CreateDirectory(Path);
             Directory.CreateDirectory(System.IO.Path.Combine(Path, ".git"));

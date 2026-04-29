@@ -4,7 +4,7 @@ set -eu
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 ROOT_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 DEFAULT_OUTPUT_DIR="$ROOT_DIR"
-DEFAULT_PACKAGE_NAME="weave-fleet"
+DEFAULT_PACKAGE_NAME="fleet"
 
 WORK_DIR=""
 
@@ -150,15 +150,15 @@ ARCHIVE_NAME="${ASSET_BASE_NAME}.tar.gz"
 ARCHIVE_PATH="$OUTPUT_DIR/$ARCHIVE_NAME"
 CHECKSUM_PATH="${ARCHIVE_PATH}.sha256"
 
-WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/weave-fleet-package.XXXXXX")"
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/fleet-package.XXXXXX")"
 PACKAGE_ROOT="$WORK_DIR/$ASSET_BASE_NAME"
 PACKAGE_BIN_DIR="$PACKAGE_ROOT/bin"
 PACKAGE_APP_DIR="$PACKAGE_ROOT/app"
 
 mkdir -p "$PACKAGE_BIN_DIR" "$PACKAGE_APP_DIR"
 
-cp "$SCRIPT_DIR/launcher.sh" "$PACKAGE_BIN_DIR/weave-fleet"
-chmod +x "$PACKAGE_BIN_DIR/weave-fleet"
+cp "$SCRIPT_DIR/launcher.sh" "$PACKAGE_BIN_DIR/fleet"
+chmod +x "$PACKAGE_BIN_DIR/fleet"
 
 cp -R "$PUBLISH_DIR"/. "$PACKAGE_APP_DIR"/
 if [ -f "$PACKAGE_APP_DIR/WeaveFleet.Api" ]; then

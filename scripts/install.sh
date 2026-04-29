@@ -2,7 +2,7 @@
 set -eu
 
 REPO="${WEAVE_FLEET_GITHUB_REPO:-pgermishuys/weave-fleet}"
-INSTALL_DIR="${WEAVE_FLEET_INSTALL_DIR:-$HOME/.weave/weave-fleet}"
+INSTALL_DIR="${WEAVE_FLEET_INSTALL_DIR:-$HOME/.weave/fleet}"
 PROFILE_FILE_OVERRIDE="${WEAVE_FLEET_PROFILE_FILE:-}"
 SKIP_PATH_UPDATE="${WEAVE_FLEET_SKIP_PATH_UPDATE:-0}"
 CHECKSUMS_NAME="${WEAVE_FLEET_CHECKSUMS_NAME:-checksums.txt}"
@@ -40,7 +40,7 @@ download_file() {
     return 0
   fi
 
-  fail "Error: curl or wget is required to download Weave Fleet."
+  fail "Error: curl or wget is required to download Fleet."
 }
 
 try_download_file() {
@@ -73,7 +73,7 @@ download_text() {
     return 0
   fi
 
-  fail "Error: curl or wget is required to download Weave Fleet."
+  fail "Error: curl or wget is required to download Fleet."
 }
 
 normalize_tag() {
@@ -126,7 +126,7 @@ resolve_tag() {
   release_tag="$(printf '%s' "$release_metadata" | tr -d '\n' | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
 
   if [ -z "$release_tag" ]; then
-    fail "Error: could not determine the latest Weave Fleet release tag."
+    fail "Error: could not determine the latest Fleet release tag."
   fi
 
   normalize_tag "$release_tag"
@@ -213,7 +213,7 @@ resolve_expected_hash() {
 
 ensure_tar_available() {
   if ! command -v tar >/dev/null 2>&1; then
-    fail "Error: tar is required to extract the Weave Fleet archive."
+    fail "Error: tar is required to extract the Fleet archive."
   fi
 }
 
@@ -231,7 +231,7 @@ find_package_root() {
     return 0
   fi
 
-  fail "Error: extracted archive did not contain the expected Weave Fleet package layout."
+  fail "Error: extracted archive did not contain the expected Fleet package layout."
 }
 
 select_profile_file() {
@@ -277,7 +277,7 @@ update_path() {
     return 0
   fi
 
-  printf '\n# Weave Fleet\n%s\n' "$path_line" >> "$profile_path"
+  printf '\n# Fleet\n%s\n' "$path_line" >> "$profile_path"
   log "Added $bin_dir to PATH in $profile_path."
 }
 
@@ -287,14 +287,14 @@ main() {
   rid="$(detect_os)-$(detect_arch)"
   release_tag="$(resolve_tag)"
   download_base_url="$(resolve_download_base_url "$release_tag")"
-  asset_name="weave-fleet-${release_tag}-${rid}.tar.gz"
+  asset_name="fleet-${release_tag}-${rid}.tar.gz"
 
-  WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/weave-fleet-install.XXXXXX")"
+  WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/fleet-install.XXXXXX")"
   archive_path="$WORK_DIR/$asset_name"
   extract_dir="$WORK_DIR/extracted"
   mkdir -p "$extract_dir"
 
-  log "Installing Weave Fleet $release_tag for $rid..."
+  log "Installing Fleet $release_tag for $rid..."
   download_file "$download_base_url/$asset_name" "$archive_path"
 
   expected_hash="$(resolve_expected_hash "$asset_name" "$download_base_url")"
@@ -314,8 +314,8 @@ main() {
   mkdir -p "$INSTALL_DIR"
   cp -R "$package_root"/. "$INSTALL_DIR"/
 
-  if [ -f "$INSTALL_DIR/bin/weave-fleet" ]; then
-    chmod +x "$INSTALL_DIR/bin/weave-fleet"
+  if [ -f "$INSTALL_DIR/bin/fleet" ]; then
+    chmod +x "$INSTALL_DIR/bin/fleet"
   fi
 
   if [ -f "$INSTALL_DIR/app/WeaveFleet.Api" ]; then
@@ -324,9 +324,9 @@ main() {
 
   update_path "$INSTALL_DIR/bin"
 
-  log "Weave Fleet installed to $INSTALL_DIR."
+  log "Fleet installed to $INSTALL_DIR."
   log "Open a new shell or run: export PATH=\"$INSTALL_DIR/bin:\$PATH\""
-  log "Then start it with: weave-fleet"
+  log "Then start it with: fleet"
 }
 
 main "$@"

@@ -172,9 +172,9 @@ public sealed class AnalyticsEndpointTenantIsolationTests : IAsyncLifetime
     private sealed class AnalyticsWebApplicationFactory : WebApplicationFactory<Program>
     {
         private readonly string _dbPath =
-            Path.Combine(Path.GetTempPath(), $"weave-fleet-analytics-isolation-{Guid.NewGuid():N}.db");
+            Path.Combine(Path.GetTempPath(), $"fleet-analytics-isolation-{Guid.NewGuid():N}.db");
         private readonly string _analyticsDbPath =
-            Path.Combine(Path.GetTempPath(), $"weave-fleet-analytics-isolation-analytics-{Guid.NewGuid():N}.db");
+            Path.Combine(Path.GetTempPath(), $"fleet-analytics-isolation-analytics-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {

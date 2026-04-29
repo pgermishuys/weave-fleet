@@ -172,7 +172,7 @@ public sealed class MultiTenancyTests
     {
         public TempDirectory()
         {
-            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"weave-fleet-multitenancy-{Guid.NewGuid():N}");
+            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"fleet-multitenancy-{Guid.NewGuid():N}");
             Directory.CreateDirectory(Path);
         }
 

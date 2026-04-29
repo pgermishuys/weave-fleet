@@ -9,7 +9,7 @@ param(
 
     [string] $Version,
 
-    [string] $PackageName = 'weave-fleet'
+    [string] $PackageName = 'fleet'
 )
 
 Set-StrictMode -Version Latest
@@ -77,10 +77,10 @@ function Get-LauncherTargetName {
     )
 
     if ($RuntimeIdentifier.StartsWith('win-', [System.StringComparison]::OrdinalIgnoreCase)) {
-        return 'weave-fleet.cmd'
+        return 'fleet.cmd'
     }
 
-    return 'weave-fleet'
+    return 'fleet'
 }
 
 function Write-Log {
@@ -136,7 +136,7 @@ try {
 
     Set-Content -Path (Join-Path $packageRoot 'VERSION') -Value $packageVersion -NoNewline
 
-    if ($launcherTargetName -eq 'weave-fleet') {
+    if ($launcherTargetName -eq 'fleet') {
         chmod +x (Join-Path $packageBinDir $launcherTargetName)
 
         $apiBinaryPath = Join-Path $packageAppDir 'WeaveFleet.Api'

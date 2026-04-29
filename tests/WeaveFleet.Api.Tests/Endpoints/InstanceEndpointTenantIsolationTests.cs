@@ -216,9 +216,9 @@ public sealed class InstanceEndpointTenantIsolationTests : IAsyncLifetime
     private sealed class InstanceIsolationFactory : WebApplicationFactory<Program>
     {
         private readonly string _dbPath =
-            Path.Combine(Path.GetTempPath(), $"weave-fleet-instance-isolation-{Guid.NewGuid():N}.db");
+            Path.Combine(Path.GetTempPath(), $"fleet-instance-isolation-{Guid.NewGuid():N}.db");
         private readonly string _analyticsDbPath =
-            Path.Combine(Path.GetTempPath(), $"weave-fleet-instance-isolation-analytics-{Guid.NewGuid():N}.db");
+            Path.Combine(Path.GetTempPath(), $"fleet-instance-isolation-analytics-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {

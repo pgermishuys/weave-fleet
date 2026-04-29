@@ -8,21 +8,21 @@ Installable local Fleet server builds are published through GitHub Releases.
 
 ```bash
 curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh | sh
-export PATH="$HOME/.weave/weave-fleet/bin:$PATH"
-weave-fleet version
+export PATH="$HOME/.weave/fleet/bin:$PATH"
+fleet version
 ```
 
 ### Windows PowerShell (`win-x64`)
 
 ```powershell
 irm https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.ps1 | iex
-weave-fleet version
+fleet version
 ```
 
 ## Run
 
 ```bash
-weave-fleet
+fleet
 ```
 
 Default URL:
@@ -37,9 +37,9 @@ curl -fsS http://127.0.0.1:5000/healthz
 
 ## Common commands
 
-- `weave-fleet version`
-- `weave-fleet update`
-- `weave-fleet uninstall`
+- `fleet version`
+- `fleet update`
+- `fleet uninstall`
 
 ## Supported release artifacts
 

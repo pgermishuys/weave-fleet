@@ -16,9 +16,9 @@ public sealed class ApiWebApplicationFactory(
     bool useTestAuthentication = false,
     Action<IServiceCollection>? configureTestServices = null) : WebApplicationFactory<Program>
 {
-    private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"weave-fleet-api-tests-{Guid.NewGuid():N}.db");
-    private readonly string _analyticsDbPath = Path.Combine(Path.GetTempPath(), $"weave-fleet-api-tests-analytics-{Guid.NewGuid():N}.db");
-    private readonly string _natsDataDir = Path.Combine(Path.GetTempPath(), $"weave-fleet-api-tests-nats-{Guid.NewGuid():N}");
+    private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-{Guid.NewGuid():N}.db");
+    private readonly string _analyticsDbPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-analytics-{Guid.NewGuid():N}.db");
+    private readonly string _natsDataDir = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-nats-{Guid.NewGuid():N}");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

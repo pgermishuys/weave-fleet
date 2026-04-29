@@ -23,7 +23,7 @@ public sealed class GitHubApiProxy(IHttpClientFactory httpClientFactory)
         using var client = httpClientFactory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github.v3+json");
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("weave-fleet/1.0");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("fleet/1.0");
 
         var url = $"{BaseUrl}/{path.TrimStart('/')}";
 

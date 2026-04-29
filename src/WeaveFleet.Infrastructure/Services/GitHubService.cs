@@ -290,7 +290,7 @@ public sealed class GitHubService(
         using var client = httpClientFactory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new("Bearer", token);
         client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("weave-fleet/1.0");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("fleet/1.0");
 
         var response = await client.GetAsync(UserUrl, ct).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)

@@ -29,8 +29,8 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
     public FleetWebApplicationFactory()
     {
         var guid = Guid.NewGuid().ToString("N");
-        _dbPath = Path.Combine(Path.GetTempPath(), $"weave-fleet-test-{guid}.db");
-        _analyticsDbPath = Path.Combine(Path.GetTempPath(), $"weave-fleet-analytics-test-{guid}.db");
+        _dbPath = Path.Combine(Path.GetTempPath(), $"fleet-test-{guid}.db");
+        _analyticsDbPath = Path.Combine(Path.GetTempPath(), $"fleet-analytics-test-{guid}.db");
         _ownsDatabaseFiles = true;
     }
 

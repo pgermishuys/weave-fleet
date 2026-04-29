@@ -43,9 +43,9 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
     public AuthFleetWebApplicationFactory()
     {
         var guid = Guid.NewGuid().ToString("N");
-        _dbPath = Path.Combine(Path.GetTempPath(), $"weave-fleet-auth-test-{guid}.db");
-        _analyticsDbPath = Path.Combine(Path.GetTempPath(), $"weave-fleet-auth-analytics-test-{guid}.db");
-        _workspaceRoot = Path.Combine(Path.GetTempPath(), $"weave-fleet-auth-workspace-{guid}");
+        _dbPath = Path.Combine(Path.GetTempPath(), $"fleet-auth-test-{guid}.db");
+        _analyticsDbPath = Path.Combine(Path.GetTempPath(), $"fleet-auth-analytics-test-{guid}.db");
+        _workspaceRoot = Path.Combine(Path.GetTempPath(), $"fleet-auth-workspace-{guid}");
         Directory.CreateDirectory(_workspaceRoot);
 
         _idp = new IdpProcessHost();

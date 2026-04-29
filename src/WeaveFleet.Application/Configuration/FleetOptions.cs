@@ -14,8 +14,8 @@ public sealed class FleetOptions
     /// <summary>Host/IP address Kestrel binds to. Default: 127.0.0.1.</summary>
     public string Host { get; set; } = "127.0.0.1";
 
-    /// <summary>Path to the SQLite database file. Default: weave-fleet.db in current directory.</summary>
-    public string DatabasePath { get; set; } = "weave-fleet.db";
+    /// <summary>Path to the SQLite database file. Default: fleet.db in current directory.</summary>
+    public string DatabasePath { get; set; } = "fleet.db";
 
     /// <summary>Enable verbose debug logging and developer-friendly error responses.</summary>
     public bool Debug { get; set; }
@@ -62,7 +62,7 @@ public sealed class FleetOptions
 
     /// <summary>
     /// Resolved analytics database path. When <see cref="AnalyticsDatabasePath"/> is empty,
-    /// defaults to "weave-fleet-analytics.db" in the same directory as <see cref="DatabasePath"/>.
+    /// defaults to "fleet-analytics.db" in the same directory as <see cref="DatabasePath"/>.
     /// </summary>
     public string ResolvedAnalyticsDatabasePath
     {
@@ -72,7 +72,7 @@ public sealed class FleetOptions
                 return AnalyticsDatabasePath;
 
             var dir = Path.GetDirectoryName(Path.GetFullPath(DatabasePath));
-            return Path.Combine(dir ?? ".", "weave-fleet-analytics.db");
+            return Path.Combine(dir ?? ".", "fleet-analytics.db");
         }
     }
 

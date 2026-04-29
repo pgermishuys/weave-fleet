@@ -186,7 +186,7 @@ public sealed class SessionSourceResolutionServiceTests
     {
         public TempDirectory()
         {
-            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"weave-fleet-session-source-{Guid.NewGuid():N}");
+            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"fleet-session-source-{Guid.NewGuid():N}");
             Directory.CreateDirectory(Path);
         }
 

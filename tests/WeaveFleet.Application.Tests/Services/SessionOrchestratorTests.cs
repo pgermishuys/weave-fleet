@@ -1073,7 +1073,7 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     {
         public TempDirectory()
         {
-            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"weave-fleet-session-{Guid.NewGuid():N}");
+            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"fleet-session-{Guid.NewGuid():N}");
             Directory.CreateDirectory(Path);
         }
 

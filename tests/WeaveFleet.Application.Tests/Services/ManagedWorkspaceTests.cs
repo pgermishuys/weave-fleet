@@ -138,7 +138,7 @@ public sealed class ManagedWorkspaceTests
     {
         public TempDirectory()
         {
-            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"weave-fleet-managed-workspace-{Guid.NewGuid():N}");
+            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"fleet-managed-workspace-{Guid.NewGuid():N}");
             Directory.CreateDirectory(Path);
         }
 

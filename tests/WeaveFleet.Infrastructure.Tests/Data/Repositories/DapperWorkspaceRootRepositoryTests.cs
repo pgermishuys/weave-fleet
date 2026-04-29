@@ -40,7 +40,7 @@ public sealed class DapperWorkspaceRootRepositoryTests
     {
         public TempDirectory()
         {
-            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"weave-fleet-root-{Guid.NewGuid():N}");
+            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"fleet-root-{Guid.NewGuid():N}");
             Directory.CreateDirectory(Path);
         }
 

@@ -102,11 +102,11 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           package_version="${RELEASE_TAG#v}"
-          asset_base_name="weave-fleet-${RELEASE_TAG}-${{ matrix.rid }}"
+          asset_base_name="fleet-${RELEASE_TAG}-${{ matrix.rid }}"
           asset_name="${asset_base_name}${{ matrix.archive_extension }}"
           archive_path="${{ github.workspace }}/artifacts/release/${asset_name}"
           extract_dir="${{ runner.temp }}/smoke-${{ matrix.rid }}"
-          log_path="$extract_dir/weave-fleet.log"
+          log_path="$extract_dir/fleet.log"
           port="5010"
 
           rm -rf "$extract_dir"
@@ -117,10 +117,10 @@ jobs:
           test -d "$extract_dir/$asset_base_name/bin"
           test -f "$extract_dir/$asset_base_name/VERSION"
 
-          version_output="$($extract_dir/$asset_base_name/bin/weave-fleet version)"
+          version_output="$($extract_dir/$asset_base_name/bin/fleet version)"
           test "$version_output" = "$package_version"
 
-          Fleet__Nats__Enabled="false" WEAVE_FLEET_HOST="127.0.0.1" WEAVE_FLEET_PORT="$port" "$extract_dir/$asset_base_name/bin/weave-fleet" >"$log_path" 2>&1 &
+          Fleet__Nats__Enabled="false" WEAVE_FLEET_HOST="127.0.0.1" WEAVE_FLEET_PORT="$port" "$extract_dir/$asset_base_name/bin/fleet" >"$log_path" 2>&1 &
           app_pid=$!
 
           cleanup() {
@@ -161,12 +161,12 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           $packageVersion = $env:RELEASE_TAG.TrimStart('v')
-          $assetBaseName = "weave-fleet-$($env:RELEASE_TAG)-${{ matrix.rid }}"
+          $assetBaseName = "fleet-$($env:RELEASE_TAG)-${{ matrix.rid }}"
           $assetName = "$assetBaseName${{ matrix.archive_extension }}"
           $archivePath = Join-Path $env:GITHUB_WORKSPACE "artifacts/release/$assetName"
           $extractDir = Join-Path $env:RUNNER_TEMP "smoke-${{ matrix.rid }}"
-          $logPath = Join-Path $extractDir 'weave-fleet.log'
-          $errorLogPath = Join-Path $extractDir 'weave-fleet.err.log'
+          $logPath = Join-Path $extractDir 'fleet.log'
+          $errorLogPath = Join-Path $extractDir 'fleet.err.log'
           $port = '5010'
 
           if (Test-Path -LiteralPath $extractDir) {
@@ -189,7 +189,7 @@ jobs:
               throw 'Missing packaged VERSION file.'
           }
 
-          $versionOutput = (& (Join-Path $packageDir 'bin/weave-fleet.cmd') version | Out-String).Trim()
+          $versionOutput = (& (Join-Path $packageDir 'bin/fleet.cmd') version | Out-String).Trim()
           if ($versionOutput -ne $packageVersion) {
               throw "Smoke test version mismatch. Expected '$packageVersion' but got '$versionOutput'."
           }
@@ -197,7 +197,7 @@ jobs:
           $env:Fleet__Nats__Enabled = 'false'
           $env:WEAVE_FLEET_HOST = '127.0.0.1'
           $env:WEAVE_FLEET_PORT = $port
-          $process = Start-Process -FilePath (Join-Path $packageDir 'bin/weave-fleet.cmd') -RedirectStandardOutput $logPath -RedirectStandardError $errorLogPath -PassThru
+          $process = Start-Process -FilePath (Join-Path $packageDir 'bin/fleet.cmd') -RedirectStandardOutput $logPath -RedirectStandardError $errorLogPath -PassThru
 
           try {
               for ($attempt = 0; $attempt -lt 30; $attempt++) {

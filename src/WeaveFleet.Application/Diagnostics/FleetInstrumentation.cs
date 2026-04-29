@@ -12,7 +12,7 @@ namespace WeaveFleet.Application.Diagnostics;
 public static class FleetInstrumentation
 {
     /// <summary>Service name used in OTEL resource attributes.</summary>
-    public const string ServiceName = "weave-fleet";
+    public const string ServiceName = "fleet";
 
     /// <summary>Service version, derived from the assembly informational version.</summary>
     public static readonly string ServiceVersion =
