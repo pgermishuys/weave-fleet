@@ -4,8 +4,8 @@ This repository releases installable Weave Fleet builds from Git tags. The relea
 
 GitHub Releases is the primary public distribution channel. The supported installer entrypoints are the release-hosted assets:
 
-- `https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh`
-- `https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.ps1`
+- `https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh`
+- `https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.ps1`
 
 ## Version source of truth
 
@@ -157,7 +157,7 @@ After the tag is pushed, verify all of the following:
 ### Unix/macOS
 
 ```bash
-curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh | sh
 export PATH="$HOME/.weave/fleet/bin:$PATH"
 fleet version
 fleet
@@ -167,7 +167,7 @@ curl -fsS http://127.0.0.1:5000/healthz
 ### Windows PowerShell
 
 ```powershell
-irm https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.ps1 | iex
+irm https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.ps1 | iex
 fleet version
 fleet
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5000/healthz

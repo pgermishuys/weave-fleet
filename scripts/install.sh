@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-REPO="${WEAVE_FLEET_GITHUB_REPO:-pgermishuys/weave-fleet}"
+REPO="${WEAVE_FLEET_GITHUB_REPO:-pgermishuys/fleet-releases}"
 INSTALL_DIR="${WEAVE_FLEET_INSTALL_DIR:-$HOME/.weave/fleet}"
 PROFILE_FILE_OVERRIDE="${WEAVE_FLEET_PROFILE_FILE:-}"
 SKIP_PATH_UPDATE="${WEAVE_FLEET_SKIP_PATH_UPDATE:-0}"

@@ -1,7 +1,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$repo = if ($env:WEAVE_FLEET_GITHUB_REPO) { $env:WEAVE_FLEET_GITHUB_REPO } else { 'pgermishuys/weave-fleet' }
+$repo = if ($env:WEAVE_FLEET_GITHUB_REPO) { $env:WEAVE_FLEET_GITHUB_REPO } else { 'pgermishuys/fleet-releases' }
 $homeDirectory = [Environment]::GetFolderPath('UserProfile')
 $installDir = if ($env:WEAVE_FLEET_INSTALL_DIR) { $env:WEAVE_FLEET_INSTALL_DIR } else { Join-Path $homeDirectory '.weave/fleet' }
 $checksumsName = if ($env:WEAVE_FLEET_CHECKSUMS_NAME) { $env:WEAVE_FLEET_CHECKSUMS_NAME } else { 'checksums.txt' }

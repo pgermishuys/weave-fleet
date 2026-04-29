@@ -7,7 +7,7 @@ Installable local Fleet server builds are published through GitHub Releases.
 ### macOS / Linux (`linux-x64`, `osx-arm64`)
 
 ```bash
-curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh | sh
 export PATH="$HOME/.weave/fleet/bin:$PATH"
 fleet version
 ```
@@ -15,7 +15,7 @@ fleet version
 ### Windows PowerShell (`win-x64`)
 
 ```powershell
-irm https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.ps1 | iex
+irm https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.ps1 | iex
 fleet version
 ```
 
