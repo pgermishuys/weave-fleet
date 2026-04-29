@@ -14,8 +14,8 @@ public sealed class NatsOptions
     /// <summary>Path to a NATS creds file. Only honoured when <see cref="ExternalUrl"/> is set.</summary>
     public string? CredsFile { get; set; }
 
-    /// <summary>Directory for embedded nats-server JetStream file storage. Default: ./data/nats.</summary>
-    public string DataDirectory { get; set; } = "./data/nats";
+    /// <summary>Directory for embedded nats-server JetStream file storage. Default: <c>&lt;LocalAppData&gt;/WeaveFleet/nats</c>.</summary>
+    public string DataDirectory { get; set; } = Path.Combine(FleetPaths.DefaultAppDataDirectory, "nats");
 
     /// <summary>Durable JetStream stream name. Default: fleet-sessions.</summary>
     public string StreamName { get; set; } = "fleet-sessions";
