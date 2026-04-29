@@ -62,19 +62,29 @@ public sealed partial class MigrationRunner
         // Get already-applied migrations
         var applied = (await connection.QueryAsync<string>("SELECT name FROM _migrations")).ToHashSet();
 
-        // Detect pre-.NET legacy databases: if _migrations is empty but application tables
-        // exist from a previous (non-.NET) version, the schema is incompatible. Drop all
-        // known legacy tables so migrations can recreate them with the correct schema.
-        if (applied.Count == 0)
-        {
-            var legacyTableExists = await connection.ExecuteScalarAsync<int>(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workspaces'");
+        // Detect corrupt or legacy migration state. Two scenarios:
+        // 1. Pre-.NET legacy DB: _migrations is empty but old tables exist.
+        // 2. Poisoned _migrations: a prior buggy release seeded all migrations as applied
+        //    without actually creating the tables (v0.1.5 bug).
+        // In both cases, wipe _migrations and drop legacy tables so migrations run cleanly.
+        var projectsTableExists = await connection.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects'");
+        var workspacesTableExists = await connection.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workspaces'");
 
-            if (legacyTableExists > 0)
-            {
-                LogLegacyDatabaseDetected();
-                await DropLegacyTablesAsync(connection);
-            }
+        if (applied.Count > 0 && projectsTableExists == 0)
+        {
+            // _migrations has entries but core tables are missing — poisoned state
+            LogCorruptMigrationHistory();
+            await connection.ExecuteAsync("DELETE FROM _migrations");
+            applied.Clear();
+        }
+
+        if (applied.Count == 0 && workspacesTableExists > 0)
+        {
+            // Legacy pre-.NET tables exist — drop them so migrations recreate with correct schema
+            LogLegacyDatabaseDetected();
+            await DropLegacyTablesAsync(connection);
         }
 
         foreach (var resourceName in resourceNames)
@@ -158,6 +168,9 @@ public sealed partial class MigrationRunner
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Legacy database detected — dropping incompatible tables so migrations can recreate them.")]
     private partial void LogLegacyDatabaseDetected();
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Corrupt migration history detected — clearing and re-running all migrations.")]
+    private partial void LogCorruptMigrationHistory();
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Skipping already-applied migration: {MigrationName}")]
     private partial void LogSkippingMigration(string migrationName);
