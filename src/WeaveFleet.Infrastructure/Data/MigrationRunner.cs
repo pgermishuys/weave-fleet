@@ -62,10 +62,9 @@ public sealed partial class MigrationRunner
         // Get already-applied migrations
         var applied = (await connection.QueryAsync<string>("SELECT name FROM _migrations")).ToHashSet();
 
-        // Detect pre-migration-tracking databases: if _migrations is empty but application
-        // tables already exist, this is a legacy database created before migration tracking
-        // was introduced. Seed all migrations as already applied to avoid re-running DDL
-        // against an existing schema.
+        // Detect pre-.NET legacy databases: if _migrations is empty but application tables
+        // exist from a previous (non-.NET) version, the schema is incompatible. Drop all
+        // known legacy tables so migrations can recreate them with the correct schema.
         if (applied.Count == 0)
         {
             var legacyTableExists = await connection.ExecuteScalarAsync<int>(
@@ -74,16 +73,7 @@ public sealed partial class MigrationRunner
             if (legacyTableExists > 0)
             {
                 LogLegacyDatabaseDetected();
-                foreach (var resourceName in resourceNames)
-                {
-                    var name = ExtractMigrationName(resourceName);
-                    await connection.ExecuteAsync(
-                        "INSERT INTO _migrations (name) VALUES (@Name)",
-                        new { Name = name });
-                    LogSkippingMigration(name);
-                }
-
-                return;
+                await DropLegacyTablesAsync(connection);
             }
         }
 
@@ -132,6 +122,29 @@ public sealed partial class MigrationRunner
         return resourceName;
     }
 
+    /// <summary>
+    /// Drops all known application tables from a pre-.NET legacy database so that
+    /// migrations can recreate them with the correct schema. Only called when the
+    /// <c>_migrations</c> table is empty but legacy tables already exist.
+    /// </summary>
+    private static async Task DropLegacyTablesAsync(IDbConnection connection)
+    {
+        // Order matters: drop tables with foreign keys first.
+        string[] legacyTables =
+        [
+            "session_callbacks",
+            "sessions",
+            "instances",
+            "workspaces",
+            "workspace_roots",
+        ];
+
+        foreach (var table in legacyTables)
+        {
+            await connection.ExecuteAsync($"DROP TABLE IF EXISTS {table}");
+        }
+    }
+
     private static string ReadResource(Assembly assembly, string resourceName)
     {
         using var stream = assembly.GetManifestResourceStream(resourceName)
@@ -143,7 +156,7 @@ public sealed partial class MigrationRunner
     [LoggerMessage(Level = LogLevel.Debug, Message = "No SQL migration resources found.")]
     private partial void LogNoMigrationsFound();
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Legacy database detected — seeding migration history for all existing migrations.")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Legacy database detected — dropping incompatible tables so migrations can recreate them.")]
     private partial void LogLegacyDatabaseDetected();
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Skipping already-applied migration: {MigrationName}")]
