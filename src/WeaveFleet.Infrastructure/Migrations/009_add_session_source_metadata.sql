@@ -6,7 +6,7 @@ ALTER TABLE workspaces ADD COLUMN source_title TEXT;
 ALTER TABLE workspaces ADD COLUMN source_summary TEXT;
 ALTER TABLE workspaces ADD COLUMN source_resolved_at TEXT;
 
-CREATE TABLE session_source_usages (
+CREATE TABLE IF NOT EXISTS session_source_usages (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   workspace_id TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
@@ -20,5 +20,5 @@ CREATE TABLE session_source_usages (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE INDEX idx_session_source_usages_session_id ON session_source_usages(session_id, created_at DESC);
-CREATE INDEX idx_session_source_usages_workspace_id ON session_source_usages(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_session_source_usages_session_id ON session_source_usages(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_session_source_usages_workspace_id ON session_source_usages(workspace_id);

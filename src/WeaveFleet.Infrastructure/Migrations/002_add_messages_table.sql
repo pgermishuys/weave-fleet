@@ -1,4 +1,4 @@
-CREATE TABLE messages (
+CREATE TABLE IF NOT EXISTS messages (
   id TEXT NOT NULL,
   session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   role TEXT NOT NULL,
@@ -9,4 +9,4 @@ CREATE TABLE messages (
 );
 
 -- Cursor-based pagination: fetch messages for a session ordered by timestamp descending
-CREATE INDEX idx_messages_session_timestamp ON messages(session_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_session_timestamp ON messages(session_id, timestamp DESC);

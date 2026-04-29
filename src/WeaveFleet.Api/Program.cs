@@ -26,7 +26,22 @@ using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Data;
 using WeaveFleet.Infrastructure.Services;
 
+// ── CLI argument overrides ────────────────────────────────────────────────────
+// Map friendly --host / --port flags to the Fleet configuration section so users
+// can run:  fleet --host 0.0.0.0 --port 5001
+var cliOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+for (var i = 0; i < args.Length; i++)
+{
+    if (args[i] is "--host" && i + 1 < args.Length)
+        cliOverrides[$"{FleetOptions.SectionName}:Host"] = args[++i];
+    else if (args[i] is "--port" && i + 1 < args.Length)
+        cliOverrides[$"{FleetOptions.SectionName}:Port"] = args[++i];
+}
+
 var builder = WebApplication.CreateBuilder(args);
+
+if (cliOverrides.Count > 0)
+    builder.Configuration.AddInMemoryCollection(cliOverrides!);
 
 // Bind Fleet options
 var fleetOptions = builder.Configuration
@@ -174,6 +189,9 @@ builder.Services.AddAntiforgery(options =>
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.HttpOnly = true;
 });
+
+// Use Fleet.Host/Port as the listen URL (overrides the "Urls" config key)
+builder.WebHost.UseUrls(fleetOptions.ListenUrl);
 
 var app = builder.Build();
 

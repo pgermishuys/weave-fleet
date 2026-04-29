@@ -7,6 +7,6 @@ UPDATE sessions
 SET retention_status = 'active'
 WHERE retention_status IS NULL OR retention_status = '';
 
-CREATE INDEX idx_sessions_retention_status ON sessions(retention_status);
-CREATE INDEX idx_sessions_retention_created_at ON sessions(retention_status, created_at DESC);
-CREATE INDEX idx_sessions_workspace_retention_created_at ON sessions(workspace_id, retention_status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sessions_retention_status ON sessions(retention_status);
+CREATE INDEX IF NOT EXISTS idx_sessions_retention_created_at ON sessions(retention_status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sessions_workspace_retention_created_at ON sessions(workspace_id, retention_status, created_at DESC);

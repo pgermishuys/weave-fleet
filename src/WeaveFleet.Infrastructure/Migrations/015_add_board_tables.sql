@@ -1,7 +1,7 @@
 -- Migration 015: Add board, lane, and card tables for kanban board persistence.
 -- Uses TEXT timestamps and snake_case naming to match existing SQLite conventions.
 
-CREATE TABLE boards (
+CREATE TABLE IF NOT EXISTS boards (
     id          TEXT NOT NULL PRIMARY KEY,
     user_id     TEXT NOT NULL,
     name        TEXT NOT NULL DEFAULT 'My Board',
@@ -9,7 +9,7 @@ CREATE TABLE boards (
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE board_lanes (
+CREATE TABLE IF NOT EXISTS board_lanes (
     id          TEXT NOT NULL PRIMARY KEY,
     board_id    TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
     name        TEXT NOT NULL,
@@ -20,7 +20,7 @@ CREATE TABLE board_lanes (
     CHECK (is_inbox IN (0, 1))
 );
 
-CREATE TABLE board_cards (
+CREATE TABLE IF NOT EXISTS board_cards (
     id           TEXT NOT NULL PRIMARY KEY,
     board_id     TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
     lane_id      TEXT NOT NULL REFERENCES board_lanes(id),

@@ -1,7 +1,7 @@
 -- Migration 016: Add board source table for external board sync configuration.
 -- Uses TEXT timestamps and snake_case naming to match existing SQLite conventions.
 
-CREATE TABLE board_sources (
+CREATE TABLE IF NOT EXISTS board_sources (
     id             TEXT NOT NULL PRIMARY KEY,
     board_id       TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
     provider_type  TEXT NOT NULL,

@@ -3,7 +3,7 @@
 -- Multiple credentials per user per namespace/kind are supported.
 -- Unique constraint on (user_id, label) prevents ambiguous display names.
 
-CREATE TABLE user_credentials (
+CREATE TABLE IF NOT EXISTS user_credentials (
     id              TEXT NOT NULL PRIMARY KEY,
     user_id         TEXT NOT NULL,
     namespace       TEXT NOT NULL,

@@ -1,5 +1,5 @@
 -- Projects table (new)
-CREATE TABLE projects (
+CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT,
@@ -10,7 +10,7 @@ CREATE TABLE projects (
 );
 
 -- Workspaces table
-CREATE TABLE workspaces (
+CREATE TABLE IF NOT EXISTS workspaces (
   id TEXT PRIMARY KEY,
   directory TEXT NOT NULL,
   source_directory TEXT,
@@ -22,7 +22,7 @@ CREATE TABLE workspaces (
 );
 
 -- Instances table
-CREATE TABLE instances (
+CREATE TABLE IF NOT EXISTS instances (
   id TEXT PRIMARY KEY,
   port INTEGER NOT NULL,
   pid INTEGER,
@@ -34,7 +34,7 @@ CREATE TABLE instances (
 );
 
 -- Sessions table (with project_id FK)
-CREATE TABLE sessions (
+CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id),
   instance_id TEXT NOT NULL REFERENCES instances(id),
@@ -53,7 +53,7 @@ CREATE TABLE sessions (
 );
 
 -- Session callbacks table
-CREATE TABLE session_callbacks (
+CREATE TABLE IF NOT EXISTS session_callbacks (
   id TEXT PRIMARY KEY,
   source_session_id TEXT NOT NULL,
   target_session_id TEXT NOT NULL,
@@ -64,17 +64,17 @@ CREATE TABLE session_callbacks (
 );
 
 -- Workspace roots table
-CREATE TABLE workspace_roots (
+CREATE TABLE IF NOT EXISTS workspace_roots (
   id TEXT PRIMARY KEY,
   path TEXT NOT NULL UNIQUE,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- Indexes
-CREATE INDEX idx_callbacks_source ON session_callbacks(source_session_id, status);
-CREATE INDEX idx_sessions_status ON sessions(status);
-CREATE INDEX idx_sessions_parent ON sessions(parent_session_id);
-CREATE INDEX idx_sessions_created_at ON sessions(created_at DESC);
-CREATE INDEX idx_sessions_project ON sessions(project_id);
-CREATE INDEX idx_projects_type ON projects(type);
-CREATE INDEX idx_projects_position ON projects(position);
+CREATE INDEX IF NOT EXISTS idx_callbacks_source ON session_callbacks(source_session_id, status);
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
+CREATE INDEX IF NOT EXISTS idx_projects_type ON projects(type);
+CREATE INDEX IF NOT EXISTS idx_projects_position ON projects(position);

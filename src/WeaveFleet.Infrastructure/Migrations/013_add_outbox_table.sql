@@ -1,7 +1,7 @@
 -- Migration 013: Add transactional outbox storage for committed event delivery.
 -- SQLite stores JSON payloads as TEXT rather than jsonb/Postgres-native JSON types.
 
-CREATE TABLE outbox_messages (
+CREATE TABLE IF NOT EXISTS outbox_messages (
     id              INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     topic           TEXT NOT NULL,
     type            TEXT NOT NULL,
