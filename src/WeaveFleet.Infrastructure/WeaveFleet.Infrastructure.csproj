@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <PackageReference Include="Dapper" />
+    <PackageReference Include="dbup-sqlite" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="NATS.Net" />
   </ItemGroup>
