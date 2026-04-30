@@ -1,31 +1,44 @@
 using System.Data;
 using System.Reflection;
-using Dapper;
+using DbUp;
+using DbUp.Engine;
+using DbUp.Sqlite.Helpers;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Data;
 
 namespace WeaveFleet.Infrastructure.Data;
 
 /// <summary>
-/// Applies numbered SQL migration files from embedded resources to a SQLite database.
-/// Tracks applied migrations in a <c>_migrations</c> table.
-/// Only processes resources whose dotted resource name contains <paramref name="folderSegment"/>
-/// as an exact dotted-segment match (not a substring). Default segment is <c>"Migrations"</c>.
+/// Applies embedded SQLite migrations with DbUp.
+/// A bounded startup bridge seeds DbUp's journal from legacy <c>_migrations</c> rows.
 /// </summary>
 public sealed partial class MigrationRunner
 {
+    internal const string MainJournalTable = "schema_versions";
+
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly ILogger<MigrationRunner> _logger;
     private readonly string _folderSegment;
+    private readonly string _journalTable;
 
     public MigrationRunner(
         IDbConnectionFactory connectionFactory,
         ILogger<MigrationRunner> logger,
         string folderSegment = "Migrations")
+        : this(connectionFactory, logger, folderSegment, MainJournalTable)
+    {
+    }
+
+    internal MigrationRunner(
+        IDbConnectionFactory connectionFactory,
+        ILogger<MigrationRunner> logger,
+        string folderSegment,
+        string journalTable)
     {
         _connectionFactory = connectionFactory;
         _logger = logger;
         _folderSegment = folderSegment;
+        _journalTable = journalTable;
     }
 
     public async Task ApplyMigrationsAsync()
@@ -36,123 +49,50 @@ public sealed partial class MigrationRunner
 
     public async Task ApplyMigrationsAsync(IDbConnection connection)
     {
-        // Ensure the migrations tracking table exists
-        await connection.ExecuteAsync("""
-            CREATE TABLE IF NOT EXISTS _migrations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )
-            """);
-
-        // Load all embedded SQL migration resources filtered by exact dotted-segment match
-        var assembly = typeof(MigrationRunner).Assembly;
-        var resourceNames = assembly.GetManifestResourceNames()
-            .Where(n => n.EndsWith(".sql", StringComparison.OrdinalIgnoreCase)
-                        && n.Split('.').Contains(_folderSegment, StringComparer.Ordinal))
-            .OrderBy(n => n)
-            .ToList();
-
-        if (resourceNames.Count == 0)
+        var scripts = LoadScripts(_folderSegment);
+        if (scripts.Count == 0)
         {
-            LogNoMigrationsFound();
+            LogNoMigrationsFound(_folderSegment);
             return;
         }
 
-        // Get already-applied migrations
-        var applied = (await connection.QueryAsync<string>("SELECT name FROM _migrations")).ToHashSet();
+        await LegacyMigrationJournalBridge.ApplyAsync(connection, scripts, _journalTable, _folderSegment, _logger);
 
-        // Detect corrupt or legacy migration state. Two scenarios:
-        // 1. Pre-.NET legacy DB: _migrations is empty but old tables exist.
-        // 2. Poisoned _migrations: a prior buggy release seeded all migrations as applied
-        //    without actually creating the tables (v0.1.5 bug).
-        // In both cases, wipe _migrations and drop legacy tables so migrations run cleanly.
-        var projectsTableExists = await connection.ExecuteScalarAsync<int>(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects'");
-        var workspacesTableExists = await connection.ExecuteScalarAsync<int>(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workspaces'");
+        var result = DeployChanges.To
+            .SqliteDatabase(new SharedConnection(connection))
+            .WithScripts(scripts)
+            .WithScriptNameComparer(StringComparer.Ordinal)
+            .WithTransactionPerScript()
+            .JournalToSqliteTable(_journalTable)
+            .LogTo(_logger)
+            .Build()
+            .PerformUpgrade();
 
-        if (applied.Count > 0 && projectsTableExists == 0)
+        if (!result.Successful)
         {
-            // _migrations has entries but core tables are missing — poisoned state
-            LogCorruptMigrationHistory();
-            await connection.ExecuteAsync("DELETE FROM _migrations");
-            applied.Clear();
-        }
-
-        if (applied.Count == 0 && workspacesTableExists > 0)
-        {
-            // Legacy pre-.NET tables exist — drop them so migrations recreate with correct schema
-            LogLegacyDatabaseDetected();
-            await DropLegacyTablesAsync(connection);
-        }
-
-        foreach (var resourceName in resourceNames)
-        {
-            var migrationName = ExtractMigrationName(resourceName);
-
-            if (applied.Contains(migrationName))
-            {
-                LogSkippingMigration(migrationName);
-                continue;
-            }
-
-            var sql = ReadResource(assembly, resourceName);
-
-            LogApplyingMigration(migrationName);
-
-            // Execute in a transaction
-            using var tx = connection.BeginTransaction();
-            try
-            {
-                await connection.ExecuteAsync(sql, transaction: tx);
-                await connection.ExecuteAsync(
-                    "INSERT INTO _migrations (name) VALUES (@Name)",
-                    new { Name = migrationName },
-                    transaction: tx);
-                tx.Commit();
-                LogMigrationApplied(migrationName);
-            }
-            catch (Exception ex)
-            {
-                tx.Rollback();
-                LogMigrationFailed(ex, migrationName);
-                throw;
-            }
+            LogMigrationFailed(result.Error, _folderSegment);
+            throw result.Error;
         }
     }
 
-    private static string ExtractMigrationName(string resourceName)
+    internal static IReadOnlyList<SqlScript> LoadScripts(string folderSegment)
     {
-        // e.g. "WeaveFleet.Infrastructure.Migrations.001_initial_schema.sql"
-        // -> "001_initial_schema.sql"
+        var assembly = typeof(MigrationRunner).Assembly;
+        return assembly.GetManifestResourceNames()
+            .Where(name => IsMigrationResource(name, folderSegment))
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .Select(name => new SqlScript(name, ReadResource(assembly, name)))
+            .ToList();
+    }
+
+    internal static bool IsMigrationResource(string resourceName, string folderSegment)
+        => resourceName.EndsWith(".sql", StringComparison.OrdinalIgnoreCase)
+            && resourceName.Split('.').Contains(folderSegment, StringComparer.Ordinal);
+
+    internal static string ExtractMigrationName(string resourceName)
+    {
         var parts = resourceName.Split('.');
-        if (parts.Length >= 2)
-            return $"{parts[^2]}.{parts[^1]}";
-        return resourceName;
-    }
-
-    /// <summary>
-    /// Drops all known application tables from a pre-.NET legacy database so that
-    /// migrations can recreate them with the correct schema. Only called when the
-    /// <c>_migrations</c> table is empty but legacy tables already exist.
-    /// </summary>
-    private static async Task DropLegacyTablesAsync(IDbConnection connection)
-    {
-        // Order matters: drop tables with foreign keys first.
-        string[] legacyTables =
-        [
-            "session_callbacks",
-            "sessions",
-            "instances",
-            "workspaces",
-            "workspace_roots",
-        ];
-
-        foreach (var table in legacyTables)
-        {
-            await connection.ExecuteAsync($"DROP TABLE IF EXISTS {table}");
-        }
+        return parts.Length >= 2 ? $"{parts[^2]}.{parts[^1]}" : resourceName;
     }
 
     private static string ReadResource(Assembly assembly, string resourceName)
@@ -163,24 +103,9 @@ public sealed partial class MigrationRunner
         return reader.ReadToEnd();
     }
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "No SQL migration resources found.")]
-    private partial void LogNoMigrationsFound();
+    [LoggerMessage(Level = LogLevel.Debug, Message = "No SQL migration resources found for segment {FolderSegment}.")]
+    private partial void LogNoMigrationsFound(string folderSegment);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Legacy database detected — dropping incompatible tables so migrations can recreate them.")]
-    private partial void LogLegacyDatabaseDetected();
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Corrupt migration history detected — clearing and re-running all migrations.")]
-    private partial void LogCorruptMigrationHistory();
-
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Skipping already-applied migration: {MigrationName}")]
-    private partial void LogSkippingMigration(string migrationName);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Applying migration: {MigrationName}")]
-    private partial void LogApplyingMigration(string migrationName);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Migration applied successfully: {MigrationName}")]
-    private partial void LogMigrationApplied(string migrationName);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to apply migration: {MigrationName}")]
-    private partial void LogMigrationFailed(Exception ex, string migrationName);
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to apply DbUp migrations for segment {FolderSegment}.")]
+    private partial void LogMigrationFailed(Exception ex, string folderSegment);
 }

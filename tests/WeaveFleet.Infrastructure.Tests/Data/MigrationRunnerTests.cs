@@ -40,7 +40,8 @@ public sealed class MigrationRunnerTests
         tables.ShouldContain("session_callbacks");
         tables.ShouldContain("session_source_usages");
         tables.ShouldContain("workspace_roots");
-        tables.ShouldContain("_migrations");
+        tables.ShouldContain(MigrationRunner.MainJournalTable);
+        tables.ShouldNotContain("_migrations");
     }
 
     [Fact]
@@ -121,31 +122,7 @@ public sealed class MigrationRunnerTests
         using var conn = CreateInMemoryConnection();
         var factory = new SingleConnectionFactory(conn);
 
-        // Apply migrations through 007 only to simulate an existing install.
-        var assembly = typeof(MigrationRunner).Assembly;
-        var migrationResources = assembly.GetManifestResourceNames()
-            .Where(name => name.EndsWith(".sql", StringComparison.OrdinalIgnoreCase)
-                && name.Split('.').Contains("Migrations", StringComparer.Ordinal))
-            .OrderBy(name => name)
-            .Where(name => string.CompareOrdinal(ExtractMigrationName(name), "008_add_session_retention_status.sql") < 0)
-            .ToList();
-
-        await conn.ExecuteAsync(
-            """
-            CREATE TABLE IF NOT EXISTS _migrations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )
-            """);
-
-        foreach (var resource in migrationResources)
-        {
-            var sql = ReadEmbeddedSql(assembly, resource);
-            var migrationName = ExtractMigrationName(resource);
-            await conn.ExecuteAsync(sql);
-            await conn.ExecuteAsync("INSERT INTO _migrations (name) VALUES (@Name)", new { Name = migrationName });
-        }
+        await ApplyLegacyMigrationsThroughAsync(conn, "007_add_sessions_hidden_flag.sql");
 
         await conn.ExecuteAsync(
             "INSERT INTO projects (id, name, type, position, created_at, updated_at) VALUES ('proj-1', 'Project', 'user', 0, '2026-01-01', '2026-01-01')");
@@ -174,10 +151,13 @@ public sealed class MigrationRunnerTests
         row.RetentionStatus.ShouldBe("active");
         row.ArchivedAt.ShouldBeNull();
         row.LifecycleStatus.ShouldBe("completed");
+
+        var journalCount = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM {MigrationRunner.MainJournalTable}");
+        journalCount.ShouldBe(MigrationRunner.LoadScripts("Migrations").Count);
     }
 
     [Fact]
-    public async Task ApplyMigrationsAsync_RecordsMigrationInTable()
+    public async Task ApplyMigrationsAsync_RecordsMigrationInDbUpJournal()
     {
         using var conn = CreateInMemoryConnection();
         var factory = new SingleConnectionFactory(conn);
@@ -185,8 +165,8 @@ public sealed class MigrationRunnerTests
 
         await runner.ApplyMigrationsAsync(conn);
 
-        var count = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM _migrations");
-        count.ShouldBeGreaterThan(0);
+        var count = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM {MigrationRunner.MainJournalTable}");
+        count.ShouldBe(MigrationRunner.LoadScripts("Migrations").Count);
     }
 
     [Fact]
@@ -198,11 +178,11 @@ public sealed class MigrationRunnerTests
 
         // Apply once
         await runner.ApplyMigrationsAsync(conn);
-        var countAfterFirst = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM _migrations");
+        var countAfterFirst = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM {MigrationRunner.MainJournalTable}");
 
-        // Apply again — should be idempotent (no duplicates, no error)
+        // Apply again - should be idempotent (no duplicates, no error)
         await runner.ApplyMigrationsAsync(conn);
-        var countAfterSecond = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM _migrations");
+        var countAfterSecond = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM {MigrationRunner.MainJournalTable}");
 
         countAfterSecond.ShouldBe(countAfterFirst);
     }
@@ -217,7 +197,7 @@ public sealed class MigrationRunnerTests
         await runner.ApplyMigrationsAsync(conn);
 
         var migrations = (await conn.QueryAsync<string>(
-            "SELECT name FROM _migrations ORDER BY id")).ToList();
+            $"SELECT ScriptName FROM {MigrationRunner.MainJournalTable} ORDER BY SchemaVersionId")).ToList();
 
         // Verify 001 comes first if there are multiple
         if (migrations.Count > 1)
@@ -226,7 +206,7 @@ public sealed class MigrationRunnerTests
         }
 
         migrations.ShouldNotBeEmpty();
-        migrations.ShouldContain(m => m.StartsWith("001_", StringComparison.Ordinal));
+        migrations.ShouldContain(m => m.EndsWith(".Migrations.001_initial_schema.sql", StringComparison.Ordinal));
     }
 
     // ── Segment filter tests ──────────────────────────────────────────────────
@@ -288,11 +268,118 @@ public sealed class MigrationRunnerTests
         await mainRunner.ApplyMigrationsAsync(conn);
 
         var mainMigrations = (await conn.QueryAsync<string>(
-            "SELECT name FROM _migrations ORDER BY id")).ToList();
+            $"SELECT ScriptName FROM {MigrationRunner.MainJournalTable} ORDER BY SchemaVersionId")).ToList();
 
         // All recorded migrations should be from the "Migrations" folder,
         // not from "AnalyticsMigrations"
         mainMigrations.ShouldAllBe(name => !name.Contains("analytics", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task LegacyBridge_FullyMigratedLegacyJournal_SeedsDbUpJournalWithoutRerunningScripts()
+    {
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+        var runner = CreateRunner(factory);
+
+        await ApplyLegacyMigrationsThroughAsync(conn, null);
+        var legacyCountBefore = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM _migrations");
+
+        await runner.ApplyMigrationsAsync(conn);
+
+        var journalScripts = (await conn.QueryAsync<string>(
+            $"SELECT ScriptName FROM {MigrationRunner.MainJournalTable} ORDER BY SchemaVersionId")).ToList();
+        journalScripts.Count.ShouldBe(legacyCountBefore);
+        journalScripts.ShouldAllBe(name => name.Contains(".Migrations.", StringComparison.Ordinal));
+
+        var legacyCountAfter = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM _migrations");
+        legacyCountAfter.ShouldBe(legacyCountBefore);
+    }
+
+    [Fact]
+    public async Task LegacyBridge_PoisonedLegacyJournalWithMissingProjects_ClearsLegacyJournalAndRebuilds()
+    {
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+        var runner = CreateRunner(factory);
+
+        await EnsureLegacyJournalAsync(conn);
+        await conn.ExecuteAsync("INSERT INTO _migrations (name) VALUES ('001_initial_schema.sql')");
+
+        await runner.ApplyMigrationsAsync(conn);
+
+        var tables = (await conn.QueryAsync<string>(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")).ToList();
+        tables.ShouldContain("projects");
+        tables.ShouldContain("sessions");
+
+        var legacyCount = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM _migrations");
+        legacyCount.ShouldBe(0);
+
+        var journalCount = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM {MigrationRunner.MainJournalTable}");
+        journalCount.ShouldBe(MigrationRunner.LoadScripts("Migrations").Count);
+    }
+
+    [Fact]
+    public async Task LegacyBridge_EmptyLegacyJournalWithLegacyWorkspaces_DropsLegacyTablesAndRebuilds()
+    {
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+        var runner = CreateRunner(factory);
+
+        await EnsureLegacyJournalAsync(conn);
+        await conn.ExecuteAsync("CREATE TABLE workspaces (legacy_id TEXT PRIMARY KEY)");
+
+        await runner.ApplyMigrationsAsync(conn);
+
+        var columns = (await conn.QueryAsync<string>("SELECT name FROM pragma_table_info('workspaces')")).ToList();
+        columns.ShouldContain("id");
+        columns.ShouldContain("directory");
+        columns.ShouldNotContain("legacy_id");
+
+        var journalCount = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM {MigrationRunner.MainJournalTable}");
+        journalCount.ShouldBe(MigrationRunner.LoadScripts("Migrations").Count);
+    }
+
+    [Fact]
+    public async Task LegacyBridge_UnknownLegacyMigrationName_FailsClearly()
+    {
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+        var runner = CreateRunner(factory);
+
+        await EnsureLegacyJournalAsync(conn);
+        await conn.ExecuteAsync("CREATE TABLE projects (id TEXT PRIMARY KEY)");
+        await conn.ExecuteAsync("INSERT INTO _migrations (name) VALUES ('999_unknown.sql')");
+
+        var ex = await Should.ThrowAsync<InvalidOperationException>(() => runner.ApplyMigrationsAsync(conn));
+        ex.Message.ShouldContain("cannot be mapped to an embedded DbUp script");
+    }
+
+    [Fact]
+    public async Task AnalyticsMigrationsSegment_UsesSeparateDbUpJournalAndLegacyBridge()
+    {
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+        var runner = new MigrationRunner(
+            factory,
+            NullLogger<MigrationRunner>.Instance,
+            "AnalyticsMigrations",
+            AnalyticsMigrationRunner.AnalyticsJournalTable);
+
+        var firstAnalyticsScript = MigrationRunner.LoadScripts("AnalyticsMigrations")[0];
+        await EnsureLegacyJournalAsync(conn);
+        await conn.ExecuteAsync(firstAnalyticsScript.Contents);
+        await conn.ExecuteAsync(
+            "INSERT INTO _migrations (name) VALUES (@Name)",
+            new { Name = MigrationRunner.ExtractMigrationName(firstAnalyticsScript.Name) });
+
+        await runner.ApplyMigrationsAsync(conn);
+
+        var journalScripts = (await conn.QueryAsync<string>(
+            $"SELECT ScriptName FROM {AnalyticsMigrationRunner.AnalyticsJournalTable} ORDER BY SchemaVersionId")).ToList();
+        journalScripts.Count.ShouldBe(MigrationRunner.LoadScripts("AnalyticsMigrations").Count);
+        journalScripts.ShouldAllBe(name => name.Contains(".AnalyticsMigrations.", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -303,17 +390,33 @@ public sealed class MigrationRunnerTests
         public System.Data.IDbConnection CreateConnection() => connection;
     }
 
-    private static string ReadEmbeddedSql(System.Reflection.Assembly assembly, string resourceName)
+    private static async Task ApplyLegacyMigrationsThroughAsync(SqliteConnection conn, string? lastMigrationName)
     {
-        using var stream = assembly.GetManifestResourceStream(resourceName);
-        stream.ShouldNotBeNull();
-        using var reader = new StreamReader(stream!);
-        return reader.ReadToEnd();
+        await EnsureLegacyJournalAsync(conn);
+
+        var scripts = MigrationRunner.LoadScripts("Migrations");
+        foreach (var script in scripts)
+        {
+            await conn.ExecuteAsync(script.Contents);
+            await conn.ExecuteAsync(
+                "INSERT INTO _migrations (name) VALUES (@Name)",
+                new { Name = MigrationRunner.ExtractMigrationName(script.Name) });
+
+            if (lastMigrationName is not null
+                && string.Equals(MigrationRunner.ExtractMigrationName(script.Name), lastMigrationName, StringComparison.Ordinal))
+            {
+                break;
+            }
+        }
     }
 
-    private static string ExtractMigrationName(string resourceName)
-    {
-        var parts = resourceName.Split('.');
-        return parts.Length >= 2 ? $"{parts[^2]}.{parts[^1]}" : resourceName;
-    }
+    private static Task<int> EnsureLegacyJournalAsync(SqliteConnection conn)
+        => conn.ExecuteAsync(
+            """
+            CREATE TABLE IF NOT EXISTS _migrations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+            """);
 }
