@@ -203,6 +203,11 @@ if (fleetOptions.Auth.Enabled)
     });
 }
 
+// One-shot relocation of legacy data files (DB, analytics DB, NATS) from CWD into
+// LocalAppData when the resolved paths are still defaults — no-op when overridden.
+var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+LegacyDataMigrator.MigrateIfNeeded(fleetOptions, startupLogger);
+
 // Run database migrations at startup
 var migrationRunner = app.Services.GetRequiredService<MigrationRunner>();
 await migrationRunner.ApplyMigrationsAsync();

@@ -41,5 +41,3 @@ client/coverage/
 
 # Local databases
 *.db
-src/WeaveFleet.Api/data
-src/WeaveFleet.Api/weave/data

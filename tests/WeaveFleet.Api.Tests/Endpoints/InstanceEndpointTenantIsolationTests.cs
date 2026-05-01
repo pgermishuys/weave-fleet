@@ -219,12 +219,18 @@ public sealed class InstanceEndpointTenantIsolationTests : IAsyncLifetime
             Path.Combine(Path.GetTempPath(), $"fleet-instance-isolation-{Guid.NewGuid():N}.db");
         private readonly string _analyticsDbPath =
             Path.Combine(Path.GetTempPath(), $"fleet-instance-isolation-analytics-{Guid.NewGuid():N}.db");
+        private readonly string _natsDataDir =
+            Path.Combine(Path.GetTempPath(), $"fleet-instance-isolation-nats-{Guid.NewGuid():N}");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
+            Directory.CreateDirectory(_natsDataDir);
             builder.UseEnvironment("Testing");
             builder.UseSetting("Fleet:DatabasePath", _dbPath);
             builder.UseSetting("Fleet:AnalyticsDatabasePath", _analyticsDbPath);
+            builder.UseSetting("Fleet:Nats:DataDirectory", _natsDataDir);
+            builder.UseSetting("Fleet:Nats:StreamName", $"fleet-inst-{Guid.NewGuid().ToString("N")[..12]}");
+            builder.UseSetting("Fleet:Nats:TenantPrefix", $"tenant.inst-{Guid.NewGuid().ToString("N")[..8]}");
             builder.UseSetting("Fleet:AnalyticsEnabled", "false");
             builder.UseSetting("Fleet:Port", "0");
             builder.UseSetting("Fleet:Auth:Enabled", "true");
@@ -251,6 +257,7 @@ public sealed class InstanceEndpointTenantIsolationTests : IAsyncLifetime
             TryDelete(_analyticsDbPath);
             TryDelete($"{_dbPath}-wal");
             TryDelete($"{_dbPath}-shm");
+            TryDeleteDirectory(_natsDataDir);
         }
 
         private static void TryDelete(string path)
@@ -259,6 +266,18 @@ public sealed class InstanceEndpointTenantIsolationTests : IAsyncLifetime
             {
                 if (File.Exists(path))
                     File.Delete(path);
+            }
+            catch
+            {
+            }
+        }
+
+        private static void TryDeleteDirectory(string path)
+        {
+            try
+            {
+                if (Directory.Exists(path))
+                    Directory.Delete(path, recursive: true);
             }
             catch
             {

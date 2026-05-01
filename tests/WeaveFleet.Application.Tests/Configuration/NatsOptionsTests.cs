@@ -12,7 +12,7 @@ public sealed class NatsOptionsTests
         options.Enabled.ShouldBeTrue();
         options.ExternalUrl.ShouldBeNull();
         options.CredsFile.ShouldBeNull();
-        options.DataDirectory.ShouldBe("./data/nats");
+        options.DataDirectory.ShouldBe(Path.Combine(FleetPaths.DefaultAppDataDirectory, "nats"));
         options.StreamName.ShouldBe("fleet-sessions");
         options.MaxAge.ShouldBe(TimeSpan.FromHours(24));
         options.MaxBytes.ShouldBe(-1);
