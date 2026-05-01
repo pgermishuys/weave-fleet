@@ -98,6 +98,18 @@ public sealed class WebSocketFanOutSubscriber : BackgroundService
                     ? userIdH.ToString() : null;
                 if (string.IsNullOrEmpty(userId)) userId = null;
 
+                // Per-session monotonic sequence assigned by HarnessEventRelay's pump. Surfaced
+                // to clients so they can track lastSequenceNumber and gap-fill via
+                // /api/sessions/{id}/committed-events?afterSequenceNumber=… on reconnect.
+                long? sequenceNumber = null;
+                if (msg.Headers is not null
+                    && msg.Headers.TryGetValue("x-fleet-sequence", out var seqH)
+                    && long.TryParse(seqH.ToString(), System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out var parsedSeq))
+                {
+                    sequenceNumber = parsedSeq;
+                }
+
                 // Buffer message.part.delta text for the durable merge on the next message.updated.
                 if (evt.Type == EventTypes.MessagePartDelta && userId is not null)
                 {
@@ -108,7 +120,7 @@ public sealed class WebSocketFanOutSubscriber : BackgroundService
 
                 // Fan out to the in-process broadcaster on the WebSocket topic for this session.
                 object payload = evt.Payload.HasValue ? evt.Payload.Value : JsonSerializer.SerializeToElement(new { });
-                await _broadcaster.BroadcastAsync($"session:{sessionId}", eventType, payload, userId, stoppingToken)
+                await _broadcaster.BroadcastAsync($"session:{sessionId}", eventType, payload, sequenceNumber, userId, stoppingToken)
                     .ConfigureAwait(false);
 
                 // Activity-status side-channel for the global "sessions" topic.

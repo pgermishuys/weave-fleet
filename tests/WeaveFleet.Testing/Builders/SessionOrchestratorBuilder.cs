@@ -28,6 +28,7 @@ public sealed class SessionOrchestratorBuilder
     public InMemoryInstanceRepository InstanceRepository { get; } = new();
     public InMemoryMessageRepository MessageRepository { get; } = new();
     public InMemoryOutboxRepository OutboxRepository { get; } = new();
+    public InMemoryHarnessEventLogRepository HarnessEventLogRepository { get; } = new();
     public FakeEventBroadcaster EventBroadcaster { get; } = new();
     public FakeAnalyticsCollector AnalyticsCollector { get; } = new();
     public FakeCredentialStore CredentialStore { get; } = new();
@@ -95,7 +96,7 @@ public sealed class SessionOrchestratorBuilder
             EventBroadcaster,
             AnalyticsCollector,
             MessageRepository,
-            OutboxRepository,
+            HarnessEventLogRepository,
             delegationService,
             CredentialStore,
             _userContext,

@@ -65,6 +65,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkspaceRootRepository, DapperWorkspaceRootRepository>();
         services.AddScoped<IMessageRepository, DapperMessageRepository>();
         services.AddScoped<IOutboxRepository, DapperOutboxRepository>();
+        services.AddScoped<IHarnessEventLogRepository, DapperHarnessEventLogRepository>();
         services.AddScoped<IUserRepository, DapperUserRepository>();
         services.AddScoped<IBoardRepository, BoardRepository>();
 

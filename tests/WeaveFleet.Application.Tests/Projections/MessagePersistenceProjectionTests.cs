@@ -27,7 +27,8 @@ public sealed class MessagePersistenceProjectionTests
             EventType: EventTypes.MessageCreated,
             UserId: "user-1",
             HarnessType: "opencode",
-            StreamSequence: 42);
+            StreamSequence: 42,
+            PublishSequence: 7);
 
         await sut.HandleAsync(evt, ctx, CancellationToken.None);
 
@@ -45,7 +46,7 @@ public sealed class MessagePersistenceProjectionTests
         var sut = new MessagePersistenceProjection(persister);
 
         var evt = new HarnessEvent { Type = EventTypes.MessageCreated, SessionId = "oc-1", Timestamp = DateTimeOffset.UtcNow };
-        var ctx = new ProjectionContext("default", "proj", "sess", EventTypes.MessageCreated, null, "opencode", 1);
+        var ctx = new ProjectionContext("default", "proj", "sess", EventTypes.MessageCreated, null, "opencode", 1, 1);
 
         await sut.HandleAsync(evt, ctx, CancellationToken.None);
 

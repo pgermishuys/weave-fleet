@@ -12,4 +12,5 @@ public readonly record struct ProjectionContext(
     string EventType,
     string? UserId,
     string? HarnessType,
-    long StreamSequence);
+    long StreamSequence,
+    long PublishSequence);

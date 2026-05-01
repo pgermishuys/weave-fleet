@@ -73,6 +73,7 @@ public sealed class NatsEventPublisher : IEventPublisher
         var headers = new NatsHeaders
         {
             ["Nats-Msg-Id"] = msgId,
+            ["x-fleet-sequence"] = context.Sequence.ToString(System.Globalization.CultureInfo.InvariantCulture),
         };
         if (context.UserId is { Length: > 0 }) headers["x-fleet-user-id"] = context.UserId;
         if (context.HarnessType is { Length: > 0 }) headers["x-fleet-harness-type"] = context.HarnessType;
@@ -110,7 +111,10 @@ public sealed class NatsEventPublisher : IEventPublisher
     {
         var subject = _naming.Subject(context.ProjectId, context.FleetSessionId, evt.Type);
         var payload = JsonSerializer.SerializeToUtf8Bytes(evt);
-        var headers = new NatsHeaders();
+        var headers = new NatsHeaders
+        {
+            ["x-fleet-sequence"] = context.Sequence.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        };
         if (context.UserId is { Length: > 0 }) headers["x-fleet-user-id"] = context.UserId;
         if (context.HarnessType is { Length: > 0 }) headers["x-fleet-harness-type"] = context.HarnessType;
         InjectTraceContext(headers);
