@@ -571,18 +571,17 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task GetCommittedEvents_ReturnsOutboxRowsAsCommittedEvents()
+    public async Task GetCommittedEvents_ReturnsHarnessEventLogRowsAsCommittedEvents()
     {
         var session = MakeSession("s-committed", "inst-1");
         _builder.SessionRepository.Seed(session);
-        _builder.OutboxRepository.Seed(new OutboxMessage
+        await _builder.HarnessEventLogRepository.AppendAsync(new HarnessEventLogEntry
         {
-            Id = 6,
-            Topic = "session:s-committed",
+            SessionId = "s-committed",
+            SequenceNumber = 6,
             Type = "message.updated",
             Payload = "{\"info\":{\"id\":\"msg-1\"}}",
             CreatedAt = "2026-01-01T00:00:00.0000000+00:00",
-            AvailableAt = "2026-01-01T00:00:00.0000000+00:00",
             UserId = "user-1"
         });
 
@@ -1048,7 +1047,7 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
             _builder.EventBroadcaster,
             _builder.AnalyticsCollector,
             _builder.MessageRepository,
-            _builder.OutboxRepository,
+            _builder.HarnessEventLogRepository,
             delegationService,
             _builder.CredentialStore,
             userContext,
