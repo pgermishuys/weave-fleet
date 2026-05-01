@@ -1,0 +1,9 @@
+# Per-run runtime artefacts: isolated data dir, fleet log, materialised scenarios
+.runtime/
+
+# Node deps
+node_modules/
+
+# Playwright caches
+playwright-report/
+test-results/
