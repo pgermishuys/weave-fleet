@@ -9,7 +9,7 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdirSync, openSync } from "node:fs";
+import { mkdirSync, openSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -45,8 +45,11 @@ export async function startFleet(opts: StartFleetOptions = {}): Promise<RunningF
   const port = opts.port ?? DEFAULT_PORT;
   const scenarioDir = opts.scenarioDir ?? SCENARIO_DIR;
 
-  // Per-run isolation: clean data dir but keep the runtime parent so the log path is stable.
+  // Per-run isolation: blow away the data dir so each run starts from a clean DB.
+  // Keeps the runtime parent (so the log path is stable) and the scenarios dir
+  // (materialise-scenarios writes there).
   mkdirSync(RUNTIME_DIR, { recursive: true });
+  rmSync(DATA_DIR, { recursive: true, force: true });
   mkdirSync(DATA_DIR, { recursive: true });
   mkdirSync(scenarioDir, { recursive: true });
 
@@ -55,10 +58,21 @@ export async function startFleet(opts: StartFleetOptions = {}): Promise<RunningF
     ...process.env,
     FLEET_HARNESS: "test",
     FLEET_BETA_SCENARIO_DIR: scenarioDir,
+    // Per-run isolation: pin the SQLite DBs into .runtime/data so each beta-harness run
+    // is independent of the user's main fleet DB. Uses the .NET config double-underscore
+    // convention which Configuration.AddEnvironmentVariables picks up.
+    Fleet__DatabasePath: resolve(DATA_DIR, "fleet.db"),
+    Fleet__AnalyticsDatabasePath: resolve(DATA_DIR, "fleet-analytics.db"),
     // Beta scenarios use OS temp as their working directory; allow it through the
     // workspace-roots gate so POST /api/sessions accepts the directory.
     FLEET_WORKSPACE_ROOTS: process.env.FLEET_WORKSPACE_ROOTS ?? tmpdir(),
     DOTNET_ENVIRONMENT: "Development",
+    // Keep debug visibility for the harness/relay/projection during beta runs so
+    // fleet.log shows enough to diagnose flakiness without instrumenting the code.
+    Logging__LogLevel__Default: "Debug",
+    Logging__LogLevel__Microsoft__AspNetCore: "Warning",
+    Logging__LogLevel__Microsoft__Hosting: "Warning",
+    Logging__LogLevel__Microsoft__EntityFrameworkCore: "Warning",
   };
 
   const child = spawn(
@@ -74,8 +88,6 @@ export async function startFleet(opts: StartFleetOptions = {}): Promise<RunningF
       "127.0.0.1",
       "--port",
       String(port),
-      "--data-dir",
-      DATA_DIR,
     ],
     {
       cwd: REPO_ROOT,

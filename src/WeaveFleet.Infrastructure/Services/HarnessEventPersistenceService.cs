@@ -233,6 +233,10 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
             {
                 if (existing is not null)
                 {
+                    // Existing row already carries the merged content; just sync metadata if it
+                    // shifted (e.g. the prior write defaulted role=assistant — see the comment
+                    // on the no-existing branch below — and this update brings the authoritative
+                    // role from message.updated.info.role).
                     var merged = MessagePersistenceService.MergeMetadata(existing, persisted.Role, persisted.AgentName);
                     if (existing.Role != merged.Role || existing.AgentName != merged.AgentName || modelIdChanged)
                     {
@@ -241,11 +245,21 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
                     }
                     return false;
                 }
+
+                // No existing row + no parts in this event. The OpenCode protocol carries
+                // role on message.updated/created (in info.role) but NOT on message.part.updated;
+                // the part lookup has no way to recover the role. So we MUST persist a stub
+                // here carrying just id + role + (empty) parts, otherwise a subsequent
+                // message.part.updated for the same id will create a fresh row defaulting to
+                // role=assistant. ApplyBufferedTextDeltaIfPresent merges any buffered streaming
+                // deltas that arrived ahead of this snapshot.
+                var stub = ApplyBufferedTextDeltaIfPresent(fleetSessionId, persisted, persisted.Id, persisted.Role, persisted.AgentName);
+                await WriteDurableEventAsync(fleetSessionId, ownerUserId, evt, stub).ConfigureAwait(false);
+                return true;
             }
 
             if (evt.Type == EventTypes.MessageUpdated)
             {
-                var base_ = existing ?? persisted;
                 var mergedBase = existing is null
                     ? persisted
                     : MessagePersistenceService.MergeTimestampAndMetadata(

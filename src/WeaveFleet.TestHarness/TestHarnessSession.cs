@@ -424,27 +424,19 @@ public sealed class TestHarnessSession : IHarnessSession
         // cannot store the raw event JSON directly.
         var fleetPart = MapEventPartToMessagePart(part);
 
-        PersistedMessage updated;
+        // No existing row: defer to MessagePersistenceProjection. The OpenCode protocol carries
+        // role on message.updated/created (in info.role), not on message.part.updated, so this
+        // branch can only guess the role and previously defaulted to "assistant" — that
+        // racing pre-write was the source of user messages ending up as role=assistant in the
+        // beta-harness loop. The projection will create the row with the authoritative role
+        // from the prior message.updated event; subsequent message.part.updated events arrive
+        // through the same projection path and merge cleanly via MergePartAndMetadata.
         if (existingMessage is null)
-        {
-            var harnessMessage = new HarnessMessage
-            {
-                Id = durableMessageId,
-                Role = "assistant",
-                Parts = fleetPart is not null ? [fleetPart] : [],
-                Timestamp = DateTimeOffset.UtcNow,
-            };
-            updated = MessagePersistenceService.ToPersistedMessage(_fleetSessionId, harnessMessage);
-        }
-        else if (fleetPart is not null)
-        {
-            updated = MessagePersistenceService.MergePartAndMetadata(
-                existingMessage, fleetPart, role: null, agentName: null);
-        }
-        else
-        {
-            updated = existingMessage;
-        }
+            return true;
+
+        PersistedMessage updated = fleetPart is not null
+            ? MessagePersistenceService.MergePartAndMetadata(existingMessage, fleetPart, role: null, agentName: null)
+            : existingMessage;
 
         await writer.WriteAsync(
             new SessionActivityWriteRequest
