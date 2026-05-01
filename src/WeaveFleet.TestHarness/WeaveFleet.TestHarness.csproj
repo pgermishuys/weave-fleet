@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WeaveFleet.Application\WeaveFleet.Application.csproj" />
+    <ProjectReference Include="..\WeaveFleet.Domain\WeaveFleet.Domain.csproj" />
+    <ProjectReference Include="..\WeaveFleet.Infrastructure\WeaveFleet.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <!-- Embed contract fixture files so FixtureLoader can read them from the assembly manifest -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\tests\contracts\*.json" LogicalName="contracts/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>
