@@ -65,6 +65,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkspaceRootRepository, DapperWorkspaceRootRepository>();
         services.AddScoped<IMessageRepository, DapperMessageRepository>();
         services.AddScoped<IOutboxRepository, DapperOutboxRepository>();
+        services.AddScoped<IHarnessEventLogRepository, DapperHarnessEventLogRepository>();
         services.AddScoped<IUserRepository, DapperUserRepository>();
         services.AddScoped<IBoardRepository, BoardRepository>();
 
@@ -126,8 +127,8 @@ public static class DependencyInjection
         services.AddSingleton<InProcessOutboxDispatcher>();
         services.AddSingleton<IOutboxDispatcher>(sp => sp.GetRequiredService<InProcessOutboxDispatcher>());
 
-        // Shared text-delta buffer — singleton so fragments buffered on the ephemeral path
-        // (by EphemeralEventRelayService) survive across scoped persister invocations.
+        // Shared text-delta buffer — singleton so fragments buffered by the fan-out subscriber
+        // (WebSocketFanOutSubscriber) survive across scoped persister invocations.
         services.AddSingleton<TextDeltaBuffer>();
 
         // Harness event persister — scoped so message/session repositories flow through correctly.
@@ -136,14 +137,15 @@ public static class DependencyInjection
 
         if (options.Nats.Enabled)
         {
-            // NATS event substrate. MessagePersistenceProjection is the sole writer to SQLite +
-            // outbox; the existing outbox dispatcher fans durable events out to WebSocket clients.
-            // EphemeralEventRelayService (below) handles ephemeral events over core NATS.
+            // NATS event substrate. MessagePersistenceProjection is the sole writer to SQLite for
+            // durable harness events. WebSocketFanOutSubscriber is the single core NATS subscriber
+            // that fans every harness event (durable + ephemeral, in publish order) to WebSocket
+            // clients via IEventBroadcaster — durable events no longer flow through the outbox.
             services.AddEventStore(options.Nats, nats =>
             {
                 nats.AddProjection<WeaveFleet.Application.Projections.MessagePersistenceProjection>(ConsumerScope.Cluster);
             });
-            services.AddHostedService<WeaveFleet.Infrastructure.Nats.EphemeralEventRelayService>();
+            services.AddHostedService<WeaveFleet.Infrastructure.Nats.WebSocketFanOutSubscriber>();
 
             // HarnessEventRelay is now publish-only — relays every harness event to NATS.
             services.AddHostedService<HarnessEventRelay>();

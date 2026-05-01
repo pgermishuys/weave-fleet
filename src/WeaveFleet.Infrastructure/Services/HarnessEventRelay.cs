@@ -14,14 +14,16 @@ namespace WeaveFleet.Infrastructure.Services;
 /// events and maintains one async-enumerable pump per live harness instance. Each pump:
 /// <list type="number">
 ///   <item>Resolves the Fleet session metadata (id, owner, project, harness-type).</item>
+///   <item>Applies the reasoning-content filter before publish for event types whose
+///     classification requires it, so unsanitized reasoning never reaches NATS subscribers.</item>
 ///   <item>Publishes every <see cref="HarnessEvent"/> to NATS via <see cref="IEventPublisher"/>
 ///     with a per-pump monotonic sequence for JetStream dedup.</item>
 ///   <item>On disconnect: flushes any buffered text deltas through the persister and emits a
 ///     final idle broadcast on the global <c>sessions</c> topic.</item>
 /// </list>
 /// The relay is publish-only — durable persistence is handled downstream by
-/// <c>MessagePersistenceProjection</c>, and WebSocket fan-out for ephemeral events is handled
-/// by <c>EphemeralEventRelayService</c>.
+/// <c>MessagePersistenceProjection</c>, and WebSocket fan-out for every event is handled by
+/// <c>WebSocketFanOutSubscriber</c> via a single core NATS subscription.
 /// </summary>
 public sealed class HarnessEventRelay : BackgroundService
 {
@@ -153,11 +155,25 @@ public sealed class HarnessEventRelay : BackgroundService
             {
                 var targetFleetSessionId = evt.FleetSessionId ?? fleetSessionId;
 
+                // Apply the reasoning-content filter BEFORE publishing — the unified fan-out
+                // subscriber forwards the published payload directly to WebSocket clients, so
+                // unsanitized reasoning must never leave this method. Null from the sanitizer
+                // means "reasoning-only part; drop the event entirely".
+                var classification = EventTypeMetadata.Classify(evt.Type);
+                HarnessEvent eventToPublish = evt;
+                if (classification.RequiresReasoningFilter)
+                {
+                    var filteredPayload = MessagePersistenceService.SanitizeDurableEventPayload(evt.Type, evt.Payload);
+                    if (filteredPayload is null)
+                        continue;
+                    eventToPublish = evt with { Payload = filteredPayload };
+                }
+
                 try
                 {
                     var seq = Interlocked.Increment(ref publishSequence);
                     await _publisher.PublishAsync(
-                        evt,
+                        eventToPublish,
                         new EventPublishContext(
                             targetFleetSessionId,
                             sessionProjectId,

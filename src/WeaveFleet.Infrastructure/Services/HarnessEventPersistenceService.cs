@@ -103,15 +103,20 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
             case EventTypes.SessionError:
             case EventTypes.SessionCompacted:
             case EventTypes.SessionDeleted:
-                await EmitOutboxOnlyAsync(fleetSessionId, ownerUserId, evt).ConfigureAwait(false);
+                // No DB side-effect for these lifecycle signals; clients receive them via the
+                // unified fan-out subscriber directly off NATS. The event is captured by the
+                // durable stream for at-least-once replay semantics but needs no handler work
+                // here beyond acking.
                 return;
         }
     }
 
     /// <summary>
-    /// Buffers a text delta from a <c>message.part.delta</c> event. Called by the ephemeral
-    /// relay service (which sees every delta over core NATS) so the buffer is populated by the
-    /// time the corresponding <c>message.updated</c> arrives on the durable path.
+    /// Buffers a text delta from a <c>message.part.delta</c> event. Called by
+    /// <c>WebSocketFanOutSubscriber</c> (which sees every event via the unified core NATS
+    /// subscription) so the buffer is populated by the time the corresponding
+    /// <c>message.updated</c> arrives through the durable projection and is merged into the
+    /// persisted snapshot.
     /// </summary>
     public void BufferTextDelta(string fleetSessionId, HarnessEvent evt)
     {
@@ -164,24 +169,10 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
                 }
                 _deltaBuffer.ClearMessage(fleetSessionId, messageId);
 
-                var createdAt = DateTimeOffset.UtcNow.ToString("O");
                 await _sessionActivityWriteService.WriteAsync(
                     new SessionActivityWriteRequest
                     {
                         MessagesToUpsert = [merged],
-                        OutboxMessages =
-                        [
-                            new OutboxMessage
-                            {
-                                Topic = $"session:{fleetSessionId}",
-                                Type = EventTypes.MessageUpdated,
-                                Payload = MessagePersistenceService.SerializePayload(
-                                    MessagePersistenceService.BuildCommittedMessagePayload(merged)),
-                                UserId = ownerUserId,
-                                CreatedAt = createdAt,
-                                AvailableAt = createdAt
-                            }
-                        ]
                     },
                     ct).ConfigureAwait(false);
             }
@@ -383,8 +374,6 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
 
             using var userScope = BackgroundUserContext.BeginScope(ownerUserId);
             await _messageRepository.DeleteByIdAsync(messageId, fleetSessionId).ConfigureAwait(false);
-
-            await EmitOutboxEventAsync(fleetSessionId, ownerUserId, evt).ConfigureAwait(false);
             return true;
         }
         catch (Exception)
@@ -412,8 +401,6 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
 
             using var userScope = BackgroundUserContext.BeginScope(ownerUserId);
             await _messageRepository.RemovePartAsync(messageId, fleetSessionId, partId).ConfigureAwait(false);
-
-            await EmitOutboxEventAsync(fleetSessionId, ownerUserId, evt).ConfigureAwait(false);
             return true;
         }
         catch (Exception)
@@ -439,8 +426,6 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
 
             using var userScope = BackgroundUserContext.BeginScope(ownerUserId);
             await _sessionRepository.UpdateTitleAsync(fleetSessionId, title).ConfigureAwait(false);
-
-            await EmitOutboxEventAsync(fleetSessionId, ownerUserId, evt).ConfigureAwait(false);
             return true;
         }
         catch (Exception)
@@ -449,69 +434,22 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
         }
     }
 
-    private async Task EmitOutboxOnlyAsync(string fleetSessionId, string ownerUserId, HarnessEvent evt)
-    {
-        try
-        {
-            using var userScope = BackgroundUserContext.BeginScope(ownerUserId);
-            await EmitOutboxEventAsync(fleetSessionId, ownerUserId, evt).ConfigureAwait(false);
-        }
-        catch (Exception) { /* swallow — matches original best-effort behaviour */ }
-    }
-
     // -----------------------------------------------------------------------
     // Private: helpers
     // -----------------------------------------------------------------------
 
-    private async Task EmitOutboxEventAsync(string fleetSessionId, string ownerUserId, HarnessEvent evt)
-    {
-        var durablePayload = MessagePersistenceService.SanitizeDurableEventPayload(evt.Type, evt.Payload)
-            ?? JsonSerializer.SerializeToElement(new { });
-        var createdAt = DateTimeOffset.UtcNow.ToString("O");
-        await _sessionActivityWriteService.WriteAsync(
-            new SessionActivityWriteRequest
-            {
-                OutboxMessages =
-                [
-                    new OutboxMessage
-                    {
-                        Topic = $"session:{fleetSessionId}",
-                        Type = evt.Type,
-                        Payload = MessagePersistenceService.SerializePayload(durablePayload),
-                        UserId = ownerUserId,
-                        CreatedAt = createdAt,
-                        AvailableAt = createdAt
-                    }
-                ]
-            },
-            CancellationToken.None).ConfigureAwait(false);
-    }
-
+    /// <summary>
+    /// Persists a message upsert without producing an outbox entry. Harness events no longer
+    /// travel to WebSocket clients through the outbox — the unified fan-out subscriber delivers
+    /// them directly off NATS in publish order — so this service only writes the read-model row.
+    /// </summary>
     private async Task WriteDurableEventAsync(string fleetSessionId, string ownerUserId, HarnessEvent evt, PersistedMessage persistedMessage)
     {
-        var durablePayload = evt.Type == EventTypes.MessageUpdated
-            ? MessagePersistenceService.BuildCommittedMessagePayload(persistedMessage)
-            : MessagePersistenceService.SanitizeDurableEventPayload(evt.Type, evt.Payload);
-
-        var createdAt = DateTimeOffset.UtcNow.ToString("O");
+        _ = fleetSessionId; _ = ownerUserId; _ = evt;
         await _sessionActivityWriteService.WriteAsync(
             new SessionActivityWriteRequest
             {
                 MessagesToUpsert = [persistedMessage],
-                OutboxMessages = durablePayload.HasValue
-                    ?
-                    [
-                        new OutboxMessage
-                        {
-                            Topic = $"session:{fleetSessionId}",
-                            Type = evt.Type,
-                            Payload = MessagePersistenceService.SerializePayload(durablePayload.Value),
-                            UserId = ownerUserId,
-                            CreatedAt = createdAt,
-                            AvailableAt = createdAt
-                        }
-                    ]
-                    : []
             },
             CancellationToken.None).ConfigureAwait(false);
     }

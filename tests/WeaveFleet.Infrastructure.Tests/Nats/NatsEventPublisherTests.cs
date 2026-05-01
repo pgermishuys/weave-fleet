@@ -89,7 +89,7 @@ public sealed class NatsEventPublisherTests : IClassFixture<EmbeddedNatsTestFixt
         using var subCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var subTask = Task.Run(async () =>
         {
-            await foreach (var msg in conn.SubscribeAsync<byte[]>("tenant.test-ephemeral.project.proj-1.live.sess-1.>", cancellationToken: subCts.Token))
+            await foreach (var msg in conn.SubscribeAsync<byte[]>("tenant.test-ephemeral.project.proj-1.session.sess-1.>", cancellationToken: subCts.Token))
             {
                 return msg;
             }
@@ -112,7 +112,7 @@ public sealed class NatsEventPublisherTests : IClassFixture<EmbeddedNatsTestFixt
             CancellationToken.None);
 
         var received = await subTask.WaitAsync(TimeSpan.FromSeconds(5));
-        received.Subject.ShouldBe("tenant.test-ephemeral.project.proj-1.live.sess-1.message.part.delta");
+        received.Subject.ShouldBe("tenant.test-ephemeral.project.proj-1.session.sess-1.message.part.delta");
     }
 
     [Fact]

@@ -99,11 +99,11 @@ public sealed class ProjectionListener
         }
 
         // 2. Subject + payload parse — malformed input is immediate poison.
-        NatsNamingStrategy.ParsedDurableSubject parsed;
+        NatsNamingStrategy.ParsedSubject parsed;
         HarnessEvent evt;
         try
         {
-            parsed = NatsNamingStrategy.ParseDurableSubject(msg.Subject)
+            parsed = NatsNamingStrategy.ParseSubject(msg.Subject)
                 ?? throw new InvalidOperationException($"Subject did not parse: {msg.Subject}");
             evt = JsonSerializer.Deserialize<HarnessEvent>(msg.Data!)
                 ?? throw new InvalidOperationException("Payload did not deserialize to HarnessEvent.");
@@ -131,6 +131,14 @@ public sealed class ProjectionListener
             ? userIdH.ToString() : null;
         string? harnessType = msg.Headers is not null && msg.Headers.TryGetValue("x-fleet-harness-type", out var harnessH)
             ? harnessH.ToString() : null;
+        long publishSequence = 0;
+        if (msg.Headers is not null
+            && msg.Headers.TryGetValue("x-fleet-sequence", out var seqH)
+            && long.TryParse(seqH.ToString(), System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out var parsedSeq))
+        {
+            publishSequence = parsedSeq;
+        }
 
         var ctx = new ProjectionContext(
             Tenant: parsed.Tenant,
@@ -139,7 +147,8 @@ public sealed class ProjectionListener
             EventType: parsed.EventType,
             UserId: string.IsNullOrEmpty(userId) ? null : userId,
             HarnessType: string.IsNullOrEmpty(harnessType) ? null : harnessType,
-            StreamSequence: (long)(msg.Metadata?.Sequence.Stream ?? 0));
+            StreamSequence: (long)(msg.Metadata?.Sequence.Stream ?? 0),
+            PublishSequence: publishSequence);
 
         try
         {

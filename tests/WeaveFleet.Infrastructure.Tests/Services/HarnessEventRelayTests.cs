@@ -13,10 +13,11 @@ using WeaveFleet.Testing.Fakes.Repositories;
 namespace WeaveFleet.Infrastructure.Tests.Services;
 
 /// <summary>
-/// The relay's responsibility is now publish-only: every harness event flows to NATS via
-/// <see cref="IEventPublisher"/> with a per-pump monotonic sequence. Downstream consumers
-/// (MessagePersistenceProjection, EphemeralEventRelayService) handle persistence and
-/// WebSocket fan-out respectively — those are tested at their own layers.
+/// The relay's responsibility is publish-only (plus reasoning-filter sanitation): every harness
+/// event flows to NATS via <see cref="IEventPublisher"/> with a per-pump monotonic sequence.
+/// Downstream consumers (MessagePersistenceProjection for durable persistence,
+/// WebSocketFanOutSubscriber for WebSocket fan-out) handle their own responsibilities and are
+/// tested at their own layers.
 /// </summary>
 public sealed class HarnessEventRelayTests
 {

@@ -29,7 +29,7 @@ public sealed partial class SessionOrchestrator(
     IEventBroadcaster eventBroadcaster,
     IAnalyticsCollector analyticsCollector,
     IMessageRepository messageRepository,
-    IOutboxRepository outboxRepository,
+    IHarnessEventLogRepository harnessEventLogRepository,
     DelegationService delegationService,
     ICredentialStore credentialStore,
     IUserContext userContext,
@@ -39,22 +39,15 @@ public sealed partial class SessionOrchestrator(
 {
     private readonly DelegationService _delegationService = delegationService;
 
-    private sealed class NoOpOutboxRepository : IOutboxRepository
+    private sealed class NoOpHarnessEventLogRepository : IHarnessEventLogRepository
     {
-        public Task<long> EnqueueAsync(OutboxMessage message) => Task.FromResult(0L);
-
-        public Task<long> EnqueueAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, OutboxMessage message)
+        public Task<long> AppendAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, HarnessEventLogEntry entry)
             => Task.FromResult(0L);
 
-        public Task<IReadOnlyList<OutboxMessage>> GetUndispatchedAsync(int limit)
-            => Task.FromResult<IReadOnlyList<OutboxMessage>>([]);
+        public Task<long> AppendAsync(HarnessEventLogEntry entry) => Task.FromResult(0L);
 
-        public Task<IReadOnlyList<OutboxMessage>> GetByTopicAfterAsync(string topic, long sequenceNumber, int limit)
-            => Task.FromResult<IReadOnlyList<OutboxMessage>>([]);
-
-        public Task MarkDispatchedAsync(IReadOnlyList<long> ids, string dispatchedAt) => Task.CompletedTask;
-
-        public Task<int> DeleteDispatchedBeforeAsync(string dispatchedBefore, int limit) => Task.FromResult(0);
+        public Task<IReadOnlyList<HarnessEventLogEntry>> GetBySessionAfterAsync(string sessionId, long afterSequenceNumber, int limit)
+            => Task.FromResult<IReadOnlyList<HarnessEventLogEntry>>([]);
     }
 
     public SessionOrchestrator(
@@ -90,7 +83,7 @@ public sealed partial class SessionOrchestrator(
             eventBroadcaster,
             analyticsCollector,
             messageRepository,
-            new NoOpOutboxRepository(),
+            new NoOpHarnessEventLogRepository(),
             delegationService,
             credentialStore,
             userContext,
@@ -798,16 +791,20 @@ public sealed partial class SessionOrchestrator(
         if (session is null)
             return FleetError.NotFoundFor(nameof(Session), sessionId);
 
+        // Harness events live in the harness_events log keyed by HarnessEventRelay's per-pump
+        // sequence — the same sequence carried in the x-fleet-sequence header that clients
+        // accumulate as lastSequenceNumber. The outbox no longer carries harness events under
+        // the unified-fan-out design, so gap-fill reads from this log instead.
         var topic = $"session:{sessionId}";
-        var rows = await outboxRepository.GetByTopicAfterAsync(
-            topic,
+        var rows = await harnessEventLogRepository.GetBySessionAfterAsync(
+            sessionId,
             Math.Max(0, afterSequenceNumber),
             Math.Max(1, limit ?? options.Outbox.DispatchBatchSize));
 
         var events = rows
             .Select(row => new CommittedEvent(
-                row.Id,
-                row.Topic,
+                row.SequenceNumber,
+                topic,
                 row.Type,
                 row.Payload,
                 DateTimeOffset.Parse(row.CreatedAt, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind)))

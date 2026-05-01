@@ -10,45 +10,47 @@ using WeaveFleet.Domain.Harnesses;
 namespace WeaveFleet.Infrastructure.Nats;
 
 /// <summary>
-/// Core NATS subscriber for ephemeral events (session.status / session.idle /
-/// message.part.delta / error / permission.*). Forwards every event to the in-process
-/// <see cref="IEventBroadcaster"/> on the session's WebSocket topic; parses activity status
-/// and emits the companion <c>activity_status</c> broadcast on the global <c>sessions</c>
-/// topic; buffers <c>message.part.delta</c> fragments into the shared <see cref="TextDeltaBuffer"/>
-/// via <see cref="IHarnessEventPersister.BufferTextDelta"/> so the durable message-updated
-/// write merges them in. Guards against oversize / malformed payloads.
+/// Single core NATS subscriber on the full harness-event subject tree. Forwards every event
+/// — durable and ephemeral — to the in-process <see cref="IEventBroadcaster"/> on the session
+/// WebSocket topic, in publish order. Per-publisher-connection ordering on the relay side
+/// combined with NATS's per-subscription delivery ordering gives end-to-end per-session order.
+/// <para>
+/// Side-channel duties retained from the former ephemeral relay:
+/// parses activity status from <c>session.status</c>/<c>session.idle</c> and updates
+/// <see cref="SessionActivityTracker"/> + emits a companion <c>activity_status</c> broadcast on
+/// the global <c>sessions</c> topic; buffers <c>message.part.delta</c> fragments into the shared
+/// <see cref="TextDeltaBuffer"/> via <see cref="IHarnessEventPersister.BufferTextDelta"/> so
+/// partial streaming content is preserved if the harness disconnects before the next snapshot.
+/// </para>
 /// </summary>
-public sealed class EphemeralEventRelayService : BackgroundService
+public sealed class WebSocketFanOutSubscriber : BackgroundService
 {
     private static readonly Action<ILogger, Exception?> LogFailed =
-        LoggerMessage.Define(LogLevel.Warning, new EventId(1, "EphemeralForwardFailed"),
-            "Failed to forward ephemeral NATS event to broadcaster");
+        LoggerMessage.Define(LogLevel.Warning, new EventId(1, "FanOutForwardFailed"),
+            "Failed to forward NATS event to broadcaster");
     private static readonly Action<ILogger, int, Exception?> LogOversize =
-        LoggerMessage.Define<int>(LogLevel.Warning, new EventId(2, "EphemeralOversizePayload"),
-            "Dropped oversize ephemeral payload ({Bytes} bytes)");
+        LoggerMessage.Define<int>(LogLevel.Warning, new EventId(2, "FanOutOversizePayload"),
+            "Dropped oversize fan-out payload ({Bytes} bytes)");
     private static readonly Action<ILogger, Exception?> LogMalformed =
-        LoggerMessage.Define(LogLevel.Warning, new EventId(3, "EphemeralMalformedPayload"),
-            "Dropped malformed ephemeral payload");
+        LoggerMessage.Define(LogLevel.Warning, new EventId(3, "FanOutMalformedPayload"),
+            "Dropped malformed fan-out payload");
 
     private readonly Lazy<INatsConnection> _connectionLazy;
-    private readonly NatsNamingStrategy _naming;
     private readonly IEventBroadcaster _broadcaster;
     private readonly SessionActivityTracker _activityTracker;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly NatsOptions _options;
-    private readonly ILogger<EphemeralEventRelayService> _logger;
+    private readonly ILogger<WebSocketFanOutSubscriber> _logger;
 
-    public EphemeralEventRelayService(
+    public WebSocketFanOutSubscriber(
         Lazy<INatsConnection> connection,
-        NatsNamingStrategy naming,
         IEventBroadcaster broadcaster,
         SessionActivityTracker activityTracker,
         IServiceScopeFactory scopeFactory,
         NatsOptions options,
-        ILogger<EphemeralEventRelayService> logger)
+        ILogger<WebSocketFanOutSubscriber> logger)
     {
         _connectionLazy = connection;
-        _naming = naming;
         _broadcaster = broadcaster;
         _activityTracker = activityTracker;
         _scopeFactory = scopeFactory;
@@ -60,7 +62,7 @@ public sealed class EphemeralEventRelayService : BackgroundService
     {
         var connection = _connectionLazy.Value;
         await foreach (var msg in connection
-            .SubscribeAsync<byte[]>(NatsNamingStrategy.EphemeralSubscriptionFilter, cancellationToken: stoppingToken)
+            .SubscribeAsync<byte[]>(NatsNamingStrategy.FanOutSubscriptionFilter, cancellationToken: stoppingToken)
             .ConfigureAwait(false))
         {
             try
@@ -71,15 +73,14 @@ public sealed class EphemeralEventRelayService : BackgroundService
                     continue;
                 }
 
-                // Subject format: tenant.{ws}.project.{pid}.live.{sid}.{type}
-                var parts = msg.Subject.Split('.');
-                if (parts.Length < 7 || parts[0] != "tenant" || parts[2] != "project" || parts[4] != "live")
+                var parsed = NatsNamingStrategy.ParseSubject(msg.Subject);
+                if (parsed is null)
                 {
                     LogMalformed(_logger, null);
                     continue;
                 }
-                var sessionId = parts[5];
-                var eventType = string.Join('.', parts[6..]);
+                var sessionId = parsed.Value.SessionId;
+                var eventType = parsed.Value.EventType;
 
                 HarnessEvent? evt;
                 try
@@ -97,6 +98,18 @@ public sealed class EphemeralEventRelayService : BackgroundService
                     ? userIdH.ToString() : null;
                 if (string.IsNullOrEmpty(userId)) userId = null;
 
+                // Per-session monotonic sequence assigned by HarnessEventRelay's pump. Surfaced
+                // to clients so they can track lastSequenceNumber and gap-fill via
+                // /api/sessions/{id}/committed-events?afterSequenceNumber=… on reconnect.
+                long? sequenceNumber = null;
+                if (msg.Headers is not null
+                    && msg.Headers.TryGetValue("x-fleet-sequence", out var seqH)
+                    && long.TryParse(seqH.ToString(), System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out var parsedSeq))
+                {
+                    sequenceNumber = parsedSeq;
+                }
+
                 // Buffer message.part.delta text for the durable merge on the next message.updated.
                 if (evt.Type == EventTypes.MessagePartDelta && userId is not null)
                 {
@@ -107,7 +120,7 @@ public sealed class EphemeralEventRelayService : BackgroundService
 
                 // Fan out to the in-process broadcaster on the WebSocket topic for this session.
                 object payload = evt.Payload.HasValue ? evt.Payload.Value : JsonSerializer.SerializeToElement(new { });
-                await _broadcaster.BroadcastAsync($"session:{sessionId}", eventType, payload, userId, stoppingToken)
+                await _broadcaster.BroadcastAsync($"session:{sessionId}", eventType, payload, sequenceNumber, userId, stoppingToken)
                     .ConfigureAwait(false);
 
                 // Activity-status side-channel for the global "sessions" topic.

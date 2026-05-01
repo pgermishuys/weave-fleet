@@ -325,9 +325,11 @@ public sealed class TestHarnessSession : IHarnessSession
 
     private async ValueTask PushEventCoreAsync(HarnessEvent evt, CancellationToken ct)
     {
-        if (await TryHandleDurableEventAsync(evt).ConfigureAwait(false))
-            return;
-
+        // Persist durable events to the DB so REST queries return them. The unified
+        // fan-out subscriber is the single broadcast path, so every event also goes
+        // through the channel — the relay publishes it to NATS and the fan-out
+        // subscriber forwards it to WebSocket clients.
+        await TryHandleDurableEventAsync(evt).ConfigureAwait(false);
         await _channel.Writer.WriteAsync(evt, ct).ConfigureAwait(false);
     }
 
@@ -343,16 +345,6 @@ public sealed class TestHarnessSession : IHarnessSession
 
         var messageId = Guid.NewGuid().ToString("N");
         var createdAt = DateTimeOffset.UtcNow;
-        var payload = System.Text.Json.JsonSerializer.SerializeToElement(new
-        {
-            info = new
-            {
-                id = messageId,
-                sessionID = _fleetSessionId,
-                role = "user",
-                time = new { created = createdAt.ToUnixTimeMilliseconds() }
-            }
-        });
 
         var partsJson = System.Text.Json.JsonSerializer.Serialize(new object[]
         {
@@ -373,18 +365,6 @@ public sealed class TestHarnessSession : IHarnessSession
             new SessionActivityWriteRequest
             {
                 MessagesToUpsert = [persisted],
-                OutboxMessages =
-                [
-                    new OutboxMessage
-                    {
-                        Topic = $"session:{_fleetSessionId}",
-                        Type = "message.updated",
-                        Payload = MessagePersistenceService.SerializePayload(payload),
-                        UserId = _ownerUserId,
-                        CreatedAt = createdAt.ToString("O"),
-                        AvailableAt = createdAt.ToString("O")
-                    }
-                ]
             },
             CancellationToken.None).ConfigureAwait(false);
     }
@@ -426,18 +406,6 @@ public sealed class TestHarnessSession : IHarnessSession
                 new SessionActivityWriteRequest
                 {
                     MessagesToUpsert = [persisted],
-                    OutboxMessages =
-                    [
-                        new OutboxMessage
-                        {
-                            Topic = $"session:{_fleetSessionId}",
-                            Type = evt.Type,
-                            Payload = MessagePersistenceService.SerializePayload(evt.Payload.Value),
-                            UserId = _ownerUserId,
-                            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
-                            AvailableAt = DateTimeOffset.UtcNow.ToString("O")
-                        }
-                    ]
                 },
                 CancellationToken.None).ConfigureAwait(false);
             return true;
@@ -482,18 +450,6 @@ public sealed class TestHarnessSession : IHarnessSession
             new SessionActivityWriteRequest
             {
                 MessagesToUpsert = [updated],
-                OutboxMessages =
-                [
-                    new OutboxMessage
-                    {
-                        Topic = $"session:{_fleetSessionId}",
-                        Type = evt.Type,
-                        Payload = MessagePersistenceService.SerializePayload(evt.Payload.Value),
-                        UserId = _ownerUserId,
-                        CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
-                        AvailableAt = DateTimeOffset.UtcNow.ToString("O")
-                    }
-                ]
             },
             CancellationToken.None).ConfigureAwait(false);
         return true;
