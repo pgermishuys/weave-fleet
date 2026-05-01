@@ -34,6 +34,14 @@ public sealed record HarnessSpawnOptions
     public string? ProjectName { get; init; }
 
     /// <summary>
+    /// Optional scenario id for the beta-tester rig. Production harnesses ignore this; the
+    /// in-process test harness uses it to look up a scripted scenario JSON file at
+    /// <c>tests/beta-harness/.runtime/scenarios/{ScenarioId}.json</c>. When null the test
+    /// harness falls back to a deterministic echo response.
+    /// </summary>
+    public string? ScenarioId { get; init; }
+
+    /// <summary>
     /// Opaque launch artifacts produced by <see cref="IHarnessRuntime.PrepareRuntimeAsync"/>.
     /// Passed through from the orchestrator without inspection.
     /// Each harness implementation casts this to its own internal subclass in <c>SpawnAsync</c>.

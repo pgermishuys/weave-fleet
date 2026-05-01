@@ -146,7 +146,8 @@ public static class SessionEndpoints
                 Source = req.Source,
                 OnCompleteTargetSessionId = req.OnComplete?.NotifySessionId,
                 OnCompleteTargetInstanceId = req.OnComplete?.NotifyInstanceId,
-                ProjectId = req.ProjectId
+                ProjectId = req.ProjectId,
+                ScenarioId = req.ScenarioId
             });
             return result.Match(
                 r => Results.Ok(new
@@ -534,7 +535,8 @@ internal sealed record CreateSessionApiRequest(
     string? InitialPrompt,
     SessionSourceSelection? Source,
     OnCompleteInfo? OnComplete,
-    string? ProjectId);
+    string? ProjectId,
+    string? ScenarioId);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record OnCompleteInfo(string NotifySessionId, string NotifyInstanceId);
