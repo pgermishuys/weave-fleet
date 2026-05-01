@@ -10,6 +10,7 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync, openSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
@@ -54,6 +55,9 @@ export async function startFleet(opts: StartFleetOptions = {}): Promise<RunningF
     ...process.env,
     FLEET_HARNESS: "test",
     FLEET_BETA_SCENARIO_DIR: scenarioDir,
+    // Beta scenarios use OS temp as their working directory; allow it through the
+    // workspace-roots gate so POST /api/sessions accepts the directory.
+    FLEET_WORKSPACE_ROOTS: process.env.FLEET_WORKSPACE_ROOTS ?? tmpdir(),
     DOTNET_ENVIRONMENT: "Development",
   };
 

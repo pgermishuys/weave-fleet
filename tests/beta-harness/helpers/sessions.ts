@@ -5,6 +5,8 @@
  * without restating the JSON shape every time.
  */
 
+import { tmpdir } from "node:os";
+
 export interface NewSessionOptions {
   baseUrl: string;
   scenarioId: string;
@@ -22,7 +24,10 @@ export interface CreatedSession {
 
 export async function newSession(opts: NewSessionOptions): Promise<CreatedSession> {
   const body = {
-    directory: opts.directory ?? null,
+    // The /api/sessions endpoint requires either a directory or a source selection.
+    // For the beta-harness loop the harness ignores the working directory anyway, so
+    // OS temp is a fine default.
+    directory: opts.directory ?? tmpdir(),
     title: opts.title ?? `beta:${opts.scenarioId}`,
     scenarioId: opts.scenarioId,
   };
