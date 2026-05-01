@@ -34,7 +34,7 @@ tests/beta-harness/
 ├── helpers/                   # short composable helpers Claude calls
 ├── playwright.config.ts       # headless by default, HEADED=1 to debug
 ├── scenarios/                 # playbook markdown — single source of truth
-├── findings/                  # YYYY-MM-DD-HHMM-<scenarioId>.md, gitignored
+├── findings/                  # YYYY-MM-DD-HHMM-<scenarioId>.md, accumulates over time
 └── .runtime/                  # gitignored: fleet.log, data/, scenarios/*.json
 ```
 
