@@ -401,18 +401,21 @@ app.UseStaticFiles(); // Serves files from wwwroot/
 app.MapFallbackToFile("index.html");
 
 var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
-var natsConnectionLazy = app.Services.GetRequiredService<Lazy<NATS.Client.Core.INatsConnection>>();
-lifetime.ApplicationStopping.Register(() =>
+var natsConnectionLazy = app.Services.GetService<Lazy<NATS.Client.Core.INatsConnection>>();
+if (natsConnectionLazy is not null)
 {
-    // Close the NATS connection immediately so NATS-consuming background services
-    // (WebSocketFanOutSubscriber, ProjectionHostService) exit their subscription
-    // loops without waiting for internal NATS client timeouts.
-    if (natsConnectionLazy.IsValueCreated)
+    lifetime.ApplicationStopping.Register(() =>
     {
-        try { natsConnectionLazy.Value.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
-        catch { /* best effort */ }
-    }
-});
+        // Close the NATS connection immediately so NATS-consuming background services
+        // (WebSocketFanOutSubscriber, ProjectionHostService) exit their subscription
+        // loops without waiting for internal NATS client timeouts.
+        if (natsConnectionLazy.IsValueCreated)
+        {
+            try { natsConnectionLazy.Value.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+            catch { /* best effort */ }
+        }
+    });
+}
 
 await app.RunAsync();
 
