@@ -18,6 +18,7 @@ public sealed class NatsEnabledFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
     {
         Directory.CreateDirectory(_tempDir);
+        builder.UseSetting("Fleet:EventBus:Transport", "Nats");
         builder.UseSetting("Fleet:Nats:DataDirectory", Path.Combine(_tempDir, "nats"));
         builder.UseSetting("Fleet:Nats:StreamName", $"fleet-sessions-e2e-{Guid.NewGuid():N}".Substring(0, 24));
         builder.UseSetting("Fleet:Nats:TenantPrefix", $"tenant.e2e-{Guid.NewGuid().ToString("N").Substring(0, 8)}");

@@ -99,6 +99,9 @@ public sealed class FleetOptions
     /// <summary>Transactional outbox polling and cleanup configuration.</summary>
     public OutboxOptions Outbox { get; set; } = new();
 
+    /// <summary>Event bus transport selection.</summary>
+    public EventBusOptions EventBus { get; set; } = new();
+
     /// <summary>NATS event substrate configuration.</summary>
     public NatsOptions Nats { get; set; } = new();
 }

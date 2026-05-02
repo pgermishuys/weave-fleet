@@ -136,7 +136,8 @@ public sealed class WebSocketFanOutSubscriber : BackgroundService
                         stoppingToken).ConfigureAwait(false);
 
                     // Propagate derived busy/idle to the parent session when a child changes state.
-                    await PropagateToParentAsync(sessionId, userId, _activityTracker, _broadcaster, stoppingToken)
+                    await Services.SessionPropagation.PropagateToParentAsync(
+                        sessionId, userId, _activityTracker, _broadcaster, stoppingToken)
                         .ConfigureAwait(false);
                 }
             }
@@ -160,39 +161,4 @@ public sealed class WebSocketFanOutSubscriber : BackgroundService
         return null;
     }
 
-    /// <summary>
-    /// After a child session's activity status changes, propagates the derived effective
-    /// activity status to its registered parent session (if any). Broadcasts on both the
-    /// global <c>sessions</c> topic (for list updates) and the per-session topic (for the
-    /// detail view).
-    /// </summary>
-    internal static async Task PropagateToParentAsync(
-        string childSessionId,
-        string? userId,
-        SessionActivityTracker tracker,
-        IEventBroadcaster broadcaster,
-        CancellationToken ct)
-    {
-        var parentSessionId = tracker.GetParentSessionId(childSessionId);
-        if (parentSessionId is null)
-            return;
-
-        var parentActivityStatus = tracker.GetEffectiveActivityStatus(parentSessionId);
-        if (parentActivityStatus is null)
-            return;
-
-        await broadcaster.BroadcastAsync(
-            "sessions",
-            "activity_status",
-            new { sessionId = parentSessionId, activityStatus = parentActivityStatus },
-            userId,
-            ct).ConfigureAwait(false);
-
-        await broadcaster.BroadcastAsync(
-            $"session:{parentSessionId}",
-            "activity_status",
-            new { sessionId = parentSessionId, activityStatus = parentActivityStatus },
-            userId,
-            ct).ConfigureAwait(false);
-    }
 }
