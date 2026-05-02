@@ -198,6 +198,7 @@ public sealed partial class SessionOrchestrator(
                 Branch = workspaceIntent.Branch,
                 ProjectId = projectId,
                 ProjectName = projectName,
+                ScenarioId = request.ScenarioId,
                 LaunchArtifacts = launchArtifacts
             }, ct);
         }
@@ -1244,6 +1245,12 @@ public sealed record CreateSessionRequest
     /// <summary>If set, registers a completion callback to resume this target session.</summary>
     public string? OnCompleteTargetSessionId { get; init; }
     public string? OnCompleteTargetInstanceId { get; init; }
+    /// <summary>
+    /// Optional beta-tester scenario id. Only honoured when fleet runs with --harness=test;
+    /// production harnesses ignore it. The orchestrator passes it through to
+    /// <see cref="HarnessSpawnOptions.ScenarioId"/> at spawn time.
+    /// </summary>
+    public string? ScenarioId { get; init; }
     /// <summary>
     /// When true, the request originates from an internal orchestrator operation (e.g. fork)
     /// and directory-path validation is bypassed. Must not be set from external API requests.

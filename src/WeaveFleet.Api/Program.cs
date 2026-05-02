@@ -30,12 +30,17 @@ using WeaveFleet.Infrastructure.Services;
 // Map friendly --host / --port flags to the Fleet configuration section so users
 // can run:  fleet --host 0.0.0.0 --port 5001
 var cliOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+string? harnessMode = Environment.GetEnvironmentVariable("FLEET_HARNESS");
 for (var i = 0; i < args.Length; i++)
 {
     if (args[i] is "--host" && i + 1 < args.Length)
         cliOverrides[$"{FleetOptions.SectionName}:Host"] = args[++i];
     else if (args[i] is "--port" && i + 1 < args.Length)
         cliOverrides[$"{FleetOptions.SectionName}:Port"] = args[++i];
+    else if (args[i] is "--harness" && i + 1 < args.Length)
+        harnessMode = args[++i];
+    else if (args[i].StartsWith("--harness=", StringComparison.Ordinal))
+        harnessMode = args[i]["--harness=".Length..];
 }
 
 var builder = WebApplication.CreateBuilder(args);
@@ -52,6 +57,41 @@ var fleetOptions = builder.Configuration
 builder.Services.Configure<FleetOptions>(
     builder.Configuration.GetSection(FleetOptions.SectionName));
 builder.Services.AddFleetInfrastructure(fleetOptions);
+
+// ── Harness mode override ─────────────────────────────────────────────────────
+// --harness=test (or FLEET_HARNESS=test) swaps the production harnesses
+// (OpenCode, ClaudeCode) for the in-process mock harness used by the
+// beta-tester rig. Opt-in only; emits a loud warning at startup.
+if (string.Equals(harnessMode, "test", StringComparison.OrdinalIgnoreCase))
+{
+    Console.WriteLine("=================================================================");
+    Console.WriteLine("  FLEET RUNNING IN TEST HARNESS MODE — no real model API calls.");
+    Console.WriteLine("  All harness traffic is served by WeaveFleet.TestHarness.");
+    Console.WriteLine("=================================================================");
+
+    // Drop production IHarness / IHarnessRuntime registrations.
+    var harnessDescriptors = builder.Services
+        .Where(d => d.ServiceType == typeof(WeaveFleet.Application.Harnesses.IHarness)
+                 || d.ServiceType == typeof(WeaveFleet.Application.Harnesses.IHarnessRuntime))
+        .ToList();
+    foreach (var d in harnessDescriptors)
+        builder.Services.Remove(d);
+
+    // Singleton instances so test-driven runs can hold a stable reference if needed.
+    var testHarness = new WeaveFleet.TestHarness.TestHarness();
+    var testHarnessRuntime = new WeaveFleet.TestHarness.TestHarnessRuntime();
+
+    builder.Services.AddSingleton<WeaveFleet.Application.Harnesses.IHarness>(testHarness);
+    builder.Services.AddSingleton<WeaveFleet.Application.Harnesses.IHarnessRuntime>(sp =>
+    {
+        testHarnessRuntime.SetScopeFactory(sp.GetRequiredService<IServiceScopeFactory>());
+        return testHarnessRuntime;
+    });
+
+    // Expose the harness instances for tests / drivers that want to push events directly.
+    builder.Services.AddSingleton(testHarness);
+    builder.Services.AddSingleton(testHarnessRuntime);
+}
 builder.AddFleetTelemetry();
 builder.Services.AddHealthChecks();
 
