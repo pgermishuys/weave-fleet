@@ -25,7 +25,9 @@ public static class TelemetryExtensions
             .GetSection(TelemetryOptions.SectionName)
             .Get<TelemetryOptions>() ?? new TelemetryOptions();
 
-        if (!telemetryOptions.Enabled)
+        // Enable telemetry if explicitly configured or if OTEL_EXPORTER_OTLP_ENDPOINT is set.
+        var otlpEndpointEnv = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT");
+        if (!telemetryOptions.Enabled && string.IsNullOrWhiteSpace(otlpEndpointEnv))
         {
             return builder;
         }
