@@ -14,9 +14,9 @@ namespace WeaveFleet.Infrastructure.Tests.Services;
 
 /// <summary>
 /// The relay's responsibility is publish-only (plus reasoning-filter sanitation): every harness
-/// event flows to NATS via <see cref="IEventPublisher"/> with a per-pump monotonic sequence.
+/// event flows to the event publisher via <see cref="IEventPublisher"/> with a per-pump monotonic sequence.
 /// Downstream consumers (MessagePersistenceProjection for durable persistence,
-/// WebSocketFanOutSubscriber for WebSocket fan-out) handle their own responsibilities and are
+/// InProcessFanOutService for WebSocket fan-out) handle their own responsibilities and are
 /// tested at their own layers.
 /// </summary>
 public sealed class HarnessEventRelayTests

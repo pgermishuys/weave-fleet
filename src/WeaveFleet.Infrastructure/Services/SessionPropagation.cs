@@ -4,8 +4,7 @@ namespace WeaveFleet.Infrastructure.Services;
 
 /// <summary>
 /// Shared helper for propagating derived busy/idle activity status to parent sessions when a
-/// child session's activity state changes. Used by both the NATS <c>WebSocketFanOutSubscriber</c>
-/// and the in-process <c>InProcessFanOutService</c>.
+/// child session's activity state changes. Used by <c>InProcessFanOutService</c>.
 /// </summary>
 internal static class SessionPropagation
 {

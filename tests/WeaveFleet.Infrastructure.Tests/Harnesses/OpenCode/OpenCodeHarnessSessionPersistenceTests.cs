@@ -947,8 +947,8 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         await cts.CancelAsync();
         await consumeTask;
 
-        // Harness events no longer write to the outbox — the unified fan-out subscriber
-        // delivers them directly off NATS. Verify the persisted message contains the merged
+        // Harness events no longer write to the outbox — the in-process fan-out service
+        // delivers them directly. Verify the persisted message contains the merged
         // text (buffered deltas merged into the MessageUpdated snapshot) and that no harness
         // events at all were written to the outbox.
         lastUpserted.ShouldNotBeNull();
@@ -1713,8 +1713,8 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     [Fact]
     public async Task MessageRemoved_DoesNotEmitOutboxEvent()
     {
-        // Harness events no longer travel through the outbox — the unified fan-out subscriber
-        // delivers message.removed directly off NATS.
+        // Harness events no longer travel through the outbox — the in-process fan-out service
+        // delivers message.removed directly.
         var fleetSessionId = "fleet-msg-removed-2";
         var messageId = "msg-to-delete-2";
 
@@ -1791,7 +1791,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
 
         handled.ShouldBeTrue();
         // Title is persisted via the session repository; no outbox write — clients receive the
-        // session.updated event via the unified NATS fan-out subscriber.
+        // session.updated event via the in-process fan-out service.
         outboxRepo.All.ShouldNotContain(m => m.Type == "session.updated");
     }
 
@@ -1802,7 +1802,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     public async Task SessionLifecycleEvents_AreDurableAndBypassOutbox(string eventType, string payloadJson)
     {
         // Session lifecycle signals (error/compacted/deleted) are classified durable so they
-        // are captured by JetStream for replay, but the handler has no DB side-effect and
+        // are captured by the event store for replay, but the handler has no DB side-effect and
         // no outbox write. Clients receive the event via the unified fan-out subscriber.
         var fleetSessionId = $"fleet-{eventType}-1";
         var (service, _, outboxRepo) = BuildPersistenceService();

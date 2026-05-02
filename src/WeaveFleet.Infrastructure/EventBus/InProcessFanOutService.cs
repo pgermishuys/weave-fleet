@@ -9,7 +9,7 @@ namespace WeaveFleet.Infrastructure.EventBus;
 
 /// <summary>
 /// Background service that reads every event (durable + ephemeral) from the in-process fan-out
-/// channel and replicates the duties of <see cref="Nats.WebSocketFanOutSubscriber"/>:
+/// channel and handles WebSocket broadcast duties:
 /// <list type="bullet">
 ///   <item>Broadcasts to <see cref="IEventBroadcaster"/> on the per-session topic.</item>
 ///   <item>Updates <see cref="SessionActivityTracker"/> for activity events and broadcasts on
@@ -18,8 +18,7 @@ namespace WeaveFleet.Infrastructure.EventBus;
 ///     <see cref="IHarnessEventPersister.BufferTextDelta"/>.</item>
 ///   <item>Propagates derived parent-session activity state.</item>
 /// </list>
-/// Reuses the static helper <see cref="Nats.WebSocketFanOutSubscriber.PropagateToParentAsync"/>
-/// (same assembly, internal visibility).
+/// Uses <see cref="SessionPropagation"/> to propagate parent-session activity state.
 /// </summary>
 internal sealed partial class InProcessFanOutService : BackgroundService
 {

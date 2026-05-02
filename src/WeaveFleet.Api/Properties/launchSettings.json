@@ -7,18 +7,7 @@
       "launchBrowser": false,
       "applicationUrl": "http://localhost:5001",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development",
-        "Fleet__EventBus__Transport": "InProcess"
-      }
-    },
-    "WeaveFleet.Api (NATS)": {
-      "commandName": "Project",
-      "dotnetRunMessages": true,
-      "launchBrowser": false,
-      "applicationUrl": "http://localhost:5001",
-      "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development",
-        "Fleet__EventBus__Transport": "Nats"
+        "ASPNETCORE_ENVIRONMENT": "Development"
       }
     }
   }

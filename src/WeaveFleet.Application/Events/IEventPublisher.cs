@@ -4,7 +4,7 @@ namespace WeaveFleet.Application.Events;
 
 /// <summary>
 /// Publishes <see cref="HarnessEvent"/>s to the event substrate. Implementations route durable
-/// and ephemeral events to the appropriate transport (JetStream vs core NATS today).
+/// and ephemeral events appropriately.
 /// </summary>
 public interface IEventPublisher
 {

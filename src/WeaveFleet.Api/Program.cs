@@ -245,7 +245,7 @@ if (fleetOptions.Auth.Enabled)
     });
 }
 
-// One-shot relocation of legacy data files (DB, analytics DB, NATS) from CWD into
+// One-shot relocation of legacy data files (DB, analytics DB) from CWD into
 // LocalAppData when the resolved paths are still defaults — no-op when overridden.
 var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
 LegacyDataMigrator.MigrateIfNeeded(fleetOptions, startupLogger);
@@ -399,23 +399,6 @@ app.UseStaticFiles(); // Serves files from wwwroot/
 
 // SPA fallback — any unmatched route serves index.html for client-side routing
 app.MapFallbackToFile("index.html");
-
-var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
-var natsConnectionLazy = app.Services.GetService<Lazy<NATS.Client.Core.INatsConnection>>();
-if (natsConnectionLazy is not null)
-{
-    lifetime.ApplicationStopping.Register(() =>
-    {
-        // Close the NATS connection immediately so NATS-consuming background services
-        // (WebSocketFanOutSubscriber, ProjectionHostService) exit their subscription
-        // loops without waiting for internal NATS client timeouts.
-        if (natsConnectionLazy.IsValueCreated)
-        {
-            try { natsConnectionLazy.Value.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
-            catch { /* best effort */ }
-        }
-    });
-}
 
 await app.RunAsync();
 

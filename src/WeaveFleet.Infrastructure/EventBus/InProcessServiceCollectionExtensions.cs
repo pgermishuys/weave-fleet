@@ -1,7 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Events;
-using WeaveFleet.Infrastructure.Nats.Configuration;
-
 namespace WeaveFleet.Infrastructure.EventBus;
 
 /// <summary>
@@ -11,8 +9,7 @@ public static class InProcessServiceCollectionExtensions
 {
     /// <summary>
     /// Registers the in-process event bus: event store, channels, publisher, projection host,
-    /// and fan-out service. Projections are declared via the <paramref name="configure"/> callback
-    /// using the same fluent API as the NATS transport.
+    /// and fan-out service. Projections are declared via the <paramref name="configure"/> callback.
     /// </summary>
     public static IServiceCollection AddInProcessEventBus(
         this IServiceCollection services,

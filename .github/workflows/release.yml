@@ -124,7 +124,7 @@ jobs:
           version_output="$($extract_dir/$asset_base_name/bin/fleet version)"
           test "$version_output" = "$package_version"
 
-          Fleet__Nats__Enabled="false" WEAVE_FLEET_HOST="127.0.0.1" WEAVE_FLEET_PORT="$port" "$extract_dir/$asset_base_name/bin/fleet" >"$log_path" 2>&1 &
+          WEAVE_FLEET_HOST="127.0.0.1" WEAVE_FLEET_PORT="$port" "$extract_dir/$asset_base_name/bin/fleet" >"$log_path" 2>&1 &
           app_pid=$!
 
           cleanup() {
@@ -198,7 +198,6 @@ jobs:
               throw "Smoke test version mismatch. Expected '$packageVersion' but got '$versionOutput'."
           }
 
-          $env:Fleet__Nats__Enabled = 'false'
           $env:WEAVE_FLEET_HOST = '127.0.0.1'
           $env:WEAVE_FLEET_PORT = $port
           $process = Start-Process -FilePath (Join-Path $packageDir 'bin/fleet.cmd') -RedirectStandardOutput $logPath -RedirectStandardError $errorLogPath -PassThru

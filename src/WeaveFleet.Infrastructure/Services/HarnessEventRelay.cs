@@ -15,15 +15,15 @@ namespace WeaveFleet.Infrastructure.Services;
 /// <list type="number">
 ///   <item>Resolves the Fleet session metadata (id, owner, project, harness-type).</item>
 ///   <item>Applies the reasoning-content filter before publish for event types whose
-///     classification requires it, so unsanitized reasoning never reaches NATS subscribers.</item>
-///   <item>Publishes every <see cref="HarnessEvent"/> to NATS via <see cref="IEventPublisher"/>
-///     with a per-pump monotonic sequence for JetStream dedup.</item>
+///     classification requires it, so unsanitized reasoning never reaches event bus subscribers.</item>
+///   <item>Publishes every <see cref="HarnessEvent"/> via <see cref="IEventPublisher"/>
+///     with a per-pump monotonic sequence for dedup.</item>
 ///   <item>On disconnect: flushes any buffered text deltas through the persister and emits a
 ///     final idle broadcast on the global <c>sessions</c> topic.</item>
 /// </list>
 /// The relay is publish-only — durable persistence is handled downstream by
 /// <c>MessagePersistenceProjection</c>, and WebSocket fan-out for every event is handled by
-/// <c>WebSocketFanOutSubscriber</c> via a single core NATS subscription.
+/// <c>InProcessFanOutService</c>.
 /// </summary>
 public sealed class HarnessEventRelay : BackgroundService
 {
@@ -37,7 +37,7 @@ public sealed class HarnessEventRelay : BackgroundService
 
     private static readonly Action<ILogger, string, Exception?> LogPublishFailed =
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(3, "EventPublishFailed"),
-            "Event publish to NATS failed for instance {InstanceId}");
+            "Event publish failed for instance {InstanceId}");
 
     private readonly InstanceTracker _tracker;
     private readonly IEventBroadcaster _broadcaster;

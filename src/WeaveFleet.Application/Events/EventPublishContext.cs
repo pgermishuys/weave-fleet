@@ -5,8 +5,7 @@ namespace WeaveFleet.Application.Events;
 /// Populated by the caller (typically <c>HarnessEventRelay</c>) from repository data.
 /// <para>
 /// <see cref="Sequence"/> is a per-session monotonic counter owned by the publishing caller.
-/// It is used as the publish-side half of the <c>Nats-Msg-Id</c> header (<c>{sessionId}:{seq}</c>)
-/// so JetStream dedup (~2-minute window) can collapse retries of the same logical publish.
+/// It is used as the publish-side dedup key (<c>{sessionId}:{seq}</c>).
 /// </para>
 /// </summary>
 public readonly record struct EventPublishContext(

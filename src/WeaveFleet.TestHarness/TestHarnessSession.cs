@@ -327,7 +327,7 @@ public sealed class TestHarnessSession : IHarnessSession
     {
         // Persist durable events to the DB so REST queries return them. The unified
         // fan-out subscriber is the single broadcast path, so every event also goes
-        // through the channel — the relay publishes it to NATS and the fan-out
+        // through the channel — the relay publishes it to the event bus and the fan-out
         // subscriber forwards it to WebSocket clients.
         await TryHandleDurableEventAsync(evt).ConfigureAwait(false);
         await _channel.Writer.WriteAsync(evt, ct).ConfigureAwait(false);

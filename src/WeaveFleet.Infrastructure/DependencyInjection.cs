@@ -15,7 +15,6 @@ using WeaveFleet.Infrastructure.EventBus;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
-using WeaveFleet.Infrastructure.Nats.Configuration;
 using WeaveFleet.Infrastructure.Plugins;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 using WeaveFleet.Infrastructure.SessionSources;
@@ -128,34 +127,19 @@ public static class DependencyInjection
         services.AddSingleton<InProcessOutboxDispatcher>();
         services.AddSingleton<IOutboxDispatcher>(sp => sp.GetRequiredService<InProcessOutboxDispatcher>());
 
-        // Shared text-delta buffer — singleton so fragments buffered by the fan-out subscriber
-        // (WebSocketFanOutSubscriber) survive across scoped persister invocations.
+        // Shared text-delta buffer — singleton so fragments buffered by the fan-out service
+        // (InProcessFanOutService) survive across scoped persister invocations.
         services.AddSingleton<TextDeltaBuffer>();
 
         // Harness event persister — scoped so message/session repositories flow through correctly.
         services.AddScoped<HarnessEventPersistenceService>();
         services.AddScoped<IHarnessEventPersister>(sp => sp.GetRequiredService<HarnessEventPersistenceService>());
 
-        if (options.EventBus.Transport == TransportKind.Nats)
+        // In-process event bus — pure .NET, no child process.
+        services.AddInProcessEventBus(bus =>
         {
-            // NATS event substrate. MessagePersistenceProjection is the sole writer to SQLite for
-            // durable harness events. WebSocketFanOutSubscriber is the single core NATS subscriber
-            // that fans every harness event (durable + ephemeral, in publish order) to WebSocket
-            // clients via IEventBroadcaster — durable events no longer flow through the outbox.
-            services.AddEventStore(options.Nats, nats =>
-            {
-                nats.AddProjection<WeaveFleet.Application.Projections.MessagePersistenceProjection>(ConsumerScope.Cluster);
-            });
-            services.AddHostedService<WeaveFleet.Infrastructure.Nats.WebSocketFanOutSubscriber>();
-        }
-        else
-        {
-            // In-process event bus — pure .NET, no child process. Default for local development.
-            services.AddInProcessEventBus(bus =>
-            {
-                bus.AddProjection<WeaveFleet.Application.Projections.MessagePersistenceProjection>(ConsumerScope.Cluster);
-            });
-        }
+            bus.AddProjection<WeaveFleet.Application.Projections.MessagePersistenceProjection>(ConsumerScope.Cluster);
+        });
 
         // HarnessEventRelay is transport-agnostic (depends on IEventPublisher only).
         services.AddHostedService<HarnessEventRelay>();

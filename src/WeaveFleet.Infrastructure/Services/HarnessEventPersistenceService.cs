@@ -104,7 +104,7 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
             case EventTypes.SessionCompacted:
             case EventTypes.SessionDeleted:
                 // No DB side-effect for these lifecycle signals; clients receive them via the
-                // unified fan-out subscriber directly off NATS. The event is captured by the
+                // unified fan-out subscriber. The event is captured by the
                 // durable stream for at-least-once replay semantics but needs no handler work
                 // here beyond acking.
                 return;
@@ -113,8 +113,7 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
 
     /// <summary>
     /// Buffers a text delta from a <c>message.part.delta</c> event. Called by
-    /// <c>WebSocketFanOutSubscriber</c> (which sees every event via the unified core NATS
-    /// subscription) so the buffer is populated by the time the corresponding
+    /// <c>InProcessFanOutService</c> so the buffer is populated by the time the corresponding
     /// <c>message.updated</c> arrives through the durable projection and is merged into the
     /// persisted snapshot.
     /// </summary>
@@ -455,7 +454,7 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
     /// <summary>
     /// Persists a message upsert without producing an outbox entry. Harness events no longer
     /// travel to WebSocket clients through the outbox — the unified fan-out subscriber delivers
-    /// them directly off NATS in publish order — so this service only writes the read-model row.
+    /// them in publish order — so this service only writes the read-model row.
     /// </summary>
     private async Task WriteDurableEventAsync(string fleetSessionId, string ownerUserId, HarnessEvent evt, PersistedMessage persistedMessage)
     {
