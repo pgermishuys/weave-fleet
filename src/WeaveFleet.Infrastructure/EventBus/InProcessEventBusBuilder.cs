@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace WeaveFleet.Infrastructure.EventBus;
@@ -18,7 +19,7 @@ public sealed class InProcessEventBusBuilder
     /// for API consistency but has no effect on the in-process path (all dispatches are local,
     /// so Cluster and PerNode are equivalent).
     /// </summary>
-    public InProcessEventBusBuilder AddProjection<TProjection>(ConsumerScope scope = ConsumerScope.Cluster)
+    public InProcessEventBusBuilder AddProjection<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TProjection>(ConsumerScope scope = ConsumerScope.Cluster)
         where TProjection : class
     {
         _services.AddScoped<TProjection>();
