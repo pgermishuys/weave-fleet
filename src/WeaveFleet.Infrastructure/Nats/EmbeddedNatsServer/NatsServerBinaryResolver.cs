@@ -17,7 +17,8 @@ internal static class NatsServerBinaryResolver
 
     private static string ResolveRid()
     {
-        if (OperatingSystem.IsWindows()) return "win-x64";
+        if (OperatingSystem.IsWindows())
+            return RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "win-arm64" : "win-x64";
         if (OperatingSystem.IsMacOS())
             return RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "osx-arm64" : "osx-x64";
         if (OperatingSystem.IsLinux()) return "linux-x64";
