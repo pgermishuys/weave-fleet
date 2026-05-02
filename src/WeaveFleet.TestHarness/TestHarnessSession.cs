@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using System.Text.Json;
@@ -279,6 +280,8 @@ public sealed class TestHarnessSession : IHarnessSession
         return updatedEvents;
     }
 
+    [UnconditionalSuppressMessage("AOT", "IL2026", Justification = "Test infrastructure only")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test infrastructure only")]
     private static bool TryRewritePromptPayload(JsonElement payload, string promptText, out JsonElement rewrittenPayload)
     {
         rewrittenPayload = payload;
@@ -333,6 +336,8 @@ public sealed class TestHarnessSession : IHarnessSession
         await _channel.Writer.WriteAsync(evt, ct).ConfigureAwait(false);
     }
 
+    [UnconditionalSuppressMessage("AOT", "IL2026", Justification = "Test infrastructure only")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test infrastructure only")]
     private async Task PersistUserPromptAsync(string text)
     {
         if (_scopeFactory is null || string.IsNullOrWhiteSpace(_ownerUserId))

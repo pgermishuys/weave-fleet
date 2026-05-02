@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using WeaveFleet.Domain.Harnesses;
 
@@ -201,6 +202,8 @@ public sealed class TestScenarioBuilder
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    [UnconditionalSuppressMessage("AOT", "IL2026", Justification = "Test infrastructure only")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test infrastructure only")]
     private static HarnessEvent MakeEvent(string sessionId, string type, object payload)
     {
         return new HarnessEvent
