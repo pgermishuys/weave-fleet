@@ -1,5 +1,7 @@
 # Remove NATS — Replace with In-Process Event Bus
 
+> **PR**: https://github.com/damianh/weave-fleet/pull/1
+
 ## TL;DR
 > **Summary**: Remove the NATS event substrate (packages, embedded server binaries, all NATS source/test files, configuration) and make the existing in-process `System.Threading.Channels`-based event bus the only transport.
 > **Estimated Effort**: Medium
