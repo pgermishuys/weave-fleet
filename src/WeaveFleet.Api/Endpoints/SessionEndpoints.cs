@@ -505,8 +505,21 @@ public static class SessionEndpoints
         InstanceTracker tracker,
         CancellationToken ct)
     {
+        // No model in the request → fall back to the session's persisted selection so that
+        // a SPA refresh (which loses local state) doesn't silently drop the model down to
+        // the harness default. SessionOrchestrator.PromptSessionAsync writes the selection
+        // on every successful prompt that resolved to a concrete (provider, model) pair.
         if (model is null)
+        {
+            var stored = await sessionService.GetSessionAsync(sessionId);
+            if (stored.IsSuccess
+                && stored.Value.SelectedProviderId is { Length: > 0 } sp
+                && stored.Value.SelectedModelId is { Length: > 0 } sm)
+            {
+                return new ModelResolutionResult(sp, sm, null);
+            }
             return ModelResolutionResult.Empty;
+        }
 
         var sessionResult = await sessionService.GetSessionAsync(sessionId);
         if (sessionResult.IsFailure)

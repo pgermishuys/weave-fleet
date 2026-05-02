@@ -371,6 +371,51 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task PromptSessionAsync_WithExplicitProviderAndModel_PersistsSelectedModelOnSession()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active",
+            Directory = "/tmp", CreatedAt = "2026-01-01", RetentionStatus = "active"
+        });
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.PromptSessionAsync("s1", "hello", new PromptOptions
+        {
+            ProviderId = "openrouter",
+            ModelId = "anthropic/claude-sonnet-4"
+        });
+
+        result.IsSuccess.ShouldBeTrue();
+        var stored = await _builder.SessionRepository.GetByIdAsync("s1");
+        stored.ShouldNotBeNull();
+        stored.SelectedProviderId.ShouldBe("openrouter");
+        stored.SelectedModelId.ShouldBe("anthropic/claude-sonnet-4");
+    }
+
+    [Fact]
+    public async Task PromptSessionAsync_WithoutModelOptions_DoesNotOverwriteStoredSelection()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active",
+            Directory = "/tmp", CreatedAt = "2026-01-01", RetentionStatus = "active",
+            SelectedProviderId = "anthropic", SelectedModelId = "claude-sonnet-4-6"
+        });
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.PromptSessionAsync("s1", "hello");
+
+        result.IsSuccess.ShouldBeTrue();
+        var stored = await _builder.SessionRepository.GetByIdAsync("s1");
+        stored.ShouldNotBeNull();
+        stored.SelectedProviderId.ShouldBe("anthropic");
+        stored.SelectedModelId.ShouldBe("claude-sonnet-4-6");
+    }
+
+    [Fact]
     public async Task CommandSessionAsync_WithUnqualifiedLegacyModel_KeepsProviderNull()
     {
         _builder.SessionRepository.Seed(new Session

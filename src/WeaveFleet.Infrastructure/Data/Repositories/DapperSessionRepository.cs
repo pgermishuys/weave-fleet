@@ -417,4 +417,12 @@ public sealed class DapperSessionRepository(
             "UPDATE sessions SET project_id = @ProjectId WHERE id = @Id AND user_id = @UserId",
             new { Id = id, ProjectId = projectId, UserId = userContext.UserId });
     }
+
+    public async Task UpdateSelectedModelAsync(string id, string providerId, string modelId)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteAsync(
+            "UPDATE sessions SET selected_provider_id = @ProviderId, selected_model_id = @ModelId WHERE id = @Id AND user_id = @UserId",
+            new { Id = id, ProviderId = providerId, ModelId = modelId, UserId = userContext.UserId });
+    }
 }
