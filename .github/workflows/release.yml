@@ -30,6 +30,10 @@ jobs:
           - rid: win-x64
             runs_on: windows-latest
             archive_extension: .zip
+          - rid: win-arm64
+            runs_on: windows-latest
+            archive_extension: .zip
+            cross_compile: true
 
     steps:
       - name: Checkout
@@ -96,7 +100,7 @@ jobs:
             -Version $packageVersion
 
       - name: Smoke test Unix package
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && !matrix.cross_compile
         shell: bash
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -155,7 +159,7 @@ jobs:
           exit 1
 
       - name: Smoke test Windows package
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && !matrix.cross_compile
         shell: pwsh
         env:
           RELEASE_TAG: ${{ github.ref_name }}
