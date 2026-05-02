@@ -1,9 +1,7 @@
 namespace WeaveFleet.Application.Projections;
 
 /// <summary>
-/// Metadata extracted from a NATS message and handed to a projection.
-/// Subject parts are parsed by <c>NatsNamingStrategy.ParseSubject</c>; header values are
-/// read from the message's headers collection.
+/// Metadata passed to a projection when an event is dispatched.
 /// </summary>
 public readonly record struct ProjectionContext(
     string Tenant,

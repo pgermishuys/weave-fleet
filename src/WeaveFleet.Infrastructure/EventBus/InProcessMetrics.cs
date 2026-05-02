@@ -5,7 +5,7 @@ namespace WeaveFleet.Infrastructure.EventBus;
 
 /// <summary>
 /// OpenTelemetry metric surface for the in-process event bus.
-/// Mirrors <c>NatsMetrics</c> structure but under <c>weave_fleet.inproc.*</c> names.
+/// Exposes metrics under <c>weave_fleet.inproc.*</c> names.
 /// Uses the shared <see cref="FleetInstrumentation.Meter"/> so existing exporters pick them up.
 /// </summary>
 internal sealed class InProcessMetrics

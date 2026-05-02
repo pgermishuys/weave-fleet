@@ -22,7 +22,6 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
 {
     private readonly string _dbPath;
     private readonly string _analyticsDbPath;
-    private readonly string _natsDataDir;
     private readonly bool _ownsDatabaseFiles;
     private string? _kestrelUrl;
     private IHost? _host;
@@ -32,7 +31,6 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
         var guid = Guid.NewGuid().ToString("N");
         _dbPath = Path.Combine(Path.GetTempPath(), $"fleet-test-{guid}.db");
         _analyticsDbPath = Path.Combine(Path.GetTempPath(), $"fleet-analytics-test-{guid}.db");
-        _natsDataDir = Path.Combine(Path.GetTempPath(), $"fleet-test-nats-{guid}");
         _ownsDatabaseFiles = true;
     }
 
@@ -40,7 +38,6 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
     {
         _dbPath = databasePath;
         _analyticsDbPath = analyticsDatabasePath;
-        _natsDataDir = Path.Combine(Path.GetTempPath(), $"fleet-test-nats-{Guid.NewGuid():N}");
         _ownsDatabaseFiles = false;
     }
 
@@ -131,10 +128,9 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
                 services.Remove(d);
         });
 
-        // Override configuration to use isolated DB and NATS paths for E2E.
+        // Override configuration to use isolated DB paths for E2E.
         builder.UseSetting("Fleet:DatabasePath", _dbPath);
         builder.UseSetting("Fleet:AnalyticsDatabasePath", _analyticsDbPath);
-        builder.UseSetting("Fleet:Nats:DataDirectory", _natsDataDir);
         builder.UseSetting("Fleet:AnalyticsEnabled", "true");
         builder.UseSetting("Fleet:Auth:Enabled", "false");
         builder.UseSetting("Fleet:Port", "0");
@@ -163,7 +159,6 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
                 AnalyticsEnabled = true,
                 Port = 0,
                 Host = "127.0.0.1",
-                Nats = new NatsOptions { DataDirectory = _natsDataDir }
             };
 
             services.AddSingleton(testOptions);
@@ -227,13 +222,10 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
         return _host;
     }
 
-    /// <summary>Clean up temporary database and NATS files on disposal.</summary>
+    /// <summary>Clean up temporary database files on disposal.</summary>
     public new async ValueTask DisposeAsync()
     {
         await base.DisposeAsync();
-
-        // The NATS data dir is unique per factory instance, so always clean it up.
-        TryDeleteDirectory(_natsDataDir);
 
         if (!_ownsDatabaseFiles)
             return;

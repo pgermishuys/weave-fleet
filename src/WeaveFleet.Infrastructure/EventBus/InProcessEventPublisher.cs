@@ -63,7 +63,7 @@ internal sealed class InProcessEventPublisher : IEventPublisher
     private void PublishDurable(HarnessEvent evt, EventPublishContext context)
     {
         var projectId = context.ProjectId ?? "scratch";
-        var tenant    = "tenant.default"; // consistent with NatsNamingStrategy default
+        var tenant    = "tenant.default";
         var messageId = $"{context.FleetSessionId}:{context.Sequence}";
 
         var envelope = new InProcessEnvelope(

@@ -4,8 +4,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Projections;
 using WeaveFleet.Domain.Harnesses;
-using WeaveFleet.Infrastructure.Nats.Configuration;
-
 namespace WeaveFleet.Infrastructure.EventBus;
 
 /// <summary>

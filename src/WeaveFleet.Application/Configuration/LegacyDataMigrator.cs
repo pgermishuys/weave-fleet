@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 namespace WeaveFleet.Application.Configuration;
 
 /// <summary>
-/// One-shot migration of legacy data files (main DB, analytics DB, NATS JetStream dir)
+/// One-shot migration of legacy data files (main DB, analytics DB)
 /// from the process working directory (where pre-LocalAppData defaults wrote them) to
 /// the new <see cref="FleetPaths.DefaultAppDataDirectory"/>. Only runs for paths that
 /// are still at their hard-coded defaults — any explicit override (env var, appsettings,
@@ -18,7 +18,6 @@ public static class LegacyDataMigrator
 
         var dbTarget = Path.Combine(appData, "fleet.db");
         var analyticsTarget = Path.Combine(appData, "fleet-analytics.db");
-        var natsTarget = Path.Combine(appData, "nats");
 
         LogScanStart(logger, appData, Environment.CurrentDirectory, null);
 
@@ -42,17 +41,6 @@ public static class LegacyDataMigrator
         else
         {
             LogSettingOverridden(logger, "Fleet:AnalyticsDatabasePath", options.ResolvedAnalyticsDatabasePath, null);
-        }
-
-        if (PathsEqual(options.Nats.DataDirectory, natsTarget))
-        {
-            migrated += SafeMigrate(
-                () => TryMoveDirectory(Path.Combine("data", "nats"), natsTarget, logger),
-                "data/nats", logger);
-        }
-        else
-        {
-            LogSettingOverridden(logger, "Fleet:Nats:DataDirectory", options.Nats.DataDirectory, null);
         }
 
         LogScanComplete(logger, migrated, null);
@@ -104,37 +92,6 @@ public static class LegacyDataMigrator
         if (File.Exists(path)) File.Delete(path);
     }
 
-    private static bool TryMoveDirectory(string legacyDir, string target, ILogger logger)
-    {
-        var legacy = Path.GetFullPath(legacyDir);
-        if (!Directory.Exists(legacy))
-        {
-            LogCandidateNotFound(logger, legacy, null);
-            return false;
-        }
-        if (Directory.Exists(target))
-        {
-            LogTargetExists(logger, legacy, target, null);
-            return false;
-        }
-
-        // Recursive copy+delete instead of Directory.Move so the migration works
-        // across volumes (Directory.Move fails with IOException across drives).
-        CopyDirectoryRecursive(legacy, target);
-        Directory.Delete(legacy, recursive: true);
-        LogMigratedDirectory(logger, legacy, target, null);
-        return true;
-    }
-
-    private static void CopyDirectoryRecursive(string source, string target)
-    {
-        Directory.CreateDirectory(target);
-        foreach (var file in Directory.EnumerateFiles(source))
-            File.Copy(file, Path.Combine(target, Path.GetFileName(file)));
-        foreach (var dir in Directory.EnumerateDirectories(source))
-            CopyDirectoryRecursive(dir, Path.Combine(target, Path.GetFileName(dir)));
-    }
-
     private static readonly Action<ILogger, string, string, Exception?> LogScanStart =
         LoggerMessage.Define<string, string>(LogLevel.Information, new EventId(1, "LegacyMigrationScanStart"),
             "Legacy data migration: scanning for relocatable data. Target: {AppData}. CWD: {Cwd}.");
@@ -158,10 +115,6 @@ public static class LegacyDataMigrator
     private static readonly Action<ILogger, string, string, Exception?> LogMigratedFile =
         LoggerMessage.Define<string, string>(LogLevel.Information, new EventId(6, "LegacyDbMigrated"),
             "Legacy data migration: migrated file {Legacy} -> {Target}.");
-
-    private static readonly Action<ILogger, string, string, Exception?> LogMigratedDirectory =
-        LoggerMessage.Define<string, string>(LogLevel.Information, new EventId(7, "LegacyDirMigrated"),
-            "Legacy data migration: migrated directory {Legacy} -> {Target}.");
 
     private static readonly Action<ILogger, string, Exception?> LogMigrationFailed =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(8, "LegacyMigrationFailed"),

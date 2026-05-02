@@ -36,7 +36,6 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
     private readonly string _dbPath;
     private readonly string _analyticsDbPath;
     private readonly string _workspaceRoot;
-    private readonly string _natsDataDir;
     private readonly IdpProcessHost _idp;
     private string? _kestrelUrl;
     private IHost? _host;
@@ -47,7 +46,6 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
         _dbPath = Path.Combine(Path.GetTempPath(), $"fleet-auth-test-{guid}.db");
         _analyticsDbPath = Path.Combine(Path.GetTempPath(), $"fleet-auth-analytics-test-{guid}.db");
         _workspaceRoot = Path.Combine(Path.GetTempPath(), $"fleet-auth-workspace-{guid}");
-        _natsDataDir = Path.Combine(Path.GetTempPath(), $"fleet-auth-nats-{guid}");
         Directory.CreateDirectory(_workspaceRoot);
 
         _idp = new IdpProcessHost();
@@ -184,7 +182,6 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
                     Enabled = true,
                     WorkspaceRoot = _workspaceRoot
                 },
-                Nats = new NatsOptions { DataDirectory = _natsDataDir }
             };
 
             services.AddSingleton(testOptions);
@@ -263,7 +260,6 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
         TryDeleteFile($"{_analyticsDbPath}-wal");
         TryDeleteFile($"{_analyticsDbPath}-shm");
         TryDeleteDirectory(_workspaceRoot);
-        TryDeleteDirectory(_natsDataDir);
     }
 
     /// <summary>
@@ -289,7 +285,6 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
         Environment.SetEnvironmentVariable("Fleet__DatabasePath", _dbPath);
         Environment.SetEnvironmentVariable("Fleet__AnalyticsDatabasePath", _analyticsDbPath);
         Environment.SetEnvironmentVariable("Fleet__AnalyticsEnabled", "true");
-        Environment.SetEnvironmentVariable("Fleet__Nats__DataDirectory", _natsDataDir);
         Environment.SetEnvironmentVariable("Fleet__Port", "0");
         Environment.SetEnvironmentVariable("Fleet__Host", "127.0.0.1");
     }
@@ -311,7 +306,6 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
         Environment.SetEnvironmentVariable("Fleet__DatabasePath", null);
         Environment.SetEnvironmentVariable("Fleet__AnalyticsDatabasePath", null);
         Environment.SetEnvironmentVariable("Fleet__AnalyticsEnabled", null);
-        Environment.SetEnvironmentVariable("Fleet__Nats__DataDirectory", null);
         Environment.SetEnvironmentVariable("Fleet__Port", null);
         Environment.SetEnvironmentVariable("Fleet__Host", null);
     }

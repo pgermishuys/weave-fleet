@@ -239,8 +239,8 @@ public sealed class InProcessProjectionHostTests
             services.AddScoped<RecordingProjection>(_ => projection);
             var sp = services.BuildServiceProvider();
 
-            var registry = new WeaveFleet.Infrastructure.Nats.Configuration.ProjectionRegistry(
-                [new WeaveFleet.Infrastructure.Nats.Configuration.ProjectionRegistryEntry(typeof(RecordingProjection), WeaveFleet.Infrastructure.Nats.Configuration.ConsumerScope.Cluster)]);
+            var registry = new WeaveFleet.Infrastructure.EventBus.ProjectionRegistry(
+                [new WeaveFleet.Infrastructure.EventBus.ProjectionRegistryEntry(typeof(RecordingProjection), WeaveFleet.Infrastructure.EventBus.ConsumerScope.Cluster)]);
 
             var host = new InProcessProjectionHost(
                 store, channels, registry,
