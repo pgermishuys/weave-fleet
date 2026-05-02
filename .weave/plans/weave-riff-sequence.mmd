@@ -1,0 +1,45 @@
+---
+title: weave-riff Connection Flow
+---
+sequenceDiagram
+    participant Host as Host (Fleet App)
+    participant Server as Signaling Server
+    participant Viewer as Viewer (Fleet App)
+    participant TURN as STUN/TURN
+
+    Note over Host,Viewer: Phase 1: Share Registration
+    Host->>Server: POST /api/sessions/share (API Key)
+    Server-->>Host: { token, uri: "weave-riff://join/abc123" }
+
+    Note over Host,Viewer: Phase 2: Viewer Joins
+    Host-->>Viewer: Sends link (Slack, email, etc.)
+    Viewer->>Server: GET /join/abc123 (OIDC auth)
+    Server-->>Viewer: Redirect → weave-riff://join/abc123
+
+    Note over Host,Viewer: Phase 3: WebRTC Signaling
+    Viewer->>Server: WS: SDP Offer
+    Server->>Host: WS: SDP Offer (forwarded)
+    Host->>Server: WS: SDP Answer
+    Server->>Viewer: WS: SDP Answer (forwarded)
+
+    loop ICE Candidate Exchange
+        Viewer->>Server: WS: ICE Candidate
+        Server->>Host: WS: ICE Candidate
+        Host->>Server: WS: ICE Candidate
+        Server->>Viewer: WS: ICE Candidate
+    end
+
+    Host-.->TURN: STUN binding request
+    Viewer-.->TURN: STUN binding request
+
+    Note over Host,Viewer: Phase 4: Direct P2P (Server steps aside)
+    Host->>Viewer: catch-up snapshot (messages + meta)
+    Viewer->>Host: identity (displayName)
+
+    loop Session Streaming
+        Host->>Viewer: event (agent output, tokens, files)
+    end
+
+    Viewer->>Host: suggest (prompt text)
+    Host->>Viewer: suggestion-response (accept/reject)
+    Host->>Viewer: event (accepted prompt executes)

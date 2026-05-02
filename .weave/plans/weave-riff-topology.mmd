@@ -1,0 +1,16 @@
+---
+title: weave-riff Multi-Viewer Topology
+---
+graph LR
+    Host["🖥️ Host<br/>(Fleet App)"]
+
+    Host -->|"DC #1<br/>events, suggestions"| A["👁️ Viewer A"]
+    Host -->|"DC #2<br/>events, suggestions"| B["👁️ Viewer B"]
+    Host -->|"DC #3<br/>events, suggestions"| C["👁️ Viewer C"]
+    Host -->|"DC #N<br/>events, suggestions"| N["👁️ Viewer N"]
+
+    style Host fill:#0f3460,stroke:#533483,color:#e0e0e0
+    style A fill:#1a1a2e,stroke:#16213e,color:#e0e0e0
+    style B fill:#1a1a2e,stroke:#16213e,color:#e0e0e0
+    style C fill:#1a1a2e,stroke:#16213e,color:#e0e0e0
+    style N fill:#1a1a2e,stroke:#16213e,color:#e0e0e0
