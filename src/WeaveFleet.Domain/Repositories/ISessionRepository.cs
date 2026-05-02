@@ -39,4 +39,9 @@ public interface ISessionRepository
     Task<(int TotalTokens, double TotalCost)> GetFleetTokenTotalsAsync();
     Task<int> MarkAllNonTerminalStoppedAsync(string stoppedAt);
     Task UpdateProjectAsync(string id, string? projectId);
+    /// <summary>
+    /// Persist the most-recent model selection used on this session, so a SPA refresh
+    /// (which loses local state) can fall back to it on the next prompt.
+    /// </summary>
+    Task UpdateSelectedModelAsync(string id, string providerId, string modelId);
 }

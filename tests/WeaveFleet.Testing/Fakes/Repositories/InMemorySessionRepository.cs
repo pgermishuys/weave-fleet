@@ -301,4 +301,14 @@ public sealed class InMemorySessionRepository : ISessionRepository
             session.ProjectId = projectId;
         return Task.CompletedTask;
     }
+
+    public Task UpdateSelectedModelAsync(string id, string providerId, string modelId)
+    {
+        if (_store.TryGetValue(id, out var session))
+        {
+            session.SelectedProviderId = providerId;
+            session.SelectedModelId = modelId;
+        }
+        return Task.CompletedTask;
+    }
 }
