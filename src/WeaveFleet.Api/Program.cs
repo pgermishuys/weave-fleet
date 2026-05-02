@@ -400,35 +400,22 @@ app.UseStaticFiles(); // Serves files from wwwroot/
 // SPA fallback — any unmatched route serves index.html for client-side routing
 app.MapFallbackToFile("index.html");
 
-// Graceful shutdown: stop all tracked harness instances before the process exits.
-// Resolve dependencies up front (the root IServiceProvider may already be disposed by the
-// time ApplicationStopping fires — both are singletons, so capturing them is safe).
 var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
-var shutdownTracker = app.Services.GetRequiredService<InstanceTracker>();
-var shutdownLogger = app.Services.GetRequiredService<ILogger<Program>>();
-lifetime.ApplicationStopping.Register(() =>
+var natsConnectionLazy = app.Services.GetService<Lazy<NATS.Client.Core.INatsConnection>>();
+if (natsConnectionLazy is not null)
 {
-    var instances = shutdownTracker.GetAll();
-    if (instances.Count == 0) return;
-
-    StartupLog.GracefulShutdownStarted(shutdownLogger, instances.Count);
-
-    var tasks = instances.Values.Select(async session =>
+    lifetime.ApplicationStopping.Register(() =>
     {
-        try
+        // Close the NATS connection immediately so NATS-consuming background services
+        // (WebSocketFanOutSubscriber, ProjectionHostService) exit their subscription
+        // loops without waiting for internal NATS client timeouts.
+        if (natsConnectionLazy.IsValueCreated)
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            await session.StopAsync(cts.Token).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            StartupLog.GracefulShutdownInstanceFailed(shutdownLogger, session.InstanceId, ex);
+            try { natsConnectionLazy.Value.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+            catch { /* best effort */ }
         }
     });
-
-    Task.WhenAll(tasks).GetAwaiter().GetResult();
-    StartupLog.GracefulShutdownComplete(shutdownLogger, instances.Count);
-});
+}
 
 await app.RunAsync();
 
@@ -441,18 +428,6 @@ internal static partial class StartupLog
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Recovery: marked {Instances} instance(s) and {Sessions} session(s) as stopped.")]
     public static partial void RecoveryComplete(ILogger logger, int instances, int sessions);
-
-    [LoggerMessage(Level = LogLevel.Information,
-        Message = "Graceful shutdown: stopping {Count} tracked instance(s).")]
-    public static partial void GracefulShutdownStarted(ILogger logger, int count);
-
-    [LoggerMessage(Level = LogLevel.Warning,
-        Message = "Graceful shutdown: failed to stop instance {InstanceId}.")]
-    public static partial void GracefulShutdownInstanceFailed(ILogger logger, string instanceId, Exception ex);
-
-    [LoggerMessage(Level = LogLevel.Information,
-        Message = "Graceful shutdown: stopped {Count} instance(s).")]
-    public static partial void GracefulShutdownComplete(ILogger logger, int count);
 
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Startup orphan kill: killing pid {Pid} ({ProcessName}).")]

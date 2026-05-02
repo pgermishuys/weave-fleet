@@ -160,6 +160,11 @@ public static class DependencyInjection
         // HarnessEventRelay is transport-agnostic (depends on IEventPublisher only).
         services.AddHostedService<HarnessEventRelay>();
 
+        // InstanceShutdownService stops all tracked harness instances on shutdown.
+        // Registered after HarnessEventRelay so it stops first (reverse order), giving
+        // relay pumps a chance to observe process exit and flush buffered deltas.
+        services.AddHostedService<InstanceShutdownService>();
+
         services.AddHostedService<OutboxDispatchBackgroundService>();
         services.AddHostedService<OutboxCleanupBackgroundService>();
 

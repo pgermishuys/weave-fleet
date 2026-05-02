@@ -9,10 +9,10 @@ public sealed class TelemetryOptions
 {
     public const string SectionName = "Fleet:Telemetry";
 
-    /// <summary>Enable OpenTelemetry export. When false, OTEL SDK is not registered. Default: true.</summary>
-    public bool Enabled { get; set; } = true;
+    /// <summary>OTLP collector endpoint. If set (or OTEL_EXPORTER_OTLP_ENDPOINT env var is set), telemetry is enabled.</summary>
+    public string OtlpEndpoint { get; set; } = "";
 
-    /// <summary>OTLP collector endpoint. Default: http://localhost:4317 (gRPC). Override with OTEL_EXPORTER_OTLP_ENDPOINT env var.</summary>
-    public string OtlpEndpoint { get; set; } = "http://localhost:4317";
+    /// <summary>Timeout in milliseconds for OTLP export requests. Keeps shutdown fast when no collector is running. Default: 1000.</summary>
+    public int ExportTimeoutMilliseconds { get; set; } = 1000;
 
 }

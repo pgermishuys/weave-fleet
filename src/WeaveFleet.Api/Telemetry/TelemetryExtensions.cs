@@ -25,10 +25,19 @@ public static class TelemetryExtensions
             .GetSection(TelemetryOptions.SectionName)
             .Get<TelemetryOptions>() ?? new TelemetryOptions();
 
-        if (!telemetryOptions.Enabled)
+        // Only register OTLP exporters when a collector endpoint is explicitly configured
+        // (via OTEL_EXPORTER_OTLP_ENDPOINT env var or Fleet:Telemetry:OtlpEndpoint in config).
+        var otlpEndpointEnv = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT");
+        var hasExplicitEndpoint = !string.IsNullOrWhiteSpace(otlpEndpointEnv)
+            || !string.IsNullOrWhiteSpace(telemetryOptions.OtlpEndpoint);
+        if (!hasExplicitEndpoint)
         {
             return builder;
         }
+
+        var baseEndpoint = (!string.IsNullOrWhiteSpace(otlpEndpointEnv)
+            ? otlpEndpointEnv
+            : telemetryOptions.OtlpEndpoint).TrimEnd('/');
 
         // Resource: service name + version (used by the logging pipeline)
         var resourceBuilder = ResourceBuilder.CreateDefault()
@@ -38,7 +47,6 @@ public static class TelemetryExtensions
 
         // Per-signal AddOtlpExporter does NOT auto-append /v1/{signal} paths when
         // Endpoint is explicitly set, so we build the full URL for each signal.
-        var baseEndpoint = telemetryOptions.OtlpEndpoint.TrimEnd('/');
 
         // --- Tracing & Metrics ---
         builder.Services.AddOpenTelemetry()
@@ -55,6 +63,7 @@ public static class TelemetryExtensions
                     {
                         otlp.Endpoint = new Uri($"{baseEndpoint}/v1/traces");
                         otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
+                        otlp.TimeoutMilliseconds = telemetryOptions.ExportTimeoutMilliseconds;
                     });
 
             })
@@ -68,6 +77,7 @@ public static class TelemetryExtensions
                     {
                         otlp.Endpoint = new Uri($"{baseEndpoint}/v1/metrics");
                         otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
+                        otlp.TimeoutMilliseconds = telemetryOptions.ExportTimeoutMilliseconds;
                     });
             });
 
@@ -84,6 +94,7 @@ public static class TelemetryExtensions
             {
                 otlp.Endpoint = new Uri($"{baseEndpoint}/v1/logs");
                 otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
+                otlp.TimeoutMilliseconds = telemetryOptions.ExportTimeoutMilliseconds;
             });
         });
 

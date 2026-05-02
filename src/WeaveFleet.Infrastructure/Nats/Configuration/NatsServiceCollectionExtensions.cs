@@ -50,9 +50,10 @@ public static class NatsServiceCollectionExtensions
             };
             return new NatsConnection(natsOpts);
         }));
-        services.AddSingleton<INatsConnection>(sp => sp.GetRequiredService<Lazy<INatsConnection>>().Value);
         services.AddSingleton(sp => new Lazy<INatsJSContext>(() =>
             new NatsJSContext((NatsConnection)sp.GetRequiredService<Lazy<INatsConnection>>().Value)));
+        // Convenience registration for consumers that inject INatsJSContext directly.
+        // The instance is owned by the Lazy above, not by the DI container.
         services.AddSingleton<INatsJSContext>(sp => sp.GetRequiredService<Lazy<INatsJSContext>>().Value);
 
         var builder = new NatsStreamBuilder(services);
