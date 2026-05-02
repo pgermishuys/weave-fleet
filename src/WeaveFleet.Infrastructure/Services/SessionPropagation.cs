@@ -1,4 +1,5 @@
 using WeaveFleet.Application.Services;
+using WeaveFleet.Infrastructure;
 
 namespace WeaveFleet.Infrastructure.Services;
 
@@ -29,17 +30,19 @@ internal static class SessionPropagation
         if (parentActivityStatus is null)
             return;
 
+        var payload = InfrastructureJsonContext.SerializeActivityStatus(parentSessionId, parentActivityStatus);
+
         await broadcaster.BroadcastAsync(
             "sessions",
             "activity_status",
-            new { sessionId = parentSessionId, activityStatus = parentActivityStatus },
+            payload,
             userId,
             ct).ConfigureAwait(false);
 
         await broadcaster.BroadcastAsync(
             $"session:{parentSessionId}",
             "activity_status",
-            new { sessionId = parentSessionId, activityStatus = parentActivityStatus },
+            payload,
             userId,
             ct).ConfigureAwait(false);
     }

@@ -11,8 +11,6 @@ public sealed class DapperSessionRepository(
     IDbConnectionFactory connectionFactory,
     IUserContext userContext) : ISessionRepository
 {
-    private static readonly string[] TerminalStatuses = ["stopped", "completed", "error"];
-
     public async Task InsertAsync(Session session)
     {
         using var conn = connectionFactory.CreateConnection();
@@ -278,8 +276,8 @@ public sealed class DapperSessionRepository(
         // System-level lookup — no user filter (used by instance stop recovery)
         using var conn = connectionFactory.CreateConnection();
         var results = await conn.QueryAsync<Session>(
-            "SELECT * FROM sessions WHERE instance_id = @InstanceId AND status NOT IN @TerminalStatuses",
-            new { InstanceId = instanceId, TerminalStatuses });
+            "SELECT * FROM sessions WHERE instance_id = @InstanceId AND status NOT IN ('stopped', 'completed', 'error')",
+            new { InstanceId = instanceId });
         return results.AsList();
     }
 
@@ -406,8 +404,8 @@ public sealed class DapperSessionRepository(
         // System-level recovery operation — no user filter
         using var conn = connectionFactory.CreateConnection();
         return await conn.ExecuteAsync(
-            "UPDATE sessions SET status = 'stopped', stopped_at = @StoppedAt, lifecycle_status = 'stopped' WHERE status NOT IN @TerminalStatuses",
-            new { StoppedAt = stoppedAt, TerminalStatuses });
+            "UPDATE sessions SET status = 'stopped', stopped_at = @StoppedAt, lifecycle_status = 'stopped' WHERE status NOT IN ('stopped', 'completed', 'error')",
+            new { StoppedAt = stoppedAt });
     }
 
     public async Task UpdateProjectAsync(string id, string? projectId)

@@ -248,7 +248,7 @@ public sealed class DapperMessageRepository : IMessageRepository
             return true;
         }).ToList();
 
-        var newPartsJson = JsonSerializer.Serialize(filtered, InfrastructureJsonContext.Default.ListJsonElement);
+        string newPartsJson = JsonSerializer.Serialize(filtered, InfrastructureJsonContext.Default.ListJsonElement);
         await conn.ExecuteAsync(
             """
             UPDATE messages SET parts_json = @PartsJson
@@ -258,11 +258,6 @@ public sealed class DapperMessageRepository : IMessageRepository
                   FROM sessions s
                   WHERE s.id = messages.session_id AND s.user_id = @UserId)
             """,
-            new DeletePartParams(newPartsJson, messageId, sessionId, _userContext.UserId));
+            new { PartsJson = newPartsJson, MessageId = messageId, SessionId = sessionId, UserId = _userContext.UserId });
     }
-
-    /// <summary>Named parameter type for the DELETE PART UPDATE statement.
-    /// Required because Dapper.AOT's source generator cannot infer types from
-    /// <see cref="JsonSerializer.Serialize"/> return values in anonymous types.</summary>
-    private sealed record DeletePartParams(string PartsJson, string MessageId, string SessionId, string UserId);
 }

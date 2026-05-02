@@ -68,6 +68,8 @@ public static class EndpointExtensions
 
     [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
         Justification = "IBackendPlugin.MapEndpoints is called with known concrete plugin types whose parameter types are preserved at runtime.")]
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification = "IBackendPlugin.MapEndpoints is called with known concrete plugin types whose parameter types are preserved at runtime.")]
     public static IEndpointRouteBuilder MapBackendPluginEndpoints(this IEndpointRouteBuilder builder)
     {
         foreach (var plugin in builder.ServiceProvider.GetServices<IBackendPlugin>())

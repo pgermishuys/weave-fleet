@@ -7,7 +7,7 @@
 
   <ItemGroup>
     <PackageReference Include="Dapper" />
-    <PackageReference Include="Dapper.AOT" PrivateAssets="all" />
+    <PackageReference Include="Dapper.AOT" PrivateAssets="analyzers;build" />
     <PackageReference Include="dbup-sqlite" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
   </ItemGroup>

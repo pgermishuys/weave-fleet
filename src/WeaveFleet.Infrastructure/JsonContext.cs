@@ -185,4 +185,7 @@ internal sealed partial class InfrastructureJsonContext : JsonSerializerContext
         => JsonSerializer.SerializeToElement(
             new ActivityStatusPayload { SessionId = sessionId, ActivityStatus = activityStatus },
             Default.ActivityStatusPayload);
+
+    /// <summary>A pre-computed empty JSON object <c>{}</c> as a <see cref="JsonElement"/>.</summary>
+    internal static readonly JsonElement EmptyObject = JsonDocument.Parse("{}").RootElement.Clone();
 }

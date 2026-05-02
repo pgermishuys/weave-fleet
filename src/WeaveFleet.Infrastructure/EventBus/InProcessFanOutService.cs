@@ -73,9 +73,9 @@ internal sealed partial class InProcessFanOutService : BackgroundService
         }
 
         // Fan out to the broadcaster on the per-session WebSocket topic.
-        object payload = evt.Payload.HasValue
+        var payload = evt.Payload.HasValue
             ? evt.Payload.Value
-            : JsonSerializer.SerializeToElement(new { });
+            : InfrastructureJsonContext.EmptyObject;
 
         await _broadcaster.BroadcastAsync(
             $"session:{sessionId}", eventType, payload, envelope.Sequence, userId, ct)
@@ -89,7 +89,7 @@ internal sealed partial class InProcessFanOutService : BackgroundService
             await _broadcaster.BroadcastAsync(
                 "sessions",
                 "activity_status",
-                new { sessionId, activityStatus },
+                InfrastructureJsonContext.SerializeActivityStatus(sessionId, activityStatus),
                 userId,
                 ct).ConfigureAwait(false);
 

@@ -174,7 +174,7 @@ public sealed partial class AnalyticsWriterService : BackgroundService
 
             foreach (var snap in snapshots)
             {
-                var modelIdsJson = System.Text.Json.JsonSerializer.Serialize(snap.ModelIds, InfrastructureJsonContext.Default.ListString);
+                string modelIdsJson = System.Text.Json.JsonSerializer.Serialize(snap.ModelIds, InfrastructureJsonContext.Default.ListString);
                 await connection.ExecuteAsync("""
                     INSERT OR REPLACE INTO session_snapshots (
                         session_id, parent_session_id, project_id, project_name,
@@ -190,15 +190,25 @@ public sealed partial class AnalyticsWriterService : BackgroundService
                         @UserId
                     )
                     """,
-                    new SessionSnapshotInsertParams(
-                        snap.SessionId, snap.ParentSessionId, snap.ProjectId, snap.ProjectName,
-                        snap.WorkspaceDirectory, snap.Title, snap.Status,
-                        snap.TotalTokens, snap.TotalCost, snap.TotalEstimatedCost,
-                        snap.MessageCount, modelIdsJson,
-                        snap.CreatedAt.ToString("O"),
-                        snap.EndedAt?.ToString("O"),
+                    new
+                    {
+                        snap.SessionId,
+                        snap.ParentSessionId,
+                        snap.ProjectId,
+                        snap.ProjectName,
+                        snap.WorkspaceDirectory,
+                        snap.Title,
+                        snap.Status,
+                        snap.TotalTokens,
+                        snap.TotalCost,
+                        snap.TotalEstimatedCost,
+                        snap.MessageCount,
+                        ModelIds = modelIdsJson,
+                        CreatedAt = snap.CreatedAt.ToString("O"),
+                        EndedAt = snap.EndedAt?.ToString("O"),
                         snap.DurationSeconds,
-                        snap.UserId),
+                        snap.UserId
+                    },
                     transaction: tx);
             }
 
@@ -294,24 +304,4 @@ public sealed partial class AnalyticsWriterService : BackgroundService
         Message = "Failed to create scope for main DB token update")]
     private partial void LogMainDbScopeFailed(Exception ex);
 
-    /// <summary>Named parameter type for the session_snapshots INSERT OR REPLACE statement.
-    /// Required because Dapper.AOT's source generator cannot infer types from
-    /// <see cref="System.Text.Json.JsonSerializer.Serialize"/> return values in anonymous types.</summary>
-    private sealed record SessionSnapshotInsertParams(
-        string SessionId,
-        string? ParentSessionId,
-        string? ProjectId,
-        string? ProjectName,
-        string? WorkspaceDirectory,
-        string? Title,
-        string? Status,
-        double TotalTokens,
-        double TotalCost,
-        double TotalEstimatedCost,
-        int MessageCount,
-        string ModelIds,
-        string CreatedAt,
-        string? EndedAt,
-        double? DurationSeconds,
-        string UserId);
 }

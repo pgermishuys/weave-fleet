@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Version>0.1.9</Version>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);DAP005</NoWarn>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
   </PropertyGroup>

@@ -50,6 +50,7 @@ internal sealed partial class InProcessEventStore
             """;
 
         using var conn = _db.CreateConnection();
+        string serializedPayload = JsonSerializer.Serialize(envelope.Event, HarnessEventJsonContext.Default.HarnessEvent);
         var id = conn.ExecuteScalar<long>(sql, new
         {
             envelope.MessageId,
@@ -57,7 +58,7 @@ internal sealed partial class InProcessEventStore
             envelope.ProjectId,
             envelope.Tenant,
             envelope.EventType,
-            Payload  = JsonSerializer.Serialize(envelope.Event),
+            Payload = serializedPayload,
             envelope.UserId,
             envelope.HarnessType,
             envelope.Sequence,
@@ -80,30 +81,46 @@ internal sealed partial class InProcessEventStore
             """;
 
         using var conn = _db.CreateConnection();
-        var rows = conn.Query(sql, new { AfterID = afterId });
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        var p = cmd.CreateParameter();
+        p.ParameterName = "@AfterID";
+        p.Value = afterId;
+        cmd.Parameters.Add(p);
+
+        if (conn.State != ConnectionState.Open)
+            conn.Open();
+
+        using var reader = cmd.ExecuteReader();
         var results = new List<(long, InProcessEnvelope)>();
-        foreach (var row in rows)
+        while (reader.Read())
         {
+            var id = reader.GetInt64(reader.GetOrdinal("id"));
+            var payloadJson = reader.GetString(reader.GetOrdinal("payload"));
+
             HarnessEvent evt;
-            try { evt = JsonSerializer.Deserialize<HarnessEvent>((string)row.payload)!; }
+            try { evt = JsonSerializer.Deserialize(payloadJson, HarnessEventJsonContext.Default.HarnessEvent)!; }
             catch (Exception ex)
             {
-                LogDeserializationFailed(_logger, (long)row.id, ex);
+                LogDeserializationFailed(_logger, id, ex);
                 continue;
             }
 
+            var userIdOrdinal = reader.GetOrdinal("user_id");
+            var harnessTypeOrdinal = reader.GetOrdinal("harness_type");
+
             var env = new InProcessEnvelope(
                 Event:       evt,
-                MessageId:   (string)row.message_id,
-                Tenant:      (string)row.tenant,
-                ProjectId:   (string)row.project_id,
-                SessionId:   (string)row.session_id,
-                EventType:   (string)row.event_type,
-                UserId:      (string?)row.user_id,
-                HarnessType: (string?)row.harness_type,
-                Sequence:    (long)row.sequence,
+                MessageId:   reader.GetString(reader.GetOrdinal("message_id")),
+                Tenant:      reader.GetString(reader.GetOrdinal("tenant")),
+                ProjectId:   reader.GetString(reader.GetOrdinal("project_id")),
+                SessionId:   reader.GetString(reader.GetOrdinal("session_id")),
+                EventType:   reader.GetString(reader.GetOrdinal("event_type")),
+                UserId:      reader.IsDBNull(userIdOrdinal) ? null : reader.GetString(userIdOrdinal),
+                HarnessType: reader.IsDBNull(harnessTypeOrdinal) ? null : reader.GetString(harnessTypeOrdinal),
+                Sequence:    reader.GetInt64(reader.GetOrdinal("sequence")),
                 IsDurable:   true);
-            results.Add(((long)row.id, env));
+            results.Add((id, env));
         }
         return results;
     }

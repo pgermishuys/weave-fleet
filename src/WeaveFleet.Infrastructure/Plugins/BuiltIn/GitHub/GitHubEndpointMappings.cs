@@ -13,6 +13,7 @@ namespace WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 internal static class GitHubEndpointMappings
 {
     [RequiresUnreferencedCode("Plugin endpoint delegates are registered at runtime via reflection-based ASP.NET Core route building; all parameter types are concrete and preserved at runtime.")]
+    [RequiresDynamicCode("Plugin endpoint delegates are registered at runtime via reflection-based ASP.NET Core route building; all parameter types are concrete and preserved at runtime.")]
     public static void MapAuthEndpoints(IEndpointRouteBuilder builder)
     {
         var group = builder.MapGroup("/api/integrations/github/auth").WithTags("GitHub");
@@ -91,6 +92,7 @@ internal static class GitHubEndpointMappings
     }
 
     [RequiresUnreferencedCode("Plugin endpoint delegates are registered at runtime via reflection-based ASP.NET Core route building; all parameter types are concrete and preserved at runtime.")]
+    [RequiresDynamicCode("Plugin endpoint delegates are registered at runtime via reflection-based ASP.NET Core route building; all parameter types are concrete and preserved at runtime.")]
     public static void MapDataEndpoints(IEndpointRouteBuilder builder)    {
         var group = builder.MapGroup("/api/integrations/github").WithTags("GitHub");
 
