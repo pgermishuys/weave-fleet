@@ -1,6 +1,6 @@
 using Shouldly;
 using WeaveFleet.Application.Services;
-using WeaveFleet.Infrastructure.Nats;
+using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Infrastructure.Tests.Nats;
@@ -21,7 +21,7 @@ public sealed class WebSocketFanOutSubscriberParentPropagationTests
         tracker.Update("child-1", "busy", "user-1");
         tracker.RegisterChild("child-1", "parent-1");
 
-        await WebSocketFanOutSubscriber.PropagateToParentAsync(
+        await SessionPropagation.PropagateToParentAsync(
             "child-1", "user-1", tracker, broadcaster, CancellationToken.None);
 
         // Should broadcast on global "sessions" topic
@@ -49,7 +49,7 @@ public sealed class WebSocketFanOutSubscriberParentPropagationTests
         tracker.Update("child-1", "idle", "user-1");
         tracker.RegisterChild("child-1", "parent-1");
 
-        await WebSocketFanOutSubscriber.PropagateToParentAsync(
+        await SessionPropagation.PropagateToParentAsync(
             "child-1", "user-1", tracker, broadcaster, CancellationToken.None);
 
         var sessionsBroadcast = broadcaster.Broadcasts.FirstOrDefault(
@@ -71,7 +71,7 @@ public sealed class WebSocketFanOutSubscriberParentPropagationTests
         tracker.RegisterChild("child-2", "parent-1");
 
         // child-1 goes idle, but child-2 is still busy
-        await WebSocketFanOutSubscriber.PropagateToParentAsync(
+        await SessionPropagation.PropagateToParentAsync(
             "child-1", "user-1", tracker, broadcaster, CancellationToken.None);
 
         var sessionsBroadcast = broadcaster.Broadcasts.FirstOrDefault(
@@ -88,7 +88,7 @@ public sealed class WebSocketFanOutSubscriberParentPropagationTests
         var broadcaster = new FakeEventBroadcaster();
         tracker.Update("standalone", "busy", "user-1");
 
-        await WebSocketFanOutSubscriber.PropagateToParentAsync(
+        await SessionPropagation.PropagateToParentAsync(
             "standalone", "user-1", tracker, broadcaster, CancellationToken.None);
 
         broadcaster.Broadcasts.ShouldBeEmpty();
@@ -103,7 +103,7 @@ public sealed class WebSocketFanOutSubscriberParentPropagationTests
         tracker.Update("child-1", "busy", "user-1");
         tracker.RegisterChild("child-1", "parent-1");
 
-        await WebSocketFanOutSubscriber.PropagateToParentAsync(
+        await SessionPropagation.PropagateToParentAsync(
             "child-1", "user-1", tracker, broadcaster, CancellationToken.None);
 
         // Parent has no tracked state so GetEffectiveActivityStatus returns null → no broadcast

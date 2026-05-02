@@ -41,6 +41,8 @@ for (var i = 0; i < args.Length; i++)
         harnessMode = args[++i];
     else if (args[i].StartsWith("--harness=", StringComparison.Ordinal))
         harnessMode = args[i]["--harness=".Length..];
+    else if (args[i] is "--transport" && i + 1 < args.Length)
+        cliOverrides[$"{FleetOptions.SectionName}:EventBus:Transport"] = args[++i];
 }
 
 var builder = WebApplication.CreateBuilder(args);

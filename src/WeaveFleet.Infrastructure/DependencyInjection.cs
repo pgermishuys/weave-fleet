@@ -11,6 +11,7 @@ using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Analytics;
 using WeaveFleet.Infrastructure.Data;
 using WeaveFleet.Infrastructure.Data.Repositories;
+using WeaveFleet.Infrastructure.EventBus;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
@@ -135,7 +136,7 @@ public static class DependencyInjection
         services.AddScoped<HarnessEventPersistenceService>();
         services.AddScoped<IHarnessEventPersister>(sp => sp.GetRequiredService<HarnessEventPersistenceService>());
 
-        if (options.Nats.Enabled)
+        if (options.EventBus.Transport == TransportKind.Nats)
         {
             // NATS event substrate. MessagePersistenceProjection is the sole writer to SQLite for
             // durable harness events. WebSocketFanOutSubscriber is the single core NATS subscriber
@@ -146,10 +147,18 @@ public static class DependencyInjection
                 nats.AddProjection<WeaveFleet.Application.Projections.MessagePersistenceProjection>(ConsumerScope.Cluster);
             });
             services.AddHostedService<WeaveFleet.Infrastructure.Nats.WebSocketFanOutSubscriber>();
-
-            // HarnessEventRelay is now publish-only — relays every harness event to NATS.
-            services.AddHostedService<HarnessEventRelay>();
         }
+        else
+        {
+            // In-process event bus — pure .NET, no child process. Default for local development.
+            services.AddInProcessEventBus(bus =>
+            {
+                bus.AddProjection<WeaveFleet.Application.Projections.MessagePersistenceProjection>(ConsumerScope.Cluster);
+            });
+        }
+
+        // HarnessEventRelay is transport-agnostic (depends on IEventPublisher only).
+        services.AddHostedService<HarnessEventRelay>();
 
         services.AddHostedService<OutboxDispatchBackgroundService>();
         services.AddHostedService<OutboxCleanupBackgroundService>();
