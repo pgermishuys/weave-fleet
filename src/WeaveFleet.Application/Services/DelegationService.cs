@@ -1,3 +1,5 @@
+using System.Text.Json;
+using WeaveFleet.Application;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
@@ -221,14 +223,15 @@ public sealed class DelegationService(
         {
             Topic = $"session:{parentSessionId}",
             Type = eventType,
-            Payload = MessagePersistenceService.SerializePayload(new DelegationEventDto(
+            Payload = JsonSerializer.Serialize(new DelegationEventDto(
                 delegation.Id,
                 delegation.ParentSessionId,
                 delegation.ParentToolCallId,
                 delegation.ChildSessionId,
                 delegation.Title,
                 delegation.Status,
-                delegation.CreatedAt)),
+                delegation.CreatedAt),
+                ApplicationJsonContext.Default.DelegationEventDto),
             UserId = userContext.UserId,
             CreatedAt = createdAt,
             AvailableAt = createdAt
@@ -237,17 +240,18 @@ public sealed class DelegationService(
 
     private async Task BroadcastAsync(string parentSessionId, string eventType, Delegation delegation)
     {
+        var dto = new DelegationEventDto(
+            delegation.Id,
+            delegation.ParentSessionId,
+            delegation.ParentToolCallId,
+            delegation.ChildSessionId,
+            delegation.Title,
+            delegation.Status,
+            delegation.CreatedAt);
         await eventBroadcaster.BroadcastAsync(
             $"session:{parentSessionId}",
             eventType,
-            new DelegationEventDto(
-                delegation.Id,
-                delegation.ParentSessionId,
-                delegation.ParentToolCallId,
-                delegation.ChildSessionId,
-                delegation.Title,
-                delegation.Status,
-                delegation.CreatedAt),
+            JsonSerializer.SerializeToElement(dto, ApplicationJsonContext.Default.DelegationEventDto),
             userContext.UserId,
             CancellationToken.None);
     }

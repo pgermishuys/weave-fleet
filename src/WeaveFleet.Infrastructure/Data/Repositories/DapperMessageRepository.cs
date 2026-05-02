@@ -1,6 +1,5 @@
 using Dapper;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
@@ -9,16 +8,7 @@ using WeaveFleet.Domain.Repositories;
 namespace WeaveFleet.Infrastructure.Data.Repositories;
 
 public sealed class DapperMessageRepository : IMessageRepository
-{
-    // Matches MessagePersistenceService.SerializerOptions — camelCase + omit nulls.
-    // Used when round-tripping PartsJson through JsonElement to preserve property casing.
-    private static readonly JsonSerializerOptions PartsJsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
-    private readonly IDbConnectionFactory _connectionFactory;
+{    private readonly IDbConnectionFactory _connectionFactory;
 
     private readonly IUserContext _userContext;
 
@@ -250,7 +240,7 @@ public sealed class DapperMessageRepository : IMessageRepository
         if (existing is null)
             return;
 
-        var parts = JsonSerializer.Deserialize<List<JsonElement>>(existing.PartsJson, PartsJsonOptions) ?? [];
+        var parts = JsonSerializer.Deserialize(existing.PartsJson, InfrastructureJsonContext.Default.ListJsonElement) ?? [];
         var filtered = parts.Where(p =>
         {
             if (p.TryGetProperty("id", out var idEl) && idEl.GetString() == partId)
@@ -258,7 +248,7 @@ public sealed class DapperMessageRepository : IMessageRepository
             return true;
         }).ToList();
 
-        var newPartsJson = JsonSerializer.Serialize(filtered, PartsJsonOptions);
+        var newPartsJson = JsonSerializer.Serialize(filtered, InfrastructureJsonContext.Default.ListJsonElement);
         await conn.ExecuteAsync(
             """
             UPDATE messages SET parts_json = @PartsJson
@@ -268,6 +258,11 @@ public sealed class DapperMessageRepository : IMessageRepository
                   FROM sessions s
                   WHERE s.id = messages.session_id AND s.user_id = @UserId)
             """,
-            new { PartsJson = newPartsJson, MessageId = messageId, SessionId = sessionId, UserId = _userContext.UserId });
+            new DeletePartParams(newPartsJson, messageId, sessionId, _userContext.UserId));
     }
+
+    /// <summary>Named parameter type for the DELETE PART UPDATE statement.
+    /// Required because Dapper.AOT's source generator cannot infer types from
+    /// <see cref="JsonSerializer.Serialize"/> return values in anonymous types.</summary>
+    private sealed record DeletePartParams(string PartsJson, string MessageId, string SessionId, string UserId);
 }

@@ -248,6 +248,36 @@ jobs:
           path: test-results/**/*.trx
           reporter: dotnet-trx
 
+  # ── AOT publish validation ────────────────────────────────────────────────
+  aot:
+    name: AOT Publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-aot-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+          restore-keys: nuget-aot-${{ runner.os }}-
+
+      - name: AOT publish (linux-x64)
+        run: |
+          dotnet publish src/WeaveFleet.Api/WeaveFleet.Api.csproj \
+            --configuration Release \
+            --runtime linux-x64 \
+            --output artifacts/publish/linux-x64 \
+            -p:SkipFrontendBuild=true
+
   # ── UI responsiveness benchmarks ──────────────────────────────────────────
   benchmarks:
     name: UI Responsiveness Benchmarks

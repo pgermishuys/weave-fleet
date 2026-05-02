@@ -3,6 +3,8 @@ using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Api.Endpoints;
 
+#pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
+
 /// <summary>
 /// Proxy endpoints that forward requests to specific running harness instances.
 /// </summary>
@@ -171,3 +173,4 @@ public static class InstanceEndpoints
         return string.Equals(result.Value.UserId, userContext.UserId, StringComparison.Ordinal);
     }
 }
+#pragma warning restore IL2026

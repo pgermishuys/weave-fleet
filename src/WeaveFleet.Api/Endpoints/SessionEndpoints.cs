@@ -9,6 +9,8 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Endpoints;
 
+#pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
+
 public static class SessionEndpoints
 {
     public static IEndpointRouteBuilder MapSessionEndpoints(this IEndpointRouteBuilder app)
@@ -146,8 +148,7 @@ public static class SessionEndpoints
                 Source = req.Source,
                 OnCompleteTargetSessionId = req.OnComplete?.NotifySessionId,
                 OnCompleteTargetInstanceId = req.OnComplete?.NotifyInstanceId,
-                ProjectId = req.ProjectId,
-                ScenarioId = req.ScenarioId
+                ProjectId = req.ProjectId
             });
             return result.Match(
                 r => Results.Ok(new
@@ -289,7 +290,7 @@ public static class SessionEndpoints
                         sequenceNumber = evt.SequenceNumber,
                         topic = evt.Topic,
                         type = evt.Type,
-                        payload = JsonSerializer.Deserialize<JsonElement>(evt.Payload),
+                        payload = JsonSerializer.Deserialize(evt.Payload, ApiJsonContext.Default.JsonElement),
                         timestamp = evt.Timestamp.ToUnixTimeMilliseconds()
                     })
                 }),
@@ -548,8 +549,7 @@ internal sealed record CreateSessionApiRequest(
     string? InitialPrompt,
     SessionSourceSelection? Source,
     OnCompleteInfo? OnComplete,
-    string? ProjectId,
-    string? ScenarioId);
+    string? ProjectId);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record OnCompleteInfo(string NotifySessionId, string NotifyInstanceId);
@@ -779,3 +779,4 @@ file static class SessionFleetErrorExtensions
             _ => Results.Problem(error.Description)
         };
 }
+#pragma warning restore IL2026

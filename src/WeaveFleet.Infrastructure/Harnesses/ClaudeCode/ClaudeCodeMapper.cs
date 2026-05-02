@@ -63,17 +63,19 @@ internal static class ClaudeCodeMapper
     /// </summary>
     internal static HarnessEvent CreateMessageUpdatedEvent(HarnessMessage msg, string sessionId)
     {
-        var payload = JsonSerializer.SerializeToElement(new
-        {
-            info = new
+        var payload = JsonSerializer.SerializeToElement(
+            new ClaudeCodeMessageUpdatedPayload
             {
-                id = msg.Id,
-                role = msg.Role,
-                sessionID = sessionId,
-                modelID = msg.ModelId,
-                time = new { created = msg.Timestamp.ToUnixTimeMilliseconds() },
-            }
-        }, MessagePersistenceService.SerializerOptions);
+                Info = new ClaudeCodeMapperInfo
+                {
+                    Id = msg.Id,
+                    Role = msg.Role,
+                    SessionID = sessionId,
+                    ModelID = msg.ModelId,
+                    Time = new ClaudeCodeMapperInfoTime { Created = msg.Timestamp.ToUnixTimeMilliseconds() },
+                }
+            },
+            InfrastructureJsonContext.Default.ClaudeCodeMessageUpdatedPayload);
 
         return new HarnessEvent
         {
@@ -91,23 +93,28 @@ internal static class ClaudeCodeMapper
     internal static HarnessEvent? CreatePartUpdatedEvent(
         string messageId, string sessionId, MessagePart part, int partIndex)
     {
-        object? partPayload = part switch
+        JsonElement? payload = part switch
         {
-            TextPart text => new
-            {
-                messageID = messageId,
-                sessionID = sessionId,
-                type = "text",
-                id = $"{messageId}-part-{partIndex}",
-                text = text.Text,
-            },
-            ToolUsePart tool => BuildToolPartPayload(messageId, sessionId, tool, partIndex),
+            TextPart text => JsonSerializer.SerializeToElement(
+                new ClaudeCodeTextPartPayload
+                {
+                    Part = new ClaudeCodeTextPartContent
+                    {
+                        MessageID = messageId,
+                        SessionID = sessionId,
+                        Type = "text",
+                        Id = $"{messageId}-part-{partIndex}",
+                        Text = text.Text,
+                    }
+                },
+                InfrastructureJsonContext.Default.ClaudeCodeTextPartPayload),
+            ToolUsePart tool => JsonSerializer.SerializeToElement(
+                BuildToolPartPayload(messageId, sessionId, tool, partIndex),
+                InfrastructureJsonContext.Default.ClaudeCodeToolPartPayload),
             _ => null,
         };
 
-        if (partPayload is null) return null;
-
-        var payload = JsonSerializer.SerializeToElement(new { part = partPayload });
+        if (payload is null) return null;
         return new HarnessEvent
         {
             Type = EventTypes.MessagePartUpdated,
@@ -122,10 +129,12 @@ internal static class ClaudeCodeMapper
     /// </summary>
     internal static HarnessEvent CreateSessionStatusEvent(string sessionId, string statusType)
     {
-        var payload = JsonSerializer.SerializeToElement(new
-        {
-            status = new { type = statusType }
-        });
+        var payload = JsonSerializer.SerializeToElement(
+            new ClaudeCodeSessionStatusPayload
+            {
+                Status = new ClaudeCodeSessionStatusType { Type = statusType }
+            },
+            InfrastructureJsonContext.Default.ClaudeCodeSessionStatusPayload);
 
         return new HarnessEvent
         {
@@ -154,28 +163,27 @@ internal static class ClaudeCodeMapper
         return events;
     }
 
-    private static object BuildToolPartPayload(
+    private static ClaudeCodeToolPartPayload BuildToolPartPayload(
         string messageId, string sessionId, ToolUsePart tool, int partIndex)
     {
-        var state = new Dictionary<string, object>
+        var state = new ClaudeCodeToolStateContent
         {
-            ["status"] = MapToolUseState(tool.State),
+            Status = MapToolUseState(tool.State),
+            Input = tool.Arguments.ValueKind != JsonValueKind.Undefined ? tool.Arguments : null,
         };
 
-        if (tool.Arguments.ValueKind != JsonValueKind.Undefined)
+        return new ClaudeCodeToolPartPayload
         {
-            state["input"] = tool.Arguments;
-        }
-
-        return new
-        {
-            messageID = messageId,
-            sessionID = sessionId,
-            type = "tool",
-            id = $"{messageId}-part-{partIndex}",
-            tool = tool.ToolName,
-            callID = tool.ToolCallId,
-            state,
+            Part = new ClaudeCodeToolPartContent
+            {
+                MessageID = messageId,
+                SessionID = sessionId,
+                Type = "tool",
+                Id = $"{messageId}-part-{partIndex}",
+                Tool = tool.ToolName,
+                CallID = tool.ToolCallId,
+                State = state,
+            }
         };
     }
 

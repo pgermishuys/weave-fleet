@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
 using Microsoft.AspNetCore.Http;
@@ -50,6 +51,7 @@ public sealed class GitHubBackendPlugin(
             actions);
     }
 
+    [RequiresUnreferencedCode("Plugin endpoint delegates are registered at runtime via reflection-based ASP.NET Core route building; all parameter types are concrete and preserved.")]
     public void MapEndpoints(IEndpointRouteBuilder builder)
     {
         GitHubEndpointMappings.MapAuthEndpoints(builder);

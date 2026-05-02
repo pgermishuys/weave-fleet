@@ -2,6 +2,8 @@ using WeaveFleet.Application.SessionSources;
 
 namespace WeaveFleet.Api.Endpoints;
 
+#pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
+
 public static class SessionSourceEndpoints
 {
     public static IEndpointRouteBuilder MapSessionSourceEndpoints(this IEndpointRouteBuilder app)
@@ -45,3 +47,4 @@ public static class SessionSourceEndpoints
         return app;
     }
 }
+#pragma warning restore IL2026

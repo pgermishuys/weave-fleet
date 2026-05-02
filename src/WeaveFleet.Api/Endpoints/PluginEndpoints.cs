@@ -2,6 +2,8 @@ using WeaveFleet.Application.Plugins;
 
 namespace WeaveFleet.Api.Endpoints;
 
+#pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
+
 public static class PluginEndpoints
 {
     public static IEndpointRouteBuilder MapPluginEndpoints(this IEndpointRouteBuilder app)
@@ -59,3 +61,4 @@ public static class PluginEndpoints
             _ => throw new ArgumentOutOfRangeException(nameof(status), status, null),
         };
 }
+#pragma warning restore IL2026

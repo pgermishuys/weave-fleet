@@ -48,7 +48,8 @@ public static class ReasoningFilter
             return payload.Clone();
 
         payloadNode["parts"] = sanitizedParts ?? [];
-        return JsonSerializer.SerializeToElement(payloadNode);
+        using var doc = JsonDocument.Parse(payloadNode.ToJsonString());
+        return doc.RootElement.Clone();
     }
 
     /// <summary>

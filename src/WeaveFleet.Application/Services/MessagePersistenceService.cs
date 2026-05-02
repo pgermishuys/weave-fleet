@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -24,7 +25,9 @@ public sealed class MessagePersistenceService
     /// </summary>
     public static PersistedMessage ToPersistedMessage(string sessionId, HarnessMessage message)
     {
-        var partsJson = JsonSerializer.Serialize(ReasoningFilter.FilterDurableParts(message.Parts), SerializerOptions);
+        var partsJson = JsonSerializer.Serialize(
+            ReasoningFilter.FilterDurableParts(message.Parts),
+            ApplicationJsonContext.Default.MessagePartArray);
         return new PersistedMessage
         {
             Id = message.Id,
@@ -76,8 +79,8 @@ public sealed class MessagePersistenceService
     /// </summary>
     public static HarnessMessage ToHarnessMessage(PersistedMessage persisted)
     {
-        var parts = ReasoningFilter.FilterDurableParts(JsonSerializer.Deserialize<IReadOnlyList<MessagePart>>(
-            persisted.PartsJson, SerializerOptions) ?? []);
+        var parts = ReasoningFilter.FilterDurableParts(JsonSerializer.Deserialize(
+            persisted.PartsJson, ApplicationJsonContext.Default.ListMessagePart) ?? []);
 
         return new HarnessMessage
         {
@@ -107,6 +110,10 @@ public sealed class MessagePersistenceService
     /// <summary>
     /// Serializes an event payload for durable outbox storage.
     /// </summary>
+    /// <remarks>
+    /// Infrastructure-layer compatibility shim. Use source-generated overloads in new code.
+    /// </remarks>
+    [RequiresUnreferencedCode("Use source-generated serialization via JsonTypeInfo overloads instead.")]
     public static string SerializePayload<TPayload>(TPayload payload)
         => JsonSerializer.Serialize(payload, SerializerOptions);
 
@@ -116,7 +123,7 @@ public sealed class MessagePersistenceService
     public static JsonElement? SanitizeDurableEventPayload(string eventType, JsonElement? payload)
     {
         if (!payload.HasValue)
-            return JsonSerializer.SerializeToElement(new { });
+            return JsonDocument.Parse("{}").RootElement.Clone();
 
         if (!EventTypeMetadata.Classify(eventType).RequiresReasoningFilter)
             return payload.Value.Clone();
@@ -150,19 +157,16 @@ public sealed class MessagePersistenceService
                 parts.Add(partPayload.Value);
         }
 
-        return JsonSerializer.SerializeToElement(new
-        {
-            info = new
-            {
-                id = message.Id,
-                role = message.Role,
-                sessionID = persisted.SessionId,
-                agent = message.Agent,
-                modelID = message.ModelId,
-                time = new { created = message.Timestamp.ToUnixTimeMilliseconds() },
-            },
-            parts,
-        }, SerializerOptions);
+        return JsonSerializer.SerializeToElement(new CommittedMessage(
+            new CommittedMessageInfo(
+                message.Id,
+                message.Role,
+                persisted.SessionId,
+                message.Agent,
+                message.ModelId,
+                new CommittedMessageTime(message.Timestamp.ToUnixTimeMilliseconds())),
+            parts),
+            ApplicationJsonContext.Default.CommittedMessage);
     }
 
     /// <summary>
@@ -191,7 +195,7 @@ public sealed class MessagePersistenceService
         if (string.IsNullOrEmpty(deltaText))
             return MergeMetadata(existing, role ?? existing.Role, agentName ?? existing.AgentName);
 
-        var parts = JsonSerializer.Deserialize<List<MessagePart>>(existing.PartsJson, SerializerOptions) ?? [];
+        var parts = JsonSerializer.Deserialize(existing.PartsJson, ApplicationJsonContext.Default.ListMessagePart) ?? [];
         var idx = parts.FindIndex(p => p is TextPart);
         if (idx >= 0)
         {
@@ -208,7 +212,7 @@ public sealed class MessagePersistenceService
             Id = existing.Id,
             SessionId = existing.SessionId,
             Role = role ?? existing.Role,
-            PartsJson = JsonSerializer.Serialize(parts, SerializerOptions),
+            PartsJson = JsonSerializer.Serialize(parts, ApplicationJsonContext.Default.ListMessagePart),
             Timestamp = existing.Timestamp,
             CreatedAt = existing.CreatedAt,
             AgentName = agentName ?? existing.AgentName,
@@ -229,7 +233,7 @@ public sealed class MessagePersistenceService
         if (newPart is ReasoningPart)
             return MergeMetadata(existing, role ?? existing.Role, agentName ?? existing.AgentName);
 
-        var parts = JsonSerializer.Deserialize<List<MessagePart>>(existing.PartsJson, SerializerOptions) ?? [];
+        var parts = JsonSerializer.Deserialize(existing.PartsJson, ApplicationJsonContext.Default.ListMessagePart) ?? [];
 
         switch (newPart)
         {
@@ -279,7 +283,7 @@ public sealed class MessagePersistenceService
             Id = existing.Id,
             SessionId = existing.SessionId,
             Role = role ?? existing.Role,
-            PartsJson = JsonSerializer.Serialize(parts, SerializerOptions),
+            PartsJson = JsonSerializer.Serialize(parts, ApplicationJsonContext.Default.ListMessagePart),
             Timestamp = existing.Timestamp,
             CreatedAt = existing.CreatedAt,
             AgentName = agentName ?? existing.AgentName,
@@ -295,14 +299,14 @@ public sealed class MessagePersistenceService
     {
         return part switch
         {
-            TextPart textPart => JsonSerializer.SerializeToElement(new
-            {
-                id = $"{messageId}-text-{index}",
-                messageID = messageId,
-                sessionID = sessionId,
-                type = "text",
-                text = textPart.Text,
-            }),
+            TextPart textPart => JsonSerializer.SerializeToElement(
+                new CommittedTextPart(
+                    $"{messageId}-text-{index}",
+                    messageId,
+                    sessionId,
+                    "text",
+                    textPart.Text),
+                ApplicationJsonContext.Default.CommittedTextPart),
             _ => null,
         };
     }

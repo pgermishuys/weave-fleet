@@ -13,11 +13,11 @@ public static class ResultExtensions
             error => error.Code switch
             {
                 var c when c.EndsWith(".NotFound", StringComparison.Ordinal) || c == "General.NotFound"
-                    => Results.NotFound(new { error = error.Description }),
+                    => Results.NotFound(new ApiErrorResponse(error.Description)),
                 "General.Conflict"
-                    => Results.Conflict(new { error = error.Description }),
+                    => Results.Conflict(new ApiErrorResponse(error.Description)),
                 var c when c.StartsWith("Validation.", StringComparison.Ordinal)
-                    => Results.BadRequest(new { error = error.Description }),
+                    => Results.BadRequest(new ApiErrorResponse(error.Description)),
                 _   => Results.Problem(error.Description)
             });
 
@@ -27,11 +27,11 @@ public static class ResultExtensions
             error => error.Code switch
             {
                 var c when c.EndsWith(".NotFound", StringComparison.Ordinal) || c == "General.NotFound"
-                    => Results.NotFound(new { error = error.Description }),
+                    => Results.NotFound(new ApiErrorResponse(error.Description)),
                 "General.Conflict"
-                    => Results.Conflict(new { error = error.Description }),
+                    => Results.Conflict(new ApiErrorResponse(error.Description)),
                 var c when c.StartsWith("Validation.", StringComparison.Ordinal)
-                    => Results.BadRequest(new { error = error.Description }),
+                    => Results.BadRequest(new ApiErrorResponse(error.Description)),
                 _   => Results.Problem(error.Description)
             });
 }

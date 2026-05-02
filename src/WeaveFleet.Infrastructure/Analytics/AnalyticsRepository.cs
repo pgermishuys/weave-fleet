@@ -30,7 +30,7 @@ public sealed class AnalyticsRepository(
         var whereClause = BuildWhereClause(fromStr, toStr, projectId);
 
         // Aggregate totals
-        var totals = await conn.QuerySingleOrDefaultAsync<(double TotalTokens, double TotalCost, double TotalEstimatedCost, int MessageCount)>(
+        var totals = await conn.QueryFirstAsync<(double TotalTokens, double TotalCost, double TotalEstimatedCost, int MessageCount)>(
             $"""
             SELECT
                 COALESCE(SUM(tokens_total), 0) AS TotalTokens,
@@ -304,7 +304,7 @@ public sealed class AnalyticsRepository(
         if (string.IsNullOrEmpty(json)) return [];
         try
         {
-            return System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? [];
+            return System.Text.Json.JsonSerializer.Deserialize(json, InfrastructureJsonContext.Default.ListString) ?? [];
         }
         catch
         {

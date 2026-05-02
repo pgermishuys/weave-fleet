@@ -45,7 +45,7 @@ public sealed class GitHubService(
             ct).ConfigureAwait(false);
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<DeviceCodeResponse>(ct).ConfigureAwait(false);
+        return await response.Content.ReadFromJsonAsync(InfrastructureJsonContext.Default.DeviceCodeResponse, ct).ConfigureAwait(false);
     }
 
     /// <summary>Polls GitHub for access token or terminal device-flow status.</summary>
@@ -63,7 +63,7 @@ public sealed class GitHubService(
             ]),
             ct).ConfigureAwait(false);
 
-        var json = await response.Content.ReadFromJsonAsync<JsonObject>(ct).ConfigureAwait(false);
+        var json = JsonNode.Parse(await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false)) as JsonObject;
         if (json is null)
             return new DeviceFlowPollResult(DeviceFlowPollStatus.Error, Message: "GitHub returned an empty response.");
 
@@ -296,7 +296,7 @@ public sealed class GitHubService(
         if (!response.IsSuccessStatusCode)
             return null;
 
-        return await response.Content.ReadFromJsonAsync<JsonObject>(ct).ConfigureAwait(false);
+        return JsonNode.Parse(await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false)) as JsonObject;
     }
 
     private static string UpdateMetadataLogin(string? metadata, string login)

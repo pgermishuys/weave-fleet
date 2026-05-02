@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
+using WeaveFleet.Application;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.DTOs;
@@ -245,14 +247,16 @@ public sealed partial class SessionOrchestrator(
         if (sessionActivityWriteService is null)
         {
             await sessionRepository.InsertAsync(session);
-            await eventBroadcaster.BroadcastAsync("sessions", "session_created", new
-            {
-                sessionId = session.Id,
-                instanceId = harnessInstance.InstanceId,
-                workspaceId = workspace.Id,
-                title = session.Title,
-                projectId = session.ProjectId
-            }, userContext.UserId, ct);
+            await eventBroadcaster.BroadcastAsync("sessions", "session_created",
+                JsonSerializer.SerializeToElement(new SessionCreatedOutboxPayload
+                {
+                    SessionId = session.Id,
+                    InstanceId = harnessInstance.InstanceId,
+                    WorkspaceId = workspace.Id,
+                    Title = session.Title,
+                    ProjectId = session.ProjectId
+                }, ApplicationJsonContext.Default.SessionCreatedOutboxPayload),
+                userContext.UserId, ct);
         }
         else
         {
@@ -264,14 +268,14 @@ public sealed partial class SessionOrchestrator(
                     [
                         CreateSessionLifecycleOutboxMessage(
                             "session_created",
-                            new
+                            JsonSerializer.Serialize(new SessionCreatedOutboxPayload
                             {
-                                sessionId = session.Id,
-                                instanceId = harnessInstance.InstanceId,
-                                workspaceId = workspace.Id,
-                                title = session.Title,
-                                projectId = session.ProjectId
-                            },
+                                SessionId = session.Id,
+                                InstanceId = harnessInstance.InstanceId,
+                                WorkspaceId = workspace.Id,
+                                Title = session.Title,
+                                ProjectId = session.ProjectId
+                            }, ApplicationJsonContext.Default.SessionCreatedOutboxPayload),
                             createdAt,
                             userContext.UserId)
                     ]
@@ -532,16 +536,18 @@ public sealed partial class SessionOrchestrator(
         if (sessionActivityWriteService is null)
         {
             await sessionRepository.InsertAsync(session);
-            await eventBroadcaster.BroadcastAsync("sessions", "session_created", new
-            {
-                sessionId = session.Id,
-                instanceId = session.InstanceId,
-                workspaceId = session.WorkspaceId,
-                title = session.Title,
-                projectId = session.ProjectId,
-                parentSessionId = session.ParentSessionId,
-                isHidden = true
-            }, userContext.UserId, ct);
+            await eventBroadcaster.BroadcastAsync("sessions", "session_created",
+                JsonSerializer.SerializeToElement(new SessionCreatedOutboxPayload
+                {
+                    SessionId = session.Id,
+                    InstanceId = session.InstanceId,
+                    WorkspaceId = session.WorkspaceId,
+                    Title = session.Title,
+                    ProjectId = session.ProjectId,
+                    ParentSessionId = session.ParentSessionId,
+                    IsHidden = true
+                }, ApplicationJsonContext.Default.SessionCreatedOutboxPayload),
+                userContext.UserId, ct);
         }
         else
         {
@@ -553,16 +559,16 @@ public sealed partial class SessionOrchestrator(
                     [
                         CreateSessionLifecycleOutboxMessage(
                             "session_created",
-                            new
+                            JsonSerializer.Serialize(new SessionCreatedOutboxPayload
                             {
-                                sessionId = session.Id,
-                                instanceId = session.InstanceId,
-                                workspaceId = session.WorkspaceId,
-                                title = session.Title,
-                                projectId = session.ProjectId,
-                                parentSessionId = session.ParentSessionId,
-                                isHidden = true
-                            },
+                                SessionId = session.Id,
+                                InstanceId = session.InstanceId,
+                                WorkspaceId = session.WorkspaceId,
+                                Title = session.Title,
+                                ProjectId = session.ProjectId,
+                                ParentSessionId = session.ParentSessionId,
+                                IsHidden = true
+                            }, ApplicationJsonContext.Default.SessionCreatedOutboxPayload),
                             createdAt,
                             userContext.UserId)
                     ]
@@ -889,11 +895,9 @@ public sealed partial class SessionOrchestrator(
         if (sessionActivityWriteService is null)
         {
             await sessionRepository.UpdateStatusAsync(id, "stopped", stoppedAt);
-            await eventBroadcaster.BroadcastAsync("sessions", "session_stopped", new
-            {
-                sessionId = id,
-                stoppedAt
-            }, session.UserId, ct);
+            await eventBroadcaster.BroadcastAsync("sessions", "session_stopped",
+                JsonSerializer.SerializeToElement(new SessionStoppedOutboxPayload(id, stoppedAt), ApplicationJsonContext.Default.SessionStoppedOutboxPayload),
+                session.UserId, ct);
         }
         else
         {
@@ -905,7 +909,7 @@ public sealed partial class SessionOrchestrator(
                     [
                         CreateSessionLifecycleOutboxMessage(
                             "session_stopped",
-                            new { sessionId = id, stoppedAt },
+                            JsonSerializer.Serialize(new SessionStoppedOutboxPayload(id, stoppedAt), ApplicationJsonContext.Default.SessionStoppedOutboxPayload),
                             stoppedAt,
                             session.UserId)
                     ]
@@ -929,11 +933,9 @@ public sealed partial class SessionOrchestrator(
         if (sessionActivityWriteService is null)
         {
             await sessionRepository.ArchiveAsync(id, archivedAt);
-            await eventBroadcaster.BroadcastAsync("sessions", "session_archived", new
-            {
-                sessionId = id,
-                archivedAt
-            }, session.UserId, ct);
+            await eventBroadcaster.BroadcastAsync("sessions", "session_archived",
+                JsonSerializer.SerializeToElement(new SessionArchivedOutboxPayload(id, archivedAt), ApplicationJsonContext.Default.SessionArchivedOutboxPayload),
+                session.UserId, ct);
         }
         else
         {
@@ -945,7 +947,7 @@ public sealed partial class SessionOrchestrator(
                     [
                         CreateSessionLifecycleOutboxMessage(
                             "session_archived",
-                            new { sessionId = id, archivedAt },
+                            JsonSerializer.Serialize(new SessionArchivedOutboxPayload(id, archivedAt), ApplicationJsonContext.Default.SessionArchivedOutboxPayload),
                             archivedAt,
                             session.UserId)
                     ]
@@ -969,10 +971,9 @@ public sealed partial class SessionOrchestrator(
         if (sessionActivityWriteService is null)
         {
             await sessionRepository.UnarchiveAsync(id);
-            await eventBroadcaster.BroadcastAsync("sessions", "session_unarchived", new
-            {
-                sessionId = id
-            }, session.UserId, ct);
+            await eventBroadcaster.BroadcastAsync("sessions", "session_unarchived",
+                JsonSerializer.SerializeToElement(new SessionUnarchivedOutboxPayload(id), ApplicationJsonContext.Default.SessionUnarchivedOutboxPayload),
+                session.UserId, ct);
         }
         else
         {
@@ -984,7 +985,7 @@ public sealed partial class SessionOrchestrator(
                     [
                         CreateSessionLifecycleOutboxMessage(
                             "session_unarchived",
-                            new { sessionId = id },
+                            JsonSerializer.Serialize(new SessionUnarchivedOutboxPayload(id), ApplicationJsonContext.Default.SessionUnarchivedOutboxPayload),
                             changedAt,
                             session.UserId)
                     ]
@@ -1034,14 +1035,14 @@ public sealed partial class SessionOrchestrator(
                 await eventBroadcaster.BroadcastAsync(
                     $"session:{delegation.ParentSessionId}",
                     "delegation.updated",
-                    new DelegationEventDto(
+                    JsonSerializer.SerializeToElement(new DelegationEventDto(
                         delegation.Id,
                         delegation.ParentSessionId,
                         delegation.ParentToolCallId,
                         delegation.ChildSessionId,
                         delegation.Title,
                         delegation.Status,
-                        delegation.CreatedAt),
+                        delegation.CreatedAt), ApplicationJsonContext.Default.DelegationEventDto),
                     session.UserId,
                     ct);
             }
@@ -1050,10 +1051,9 @@ public sealed partial class SessionOrchestrator(
                 await delegationRepository.DeleteByParentSessionIdAsync(id);
 
             await sessionRepository.DeleteAsync(id);
-            await eventBroadcaster.BroadcastAsync("sessions", "session_deleted", new
-            {
-                sessionId = id
-            }, session.UserId, ct);
+            await eventBroadcaster.BroadcastAsync("sessions", "session_deleted",
+                JsonSerializer.SerializeToElement(new SessionDeletedOutboxPayload(id), ApplicationJsonContext.Default.SessionDeletedOutboxPayload),
+                session.UserId, ct);
         }
         else
         {
@@ -1069,14 +1069,15 @@ public sealed partial class SessionOrchestrator(
                 {
                     Topic = $"session:{delegation.ParentSessionId}",
                     Type = "delegation.updated",
-                    Payload = MessagePersistenceService.SerializePayload(new DelegationEventDto(
+                    Payload = JsonSerializer.Serialize(new DelegationEventDto(
                         delegation.Id,
                         delegation.ParentSessionId,
                         delegation.ParentToolCallId,
                         delegation.ChildSessionId,
                         delegation.Title,
                         delegation.Status,
-                        delegation.CreatedAt)),
+                        delegation.CreatedAt),
+                        ApplicationJsonContext.Default.DelegationEventDto),
                     UserId = session.UserId,
                     CreatedAt = deletedAtText,
                     AvailableAt = deletedAtText
@@ -1086,7 +1087,7 @@ public sealed partial class SessionOrchestrator(
             outboxMessages.Add(
                 CreateSessionLifecycleOutboxMessage(
                     "session_deleted",
-                    new { sessionId = id },
+                    JsonSerializer.Serialize(new SessionDeletedOutboxPayload(id), ApplicationJsonContext.Default.SessionDeletedOutboxPayload),
                     deletedAtText,
                     session.UserId));
 
@@ -1224,7 +1225,7 @@ public sealed partial class SessionOrchestrator(
 
     private static OutboxMessage CreateSessionLifecycleOutboxMessage(
         string eventType,
-        object payload,
+        string payloadJson,
         string createdAt,
         string userId)
     {
@@ -1232,7 +1233,7 @@ public sealed partial class SessionOrchestrator(
         {
             Topic = "sessions",
             Type = eventType,
-            Payload = MessagePersistenceService.SerializePayload(payload),
+            Payload = payloadJson,
             UserId = userId,
             CreatedAt = createdAt,
             AvailableAt = createdAt

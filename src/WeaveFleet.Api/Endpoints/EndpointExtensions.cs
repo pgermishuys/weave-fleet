@@ -7,6 +7,8 @@ using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Endpoints;
 
+#pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
+
 /// <summary>
 /// Extension methods for registering all Fleet API endpoints.
 /// </summary>
@@ -64,6 +66,8 @@ public static class EndpointExtensions
         return app;
     }
 
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "IBackendPlugin.MapEndpoints is called with known concrete plugin types whose parameter types are preserved at runtime.")]
     public static IEndpointRouteBuilder MapBackendPluginEndpoints(this IEndpointRouteBuilder builder)
     {
         foreach (var plugin in builder.ServiceProvider.GetServices<IBackendPlugin>())
@@ -90,3 +94,4 @@ public static class EndpointExtensions
         return group;
     }
 }
+#pragma warning restore IL2026

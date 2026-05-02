@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Dapper;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Analytics;
@@ -27,7 +28,7 @@ namespace WeaveFleet.Infrastructure;
 /// </summary>
 public static class DependencyInjection
 {
-    public static IServiceCollection AddBuiltInPlugin<TPlugin>(this IServiceCollection services)
+    public static IServiceCollection AddBuiltInPlugin<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TPlugin>(this IServiceCollection services)
         where TPlugin : class, IBackendPlugin
     {
         services.AddSingleton<TPlugin>();

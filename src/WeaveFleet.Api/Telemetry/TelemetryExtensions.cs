@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
@@ -19,6 +20,7 @@ public static class TelemetryExtensions
     /// Adds OpenTelemetry tracing, metrics, and logging to the host.
     /// Reads configuration from the "Fleet:Telemetry" section and standard OTEL environment variables.
     /// </summary>
+    [RequiresUnreferencedCode("TelemetryOptions binding uses reflection-based IConfiguration.Get<T>; all config properties are primitive types and safe at runtime.")]
     public static IHostApplicationBuilder AddFleetTelemetry(this IHostApplicationBuilder builder)
     {
         var telemetryOptions = builder.Configuration

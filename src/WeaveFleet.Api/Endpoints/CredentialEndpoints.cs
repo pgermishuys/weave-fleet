@@ -2,6 +2,8 @@ using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Endpoints;
 
+#pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
+
 /// <summary>
 /// API endpoints for managing user credentials.
 /// Values are NEVER included in any response — only metadata (label, provider, type, displayHint).
@@ -123,3 +125,4 @@ internal sealed record StoreCredentialRequest(
 internal sealed record UpdateCredentialRequest(
     string Value,
     string? Metadata);
+#pragma warning restore IL2026

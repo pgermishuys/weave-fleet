@@ -1,9 +1,12 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using WeaveFleet.Api;
 using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Endpoints;
+
+#pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
 
 public static class WebSocketEndpoints
 {
@@ -124,7 +127,7 @@ public static class WebSocketEndpoints
                                 subscribedTopics.Add(t);
                     }
 
-                    var response = JsonSerializer.Serialize(new { type = "subscribed", topics = subscribedTopics });
+                    var response = JsonSerializer.Serialize(new WsSubscribedPayload("subscribed", subscribedTopics), ApiJsonContext.Default.WsSubscribedPayload);
                     var responseBytes = Encoding.UTF8.GetBytes(response);
                     await webSocket.SendAsync(new ArraySegment<byte>(responseBytes),
                         WebSocketMessageType.Text, endOfMessage: true, cts.Token);
@@ -150,21 +153,13 @@ public static class WebSocketEndpoints
                                 activityTracker.GetEffectiveActivityStatus(snapshot.FleetSessionId)
                                 ?? snapshot.ActivityStatus;
 
-                            var initialEvent = JsonSerializer.Serialize(new
-                            {
-                                type = "event",
-                                topic = "activity",
-                                data = new
-                                {
-                                    type = "activity_status",
-                                    sequenceNumber = (long?)null,
-                                    properties = new
-                                    {
-                                        sessionId = snapshot.FleetSessionId,
-                                        activityStatus = effectiveActivityStatus
-                                    }
-                                }
-                            });
+                            var props = JsonSerializer.SerializeToElement(
+                                new WsActivityStatusProperties(snapshot.FleetSessionId, effectiveActivityStatus),
+                                ApiJsonContext.Default.WsActivityStatusProperties);
+                            var initialEvent = JsonSerializer.Serialize(
+                                new WsEventPayload("event", "activity",
+                                    new WsEventDataPayload("activity_status", null, props)),
+                                ApiJsonContext.Default.WsEventPayload);
                             var initialBytes = Encoding.UTF8.GetBytes(initialEvent);
                             await webSocket.SendAsync(new ArraySegment<byte>(initialBytes),
                                 WebSocketMessageType.Text, endOfMessage: true, cts.Token);
@@ -232,17 +227,10 @@ public static class WebSocketEndpoints
                 if (!sanitizedPayload.HasValue)
                     continue;
 
-                var json = JsonSerializer.Serialize(new
-                {
-                    type = "event",
-                    topic = evt.Topic,
-                    data = new
-                    {
-                        type = evt.Type,
-                        sequenceNumber = evt.SequenceNumber,
-                        properties = sanitizedPayload.Value
-                    }
-                });
+                var json = JsonSerializer.Serialize(
+                    new WsEventPayload("event", evt.Topic,
+                        new WsEventDataPayload(evt.Type, evt.SequenceNumber, sanitizedPayload.Value)),
+                    ApiJsonContext.Default.WsEventPayload);
 
                 var bytes = Encoding.UTF8.GetBytes(json);
                 try
@@ -281,3 +269,4 @@ public static class WebSocketEndpoints
         return fleetOptions.Auth.AllowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
     }
 }
+#pragma warning restore IL2026

@@ -1,9 +1,12 @@
 using System.Text;
 using System.Text.Json;
+using WeaveFleet.Api;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Endpoints;
+
+#pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
 
 /// <summary>
 /// SSE endpoints for per-session event streaming and global activity streams.
@@ -33,7 +36,7 @@ public static class SessionEventEndpoints
             if (session.Status is "completed" or "failed" or "aborted")
             {
                 // No live instance — send a single "stopped" event and close
-                var stoppedData = JsonSerializer.Serialize(new { sessionId = id, status = "stopped" });
+                var stoppedData = JsonSerializer.Serialize(new SseSessionStoppedPayload(id, "stopped"), ApiJsonContext.Default.SseSessionStoppedPayload);
                 await WriteSseEventAsync(context.Response, "session_status", stoppedData, ct);
                 return Results.Empty;
             }
@@ -45,14 +48,9 @@ public static class SessionEventEndpoints
                 if (!sanitizedPayload.HasValue)
                     continue;
 
-                var data = JsonSerializer.Serialize(new
-                {
-                    sessionId = id,
-                    type = evt.Type,
-                    payload = sanitizedPayload.Value,
-                    sequenceNumber = evt.SequenceNumber,
-                    timestamp = evt.Timestamp.ToUnixTimeMilliseconds()
-                });
+                var data = JsonSerializer.Serialize(
+                    new SseSessionEventPayload(id, evt.Type, sanitizedPayload.Value, evt.SequenceNumber, evt.Timestamp.ToUnixTimeMilliseconds()),
+                    ApiJsonContext.Default.SseSessionEventPayload);
                 await WriteSseEventAsync(context.Response, evt.Type, data, ct);
             }
 
@@ -79,14 +77,9 @@ public static class SessionEventEndpoints
                 if (!sanitizedPayload.HasValue)
                     continue;
 
-                var data = JsonSerializer.Serialize(new
-                {
-                    topic = evt.Topic,
-                    type = evt.Type,
-                    payload = sanitizedPayload.Value,
-                    sequenceNumber = evt.SequenceNumber,
-                    timestamp = evt.Timestamp.ToUnixTimeMilliseconds()
-                });
+                var data = JsonSerializer.Serialize(
+                    new SseActivityEventPayload(evt.Topic, evt.Type, sanitizedPayload.Value, evt.SequenceNumber, evt.Timestamp.ToUnixTimeMilliseconds()),
+                    ApiJsonContext.Default.SseActivityEventPayload);
                 await WriteSseEventAsync(context.Response, evt.Type, data, ct);
             }
 
@@ -109,3 +102,4 @@ public static class SessionEventEndpoints
         await response.Body.FlushAsync(ct);
     }
 }
+#pragma warning restore IL2026

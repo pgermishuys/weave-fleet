@@ -1,4 +1,5 @@
 using System.Text.Json;
+using WeaveFleet.Application;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
@@ -338,7 +339,7 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
             {
                 var partsJson = fleetPart is ReasoningPart
                     ? "[]"
-                    : JsonSerializer.Serialize(new[] { fleetPart }, MessagePersistenceService.SerializerOptions);
+                    : JsonSerializer.Serialize(new MessagePart[] { fleetPart }, ApplicationJsonContext.Default.MessagePartArray);
                 persisted = new PersistedMessage
                 {
                     Id = messageId,
@@ -500,8 +501,8 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
         if (!session.TryGetValue((messageId, partId), out var bufferedText) || string.IsNullOrEmpty(bufferedText))
             return persisted;
 
-        var parts = JsonSerializer.Deserialize<List<MessagePart>>(
-            persisted.PartsJson, MessagePersistenceService.SerializerOptions) ?? [];
+        var parts = JsonSerializer.Deserialize(
+            persisted.PartsJson, ApplicationJsonContext.Default.ListMessagePart) ?? [];
         var idx = parts.FindIndex(p => p is TextPart);
         if (idx < 0)
             return persisted;
@@ -516,7 +517,7 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
             Id = persisted.Id,
             SessionId = persisted.SessionId,
             Role = persisted.Role,
-            PartsJson = JsonSerializer.Serialize(parts, MessagePersistenceService.SerializerOptions),
+            PartsJson = JsonSerializer.Serialize(parts, ApplicationJsonContext.Default.ListMessagePart),
             Timestamp = persisted.Timestamp,
             CreatedAt = persisted.CreatedAt,
             AgentName = persisted.AgentName,

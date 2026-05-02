@@ -439,7 +439,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         {
             Topic = $"session:{_fleetSessionId}",
             Type = harnessEvent.Type,
-            Payload = MessagePersistenceService.SerializePayload(harnessEvent.Payload!.Value),
+            Payload = harnessEvent.Payload!.Value.GetRawText(),
             UserId = _ownerUserId,
             CreatedAt = createdAt,
             AvailableAt = createdAt
