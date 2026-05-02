@@ -12,7 +12,7 @@ export PATH="$HOME/.weave/fleet/bin:$PATH"
 fleet version
 ```
 
-### Windows PowerShell (`win-x64`)
+### Windows PowerShell (`win-x64`, `win-arm64`)
 
 ```powershell
 irm https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.ps1 | iex
@@ -46,6 +46,7 @@ curl -fsS http://127.0.0.1:5000/healthz
 - `linux-x64`
 - `osx-arm64`
 - `win-x64`
+- `win-arm64`
 
 ## Releasing
 

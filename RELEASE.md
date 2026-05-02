@@ -55,10 +55,11 @@ For each tag, the workflow builds and publishes self-contained artifacts for:
 - `linux-x64`
 - `osx-arm64`
 - `win-x64`
+- `win-arm64`
 
 It then publishes a GitHub Release containing:
 
-- 3 platform archives (`.tar.gz` on Unix, `.zip` on Windows)
+- 4 platform archives (`.tar.gz` on Unix, `.zip` on Windows)
 - per-asset `.sha256` files
 - merged `checksums.txt`
 - `install.sh`
@@ -145,7 +146,7 @@ After the tag is pushed, verify all of the following:
 - [ ] GitHub Actions `Release` workflow succeeded.
 - [ ] All build matrix jobs succeeded.
 - [ ] The GitHub Release exists for the tag.
-- [ ] The release includes all 3 platform archives.
+- [ ] The release includes all 4 platform archives.
 - [ ] The release includes all per-asset checksum files and `checksums.txt`.
 - [ ] The release includes `install.sh` and `install.ps1`.
 - [ ] Packaged smoke tests passed in the workflow.
