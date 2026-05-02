@@ -25,12 +25,19 @@ public static class TelemetryExtensions
             .GetSection(TelemetryOptions.SectionName)
             .Get<TelemetryOptions>() ?? new TelemetryOptions();
 
-        // Enable telemetry if explicitly configured or if OTEL_EXPORTER_OTLP_ENDPOINT is set.
+        // Only register OTLP exporters when a collector endpoint is explicitly configured
+        // (via OTEL_EXPORTER_OTLP_ENDPOINT env var or Fleet:Telemetry:OtlpEndpoint in config).
         var otlpEndpointEnv = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT");
-        if (!telemetryOptions.Enabled && string.IsNullOrWhiteSpace(otlpEndpointEnv))
+        var hasExplicitEndpoint = !string.IsNullOrWhiteSpace(otlpEndpointEnv)
+            || !string.IsNullOrWhiteSpace(telemetryOptions.OtlpEndpoint);
+        if (!hasExplicitEndpoint)
         {
             return builder;
         }
+
+        var baseEndpoint = (!string.IsNullOrWhiteSpace(otlpEndpointEnv)
+            ? otlpEndpointEnv
+            : telemetryOptions.OtlpEndpoint).TrimEnd('/');
 
         // Resource: service name + version (used by the logging pipeline)
         var resourceBuilder = ResourceBuilder.CreateDefault()
@@ -40,7 +47,6 @@ public static class TelemetryExtensions
 
         // Per-signal AddOtlpExporter does NOT auto-append /v1/{signal} paths when
         // Endpoint is explicitly set, so we build the full URL for each signal.
-        var baseEndpoint = telemetryOptions.OtlpEndpoint.TrimEnd('/');
 
         // --- Tracing & Metrics ---
         builder.Services.AddOpenTelemetry()

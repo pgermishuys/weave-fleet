@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "WeaveFleet.IdP": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:60749;http://localhost:60750"
+    }
+  }
+}
