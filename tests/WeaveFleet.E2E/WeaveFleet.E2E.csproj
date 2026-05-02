@@ -50,7 +50,9 @@
   <Target Name="EnsureFrontendBuilt"
           Condition="'$(SkipFrontendBuild)' != 'true'">
     <Message Importance="high"
-             Text="E2E: Building frontend SPA for current test run..." />
+             Text="E2E: Restoring and building frontend SPA for current test run..." />
+    <Exec Command="bun install --frozen-lockfile"
+          WorkingDirectory="$(MSBuildThisFileDirectory)..\..\client" />
     <Exec Command="bun run build"
           WorkingDirectory="$(MSBuildThisFileDirectory)..\..\client" />
   </Target>
