@@ -50,10 +50,8 @@ public static class NatsServiceCollectionExtensions
             };
             return new NatsConnection(natsOpts);
         }));
-        services.AddSingleton<INatsConnection>(sp => sp.GetRequiredService<Lazy<INatsConnection>>().Value);
         services.AddSingleton(sp => new Lazy<INatsJSContext>(() =>
             new NatsJSContext((NatsConnection)sp.GetRequiredService<Lazy<INatsConnection>>().Value)));
-        services.AddSingleton<INatsJSContext>(sp => sp.GetRequiredService<Lazy<INatsJSContext>>().Value);
 
         var builder = new NatsStreamBuilder(services);
         configure(builder);

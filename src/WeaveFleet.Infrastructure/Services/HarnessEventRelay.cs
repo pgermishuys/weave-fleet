@@ -46,6 +46,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<HarnessEventRelay> _logger;
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _subscriptions = new();
+    private readonly ConcurrentDictionary<string, Task> _pumpTasks = new();
     private CancellationToken _stoppingToken;
 
     public HarnessEventRelay(
@@ -64,7 +65,7 @@ public sealed class HarnessEventRelay : BackgroundService
         _logger = logger;
     }
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _stoppingToken = stoppingToken;
 
@@ -75,12 +76,26 @@ public sealed class HarnessEventRelay : BackgroundService
         foreach (var (id, instance) in _tracker.GetAll())
             StartSubscription(id, instance);
 
-        return Task.Delay(Timeout.Infinite, stoppingToken)
-            .ContinueWith(_ =>
+        try
+        {
+            await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected on shutdown
+        }
+        finally
+        {
+            _tracker.InstanceRegistered -= OnInstanceRegistered;
+            _tracker.InstanceRemoved -= OnInstanceRemoved;
+
+            // Wait for all pump tasks to finish their cleanup (flush deltas, broadcast idle)
+            var tasks = _pumpTasks.Values.ToArray();
+            if (tasks.Length > 0)
             {
-                _tracker.InstanceRegistered -= OnInstanceRegistered;
-                _tracker.InstanceRemoved -= OnInstanceRemoved;
-            }, TaskScheduler.Default);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
+            }
+        }
     }
 
     private void OnInstanceRegistered(string instanceId, IHarnessSession instance)
@@ -106,7 +121,13 @@ public sealed class HarnessEventRelay : BackgroundService
             return;
         }
 
-        _ = Task.Run(() => PumpAsync(instanceId, instance, cts.Token), cts.Token);
+        var task = Task.Run(() => PumpAsync(instanceId, instance, cts.Token), cts.Token);
+        _pumpTasks.TryAdd(instanceId, task);
+
+        // Remove from tracking when pump completes
+        _ = task.ContinueWith(
+            _ => _pumpTasks.TryRemove(instanceId, out Task? _),
+            TaskScheduler.Default);
     }
 
     private async Task PumpAsync(string instanceId, IHarnessSession instance, CancellationToken ct)

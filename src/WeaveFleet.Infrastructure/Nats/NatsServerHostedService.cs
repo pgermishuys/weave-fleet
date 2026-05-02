@@ -28,7 +28,9 @@ public sealed class NatsServerHostedService : IHostedService, IAsyncDisposable
     public string ResolvedUrl { get; private set; } = "";
     public bool IsEmbeddedRunning => _process is { HasExited: false };
 
-    public NatsServerHostedService(NatsOptions options, ILogger<NatsServerHostedService> logger)
+    public NatsServerHostedService(
+        NatsOptions options,
+        ILogger<NatsServerHostedService> logger)
     {
         _options = options;
         _logger = logger;
@@ -63,8 +65,17 @@ public sealed class NatsServerHostedService : IHostedService, IAsyncDisposable
         LogLaunched(_logger, ResolvedUrl, null);
     }
 
+    private bool _stopped;
+
     public async Task StopAsync(CancellationToken cancellationToken)
     {
+        if (_stopped) return;
+        _stopped = true;
+
+        // NATS connection is disposed earlier (in ApplicationStopping) so that consuming
+        // services exit their subscription loops immediately without waiting for internal
+        // NATS client timeouts. No need to dispose it here again.
+
         if (_process is null) return;
         try
         {

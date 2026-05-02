@@ -55,6 +55,7 @@ public static class TelemetryExtensions
                     {
                         otlp.Endpoint = new Uri($"{baseEndpoint}/v1/traces");
                         otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
+                        otlp.TimeoutMilliseconds = telemetryOptions.ExportTimeoutMilliseconds;
                     });
 
             })
@@ -68,6 +69,7 @@ public static class TelemetryExtensions
                     {
                         otlp.Endpoint = new Uri($"{baseEndpoint}/v1/metrics");
                         otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
+                        otlp.TimeoutMilliseconds = telemetryOptions.ExportTimeoutMilliseconds;
                     });
             });
 
@@ -84,6 +86,7 @@ public static class TelemetryExtensions
             {
                 otlp.Endpoint = new Uri($"{baseEndpoint}/v1/logs");
                 otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
+                otlp.TimeoutMilliseconds = telemetryOptions.ExportTimeoutMilliseconds;
             });
         });
 
