@@ -27,4 +27,13 @@ public sealed class Session
     public string? HarnessResumeToken { get; set; }
     /// <summary>Owner's user identifier.</summary>
     public string UserId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Last model selection used on this session. Persisted on every successful prompt that
+    /// carried an explicit model so the next prompt can fall back to it when the SPA omits
+    /// one (e.g. after a refresh wipes client-side state).
+    /// </summary>
+    public string? SelectedProviderId { get; set; }
+    /// <inheritdoc cref="SelectedProviderId" />
+    public string? SelectedModelId { get; set; }
 }

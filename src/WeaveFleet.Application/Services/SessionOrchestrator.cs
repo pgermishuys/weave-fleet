@@ -616,6 +616,17 @@ public sealed partial class SessionOrchestrator(
         try
         {
             await instanceResult.Value.SendPromptAsync(text, options, ct);
+
+            // Persist the model selection so a SPA refresh (which loses local state) can
+            // fall back to it on the next prompt instead of silently using the harness
+            // default. We only update when both ids are present — the API layer resolves
+            // the provider/model pair via ResolveSessionModelAsync before reaching here.
+            if (options?.ProviderId is { Length: > 0 } providerId
+                && options.ModelId is { Length: > 0 } modelId)
+            {
+                await sessionRepository.UpdateSelectedModelAsync(id, providerId, modelId);
+            }
+
             return Unit.Value;
         }
         catch (InvalidOperationException ex)
