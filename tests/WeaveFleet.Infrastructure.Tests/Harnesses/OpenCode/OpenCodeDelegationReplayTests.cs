@@ -111,12 +111,21 @@ public sealed class OpenCodeDelegationReplayTests
     /// Starts consuming events in background, delays briefly to let the fixture SSE body
     /// be fully consumed, then cancels and awaits the consume task.
     /// </summary>
+    /// <remarks>
+    /// The default delay is generous on purpose — slow CI runners observed both modes of
+    /// failure here: (a) <c>Task.Run</c> not getting a thread before the cancel timer fires,
+    /// which produced empty event lists, and (b) the SSE body not finishing emission inside
+    /// a tight window. Passing <c>cts.Token</c> as Task.Run's scheduling token is a separate
+    /// hazard — if the cts is already cancelled when the runtime tries to schedule the task,
+    /// the task is born in the cancelled state and surfaces a <c>TaskCanceledException</c>
+    /// the catch in <c>ConsumeAsync</c> never sees. Drop it.
+    /// </remarks>
     private static async Task<List<HarnessEvent>> ConsumeWithCancelAsync(
         OpenCodeHarnessSession instance,
-        int cancelAfterMs = 400)
+        int cancelAfterMs = 2000)
     {
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var consumeTask = Task.Run(() => ConsumeAsync(instance, cts.Token), cts.Token);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var consumeTask = Task.Run(() => ConsumeAsync(instance, cts.Token));
         await Task.Delay(cancelAfterMs, CancellationToken.None);
         await cts.CancelAsync();
         return await consumeTask;
