@@ -163,7 +163,7 @@ function getRelativeCostWidth(cost: number, highestCost: number): number {
 
 .projects-tab__eyebrow {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -201,7 +201,7 @@ function getRelativeCostWidth(cost: number, highestCost: number): number {
 
 .projects-tab__stat-label {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.4;
 }
 
@@ -230,7 +230,7 @@ function getRelativeCostWidth(cost: number, highestCost: number): number {
 .projects-tab__bar-label,
 .projects-tab__bar-value {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   line-height: 1.4;
 }

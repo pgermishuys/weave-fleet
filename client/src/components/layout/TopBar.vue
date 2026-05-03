@@ -128,7 +128,7 @@ const showUserAvatar = computed(() => config.value.authEnabled);
       class="breadcrumb flex min-w-0 items-center"
       aria-label="Breadcrumb"
     >
-      <span class="shrink-0 text-[13px] font-medium text-[var(--text)]">Weave Fleet</span>
+      <span class="shrink-0 text-[12px] font-medium text-[var(--text)]">Weave Fleet</span>
 
       <template
         v-for="item in breadcrumbItems"
@@ -173,7 +173,7 @@ const showUserAvatar = computed(() => config.value.authEnabled);
         v-if="showUserAvatar"
         class="h-8 w-8 border border-[var(--border)] bg-[var(--panel-bg)]"
       >
-        <AvatarFallback class="bg-[rgba(124,58,237,0.15)] text-[11px] font-semibold tracking-[0.08em] text-[var(--text)]">
+        <AvatarFallback class="bg-[rgba(124,58,237,0.15)] text-[10px] font-semibold tracking-[0.08em] text-[var(--text)]">
           {{ avatarInitials }}
         </AvatarFallback>
       </Avatar>
@@ -193,7 +193,7 @@ const showUserAvatar = computed(() => config.value.authEnabled);
 .breadcrumb {
   gap: 6px;
   padding-left: 16px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -207,7 +207,7 @@ const showUserAvatar = computed(() => config.value.authEnabled);
   gap: 6px;
   border-radius: 20px;
   padding: 4px 12px 4px 8px;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1;
 }
 

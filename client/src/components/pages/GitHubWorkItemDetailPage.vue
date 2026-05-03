@@ -606,7 +606,7 @@ async function handleCreateSession(): Promise<void> {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -636,7 +636,7 @@ async function handleCreateSession(): Promise<void> {
   padding: 0 8px;
   border: 1px solid transparent;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
 }
 
@@ -662,7 +662,7 @@ async function handleCreateSession(): Promise<void> {
   border-radius: var(--radius-btn);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   line-height: 1;
   text-decoration: none;
@@ -700,7 +700,7 @@ async function handleCreateSession(): Promise<void> {
 }
 
 .detail-meta-item__label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -708,12 +708,12 @@ async function handleCreateSession(): Promise<void> {
 }
 
 .detail-meta-item__value {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text);
 }
 
 .detail-meta-item__hint {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -778,14 +778,14 @@ async function handleCreateSession(): Promise<void> {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 
 .detail-panel__empty,
 .detail-panel__banner {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--muted);
 }
 
@@ -824,7 +824,7 @@ async function handleCreateSession(): Promise<void> {
 
 .detail-comment__meta,
 .detail-comment__footer a {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 

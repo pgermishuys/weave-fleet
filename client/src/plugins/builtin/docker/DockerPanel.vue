@@ -154,7 +154,7 @@ const connectionClassName = computed(() => {
 
 .simple-panel-copy {
   margin: 0 0 10px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -168,7 +168,7 @@ const connectionClassName = computed(() => {
   align-items: center;
   gap: 8px;
   padding: 6px 0;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .container-dot {

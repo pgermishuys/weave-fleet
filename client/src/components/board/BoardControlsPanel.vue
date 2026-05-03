@@ -206,7 +206,7 @@ function handleGroupByChange(value: BoardGroupBy): void {
 
 .bc-label {
   margin: 0 0 6px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -228,7 +228,7 @@ function handleGroupByChange(value: BoardGroupBy): void {
   gap: 8px;
   padding: 3px 0;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text);
 }
 
@@ -246,7 +246,7 @@ function handleGroupByChange(value: BoardGroupBy): void {
 
 .radio-pill {
   padding: 5px 12px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
   border: 1px solid var(--border);
   border-radius: 20px;
@@ -263,7 +263,7 @@ function handleGroupByChange(value: BoardGroupBy): void {
 
 .bc-summary {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -289,7 +289,7 @@ function handleGroupByChange(value: BoardGroupBy): void {
 }
 
 .bc-stat__label {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
 }
 </style>

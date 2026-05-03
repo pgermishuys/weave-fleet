@@ -316,7 +316,7 @@ function formatFetchMessage(error: string | undefined, fallback: string): string
 .analytics-page__eyebrow {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -340,7 +340,7 @@ function formatFetchMessage(error: string | undefined, fallback: string): string
   margin: 0;
   max-width: 760px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.6;
 }
 </style>

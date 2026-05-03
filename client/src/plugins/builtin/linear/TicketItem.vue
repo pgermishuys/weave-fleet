@@ -88,7 +88,7 @@ const priorityStyle = computed(() => ({ color: priorityColors[props.ticket.prior
 }
 
 .ticket-id {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--muted);
   flex-shrink: 0;
@@ -102,7 +102,7 @@ const priorityStyle = computed(() => ({ color: priorityColors[props.ticket.prior
 
 .ticket-title {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;

@@ -746,14 +746,14 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
 
 .session-section-card__title {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text);
 }
 
 .session-section-card__note {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -778,7 +778,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;

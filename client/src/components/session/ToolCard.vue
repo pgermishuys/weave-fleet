@@ -134,7 +134,7 @@ function toggleCollapsed(): void {
   background: transparent;
   color: inherit;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   text-align: left;
   transition: background-color 0.25s ease;
 }
@@ -169,7 +169,7 @@ function toggleCollapsed(): void {
 
 .tool-header__kind {
   color: var(--accent);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -186,7 +186,7 @@ function toggleCollapsed(): void {
 
 .tool-header__status {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .tool-body {
@@ -197,7 +197,7 @@ function toggleCollapsed(): void {
   margin: 0;
   padding: 0 12px 10px;
   color: #d4d4d8;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.6;
 }
 
@@ -208,7 +208,7 @@ function toggleCollapsed(): void {
   background: rgba(255, 255, 255, 0.02);
   color: #d4d4d8;
   font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;

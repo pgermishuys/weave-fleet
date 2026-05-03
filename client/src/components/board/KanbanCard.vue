@@ -446,7 +446,7 @@ function handleDragEnd(): void {
   align-items: center;
   gap: 6px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
 }
 
@@ -469,13 +469,13 @@ function handleDragEnd(): void {
 .k-card__metadata,
 .k-card__detail dt,
 .k-card__detail dd {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 
 .k-card__title {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.4;
   color: var(--text);
@@ -527,7 +527,7 @@ function handleDragEnd(): void {
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent-dim) 55%, transparent);
   color: var(--text);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .k-card__rename-form {
@@ -577,7 +577,7 @@ function handleDragEnd(): void {
   border-radius: var(--radius-btn);
   background: transparent;
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   padding: 6px 9px;
   cursor: pointer;

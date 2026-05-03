@@ -113,14 +113,14 @@ const toneLabel = computed(() => {
 
 .context-meter__label {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text);
 }
 
 .context-meter__value {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -133,13 +133,13 @@ const toneLabel = computed(() => {
 }
 
 .context-meter__percent {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
 }
 
 .context-meter__tone {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
 }
 

@@ -446,7 +446,7 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
 
 .board-source-config__eyebrow {
   margin: 0 0 6px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -465,7 +465,7 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
 .board-source-config__meta,
 .board-source-config__empty {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--muted);
 }
@@ -495,7 +495,7 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
 }
 
 .board-source-config__label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -527,7 +527,7 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
 }
 
 .board-source-config__toggle-description {
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.4;
   color: var(--muted);
 }
@@ -550,7 +550,7 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
   border-radius: var(--radius-btn);
   background: var(--card-bg);
   color: var(--text);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -619,7 +619,7 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
   padding: 2px 8px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -627,7 +627,7 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
 }
 
 .board-source-config__repository {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
 }

@@ -104,7 +104,7 @@ const connectionClassName = computed(() => {
 
 .linear-panel-eyebrow {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -131,7 +131,7 @@ const connectionClassName = computed(() => {
 
 .linear-panel-description {
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--muted);
 }
@@ -139,7 +139,7 @@ const connectionClassName = computed(() => {
 .linear-panel-connection {
   border-radius: 999px;
   padding: 5px 8px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -178,14 +178,14 @@ const connectionClassName = computed(() => {
 
 .linear-panel-empty-title {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
 }
 
 .linear-panel-empty-description {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--muted);
 }

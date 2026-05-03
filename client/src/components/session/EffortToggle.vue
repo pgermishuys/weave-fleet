@@ -63,7 +63,7 @@ function cycleEffort(): void {
 
 .effort-toggle__label {
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .effort-toggle__dots {

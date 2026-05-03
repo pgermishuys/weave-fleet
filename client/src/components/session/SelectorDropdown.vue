@@ -171,7 +171,7 @@ function selectItem(itemId: string): void {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.2;
 }
 
@@ -228,7 +228,7 @@ function selectItem(itemId: string): void {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.02);
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .selector-dropdown__filter::placeholder {
@@ -274,26 +274,26 @@ function selectItem(itemId: string): void {
 
 .selector-dropdown__item-label {
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
 .selector-dropdown__item-description {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.4;
 }
 
 .selector-dropdown__item-meta {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   white-space: nowrap;
 }
 
 .selector-dropdown__empty {
   padding: 10px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   text-align: center;
 }
 </style>

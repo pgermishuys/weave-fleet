@@ -199,24 +199,24 @@ const displayModelId = computed(() => {
 
 .msg-author {
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
 
 .msg-model {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
 }
 
 .msg-timestamp {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .msg-body {
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.45;
   color: #d4d4d8;
 }
@@ -280,7 +280,7 @@ const displayModelId = computed(() => {
 .msg-body__content :deep(pre code) {
   display: block;
   padding: 10px 12px;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .msg-body__content :deep(blockquote) {

@@ -186,7 +186,7 @@ function handleSelect(value: string): void {
   padding: 8px 12px 6px;
   background: var(--card-bg);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -253,7 +253,7 @@ function handleSelect(value: string): void {
 
 .autocomplete-popup__label {
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   line-height: 1.4;
   word-break: break-word;
@@ -261,7 +261,7 @@ function handleSelect(value: string): void {
 
 .autocomplete-popup__description {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.4;
   word-break: break-word;
 }
@@ -273,7 +273,7 @@ function handleSelect(value: string): void {
   gap: 8px;
   padding: 14px 16px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   text-align: center;
 }
 

@@ -488,7 +488,7 @@ function showDropSlot(index: number): boolean {
   min-height: 24px;
   padding: 0 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -510,7 +510,7 @@ function showDropSlot(index: number): boolean {
   border-radius: var(--radius-btn);
   background: var(--card-bg);
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   padding: 7px 10px;
   cursor: pointer;
@@ -559,7 +559,7 @@ function showDropSlot(index: number): boolean {
   border: 1px dashed var(--border);
   border-radius: var(--radius-card);
   background: rgba(255, 255, 255, 0.02);
-  font-size: 12px;
+  font-size: 11px;
   text-align: center;
   color: var(--muted);
 }

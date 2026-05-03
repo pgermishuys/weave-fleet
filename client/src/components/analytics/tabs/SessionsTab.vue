@@ -386,7 +386,7 @@ function getSortIcon(sortBy: SessionsTabSortBy) {
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -429,7 +429,7 @@ function getSortIcon(sortBy: SessionsTabSortBy) {
 .sessions-tab__cell {
   padding: 16px;
   color: var(--text);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.5;
   vertical-align: top;
 }
@@ -447,7 +447,7 @@ function getSortIcon(sortBy: SessionsTabSortBy) {
 .sessions-tab__secondary {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   word-break: break-all;
 }
 
@@ -466,7 +466,7 @@ function getSortIcon(sortBy: SessionsTabSortBy) {
   border-radius: 999px;
   background: rgba(99, 102, 241, 0.12);
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.2;
 }
 
@@ -483,7 +483,7 @@ function getSortIcon(sortBy: SessionsTabSortBy) {
   min-height: 280px;
   padding: 24px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
   text-align: center;
 }
 

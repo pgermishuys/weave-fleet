@@ -881,7 +881,7 @@ async function handleToggleRepoBookmark(repo: CachedGitHubRepo): Promise<void> {
 }
 
 .repo-selector-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--muted);
 }
@@ -966,7 +966,7 @@ async function handleToggleRepoBookmark(repo: CachedGitHubRepo): Promise<void> {
   background: transparent;
   color: var(--text);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   padding: 8px 10px;
   text-align: left;
 }
@@ -985,7 +985,7 @@ async function handleToggleRepoBookmark(repo: CachedGitHubRepo): Promise<void> {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   padding: 6px 8px;
   transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
@@ -1024,14 +1024,14 @@ async function handleToggleRepoBookmark(repo: CachedGitHubRepo): Promise<void> {
 
 .repo-selector-empty-state {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
   padding: 4px 2px;
 }
 
 .repo-selector-message {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
 }
 
@@ -1058,7 +1058,7 @@ async function handleToggleRepoBookmark(repo: CachedGitHubRepo): Promise<void> {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   padding: 10px 0;
   text-align: center;
@@ -1110,7 +1110,7 @@ async function handleToggleRepoBookmark(repo: CachedGitHubRepo): Promise<void> {
   align-items: flex-start;
   gap: 10px;
   padding: 14px 12px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -1138,7 +1138,7 @@ async function handleToggleRepoBookmark(repo: CachedGitHubRepo): Promise<void> {
   background: var(--card-bg);
   color: var(--text);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   padding: 0 10px;
 }
@@ -1162,7 +1162,7 @@ async function handleToggleRepoBookmark(repo: CachedGitHubRepo): Promise<void> {
   gap: 12px;
   border-bottom: 1px solid var(--border);
   padding: 10px 12px;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .plugin-banner--error {

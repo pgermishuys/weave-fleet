@@ -297,7 +297,7 @@ function handleCollapse(): void {
 
 .right-section__eyebrow {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -313,7 +313,7 @@ function handleCollapse(): void {
 
 .right-section__description {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--muted);
 }
@@ -336,14 +336,14 @@ function handleCollapse(): void {
 
 .right-placeholder-card__title {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text);
 }
 
 .right-placeholder-card__body {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.5;
   color: var(--muted);
 }

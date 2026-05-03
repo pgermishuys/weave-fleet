@@ -688,8 +688,8 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
 
 .panel-header {
   margin: 0;
-  padding: 14px 16px 10px;
-  font-size: 11px;
+  padding: 8px 12px 6px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -699,20 +699,20 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
 .panel-actions {
   display: flex;
   gap: 8px;
-  padding: 0 12px 10px;
+  padding: 0 8px 6px;
 }
 
 .panel-action-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
+  min-height: 28px;
   padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-btn);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
 }
 
@@ -740,7 +740,7 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
 }
 
 .panel-search {
-  margin: 0 12px 8px;
+  margin: 0 8px 6px;
   position: relative;
 }
 
@@ -802,7 +802,7 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
 
 .sessions-feedback-banner__copy {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text);
 }
 
@@ -813,7 +813,7 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
   border-radius: var(--radius-btn);
   background: transparent;
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
 }
 
@@ -838,14 +838,14 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
 
 .sessions-feedback-state__title {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text);
 }
 
 .sessions-feedback-state__copy {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -856,7 +856,7 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
   border-radius: var(--radius-btn);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
 }
 
@@ -871,14 +871,14 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
 
 .sessions-empty-state__title {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text);
 }
 
 .sessions-empty-state__copy {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 

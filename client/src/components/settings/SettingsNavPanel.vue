@@ -91,7 +91,7 @@ function selectSection(sectionId: SettingsSectionId): void {
 .panel-header {
   margin: 0;
   padding: 14px 16px 10px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -117,7 +117,7 @@ function selectSection(sectionId: SettingsSectionId): void {
   border-radius: var(--radius-btn);
   background: transparent;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   text-align: left;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;

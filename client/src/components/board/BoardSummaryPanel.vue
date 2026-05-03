@@ -257,7 +257,7 @@ const liveFleetSummaryLabel = computed(() => {
 
 .summary-label {
   margin: 0 0 14px;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -266,7 +266,7 @@ const liveFleetSummaryLabel = computed(() => {
 .summary-meta,
 .summary-footnote {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.5;
   color: var(--muted);
 }
@@ -281,7 +281,7 @@ const liveFleetSummaryLabel = computed(() => {
 
 .section-title {
   margin: 0 0 12px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text);
 }
@@ -291,7 +291,7 @@ const liveFleetSummaryLabel = computed(() => {
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .bar-row:last-child {
@@ -392,7 +392,7 @@ const liveFleetSummaryLabel = computed(() => {
 
 .agent-name,
 .metric-value {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -400,7 +400,7 @@ const liveFleetSummaryLabel = computed(() => {
 .agent-count,
 .agent-cost,
 .metric-label {
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .metric-row {
