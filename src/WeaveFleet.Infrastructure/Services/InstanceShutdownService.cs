@@ -36,10 +36,12 @@ internal sealed class InstanceShutdownService(
             return;
         }
 
-        LogShutdownStarted(logger, instances.Count, null);
+        var count = instances.Count;
+        LogShutdownStarted(logger, count, null);
 
-        var tasks = instances.Values.Select(async session =>
+        var tasks = instances.Select(async kv =>
         {
+            var (instanceId, session) = kv;
             try
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -50,9 +52,14 @@ internal sealed class InstanceShutdownService(
             {
                 LogInstanceFailed(logger, session.InstanceId, ex);
             }
+            finally
+            {
+                // Remove from tracker so HarnessEventRelay cancels SSE subscriptions immediately.
+                tracker.Remove(instanceId);
+            }
         });
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
-        LogShutdownComplete(logger, instances.Count, null);
+        LogShutdownComplete(logger, count, null);
     }
 }
