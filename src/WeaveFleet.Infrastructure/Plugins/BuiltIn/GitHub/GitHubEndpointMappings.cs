@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
+using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
@@ -18,8 +19,10 @@ internal static class GitHubEndpointMappings
     {
         var group = builder.MapGroup("/api/integrations/github/auth").WithTags("GitHub");
 
-        group.MapPost("/device-code", async (HttpContext httpContext, GitHubService gitHubService, CancellationToken ct) =>
+        group.MapPost("/device-code", async (HttpContext httpContext) =>
         {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var ct = httpContext.RequestAborted;
             var response = await gitHubService.InitiateDeviceFlowAsync(ct).ConfigureAwait(false);
             IResult result = response is null
                 ? Results.Problem("Failed to initiate GitHub device flow.")
@@ -33,15 +36,15 @@ internal static class GitHubEndpointMappings
         })
         .WithName("GitHubInitiateDeviceFlow");
 
-        group.MapPost("/poll", async (
-            HttpContext httpContext,
-            GitHubPollRequest request,
-            GitHubService gitHubService,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapPost("/poll", async (HttpContext httpContext) =>
         {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+            var request = await httpContext.Request.ReadFromJsonAsync<GitHubPollRequest>(ct).ConfigureAwait(false);
+
             IResult result;
-            if (string.IsNullOrWhiteSpace(request.DeviceCode))
+            if (request is null || string.IsNullOrWhiteSpace(request.DeviceCode))
             {
                 result = Results.BadRequest(new GitHubEndpointError("deviceCode is required."));
             }
@@ -66,15 +69,15 @@ internal static class GitHubEndpointMappings
         })
         .WithName("GitHubPollForToken");
 
-        group.MapPost("/token", async (
-            HttpContext httpContext,
-            GitHubConnectWithTokenRequest request,
-            GitHubService gitHubService,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapPost("/token", async (HttpContext httpContext) =>
         {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+            var request = await httpContext.Request.ReadFromJsonAsync<GitHubConnectWithTokenRequest>(ct).ConfigureAwait(false);
+
             IResult result;
-            if (string.IsNullOrWhiteSpace(request.Token))
+            if (request is null || string.IsNullOrWhiteSpace(request.Token))
                 result = Results.BadRequest(new GitHubEndpointError("token is required."));
             else if (!await gitHubService.ConnectWithTokenAsync(userContext.UserId, request.Token, ct).ConfigureAwait(false))
                 result = Results.BadRequest(new GitHubEndpointError("Failed to validate GitHub token."));
@@ -85,15 +88,21 @@ internal static class GitHubEndpointMappings
         })
         .WithName("GitHubConnectWithToken");
 
-        group.MapDelete("/", async (HttpContext httpContext, GitHubService gitHubService, IUserContext userContext, CancellationToken ct) =>
+        group.MapDelete("/", async (HttpContext httpContext) =>
         {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
             await gitHubService.DisconnectAsync(userContext.UserId, ct).ConfigureAwait(false);
             await Results.NoContent().ExecuteAsync(httpContext).ConfigureAwait(false);
         })
         .WithName("GitHubDisconnect");
 
-        group.MapGet("/status", async (HttpContext httpContext, GitHubService gitHubService, IUserContext userContext, CancellationToken ct) =>
+        group.MapGet("/status", async (HttpContext httpContext) =>
         {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
             var connected = await gitHubService.IsConnectedAsync(userContext.UserId, ct).ConfigureAwait(false);
             await Results.Ok(new GitHubConnectionStatusApiResponse(connected)).ExecuteAsync(httpContext).ConfigureAwait(false);
         })
@@ -102,186 +111,195 @@ internal static class GitHubEndpointMappings
 
     [RequiresUnreferencedCode("Plugin endpoint delegates are registered at runtime via reflection-based ASP.NET Core route building; all parameter types are concrete and preserved at runtime.")]
     [RequiresDynamicCode("Plugin endpoint delegates are registered at runtime via reflection-based ASP.NET Core route building; all parameter types are concrete and preserved at runtime.")]
-    public static void MapDataEndpoints(IEndpointRouteBuilder builder)    {
+    public static void MapDataEndpoints(IEndpointRouteBuilder builder)
+    {
         var group = builder.MapGroup("/api/integrations/github").WithTags("GitHub");
 
-        group.MapGet("/repos", async (
-            HttpContext httpContext,
-            int? page,
-            int? perPage,
-            string? sort,
-            GitHubService gitHubService,
-            GitHubApiProxy proxy,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapGet("/repos", async (HttpContext httpContext) =>
         {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var page = GetQueryInt(httpContext, "page");
+            var perPage = GetQueryInt(httpContext, "perPage") ?? 100;
+            var sort = GetQueryString(httpContext, "sort") ?? "updated";
+
             var query = BuildQuery(
                 ("page", page?.ToString(CultureInfo.InvariantCulture)),
-                ("per_page", (perPage ?? 100).ToString(CultureInfo.InvariantCulture)),
-                ("sort", sort ?? "updated"));
+                ("per_page", perPage.ToString(CultureInfo.InvariantCulture)),
+                ("sort", sort));
             await ProxyAsync(httpContext, gitHubService, proxy, userContext.UserId, $"user/repos{query}", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubListRepos");
 
-        group.MapGet("/repos/{owner}/{repo}/issues", async (
-            HttpContext httpContext,
-            string owner,
-            string repo,
-            string? state,
-            string? labels,
-            int? page,
-            int? perPage,
-            GitHubService gitHubService,
-            GitHubApiProxy proxy,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapGet("/repos/{owner}/{repo}/issues", async (HttpContext httpContext) =>
         {
-            var pageString = page?.ToString(CultureInfo.InvariantCulture);
-            var perPageString = (perPage ?? 30).ToString(CultureInfo.InvariantCulture);
-            var query = BuildQuery(("state", state ?? "open"), ("labels", labels), ("page", pageString), ("per_page", perPageString));
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var owner = GetRouteString(httpContext, "owner");
+            var repo = GetRouteString(httpContext, "repo");
+            var state = GetQueryString(httpContext, "state") ?? "open";
+            var labels = GetQueryString(httpContext, "labels");
+            var page = GetQueryInt(httpContext, "page");
+            var perPage = GetQueryInt(httpContext, "perPage") ?? 30;
+
+            var query = BuildQuery(("state", state), ("labels", labels), ("page", page?.ToString(CultureInfo.InvariantCulture)), ("per_page", perPage.ToString(CultureInfo.InvariantCulture)));
             await ProxyAsync(httpContext, gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/issues{query}", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubListIssues");
 
-        group.MapGet("/repos/{owner}/{repo}/issues/search", async (
-            HttpContext httpContext,
-            string owner,
-            string repo,
-            string? q,
-            GitHubService gitHubService,
-            GitHubApiProxy proxy,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapGet("/repos/{owner}/{repo}/issues/search", async (HttpContext httpContext) =>
         {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var owner = GetRouteString(httpContext, "owner");
+            var repo = GetRouteString(httpContext, "repo");
+            var q = GetQueryString(httpContext, "q");
+
             var query = BuildQuery(("q", q is null ? $"repo:{owner}/{repo}" : $"repo:{owner}/{repo} {q}"), ("type", "issue"));
             await ProxyAsync(httpContext, gitHubService, proxy, userContext.UserId, $"search/issues{query}", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubSearchIssues");
 
-        group.MapGet("/repos/{owner}/{repo}/issues/{number:int}", async (
-            HttpContext httpContext,
-            string owner,
-            string repo,
-            int number,
-            GitHubService gitHubService,
-            GitHubApiProxy proxy,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapGet("/repos/{owner}/{repo}/issues/{number:int}", async (HttpContext httpContext) =>
         {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var owner = GetRouteString(httpContext, "owner");
+            var repo = GetRouteString(httpContext, "repo");
+            var number = GetRouteInt(httpContext, "number");
+
             await ProxyAsync(httpContext, gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/issues/{number}", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubGetIssue");
 
-        group.MapGet("/repos/{owner}/{repo}/issues/{number:int}/comments", async (
-            HttpContext httpContext,
-            string owner,
-            string repo,
-            int number,
-            GitHubService gitHubService,
-            GitHubApiProxy proxy,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapGet("/repos/{owner}/{repo}/issues/{number:int}/comments", async (HttpContext httpContext) =>
         {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var owner = GetRouteString(httpContext, "owner");
+            var repo = GetRouteString(httpContext, "repo");
+            var number = GetRouteInt(httpContext, "number");
+
             await ProxyAsync(httpContext, gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/issues/{number}/comments", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubListIssueComments");
 
-        group.MapGet("/repos/{owner}/{repo}/labels", async (
-            HttpContext httpContext,
-            string owner,
-            string repo,
-            GitHubService gitHubService,
-            GitHubApiProxy proxy,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapGet("/repos/{owner}/{repo}/labels", async (HttpContext httpContext) =>
         {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var owner = GetRouteString(httpContext, "owner");
+            var repo = GetRouteString(httpContext, "repo");
+
             await ProxyAsync(httpContext, gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/labels?per_page=100", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubListLabels");
 
-        group.MapGet("/repos/{owner}/{repo}/milestones", async (
-            HttpContext httpContext,
-            string owner,
-            string repo,
-            GitHubService gitHubService,
-            GitHubApiProxy proxy,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapGet("/repos/{owner}/{repo}/milestones", async (HttpContext httpContext) =>
         {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var owner = GetRouteString(httpContext, "owner");
+            var repo = GetRouteString(httpContext, "repo");
+
             await ProxyAsync(httpContext, gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/milestones?state=open&per_page=100", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubListMilestones");
 
-        group.MapGet("/repos/{owner}/{repo}/assignees", async (
-            HttpContext httpContext,
-            string owner,
-            string repo,
-            GitHubService gitHubService,
-            GitHubApiProxy proxy,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapGet("/repos/{owner}/{repo}/assignees", async (HttpContext httpContext) =>
         {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var owner = GetRouteString(httpContext, "owner");
+            var repo = GetRouteString(httpContext, "repo");
+
             await ProxyAsync(httpContext, gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/assignees?per_page=100", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubListAssignees");
 
-        group.MapGet("/repos/{owner}/{repo}/pulls", async (
-            HttpContext httpContext,
-            string owner,
-            string repo,
-            string? state,
-            int? page,
-            int? perPage,
-            GitHubService gitHubService,
-            GitHubApiProxy proxy,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapGet("/repos/{owner}/{repo}/pulls", async (HttpContext httpContext) =>
         {
-            var pageString = page?.ToString(CultureInfo.InvariantCulture);
-            var perPageString = (perPage ?? 30).ToString(CultureInfo.InvariantCulture);
-            var query = BuildQuery(("state", state ?? "open"), ("page", pageString), ("per_page", perPageString));
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var owner = GetRouteString(httpContext, "owner");
+            var repo = GetRouteString(httpContext, "repo");
+            var state = GetQueryString(httpContext, "state") ?? "open";
+            var page = GetQueryInt(httpContext, "page");
+            var perPage = GetQueryInt(httpContext, "perPage") ?? 30;
+
+            var query = BuildQuery(("state", state), ("page", page?.ToString(CultureInfo.InvariantCulture)), ("per_page", perPage.ToString(CultureInfo.InvariantCulture)));
             await ProxyAsync(httpContext, gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/pulls{query}", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubListPRs");
 
-        group.MapGet("/repos/{owner}/{repo}/pulls/{number:int}", async (
-            HttpContext httpContext,
-            string owner,
-            string repo,
-            int number,
-            GitHubService gitHubService,
-            GitHubApiProxy proxy,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapGet("/repos/{owner}/{repo}/pulls/{number:int}", async (HttpContext httpContext) =>
         {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var owner = GetRouteString(httpContext, "owner");
+            var repo = GetRouteString(httpContext, "repo");
+            var number = GetRouteInt(httpContext, "number");
+
             await ProxyAsync(httpContext, gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/pulls/{number}", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubGetPR");
 
-        group.MapGet("/repos/{owner}/{repo}/pulls/{number:int}/comments", async (
-            HttpContext httpContext,
-            string owner,
-            string repo,
-            int number,
-            GitHubService gitHubService,
-            GitHubApiProxy proxy,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapGet("/repos/{owner}/{repo}/pulls/{number:int}/comments", async (HttpContext httpContext) =>
         {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var owner = GetRouteString(httpContext, "owner");
+            var repo = GetRouteString(httpContext, "repo");
+            var number = GetRouteInt(httpContext, "number");
+
             await ProxyAsync(httpContext, gitHubService, proxy, userContext.UserId, $"repos/{owner}/{repo}/pulls/{number}/comments", ct: ct).ConfigureAwait(false);
         })
         .WithName("GitHubListPRComments");
 
-        group.MapGet("/repos/{owner}/{repo}/pulls/{number:int}/status", async (
-            HttpContext httpContext,
-            string owner,
-            string repo,
-            int number,
-            GitHubService gitHubService,
-            GitHubApiProxy proxy,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapGet("/repos/{owner}/{repo}/pulls/{number:int}/status", async (HttpContext httpContext) =>
         {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var owner = GetRouteString(httpContext, "owner");
+            var repo = GetRouteString(httpContext, "repo");
+            var number = GetRouteInt(httpContext, "number");
+
             var token = await gitHubService.GetTokenAsync(userContext.UserId, ct).ConfigureAwait(false);
             if (token is null)
             {
@@ -308,21 +326,31 @@ internal static class GitHubEndpointMappings
         })
         .WithName("GitHubGetPRStatus");
 
-        group.MapGet("/bookmarks", async (HttpContext httpContext, IPluginStateStore store, IUserContext userContext, CancellationToken ct) =>
+        group.MapGet("/bookmarks", async (HttpContext httpContext) =>
         {
+            var store = httpContext.RequestServices.GetRequiredService<IPluginStateStore>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
             var config = await store.GetStateAsync("github_bookmarks", userContext.UserId, ct).ConfigureAwait(false);
             var bookmarks = ToBookmarkedRepos(config?["repos"] as JsonArray);
             await Results.Ok(bookmarks).ExecuteAsync(httpContext).ConfigureAwait(false);
         })
         .WithName("GitHubGetBookmarks");
 
-        group.MapPut("/bookmarks", async (
-            HttpContext httpContext,
-            GitHubBookmarkSyncRequest request,
-            IPluginStateStore store,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapPut("/bookmarks", async (HttpContext httpContext) =>
         {
+            var store = httpContext.RequestServices.GetRequiredService<IPluginStateStore>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+            var request = await httpContext.Request.ReadFromJsonAsync<GitHubBookmarkSyncRequest>(ct).ConfigureAwait(false);
+
+            if (request is null)
+            {
+                await Results.BadRequest(new GitHubEndpointError("Invalid request body.")).ExecuteAsync(httpContext).ConfigureAwait(false);
+                return;
+            }
+
             var repos = new JsonArray();
             foreach (var bookmark in request.Bookmarks)
             {
@@ -339,13 +367,19 @@ internal static class GitHubEndpointMappings
         })
         .WithName("GitHubSyncBookmarks");
 
-        group.MapPost("/bookmarks", async (
-            HttpContext httpContext,
-            GitHubBookmarkRequest request,
-            IPluginStateStore store,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapPost("/bookmarks", async (HttpContext httpContext) =>
         {
+            var store = httpContext.RequestServices.GetRequiredService<IPluginStateStore>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+            var request = await httpContext.Request.ReadFromJsonAsync<GitHubBookmarkRequest>(ct).ConfigureAwait(false);
+
+            if (request is null)
+            {
+                await Results.BadRequest(new GitHubEndpointError("Invalid request body.")).ExecuteAsync(httpContext).ConfigureAwait(false);
+                return;
+            }
+
             var config = await store.GetStateAsync("github_bookmarks", userContext.UserId, ct).ConfigureAwait(false) ?? [];
             var repos = config["repos"] as JsonArray ?? new JsonArray();
             var exists = repos.Any(repo => repo?.GetValue<string>() == request.Repo);
@@ -358,15 +392,16 @@ internal static class GitHubEndpointMappings
         })
         .WithName("GitHubAddBookmark");
 
-        group.MapDelete("/bookmarks/{owner}/{repo}", async (
-            HttpContext httpContext,
-            string owner,
-            string repo,
-            IPluginStateStore store,
-            IUserContext userContext,
-            CancellationToken ct) =>
+        group.MapDelete("/bookmarks/{owner}/{repo}", async (HttpContext httpContext) =>
         {
+            var store = httpContext.RequestServices.GetRequiredService<IPluginStateStore>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var owner = GetRouteString(httpContext, "owner");
+            var repo = GetRouteString(httpContext, "repo");
             var fullName = $"{owner}/{repo}";
+
             var config = await store.GetStateAsync("github_bookmarks", userContext.UserId, ct).ConfigureAwait(false);
             if (config is not null)
             {
@@ -386,6 +421,18 @@ internal static class GitHubEndpointMappings
         })
         .WithName("GitHubRemoveBookmark");
     }
+
+    private static string GetRouteString(HttpContext httpContext, string key)
+        => httpContext.Request.RouteValues[key]?.ToString() ?? string.Empty;
+
+    private static int GetRouteInt(HttpContext httpContext, string key)
+        => int.TryParse(httpContext.Request.RouteValues[key]?.ToString(), CultureInfo.InvariantCulture, out var value) ? value : 0;
+
+    private static string? GetQueryString(HttpContext httpContext, string key)
+        => httpContext.Request.Query.TryGetValue(key, out var values) ? (string?)values : null;
+
+    private static int? GetQueryInt(HttpContext httpContext, string key)
+        => httpContext.Request.Query.TryGetValue(key, out var values) && int.TryParse((string?)values, CultureInfo.InvariantCulture, out var value) ? value : null;
 
     private static async Task ProxyAsync(
         HttpContext httpContext,
