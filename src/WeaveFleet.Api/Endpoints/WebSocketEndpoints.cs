@@ -58,7 +58,8 @@ public static class WebSocketEndpoints
 
         // Current subscribed topics for this connection
         var subscribedTopics = new List<string>();
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
+        var lifetime = context.RequestServices.GetRequiredService<IHostApplicationLifetime>();
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, lifetime.ApplicationStopping);
 
         // Pump events to the WebSocket while it is open — scoped to the authenticated user
         var sendTask = PumpEventsAsync(webSocket, broadcaster, subscribedTopics, userContext.UserId, cts.Token);

@@ -399,6 +399,11 @@ internal sealed class OpenCodeHttpClient
                 {
                     break;
                 }
+                catch (Exception) when (ct.IsCancellationRequested)
+                {
+                    // Shutting down — don't log reconnect attempts.
+                    break;
+                }
                 catch (Exception ex)
                 {
                     LogSseReconnect(_logger, delayMs, ex);
