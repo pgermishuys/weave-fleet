@@ -192,6 +192,10 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(StoreCredentialRequest))]
 [JsonSerializable(typeof(UpdateCredentialRequest))]
 [JsonSerializable(typeof(IReadOnlyList<CredentialResponse>))]
+// Preferences
+[JsonSerializable(typeof(SetPreferenceRequest))]
+[JsonSerializable(typeof(IReadOnlyDictionary<string, string>))]
+[JsonSerializable(typeof(Dictionary<string, string>))]
 // Config
 [JsonSerializable(typeof(ClientConfigResponse))]
 [JsonSerializable(typeof(System.Text.Json.Nodes.JsonObject))]

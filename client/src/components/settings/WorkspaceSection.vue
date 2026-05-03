@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AddWorkspaceRootResponse, WorkspaceRootItem, WorkspaceRootsResponse } from "@/lib/api-types";
-import { onMounted, reactive, ref, shallowRef, watch } from "vue";
+import { computed, onMounted, reactive, ref, shallowRef, watch } from "vue";
 import { AlertCircle, Folder, FolderGit2, LoaderCircle, Plus, RefreshCw, Trash2 } from "lucide-vue-next";
 import { apiFetch } from "@/lib/api-client";
 import DirectoryPickerPopover from "@/components/ui/DirectoryPickerPopover.vue";
@@ -10,6 +10,8 @@ import {
   writeWorkspacePreferences,
 } from "@/lib/workspace-preferences";
 import type { WorkspacePreferences } from "@/lib/workspace-preferences";
+import { useHarnesses } from "@/composables/use-harnesses";
+import { usePreferencesStore } from "@/stores/preferences";
 
 const buttonPrimaryClass = "inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
 const buttonSecondaryClass = "inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60";
@@ -40,6 +42,20 @@ function handleDirectorySelected(path: string): void {
 const workspacePreferences = reactive<WorkspacePreferences>(
   readWorkspacePreferences(typeof window !== "undefined" ? window.localStorage : null),
 );
+
+const { harnesses } = useHarnesses();
+const preferencesStore = usePreferencesStore();
+
+preferencesStore.ensureLoaded();
+
+const availableHarnesses = computed(() => harnesses.value.filter((h) => h.available));
+const showHarnessSelect = computed(() => availableHarnesses.value.length > 1);
+const defaultHarnessType = computed(() => preferencesStore.get("defaultHarnessType", "opencode"));
+
+function handleDefaultHarnessChange(event: Event): void {
+  const value = (event.target as HTMLSelectElement).value;
+  void preferencesStore.set("defaultHarnessType", value);
+}
 
 onMounted(() => {
   void loadWorkspaceRoots();
@@ -193,6 +209,27 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
             :value="root.path"
           >
             {{ root.path }}
+          </option>
+        </select>
+      </label>
+
+      <label
+        v-if="showHarnessSelect"
+        class="grid gap-1 text-sm text-text"
+      >
+        <span class="text-xs font-medium uppercase tracking-wide text-muted">Default harness</span>
+        <select
+          :value="defaultHarnessType"
+          :class="selectClass"
+          :disabled="preferencesStore.isLoading"
+          @change="handleDefaultHarnessChange"
+        >
+          <option
+            v-for="harness in availableHarnesses"
+            :key="harness.type"
+            :value="harness.type"
+          >
+            {{ harness.displayName }}
           </option>
         </select>
       </label>

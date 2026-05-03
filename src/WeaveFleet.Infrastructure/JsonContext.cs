@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
+using WeaveFleet.Infrastructure.Harnesses.NuCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Services;
 
@@ -175,6 +176,7 @@ internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(NuCodeMessageUpdatedPayload))]
 [JsonSerializable(typeof(NuCodePartUpdatedPayload))]
 [JsonSerializable(typeof(Dictionary<string, object?>))]
+[JsonSerializable(typeof(CopilotTokenResponse))]
 internal sealed partial class NuCodeJsonContext : JsonSerializerContext
 {
 }
