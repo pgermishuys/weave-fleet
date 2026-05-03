@@ -278,6 +278,42 @@ jobs:
             --output artifacts/publish/linux-x64 \
             -p:SkipFrontendBuild=true
 
+      - name: Smoke test AOT binary
+        shell: bash
+        run: |
+          binary="artifacts/publish/linux-x64/WeaveFleet.Api"
+          chmod +x "$binary"
+          port="5010"
+          log_path="/tmp/fleet-smoke.log"
+
+          Fleet__Host="127.0.0.1" Fleet__Port="$port" "$binary" >"$log_path" 2>&1 &
+          app_pid=$!
+
+          cleanup() { kill "$app_pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+
+          for _ in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:${port}/healthz" >/dev/null; then
+              echo "AOT smoke test passed — healthz responded OK."
+              kill "$app_pid" 2>/dev/null || true
+              wait "$app_pid" 2>/dev/null || true
+              trap - EXIT
+              exit 0
+            fi
+
+            if ! kill -0 "$app_pid" 2>/dev/null; then
+              echo "::error::AOT binary crashed during startup"
+              cat "$log_path"
+              exit 1
+            fi
+
+            sleep 1
+          done
+
+          echo "::error::AOT binary did not become healthy within 30s"
+          cat "$log_path"
+          exit 1
+
   # ── UI responsiveness benchmarks ──────────────────────────────────────────
   benchmarks:
     name: UI Responsiveness Benchmarks
