@@ -1,4 +1,5 @@
-using Dapper;
+using System.Data;
+using System.Data.Common;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
@@ -9,7 +10,6 @@ namespace WeaveFleet.Infrastructure.Data.Repositories;
 public sealed class DapperDelegationRepository : IDelegationRepository
 {
     private readonly IDbConnectionFactory _connectionFactory;
-
     private readonly IUserContext _userContext;
 
     public DapperDelegationRepository(IDbConnectionFactory connectionFactory, IUserContext userContext)
@@ -24,9 +24,9 @@ public sealed class DapperDelegationRepository : IDelegationRepository
         await InsertAsync(conn, null, delegation);
     }
 
-    public async Task InsertAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, Delegation delegation)
+    public async Task InsertAsync(IDbConnection connection, IDbTransaction? transaction, Delegation delegation)
     {
-        await connection.ExecuteAsync(
+        await connection.ExecuteNonQueryAsync(
             """
             INSERT INTO delegations (id, parent_session_id, child_session_id, parent_tool_call_id, title, status, created_at, updated_at, completed_at)
             SELECT @Id, @ParentSessionId, @ChildSessionId, @ParentToolCallId, @Title, @Status, @CreatedAt, @UpdatedAt, @CompletedAt
@@ -39,18 +39,18 @@ public sealed class DapperDelegationRepository : IDelegationRepository
                       SELECT 1 FROM sessions child_session
                       WHERE child_session.id = @ChildSessionId AND child_session.user_id = @UserId))
             """,
-            new
+            cmd =>
             {
-                delegation.Id,
-                delegation.ParentSessionId,
-                delegation.ChildSessionId,
-                delegation.ParentToolCallId,
-                delegation.Title,
-                delegation.Status,
-                delegation.CreatedAt,
-                delegation.UpdatedAt,
-                delegation.CompletedAt,
-                UserId = _userContext.UserId
+                cmd.AddParameter("Id", delegation.Id);
+                cmd.AddParameter("ParentSessionId", delegation.ParentSessionId);
+                cmd.AddParameter("ChildSessionId", delegation.ChildSessionId);
+                cmd.AddParameter("ParentToolCallId", delegation.ParentToolCallId);
+                cmd.AddParameter("Title", delegation.Title);
+                cmd.AddParameter("Status", delegation.Status);
+                cmd.AddParameter("CreatedAt", delegation.CreatedAt);
+                cmd.AddParameter("UpdatedAt", delegation.UpdatedAt);
+                cmd.AddParameter("CompletedAt", delegation.CompletedAt);
+                cmd.AddParameter("UserId", _userContext.UserId);
             },
             transaction);
     }
@@ -58,20 +58,25 @@ public sealed class DapperDelegationRepository : IDelegationRepository
     public async Task<Delegation?> GetByIdAsync(string id)
     {
         using var conn = _connectionFactory.CreateConnection();
-        return await conn.QueryFirstOrDefaultAsync<Delegation>(
+        return await conn.QueryFirstOrDefaultAsync(
             """
             SELECT d.*
             FROM delegations d
             INNER JOIN sessions parent_session ON parent_session.id = d.parent_session_id
             WHERE d.id = @Id AND parent_session.user_id = @UserId
             """,
-            new { Id = id, UserId = _userContext.UserId });
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            },
+            ReadDelegation);
     }
 
     public async Task<IReadOnlyList<Delegation>> GetByParentSessionIdAsync(string parentSessionId)
     {
         using var conn = _connectionFactory.CreateConnection();
-        var results = await conn.QueryAsync<Delegation>(
+        return await conn.QueryAsync(
             """
             SELECT d.*
             FROM delegations d
@@ -79,14 +84,18 @@ public sealed class DapperDelegationRepository : IDelegationRepository
             WHERE d.parent_session_id = @ParentSessionId AND parent_session.user_id = @UserId
             ORDER BY d.created_at ASC
             """,
-            new { ParentSessionId = parentSessionId, UserId = _userContext.UserId });
-        return results.AsList();
+            cmd =>
+            {
+                cmd.AddParameter("ParentSessionId", parentSessionId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            },
+            ReadDelegation);
     }
 
     public async Task<Delegation?> GetByChildSessionIdAsync(string childSessionId)
     {
         using var conn = _connectionFactory.CreateConnection();
-        return await conn.QueryFirstOrDefaultAsync<Delegation>(
+        return await conn.QueryFirstOrDefaultAsync(
             """
             SELECT d.*
             FROM delegations d
@@ -94,13 +103,18 @@ public sealed class DapperDelegationRepository : IDelegationRepository
             WHERE d.child_session_id = @ChildSessionId AND parent_session.user_id = @UserId
             LIMIT 1
             """,
-            new { ChildSessionId = childSessionId, UserId = _userContext.UserId });
+            cmd =>
+            {
+                cmd.AddParameter("ChildSessionId", childSessionId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            },
+            ReadDelegation);
     }
 
     public async Task<Delegation?> GetByParentToolCallIdAsync(string parentSessionId, string toolCallId)
     {
         using var conn = _connectionFactory.CreateConnection();
-        return await conn.QueryFirstOrDefaultAsync<Delegation>(
+        return await conn.QueryFirstOrDefaultAsync(
             """
             SELECT d.*
             FROM delegations d
@@ -110,7 +124,13 @@ public sealed class DapperDelegationRepository : IDelegationRepository
               AND parent_session.user_id = @UserId
             LIMIT 1
             """,
-            new { ParentSessionId = parentSessionId, ToolCallId = toolCallId, UserId = _userContext.UserId });
+            cmd =>
+            {
+                cmd.AddParameter("ParentSessionId", parentSessionId);
+                cmd.AddParameter("ToolCallId", toolCallId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            },
+            ReadDelegation);
     }
 
     public async Task UpdateStatusAsync(string id, string status, string updatedAt, string? completedAt)
@@ -119,9 +139,9 @@ public sealed class DapperDelegationRepository : IDelegationRepository
         await UpdateStatusAsync(conn, null, id, status, updatedAt, completedAt);
     }
 
-    public async Task UpdateStatusAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, string id, string status, string updatedAt, string? completedAt)
+    public async Task UpdateStatusAsync(IDbConnection connection, IDbTransaction? transaction, string id, string status, string updatedAt, string? completedAt)
     {
-        await connection.ExecuteAsync(
+        await connection.ExecuteNonQueryAsync(
             """
             UPDATE delegations
             SET status = @Status,
@@ -133,7 +153,14 @@ public sealed class DapperDelegationRepository : IDelegationRepository
                   FROM sessions parent_session
                   WHERE parent_session.id = delegations.parent_session_id AND parent_session.user_id = @UserId)
             """,
-            new { Id = id, Status = status, UpdatedAt = updatedAt, CompletedAt = completedAt, UserId = _userContext.UserId },
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("Status", status);
+                cmd.AddParameter("UpdatedAt", updatedAt);
+                cmd.AddParameter("CompletedAt", completedAt);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            },
             transaction);
     }
 
@@ -143,9 +170,9 @@ public sealed class DapperDelegationRepository : IDelegationRepository
         await UpdateChildSessionIdAsync(conn, null, id, childSessionId, updatedAt);
     }
 
-    public async Task UpdateChildSessionIdAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, string id, string? childSessionId, string updatedAt)
+    public async Task UpdateChildSessionIdAsync(IDbConnection connection, IDbTransaction? transaction, string id, string? childSessionId, string updatedAt)
     {
-        await connection.ExecuteAsync(
+        await connection.ExecuteNonQueryAsync(
             """
             UPDATE delegations
             SET child_session_id = @ChildSessionId,
@@ -162,7 +189,13 @@ public sealed class DapperDelegationRepository : IDelegationRepository
                       FROM sessions child_session
                       WHERE child_session.id = @ChildSessionId AND child_session.user_id = @UserId))
             """,
-            new { Id = id, ChildSessionId = childSessionId, UpdatedAt = updatedAt, UserId = _userContext.UserId },
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("ChildSessionId", childSessionId);
+                cmd.AddParameter("UpdatedAt", updatedAt);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            },
             transaction);
     }
 
@@ -172,9 +205,9 @@ public sealed class DapperDelegationRepository : IDelegationRepository
         await DeleteByParentSessionIdAsync(conn, null, parentSessionId);
     }
 
-    public async Task DeleteByParentSessionIdAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, string parentSessionId)
+    public async Task DeleteByParentSessionIdAsync(IDbConnection connection, IDbTransaction? transaction, string parentSessionId)
     {
-        await connection.ExecuteAsync(
+        await connection.ExecuteNonQueryAsync(
             """
             DELETE FROM delegations
             WHERE parent_session_id = @ParentSessionId
@@ -183,7 +216,24 @@ public sealed class DapperDelegationRepository : IDelegationRepository
                   FROM sessions parent_session
                   WHERE parent_session.id = delegations.parent_session_id AND parent_session.user_id = @UserId)
             """,
-            new { ParentSessionId = parentSessionId, UserId = _userContext.UserId },
+            cmd =>
+            {
+                cmd.AddParameter("ParentSessionId", parentSessionId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            },
             transaction);
     }
+
+    private static Delegation ReadDelegation(DbDataReader r) => new()
+    {
+        Id = r.GetString(r.GetOrdinal("id")),
+        ParentSessionId = r.GetString(r.GetOrdinal("parent_session_id")),
+        ChildSessionId = r.GetNullableString(r.GetOrdinal("child_session_id")),
+        ParentToolCallId = r.GetNullableString(r.GetOrdinal("parent_tool_call_id")),
+        Title = r.GetString(r.GetOrdinal("title")),
+        Status = r.GetString(r.GetOrdinal("status")),
+        CreatedAt = r.GetString(r.GetOrdinal("created_at")),
+        UpdatedAt = r.GetString(r.GetOrdinal("updated_at")),
+        CompletedAt = r.GetNullableString(r.GetOrdinal("completed_at")),
+    };
 }

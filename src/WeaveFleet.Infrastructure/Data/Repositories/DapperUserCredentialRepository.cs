@@ -1,4 +1,4 @@
-using Dapper;
+using System.Data.Common;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
@@ -7,7 +7,7 @@ using WeaveFleet.Domain.Repositories;
 namespace WeaveFleet.Infrastructure.Data.Repositories;
 
 /// <summary>
-/// Dapper-backed implementation of <see cref="IUserCredentialRepository"/>.
+/// Raw ADO.NET implementation of <see cref="IUserCredentialRepository"/>.
 /// All queries are scoped to the current user via <see cref="IUserContext"/>.
 /// </summary>
 public sealed class DapperUserCredentialRepository(
@@ -20,9 +20,14 @@ public sealed class DapperUserCredentialRepository(
     public async Task<UserCredential?> GetByIdAsync(string id, string userId)
     {
         using var conn = connectionFactory.CreateConnection();
-        return await conn.QueryFirstOrDefaultAsync<UserCredential>(
+        return await conn.QueryFirstOrDefaultAsync(
             "SELECT * FROM user_credentials WHERE id = @Id AND user_id = @UserId",
-            new { Id = id, UserId = userId }).ConfigureAwait(false);
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("UserId", userId);
+            },
+            ReadUserCredential).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<UserCredential>> ListByUserAsync()
@@ -31,10 +36,10 @@ public sealed class DapperUserCredentialRepository(
     public async Task<IReadOnlyList<UserCredential>> ListByUserAsync(string userId)
     {
         using var conn = connectionFactory.CreateConnection();
-        var results = await conn.QueryAsync<UserCredential>(
+        return await conn.QueryAsync(
             "SELECT * FROM user_credentials WHERE user_id = @UserId ORDER BY created_at ASC",
-            new { UserId = userId }).ConfigureAwait(false);
-        return results.AsList();
+            cmd => { cmd.AddParameter("UserId", userId); },
+            ReadUserCredential).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<UserCredential>> ListByUserAndNamespaceAsync(string credentialNamespace)
@@ -43,10 +48,14 @@ public sealed class DapperUserCredentialRepository(
     public async Task<IReadOnlyList<UserCredential>> ListByUserAndNamespaceAsync(string userId, string credentialNamespace)
     {
         using var conn = connectionFactory.CreateConnection();
-        var results = await conn.QueryAsync<UserCredential>(
+        return await conn.QueryAsync(
             "SELECT * FROM user_credentials WHERE user_id = @UserId AND namespace = @Namespace ORDER BY created_at ASC",
-            new { UserId = userId, Namespace = credentialNamespace }).ConfigureAwait(false);
-        return results.AsList();
+            cmd =>
+            {
+                cmd.AddParameter("UserId", userId);
+                cmd.AddParameter("Namespace", credentialNamespace);
+            },
+            ReadUserCredential).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<UserCredential>> ListByUserNamespaceAndKindAsync(string credentialNamespace, string kind)
@@ -55,16 +64,21 @@ public sealed class DapperUserCredentialRepository(
     public async Task<IReadOnlyList<UserCredential>> ListByUserNamespaceAndKindAsync(string userId, string credentialNamespace, string kind)
     {
         using var conn = connectionFactory.CreateConnection();
-        var results = await conn.QueryAsync<UserCredential>(
+        return await conn.QueryAsync(
             "SELECT * FROM user_credentials WHERE user_id = @UserId AND namespace = @Namespace AND kind = @Kind ORDER BY created_at ASC",
-            new { UserId = userId, Namespace = credentialNamespace, Kind = kind }).ConfigureAwait(false);
-        return results.AsList();
+            cmd =>
+            {
+                cmd.AddParameter("UserId", userId);
+                cmd.AddParameter("Namespace", credentialNamespace);
+                cmd.AddParameter("Kind", kind);
+            },
+            ReadUserCredential).ConfigureAwait(false);
     }
 
     public async Task UpsertAsync(UserCredential credential)
     {
         using var conn = connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             INSERT INTO user_credentials (id, user_id, namespace, kind, label, encrypted_value, display_hint, metadata, created_at, updated_at)
             VALUES (@Id, @UserId, @Namespace, @Kind, @Label, @EncryptedValue, @DisplayHint, @Metadata, @CreatedAt, @UpdatedAt)
@@ -74,18 +88,18 @@ public sealed class DapperUserCredentialRepository(
                 metadata = excluded.metadata,
                 updated_at = excluded.updated_at
             """,
-            new
+            cmd =>
             {
-                credential.Id,
-                UserId = credential.UserId,
-                credential.Namespace,
-                credential.Kind,
-                credential.Label,
-                credential.EncryptedValue,
-                credential.DisplayHint,
-                credential.Metadata,
-                credential.CreatedAt,
-                credential.UpdatedAt
+                cmd.AddParameter("Id", credential.Id);
+                cmd.AddParameter("UserId", credential.UserId);
+                cmd.AddParameter("Namespace", credential.Namespace);
+                cmd.AddParameter("Kind", credential.Kind);
+                cmd.AddParameter("Label", credential.Label);
+                cmd.AddParameter("EncryptedValue", credential.EncryptedValue);
+                cmd.AddParameter("DisplayHint", credential.DisplayHint);
+                cmd.AddParameter("Metadata", credential.Metadata);
+                cmd.AddParameter("CreatedAt", credential.CreatedAt);
+                cmd.AddParameter("UpdatedAt", credential.UpdatedAt);
             }).ConfigureAwait(false);
     }
 
@@ -95,8 +109,26 @@ public sealed class DapperUserCredentialRepository(
     public async Task DeleteAsync(string id, string userId)
     {
         using var conn = connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             "DELETE FROM user_credentials WHERE id = @Id AND user_id = @UserId",
-            new { Id = id, UserId = userId }).ConfigureAwait(false);
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("UserId", userId);
+            }).ConfigureAwait(false);
     }
+
+    private static UserCredential ReadUserCredential(DbDataReader r) => new()
+    {
+        Id = r.GetString(r.GetOrdinal("id")),
+        UserId = r.GetString(r.GetOrdinal("user_id")),
+        Namespace = r.GetString(r.GetOrdinal("namespace")),
+        Kind = r.GetString(r.GetOrdinal("kind")),
+        Label = r.GetString(r.GetOrdinal("label")),
+        EncryptedValue = r.GetString(r.GetOrdinal("encrypted_value")),
+        DisplayHint = r.GetString(r.GetOrdinal("display_hint")),
+        Metadata = r.GetNullableString(r.GetOrdinal("metadata")),
+        CreatedAt = r.GetString(r.GetOrdinal("created_at")),
+        UpdatedAt = r.GetString(r.GetOrdinal("updated_at")),
+    };
 }

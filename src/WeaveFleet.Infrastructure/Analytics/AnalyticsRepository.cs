@@ -1,12 +1,13 @@
-using Dapper;
+using System.Data.Common;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Infrastructure.Data;
 
 namespace WeaveFleet.Infrastructure.Analytics;
 
 /// <summary>
-/// Dapper-based read repository for the analytics database.
+/// Raw ADO.NET read repository for the analytics database.
 /// Implements <see cref="IAnalyticsReader"/> with parameterized queries.
 /// Date range filtering uses ISO 8601 string comparison (valid for SQLite with UTC timestamps).
 /// All queries are scoped by <see cref="IUserContext.UserId"/> for tenant isolation.
@@ -30,7 +31,7 @@ public sealed class AnalyticsRepository(
         var whereClause = BuildWhereClause(fromStr, toStr, projectId);
 
         // Aggregate totals
-        var totals = await conn.QueryFirstAsync<(double TotalTokens, double TotalCost, double TotalEstimatedCost, int MessageCount)>(
+        var totals = await conn.QueryFirstAsync(
             $"""
             SELECT
                 COALESCE(SUM(tokens_total), 0) AS TotalTokens,
@@ -40,18 +41,36 @@ public sealed class AnalyticsRepository(
             FROM token_events
             {whereClause}
             """,
-            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId, UserId = userId });
+            cmd =>
+            {
+                cmd.AddParameter("FromDate", fromStr);
+                cmd.AddParameter("ToDate", toStr);
+                cmd.AddParameter("ProjectId", projectId);
+                cmd.AddParameter("UserId", userId);
+            },
+            r => (
+                TotalTokens: r.GetDouble(r.GetOrdinal("TotalTokens")),
+                TotalCost: r.GetDouble(r.GetOrdinal("TotalCost")),
+                TotalEstimatedCost: r.GetDouble(r.GetOrdinal("TotalEstimatedCost")),
+                MessageCount: (int)r.GetInt64(r.GetOrdinal("MessageCount"))
+            ));
 
-        var sessionCount = await conn.ExecuteScalarAsync<int>(
+        var sessionCount = (int)(await conn.ExecuteScalarAsync<long>(
             $"""
             SELECT COUNT(DISTINCT session_id)
             FROM token_events
             {whereClause}
             """,
-            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId, UserId = userId });
+            cmd =>
+            {
+                cmd.AddParameter("FromDate", fromStr);
+                cmd.AddParameter("ToDate", toStr);
+                cmd.AddParameter("ProjectId", projectId);
+                cmd.AddParameter("UserId", userId);
+            }));
 
         // Top 5 models by cost
-        var topModels = (await conn.QueryAsync<(string Name, double Tokens, double Cost)>(
+        var topModels = (await conn.QueryAsync(
             $"""
             SELECT
                 COALESCE(model_id, 'unknown') AS Name,
@@ -63,12 +82,21 @@ public sealed class AnalyticsRepository(
             ORDER BY Cost DESC
             LIMIT 5
             """,
-            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId, UserId = userId }))
-            .Select(r => new AnalyticsTopItem(r.Name, r.Tokens, r.Cost))
-            .ToList();
+            cmd =>
+            {
+                cmd.AddParameter("FromDate", fromStr);
+                cmd.AddParameter("ToDate", toStr);
+                cmd.AddParameter("ProjectId", projectId);
+                cmd.AddParameter("UserId", userId);
+            },
+            r => new AnalyticsTopItem(
+                r.GetString(r.GetOrdinal("Name")),
+                r.GetDouble(r.GetOrdinal("Tokens")),
+                r.GetDouble(r.GetOrdinal("Cost"))
+            ))).ToList();
 
         // Top 5 projects by cost
-        var topProjects = (await conn.QueryAsync<(string Name, double Tokens, double Cost)>(
+        var topProjects = (await conn.QueryAsync(
             $"""
             SELECT
                 COALESCE(project_name, project_id, 'unknown') AS Name,
@@ -80,9 +108,18 @@ public sealed class AnalyticsRepository(
             ORDER BY Cost DESC
             LIMIT 5
             """,
-            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId, UserId = userId }))
-            .Select(r => new AnalyticsTopItem(r.Name, r.Tokens, r.Cost))
-            .ToList();
+            cmd =>
+            {
+                cmd.AddParameter("FromDate", fromStr);
+                cmd.AddParameter("ToDate", toStr);
+                cmd.AddParameter("ProjectId", projectId);
+                cmd.AddParameter("UserId", userId);
+            },
+            r => new AnalyticsTopItem(
+                r.GetString(r.GetOrdinal("Name")),
+                r.GetDouble(r.GetOrdinal("Tokens")),
+                r.GetDouble(r.GetOrdinal("Cost"))
+            ))).ToList();
 
         return new AnalyticsSummary(
             totals.TotalTokens, totals.TotalCost, totals.TotalEstimatedCost,
@@ -102,15 +139,13 @@ public sealed class AnalyticsRepository(
         var toStr = toDate?.ToString("O");
         var userId = userContext.UserId;
 
-        // Read from daily_rollups — fast path. Falls back to empty if no rollups computed yet.
-        // When no project filter, aggregate all rows (fleet-wide for this user). When project specified, filter.
         var projectFilter = string.IsNullOrEmpty(projectId)
             ? ""
             : "AND project_id = @ProjectId";
 
         var dateFilter = BuildDateOnlyFilter(fromStr, toStr);
 
-        var rows = await conn.QueryAsync<DailyRollupRow>(
+        var rows = await conn.QueryAsync(
             $"""
             SELECT
                 date AS Date,
@@ -127,11 +162,23 @@ public sealed class AnalyticsRepository(
             GROUP BY date
             ORDER BY date
             """,
-            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId ?? "", UserId = userId });
+            cmd =>
+            {
+                cmd.AddParameter("FromDate", fromStr);
+                cmd.AddParameter("ToDate", toStr);
+                cmd.AddParameter("ProjectId", projectId ?? "");
+                cmd.AddParameter("UserId", userId);
+            },
+            r => new DailyAnalytics(
+                r.GetString(r.GetOrdinal("Date")),
+                r.GetDouble(r.GetOrdinal("Tokens")),
+                r.GetDouble(r.GetOrdinal("Cost")),
+                r.GetDouble(r.GetOrdinal("EstimatedCost")),
+                (int)r.GetInt64(r.GetOrdinal("Sessions")),
+                (int)r.GetInt64(r.GetOrdinal("Messages"))
+            ));
 
-        return rows
-            .Select(r => new DailyAnalytics(r.Date, r.Tokens, r.Cost, r.EstimatedCost, (int)r.Sessions, (int)r.Messages))
-            .ToList();
+        return rows;
     }
 
     public async Task<IReadOnlyList<SessionAnalytics>> GetSessionsAsync(
@@ -154,9 +201,7 @@ public sealed class AnalyticsRepository(
 
         var whereClause = "WHERE " + string.Join(" AND ", conditions);
 
-        // Join token_events to get live token/cost totals and aggregate model ids
-        // instead of relying on snapshot fields that may be stale or empty.
-        var rows = await conn.QueryAsync<SessionSnapshotRow>(
+        var rows = await conn.QueryAsync(
             $"""
             SELECT
                 ss.session_id, ss.title, ss.project_id, ss.project_name,
@@ -181,15 +226,28 @@ public sealed class AnalyticsRepository(
             ORDER BY ss.created_at DESC
             LIMIT @Limit
             """,
-            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId, Limit = limit, UserId = userId });
+            cmd =>
+            {
+                cmd.AddParameter("FromDate", fromStr);
+                cmd.AddParameter("ToDate", toStr);
+                cmd.AddParameter("ProjectId", projectId);
+                cmd.AddParameter("Limit", limit);
+                cmd.AddParameter("UserId", userId);
+            },
+            r => new SessionAnalytics(
+                r.GetString(r.GetOrdinal("session_id")),
+                r.GetNullableString(r.GetOrdinal("title")),
+                r.GetNullableString(r.GetOrdinal("project_id")),
+                r.GetNullableString(r.GetOrdinal("project_name")),
+                r.GetDouble(r.GetOrdinal("total_tokens")),
+                r.GetDouble(r.GetOrdinal("total_cost")),
+                r.GetDouble(r.GetOrdinal("total_estimated_cost")),
+                ParseModelIds(r.GetNullableString(r.GetOrdinal("model_ids"))),
+                r.GetNullableDouble(r.GetOrdinal("duration_seconds")),
+                r.GetString(r.GetOrdinal("created_at"))
+            ));
 
-        return rows
-            .Select(r => new SessionAnalytics(
-                r.SessionId, r.Title, r.ProjectId, r.ProjectName,
-                r.TotalTokens, r.TotalCost, r.TotalEstimatedCost,
-                ParseModelIds(r.ModelIds),
-                r.DurationSeconds, r.CreatedAt))
-            .ToList();
+        return rows;
     }
 
     public async Task<IReadOnlyList<ModelAnalytics>> GetModelsAsync(
@@ -205,7 +263,7 @@ public sealed class AnalyticsRepository(
 
         var dateFilter = BuildDateFilter(fromStr, toStr);
 
-        var rows = await conn.QueryAsync<ModelAnalyticsRow>(
+        var rows = await conn.QueryAsync(
             $"""
             SELECT
                 COALESCE(model_id, 'unknown') AS ModelId,
@@ -222,11 +280,23 @@ public sealed class AnalyticsRepository(
             GROUP BY model_id, provider_id
             ORDER BY Cost DESC
             """,
-            new { FromDate = fromStr, ToDate = toStr, UserId = userId });
+            cmd =>
+            {
+                cmd.AddParameter("FromDate", fromStr);
+                cmd.AddParameter("ToDate", toStr);
+                cmd.AddParameter("UserId", userId);
+            },
+            r => new ModelAnalytics(
+                r.GetString(r.GetOrdinal("ModelId")),
+                r.GetString(r.GetOrdinal("ProviderId")),
+                r.GetDouble(r.GetOrdinal("Tokens")),
+                r.GetDouble(r.GetOrdinal("Cost")),
+                r.GetDouble(r.GetOrdinal("EstimatedCost")),
+                (int)r.GetInt64(r.GetOrdinal("MessageCount")),
+                r.GetDouble(r.GetOrdinal("AvgCostPerMessage"))
+            ));
 
-        return rows
-            .Select(r => new ModelAnalytics(r.ModelId, r.ProviderId, r.Tokens, r.Cost, r.EstimatedCost, (int)r.MessageCount, r.AvgCostPerMessage))
-            .ToList();
+        return rows;
     }
 
     public async Task<IReadOnlyList<TokenEventRow>> ExportTokenEventsAsync(
@@ -243,33 +313,46 @@ public sealed class AnalyticsRepository(
 
         var whereClause = BuildWhereClause(fromStr, toStr, projectId);
 
-        var rows = await conn.QueryAsync<TokenEventRow>(
+        var rows = await conn.QueryAsync(
             $"""
             SELECT
-                id AS Id,
-                event_id AS EventId,
-                session_id AS SessionId,
-                project_id AS ProjectId,
-                project_name AS ProjectName,
-                workspace_directory AS WorkspaceDirectory,
-                model_id AS ModelId,
-                provider_id AS ProviderId,
-                tokens_input AS TokensInput,
-                tokens_output AS TokensOutput,
-                tokens_reasoning AS TokensReasoning,
-                tokens_cache_read AS TokensCacheRead,
-                tokens_cache_write AS TokensCacheWrite,
-                tokens_total AS TokensTotal,
-                cost AS Cost,
-                estimated_cost AS EstimatedCost,
-                created_at AS CreatedAt
+                id, event_id, session_id, project_id, project_name,
+                workspace_directory, model_id, provider_id,
+                tokens_input, tokens_output, tokens_reasoning,
+                tokens_cache_read, tokens_cache_write, tokens_total,
+                cost, estimated_cost, created_at
             FROM token_events
             {whereClause}
             ORDER BY created_at
             """,
-            new { FromDate = fromStr, ToDate = toStr, ProjectId = projectId, UserId = userId });
+            (Action<DbCommand>)(cmd =>
+            {
+                cmd.AddParameter("FromDate", fromStr);
+                cmd.AddParameter("ToDate", toStr);
+                cmd.AddParameter("ProjectId", projectId);
+                cmd.AddParameter("UserId", userId);
+            }),
+            r => new TokenEventRow(
+                Id: r.GetInt64(r.GetOrdinal("id")),
+                EventId: r.GetString(r.GetOrdinal("event_id")),
+                SessionId: r.GetString(r.GetOrdinal("session_id")),
+                ProjectId: r.GetNullableString(r.GetOrdinal("project_id")),
+                ProjectName: r.GetNullableString(r.GetOrdinal("project_name")),
+                WorkspaceDirectory: r.GetNullableString(r.GetOrdinal("workspace_directory")),
+                ModelId: r.GetNullableString(r.GetOrdinal("model_id")),
+                ProviderId: r.GetNullableString(r.GetOrdinal("provider_id")),
+                TokensInput: r.GetDouble(r.GetOrdinal("tokens_input")),
+                TokensOutput: r.GetDouble(r.GetOrdinal("tokens_output")),
+                TokensReasoning: r.GetDouble(r.GetOrdinal("tokens_reasoning")),
+                TokensCacheRead: r.GetDouble(r.GetOrdinal("tokens_cache_read")),
+                TokensCacheWrite: r.GetDouble(r.GetOrdinal("tokens_cache_write")),
+                TokensTotal: r.GetDouble(r.GetOrdinal("tokens_total")),
+                Cost: r.GetDouble(r.GetOrdinal("cost")),
+                EstimatedCost: r.GetNullableDouble(r.GetOrdinal("estimated_cost")),
+                CreatedAt: r.GetString(r.GetOrdinal("created_at"))
+            ));
 
-        return rows.ToList();
+        return rows;
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -311,44 +394,4 @@ public sealed class AnalyticsRepository(
             return [];
         }
     }
-
-    // Internal projection helpers — use mutable classes with default constructors so Dapper
-    // can map by property name (positional records fail with aggregate REAL/INTEGER columns
-    // because SQLite returns unexpected CLR types like byte[] for COALESCE(SUM(...),0)).
-#pragma warning disable CA1812 // Internal class is never instantiated (Dapper instantiates via reflection)
-    private sealed class SessionSnapshotRow
-    {
-        public string SessionId { get; init; } = "";
-        public string? Title { get; init; }
-        public string? ProjectId { get; init; }
-        public string? ProjectName { get; init; }
-        public double TotalTokens { get; init; }
-        public double TotalCost { get; init; }
-        public double TotalEstimatedCost { get; init; }
-        public string? ModelIds { get; init; }
-        public double? DurationSeconds { get; init; }
-        public string CreatedAt { get; init; } = "";
-    }
-
-    private sealed class DailyRollupRow
-    {
-        public string Date { get; init; } = "";
-        public double Tokens { get; init; }
-        public double Cost { get; init; }
-        public double EstimatedCost { get; init; }
-        public long Sessions { get; init; }
-        public long Messages { get; init; }
-    }
-
-    private sealed class ModelAnalyticsRow
-    {
-        public string ModelId { get; init; } = "";
-        public string ProviderId { get; init; } = "";
-        public double Tokens { get; init; }
-        public double Cost { get; init; }
-        public double EstimatedCost { get; init; }
-        public long MessageCount { get; init; }
-        public double AvgCostPerMessage { get; init; }
-    }
-#pragma warning restore CA1812
 }

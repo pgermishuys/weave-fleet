@@ -1,9 +1,9 @@
 using System.Data;
 using System.Text.Json;
-using Dapper;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Infrastructure.Data;
 
 namespace WeaveFleet.Infrastructure.EventBus;
 
@@ -51,17 +51,17 @@ internal sealed partial class InProcessEventStore
 
         using var conn = _db.CreateConnection();
         string serializedPayload = JsonSerializer.Serialize(envelope.Event, HarnessEventJsonContext.Default.HarnessEvent);
-        var id = conn.ExecuteScalar<long>(sql, new
+        var id = conn.ExecuteScalar<long>(sql, cmd =>
         {
-            envelope.MessageId,
-            envelope.SessionId,
-            envelope.ProjectId,
-            envelope.Tenant,
-            envelope.EventType,
-            Payload = serializedPayload,
-            envelope.UserId,
-            envelope.HarnessType,
-            envelope.Sequence,
+            cmd.AddParameter("MessageId", envelope.MessageId);
+            cmd.AddParameter("SessionId", envelope.SessionId);
+            cmd.AddParameter("ProjectId", envelope.ProjectId);
+            cmd.AddParameter("Tenant", envelope.Tenant);
+            cmd.AddParameter("EventType", envelope.EventType);
+            cmd.AddParameter("Payload", serializedPayload);
+            cmd.AddParameter("UserId", envelope.UserId);
+            cmd.AddParameter("HarnessType", envelope.HarnessType);
+            cmd.AddParameter("Sequence", envelope.Sequence);
         });
         return id; // 0 when INSERT OR IGNORE skipped the row
     }
@@ -134,7 +134,7 @@ internal sealed partial class InProcessEventStore
             WHERE  id = @Id
             """;
         using var conn = _db.CreateConnection();
-        conn.Execute(sql, new { Id = id });
+        conn.ExecuteNonQuery(sql, cmd => { cmd.AddParameter("Id", id); });
     }
 
     [LoggerMessage(Level = LogLevel.Warning, EventId = 1,

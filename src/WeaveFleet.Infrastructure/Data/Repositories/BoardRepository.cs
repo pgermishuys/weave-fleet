@@ -1,5 +1,5 @@
 using System.Data;
-using Dapper;
+using System.Data.Common;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
@@ -16,18 +16,23 @@ public sealed class BoardRepository(
     public async Task<Board?> GetByIdAsync(string id, string userId)
     {
         using var conn = connectionFactory.CreateConnection();
-        return await conn.QueryFirstOrDefaultAsync<Board>(
+        return await conn.QueryFirstOrDefaultAsync(
             "SELECT * FROM boards WHERE id = @Id AND user_id = @UserId",
-            new { Id = id, UserId = userId });
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("UserId", userId);
+            },
+            ReadBoard);
     }
 
     public async Task<IReadOnlyList<Board>> ListByUserAsync(string userId)
     {
         using var conn = connectionFactory.CreateConnection();
-        var results = await conn.QueryAsync<Board>(
+        return await conn.QueryAsync(
             "SELECT * FROM boards WHERE user_id = @UserId ORDER BY created_at ASC, id ASC",
-            new { UserId = userId });
-        return results.AsList();
+            cmd => { cmd.AddParameter("UserId", userId); },
+            ReadBoard);
     }
 
     public async Task InsertAsync(Board board)
@@ -35,18 +40,18 @@ public sealed class BoardRepository(
         var resolvedUserId = ResolveUserId(board.UserId);
 
         using var conn = connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             INSERT INTO boards (id, user_id, name, created_at, updated_at)
             VALUES (@Id, @UserId, @Name, @CreatedAt, @UpdatedAt)
             """,
-            new
+            cmd =>
             {
-                board.Id,
-                UserId = resolvedUserId,
-                board.Name,
-                board.CreatedAt,
-                board.UpdatedAt
+                cmd.AddParameter("Id", board.Id);
+                cmd.AddParameter("UserId", resolvedUserId);
+                cmd.AddParameter("Name", board.Name);
+                cmd.AddParameter("CreatedAt", board.CreatedAt);
+                cmd.AddParameter("UpdatedAt", board.UpdatedAt);
             });
     }
 
@@ -55,35 +60,39 @@ public sealed class BoardRepository(
         var resolvedUserId = ResolveUserId(board.UserId);
 
         using var conn = connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             UPDATE boards
             SET name = @Name,
                 updated_at = @UpdatedAt
             WHERE id = @Id AND user_id = @UserId
             """,
-            new
+            cmd =>
             {
-                board.Id,
-                UserId = resolvedUserId,
-                board.Name,
-                board.UpdatedAt
+                cmd.AddParameter("Id", board.Id);
+                cmd.AddParameter("UserId", resolvedUserId);
+                cmd.AddParameter("Name", board.Name);
+                cmd.AddParameter("UpdatedAt", board.UpdatedAt);
             });
     }
 
     public async Task<bool> DeleteAsync(string id, string userId)
     {
         using var conn = connectionFactory.CreateConnection();
-        var rows = await conn.ExecuteAsync(
+        var rows = await conn.ExecuteNonQueryAsync(
             "DELETE FROM boards WHERE id = @Id AND user_id = @UserId",
-            new { Id = id, UserId = userId });
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("UserId", userId);
+            });
         return rows > 0;
     }
 
     public async Task<IReadOnlyList<BoardSource>> GetSourcesByBoardIdAsync(string boardId, string userId)
     {
         using var conn = connectionFactory.CreateConnection();
-        var results = await conn.QueryAsync<BoardSource>(
+        return await conn.QueryAsync(
             """
             SELECT source.*
             FROM board_sources source
@@ -92,14 +101,18 @@ public sealed class BoardRepository(
               AND board.user_id = @UserId
             ORDER BY source.created_at ASC, source.id ASC
             """,
-            new { BoardId = boardId, UserId = userId });
-        return results.AsList();
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("UserId", userId);
+            },
+            ReadBoardSource);
     }
 
     public async Task InsertSourceAsync(BoardSource source)
     {
         using var conn = connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             INSERT INTO board_sources (id, board_id, provider_type, config, last_sync_at, created_at, updated_at)
             SELECT @Id, @BoardId, @ProviderType, @Config, @LastSyncAt, @CreatedAt, @UpdatedAt
@@ -107,23 +120,23 @@ public sealed class BoardRepository(
             WHERE board.id = @BoardId
               AND board.user_id = @UserId
             """,
-            new
+            cmd =>
             {
-                source.Id,
-                source.BoardId,
-                source.ProviderType,
-                source.Config,
-                source.LastSyncAt,
-                source.CreatedAt,
-                source.UpdatedAt,
-                UserId = userContext.UserId
+                cmd.AddParameter("Id", source.Id);
+                cmd.AddParameter("BoardId", source.BoardId);
+                cmd.AddParameter("ProviderType", source.ProviderType);
+                cmd.AddParameter("Config", source.Config);
+                cmd.AddParameter("LastSyncAt", source.LastSyncAt);
+                cmd.AddParameter("CreatedAt", source.CreatedAt);
+                cmd.AddParameter("UpdatedAt", source.UpdatedAt);
+                cmd.AddParameter("UserId", userContext.UserId);
             });
     }
 
     public async Task UpdateSourceAsync(BoardSource source)
     {
         using var conn = connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             UPDATE board_sources
             SET provider_type = @ProviderType,
@@ -138,22 +151,22 @@ public sealed class BoardRepository(
                   WHERE board.id = @BoardId
                     AND board.user_id = @UserId)
             """,
-            new
+            cmd =>
             {
-                source.Id,
-                source.BoardId,
-                source.ProviderType,
-                source.Config,
-                source.LastSyncAt,
-                source.UpdatedAt,
-                UserId = userContext.UserId
+                cmd.AddParameter("Id", source.Id);
+                cmd.AddParameter("BoardId", source.BoardId);
+                cmd.AddParameter("ProviderType", source.ProviderType);
+                cmd.AddParameter("Config", source.Config);
+                cmd.AddParameter("LastSyncAt", source.LastSyncAt);
+                cmd.AddParameter("UpdatedAt", source.UpdatedAt);
+                cmd.AddParameter("UserId", userContext.UserId);
             });
     }
 
     public async Task<bool> DeleteSourceAsync(string boardId, string sourceId, string userId)
     {
         using var conn = connectionFactory.CreateConnection();
-        var rows = await conn.ExecuteAsync(
+        var rows = await conn.ExecuteNonQueryAsync(
             """
             DELETE FROM board_sources
             WHERE id = @SourceId
@@ -164,7 +177,12 @@ public sealed class BoardRepository(
                   WHERE board.id = @BoardId
                     AND board.user_id = @UserId)
             """,
-            new { BoardId = boardId, SourceId = sourceId, UserId = userId });
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("SourceId", sourceId);
+                cmd.AddParameter("UserId", userId);
+            });
         return rows > 0;
     }
 
@@ -177,7 +195,7 @@ public sealed class BoardRepository(
     public async Task<IReadOnlyList<BoardLane>> ListLanesAsync(string boardId, string userId)
     {
         using var conn = connectionFactory.CreateConnection();
-        var results = await conn.QueryAsync<BoardLane>(
+        return await conn.QueryAsync(
             """
             SELECT lane.*
             FROM board_lanes lane
@@ -186,8 +204,12 @@ public sealed class BoardRepository(
               AND board.user_id = @UserId
             ORDER BY lane.position ASC, lane.created_at ASC, lane.id ASC
             """,
-            new { BoardId = boardId, UserId = userId });
-        return results.AsList();
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("UserId", userId);
+            },
+            ReadBoardLane);
     }
 
     public async Task InsertLaneAsync(BoardLane lane)
@@ -202,7 +224,7 @@ public sealed class BoardRepository(
             ? lane.Position
             : await GetNextLanePositionAsync(conn, tx, lane.BoardId, userContext.UserId);
 
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             INSERT INTO board_lanes (id, board_id, name, position, is_inbox, created_at, updated_at)
             SELECT @Id, @BoardId, @Name, @Position, @IsInbox, @CreatedAt, @UpdatedAt
@@ -210,16 +232,16 @@ public sealed class BoardRepository(
             WHERE board.id = @BoardId
               AND board.user_id = @UserId
             """,
-            new
+            cmd =>
             {
-                lane.Id,
-                lane.BoardId,
-                lane.Name,
-                Position = position,
-                lane.IsInbox,
-                lane.CreatedAt,
-                lane.UpdatedAt,
-                UserId = userContext.UserId
+                cmd.AddParameter("Id", lane.Id);
+                cmd.AddParameter("BoardId", lane.BoardId);
+                cmd.AddParameter("Name", lane.Name);
+                cmd.AddParameter("Position", position);
+                cmd.AddParameter("IsInbox", lane.IsInbox);
+                cmd.AddParameter("CreatedAt", lane.CreatedAt);
+                cmd.AddParameter("UpdatedAt", lane.UpdatedAt);
+                cmd.AddParameter("UserId", userContext.UserId);
             },
             tx);
 
@@ -234,7 +256,7 @@ public sealed class BoardRepository(
         if (lane.IsInbox)
             await ClearInboxLaneAsync(conn, tx, lane.BoardId, lane.Id, userContext.UserId);
 
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             UPDATE board_lanes
             SET name = @Name,
@@ -249,15 +271,15 @@ public sealed class BoardRepository(
                   WHERE board.id = @BoardId
                     AND board.user_id = @UserId)
             """,
-            new
+            cmd =>
             {
-                lane.Id,
-                lane.BoardId,
-                lane.Name,
-                lane.Position,
-                lane.IsInbox,
-                lane.UpdatedAt,
-                UserId = userContext.UserId
+                cmd.AddParameter("Id", lane.Id);
+                cmd.AddParameter("BoardId", lane.BoardId);
+                cmd.AddParameter("Name", lane.Name);
+                cmd.AddParameter("Position", lane.Position);
+                cmd.AddParameter("IsInbox", lane.IsInbox);
+                cmd.AddParameter("UpdatedAt", lane.UpdatedAt);
+                cmd.AddParameter("UserId", userContext.UserId);
             },
             tx);
 
@@ -278,13 +300,18 @@ public sealed class BoardRepository(
               AND card.lane_id = @LaneId
               AND board.user_id = @UserId
             """,
-            new { BoardId = boardId, LaneId = laneId, UserId = userId },
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("LaneId", laneId);
+                cmd.AddParameter("UserId", userId);
+            },
             tx);
 
         if (cardCount > 0)
             return false;
 
-        var rows = await conn.ExecuteAsync(
+        var rows = await conn.ExecuteNonQueryAsync(
             """
             DELETE FROM board_lanes
             WHERE id = @LaneId
@@ -295,7 +322,12 @@ public sealed class BoardRepository(
                   WHERE board.id = @BoardId
                     AND board.user_id = @UserId)
             """,
-            new { BoardId = boardId, LaneId = laneId, UserId = userId },
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("LaneId", laneId);
+                cmd.AddParameter("UserId", userId);
+            },
             tx);
 
         if (rows == 0)
@@ -338,7 +370,7 @@ public sealed class BoardRepository(
 
         await ClearInboxLaneAsync(conn, tx, boardId, laneId, userId);
 
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             UPDATE board_lanes
             SET is_inbox = 1,
@@ -351,7 +383,12 @@ public sealed class BoardRepository(
                   WHERE board.id = @BoardId
                     AND board.user_id = @UserId)
             """,
-            new { BoardId = boardId, LaneId = laneId, UserId = userId },
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("LaneId", laneId);
+                cmd.AddParameter("UserId", userId);
+            },
             tx);
 
         tx.Commit();
@@ -367,7 +404,7 @@ public sealed class BoardRepository(
     public async Task<IReadOnlyList<BoardCard>> ListCardsAsync(string boardId, string userId)
     {
         using var conn = connectionFactory.CreateConnection();
-        var results = await conn.QueryAsync<BoardCard>(
+        return await conn.QueryAsync(
             """
             SELECT card.*
             FROM board_cards card
@@ -381,8 +418,12 @@ public sealed class BoardRepository(
                      card.created_at ASC,
                      card.id ASC
             """,
-            new { BoardId = boardId, UserId = userId });
-        return results.AsList();
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("UserId", userId);
+            },
+            ReadBoardCard);
     }
 
     public async Task InsertCardAsync(BoardCard card)
@@ -392,7 +433,7 @@ public sealed class BoardRepository(
             ? card.Position
             : await GetNextCardPositionAsync(conn, null, card.BoardId, card.LaneId, userContext.UserId);
 
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             INSERT INTO board_cards (id, board_id, lane_id, title, source_type, source_key, metadata, position, archived_at, created_at, updated_at)
             SELECT @Id, @BoardId, @LaneId, @Title, @SourceType, @SourceKey, @Metadata, @Position, @ArchivedAt, @CreatedAt, @UpdatedAt
@@ -405,27 +446,27 @@ public sealed class BoardRepository(
                   WHERE lane.id = @LaneId
                     AND lane.board_id = @BoardId)
             """,
-            new
+            cmd =>
             {
-                card.Id,
-                card.BoardId,
-                card.LaneId,
-                card.Title,
-                card.SourceType,
-                card.SourceKey,
-                card.Metadata,
-                Position = position,
-                card.ArchivedAt,
-                card.CreatedAt,
-                card.UpdatedAt,
-                UserId = userContext.UserId
+                cmd.AddParameter("Id", card.Id);
+                cmd.AddParameter("BoardId", card.BoardId);
+                cmd.AddParameter("LaneId", card.LaneId);
+                cmd.AddParameter("Title", card.Title);
+                cmd.AddParameter("SourceType", card.SourceType);
+                cmd.AddParameter("SourceKey", card.SourceKey);
+                cmd.AddParameter("Metadata", card.Metadata);
+                cmd.AddParameter("Position", position);
+                cmd.AddParameter("ArchivedAt", card.ArchivedAt);
+                cmd.AddParameter("CreatedAt", card.CreatedAt);
+                cmd.AddParameter("UpdatedAt", card.UpdatedAt);
+                cmd.AddParameter("UserId", userContext.UserId);
             });
     }
 
     public async Task UpdateCardAsync(BoardCard card)
     {
         using var conn = connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             UPDATE board_cards
             SET lane_id = @LaneId,
@@ -449,19 +490,19 @@ public sealed class BoardRepository(
                   WHERE lane.id = @LaneId
                     AND lane.board_id = @BoardId)
             """,
-            new
+            cmd =>
             {
-                card.Id,
-                card.BoardId,
-                card.LaneId,
-                card.Title,
-                card.SourceType,
-                card.SourceKey,
-                card.Metadata,
-                card.Position,
-                card.ArchivedAt,
-                card.UpdatedAt,
-                UserId = userContext.UserId
+                cmd.AddParameter("Id", card.Id);
+                cmd.AddParameter("BoardId", card.BoardId);
+                cmd.AddParameter("LaneId", card.LaneId);
+                cmd.AddParameter("Title", card.Title);
+                cmd.AddParameter("SourceType", card.SourceType);
+                cmd.AddParameter("SourceKey", card.SourceKey);
+                cmd.AddParameter("Metadata", card.Metadata);
+                cmd.AddParameter("Position", card.Position);
+                cmd.AddParameter("ArchivedAt", card.ArchivedAt);
+                cmd.AddParameter("UpdatedAt", card.UpdatedAt);
+                cmd.AddParameter("UserId", userContext.UserId);
             });
     }
 
@@ -474,7 +515,7 @@ public sealed class BoardRepository(
         if (card is null)
             return false;
 
-        var rows = await conn.ExecuteAsync(
+        var rows = await conn.ExecuteNonQueryAsync(
             """
             DELETE FROM board_cards
             WHERE id = @CardId
@@ -485,7 +526,12 @@ public sealed class BoardRepository(
                   WHERE board.id = @BoardId
                     AND board.user_id = @UserId)
             """,
-            new { BoardId = boardId, CardId = cardId, UserId = userId },
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("CardId", cardId);
+                cmd.AddParameter("UserId", userId);
+            },
             tx);
 
         if (rows == 0)
@@ -510,7 +556,7 @@ public sealed class BoardRepository(
         if (card is null)
             return null;
 
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             UPDATE board_cards
             SET archived_at = @ArchivedAt,
@@ -523,7 +569,13 @@ public sealed class BoardRepository(
                   WHERE board.id = @BoardId
                     AND board.user_id = @UserId)
             """,
-            new { BoardId = boardId, CardId = cardId, ArchivedAt = archivedAt, UserId = userId },
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("CardId", cardId);
+                cmd.AddParameter("ArchivedAt", archivedAt);
+                cmd.AddParameter("UserId", userId);
+            },
             tx);
 
         await RebalanceCardPositionsAsync(conn, tx, boardId, card.LaneId, userId);
@@ -550,7 +602,7 @@ public sealed class BoardRepository(
         var targetCardIds = await GetOrderedActiveCardIdsAsync(conn, tx, boardId, laneId, userId, cardId);
         var orderedTargetCardIds = InsertAtPosition(targetCardIds, cardId, position);
 
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             UPDATE board_cards
             SET lane_id = @LaneId,
@@ -563,7 +615,13 @@ public sealed class BoardRepository(
                   WHERE board.id = @BoardId
                     AND board.user_id = @UserId)
             """,
-            new { BoardId = boardId, CardId = cardId, LaneId = laneId, UserId = userId },
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("CardId", cardId);
+                cmd.AddParameter("LaneId", laneId);
+                cmd.AddParameter("UserId", userId);
+            },
             tx);
 
         if (!string.Equals(sourceLaneId, laneId, StringComparison.Ordinal))
@@ -588,7 +646,7 @@ public sealed class BoardRepository(
         var laneCardIds = await GetOrderedActiveCardIdsAsync(conn, tx, boardId, card.LaneId, userId, cardId);
         var orderedCardIds = InsertAtPosition(laneCardIds, cardId, position);
 
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             UPDATE board_cards
             SET updated_at = datetime('now')
@@ -600,7 +658,12 @@ public sealed class BoardRepository(
                   WHERE board.id = @BoardId
                     AND board.user_id = @UserId)
             """,
-            new { BoardId = boardId, CardId = cardId, UserId = userId },
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("CardId", cardId);
+                cmd.AddParameter("UserId", userId);
+            },
             tx);
 
         await RebalanceCardPositionsAsync(conn, tx, boardId, card.LaneId, userId, orderedCardIds);
@@ -616,7 +679,7 @@ public sealed class BoardRepository(
         string boardId,
         string laneId,
         string userId)
-        => await connection.QueryFirstOrDefaultAsync<BoardLane>(
+        => await connection.QueryFirstOrDefaultAsync(
             """
             SELECT lane.*
             FROM board_lanes lane
@@ -625,7 +688,13 @@ public sealed class BoardRepository(
               AND lane.board_id = @BoardId
               AND board.user_id = @UserId
             """,
-            new { BoardId = boardId, LaneId = laneId, UserId = userId },
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("LaneId", laneId);
+                cmd.AddParameter("UserId", userId);
+            },
+            ReadBoardLane,
             transaction);
 
     private static async Task<BoardCard?> GetCardByIdAsync(
@@ -634,7 +703,7 @@ public sealed class BoardRepository(
         string boardId,
         string cardId,
         string userId)
-        => await connection.QueryFirstOrDefaultAsync<BoardCard>(
+        => await connection.QueryFirstOrDefaultAsync(
             """
             SELECT card.*
             FROM board_cards card
@@ -643,7 +712,13 @@ public sealed class BoardRepository(
               AND card.board_id = @BoardId
               AND board.user_id = @UserId
             """,
-            new { BoardId = boardId, CardId = cardId, UserId = userId },
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("CardId", cardId);
+                cmd.AddParameter("UserId", userId);
+            },
+            ReadBoardCard,
             transaction);
 
     private static async Task<int> GetNextLanePositionAsync(
@@ -660,7 +735,11 @@ public sealed class BoardRepository(
             WHERE lane.board_id = @BoardId
               AND board.user_id = @UserId
             """,
-            new { BoardId = boardId, UserId = userId },
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("UserId", userId);
+            },
             transaction);
 
         return checked((int)((currentMax ?? 0) + PositionGap));
@@ -683,7 +762,12 @@ public sealed class BoardRepository(
               AND card.archived_at IS NULL
               AND board.user_id = @UserId
             """,
-            new { BoardId = boardId, LaneId = laneId, UserId = userId },
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("LaneId", laneId);
+                cmd.AddParameter("UserId", userId);
+            },
             transaction);
 
         return checked((int)((currentMax ?? 0) + PositionGap));
@@ -696,7 +780,7 @@ public sealed class BoardRepository(
         string? excludedLaneId,
         string userId)
     {
-        await connection.ExecuteAsync(
+        await connection.ExecuteNonQueryAsync(
             """
             UPDATE board_lanes
             SET is_inbox = 0,
@@ -709,7 +793,12 @@ public sealed class BoardRepository(
                   WHERE board.id = @BoardId
                     AND board.user_id = @UserId)
             """,
-            new { BoardId = boardId, ExcludedLaneId = excludedLaneId, UserId = userId },
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("ExcludedLaneId", excludedLaneId);
+                cmd.AddParameter("UserId", userId);
+            },
             transaction);
     }
 
@@ -719,7 +808,7 @@ public sealed class BoardRepository(
         string boardId,
         string userId)
     {
-        var laneIds = await connection.QueryAsync<string>(
+        return await connection.QueryAsync(
             """
             SELECT lane.id
             FROM board_lanes lane
@@ -728,9 +817,13 @@ public sealed class BoardRepository(
               AND board.user_id = @UserId
             ORDER BY lane.position ASC, lane.created_at ASC, lane.id ASC
             """,
-            new { BoardId = boardId, UserId = userId },
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("UserId", userId);
+            },
+            r => r.GetString(r.GetOrdinal("id")),
             transaction);
-        return laneIds.AsList();
     }
 
     private static async Task<IReadOnlyList<string>> GetOrderedActiveCardIdsAsync(
@@ -741,7 +834,7 @@ public sealed class BoardRepository(
         string userId,
         string? excludedCardId = null)
     {
-        var cardIds = await connection.QueryAsync<string>(
+        return await connection.QueryAsync(
             """
             SELECT card.id
             FROM board_cards card
@@ -753,9 +846,15 @@ public sealed class BoardRepository(
               AND board.user_id = @UserId
             ORDER BY card.position ASC, card.created_at ASC, card.id ASC
             """,
-            new { BoardId = boardId, LaneId = laneId, ExcludedCardId = excludedCardId, UserId = userId },
+            cmd =>
+            {
+                cmd.AddParameter("BoardId", boardId);
+                cmd.AddParameter("LaneId", laneId);
+                cmd.AddParameter("ExcludedCardId", excludedCardId);
+                cmd.AddParameter("UserId", userId);
+            },
+            r => r.GetString(r.GetOrdinal("id")),
             transaction);
-        return cardIds.AsList();
     }
 
     private static async Task RebalanceLanePositionsAsync(
@@ -769,7 +868,7 @@ public sealed class BoardRepository(
 
         for (var index = 0; index < laneIds.Count; index++)
         {
-            await connection.ExecuteAsync(
+            await connection.ExecuteNonQueryAsync(
                 """
                 UPDATE board_lanes
                 SET position = @Position,
@@ -782,12 +881,12 @@ public sealed class BoardRepository(
                       WHERE board.id = @BoardId
                         AND board.user_id = @UserId)
                 """,
-                new
+                cmd =>
                 {
-                    BoardId = boardId,
-                    LaneId = laneIds[index],
-                    Position = checked((index + 1) * PositionGap),
-                    UserId = userId
+                    cmd.AddParameter("BoardId", boardId);
+                    cmd.AddParameter("LaneId", laneIds[index]);
+                    cmd.AddParameter("Position", checked((index + 1) * PositionGap));
+                    cmd.AddParameter("UserId", userId);
                 },
                 transaction);
         }
@@ -805,7 +904,7 @@ public sealed class BoardRepository(
 
         for (var index = 0; index < cardIds.Count; index++)
         {
-            await connection.ExecuteAsync(
+            await connection.ExecuteNonQueryAsync(
                 """
                 UPDATE board_cards
                 SET position = @Position,
@@ -820,13 +919,13 @@ public sealed class BoardRepository(
                       WHERE board.id = @BoardId
                         AND board.user_id = @UserId)
                 """,
-                new
+                cmd =>
                 {
-                    BoardId = boardId,
-                    LaneId = laneId,
-                    CardId = cardIds[index],
-                    Position = checked((index + 1) * PositionGap),
-                    UserId = userId
+                    cmd.AddParameter("BoardId", boardId);
+                    cmd.AddParameter("LaneId", laneId);
+                    cmd.AddParameter("CardId", cardIds[index]);
+                    cmd.AddParameter("Position", checked((index + 1) * PositionGap));
+                    cmd.AddParameter("UserId", userId);
                 },
                 transaction);
         }
@@ -864,4 +963,50 @@ public sealed class BoardRepository(
 
     private string ResolveUserId(string? userId)
         => string.IsNullOrWhiteSpace(userId) ? userContext.UserId : userId;
+
+    private static Board ReadBoard(DbDataReader r) => new()
+    {
+        Id = r.GetString(r.GetOrdinal("id")),
+        UserId = r.GetString(r.GetOrdinal("user_id")),
+        Name = r.GetString(r.GetOrdinal("name")),
+        CreatedAt = r.GetString(r.GetOrdinal("created_at")),
+        UpdatedAt = r.GetString(r.GetOrdinal("updated_at")),
+    };
+
+    private static BoardLane ReadBoardLane(DbDataReader r) => new()
+    {
+        Id = r.GetString(r.GetOrdinal("id")),
+        BoardId = r.GetString(r.GetOrdinal("board_id")),
+        Name = r.GetString(r.GetOrdinal("name")),
+        Position = (int)r.GetInt64(r.GetOrdinal("position")),
+        IsInbox = r.GetInt64(r.GetOrdinal("is_inbox")) != 0,
+        CreatedAt = r.GetString(r.GetOrdinal("created_at")),
+        UpdatedAt = r.GetString(r.GetOrdinal("updated_at")),
+    };
+
+    private static BoardCard ReadBoardCard(DbDataReader r) => new()
+    {
+        Id = r.GetString(r.GetOrdinal("id")),
+        BoardId = r.GetString(r.GetOrdinal("board_id")),
+        LaneId = r.GetString(r.GetOrdinal("lane_id")),
+        Title = r.GetString(r.GetOrdinal("title")),
+        SourceType = r.GetNullableString(r.GetOrdinal("source_type")),
+        SourceKey = r.GetNullableString(r.GetOrdinal("source_key")),
+        Metadata = r.GetNullableString(r.GetOrdinal("metadata")),
+        Position = (int)r.GetInt64(r.GetOrdinal("position")),
+        ArchivedAt = r.GetNullableString(r.GetOrdinal("archived_at")),
+        CreatedAt = r.GetString(r.GetOrdinal("created_at")),
+        UpdatedAt = r.GetString(r.GetOrdinal("updated_at")),
+    };
+
+    private static BoardSource ReadBoardSource(DbDataReader r) => new()
+    {
+        Id = r.GetString(r.GetOrdinal("id")),
+        BoardId = r.GetString(r.GetOrdinal("board_id")),
+        ProviderType = r.GetString(r.GetOrdinal("provider_type")),
+        Config = r.GetString(r.GetOrdinal("config")),
+        LastSyncAt = r.GetNullableString(r.GetOrdinal("last_sync_at")),
+        CreatedAt = r.GetString(r.GetOrdinal("created_at")),
+        UpdatedAt = r.GetString(r.GetOrdinal("updated_at")),
+    };
 }

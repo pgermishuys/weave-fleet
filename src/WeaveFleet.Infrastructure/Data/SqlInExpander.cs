@@ -1,22 +1,21 @@
+using System.Data.Common;
 using System.Text;
-using Dapper;
 
 namespace WeaveFleet.Infrastructure.Data;
 
 /// <summary>
-/// Expands list parameters into individual numbered parameters for SQLite compatibility
-/// with Dapper.AOT, which does not support Dapper's runtime IN @List expansion.
+/// Expands list parameters into individual numbered parameters for SQLite compatibility.
 /// </summary>
 internal static class SqlInExpander
 {
     /// <summary>
-    /// Appends an IN clause with expanded parameters to the SQL builder and adds them to <paramref name="parameters"/>.
+    /// Appends an IN clause with expanded parameters to the SQL builder and adds them to <paramref name="cmd"/>.
     /// For example, given prefix "Status" and values ["active", "stopped"], appends "IN (@Status0, @Status1)"
     /// and adds parameters @Status0 = "active", @Status1 = "stopped".
     /// </summary>
     public static void AppendInClause<T>(
         StringBuilder sql,
-        DynamicParameters parameters,
+        DbCommand cmd,
         string prefix,
         IReadOnlyList<T> values)
     {
@@ -27,7 +26,7 @@ internal static class SqlInExpander
                 sql.Append(", ");
             var paramName = $"@{prefix}{i}";
             sql.Append(paramName);
-            parameters.Add($"{prefix}{i}", values[i]);
+            cmd.AddParameter($"{prefix}{i}", values[i]);
         }
         sql.Append(')');
     }

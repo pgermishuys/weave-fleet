@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using Dapper;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
@@ -43,9 +42,6 @@ public static class DependencyInjection
         this IServiceCollection services,
         FleetOptions options)
     {
-        // Enable snake_case → PascalCase column mapping for Dapper globally
-        DefaultTypeMap.MatchNamesWithUnderscores = true;
-
         // Register FleetOptions so singleton services (e.g. OpenCodeHarness) can inject it.
         services.AddSingleton(options);
 
