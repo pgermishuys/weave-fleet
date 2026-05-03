@@ -1,3 +1,4 @@
+using WeaveFleet.Api;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 
@@ -19,24 +20,16 @@ public static class InstanceEndpoints
         {
             var instance = tracker.Get(id);
             if (instance is null)
-                return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
+                return Results.NotFound(new ErrorResponse($"Instance '{id}' not found or not running."));
 
             if (!await IsOwnerAsync(instanceService, userContext, id))
-                return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
+                return Results.NotFound(new ErrorResponse($"Instance '{id}' not found or not running."));
 
             var providers = await instance.GetProvidersAsync(ct);
-            // Return AvailableProvider[] — the frontend hook expects a bare array
-            // Model IDs are returned raw (no prefix rewriting); the frontend carries providerId separately.
-            var result = providers.Select(p => new
-            {
-                id = p.Id,
-                name = p.Name ?? p.Id,
-                models = p.Models.Select(m => new
-                {
-                    id = m.Id,
-                    name = m.Name ?? m.Id,
-                }),
-            });
+            var result = providers.Select(p => new InstanceProviderItem(
+                p.Id,
+                p.Name ?? p.Id,
+                p.Models.Select(m => new InstanceModelItem(m.Id, m.Name ?? m.Id)).ToList())).ToList();
             return Results.Ok(result);
         })
         .WithName("GetInstanceModels");
@@ -46,18 +39,14 @@ public static class InstanceEndpoints
         {
             var instance = tracker.Get(id);
             if (instance is null)
-                return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
+                return Results.NotFound(new ErrorResponse($"Instance '{id}' not found or not running."));
 
             if (!await IsOwnerAsync(instanceService, userContext, id))
-                return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
+                return Results.NotFound(new ErrorResponse($"Instance '{id}' not found or not running."));
 
             var commands = await instance.GetCommandsAsync(ct);
-            var result = commands.Select(c => new
-            {
-                name = c.Name,
-                description = c.Description,
-            });
-            return Results.Ok(new { instanceId = id, commands = result });
+            var result = commands.Select(c => new InstanceCommandItem(c.Name, c.Description)).ToList();
+            return Results.Ok(new InstanceCommandsResponse(id, result));
         })
         .WithName("GetInstanceCommands");
 
@@ -66,14 +55,14 @@ public static class InstanceEndpoints
         {
             var instance = tracker.Get(id);
             if (instance is null)
-                return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
+                return Results.NotFound(new ErrorResponse($"Instance '{id}' not found or not running."));
 
             if (!await IsOwnerAsync(instanceService, userContext, id))
-                return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
+                return Results.NotFound(new ErrorResponse($"Instance '{id}' not found or not running."));
 
             var providers = await instance.GetProvidersAsync(ct);
             if (!ModelRef.TryResolve(req.Model, providers, out var resolvedModel, out var modelError))
-                return Results.BadRequest(new { error = modelError });
+                return Results.BadRequest(new ErrorResponse(modelError!));
 
             var options = new CommandOptions
             {
@@ -86,7 +75,7 @@ public static class InstanceEndpoints
 
             var validationError = options.Validate();
             if (validationError is not null)
-                return Results.BadRequest(new { error = validationError });
+                return Results.BadRequest(new ErrorResponse(validationError));
 
             await instance.SendCommandAsync(options, ct);
             return Results.Accepted();
@@ -98,26 +87,21 @@ public static class InstanceEndpoints
         {
             var instance = tracker.Get(id);
             if (instance is null)
-                return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
+                return Results.NotFound(new ErrorResponse($"Instance '{id}' not found or not running."));
 
             if (!await IsOwnerAsync(instanceService, userContext, id))
-                return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
+                return Results.NotFound(new ErrorResponse($"Instance '{id}' not found or not running."));
 
             var agents = await instance.GetAgentsAsync(ct);
-            // Return { instanceId, agents: AutocompleteAgent[] }
-            var result = agents.Select(a => new
-            {
-                name = a.Name,
-                description = a.Description,
-                mode = a.Mode ?? "agent",
-                hidden = a.Hidden,
-                model = a.ModelProviderId is not null ? new
-                {
-                    providerID = a.ModelProviderId,
-                    modelID = a.ModelId ?? string.Empty,
-                } : null,
-            });
-            return Results.Ok(new { instanceId = id, agents = result });
+            var result = agents.Select(a => new InstanceAgentItem(
+                a.Name,
+                a.Description,
+                a.Mode ?? "agent",
+                a.Hidden,
+                a.ModelProviderId is not null
+                    ? new InstanceAgentModelRef(a.ModelProviderId, a.ModelId ?? string.Empty)
+                    : null)).ToList();
+            return Results.Ok(new InstanceAgentsResponse(id, result));
         })
         .WithName("GetInstanceAgents");
 
@@ -133,18 +117,18 @@ public static class InstanceEndpoints
         {
             var instance = tracker.Get(id);
             if (instance is null)
-                return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
+                return Results.NotFound(new ErrorResponse($"Instance '{id}' not found or not running."));
 
             if (!await IsOwnerAsync(instanceService, userContext, id))
-                return Results.NotFound(new { error = $"Instance '{id}' not found or not running." });
+                return Results.NotFound(new ErrorResponse($"Instance '{id}' not found or not running."));
 
             var instanceResult = await instanceService.GetInstanceAsync(id);
             if (instanceResult.IsFailure)
-                return Results.NotFound(new { error = $"Instance '{id}' not found in database." });
+                return Results.NotFound(new ErrorResponse($"Instance '{id}' not found in database."));
 
             var dbInstance = instanceResult.Value;
             if (string.IsNullOrWhiteSpace(q) || !Directory.Exists(dbInstance.Directory))
-                return Results.Ok(new { instanceId = id, files = Array.Empty<string>() });
+                return Results.Ok(new InstanceFilesResponse(id, Array.Empty<string>()));
 
             var pattern = $"*{q}*";
             var files = Directory
@@ -153,7 +137,7 @@ public static class InstanceEndpoints
                 .Select(f => f[dbInstance.Directory.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
                 .ToArray();
 
-            return Results.Ok(new { instanceId = id, files });
+            return Results.Ok(new InstanceFilesResponse(id, files));
         })
         .WithName("FindInstanceFiles");
 

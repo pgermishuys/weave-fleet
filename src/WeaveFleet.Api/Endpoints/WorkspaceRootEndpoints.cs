@@ -1,3 +1,4 @@
+using WeaveFleet.Api;
 using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -18,15 +19,13 @@ public static class WorkspaceRootEndpoints
             var items = roots.Select(r =>
             {
                 var isEnv = r.Id.StartsWith("env:", StringComparison.Ordinal);
-                return new
-                {
-                    id = isEnv ? (string?)null : r.Id,
-                    path = r.Path,
-                    source = isEnv ? "env" : "user",
-                    exists = Directory.Exists(r.Path)
-                };
-            });
-            return Results.Ok(new { roots = items });
+                return new WorkspaceRootItem(
+                    Id: isEnv ? null : r.Id,
+                    Path: r.Path,
+                    Source: isEnv ? "env" : "user",
+                    Exists: Directory.Exists(r.Path));
+            }).ToList();
+            return Results.Ok(new WorkspaceRootsResponse(items));
         })
         .WithName("GetWorkspaceRoots");
 
@@ -34,7 +33,7 @@ public static class WorkspaceRootEndpoints
         {
             var result = await svc.AddRootAsync(req.Path);
             return result.Match(
-                root => Results.Ok(new { id = root.Id, path = root.Path }),
+                root => Results.Ok(new WorkspaceRootAddedResponse(root.Id, root.Path)),
                 err => err.ToApiResult());
         })
         .WithName("AddWorkspaceRoot");
@@ -57,9 +56,9 @@ file static class WorkspaceRootFleetErrorExtensions
     public static IResult ToApiResult(this WeaveFleet.Domain.Common.FleetError error) =>
         error.Code switch
         {
-            var c when c.EndsWith(".NotFound", StringComparison.Ordinal) => Results.NotFound(new { error = error.Description }),
-            "General.Conflict" => Results.Conflict(new { error = error.Description }),
-            var c when c.StartsWith("Validation.", StringComparison.Ordinal) => Results.BadRequest(new { error = error.Description }),
+            var c when c.EndsWith(".NotFound", StringComparison.Ordinal) => Results.NotFound(new ErrorResponse(error.Description)),
+            "General.Conflict" => Results.Conflict(new ErrorResponse(error.Description)),
+            var c when c.StartsWith("Validation.", StringComparison.Ordinal) => Results.BadRequest(new ErrorResponse(error.Description)),
             _ => Results.Problem(error.Description)
         };
 }

@@ -27,7 +27,7 @@ public static class SessionEventEndpoints
         {
             var session = await sessionRepo.GetByIdAsync(id);
             if (session is null)
-                return Results.NotFound(new { error = $"Session {id} not found." });
+                return Results.NotFound(new ErrorResponse($"Session {id} not found."));
 
             context.Response.Headers.ContentType = "text/event-stream";
             context.Response.Headers.CacheControl = "no-cache";

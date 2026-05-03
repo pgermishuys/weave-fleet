@@ -1,3 +1,4 @@
+using WeaveFleet.Api;
 using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -27,9 +28,9 @@ public static class CredentialEndpoints
                 c.DisplayHint,
                 c.Metadata,
                 c.CreatedAt,
-                c.UpdatedAt)));
+                c.UpdatedAt)).ToList());
         })
-        .Produces<IEnumerable<CredentialResponse>>(StatusCodes.Status200OK)
+        .Produces<IReadOnlyList<CredentialResponse>>(StatusCodes.Status200OK)
         .WithName("ListCredentials");
 
         // PUT /api/credentials — store a new credential (create or update by label)
@@ -38,13 +39,13 @@ public static class CredentialEndpoints
             ICredentialStore credentialStore) =>
         {
             if (string.IsNullOrWhiteSpace(request.Label))
-                return Results.BadRequest(new { error = "Label is required." });
+                return Results.BadRequest(new ErrorResponse("Label is required."));
             if (string.IsNullOrWhiteSpace(request.Namespace))
-                return Results.BadRequest(new { error = "Provider is required." });
+                return Results.BadRequest(new ErrorResponse("Provider is required."));
             if (string.IsNullOrWhiteSpace(request.Kind))
-                return Results.BadRequest(new { error = "Type is required." });
+                return Results.BadRequest(new ErrorResponse("Type is required."));
             if (string.IsNullOrWhiteSpace(request.Value))
-                return Results.BadRequest(new { error = "API key value is required." });
+                return Results.BadRequest(new ErrorResponse("API key value is required."));
 
             await credentialStore.StoreCredentialAsync(
                 request.Label,
@@ -70,10 +71,10 @@ public static class CredentialEndpoints
             var existing = credentials.FirstOrDefault(c => c.Id == id);
 
             if (existing is null)
-                return Results.NotFound(new { error = $"Credential '{id}' not found." });
+                return Results.NotFound(new ErrorResponse($"Credential '{id}' not found."));
 
             if (string.IsNullOrWhiteSpace(request.Value))
-                return Results.BadRequest(new { error = "API key value is required." });
+                return Results.BadRequest(new ErrorResponse("API key value is required."));
 
             await credentialStore.StoreCredentialAsync(
                 existing.Label,

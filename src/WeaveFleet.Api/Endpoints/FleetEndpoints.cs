@@ -1,3 +1,4 @@
+using WeaveFleet.Api;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
@@ -30,18 +31,14 @@ public static class FleetEndpoints
         .WithName("GetFleetSummary");
 
         // GET /api/version — assembly version + embedded source revision
-        group.MapGet("/version", () => Results.Ok(new
-        {
-            version = FleetInstrumentation.ServiceVersion,
-            commit = FleetInstrumentation.ServiceCommit
-        }))
+        group.MapGet("/version", () => Results.Ok(new VersionResponse(
+            FleetInstrumentation.ServiceVersion,
+            FleetInstrumentation.ServiceCommit)))
         .WithName("GetVersion");
 
         // GET /api/profile — active profile name (from env or default)
-        group.MapGet("/profile", () => Results.Ok(new
-        {
-            profile = Environment.GetEnvironmentVariable("WEAVE_PROFILE") ?? "default"
-        }))
+        group.MapGet("/profile", () => Results.Ok(new ProfileResponse(
+            Environment.GetEnvironmentVariable("WEAVE_PROFILE") ?? "default")))
         .WithName("GetProfile");
 
         // GET /api/repositories — scanned repos from workspace roots
@@ -52,16 +49,12 @@ public static class FleetEndpoints
         {
             var repos = await repoService.ScanRepositoriesAsync(ct);
             var allowedRoots = await workspaceRootService.GetAllowedRootsAsync();
-            return Results.Ok(new
-            {
-                repositories = repos.Select(r => new
-                {
-                    path = r.Path,
-                    name = r.Name,
-                    parentRoot = FindParentRoot(r.Path, allowedRoots)
-                }),
-                scannedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-            });
+            return Results.Ok(new RepositoriesListResponse(
+                repos.Select(r => new RepositoryListItem(
+                    r.Path,
+                    r.Name,
+                    FindParentRoot(r.Path, allowedRoots))).ToList(),
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
         })
         .WithName("GetRepositories");
 
@@ -73,36 +66,23 @@ public static class FleetEndpoints
         {
             var resolvedPath = await repoService.ResolveRepositoryPathAsync(path, ct);
             if (resolvedPath.IsFailure)
-                return Results.BadRequest(new { error = resolvedPath.Error.Description });
+                return Results.BadRequest(new ErrorResponse(resolvedPath.Error.Description));
 
             var info = await repoService.GetRepositoryInfoAsync(resolvedPath.Value, ct);
             if (info is null)
-                return Results.NotFound(new { error = "Not a git repository." });
+                return Results.NotFound(new ErrorResponse("Not a git repository."));
 
-            return Results.Ok(new
-            {
-                repository = new
-                {
-                    name = info.Name,
-                    path = info.Path,
-                    branch = string.IsNullOrWhiteSpace(info.CurrentBranch) ? null : info.CurrentBranch,
-                    lastCommit = string.IsNullOrWhiteSpace(info.LastCommitMessage)
+            return Results.Ok(new RepositoryInfoResponse(
+                new RepositoryInfoDto(
+                    info.Name,
+                    info.Path,
+                    string.IsNullOrWhiteSpace(info.CurrentBranch) ? null : info.CurrentBranch,
+                    string.IsNullOrWhiteSpace(info.LastCommitMessage)
                         ? null
-                        : new
-                        {
-                            hash = string.Empty,
-                            message = info.LastCommitMessage,
-                            author = string.Empty,
-                            date = string.Empty
-                        },
-                    remotes = string.IsNullOrWhiteSpace(info.RemoteUrl)
-                        ? Array.Empty<object>()
-                        : new object[]
-                        {
-                            new { name = "origin", url = info.RemoteUrl }
-                        }
-                }
-            });
+                        : new RepositoryLastCommit(string.Empty, info.LastCommitMessage, string.Empty, string.Empty),
+                    string.IsNullOrWhiteSpace(info.RemoteUrl)
+                        ? Array.Empty<RepositoryRemote>()
+                        : [new RepositoryRemote("origin", info.RemoteUrl)])));
         })
         .WithName("GetRepositoryInfo");
 
@@ -114,54 +94,44 @@ public static class FleetEndpoints
         {
             var resolvedPath = await repoService.ResolveRepositoryPathAsync(path, ct);
             if (resolvedPath.IsFailure)
-                return Results.BadRequest(new { error = resolvedPath.Error.Description });
+                return Results.BadRequest(new ErrorResponse(resolvedPath.Error.Description));
 
             var detail = await repoService.GetRepositoryDetailAsync(resolvedPath.Value, ct);
             if (detail is null)
-                return Results.NotFound(new { error = "Not a git repository." });
+                return Results.NotFound(new ErrorResponse("Not a git repository."));
 
-            return Results.Ok(new
-            {
-                repository = new
-                {
-                    name = detail.Info.Name,
-                    path = detail.Info.Path,
-                    branch = string.IsNullOrWhiteSpace(detail.Info.CurrentBranch) ? null : detail.Info.CurrentBranch,
-                    uncommittedCount = 0,
-                    totalCommitCount = 0,
-                    firstCommitDate = (string?)null,
-                    lastCommitDate = (string?)null,
-                    branches = detail.Branches.Select(branch => new
-                    {
-                        name = branch,
-                        shortHash = string.Empty,
-                        message = string.Empty,
-                        author = string.Empty,
-                        authorEmail = string.Empty,
-                        date = string.Empty,
-                        isCurrent = string.Equals(branch.TrimStart('*', ' '), detail.Info.CurrentBranch, StringComparison.Ordinal),
-                        isRemote = branch.Contains("remotes/", StringComparison.Ordinal)
-                    }),
-                    tags = Array.Empty<object>(),
-                    recentCommits = detail.RecentCommits.Select(commit => new
-                    {
-                        hash = string.Empty,
-                        shortHash = commit.Split(' ', 2, StringSplitOptions.TrimEntries)[0],
-                        message = commit.Contains(' ') ? commit[(commit.IndexOf(' ') + 1)..] : commit,
-                        author = string.Empty,
-                        authorEmail = string.Empty,
-                        date = string.Empty
-                    }),
-                    remotes = detail.Remotes.Select(remote => new
-                    {
-                        name = ParseRemoteName(remote),
-                        url = ParseRemoteUrl(remote),
-                        github = (object?)null
-                    }),
-                    readmeContent = (string?)null,
-                    readmeFilename = (string?)null
-                }
-            });
+            return Results.Ok(new RepositoryDetailResponse(
+                new RepositoryDetailDto(
+                    detail.Info.Name,
+                    detail.Info.Path,
+                    string.IsNullOrWhiteSpace(detail.Info.CurrentBranch) ? null : detail.Info.CurrentBranch,
+                    0,
+                    0,
+                    null,
+                    null,
+                    detail.Branches.Select(branch => new RepositoryBranchItem(
+                        branch,
+                        string.Empty,
+                        string.Empty,
+                        string.Empty,
+                        string.Empty,
+                        string.Empty,
+                        string.Equals(branch.TrimStart('*', ' '), detail.Info.CurrentBranch, StringComparison.Ordinal),
+                        branch.Contains("remotes/", StringComparison.Ordinal))).ToList(),
+                    Array.Empty<string>(),
+                    detail.RecentCommits.Select(commit => new RepositoryCommitItem(
+                        string.Empty,
+                        commit.Split(' ', 2, StringSplitOptions.TrimEntries)[0],
+                        commit.Contains(' ') ? commit[(commit.IndexOf(' ') + 1)..] : commit,
+                        string.Empty,
+                        string.Empty,
+                        string.Empty)).ToList(),
+                    detail.Remotes.Select(remote => new RepositoryRemoteItem(
+                        ParseRemoteName(remote),
+                        ParseRemoteUrl(remote),
+                        null)).ToList(),
+                    null,
+                    null)));
         })
         .WithName("GetRepositoryDetail");
 
@@ -174,16 +144,12 @@ public static class FleetEndpoints
             await repoService.RefreshScanAsync(ct);
             var repos = await repoService.ScanRepositoriesAsync(ct);
             var allowedRoots = await workspaceRootService.GetAllowedRootsAsync();
-            return Results.Ok(new
-            {
-                repositories = repos.Select(r => new
-                {
-                    path = r.Path,
-                    name = r.Name,
-                    parentRoot = FindParentRoot(r.Path, allowedRoots)
-                }),
-                scannedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-            });
+            return Results.Ok(new RepositoriesListResponse(
+                repos.Select(r => new RepositoryListItem(
+                    r.Path,
+                    r.Name,
+                    FindParentRoot(r.Path, allowedRoots))).ToList(),
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
         })
         .WithName("RefreshRepositories");
 
@@ -195,13 +161,11 @@ public static class FleetEndpoints
 
             var statusById = statuses.ToDictionary(status => status.PluginId, StringComparer.Ordinal);
 
-            return Results.Ok(new
-            {
-                integrations = descriptors.Select(descriptor => new
-                {
-                    id = descriptor.Id,
-                    name = descriptor.DisplayName,
-                    status = statusById.TryGetValue(descriptor.Id, out var status)
+            return Results.Ok(new IntegrationsResponse(
+                descriptors.Select(descriptor => new IntegrationItem(
+                    descriptor.Id,
+                    descriptor.DisplayName,
+                    statusById.TryGetValue(descriptor.Id, out var status)
                         ? status.Status switch
                         {
                             PluginConnectionStatus.Connected => "connected",
@@ -209,11 +173,9 @@ public static class FleetEndpoints
                             _ => "disconnected",
                         }
                         : "disconnected",
-                    connectedAt = statusById.TryGetValue(descriptor.Id, out status)
+                    statusById.TryGetValue(descriptor.Id, out status)
                         ? status.ConnectedAt
-                        : null,
-                })
-            });
+                        : null)).ToList()));
         })
         .WithName("GetIntegrations");
 

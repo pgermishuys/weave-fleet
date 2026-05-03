@@ -34,7 +34,7 @@ internal static class GitHubEndpointMappings
         .WithName("GitHubInitiateDeviceFlow");
 
         group.MapPost("/poll", async (
-            PollRequest request,
+            GitHubPollRequest request,
             GitHubService gitHubService,
             IUserContext userContext,
             CancellationToken ct) =>
@@ -60,7 +60,7 @@ internal static class GitHubEndpointMappings
         .WithName("GitHubPollForToken");
 
         group.MapPost("/token", async (
-            ConnectWithTokenRequest request,
+            GitHubConnectWithTokenRequest request,
             GitHubService gitHubService,
             IUserContext userContext,
             CancellationToken ct) =>
@@ -287,7 +287,7 @@ internal static class GitHubEndpointMappings
         .WithName("GitHubGetBookmarks");
 
         group.MapPut("/bookmarks", async (
-            BookmarkSyncRequest request,
+            GitHubBookmarkSyncRequest request,
             IPluginStateStore store,
             IUserContext userContext,
             CancellationToken ct) =>
@@ -309,7 +309,7 @@ internal static class GitHubEndpointMappings
         .WithName("GitHubSyncBookmarks");
 
         group.MapPost("/bookmarks", async (
-            BookmarkRequest request,
+            GitHubBookmarkRequest request,
             IPluginStateStore store,
             IUserContext userContext,
             CancellationToken ct) =>
@@ -381,7 +381,7 @@ internal static class GitHubEndpointMappings
         return queryString.Length > 0 ? $"?{queryString}" : string.Empty;
     }
 
-    private static BookmarkedRepoDto[] ToBookmarkedRepos(JsonArray? repos)
+    private static GitHubBookmarkedRepoDto[] ToBookmarkedRepos(JsonArray? repos)
         => (repos ?? [])
             .Select(entry => entry?.GetValue<string>())
             .Where(fullName => !string.IsNullOrWhiteSpace(fullName))
@@ -390,18 +390,18 @@ internal static class GitHubEndpointMappings
                 var parts = fullName!.Split('/', 2, StringSplitOptions.TrimEntries);
                 var owner = parts.ElementAtOrDefault(0) ?? string.Empty;
                 var name = parts.ElementAtOrDefault(1) ?? string.Empty;
-                return new BookmarkedRepoDto(fullName, owner, name);
+                return new GitHubBookmarkedRepoDto(fullName, owner, name);
             })
             .ToArray();
-
-    public sealed record BookmarkRequest(string Repo);
-    public sealed record BookmarkSyncRequest(IReadOnlyList<BookmarkedRepoDto> Bookmarks);
-    public sealed record BookmarkedRepoDto(string FullName, string Owner, string Name);
-
-    public sealed record ConnectWithTokenRequest(string Token);
-
-    public sealed record PollRequest(string DeviceCode);
 }
+
+// ── Named API request types (file-level so they are accessible from ApiJsonContext in the Api project) ─────
+
+public sealed record GitHubBookmarkRequest(string Repo);
+public sealed record GitHubBookmarkSyncRequest(IReadOnlyList<GitHubBookmarkedRepoDto> Bookmarks);
+public sealed record GitHubBookmarkedRepoDto(string FullName, string Owner, string Name);
+public sealed record GitHubConnectWithTokenRequest(string Token);
+public sealed record GitHubPollRequest(string DeviceCode);
 
 // ── Named API response types (file-level so they are accessible from ApiJsonContext in the Api project) ─────
 
