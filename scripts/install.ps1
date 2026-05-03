@@ -68,7 +68,14 @@ function Get-WindowsAssetBaseName {
         [string] $ReleaseTag
     )
 
-    return "fleet-$ReleaseTag-win-x64"
+    $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq [System.Runtime.InteropServices.Architecture]::Arm64) {
+        'arm64'
+    }
+    else {
+        'x64'
+    }
+
+    return "fleet-$ReleaseTag-win-$arch"
 }
 
 function Get-ExpectedHashFromContent {
