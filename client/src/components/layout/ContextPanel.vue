@@ -5,6 +5,8 @@ import { computed, defineComponent, h } from "vue";
 import { storeToRefs } from "pinia";
 import BoardControlsPanel from "@/components/board/BoardControlsPanel.vue";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
+import SettingsNavPanel from "@/components/settings/SettingsNavPanel.vue";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import { getSidebarPanels } from "@/plugins/slots";
 import { useSidebarStore } from "@/stores/sidebar";
 
@@ -23,6 +25,19 @@ interface PluginPanelDefinition {
   id: PluginRailId;
   title: string;
 }
+
+const SettingsContextPanel = defineComponent({
+  name: "SettingsContextPanel",
+  setup() {
+    const { activeSection, setActiveSection } = useSettingsNav();
+
+    return () =>
+      h(SettingsNavPanel, {
+        modelValue: activeSection.value,
+        "onUpdate:modelValue": setActiveSection,
+      });
+  },
+});
 
 function createPlaceholderPanel(
   eyebrow: string,
@@ -55,11 +70,13 @@ const pluginPanelRegistry = [
 const pluginPanels = Object.fromEntries(
   pluginPanelRegistry.map(({ id, title }) => [
     id,
-    createPlaceholderPanel(
-      "Plugin",
-      `${title} Panel`,
-      `${title} integration controls will appear here.`,
-    ),
+    id === "settings"
+      ? SettingsContextPanel
+      : createPlaceholderPanel(
+          "Plugin",
+          `${title} Panel`,
+          `${title} integration controls will appear here.`,
+        ),
   ]),
 ) as Record<PluginRailId, Component>;
 
