@@ -13,6 +13,8 @@ public sealed class SettingsPage(IPage page)
     private ILocator PageHeading => _page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { NameString = "Settings", Exact = true });
     private ILocator CredentialsHeading => _page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { NameString = "Credentials", Exact = true });
     private ILocator WorkspaceLabelInput => _page.GetByLabel("Workspace label");
+    private ILocator CredentialsNavButton => _page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { NameString = "Credentials" });
+    private ILocator WorkspaceNavButton => _page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { NameString = "Workspace" });
     private ILocator AddApiKeyButton => _page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { NameString = "Add API Key" });
     private ILocator AddApiKeyFormHeading => _page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions { NameString = "Add API key" });
     private ILocator AddApiKeyForm => _page.Locator("form").Filter(new LocatorFilterOptions { Has = _page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { NameString = "Save API Key" }) });
@@ -33,7 +35,20 @@ public sealed class SettingsPage(IPage page)
     public async Task WaitForLoadedAsync()
     {
         await Assertions.Expect(PageHeading).ToBeVisibleAsync();
+        await Assertions.Expect(WorkspaceLabelInput).ToBeVisibleAsync();
+    }
+
+    /// <summary>Navigate to the Credentials section via the sidebar nav.</summary>
+    public async Task NavigateToCredentialsAsync()
+    {
+        await CredentialsNavButton.ClickAsync();
         await Assertions.Expect(CredentialsHeading).ToBeVisibleAsync();
+    }
+
+    /// <summary>Navigate to the Workspace section via the sidebar nav.</summary>
+    public async Task NavigateToWorkspaceAsync()
+    {
+        await WorkspaceNavButton.ClickAsync();
         await Assertions.Expect(WorkspaceLabelInput).ToBeVisibleAsync();
     }
 
