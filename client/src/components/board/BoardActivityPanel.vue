@@ -355,14 +355,14 @@ onUnmounted(() => {
 .activity-feed-empty {
   margin: 0;
   padding: 8px 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 
 .activity-feed-item {
   padding: 8px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.5;
 }
 

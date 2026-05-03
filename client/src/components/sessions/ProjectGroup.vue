@@ -540,13 +540,13 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 }
 
 .project-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
 }
 
 .project-count {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
 }
 

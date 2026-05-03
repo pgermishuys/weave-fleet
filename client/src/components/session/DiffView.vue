@@ -45,7 +45,7 @@ defineProps<{
   gap: 10px;
   padding: 2px 12px;
   font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;

@@ -137,7 +137,7 @@ function getStatusIndicatorClass(status: TodoEntry["status"]): string {
 .todo-list-view__count,
 .todo-list-view__empty {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
 }
 
@@ -158,7 +158,7 @@ function getStatusIndicatorClass(status: TodoEntry["status"]): string {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.4;
 }
 

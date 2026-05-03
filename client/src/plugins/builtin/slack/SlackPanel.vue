@@ -103,14 +103,14 @@ const connectionClassName = computed(() => {
 }
 
 .slack-heading {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text);
 }
 
 .slack-copy {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.5;
   color: var(--muted);
 }

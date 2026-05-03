@@ -20,7 +20,7 @@
 .center__placeholder {
   padding: 12px 24px;
   border-bottom: 1px solid var(--border);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;

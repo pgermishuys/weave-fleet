@@ -55,7 +55,7 @@ defineProps<{
 
 .token-card__label {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -71,7 +71,7 @@ defineProps<{
 
 .token-card__helper {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.4;
   color: var(--muted);
 }

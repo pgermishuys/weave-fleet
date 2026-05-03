@@ -149,7 +149,7 @@ const activePanelKey = computed(() => {
 
 .context-panel :deep(.context-panel__eyebrow) {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -165,7 +165,7 @@ const activePanelKey = computed(() => {
 
 .context-panel :deep(.context-panel__description) {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.5;
   color: var(--muted);
 }

@@ -63,7 +63,7 @@ defineProps<{
 .files-changed__title,
 .files-changed__count {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .files-changed__title {
@@ -106,7 +106,7 @@ defineProps<{
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text);
 }
 
@@ -118,7 +118,7 @@ defineProps<{
 }
 
 .files-changed__stat {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
 }
 

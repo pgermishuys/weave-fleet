@@ -574,7 +574,7 @@ const commentSummary = computed(() => {
                         {{ comment.user.login }}
                       </p>
                       <span
-                        class="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                        class="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
                       >
                         {{ comment.sourceLabel }}
                       </span>

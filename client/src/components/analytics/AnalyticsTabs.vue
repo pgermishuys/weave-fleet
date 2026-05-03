@@ -86,7 +86,7 @@ function handleSelect(tabId: AnalyticsTabId): void {
   border-radius: 12px;
   background: transparent;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
   cursor: pointer;

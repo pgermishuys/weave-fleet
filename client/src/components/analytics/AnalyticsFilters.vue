@@ -174,7 +174,7 @@ function handleToUpdate(value: string | number): void {
 
 .analytics-filter__label {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -182,7 +182,7 @@ function handleToUpdate(value: string | number): void {
 
 .analytics-filter__hint {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.4;
 }
 

@@ -642,7 +642,7 @@ function removeSessionFromStore(): void {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px 6px 38px;
+  padding: 4px 12px 4px 32px;
   cursor: pointer;
   border: 0;
   border-left: 3px solid transparent;
@@ -691,7 +691,7 @@ function removeSessionFromStore(): void {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.2;
 }
 
@@ -721,7 +721,7 @@ function removeSessionFromStore(): void {
 }
 
 .session-meta {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
 }
 

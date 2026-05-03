@@ -71,13 +71,13 @@ const statusClassName = computed(() => {
 
   switch (status) {
     case "connected":
-      return "rounded-full border border-green-500/30 bg-green-500/10 px-2 py-1 text-[11px] font-medium text-green-300";
+      return "rounded-full border border-green-500/30 bg-green-500/10 px-2 py-1 text-[10px] font-medium text-green-300";
     case "error":
-      return "rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-[11px] font-medium text-red-200";
+      return "rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-medium text-red-200";
     case "checking":
-      return "rounded-full border border-border bg-main-bg px-2 py-1 text-[11px] font-medium text-muted";
+      return "rounded-full border border-border bg-main-bg px-2 py-1 text-[10px] font-medium text-muted";
     default:
-      return "rounded-full border border-border bg-main-bg px-2 py-1 text-[11px] font-medium text-muted";
+      return "rounded-full border border-border bg-main-bg px-2 py-1 text-[10px] font-medium text-muted";
   }
 });
 

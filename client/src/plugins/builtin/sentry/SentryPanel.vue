@@ -172,14 +172,14 @@ const connectionClassName = computed(() => {
 
 .error-title {
   flex: 1;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text);
 }
 
 .error-meta,
 .error-level {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
 }
 

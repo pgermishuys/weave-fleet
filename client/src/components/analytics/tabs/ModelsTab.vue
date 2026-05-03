@@ -249,7 +249,7 @@ const emptyStateMessage = computed(() => {
   background: color-mix(in srgb, var(--card-bg) 70%, transparent);
   padding: 24px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
   text-align: center;
 }
 
@@ -272,7 +272,7 @@ const emptyStateMessage = computed(() => {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.02);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-align: left;
@@ -298,7 +298,7 @@ const emptyStateMessage = computed(() => {
 .models-tab__cell {
   padding: 16px 20px;
   color: var(--text);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.5;
   vertical-align: top;
 }

@@ -65,7 +65,7 @@ const indicator = computed(() => {
   align-items: flex-start;
   gap: 8px;
   padding: 6px 0;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.4;
 }
 
@@ -79,7 +79,7 @@ const indicator = computed(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: transparent;
 }
@@ -112,7 +112,7 @@ const indicator = computed(() => {
 }
 
 .todo-status {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
 }
 </style>

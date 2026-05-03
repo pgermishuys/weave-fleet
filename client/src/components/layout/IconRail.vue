@@ -312,7 +312,7 @@ function handleSelect(item: RailItem): void {
   width: 24px;
   height: 1px;
   background: var(--border);
-  margin: 6px 0;
+  margin: 4px 0;
 }
 
 .rail-bottom-divider {
@@ -350,7 +350,7 @@ function handleSelect(item: RailItem): void {
   transform: translate(0, -50%);
   background: #27272a;
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
   padding: 4px 10px;
   border-radius: 4px;
   white-space: nowrap;

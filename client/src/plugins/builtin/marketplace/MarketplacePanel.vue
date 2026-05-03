@@ -130,7 +130,7 @@ function handleConfigure(pluginId: string): void {
 
 .mp-section-label {
   padding: 12px 12px 6px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -172,7 +172,7 @@ function handleConfigure(pluginId: string): void {
 
 .mp-plugin-name {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text);
 }
@@ -182,7 +182,7 @@ function handleConfigure(pluginId: string): void {
   align-items: center;
   gap: 4px;
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -210,7 +210,7 @@ function handleConfigure(pluginId: string): void {
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   padding: 7px 10px;
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
 }
 

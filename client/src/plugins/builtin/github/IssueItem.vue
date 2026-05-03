@@ -203,21 +203,21 @@ function handleKeydown(event: KeyboardEvent): void {
   margin: 0;
   min-width: 0;
   flex: 1;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text);
 }
 
 .issue-number {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
 }
 
 .issue-repo,
 .issue-user,
 .issue-time {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
 }
 
@@ -252,7 +252,7 @@ function handleKeydown(event: KeyboardEvent): void {
   top: 50%;
   right: 12px;
   transform: translateY(-50%);
-  font-size: 11px;
+  font-size: 10px;
   color: var(--accent);
   text-decoration: none;
   opacity: 0;

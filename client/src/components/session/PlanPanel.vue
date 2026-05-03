@@ -66,7 +66,7 @@ const panelTitle = computed(() => props.sessionTitle ? `${props.sessionTitle} Pl
 
 .plan-eyebrow {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -75,7 +75,7 @@ const panelTitle = computed(() => props.sessionTitle ? `${props.sessionTitle} Pl
 
 .plan-title {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
 }

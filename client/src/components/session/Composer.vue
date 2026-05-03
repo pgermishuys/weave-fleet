@@ -705,7 +705,7 @@ function handleKeydown(event: KeyboardEvent): void {
   gap: 8px;
   margin: 0 0 10px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.4;
 }
 
@@ -716,7 +716,7 @@ function handleKeydown(event: KeyboardEvent): void {
   padding: 10px 12px;
   background: color-mix(in srgb, var(--error) 10%, transparent);
   color: var(--error);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.5;
 }
 
@@ -777,7 +777,7 @@ function handleKeydown(event: KeyboardEvent): void {
   color: var(--text);
   resize: none;
   outline: none;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -804,7 +804,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border-radius: 20px;
   background: var(--accent);
   color: #fff;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -825,7 +825,7 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .queue-badge {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -851,7 +851,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel-bg);
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text);
   position: relative;
 }
