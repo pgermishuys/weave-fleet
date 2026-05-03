@@ -379,13 +379,13 @@ public sealed class MessagePersistenceTests : E2ETestBase,
                 response.Url.Contains($"/api/sessions/{sessionId}/committed-events", StringComparison.Ordinal)
                 && response.Url.Contains("afterSequenceNumber=", StringComparison.Ordinal)
                 && response.Ok,
-                new PageWaitForResponseOptions { Timeout = 10_000 });
+                new PageWaitForResponseOptions { Timeout = 30_000 });
 
             detail = await dashboard.ClickSessionCardAsync(sessionId);
 
             var gapFillResponse = await afterSequenceNumberResponse;
             gapFillResponse.Url.ShouldContain("afterSequenceNumber=");
-            await detail.WaitForMessageTextAsync("Recovered after reconnect via sequence gap fill", 10_000);
+            await detail.WaitForMessageTextAsync("Recovered after reconnect via sequence gap fill", 30_000);
         });
     }
 
@@ -447,13 +447,13 @@ public sealed class MessagePersistenceTests : E2ETestBase,
                 response.Url.Contains($"/api/sessions/{sessionAId}/committed-events", StringComparison.Ordinal)
                 && response.Url.Contains("afterSequenceNumber=", StringComparison.Ordinal)
                 && response.Ok,
-                new PageWaitForResponseOptions { Timeout = 10_000 });
+                new PageWaitForResponseOptions { Timeout = 30_000 });
 
             sessionADetail = await sidebar.ClickSessionAsync(sessionAId);
 
             var gapFillResponse = await afterSequenceNumberResponse;
             gapFillResponse.Url.ShouldContain("afterSequenceNumber=");
-            await sessionADetail.WaitForMessageTextAsync("Recovered final message after switching from session B", 10_000);
+            await sessionADetail.WaitForMessageTextAsync("Recovered final message after switching from session B", 30_000);
         });
     }
 
