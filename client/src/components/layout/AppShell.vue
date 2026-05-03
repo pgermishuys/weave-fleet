@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
+import { useLocation } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import CommandPalette from "@/components/CommandPalette.vue";
 import TauriUpdateDialog from "@/components/TauriUpdateDialog.vue";
@@ -18,6 +19,9 @@ import { useSidebarStore } from "@/stores/sidebar";
 useCommands();
 useWeaveSocket();
 
+const pathname = useLocation({
+  select: (location) => location.pathname,
+});
 const sidebarStore = useSidebarStore();
 const sessionsStore = useSessionsStore();
 
@@ -27,6 +31,7 @@ const { activeSessionId, sessions } = storeToRefs(sessionsStore);
 const activeSession = computed(() => {
   return sessions.value.find((session) => session.session.id === activeSessionId.value) ?? null;
 });
+const isSettingsRoute = computed(() => pathname.value.startsWith("/settings"));
 
 const activeInstanceId = computed(() => activeSession.value?.instanceId ?? "");
 const { todos } = useSessionTodos(
@@ -86,7 +91,7 @@ function handleExpandRightPanel(): void {
         <slot />
       </CenterContent>
 
-      <Transition name="right-panel-swap" mode="out-in">
+      <Transition v-if="!isSettingsRoute" name="right-panel-swap" mode="out-in">
         <CollapsedRightRail
           v-if="rightPanelCollapsed"
           key="collapsed"
