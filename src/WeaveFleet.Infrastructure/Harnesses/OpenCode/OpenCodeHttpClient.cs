@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Domain.Harnesses;
@@ -50,7 +51,7 @@ internal sealed class OpenCodeHttpClient
     /// <summary>GET /global/health</summary>
     public async Task<OpenCodeHealthResponse> CheckHealthAsync(CancellationToken ct)
     {
-        return await GetAsync<OpenCodeHealthResponse>("/global/health", ct).ConfigureAwait(false);
+        return await GetAsync("/global/health", OpenCodeJsonContext.Default.OpenCodeHealthResponse, ct).ConfigureAwait(false);
     }
 
     // -----------------------------------------------------------------------
@@ -64,7 +65,7 @@ internal sealed class OpenCodeHttpClient
         CancellationToken ct)
     {
         var url = BuildUrl("/session", directory);
-        return await PostAsync<OpenCodeSessionInfo>(url, request, ct).ConfigureAwait(false);
+        return await PostAsync(url, request, OpenCodeJsonContext.Default.OpenCodeCreateSessionRequest, OpenCodeJsonContext.Default.OpenCodeSessionInfo, ct).ConfigureAwait(false);
     }
 
     /// <summary>GET /session/{sessionId}?directory={directory}</summary>
@@ -74,7 +75,7 @@ internal sealed class OpenCodeHttpClient
         CancellationToken ct)
     {
         var url = BuildUrl($"/session/{Uri.EscapeDataString(sessionId)}", directory);
-        return await GetAsync<OpenCodeSessionInfo>(url, ct).ConfigureAwait(false);
+        return await GetAsync(url, OpenCodeJsonContext.Default.OpenCodeSessionInfo, ct).ConfigureAwait(false);
     }
 
     /// <summary>GET /session?directory={directory}</summary>
@@ -83,7 +84,7 @@ internal sealed class OpenCodeHttpClient
         CancellationToken ct)
     {
         var url = BuildUrl("/session", directory);
-        return await GetAsync<IReadOnlyList<OpenCodeSessionInfo>>(url, ct).ConfigureAwait(false)
+        return await GetAsync(url, OpenCodeJsonContext.Default.ListOpenCodeSessionInfo, ct).ConfigureAwait(false)
                ?? [];
     }
 
@@ -107,7 +108,7 @@ internal sealed class OpenCodeHttpClient
         CancellationToken ct)
     {
         var url = BuildUrl($"/session/{Uri.EscapeDataString(sessionId)}/message", directory);
-        return await PostAsync<OpenCodeMessageWithParts>(url, request, ct).ConfigureAwait(false);
+        return await PostAsync(url, request, OpenCodeJsonContext.Default.OpenCodePromptRequest, OpenCodeJsonContext.Default.OpenCodeMessageWithParts, ct).ConfigureAwait(false);
     }
 
     /// <summary>POST /session/{sessionId}/prompt_async?directory={directory} — fire and forget (204).</summary>
@@ -121,7 +122,7 @@ internal sealed class OpenCodeHttpClient
         LogRequest(_logger, $"POST {url}", null);
 
         var content = new StringContent(
-            JsonSerializer.Serialize(request, OpenCodeJsonOptions.Default),
+            JsonSerializer.Serialize(request, OpenCodeJsonContext.Default.OpenCodePromptRequest),
             Encoding.UTF8,
             "application/json");
 
@@ -147,7 +148,7 @@ internal sealed class OpenCodeHttpClient
         LogRequest(_logger, $"POST {logUrl}", null);
 
         var content = new StringContent(
-            JsonSerializer.Serialize(request, OpenCodeJsonOptions.Default),
+            JsonSerializer.Serialize(request, OpenCodeJsonContext.Default.OpenCodeCommandRequest),
             Encoding.UTF8,
             "application/json");
 
@@ -290,28 +291,28 @@ internal sealed class OpenCodeHttpClient
         CancellationToken ct)
     {
         var url = BuildUrl($"/session/{Uri.EscapeDataString(sessionId)}/fork", directory);
-        return await PostAsync<OpenCodeSessionInfo>(url, request, ct).ConfigureAwait(false);
+        return await PostAsync(url, request, OpenCodeJsonContext.Default.OpenCodeForkRequest, OpenCodeJsonContext.Default.OpenCodeSessionInfo, ct).ConfigureAwait(false);
     }
 
     /// <summary>GET /agent?directory={directory}</summary>
     public async Task<IReadOnlyList<OpenCodeAgentInfo>> GetAgentsAsync(string directory, CancellationToken ct)
     {
         var url = BuildUrl("/agent", directory);
-        return await GetAsync<IReadOnlyList<OpenCodeAgentInfo>>(url, ct).ConfigureAwait(false) ?? [];
+        return await GetAsync(url, OpenCodeJsonContext.Default.ListOpenCodeAgentInfo, ct).ConfigureAwait(false) ?? [];
     }
 
     /// <summary>GET /command?directory={directory}</summary>
     public async Task<IReadOnlyList<OpenCodeCommandInfo>> GetCommandsAsync(string directory, CancellationToken ct)
     {
         var url = BuildUrl("/command", directory);
-        return await GetAsync<IReadOnlyList<OpenCodeCommandInfo>>(url, ct).ConfigureAwait(false) ?? [];
+        return await GetAsync(url, OpenCodeJsonContext.Default.ListOpenCodeCommandInfo, ct).ConfigureAwait(false) ?? [];
     }
 
     /// <summary>GET /provider?directory={directory}</summary>
     public async Task<OpenCodeProvidersResponse> GetProvidersAsync(string directory, CancellationToken ct)
     {
         var url = BuildUrl("/provider", directory);
-        return await GetAsync<OpenCodeProvidersResponse>(url, ct).ConfigureAwait(false);
+        return await GetAsync(url, OpenCodeJsonContext.Default.OpenCodeProvidersResponse, ct).ConfigureAwait(false);
     }
 
     /// <summary>GET /session/status?directory={directory}</summary>
@@ -320,7 +321,7 @@ internal sealed class OpenCodeHttpClient
         CancellationToken ct)
     {
         var url = BuildUrl("/session/status", directory);
-        return await GetAsync<Dictionary<string, OpenCodeSessionStatus>>(url, ct).ConfigureAwait(false)
+        return await GetAsync(url, OpenCodeJsonContext.Default.DictionaryStringOpenCodeSessionStatus, ct).ConfigureAwait(false)
                ?? [];
     }
 
@@ -373,7 +374,7 @@ internal sealed class OpenCodeHttpClient
                         OpenCodeSseEvent? evt;
                         try
                         {
-                            evt = JsonSerializer.Deserialize<OpenCodeSseEvent>(json, OpenCodeJsonOptions.Default);
+                            evt = JsonSerializer.Deserialize(json, OpenCodeJsonContext.Default.OpenCodeSseEvent);
                         }
                         catch (JsonException)
                         {
@@ -425,7 +426,7 @@ internal sealed class OpenCodeHttpClient
     // Helpers
     // -----------------------------------------------------------------------
 
-    private async Task<T> GetAsync<T>(string url, CancellationToken ct)
+    private async Task<T> GetAsync<T>(string url, JsonTypeInfo<T> typeInfo, CancellationToken ct)
     {
         LogRequest(_logger, $"GET {url}", null);
         using var response = await _httpClient.GetAsync(url, ct).ConfigureAwait(false);
@@ -438,13 +439,13 @@ internal sealed class OpenCodeHttpClient
         }
 
         var result = await response.Content
-            .ReadFromJsonAsync<T>(OpenCodeJsonOptions.Default, ct)
+            .ReadFromJsonAsync(typeInfo, ct)
             .ConfigureAwait(false);
 
         return result!;
     }
 
-    private async Task<T> PostAsync<T>(string url, object? body, CancellationToken ct)
+    private async Task<TResp> PostAsync<TReq, TResp>(string url, TReq? body, JsonTypeInfo<TReq> reqTypeInfo, JsonTypeInfo<TResp> respTypeInfo, CancellationToken ct)
     {
         LogRequest(_logger, $"POST {url}", null);
 
@@ -452,7 +453,7 @@ internal sealed class OpenCodeHttpClient
         if (body is not null)
         {
             content = new StringContent(
-                JsonSerializer.Serialize(body, body.GetType(), OpenCodeJsonOptions.Default),
+                JsonSerializer.Serialize(body, reqTypeInfo),
                 Encoding.UTF8,
                 "application/json");
         }
@@ -467,7 +468,7 @@ internal sealed class OpenCodeHttpClient
         }
 
         var result = await response.Content
-            .ReadFromJsonAsync<T>(OpenCodeJsonOptions.Default, ct)
+            .ReadFromJsonAsync(respTypeInfo, ct)
             .ConfigureAwait(false);
 
         return result!;

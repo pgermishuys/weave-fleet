@@ -1,4 +1,5 @@
 using System.Data;
+using System.Text;
 using Dapper;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
@@ -89,14 +90,20 @@ public sealed class DapperOutboxRepository(
             return;
 
         using var connection = connectionFactory.CreateConnection();
-        await connection.ExecuteAsync(
+        var sql = new StringBuilder(
             """
             UPDATE outbox_messages
             SET dispatched_at = @DispatchedAt
-            WHERE id IN @Ids
+            WHERE id 
+            """);
+        var parameters = new DynamicParameters();
+        parameters.Add("DispatchedAt", dispatchedAt);
+        SqlInExpander.AppendInClause(sql, parameters, "Id", ids);
+        sql.Append("""
+
               AND dispatched_at IS NULL
-            """,
-            new { DispatchedAt = dispatchedAt, Ids = ids }).ConfigureAwait(false);
+            """);
+        await connection.ExecuteAsync(sql.ToString(), parameters).ConfigureAwait(false);
     }
 
     public async Task<int> DeleteDispatchedBeforeAsync(string dispatchedBefore, int limit)

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
@@ -9,7 +10,7 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 internal static class OpenCodeMessageDeserializer
 {
     internal static OpenCodeAssistantMessage? DeserializeAssistantMessage(JsonElement infoEl)
-        => Deserialize<OpenCodeAssistantMessage>(infoEl, static node =>
+        => Deserialize(infoEl, OpenCodeJsonContext.Default.OpenCodeAssistantMessage, static node =>
         {
             NormalizeCommonMessageInfoAliases(node);
             ApplyAlias(node, "parentId", "parentID", "parent_id");
@@ -18,7 +19,7 @@ internal static class OpenCodeMessageDeserializer
         });
 
     internal static OpenCodeUserMessage? DeserializeUserMessage(JsonElement infoEl)
-        => Deserialize<OpenCodeUserMessage>(infoEl, static node =>
+        => Deserialize(infoEl, OpenCodeJsonContext.Default.OpenCodeUserMessage, static node =>
         {
             NormalizeCommonMessageInfoAliases(node);
 
@@ -29,7 +30,7 @@ internal static class OpenCodeMessageDeserializer
             }
         });
 
-    private static T? Deserialize<T>(JsonElement element, Action<JsonObject> normalize)
+    private static T? Deserialize<T>(JsonElement element, JsonTypeInfo<T> typeInfo, Action<JsonObject> normalize)
         where T : class
     {
         if (element.ValueKind != JsonValueKind.Object)
@@ -40,7 +41,7 @@ internal static class OpenCodeMessageDeserializer
             return null;
 
         normalize(node);
-        return node.Deserialize<T>(OpenCodeJsonOptions.Default);
+        return node.Deserialize(typeInfo);
     }
 
     private static void NormalizeCommonMessageInfoAliases(JsonObject node)

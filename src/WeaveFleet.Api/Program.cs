@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
+using WeaveFleet.Api;
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Api.Telemetry;
 using WeaveFleet.Application.Configuration;
@@ -25,6 +26,13 @@ using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Data;
 using WeaveFleet.Infrastructure.Services;
+
+// Suppress ILLink IL2026 for the top-level entry point: config binding uses simple POCOs;
+// telemetry and plugin endpoint registration are safe at runtime.
+[assembly: System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
+    Scope = "member",
+    Target = "M:Program.<<Main>$>d__0.MoveNext()",
+    Justification = "Top-level program uses simple POCOs for config binding and telemetry; safe at runtime.")]
 
 // ── CLI argument overrides ────────────────────────────────────────────────────
 // Map friendly --host / --port flags to the Fleet configuration section so users
@@ -51,6 +59,7 @@ if (cliOverrides.Count > 0)
     builder.Configuration.AddInMemoryCollection(cliOverrides!);
 
 // Bind Fleet options
+#pragma warning disable IL2026 // FleetOptions is a simple POCO with primitive properties; safe at runtime
 var fleetOptions = builder.Configuration
     .GetSection(FleetOptions.SectionName)
     .Get<FleetOptions>() ?? new FleetOptions();
@@ -95,6 +104,7 @@ if (string.Equals(harnessMode, "test", StringComparison.OrdinalIgnoreCase))
     builder.Services.AddSingleton(testHarnessRuntime);
 }
 builder.AddFleetTelemetry();
+#pragma warning restore IL2026
 builder.Services.AddHealthChecks();
 
 // ── Data Protection ───────────────────────────────────────────────────────────
@@ -232,6 +242,14 @@ builder.Services.AddAntiforgery(options =>
     options.Cookie.HttpOnly = true;
 });
 
+// ── JSON Serialization ───────────────────────────────────────────────────────
+// Register source-generated JsonSerializerContext so minimal API endpoints
+// use compile-time serialization (required for trimming and AOT).
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default);
+});
+
 // Use Fleet.Host/Port as the listen URL (overrides the "Urls" config key)
 builder.WebHost.UseUrls(fleetOptions.ListenUrl);
 
@@ -367,7 +385,9 @@ app.Use(async (context, next) =>
     catch (AntiforgeryValidationException)
     {
         context.Response.StatusCode = StatusCodes.Status400BadRequest;
-        await context.Response.WriteAsJsonAsync(new { error = "Invalid or missing CSRF token." });
+        await context.Response.WriteAsJsonAsync(
+            new WeaveFleet.Api.ErrorResponse("Invalid or missing CSRF token."),
+            WeaveFleet.Api.ApiJsonContext.Default.ErrorResponse);
     }
 });
 
@@ -383,11 +403,11 @@ app.UseWebSockets();
 // Health checks (registered before SPA fallback)
 app.MapHealthChecks("/healthz");
 app.MapHealthChecks("/readyz");
-app.MapGet("/version", () => Results.Ok(new
-{
-    version = FleetInstrumentation.ServiceVersion,
-    commit = FleetInstrumentation.ServiceCommit
-}));
+#pragma warning disable IL2026 // RDG intercepts this MapGet in a Web SDK project
+app.MapGet("/version", () => Results.Ok(new VersionResponse(
+    FleetInstrumentation.ServiceVersion,
+    FleetInstrumentation.ServiceCommit)));
+#pragma warning restore IL2026
 app.MapAuthEndpoints(fleetOptions);
 
 // API endpoints (registered before SPA fallback)

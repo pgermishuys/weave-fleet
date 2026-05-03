@@ -6,6 +6,8 @@ using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Api.Endpoints;
 
+#pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
+
 public static class FleetEndpoints
 {
     public static IEndpointRouteBuilder MapFleetSummaryEndpoints(this IEndpointRouteBuilder app)
@@ -244,3 +246,4 @@ public static class FleetEndpoints
         return parts.Length > 1 ? parts[1] : string.Empty;
     }
 }
+#pragma warning restore IL2026

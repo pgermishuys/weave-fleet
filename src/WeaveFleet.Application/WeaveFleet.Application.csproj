@@ -1,5 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\WeaveFleet.Domain\WeaveFleet.Domain.csproj" />
   </ItemGroup>

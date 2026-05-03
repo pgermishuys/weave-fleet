@@ -40,7 +40,7 @@ internal static class ClientPayloadSanitizer
     public static JsonElement? SanitizeEventPayload(string eventType, JsonElement? payload)
     {
         if (!payload.HasValue)
-            return JsonSerializer.SerializeToElement(new { });
+            return JsonDocument.Parse("{}").RootElement;
 
         if (!EventTypeMetadata.Classify(eventType).RequiresReasoningFilter)
             return payload.Value.Clone();

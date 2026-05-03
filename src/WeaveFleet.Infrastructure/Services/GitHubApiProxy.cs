@@ -1,5 +1,4 @@
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json.Nodes;
 
@@ -45,6 +44,7 @@ public sealed class GitHubApiProxy(IHttpClientFactory httpClientFactory)
         if (!response.IsSuccessStatusCode)
             return null;
 
-        return await response.Content.ReadFromJsonAsync<JsonNode>(ct).ConfigureAwait(false);
+        var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        return JsonNode.Parse(json);
     }
 }

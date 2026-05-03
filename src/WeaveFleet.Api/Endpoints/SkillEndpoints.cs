@@ -1,5 +1,7 @@
 namespace WeaveFleet.Api.Endpoints;
 
+#pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
+
 /// <summary>
 /// CRUD endpoints for weave skill management (~/.weave/skills/).
 /// </summary>
@@ -149,3 +151,4 @@ public static class SkillEndpoints
 }
 
 internal sealed record InstallSkillRequest(string Name, string? SourcePath);
+#pragma warning restore IL2026

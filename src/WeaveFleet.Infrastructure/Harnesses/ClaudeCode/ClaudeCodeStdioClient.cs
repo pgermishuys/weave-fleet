@@ -44,8 +44,8 @@ internal static class ClaudeCodeStdioClient
             ClaudeCodeStreamMessage? msg;
             try
             {
-                msg = JsonSerializer.Deserialize<ClaudeCodeStreamMessage>(
-                    line, ClaudeCodeJsonOptions.Default);
+                msg = JsonSerializer.Deserialize(
+                    line, ClaudeCodeJsonContext.Default.ClaudeCodeStreamMessage);
             }
             catch (JsonException)
             {

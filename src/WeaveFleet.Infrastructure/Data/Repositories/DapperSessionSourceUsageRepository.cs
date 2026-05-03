@@ -1,3 +1,4 @@
+using System.Text;
 using Dapper;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
@@ -86,7 +87,7 @@ public sealed class DapperSessionSourceUsageRepository : ISessionSourceUsageRepo
         }
 
         using var conn = _connectionFactory.CreateConnection();
-        var results = await conn.QueryAsync<SessionSourceUsage>(
+        var sql = new StringBuilder(
             """
             SELECT ranked.*
             FROM (
@@ -98,18 +99,21 @@ public sealed class DapperSessionSourceUsageRepository : ISessionSourceUsageRepo
                     AS row_num
                 FROM session_source_usages ssu
                 INNER JOIN sessions session_row ON session_row.id = ssu.session_id
-                WHERE ssu.session_id IN @SessionIds
+                WHERE ssu.session_id 
+            """);
+        var parameters = new DynamicParameters();
+        SqlInExpander.AppendInClause(sql, parameters, "SessionId", sessionIds.ToList());
+        sql.Append("""
+
                   AND ssu.action_id = @ActionId
                   AND session_row.user_id = @UserId
             ) ranked
             WHERE ranked.row_num = 1
-            """,
-            new
-            {
-                SessionIds = sessionIds,
-                ActionId = SessionSourceActions.StartSession,
-                UserId = _userContext.UserId
-            });
+            """);
+        parameters.Add("ActionId", SessionSourceActions.StartSession);
+        parameters.Add("UserId", _userContext.UserId);
+
+        var results = await conn.QueryAsync<SessionSourceUsage>(sql.ToString(), parameters);
 
         return results.ToDictionary(usage => usage.SessionId, usage => usage);
     }

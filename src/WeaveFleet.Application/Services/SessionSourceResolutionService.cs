@@ -87,7 +87,7 @@ public sealed class SessionSourceResolutionService(IEnumerable<ISessionSourcePro
             return new SessionSourceSelection
             {
                 Key = SessionSourceCatalog.ManagedWorkspaceStartSession.Key,
-                Input = JsonSerializer.SerializeToElement(new { })
+                Input = JsonDocument.Parse("{}").RootElement.Clone()
             };
         }
 
@@ -116,7 +116,7 @@ public sealed class SessionSourceResolutionService(IEnumerable<ISessionSourcePro
             Directory = directory,
             IsolationStrategy = isolationStrategy,
             Branch = branch
-        });
+        }, ApplicationJsonContext.Default.LegacyDirectoryInput);
     }
 
     private static Result<Unit> ValidateSourceKey(SessionSourceKey key)
@@ -134,12 +134,5 @@ public sealed class SessionSourceResolutionService(IEnumerable<ISessionSourcePro
             return FleetError.ValidationError("SessionSource.ContractVersion", "Session source contract version must be greater than zero.");
 
         return Unit.Value;
-    }
-
-    private sealed record LegacyDirectoryInput
-    {
-        public required string Directory { get; init; }
-        public string? IsolationStrategy { get; init; }
-        public string? Branch { get; init; }
     }
 }

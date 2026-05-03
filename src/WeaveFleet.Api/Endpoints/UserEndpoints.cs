@@ -3,6 +3,8 @@ using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Endpoints;
 
+#pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
+
 public static class UserEndpoints
 {
     public static IEndpointRouteBuilder MapUserEndpoints(this IEndpointRouteBuilder app)
@@ -65,3 +67,4 @@ internal sealed record UserMeResponse(
     bool OnboardingCompleted,
     UserOnboardingStatus OnboardingStatus,
     string CreatedAt);
+#pragma warning restore IL2026

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Common;
@@ -9,11 +8,6 @@ namespace WeaveFleet.Infrastructure.SessionSources;
 public sealed class RepositorySessionSourceProvider(
     RepositoryService repositoryService) : ISessionSourceProvider
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
-    {
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
-    };
-
     public string ProviderId => SessionSourceProviderIds.Repository;
 
     public IReadOnlyList<SessionSourceDescriptor> GetDescriptors() =>
@@ -40,7 +34,7 @@ public sealed class RepositorySessionSourceProvider(
         RepositorySourceInput? input;
         try
         {
-            input = selection.Input.Deserialize<RepositorySourceInput>(SerializerOptions);
+            input = selection.Input.Deserialize(InfrastructureJsonContext.Default.RepositorySourceInput);
         }
         catch (JsonException ex)
         {
@@ -126,12 +120,4 @@ public sealed class RepositorySessionSourceProvider(
         string.Equals(actual.SourceType, expected.SourceType, StringComparison.Ordinal) &&
         string.Equals(actual.ActionId, expected.ActionId, StringComparison.Ordinal) &&
         actual.ContractVersion == expected.ContractVersion;
-
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    private sealed record RepositorySourceInput
-    {
-        public string? RepositoryPath { get; init; }
-        public string? IsolationStrategy { get; init; }
-        public string? Branch { get; init; }
-    }
 }

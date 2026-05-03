@@ -1,6 +1,5 @@
 using WeaveFleet.Application.Services;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using WeaveFleet.Domain.Common;
 
 namespace WeaveFleet.Application.SessionSources;
@@ -8,11 +7,6 @@ namespace WeaveFleet.Application.SessionSources;
 public sealed class LocalDirectorySessionSourceProvider(
     WorkspaceRootService workspaceRootService) : ISessionSourceProvider
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
-    {
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
-    };
-
     public string ProviderId => SessionSourceProviderIds.Local;
 
     public IReadOnlyList<SessionSourceDescriptor> GetDescriptors() =>
@@ -36,7 +30,7 @@ public sealed class LocalDirectorySessionSourceProvider(
 
         try
         {
-            input = selection.Input.Deserialize<DirectorySourceInput>(SerializerOptions);
+            input = selection.Input.Deserialize(ApplicationJsonContext.Default.DirectorySourceInput);
         }
         catch (JsonException ex)
         {
@@ -83,12 +77,4 @@ public sealed class LocalDirectorySessionSourceProvider(
         string.Equals(actual.SourceType, expected.SourceType, StringComparison.Ordinal) &&
         string.Equals(actual.ActionId, expected.ActionId, StringComparison.Ordinal) &&
         actual.ContractVersion == expected.ContractVersion;
-
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    private sealed record DirectorySourceInput
-    {
-        public string? Directory { get; init; }
-        public string? IsolationStrategy { get; init; }
-        public string? Branch { get; init; }
-    }
 }

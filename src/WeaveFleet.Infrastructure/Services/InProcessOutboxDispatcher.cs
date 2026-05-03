@@ -37,7 +37,7 @@ public sealed partial class InProcessOutboxDispatcher(
 
             foreach (var message in messages)
             {
-                var payload = JsonSerializer.Deserialize<JsonElement>(message.Payload);
+                var payload = JsonDocument.Parse(message.Payload).RootElement;
                 await broadcaster.BroadcastAsync(
                     message.Topic,
                     message.Type,

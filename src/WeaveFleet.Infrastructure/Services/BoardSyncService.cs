@@ -364,7 +364,7 @@ public sealed class BoardSyncService(
             {
                 var labelName = label?["name"]?.GetValue<string>()?.Trim();
                 if (!string.IsNullOrWhiteSpace(labelName))
-                    labels.Add(labelName);
+                    labels.Add((JsonNode)JsonValue.Create(labelName)!);
             }
         }
 

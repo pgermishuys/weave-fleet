@@ -5,6 +5,8 @@ using WeaveFleet.Application.Analytics;
 
 namespace WeaveFleet.Api.Endpoints;
 
+#pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
+
 /// <summary>
 /// Analytics query endpoints: summary, daily breakdown, sessions, models, and raw export.
 /// All endpoints are read-only and require analytics to be enabled.
@@ -166,3 +168,4 @@ public static class AnalyticsEndpoints
         }
     }
 }
+#pragma warning restore IL2026

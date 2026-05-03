@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace WeaveFleet.Application.Services;
 
 /// <summary>
@@ -6,9 +8,9 @@ namespace WeaveFleet.Application.Services;
 /// </summary>
 public interface IEventBroadcaster
 {
-    Task BroadcastAsync(string topic, string type, object payload, string? userId, CancellationToken ct);
+    Task BroadcastAsync(string topic, string type, JsonElement payload, string? userId, CancellationToken ct);
 
-    Task BroadcastAsync(string topic, string type, object payload, long? sequenceNumber, string? userId, CancellationToken ct);
+    Task BroadcastAsync(string topic, string type, JsonElement payload, long? sequenceNumber, string? userId, CancellationToken ct);
 
     /// <summary>
     /// Subscribe to one or more <paramref name="topics"/>.

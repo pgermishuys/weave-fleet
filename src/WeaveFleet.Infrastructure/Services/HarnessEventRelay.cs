@@ -249,7 +249,7 @@ public sealed class HarnessEventRelay : BackgroundService
             await _broadcaster.BroadcastAsync(
                 "sessions",
                 "activity_status",
-                new { sessionId = fleetSessionId, activityStatus = "idle" },
+                InfrastructureJsonContext.SerializeActivityStatus(fleetSessionId, "idle"),
                 sessionUserId,
                 CancellationToken.None).ConfigureAwait(false);
         }

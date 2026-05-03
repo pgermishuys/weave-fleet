@@ -351,7 +351,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         if (!string.IsNullOrWhiteSpace(fallback?.ProviderId))
             infoNode["providerId"] = fallback.ProviderId;
 
-        return evt with { Payload = JsonSerializer.SerializeToElement(payloadNode) };
+        return evt with { Payload = JsonDocument.Parse(payloadNode!.ToJsonString()).RootElement };
     }
 
     private async Task<OpenCodeAgentModelInfo?> ResolveModelInfoForAgentAsync(string agentName, CancellationToken ct)

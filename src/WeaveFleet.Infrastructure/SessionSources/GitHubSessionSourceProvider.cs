@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Common;
@@ -32,11 +31,6 @@ public sealed class GitHubSessionSourceProvider(
         "sk-"
     ];
     private static readonly char[] SecretDelimiters = [' ', '\t', ':', '=', '"', '\'', '`'];
-
-    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
-    {
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
-    };
 
     public string ProviderId => SessionSourceProviderIds.GitHub;
 
@@ -75,7 +69,7 @@ public sealed class GitHubSessionSourceProvider(
         GitHubSourceInput? input;
         try
         {
-            input = selection.Input.Deserialize<GitHubSourceInput>(SerializerOptions);
+            input = selection.Input.Deserialize(InfrastructureJsonContext.Default.GitHubSourceInput);
         }
         catch (JsonException ex)
         {
@@ -343,15 +337,4 @@ public sealed class GitHubSessionSourceProvider(
         string.Equals(sourceType, SessionSourceTypeNames.GitHubPullRequest, StringComparison.Ordinal)
             ? "pull request"
             : "issue";
-
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    private sealed record GitHubSourceInput
-    {
-        public string? Owner { get; init; }
-        public string? Repo { get; init; }
-        public int Number { get; init; }
-        public string? RepositoryPath { get; init; }
-        public string? IsolationStrategy { get; init; }
-        public string? Branch { get; init; }
-    }
 }

@@ -30,16 +30,16 @@ public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
     internal int SubscriberCount => _subscriptions.Count;
 
     /// <inheritdoc />
-    public Task BroadcastAsync(string topic, string type, object payload)
-        => BroadcastAsync(topic, type, payload, CancellationToken.None);
+    public Task BroadcastAsync(string topic, string type, JsonElement payload)
+        => BroadcastAsync(topic, type, payload, sequenceNumber: null, userId: null, CancellationToken.None);
 
-    public Task BroadcastAsync(string topic, string type, object payload, CancellationToken ct)
+    public Task BroadcastAsync(string topic, string type, JsonElement payload, CancellationToken ct)
         => BroadcastAsync(topic, type, payload, sequenceNumber: null, userId: null, ct);
 
     public Task BroadcastAsync(
         string topic,
         string type,
-        object payload,
+        JsonElement payload,
         string? userId,
         CancellationToken ct)
         => BroadcastAsync(topic, type, payload, sequenceNumber: null, userId, ct);
@@ -47,13 +47,12 @@ public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
     public Task BroadcastAsync(
         string topic,
         string type,
-        object payload,
+        JsonElement payload,
         long? sequenceNumber,
         string? userId,
         CancellationToken ct)
     {
-        var json = JsonSerializer.SerializeToElement(payload);
-        var evt = new BroadcastEvent(topic, type, json, DateTimeOffset.UtcNow, sequenceNumber, userId);
+        var evt = new BroadcastEvent(topic, type, payload, DateTimeOffset.UtcNow, sequenceNumber, userId);
 
         foreach (var sub in _subscriptions.Values)
         {

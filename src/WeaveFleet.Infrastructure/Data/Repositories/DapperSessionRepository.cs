@@ -11,8 +11,6 @@ public sealed class DapperSessionRepository(
     IDbConnectionFactory connectionFactory,
     IUserContext userContext) : ISessionRepository
 {
-    private static readonly string[] TerminalStatuses = ["stopped", "completed", "error"];
-
     public async Task InsertAsync(Session session)
     {
         using var conn = connectionFactory.CreateConnection();
@@ -107,29 +105,28 @@ public sealed class DapperSessionRepository(
         using var conn = connectionFactory.CreateConnection();
 
         var sql = new StringBuilder("SELECT * FROM sessions WHERE user_id = @UserId AND parent_session_id IS NULL");
-        var conditions = new List<string>();
+        var parameters = new DynamicParameters();
+        parameters.Add("UserId", userContext.UserId);
+        parameters.Add("Limit", limit);
+        parameters.Add("Offset", offset);
 
         if (statuses is { Count: > 0 })
-            conditions.Add("status IN @Statuses");
+        {
+            sql.Append(" AND status ");
+            SqlInExpander.AppendInClause(sql, parameters, "Status", statuses);
+        }
         if (projectId is not null)
-            conditions.Add("project_id = @ProjectId");
+        {
+            sql.Append(" AND project_id = @ProjectId");
+            parameters.Add("ProjectId", projectId);
+        }
         if (retentionStatuses is { Count: > 0 })
-            conditions.Add("retention_status IN @RetentionStatuses");
-
-        if (conditions.Count > 0)
-            sql.Append(" AND ").Append(string.Join(" AND ", conditions));
+        {
+            sql.Append(" AND retention_status ");
+            SqlInExpander.AppendInClause(sql, parameters, "RetentionStatus", retentionStatuses);
+        }
 
         sql.Append(" ORDER BY created_at DESC LIMIT @Limit OFFSET @Offset");
-
-        var parameters = new
-        {
-            UserId = userContext.UserId,
-            Statuses = statuses,
-            ProjectId = projectId,
-            RetentionStatuses = retentionStatuses,
-            Limit = limit,
-            Offset = offset
-        };
 
         var results = await conn.QueryAsync<Session>(sql.ToString(), parameters);
         return results.AsList();
@@ -153,15 +150,21 @@ public sealed class DapperSessionRepository(
         using var conn = connectionFactory.CreateConnection();
 
         var sql = new StringBuilder("SELECT COUNT(*) FROM sessions WHERE user_id = @UserId");
+        var parameters = new DynamicParameters();
+        parameters.Add("UserId", userContext.UserId);
 
         if (statuses is { Count: > 0 })
-            sql.Append(" AND status IN @Statuses");
+        {
+            sql.Append(" AND status ");
+            SqlInExpander.AppendInClause(sql, parameters, "Status", statuses);
+        }
         if (retentionStatuses is { Count: > 0 })
-            sql.Append(" AND retention_status IN @RetentionStatuses");
+        {
+            sql.Append(" AND retention_status ");
+            SqlInExpander.AppendInClause(sql, parameters, "RetentionStatus", retentionStatuses);
+        }
 
-        return await conn.ExecuteScalarAsync<int>(
-            sql.ToString(),
-            new { UserId = userContext.UserId, Statuses = statuses, RetentionStatuses = retentionStatuses });
+        return await conn.ExecuteScalarAsync<int>(sql.ToString(), parameters);
     }
 
     public async Task<(int Active, int Idle)> GetStatusCountsAsync()
@@ -196,14 +199,18 @@ public sealed class DapperSessionRepository(
     {
         using var conn = connectionFactory.CreateConnection();
         var sql = new StringBuilder("SELECT * FROM sessions WHERE status = 'active' AND user_id = @UserId");
+        var parameters = new DynamicParameters();
+        parameters.Add("UserId", userContext.UserId);
+
         if (retentionStatuses is { Count: > 0 })
-            sql.Append(" AND retention_status IN @RetentionStatuses");
+        {
+            sql.Append(" AND retention_status ");
+            SqlInExpander.AppendInClause(sql, parameters, "RetentionStatus", retentionStatuses);
+        }
 
         sql.Append(" ORDER BY created_at DESC");
 
-        var results = await conn.QueryAsync<Session>(
-            sql.ToString(),
-            new { UserId = userContext.UserId, RetentionStatuses = retentionStatuses });
+        var results = await conn.QueryAsync<Session>(sql.ToString(), parameters);
         return results.AsList();
     }
 
@@ -278,8 +285,8 @@ public sealed class DapperSessionRepository(
         // System-level lookup — no user filter (used by instance stop recovery)
         using var conn = connectionFactory.CreateConnection();
         var results = await conn.QueryAsync<Session>(
-            "SELECT * FROM sessions WHERE instance_id = @InstanceId AND status NOT IN @TerminalStatuses",
-            new { InstanceId = instanceId, TerminalStatuses });
+            "SELECT * FROM sessions WHERE instance_id = @InstanceId AND status NOT IN ('stopped', 'completed', 'error')",
+            new { InstanceId = instanceId });
         return results.AsList();
     }
 
@@ -351,14 +358,19 @@ public sealed class DapperSessionRepository(
     {
         using var conn = connectionFactory.CreateConnection();
         var sql = new StringBuilder("SELECT * FROM sessions WHERE workspace_id = @WorkspaceId AND user_id = @UserId");
+        var parameters = new DynamicParameters();
+        parameters.Add("WorkspaceId", workspaceId);
+        parameters.Add("UserId", userContext.UserId);
+
         if (retentionStatuses is { Count: > 0 })
-            sql.Append(" AND retention_status IN @RetentionStatuses");
+        {
+            sql.Append(" AND retention_status ");
+            SqlInExpander.AppendInClause(sql, parameters, "RetentionStatus", retentionStatuses);
+        }
 
         sql.Append(" ORDER BY created_at DESC");
 
-        var results = await conn.QueryAsync<Session>(
-            sql.ToString(),
-            new { WorkspaceId = workspaceId, UserId = userContext.UserId, RetentionStatuses = retentionStatuses });
+        var results = await conn.QueryAsync<Session>(sql.ToString(), parameters);
         return results.AsList();
     }
 
@@ -406,8 +418,8 @@ public sealed class DapperSessionRepository(
         // System-level recovery operation — no user filter
         using var conn = connectionFactory.CreateConnection();
         return await conn.ExecuteAsync(
-            "UPDATE sessions SET status = 'stopped', stopped_at = @StoppedAt, lifecycle_status = 'stopped' WHERE status NOT IN @TerminalStatuses",
-            new { StoppedAt = stoppedAt, TerminalStatuses });
+            "UPDATE sessions SET status = 'stopped', stopped_at = @StoppedAt, lifecycle_status = 'stopped' WHERE status NOT IN ('stopped', 'completed', 'error')",
+            new { StoppedAt = stoppedAt });
     }
 
     public async Task UpdateProjectAsync(string id, string? projectId)

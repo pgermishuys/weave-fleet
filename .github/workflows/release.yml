@@ -64,13 +64,12 @@ jobs:
         run: npm run build
         working-directory: client
 
-      - name: Publish self-contained app
+      - name: Publish AOT app
         shell: bash
         run: |
           dotnet publish src/WeaveFleet.Api/WeaveFleet.Api.csproj \
             --configuration Release \
             --runtime "${{ matrix.rid }}" \
-            --self-contained true \
             --output "${{ github.workspace }}/artifacts/publish/${{ matrix.rid }}"
 
       - name: Package Unix archive

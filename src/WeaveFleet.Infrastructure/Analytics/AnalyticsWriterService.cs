@@ -174,7 +174,7 @@ public sealed partial class AnalyticsWriterService : BackgroundService
 
             foreach (var snap in snapshots)
             {
-                var modelIdsJson = System.Text.Json.JsonSerializer.Serialize(snap.ModelIds);
+                string modelIdsJson = System.Text.Json.JsonSerializer.Serialize(snap.ModelIds, InfrastructureJsonContext.Default.ListString);
                 await connection.ExecuteAsync("""
                     INSERT OR REPLACE INTO session_snapshots (
                         session_id, parent_session_id, project_id, project_name,
@@ -192,10 +192,18 @@ public sealed partial class AnalyticsWriterService : BackgroundService
                     """,
                     new
                     {
-                        snap.SessionId, snap.ParentSessionId, snap.ProjectId, snap.ProjectName,
-                        snap.WorkspaceDirectory, snap.Title, snap.Status,
-                        snap.TotalTokens, snap.TotalCost, snap.TotalEstimatedCost,
-                        snap.MessageCount, ModelIds = modelIdsJson,
+                        snap.SessionId,
+                        snap.ParentSessionId,
+                        snap.ProjectId,
+                        snap.ProjectName,
+                        snap.WorkspaceDirectory,
+                        snap.Title,
+                        snap.Status,
+                        snap.TotalTokens,
+                        snap.TotalCost,
+                        snap.TotalEstimatedCost,
+                        snap.MessageCount,
+                        ModelIds = modelIdsJson,
                         CreatedAt = snap.CreatedAt.ToString("O"),
                         EndedAt = snap.EndedAt?.ToString("O"),
                         snap.DurationSeconds,
@@ -295,4 +303,5 @@ public sealed partial class AnalyticsWriterService : BackgroundService
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Failed to create scope for main DB token update")]
     private partial void LogMainDbScopeFailed(Exception ex);
+
 }

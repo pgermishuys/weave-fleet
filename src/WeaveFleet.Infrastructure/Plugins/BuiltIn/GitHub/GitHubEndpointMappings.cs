@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Builder;
@@ -11,6 +12,8 @@ namespace WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 
 internal static class GitHubEndpointMappings
 {
+    [RequiresUnreferencedCode("Plugin endpoint delegates are registered at runtime via reflection-based ASP.NET Core route building; all parameter types are concrete and preserved at runtime.")]
+    [RequiresDynamicCode("Plugin endpoint delegates are registered at runtime via reflection-based ASP.NET Core route building; all parameter types are concrete and preserved at runtime.")]
     public static void MapAuthEndpoints(IEndpointRouteBuilder builder)
     {
         var group = builder.MapGroup("/api/integrations/github/auth").WithTags("GitHub");
@@ -21,14 +24,12 @@ internal static class GitHubEndpointMappings
             if (response is null)
                 return Results.Problem("Failed to initiate GitHub device flow.");
 
-            return Results.Ok(new
-            {
-                deviceCode = response.DeviceCode,
-                userCode = response.UserCode,
-                verificationUri = response.VerificationUri,
-                expiresIn = response.ExpiresIn,
-                interval = response.Interval,
-            });
+            return Results.Ok(new GitHubDeviceCodeApiResponse(
+                response.DeviceCode,
+                response.UserCode,
+                response.VerificationUri,
+                response.ExpiresIn,
+                response.Interval));
         })
         .WithName("GitHubInitiateDeviceFlow");
 
@@ -39,13 +40,12 @@ internal static class GitHubEndpointMappings
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.DeviceCode))
-                return Results.BadRequest(new { error = "deviceCode is required." });
+                return Results.BadRequest(new GitHubEndpointError("deviceCode is required."));
 
             var result = await gitHubService.PollForTokenAsync(userContext.UserId, request.DeviceCode, ct).ConfigureAwait(false);
 
-            return Results.Ok(new
-            {
-                status = result.Status switch
+            return Results.Ok(new GitHubPollApiResponse(
+                result.Status switch
                 {
                     DeviceFlowPollStatus.Pending => "pending",
                     DeviceFlowPollStatus.Complete => "complete",
@@ -54,9 +54,8 @@ internal static class GitHubEndpointMappings
                     DeviceFlowPollStatus.Error => "error",
                     _ => throw new InvalidOperationException($"Unsupported device flow poll status '{result.Status}'."),
                 },
-                interval = result.Interval,
-                message = result.Message,
-            });
+                result.Interval,
+                result.Message));
         })
         .WithName("GitHubPollForToken");
 
@@ -67,11 +66,11 @@ internal static class GitHubEndpointMappings
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.Token))
-                return Results.BadRequest(new { error = "token is required." });
+                return Results.BadRequest(new GitHubEndpointError("token is required."));
 
             var connected = await gitHubService.ConnectWithTokenAsync(userContext.UserId, request.Token, ct).ConfigureAwait(false);
             if (!connected)
-                return Results.BadRequest(new { error = "Failed to validate GitHub token." });
+                return Results.BadRequest(new GitHubEndpointError("Failed to validate GitHub token."));
 
             return Results.NoContent();
         })
@@ -87,13 +86,14 @@ internal static class GitHubEndpointMappings
         group.MapGet("/status", async (GitHubService gitHubService, IUserContext userContext, CancellationToken ct) =>
         {
             var connected = await gitHubService.IsConnectedAsync(userContext.UserId, ct).ConfigureAwait(false);
-            return Results.Ok(new { connected });
+            return Results.Ok(new GitHubConnectionStatusApiResponse(connected));
         })
         .WithName("GitHubConnectionStatus");
     }
 
-    public static void MapDataEndpoints(IEndpointRouteBuilder builder)
-    {
+    [RequiresUnreferencedCode("Plugin endpoint delegates are registered at runtime via reflection-based ASP.NET Core route building; all parameter types are concrete and preserved at runtime.")]
+    [RequiresDynamicCode("Plugin endpoint delegates are registered at runtime via reflection-based ASP.NET Core route building; all parameter types are concrete and preserved at runtime.")]
+    public static void MapDataEndpoints(IEndpointRouteBuilder builder)    {
         var group = builder.MapGroup("/api/integrations/github").WithTags("GitHub");
 
         group.MapGet("/repos", async (
@@ -267,11 +267,11 @@ internal static class GitHubEndpointMappings
 
             var pullRequest = await proxy.FetchAsync(token, $"repos/{owner}/{repo}/pulls/{number}", ct: ct).ConfigureAwait(false);
             if (pullRequest is null)
-                return Results.NotFound(new { error = "PR not found." });
+                return Results.NotFound(new GitHubEndpointError("PR not found."));
 
             var sha = pullRequest["head"]?["sha"]?.GetValue<string>();
             if (sha is null)
-                return Results.NotFound(new { error = "PR head SHA not found." });
+                return Results.NotFound(new GitHubEndpointError("PR head SHA not found."));
 
             var status = await proxy.FetchAsync(token, $"repos/{owner}/{repo}/commits/{sha}/check-runs", ct: ct).ConfigureAwait(false);
             return Results.Ok(status);
@@ -295,7 +295,7 @@ internal static class GitHubEndpointMappings
             var repos = new JsonArray();
             foreach (var bookmark in request.Bookmarks)
             {
-                repos.Add(bookmark.FullName);
+                repos.Add(JsonValue.Create<string>(bookmark.FullName));
             }
 
             var config = new JsonObject
@@ -318,7 +318,7 @@ internal static class GitHubEndpointMappings
             var repos = config["repos"] as JsonArray ?? new JsonArray();
             var exists = repos.Any(repo => repo?.GetValue<string>() == request.Repo);
             if (!exists)
-                repos.Add(request.Repo);
+                repos.Add(JsonValue.Create<string>(request.Repo));
 
             config["repos"] = repos;
             await store.SetStateAsync("github_bookmarks", userContext.UserId, config, ct).ConfigureAwait(false);
@@ -394,11 +394,30 @@ internal static class GitHubEndpointMappings
             })
             .ToArray();
 
-    private sealed record BookmarkRequest(string Repo);
-    private sealed record BookmarkSyncRequest(IReadOnlyList<BookmarkedRepoDto> Bookmarks);
-    private sealed record BookmarkedRepoDto(string FullName, string Owner, string Name);
+    public sealed record BookmarkRequest(string Repo);
+    public sealed record BookmarkSyncRequest(IReadOnlyList<BookmarkedRepoDto> Bookmarks);
+    public sealed record BookmarkedRepoDto(string FullName, string Owner, string Name);
 
-    private sealed record ConnectWithTokenRequest(string Token);
+    public sealed record ConnectWithTokenRequest(string Token);
 
-    private sealed record PollRequest(string DeviceCode);
+    public sealed record PollRequest(string DeviceCode);
 }
+
+// ── Named API response types (file-level so they are accessible from ApiJsonContext in the Api project) ─────
+
+/// <summary>Response from the GitHub device code initiation endpoint.</summary>
+public sealed record GitHubDeviceCodeApiResponse(
+    string DeviceCode,
+    string UserCode,
+    string VerificationUri,
+    int ExpiresIn,
+    int Interval);
+
+/// <summary>Response from the GitHub device flow poll endpoint.</summary>
+public sealed record GitHubPollApiResponse(string Status, int? Interval, string? Message);
+
+/// <summary>Response from the GitHub connection status endpoint.</summary>
+public sealed record GitHubConnectionStatusApiResponse(bool Connected);
+
+/// <summary>Error response body for GitHub plugin endpoints.</summary>
+public sealed record GitHubEndpointError(string Error);
