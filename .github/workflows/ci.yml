@@ -286,7 +286,7 @@ jobs:
           port="5010"
           log_path="/tmp/fleet-smoke.log"
 
-          WEAVE_FLEET_HOST="127.0.0.1" WEAVE_FLEET_PORT="$port" "$binary" >"$log_path" 2>&1 &
+          Fleet__Host="127.0.0.1" Fleet__Port="$port" "$binary" >"$log_path" 2>&1 &
           app_pid=$!
 
           cleanup() { kill "$app_pid" 2>/dev/null || true; }
