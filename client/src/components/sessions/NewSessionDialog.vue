@@ -40,6 +40,7 @@ import {
 } from "@/lib/github-session-source";
 import { cn } from "@/lib/utils";
 import { useAppShellStore } from "@/stores/app-shell";
+import { usePreferencesStore } from "@/stores/preferences";
 
 type SessionSourceKind = "repository" | "directory";
 type IsolationStrategy = "existing" | "worktree";
@@ -65,9 +66,12 @@ const emit = defineEmits<{
 }>();
 
 const appShellStore = useAppShellStore();
+const preferencesStore = usePreferencesStore();
 const { config } = storeToRefs(appShellStore);
 
 type WorktreeMode = "new" | "existing";
+
+preferencesStore.ensureLoaded();
 
 const sourceKind = shallowRef<SessionSourceKind>("repository");
 const repositoryQuery = shallowRef("");
@@ -83,7 +87,11 @@ const branchManuallyEdited = shallowRef(false);
 const worktreeMode = shallowRef<WorktreeMode>("new");
 const selectedWorktreePath = shallowRef<string | null>(null);
 const selectedProjectId = shallowRef(props.initialProjectId ?? UNGROUPED_PROJECT_ID);
-const selectedHarnessType = shallowRef("");
+function getDefaultHarnessType(): string {
+  return preferencesStore.get("defaultHarnessType", "opencode");
+}
+
+const selectedHarnessType = shallowRef(getDefaultHarnessType());
 const submitAttempted = shallowRef(false);
 const activeGitHubPreset = shallowRef<GitHubSessionSourcePreset | null>(null);
 
@@ -314,7 +322,7 @@ function resetForm(): void {
   worktreeMode.value = "new";
   selectedWorktreePath.value = null;
   selectedProjectId.value = getInitialProjectSelection();
-  selectedHarnessType.value = "";
+  selectedHarnessType.value = getDefaultHarnessType();
   submitAttempted.value = false;
   activeGitHubPreset.value = null;
 }
