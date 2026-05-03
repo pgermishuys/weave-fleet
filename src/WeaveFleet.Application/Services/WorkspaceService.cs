@@ -152,8 +152,29 @@ public sealed partial class WorkspaceService(
 
         if (workspace.IsolationStrategy == "worktree" && workspace.Directory is not null)
         {
-            await RunGitAsync(workspace.SourceDirectory ?? workspace.Directory,
-                "worktree", "remove", "--force", workspace.Directory);
+            try
+            {
+                await RunGitAsync(workspace.SourceDirectory ?? workspace.Directory,
+                    "worktree", "remove", "--force", workspace.Directory);
+            }
+            catch (Exception ex)
+            {
+                // Fall back to manual directory removal if git worktree remove fails
+                LogCloneDeleteFailed(ex, workspace.Directory);
+                try { System.IO.Directory.Delete(workspace.Directory, recursive: true); }
+                catch { /* best effort */ }
+            }
+
+            // Remove the -worktrees parent folder if it is now empty
+            var worktreesRoot = Path.GetDirectoryName(workspace.Directory);
+            if (worktreesRoot is not null
+                && worktreesRoot.EndsWith("-worktrees", StringComparison.Ordinal)
+                && System.IO.Directory.Exists(worktreesRoot)
+                && System.IO.Directory.GetFileSystemEntries(worktreesRoot).Length == 0)
+            {
+                try { System.IO.Directory.Delete(worktreesRoot); }
+                catch { /* best effort */ }
+            }
         }
         else if (workspace.IsolationStrategy is "clone" or "managed" && workspace.Directory is not null)
         {
@@ -205,12 +226,45 @@ public sealed partial class WorkspaceService(
 
     private static async Task<string> CreateWorktreeAsync(string sourceDir, string? branch)
     {
-        var branchName = branch ?? $"fleet-{Guid.NewGuid().ToString("N")[..8]}";
-        var worktreeDir = Path.Combine(
-            Path.GetDirectoryName(sourceDir) ?? sourceDir,
-            $".fleet-worktree-{Guid.NewGuid().ToString("N")[..8]}");
+        var branchName = branch ?? $"weave-session-{Guid.NewGuid().ToString("N")[..8]}";
 
-        await RunGitAsync(sourceDir, "worktree", "add", "-b", branchName, worktreeDir);
+        // Place worktree under a dedicated sibling folder to avoid polluting the parent.
+        // Naming: {repo-name}-worktrees/{hyphenated-branch-name}
+        // e.g. source "C:\repos\my-project" + branch "feature/auth"
+        //   → "C:\repos\my-project-worktrees\feature-auth"
+        var repoName = Path.GetFileName(sourceDir);
+        var hyphenatedBranch = branchName.Replace('/', '-').Replace('\\', '-');
+        var parentDir = Path.GetFullPath(Path.GetDirectoryName(sourceDir) ?? sourceDir);
+        var worktreesRoot = Path.Combine(parentDir, $"{repoName}-worktrees");
+        var worktreeDir = Path.Combine(worktreesRoot, hyphenatedBranch);
+
+        // Guard against path traversal
+        var resolvedWorktreesRoot = Path.GetFullPath(worktreesRoot);
+        var resolvedWorktreeDir = Path.GetFullPath(worktreeDir);
+        if (!resolvedWorktreesRoot.StartsWith(parentDir + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Worktree root escapes parent directory: {resolvedWorktreesRoot}");
+        if (!resolvedWorktreeDir.StartsWith(resolvedWorktreesRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Invalid branch name results in path outside worktree root: {branchName}");
+
+        Directory.CreateDirectory(worktreesRoot);
+
+        // Check if the branch already exists; if so, check it out rather than creating.
+        var branchExists = false;
+        try
+        {
+            await RunGitAsync(sourceDir, "rev-parse", "--verify", branchName);
+            branchExists = true;
+        }
+        catch
+        {
+            // Branch doesn't exist locally — will be created
+        }
+
+        if (branchExists)
+            await RunGitAsync(sourceDir, "worktree", "add", worktreeDir, branchName);
+        else
+            await RunGitAsync(sourceDir, "worktree", "add", worktreeDir, "-b", branchName);
+
         return worktreeDir;
     }
 
