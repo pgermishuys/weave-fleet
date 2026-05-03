@@ -248,17 +248,7 @@ builder.Services.AddAntiforgery(options =>
 // DefaultJsonTypeInfoResolver is appended as a fallback so the runtime
 // RequestDelegateFactory can resolve framework types (e.g. Task) for
 // dynamically-registered plugin endpoints that bypass RDG interception.
-// The suppressed warnings apply only to the fallback resolver which is never
-// used for actual serialization — only to satisfy the RDF's type validation.
-#pragma warning disable IL2026 // DefaultJsonTypeInfoResolver: metadata for trimmed types
-#pragma warning disable IL3050 // DefaultJsonTypeInfoResolver: AOT dynamic code
-builder.Services.ConfigureHttpJsonOptions(options =>
-{
-    options.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default);
-    options.SerializerOptions.TypeInfoResolverChain.Add(new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver());
-});
-#pragma warning restore IL3050
-#pragma warning restore IL2026
+JsonSerializationSetup.ConfigureHttpJson(builder.Services);
 
 // Register ProblemDetails service so Results.Problem() serializes correctly
 // with the source-generated context.
@@ -462,4 +452,28 @@ internal static partial class StartupLog
 // Expose Program for WebApplicationFactory in E2E tests
 public partial class Program
 {
+}
+
+/// <summary>
+/// Configures HTTP JSON options with source-generated context and a reflection-based
+/// fallback resolver. The fallback is required so the runtime <c>RequestDelegateFactory</c>
+/// can resolve framework types (e.g. <see cref="Task"/>) for dynamically-registered
+/// plugin endpoints that bypass RDG interception. The fallback is never used for actual
+/// serialization — <see cref="ApiJsonContext"/> takes priority at position 0 in the chain.
+/// </summary>
+internal static class JsonSerializationSetup
+{
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "DefaultJsonTypeInfoResolver is a fallback for framework types (e.g. Task) that are always preserved; it is never used for actual API payload serialization.")]
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification = "DefaultJsonTypeInfoResolver is a fallback for framework types (e.g. Task) that are always preserved; it is never used for actual API payload serialization.")]
+    public static void ConfigureHttpJson(IServiceCollection services)
+    {
+        services.ConfigureHttpJsonOptions(options =>
+        {
+            options.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default);
+            options.SerializerOptions.TypeInfoResolverChain.Add(
+                new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver());
+        });
+    }
 }
