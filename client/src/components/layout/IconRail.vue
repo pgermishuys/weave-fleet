@@ -30,7 +30,7 @@ const topItems: readonly RailItem[] = [
 ];
 
 const bottomItems: readonly RailItem[] = [
-  { id: "marketplace", label: "Marketplace", icon: Puzzle },
+  { id: "marketplace", label: "Plugins", icon: Puzzle },
   { id: "analytics", label: "Analytics", icon: BarChart3, to: "/analytics" },
   { id: "settings", label: "Settings", icon: Settings, to: "/settings" },
 ];
@@ -123,7 +123,7 @@ function getStatusBadgeCount(count: number): number | undefined {
 }
 
 function isSidebarRail(value: RailItemId): value is SidebarRail {
-  return ["board", "sessions", "analytics", "github", "linear", "slack", "docker", "sentry", "marketplace", "settings"].includes(value);
+  return ["board", "sessions", "analytics", "github", "marketplace", "settings"].includes(value);
 }
 
 async function loadPluginStatuses(): Promise<void> {

@@ -10,10 +10,6 @@ import { useSidebarStore } from "@/stores/sidebar";
 
 type PluginRailId =
   | "github"
-  | "linear"
-  | "slack"
-  | "docker"
-  | "sentry"
   | "marketplace"
   | "settings";
 
@@ -44,11 +40,7 @@ function createPlaceholderPanel(
 
 const pluginPanelRegistry = [
   { id: "github", title: "GitHub" },
-  { id: "linear", title: "Linear" },
-  { id: "slack", title: "Slack" },
-  { id: "docker", title: "Docker" },
-  { id: "sentry", title: "Sentry" },
-  { id: "marketplace", title: "Marketplace" },
+  { id: "marketplace", title: "Plugins" },
   { id: "settings", title: "Settings" },
 ] as const satisfies readonly PluginPanelDefinition[];
 

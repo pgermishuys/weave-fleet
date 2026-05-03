@@ -6,10 +6,6 @@ export type SidebarRail =
   | "sessions"
   | "analytics"
   | "github"
-  | "linear"
-  | "slack"
-  | "docker"
-  | "sentry"
   | "marketplace"
   | "settings";
 
