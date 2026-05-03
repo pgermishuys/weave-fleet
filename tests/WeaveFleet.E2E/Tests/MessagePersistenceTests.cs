@@ -379,18 +379,18 @@ public sealed class MessagePersistenceTests : E2ETestBase,
                 response.Url.Contains($"/api/sessions/{sessionId}/committed-events", StringComparison.Ordinal)
                 && response.Url.Contains("afterSequenceNumber=", StringComparison.Ordinal)
                 && response.Ok,
-                new PageWaitForResponseOptions { Timeout = 30_000 });
+                new PageWaitForResponseOptions { Timeout = 10_000 });
 
             detail = await dashboard.ClickSessionCardAsync(sessionId);
 
             var gapFillResponse = await afterSequenceNumberResponse;
             gapFillResponse.Url.ShouldContain("afterSequenceNumber=");
-            await detail.WaitForMessageTextAsync("Recovered after reconnect via sequence gap fill", 30_000);
+            await detail.WaitForMessageTextAsync("Recovered after reconnect via sequence gap fill", 10_000);
         });
     }
 
     [Fact]
-    public async Task SwitchingFromAnotherSession_ReplaysMissedCommittedEvents_ViaSequenceGapFill()
+    public async Task SwitchingFromAnotherSession_ShowsMessagesPushedWhileViewingDifferentSession()
     {
         await WithFailureCapture(async () =>
         {
@@ -436,24 +436,19 @@ public sealed class MessagePersistenceTests : E2ETestBase,
 
             await sidebar.ExpectSessionVisibleAsync(sessionAId);
 
+            // Push a message to session A while viewing session B.
+            // The WebSocket stays connected across sidebar session switches,
+            // so events arrive via streaming (not HTTP gap-fill).
             await PushDurableAssistantMessageAsync(
                 sessionAHarness,
                 sessionAHarnessId,
                 sessionAId,
-                "msg-a-gapfill-1",
-                "Recovered final message after switching from session B");
-
-            var afterSequenceNumberResponse = Page.WaitForResponseAsync(response =>
-                response.Url.Contains($"/api/sessions/{sessionAId}/committed-events", StringComparison.Ordinal)
-                && response.Url.Contains("afterSequenceNumber=", StringComparison.Ordinal)
-                && response.Ok,
-                new PageWaitForResponseOptions { Timeout = 30_000 });
+                "msg-a-while-on-b",
+                "Message pushed while viewing session B");
 
             sessionADetail = await sidebar.ClickSessionAsync(sessionAId);
 
-            var gapFillResponse = await afterSequenceNumberResponse;
-            gapFillResponse.Url.ShouldContain("afterSequenceNumber=");
-            await sessionADetail.WaitForMessageTextAsync("Recovered final message after switching from session B", 30_000);
+            await sessionADetail.WaitForMessageTextAsync("Message pushed while viewing session B", 30_000);
         });
     }
 
