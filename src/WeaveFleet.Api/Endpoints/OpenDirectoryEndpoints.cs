@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using WeaveFleet.Api;
 using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -15,12 +16,12 @@ public static class OpenDirectoryEndpoints
         group.MapPost("/open-directory", async (OpenDirectoryRequest req, WorkspaceRootService workspaceRootService) =>
         {
             if (string.IsNullOrWhiteSpace(req.Path) || !Directory.Exists(req.Path))
-                return Results.BadRequest(new { error = "Directory does not exist." });
+                return Results.BadRequest(new ErrorResponse("Directory does not exist."));
 
             var normalised = Path.GetFullPath(req.Path);
             var allowedRoots = await workspaceRootService.GetAllowedRootsAsync();
             if (!IsUnderAllowedRoot(normalised, allowedRoots))
-                return Results.BadRequest(new { error = "Path is outside allowed workspace roots." });
+                return Results.BadRequest(new ErrorResponse("Path is outside allowed workspace roots."));
 
             try
             {

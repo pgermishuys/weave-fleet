@@ -1,3 +1,4 @@
+using WeaveFleet.Api;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Repositories;
@@ -58,7 +59,7 @@ public static class ProjectEndpoints
             return result.Match(
                 p => Results.Created($"/api/projects/{p.Id}",
                     new ProjectResponse(p.Id, p.Name, p.Description, p.Type, p.Position, 0, p.CreatedAt, p.UpdatedAt)),
-                error => Results.BadRequest(new { error = error.Description }));
+                error => Results.BadRequest(new ErrorResponse(error.Description)));
         })
         .Produces<ProjectResponse>(201)
         .WithName("CreateProject");
@@ -102,9 +103,9 @@ file static class FleetErrorExtensions
     public static IResult ToApiResult(this WeaveFleet.Domain.Common.FleetError error) =>
         error.Code switch
         {
-            var c when c.EndsWith(".NotFound", StringComparison.Ordinal) => Results.NotFound(new { error = error.Description }),
-            "General.Conflict" => Results.Conflict(new { error = error.Description }),
-            var c when c.StartsWith("Validation.", StringComparison.Ordinal) => Results.BadRequest(new { error = error.Description }),
+            var c when c.EndsWith(".NotFound", StringComparison.Ordinal) => Results.NotFound(new ErrorResponse(error.Description)),
+            "General.Conflict" => Results.Conflict(new ErrorResponse(error.Description)),
+            var c when c.StartsWith("Validation.", StringComparison.Ordinal) => Results.BadRequest(new ErrorResponse(error.Description)),
             _ => Results.Problem(error.Description)
         };
 }

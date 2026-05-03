@@ -247,8 +247,12 @@ builder.Services.AddAntiforgery(options =>
 // use compile-time serialization (required for trimming and AOT).
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
-    options.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default);
+    options.SerializerOptions.TypeInfoResolver = ApiJsonContext.Default;
 });
+
+// Register ProblemDetails service so Results.Problem() serializes correctly
+// with the source-generated context.
+builder.Services.AddProblemDetails();
 
 // Use Fleet.Host/Port as the listen URL (overrides the "Urls" config key)
 builder.WebHost.UseUrls(fleetOptions.ListenUrl);

@@ -14,33 +14,27 @@ public static class SessionSourceEndpoints
         {
             var sources = providers
                 .SelectMany(provider => provider.GetDescriptors())
-                .Select(descriptor => new
-                {
-                    key = new
-                    {
-                        providerId = descriptor.Key.ProviderId,
-                        sourceType = descriptor.Key.SourceType,
-                        actionId = descriptor.Key.ActionId,
-                        contractVersion = descriptor.Key.ContractVersion
-                    },
-                    displayName = descriptor.DisplayName,
-                    kind = descriptor.Kind,
-                    inputFields = descriptor.InputFields.Select(field => new
-                    {
-                        name = field.Name,
-                        valueType = field.ValueType,
-                        required = field.Required,
-                        allowedValues = field.AllowedValues,
-                        description = field.Description
-                    }),
-                    producesWorkspace = descriptor.ProducesWorkspace,
-                    producesContext = descriptor.ProducesContext,
-                    requiresConfirmation = descriptor.RequiresConfirmation
-                })
-                .OrderBy(source => source.displayName, StringComparer.Ordinal)
+                .Select(descriptor => new SessionSourceItem(
+                    Key: new SessionSourceKey(
+                        descriptor.Key.ProviderId,
+                        descriptor.Key.SourceType,
+                        descriptor.Key.ActionId,
+                        descriptor.Key.ContractVersion),
+                    DisplayName: descriptor.DisplayName,
+                    Kind: descriptor.Kind,
+                    InputFields: descriptor.InputFields.Select(field => new SessionSourceInputField(
+                        field.Name,
+                        field.ValueType,
+                        field.Required,
+                        field.AllowedValues,
+                        field.Description)).ToList(),
+                    ProducesWorkspace: descriptor.ProducesWorkspace,
+                    ProducesContext: descriptor.ProducesContext,
+                    RequiresConfirmation: descriptor.RequiresConfirmation))
+                .OrderBy(source => source.DisplayName, StringComparer.Ordinal)
                 .ToList();
 
-            return Results.Ok(new { sources });
+            return Results.Ok(new SessionSourceCatalogResponse(sources));
         })
         .WithName("GetSessionSourceCatalog");
 

@@ -1,3 +1,4 @@
+using WeaveFleet.Api;
 using System.Text.Json.Serialization;
 using System.Text.Json.Nodes;
 using System.Text.Json;
@@ -28,7 +29,7 @@ public static class BoardEndpoints
         {
             var name = NormalizeRequired(req.Name);
             if (name is null)
-                return Results.BadRequest(new { error = "Board name is required." });
+                return Results.BadRequest(new ErrorResponse("Board name is required."));
 
             var now = DateTimeOffset.UtcNow.ToString("O");
             var board = new Board
@@ -55,7 +56,7 @@ public static class BoardEndpoints
 
             var name = NormalizeRequired(req.Name);
             if (name is null)
-                return Results.BadRequest(new { error = "Board name is required." });
+                return Results.BadRequest(new ErrorResponse("Board name is required."));
 
             board.Name = name;
             board.UpdatedAt = DateTimeOffset.UtcNow.ToString("O");
@@ -102,11 +103,11 @@ public static class BoardEndpoints
 
             var providerType = NormalizeRequired(req.ProviderType);
             if (providerType is null)
-                return Results.BadRequest(new { error = "Source providerType is required." });
+                return Results.BadRequest(new ErrorResponse("Source providerType is required."));
 
             var configResult = NormalizeJsonObject(req.Config, "Source config is required.");
             if (configResult.IsFailure)
-                return Results.BadRequest(new { error = configResult.Error.Description });
+                return Results.BadRequest(new ErrorResponse(configResult.Error.Description));
 
             var now = DateTimeOffset.UtcNow.ToString("O");
             var source = new BoardSource
@@ -137,14 +138,14 @@ public static class BoardEndpoints
                 return NotFound("Source not found.");
 
             if (req.ProviderType is not null && NormalizeRequired(req.ProviderType) is null)
-                return Results.BadRequest(new { error = "Source providerType is required." });
+                return Results.BadRequest(new ErrorResponse("Source providerType is required."));
 
             Result<string>? configResult = null;
             if (req.Config is not null)
             {
                 configResult = NormalizeJsonObject(req.Config, "Source config is required.");
                 if (configResult.IsFailure)
-                    return Results.BadRequest(new { error = configResult.Error.Description });
+                    return Results.BadRequest(new ErrorResponse(configResult.Error.Description));
             }
 
             var updatedSource = new BoardSource
@@ -217,10 +218,10 @@ public static class BoardEndpoints
 
             var name = NormalizeRequired(req.Name);
             if (name is null)
-                return Results.BadRequest(new { error = "Lane name is required." });
+                return Results.BadRequest(new ErrorResponse("Lane name is required."));
 
             if (!IsValidPosition(req.Position))
-                return Results.BadRequest(new { error = "Position must be zero or greater." });
+                return Results.BadRequest(new ErrorResponse("Position must be zero or greater."));
 
             var now = DateTimeOffset.UtcNow.ToString("O");
             var lane = new BoardLane
@@ -254,10 +255,10 @@ public static class BoardEndpoints
                 return NotFound("Lane not found.");
 
             if (req.Name is not null && NormalizeRequired(req.Name) is null)
-                return Results.BadRequest(new { error = "Lane name is required." });
+                return Results.BadRequest(new ErrorResponse("Lane name is required."));
 
             if (!IsValidPosition(req.Position))
-                return Results.BadRequest(new { error = "Position must be zero or greater." });
+                return Results.BadRequest(new ErrorResponse("Position must be zero or greater."));
 
             var updatedLane = new BoardLane
             {
@@ -291,7 +292,7 @@ public static class BoardEndpoints
 
             var cards = await boardRepository.ListCardsAsync(boardId, userContext.UserId);
             if (cards.Any(card => string.Equals(card.LaneId, laneId, StringComparison.Ordinal)))
-                return Results.Conflict(new { error = "Cannot delete a lane that still contains cards." });
+                return Results.Conflict(new ErrorResponse("Cannot delete a lane that still contains cards."));
 
             var deleted = await boardRepository.DeleteLaneAsync(boardId, laneId, userContext.UserId);
             return deleted
@@ -341,10 +342,10 @@ public static class BoardEndpoints
 
             var title = NormalizeRequired(req.Title);
             if (title is null)
-                return Results.BadRequest(new { error = "Card title is required." });
+                return Results.BadRequest(new ErrorResponse("Card title is required."));
 
             if (!IsValidPosition(req.Position))
-                return Results.BadRequest(new { error = "Position must be zero or greater." });
+                return Results.BadRequest(new ErrorResponse("Position must be zero or greater."));
 
             var now = DateTimeOffset.UtcNow.ToString("O");
             var card = new BoardCard
@@ -378,16 +379,16 @@ public static class BoardEndpoints
                 return NotFound("Card not found.");
 
             if (req.Title is not null && NormalizeRequired(req.Title) is null)
-                return Results.BadRequest(new { error = "Card title is required." });
+                return Results.BadRequest(new ErrorResponse("Card title is required."));
 
             if (!IsValidPosition(req.Position))
-                return Results.BadRequest(new { error = "Position must be zero or greater." });
+                return Results.BadRequest(new ErrorResponse("Position must be zero or greater."));
 
             var targetLaneId = req.LaneId ?? card.LaneId;
             if (!string.Equals(targetLaneId, card.LaneId, StringComparison.Ordinal) || req.Position is not null)
             {
                 if (card.ArchivedAt is not null)
-                    return Results.Conflict(new { error = "Archived cards cannot be moved or reordered." });
+                    return Results.Conflict(new ErrorResponse("Archived cards cannot be moved or reordered."));
 
                 var lane = await boardRepository.GetLaneByIdAsync(boardId, targetLaneId, userContext.UserId);
                 if (lane is null)
@@ -473,10 +474,10 @@ public static class BoardEndpoints
                 return NotFound("Card not found.");
 
             if (card.ArchivedAt is not null)
-                return Results.Conflict(new { error = "Archived cards cannot be moved." });
+                return Results.Conflict(new ErrorResponse("Archived cards cannot be moved."));
 
             if (req.Position < 0)
-                return Results.BadRequest(new { error = "Position must be zero or greater." });
+                return Results.BadRequest(new ErrorResponse("Position must be zero or greater."));
 
             var lane = await boardRepository.GetLaneByIdAsync(boardId, req.LaneId, userContext.UserId);
             if (lane is null)
@@ -511,7 +512,7 @@ public static class BoardEndpoints
     private static BoardSyncResponse ToResponse(BoardSyncResult result) =>
         new(result.SourcesProcessed, result.IssuesFetched, result.CardsCreated, result.CardsUpdated, result.CardsMarkedStale, result.SyncedAt);
 
-    private static IResult NotFound(string message) => Results.NotFound(new { error = message });
+    private static IResult NotFound(string message) => Results.NotFound(new ErrorResponse(message));
 
     private static string? NormalizeRequired(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -636,13 +637,13 @@ file static class BoardFleetErrorExtensions
         error.Code switch
         {
             var code when code.EndsWith(".NotFound", StringComparison.Ordinal) || code == "General.NotFound"
-                => Results.NotFound(new { error = error.Description }),
+                => Results.NotFound(new ErrorResponse(error.Description)),
             "General.Unauthorized"
                 => Results.Unauthorized(),
             "General.Conflict"
-                => Results.Conflict(new { error = error.Description }),
+                => Results.Conflict(new ErrorResponse(error.Description)),
             var code when code.StartsWith("Validation.", StringComparison.Ordinal)
-                => Results.BadRequest(new { error = error.Description }),
+                => Results.BadRequest(new ErrorResponse(error.Description)),
             _ => Results.Problem(error.Description)
         };
 }

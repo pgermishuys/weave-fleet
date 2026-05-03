@@ -1,3 +1,5 @@
+using WeaveFleet.Api;
+
 namespace WeaveFleet.Api.Endpoints;
 
 #pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
@@ -18,16 +20,14 @@ public static class SkillEndpoints
         group.MapGet("", () =>
         {
             if (!Directory.Exists(SkillsDir))
-                return Results.Ok(Array.Empty<object>());
+                return Results.Ok(Array.Empty<SkillListItem>());
 
             var skills = Directory.EnumerateDirectories(SkillsDir)
-                .Select(dir => new
-                {
-                    name = Path.GetFileName(dir),
-                    path = dir,
-                    hasPrompt = File.Exists(Path.Combine(dir, "prompt.md"))
-                               || File.Exists(Path.Combine(dir, "PROMPT.md"))
-                })
+                .Select(dir => new SkillListItem(
+                    Name: Path.GetFileName(dir),
+                    Path: dir,
+                    HasPrompt: File.Exists(Path.Combine(dir, "prompt.md"))
+                               || File.Exists(Path.Combine(dir, "PROMPT.md"))))
                 .ToArray();
 
             return Results.Ok(skills);
@@ -38,20 +38,20 @@ public static class SkillEndpoints
         group.MapGet("/{name}", (string name) =>
         {
             if (!IsValidSkillName(name))
-                return Results.BadRequest(new { error = "Invalid skill name." });
+                return Results.BadRequest(new ErrorResponse("Invalid skill name."));
 
             var dir = Path.Combine(SkillsDir, name);
             if (!IsContainedInSkillsDir(dir))
-                return Results.BadRequest(new { error = "Invalid skill name." });
+                return Results.BadRequest(new ErrorResponse("Invalid skill name."));
 
             if (!Directory.Exists(dir))
-                return Results.NotFound(new { error = $"Skill '{name}' not found." });
+                return Results.NotFound(new ErrorResponse($"Skill '{name}' not found."));
 
             var promptFile = Directory.EnumerateFiles(dir, "*.md", SearchOption.TopDirectoryOnly)
                 .FirstOrDefault();
             var prompt = promptFile is not null ? File.ReadAllText(promptFile) : null;
 
-            return Results.Ok(new { name, path = dir, prompt });
+            return Results.Ok(new SkillDetailResponse(name, dir, prompt));
         })
         .WithName("GetSkill");
 
@@ -59,22 +59,22 @@ public static class SkillEndpoints
         group.MapPost("", (InstallSkillRequest req) =>
         {
             if (string.IsNullOrWhiteSpace(req.Name))
-                return Results.BadRequest(new { error = "Skill name is required." });
+                return Results.BadRequest(new ErrorResponse("Skill name is required."));
 
             if (!IsValidSkillName(req.Name))
-                return Results.BadRequest(new { error = "Invalid skill name." });
+                return Results.BadRequest(new ErrorResponse("Invalid skill name."));
 
             var dest = Path.Combine(SkillsDir, req.Name);
             if (!IsContainedInSkillsDir(dest))
-                return Results.BadRequest(new { error = "Invalid skill name." });
+                return Results.BadRequest(new ErrorResponse("Invalid skill name."));
 
             if (Directory.Exists(dest))
-                return Results.Conflict(new { error = $"Skill '{req.Name}' already exists." });
+                return Results.Conflict(new ErrorResponse($"Skill '{req.Name}' already exists."));
 
             if (!string.IsNullOrEmpty(req.SourcePath))
             {
                 if (!Directory.Exists(req.SourcePath))
-                    return Results.BadRequest(new { error = "Source path does not exist." });
+                    return Results.BadRequest(new ErrorResponse("Source path does not exist."));
 
                 CopyDirectory(req.SourcePath, dest);
             }
@@ -85,7 +85,7 @@ public static class SkillEndpoints
                 File.WriteAllText(Path.Combine(dest, "prompt.md"), $"# {req.Name}\n\n");
             }
 
-            return Results.Created($"/api/skills/{req.Name}", new { name = req.Name, path = dest });
+            return Results.Created($"/api/skills/{req.Name}", new SkillCreatedResponse(req.Name, dest));
         })
         .WithName("InstallSkill");
 
@@ -93,14 +93,14 @@ public static class SkillEndpoints
         group.MapDelete("/{name}", (string name) =>
         {
             if (!IsValidSkillName(name))
-                return Results.BadRequest(new { error = "Invalid skill name." });
+                return Results.BadRequest(new ErrorResponse("Invalid skill name."));
 
             var dir = Path.Combine(SkillsDir, name);
             if (!IsContainedInSkillsDir(dir))
-                return Results.BadRequest(new { error = "Invalid skill name." });
+                return Results.BadRequest(new ErrorResponse("Invalid skill name."));
 
             if (!Directory.Exists(dir))
-                return Results.NotFound(new { error = $"Skill '{name}' not found." });
+                return Results.NotFound(new ErrorResponse($"Skill '{name}' not found."));
 
             Directory.Delete(dir, recursive: true);
             return Results.NoContent();

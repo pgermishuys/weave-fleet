@@ -15,30 +15,22 @@ public static class PluginEndpoints
             var descriptors = await pluginCatalog.GetDescriptorsAsync(cancellationToken).ConfigureAwait(false);
             var statuses = await pluginCatalog.GetStatusesAsync(cancellationToken).ConfigureAwait(false);
 
-            return Results.Ok(new
-            {
-                plugins = descriptors.Select(descriptor => new
-                {
-                    id = descriptor.Id,
-                    displayName = descriptor.DisplayName,
-                    trustLevel = ToTrustLevel(descriptor.TrustLevel),
-                    hasFrontend = descriptor.HasFrontend,
-                    hasBackend = descriptor.HasBackend,
-                }),
-                statuses = statuses.Select(status => new
-                {
-                    pluginId = status.PluginId,
-                    status = ToConnectionStatus(status.Status),
-                    connectedAt = status.ConnectedAt,
-                    actions = status.Actions.Select(action => new
-                    {
-                        id = action.Id,
-                        label = action.Label,
-                        href = action.Href,
-                        method = action.Method,
-                    }),
-                }),
-            });
+            return Results.Ok(new PluginListResponse(
+                Plugins: descriptors.Select(descriptor => new PluginDescriptorItem(
+                    Id: descriptor.Id,
+                    DisplayName: descriptor.DisplayName,
+                    TrustLevel: ToTrustLevel(descriptor.TrustLevel),
+                    HasFrontend: descriptor.HasFrontend,
+                    HasBackend: descriptor.HasBackend)).ToList(),
+                Statuses: statuses.Select(status => new PluginStatusItem(
+                    PluginId: status.PluginId,
+                    Status: ToConnectionStatus(status.Status),
+                    ConnectedAt: status.ConnectedAt,
+                    Actions: status.Actions.Select(action => new PluginActionItem(
+                        Id: action.Id,
+                        Label: action.Label,
+                        Href: action.Href,
+                        Method: action.Method)).ToList())).ToList()));
         })
         .WithName("GetPlugins");
 
@@ -61,4 +53,28 @@ public static class PluginEndpoints
             _ => throw new ArgumentOutOfRangeException(nameof(status), status, null),
         };
 }
+
+public sealed record PluginListResponse(
+    IReadOnlyList<PluginDescriptorItem> Plugins,
+    IReadOnlyList<PluginStatusItem> Statuses);
+
+public sealed record PluginDescriptorItem(
+    string Id,
+    string DisplayName,
+    string TrustLevel,
+    bool HasFrontend,
+    bool HasBackend);
+
+public sealed record PluginStatusItem(
+    string PluginId,
+    string Status,
+    DateTimeOffset? ConnectedAt,
+    IReadOnlyList<PluginActionItem> Actions);
+
+public sealed record PluginActionItem(
+    string Id,
+    string Label,
+    string? Href,
+    string? Method);
+
 #pragma warning restore IL2026

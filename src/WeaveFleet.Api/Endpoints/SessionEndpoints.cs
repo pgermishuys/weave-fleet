@@ -1,3 +1,4 @@
+using WeaveFleet.Api;
 using System.Text.Json.Serialization;
 using System.Text.Json;
 using WeaveFleet.Application.DTOs;
@@ -67,29 +68,27 @@ public static class SessionEndpoints
                     var workspace = await workspaceRepository.GetByIdAsync(session.WorkspaceId);
                     var primaryOrigin = await sessionSourceUsageRepository.GetPrimaryBySessionIdAsync(session.Id);
 
-                    return Results.Ok(new
-                    {
-                        id = session.Id,
-                        instanceId = session.InstanceId,
-                        workspaceId = session.WorkspaceId,
-                        workspaceDirectory = workspace?.Directory ?? session.Directory,
-                        workspaceDisplayName = workspace?.DisplayName,
-                        sourceDirectory = workspace?.SourceDirectory,
-                        isolationStrategy = workspace?.IsolationStrategy ?? "existing",
-                        branch = workspace?.Branch,
-                        title = session.Title,
-                        createdAt = session.CreatedAt,
-                        stoppedAt = session.StoppedAt,
-                        activityStatus = session.ActivityStatus,
-                        lifecycleStatus = session.LifecycleStatus,
-                        retentionStatus = session.RetentionStatus,
-                        archivedAt = session.ArchivedAt,
-                        totalTokens = session.TotalTokens > 0 ? session.TotalTokens : (int?)null,
-                        totalCost = session.TotalCost > 0 ? session.TotalCost : (double?)null,
-                        harnessType = session.HarnessType,
-                        projectId = session.ProjectId,
-                        origin = primaryOrigin is not null ? ToOriginDto(primaryOrigin) : null
-                    });
+                    return Results.Ok(new GetSessionResponse(
+                        Id: session.Id,
+                        InstanceId: session.InstanceId,
+                        WorkspaceId: session.WorkspaceId,
+                        WorkspaceDirectory: workspace?.Directory ?? session.Directory,
+                        WorkspaceDisplayName: workspace?.DisplayName,
+                        SourceDirectory: workspace?.SourceDirectory,
+                        IsolationStrategy: workspace?.IsolationStrategy ?? "existing",
+                        Branch: workspace?.Branch,
+                        Title: session.Title,
+                        CreatedAt: session.CreatedAt,
+                        StoppedAt: session.StoppedAt,
+                        ActivityStatus: session.ActivityStatus,
+                        LifecycleStatus: session.LifecycleStatus,
+                        RetentionStatus: session.RetentionStatus,
+                        ArchivedAt: session.ArchivedAt,
+                        TotalTokens: session.TotalTokens > 0 ? session.TotalTokens : null,
+                        TotalCost: session.TotalCost > 0 ? session.TotalCost : null,
+                        HarnessType: session.HarnessType,
+                        ProjectId: session.ProjectId,
+                        Origin: primaryOrigin is not null ? ToOriginDto(primaryOrigin) : null));
                 },
                 error => Task.FromResult(error.ToSessionApiResult()));
         })
@@ -151,12 +150,10 @@ public static class SessionEndpoints
                 ProjectId = req.ProjectId
             });
             return result.Match(
-                r => Results.Ok(new
-                {
-                    instanceId = r.InstanceId,
-                    workspaceId = r.WorkspaceId,
-                    session = r.Session
-                }),
+                r => Results.Ok(new CreateSessionApiResponse(
+                    r.InstanceId,
+                    r.WorkspaceId,
+                    r.Session)),
                 err => err.ToSessionApiResult());
         })
         .WithName("CreateSession");
@@ -165,16 +162,12 @@ public static class SessionEndpoints
         {
             var result = await orchestrator.PreviewAddSourceToSessionAsync(id, req.Source);
             return result.Match(
-                envelope => Results.Ok(new
-                {
-                    preview = new
-                    {
-                        originLabel = envelope.OriginLabel,
-                        content = envelope.Content,
-                        isTruncated = envelope.IsTruncated,
-                        characterCount = envelope.CharacterCount
-                    }
-                }),
+                envelope => Results.Ok(new PreviewSessionResponse(
+                    new SessionPreviewEnvelope(
+                        envelope.OriginLabel,
+                        envelope.Content,
+                        envelope.IsTruncated,
+                        envelope.CharacterCount))),
                 err => err.ToSessionApiResult());
         })
         .WithName("PreviewSessionSource");
@@ -214,11 +207,9 @@ public static class SessionEndpoints
         {
             var result = await orchestrator.ResumeSessionAsync(id);
             return result.Match(
-                session => Results.Ok(new
-                {
-                    instanceId = session.InstanceId,
-                    session
-                }),
+                session => Results.Ok(new ResumeSessionApiResponse(
+                    session.InstanceId,
+                    session)),
                 err => err.ToSessionApiResult());
         })
         .WithName("ResumeSession");
@@ -236,13 +227,11 @@ public static class SessionEndpoints
         {
             var result = await orchestrator.ForkSessionAsync(id, req.Title);
             return result.Match(
-                r => Results.Ok(new
-                {
-                    instanceId = r.InstanceId,
-                    workspaceId = r.WorkspaceId,
-                    session = r.Session,
-                    forkedFromSessionId = id
-                }),
+                r => Results.Ok(new ForkSessionApiResponse(
+                    r.InstanceId,
+                    r.WorkspaceId,
+                    r.Session,
+                    id)),
                 err => err.ToSessionApiResult());
         })
         .WithName("ForkSession");
@@ -259,16 +248,12 @@ public static class SessionEndpoints
                 {
                     var sanitizedMessages = ClientPayloadSanitizer.SanitizeMessages(page.Messages);
                     var oldest = page.Messages.Count > 0 ? page.Messages[0].Id : null;
-                    return Results.Ok(new
-                    {
-                        messages = sanitizedMessages,
-                        pagination = new
-                        {
-                            hasMore = page.HasMore,
-                            oldestMessageId = oldest,
-                            totalCount = sanitizedMessages.Count
-                        }
-                    });
+                    return Results.Ok(new GetSessionMessagesApiResponse(
+                        sanitizedMessages,
+                        new SessionMessagesPagination(
+                            page.HasMore,
+                            oldest,
+                            sanitizedMessages.Count)));
                 },
                 err => err.ToSessionApiResult());
         })
@@ -283,24 +268,20 @@ public static class SessionEndpoints
         {
             var result = await orchestrator.GetCommittedEventsAsync(id, afterSequenceNumber, limit);
             return result.Match(
-                events => Results.Ok(new
-                {
-                    events = events.Select(evt => new
-                    {
-                        sequenceNumber = evt.SequenceNumber,
-                        topic = evt.Topic,
-                        type = evt.Type,
-                        payload = JsonSerializer.Deserialize(evt.Payload, ApiJsonContext.Default.JsonElement),
-                        timestamp = evt.Timestamp.ToUnixTimeMilliseconds()
-                    })
-                }),
+                events => Results.Ok(new GetCommittedEventsResponse(
+                    events.Select(evt => new CommittedEventItem(
+                        evt.SequenceNumber,
+                        evt.Topic,
+                        evt.Type,
+                        JsonSerializer.Deserialize(evt.Payload, ApiJsonContext.Default.JsonElement),
+                        evt.Timestamp.ToUnixTimeMilliseconds())).ToList())),
                 err => err.ToSessionApiResult());
         })
         .WithName("GetCommittedSessionEvents");
 
         // GET /api/sessions/{id}/diffs — stub (harness diff API not yet defined)
         group.MapGet("/{id}/diffs", (string id) =>
-            Results.Ok(new { diffs = Array.Empty<object>() }))
+            Results.Ok(new GetSessionDiffsResponse(Array.Empty<JsonElement>())))
         .WithName("GetSessionDiffs");
 
         // GET /api/sessions/{id}/status
@@ -308,17 +289,15 @@ public static class SessionEndpoints
         {
             var result = await sessionService.GetSessionAsync(id);
             return result.Match(
-                session => Results.Ok(new
-                {
-                    status = session.Status,
-                    activityStatus = session.ActivityStatus,
-                    lifecycleStatus = session.LifecycleStatus,
-                    retentionStatus = session.RetentionStatus,
-                    archivedAt = session.ArchivedAt
-                }),
+                session => Results.Ok(new GetSessionStatusResponse(
+                    session.Status,
+                    session.ActivityStatus,
+                    session.LifecycleStatus ?? "running",
+                    session.RetentionStatus,
+                    session.ArchivedAt)),
                 err => err.Code switch
                 {
-                    var c when c.EndsWith(".NotFound", StringComparison.Ordinal) => Results.NotFound(new { error = err.Description }),
+                    var c when c.EndsWith(".NotFound", StringComparison.Ordinal) => Results.NotFound(new ErrorResponse(err.Description)),
                     _ => Results.Problem(err.Description)
                 });
         })
@@ -342,7 +321,7 @@ public static class SessionEndpoints
 
             var validationError = options.Validate();
             if (validationError is not null)
-                return Results.BadRequest(new { error = validationError });
+                return Results.BadRequest(new ErrorResponse(validationError));
 
             var result = await orchestrator.CommandSessionAsync(id, options, ct);
             return result.Match(_ => Results.Accepted(), err => err.ToSessionApiResult());
@@ -357,8 +336,8 @@ public static class SessionEndpoints
                 _ => Results.NoContent(),
                 error => error.Code switch
                 {
-                    var c when c.EndsWith(".NotFound", StringComparison.Ordinal) => Results.NotFound(new { error = error.Description }),
-                    _ => Results.Problem(error.Description)
+                    var c when c.EndsWith(".NotFound", StringComparison.Ordinal) => Results.NotFound(new ErrorResponse(error.Description)),
+            _ => Results.Problem(error.Description)
                 });
         })
         .WithName("DeleteSession");
@@ -528,12 +507,12 @@ public static class SessionEndpoints
 
         var instance = tracker.Get(sessionResult.Value.InstanceId);
         if (instance is null)
-            return new ModelResolutionResult(null, null, Results.NotFound(new { error = $"Instance '{sessionResult.Value.InstanceId}' not found or not running." }));
+            return new ModelResolutionResult(null, null, Results.NotFound(new ErrorResponse($"Instance '{sessionResult.Value.InstanceId}' not found or not running.")));
 
         var providers = await instance.GetProvidersAsync(ct);
         return ModelRef.TryResolve(model, providers, out var resolved, out var error)
             ? new ModelResolutionResult(resolved.ProviderId, resolved.ModelId, null)
-            : new ModelResolutionResult(null, null, Results.BadRequest(new { error }));
+            : new ModelResolutionResult(null, null, Results.BadRequest(new ErrorResponse(error!)));
     }
 }
 
@@ -773,9 +752,9 @@ file static class SessionFleetErrorExtensions
     public static IResult ToSessionApiResult(this WeaveFleet.Domain.Common.FleetError error) =>
         error.Code switch
         {
-            var c when c.EndsWith(".NotFound", StringComparison.Ordinal) => Results.NotFound(new { error = error.Description }),
-            "General.Conflict" => Results.Conflict(new { error = error.Description }),
-            var c when c.StartsWith("Validation.", StringComparison.Ordinal) => Results.BadRequest(new { error = error.Description }),
+            var c when c.EndsWith(".NotFound", StringComparison.Ordinal) => Results.NotFound(new ErrorResponse(error.Description)),
+            "General.Conflict" => Results.Conflict(new ErrorResponse(error.Description)),
+            var c when c.StartsWith("Validation.", StringComparison.Ordinal) => Results.BadRequest(new ErrorResponse(error.Description)),
             _ => Results.Problem(error.Description)
         };
 }
