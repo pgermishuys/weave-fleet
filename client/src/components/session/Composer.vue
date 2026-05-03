@@ -37,7 +37,7 @@ const { draft, setText, setAgentId, setModelId } = useDraftState(props.sessionId
   agentId: "",
   modelId: "",
 });
-const { canSend, error: sendPromptError, sendPrompt } = useSendPrompt(props.sessionId);
+const { error: sendPromptError, sendPrompt } = useSendPrompt(props.sessionId);
 const { error: sendCommandError, sendCommand } = useSendCommand(props.sessionId);
 
 const sessionsStore = useSessionsStore();
