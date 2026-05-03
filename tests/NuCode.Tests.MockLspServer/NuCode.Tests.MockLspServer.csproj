@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>NuCode.Tests.MockLspServer</RootNamespace>
+    <NoWarn>$(NoWarn);CA1305</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Remove="Shouldly" />
+  </ItemGroup>
+
+</Project>
