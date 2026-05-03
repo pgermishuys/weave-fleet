@@ -186,8 +186,9 @@ public static class SessionEndpoints
             if (modelResolution.ErrorResult is not null)
                 return modelResolution.ErrorResult;
 
-            var options = req.Agent is not null || req.Model is not null
-                ? new PromptOptions { Agent = req.Agent, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId }
+            var attachments = req.Attachments?.Select(a => new HarnessAttachment(a.Mime, a.Filename ?? "image.png", a.Data)).ToList();
+            var options = req.Agent is not null || req.Model is not null || attachments is { Count: > 0 }
+                ? new PromptOptions { Agent = req.Agent, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId, Attachments = attachments }
                 : null;
             var result = await orchestrator.PromptSessionAsync(id, req.Text, options, ct);
             return result.Match(_ => Results.Ok(), err => err.ToSessionApiResult());
@@ -539,7 +540,9 @@ internal sealed record PreviewSessionSourceApiRequest(SessionSourceSelection Sou
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record AddSessionSourceApiRequest(SessionSourceSelection Source, bool Confirm);
 
-internal sealed record SendPromptApiRequest(string Text, string? Agent, ModelRef? Model);
+internal sealed record SendPromptApiRequest(string Text, string? Agent, ModelRef? Model, ImageAttachmentDto[]? Attachments);
+
+internal sealed record ImageAttachmentDto(string Mime, string? Filename, string Data);
 
 internal sealed record ForkSessionApiRequest(string? Title);
 

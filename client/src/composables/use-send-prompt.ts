@@ -4,7 +4,7 @@ import { useAgents } from "@/composables/use-agents";
 import { useDraftState, type EffortLevel } from "@/composables/use-draft-state";
 import { useModels } from "@/composables/use-models";
 import { apiFetch } from "@/lib/api-client";
-import type { AccumulatedMessage } from "@/lib/api-types";
+import type { AccumulatedMessage, ImageAttachment } from "@/lib/api-types";
 import { useSessionsStore } from "@/stores/sessions";
 
 export interface SentPromptMessage {
@@ -167,6 +167,7 @@ interface BackendSendPromptRequest {
   text: string;
   agent?: string;
   model?: { providerID: string; modelID: string };
+  attachments?: ImageAttachment[];
 }
 
 async function readPromptErrorMessage(response: Response): Promise<string> {
@@ -240,9 +241,9 @@ export function useSendPrompt(sessionId: string) {
     }
   }
 
-  function sendPrompt(): boolean {
+  function sendPrompt(attachments?: ImageAttachment[]): boolean {
     const body = draft.text.trim();
-    if (!body) {
+    if (!body && (!attachments || attachments.length === 0)) {
       return false;
     }
 
@@ -286,6 +287,10 @@ export function useSendPrompt(sessionId: string) {
 
     if (resolvedModelId && !usesDefaultModel) {
       request.model = { providerID: model?.providerId ?? "", modelID: resolvedModelId };
+    }
+
+    if (attachments && attachments.length > 0) {
+      request.attachments = attachments;
     }
 
     void postPrompt(promptId, request);
