@@ -7,6 +7,7 @@
   <ItemGroup>
     <PackageReference Include="dbup-sqlite" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
   </ItemGroup>
 
   <ItemGroup>
@@ -16,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\WeaveFleet.Application\WeaveFleet.Application.csproj" />
+    <ProjectReference Include="..\NuCode\NuCode.csproj" />
   </ItemGroup>
 
   <ItemGroup>

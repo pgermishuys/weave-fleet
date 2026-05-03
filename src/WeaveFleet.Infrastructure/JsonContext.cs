@@ -166,6 +166,36 @@ internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
 {
 }
 
+/// <summary>CamelCase + WhenWritingNull options for NuCode harness event payloads.</summary>
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(NuCodeMessageCreatedPayload))]
+[JsonSerializable(typeof(NuCodeMessageUpdatedPayload))]
+[JsonSerializable(typeof(NuCodePartUpdatedPayload))]
+[JsonSerializable(typeof(Dictionary<string, object?>))]
+internal sealed partial class NuCodeJsonContext : JsonSerializerContext
+{
+}
+
+internal sealed record NuCodeMessageCreatedPayload
+{
+    [JsonPropertyName("messageId")] public required string MessageId { get; init; }
+    [JsonPropertyName("role")] public required string Role { get; init; }
+    [JsonPropertyName("content")] public required string Content { get; init; }
+}
+
+internal sealed record NuCodeMessageUpdatedPayload
+{
+    [JsonPropertyName("messageId")] public required string MessageId { get; init; }
+}
+
+internal sealed record NuCodePartUpdatedPayload
+{
+    [JsonPropertyName("messageId")] public required string MessageId { get; init; }
+    [JsonPropertyName("partId")] public required string PartId { get; init; }
+}
+
 /// <summary>CamelCase + WhenWritingNull options for Infrastructure-specific payloads.</summary>
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
