@@ -224,25 +224,6 @@
       <span>GitHub</span>
       <span class="p-count">&middot; 3</span>
     </div>
-    <div class="plugin-pill" data-drawer="linear" onclick="toggleDrawer('linear')">
-      <span class="p-icon">&#9670;</span>
-      <span>Linear</span>
-      <span class="p-count">&middot; 1</span>
-    </div>
-    <div class="plugin-pill" data-drawer="docker" onclick="toggleDrawer('docker')">
-      <span class="p-icon">&#128051;</span>
-      <span>Docker</span>
-      <span class="p-status" style="color:var(--running)">&middot; Running</span>
-    </div>
-    <div class="plugin-pill" data-drawer="sentry" onclick="toggleDrawer('sentry')">
-      <span class="p-icon">&#128065;</span>
-      <span>Sentry</span>
-      <span class="p-error">&middot; 2 errors</span>
-    </div>
-    <div class="plugin-pill disconnected">
-      <span class="p-icon">#</span>
-      <span>Slack</span>
-    </div>
   </div>
 
   <div class="topbar-right">
@@ -436,78 +417,6 @@
       </div>
     </div>
 
-    <div class="drawer" id="drawer-sentry">
-      <div class="drawer-header">
-        <span style="font-size:14px">&#128065;</span>
-        <span class="drawer-title">Sentry — 2 Unresolved Errors</span>
-        <button class="drawer-close" onclick="closeDrawer()">&times;</button>
-      </div>
-      <div class="drawer-tabs">
-        <div class="drawer-tab active">Errors</div>
-        <div class="drawer-tab">Performance</div>
-      </div>
-      <div class="drawer-body">
-        <div class="sentry-error">
-          <div class="sentry-error-title">NullPointerException in TokenStore.Get</div>
-          <div class="sentry-error-meta">14 events &middot; 3 users &middot; First seen 2h ago &middot; Last 5m ago</div>
-          <div class="sentry-error-stack">at auth.TokenStore.Get(token_store.go:42)
-at auth.RefreshScheduler.check(refresh.go:78)
-at auth.RefreshScheduler.Run(refresh.go:31)</div>
-          <button class="sentry-investigate">Investigate in New Session</button>
-        </div>
-        <div class="sentry-error">
-          <div class="sentry-error-title">ConnectionTimeout in pool.Acquire</div>
-          <div class="sentry-error-meta">8 events &middot; 5 users &middot; First seen 1h ago &middot; Last 12m ago</div>
-          <div class="sentry-error-stack">at db.Pool.Acquire(pool.go:156)
-at db.Repository.Query(repository.go:23)</div>
-          <button class="sentry-investigate">Investigate in New Session</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="drawer" id="drawer-linear">
-      <div class="drawer-header">
-        <span style="font-size:14px">&#9670;</span>
-        <span class="drawer-title">Linear — Linked Ticket</span>
-        <button class="drawer-close" onclick="closeDrawer()">&times;</button>
-      </div>
-      <div class="drawer-body">
-        <div style="background:var(--bg);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px">
-          <div style="font-size:10px;color:var(--muted);font-weight:600">ENG-142</div>
-          <div style="font-size:13px;font-weight:600;margin:4px 0">Implement OAuth token refresh with sliding window</div>
-          <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
-            <span style="font-size:10px;padding:2px 6px;background:rgba(245,158,11,.12);color:var(--idle);border-radius:8px">In Progress</span>
-            <span style="font-size:10px;color:var(--muted)">Urgent</span>
-            <span style="font-size:10px;color:var(--muted)">Assigned to PG</span>
-          </div>
-          <div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.4">Implement automatic token refresh using a sliding window approach. Should refresh 30s before expiry with exponential backoff on failure.</div>
-        </div>
-        <div class="drawer-actions">
-          <button class="drawer-action-btn secondary">Update Status</button>
-          <button class="drawer-action-btn secondary">Add Comment</button>
-          <button class="drawer-action-btn secondary">Open in Linear</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="drawer" id="drawer-docker">
-      <div class="drawer-header">
-        <span style="font-size:14px">&#128051;</span>
-        <span class="drawer-title">Docker — 3 Running Containers</span>
-        <button class="drawer-close" onclick="closeDrawer()">&times;</button>
-      </div>
-      <div class="drawer-tabs">
-        <div class="drawer-tab active">Containers</div>
-        <div class="drawer-tab">Logs</div>
-        <div class="drawer-tab">Resources</div>
-      </div>
-      <div class="drawer-body">
-        <div class="docker-container"><span class="docker-container-name">gateway-api</span><span class="docker-container-status" style="color:var(--running)">&#9679; Running</span><span class="docker-container-stats">128MB &middot; 2.1% CPU &middot; Up 2h</span></div>
-        <div class="docker-container"><span class="docker-container-name">postgres-15</span><span class="docker-container-status" style="color:var(--running)">&#9679; Running</span><span class="docker-container-stats">256MB &middot; 1.8% CPU &middot; Up 4h</span></div>
-        <div class="docker-container"><span class="docker-container-name">redis-cluster</span><span class="docker-container-status" style="color:var(--running)">&#9679; Running</span><span class="docker-container-stats">64MB &middot; 0.3% CPU &middot; Up 4h</span></div>
-        <div class="docker-container"><span class="docker-container-name">nginx-proxy</span><span class="docker-container-status" style="color:var(--muted)">&#9679; Stopped</span><span class="docker-container-stats">Exited 30m ago</span></div>
-      </div>
-    </div>
 
     <div class="composer">
       <div class="composer-box">

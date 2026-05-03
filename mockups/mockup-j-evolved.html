@@ -409,12 +409,9 @@
       <div class="rail-item active" data-id="sessions" data-tooltip="Sessions" onclick="selectRailItem('sessions')">💬</div>
       <div class="rail-divider"></div>
       <div class="rail-item" data-id="github" data-tooltip="GitHub" style="font-size:11px;font-weight:600" onclick="selectRailItem('github')">GH<span class="rail-status-dot" style="background:var(--running)"></span></div>
-      <div class="rail-item" data-id="linear" data-tooltip="Linear" style="font-size:11px;font-weight:600" onclick="selectRailItem('linear')">Li<span class="rail-status-dot" style="background:var(--running)"></span></div>
-      <div class="rail-item" data-id="slack" data-tooltip="Slack" style="font-size:11px;font-weight:600;color:#52525b" onclick="selectRailItem('slack')">Sl</div>
-      <div class="rail-item" data-id="docker" data-tooltip="Docker" onclick="selectRailItem('docker')">🐳<span class="rail-status-dot" style="background:var(--running)"></span></div>
-      <div class="rail-item" data-id="sentry" data-tooltip="Sentry" onclick="selectRailItem('sentry')">⚠<span class="rail-status-dot" style="background:var(--error)"></span><span class="rail-badge">2</span></div>
+
       <div class="rail-bottom">
-        <div class="rail-item" data-id="marketplace" data-tooltip="Marketplace" onclick="selectRailItem('marketplace')">🧩</div>
+        <div class="rail-item" data-id="marketplace" data-tooltip="Plugins" onclick="selectRailItem('marketplace')">🧩</div>
         <div class="rail-item" data-tooltip="Settings">⚙</div>
       </div>
     </div>
@@ -704,67 +701,16 @@
       </div>
     </div>
 
-    <!-- CONTEXT PANEL: LINEAR -->
-    <div class="context-panel hidden" id="ctx-linear">
-      <div class="plugin-header">
-        <span class="plugin-header-title">Linear</span>
-        <span class="connected-pill">Connected</span>
-        <span class="plugin-header-gear">⚙</span>
-      </div>
-      <div class="panel-search"><span class="search-icon">⌕</span><input type="text" placeholder="Search tickets…"></div>
-      <div class="plugin-list">
-        <div class="ticket-item">
-          <span class="ticket-id">ENG-142</span>
-          <div class="ticket-info"><div class="ticket-title">Implement token refresh mechanism</div><div class="ticket-meta"><span class="ticket-status in-progress">In Progress</span><span class="ticket-priority">🟠</span></div></div>
-          <span class="issue-avatar">PG</span>
-          <span class="link-action">Link →</span>
-        </div>
-        <div class="ticket-item">
-          <span class="ticket-id">ENG-138</span>
-          <div class="ticket-info"><div class="ticket-title">PKCE flow for mobile clients</div><div class="ticket-meta"><span class="ticket-status todo">Todo</span><span class="ticket-priority">🟡</span></div></div>
-          <span class="issue-avatar">SM</span>
-          <span class="link-action">Link →</span>
-        </div>
-        <div class="ticket-item">
-          <span class="ticket-id">ENG-135</span>
-          <div class="ticket-info"><div class="ticket-title">Database connection pool tuning</div><div class="ticket-meta"><span class="ticket-status in-progress">In Progress</span><span class="ticket-priority">🟠</span></div></div>
-          <span class="issue-avatar">PG</span>
-          <span class="link-action">Link →</span>
-        </div>
-        <div class="ticket-item">
-          <span class="ticket-id">ENG-131</span>
-          <div class="ticket-info"><div class="ticket-title">API v2 response schema migration</div><div class="ticket-meta"><span class="ticket-status todo">Todo</span><span class="ticket-priority">🔴</span></div></div>
-          <span class="issue-avatar">JK</span>
-          <span class="link-action">Link →</span>
-        </div>
-        <div class="ticket-item">
-          <span class="ticket-id">ENG-128</span>
-          <div class="ticket-info"><div class="ticket-title">Setup CI/CD pipeline</div><div class="ticket-meta"><span class="ticket-status done">Done</span><span class="ticket-priority">🟡</span></div></div>
-          <span class="issue-avatar">SM</span>
-          <span class="link-action">Link →</span>
-        </div>
-        <div class="ticket-item">
-          <span class="ticket-id">ENG-125</span>
-          <div class="ticket-info"><div class="ticket-title">Frontend component library</div><div class="ticket-meta"><span class="ticket-status in-progress">In Progress</span><span class="ticket-priority">⚪</span></div></div>
-          <span class="issue-avatar">PG</span>
-          <span class="link-action">Link →</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- CONTEXT PANEL: MARKETPLACE -->
+    <!-- CONTEXT PANEL: PLUGINS -->
     <div class="context-panel hidden" id="ctx-marketplace">
       <div class="plugin-header">
-        <span class="plugin-header-title">Marketplace</span>
+        <span class="plugin-header-title">Plugins</span>
       </div>
       <div class="panel-search"><span class="search-icon">⌕</span><input type="text" placeholder="Search plugins…"></div>
       <div class="plugin-list">
         <div class="mp-section-label">Installed</div>
         <div class="mp-installed-item"><span class="mp-installed-icon" style="font-size:11px;font-weight:600">GH</span><span class="mp-installed-name">GitHub</span><span class="mp-installed-status" style="color:#22c55e">Connected</span><span class="mp-configure">Configure</span></div>
-        <div class="mp-installed-item"><span class="mp-installed-icon" style="font-size:11px;font-weight:600">Li</span><span class="mp-installed-name">Linear</span><span class="mp-installed-status" style="color:#22c55e">Connected</span><span class="mp-configure">Configure</span></div>
-        <div class="mp-installed-item"><span class="mp-installed-icon" style="font-size:11px;font-weight:600">Sl</span><span class="mp-installed-name">Slack</span><span class="mp-installed-status" style="color:var(--muted)">Disconnected</span><span class="mp-configure">Configure</span></div>
-        <div class="mp-installed-item"><span class="mp-installed-icon">🐳</span><span class="mp-installed-name">Docker</span><span class="mp-installed-status" style="color:#22c55e">Connected</span><span class="mp-configure">Configure</span></div>
-        <div class="mp-installed-item"><span class="mp-installed-icon">⚠</span><span class="mp-installed-name">Sentry</span><span class="mp-installed-status" style="color:#ef4444">Error</span><span class="mp-configure">Configure</span></div>
+
         <div class="mp-section-label">Available</div>
         <div class="mp-grid">
           <div class="mp-card"><span class="mp-card-icon">📝</span><span class="mp-card-name">Notion</span><span class="mp-card-desc">Sync docs and wikis</span><button class="btn-ghost">Install</button></div>
@@ -777,44 +723,6 @@
       </div>
     </div>
 
-    <!-- CONTEXT PANEL: SLACK -->
-    <div class="context-panel hidden" id="ctx-slack">
-      <div class="plugin-header">
-        <span class="plugin-header-title">Slack</span>
-        <span class="disconnected-pill">Disconnected</span>
-      </div>
-      <div class="simple-panel-content">
-        <p>Send session summaries and get notifications in Slack channels.</p>
-        <button class="btn-accent">Connect Slack</button>
-      </div>
-    </div>
-
-    <!-- CONTEXT PANEL: DOCKER -->
-    <div class="context-panel hidden" id="ctx-docker">
-      <div class="plugin-header">
-        <span class="plugin-header-title">Docker</span>
-        <span class="connected-pill">Connected</span>
-      </div>
-      <div class="simple-panel-content">
-        <p style="font-weight:600;color:var(--text)">3 containers running</p>
-        <div class="container-item"><span class="container-dot" style="background:var(--running)"></span><span>weave-api</span><span style="color:var(--muted);margin-left:auto;font-size:10px">Up 2h</span></div>
-        <div class="container-item"><span class="container-dot" style="background:var(--running)"></span><span>weave-db</span><span style="color:var(--muted);margin-left:auto;font-size:10px">Up 2h</span></div>
-        <div class="container-item"><span class="container-dot" style="background:var(--running)"></span><span>weave-redis</span><span style="color:var(--muted);margin-left:auto;font-size:10px">Up 2h</span></div>
-      </div>
-    </div>
-
-    <!-- CONTEXT PANEL: SENTRY -->
-    <div class="context-panel hidden" id="ctx-sentry">
-      <div class="plugin-header">
-        <span class="plugin-header-title">Sentry</span>
-        <span class="error-pill">2 Errors</span>
-      </div>
-      <div class="simple-panel-content">
-        <p style="font-weight:600;color:var(--text)">2 unresolved errors</p>
-        <div class="error-item"><div class="error-item-title">TypeError: Cannot read property 'refresh' of undefined</div><div class="error-item-time">src/auth/refresh.go · 12m ago</div></div>
-        <div class="error-item"><div class="error-item-title">ConnectionError: Redis connection refused</div><div class="error-item-time">src/cache/redis.go · 45m ago</div></div>
-      </div>
-    </div>
     <div class="center" id="center-sessions">
       <div class="activity-stream">
         <!-- Message 1: User -->
@@ -1361,7 +1269,7 @@
 <script>
 // ── STATE ──
 let currentView = 'sessions'; // 'sessions' | 'board' | plugin id
-const pluginIds = ['github', 'linear', 'marketplace', 'slack', 'docker', 'sentry'];
+const pluginIds = ['github', 'marketplace'];
 
 // ── RAIL NAVIGATION ──
 function selectRailItem(id) {

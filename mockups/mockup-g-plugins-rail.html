@@ -251,32 +251,12 @@
       <span class="status-dot green"></span>
       <span class="tooltip">GitHub</span>
     </div>
-    <div class="rail-icon" data-panel="linear" onclick="switchPanel('linear')">
-      <svg viewBox="0 0 20 20"><path d="M10 2l8 8-8 8-8-8 8-8z"/></svg>
-      <span class="status-dot green"></span>
-      <span class="tooltip">Linear</span>
-    </div>
-    <div class="rail-icon" data-panel="slack" onclick="switchPanel('slack')">
-      <svg viewBox="0 0 20 20"><path d="M7 2a2 2 0 00-2 2v3H4a2 2 0 100 4h1v3a2 2 0 104 0v-3h2v3a2 2 0 104 0v-3h1a2 2 0 100-4h-1V4a2 2 0 10-4 0v3H9V4a2 2 0 00-2-2zm2 9V7h2v4H9z"/></svg>
-      <span class="status-dot muted"></span>
-      <span class="tooltip">Slack</span>
-    </div>
-    <div class="rail-icon" data-panel="docker" onclick="switchPanel('docker')">
-      <svg viewBox="0 0 20 20"><path d="M2 10h3V7h3V4h3v3h3v3h3v2H2v-2zm4-3h1v1H6V7zm3 0h1v1H9V7zm3 0h1v1h-1V7zm-6-3h1v1H6V4zm3 0h1v1H9V4z"/></svg>
-      <span class="status-dot green"></span>
-      <span class="tooltip">Docker</span>
-    </div>
-    <div class="rail-icon" data-panel="sentry" onclick="switchPanel('sentry')">
-      <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="10" r="3"/></svg>
-      <span class="status-dot red"></span>
-      <span class="tooltip">Sentry</span>
-    </div>
 
     <div class="rail-spacer"></div>
 
     <div class="rail-icon" data-panel="marketplace" onclick="switchPanel('marketplace')">
       <svg viewBox="0 0 20 20"><rect x="2" y="2" width="7" height="7" rx="1"/><rect x="11" y="2" width="7" height="7" rx="1"/><rect x="2" y="11" width="7" height="7" rx="1"/><rect x="11" y="11" width="7" height="7" rx="1"/></svg>
-      <span class="tooltip">Marketplace</span>
+      <span class="tooltip">Plugins</span>
     </div>
     <div class="rail-icon" data-panel="settings" onclick="switchPanel('settings')">
       <svg viewBox="0 0 20 20"><path d="M10 13a3 3 0 100-6 3 3 0 000 6z"/><path fill-rule="evenodd" d="M10 1a1 1 0 011 1v.6a7 7 0 012.45 1.01l.42-.42a1 1 0 111.42 1.42l-.42.42A7 7 0 0116.4 8H17a1 1 0 110 2h-.6a7 7 0 01-1.01 2.45l.42.42a1 1 0 11-1.42 1.42l-.42-.42A7 7 0 0112 14.87V15.5a1 1 0 01-2 0v-.63a7 7 0 01-2.45-1.01l-.42.42a1 1 0 01-1.42-1.42l.42-.42A7 7 0 014.6 10H4a1 1 0 110-2h.6a7 7 0 011.01-2.45l-.42-.42a1 1 0 111.42-1.42l.42.42A7 7 0 019 3.6V2a1 1 0 011-1z"/></svg>
@@ -501,137 +481,15 @@
     </div>
   </div>
 
-  <!-- LEFT PANEL: Linear -->
-  <div class="left-panel panel-hidden" id="panel-linear">
-    <div class="plugin-panel-header">
-      <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="flex-shrink:0"><path d="M10 2l8 8-8 8-8-8 8-8z"/></svg>
-      <span class="plugin-name">Linear</span>
-      <span class="plugin-badge connected">Connected</span>
-      <span class="plugin-gear">&#9881;</span>
-    </div>
-    <div class="plugin-search"><input placeholder="Search tickets..."></div>
-    <div class="plugin-panel">
-      <div class="linear-ticket">
-        <div class="linear-id">ENG-142</div>
-        <div class="linear-title">Implement OAuth token refresh with sliding window</div>
-        <div class="linear-meta">
-          <span class="linear-status inprogress">In Progress</span>
-          <span class="linear-priority" title="Urgent">&#9888;</span>
-        </div>
-      </div>
-      <div class="linear-ticket">
-        <div class="linear-id">ENG-139</div>
-        <div class="linear-title">Add PKCE challenge/verifier for public clients</div>
-        <div class="linear-meta">
-          <span class="linear-status inprogress">In Progress</span>
-          <span class="linear-priority" title="High">&#9650;</span>
-        </div>
-      </div>
-      <div class="linear-ticket">
-        <div class="linear-id">ENG-137</div>
-        <div class="linear-title">Set up connection pooling for PostgreSQL</div>
-        <div class="linear-meta">
-          <span class="linear-status todo">Todo</span>
-          <span class="linear-priority" title="Medium">&#9644;</span>
-        </div>
-      </div>
-      <div class="linear-ticket">
-        <div class="linear-id">ENG-134</div>
-        <div class="linear-title">Migrate user endpoints to API v2 schema</div>
-        <div class="linear-meta">
-          <span class="linear-status inprogress">In Progress</span>
-          <span class="linear-priority" title="High">&#9650;</span>
-        </div>
-      </div>
-      <div class="linear-ticket">
-        <div class="linear-id">ENG-128</div>
-        <div class="linear-title">Write integration tests for OAuth flow</div>
-        <div class="linear-meta">
-          <span class="linear-status todo">Todo</span>
-          <span class="linear-priority" title="Medium">&#9644;</span>
-        </div>
-      </div>
-      <div class="linear-ticket">
-        <div class="linear-id">ENG-121</div>
-        <div class="linear-title">Dark mode token system for component library</div>
-        <div class="linear-meta">
-          <span class="linear-status done">Done</span>
-          <span class="linear-priority" title="Low">&#9660;</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- LEFT PANEL: Slack (disconnected) -->
-  <div class="left-panel panel-hidden" id="panel-slack">
-    <div class="plugin-panel-header">
-      <span style="font-size:16px;flex-shrink:0">#</span>
-      <span class="plugin-name">Slack</span>
-      <span class="plugin-badge disconnected">Disconnected</span>
-    </div>
-    <div class="plugin-connect">
-      <div class="plugin-connect-icon">#</div>
-      <div class="plugin-connect-title">Connect Slack</div>
-      <div class="plugin-connect-desc">Link your Slack workspace to send session summaries, get notifications, and share context with your team.</div>
-      <button class="btn-connect">Connect Slack</button>
-    </div>
-  </div>
-
-  <!-- LEFT PANEL: Docker -->
-  <div class="left-panel panel-hidden" id="panel-docker">
-    <div class="plugin-panel-header">
-      <span style="font-size:16px;flex-shrink:0">&#x1F433;</span>
-      <span class="plugin-name">Docker</span>
-      <span class="plugin-badge connected">Connected</span>
-      <span class="plugin-gear">&#9881;</span>
-    </div>
-    <div class="plugin-panel" style="padding:14px">
-      <div style="font-size:11px;text-transform:uppercase;color:var(--muted);letter-spacing:.5px;margin-bottom:8px;font-weight:600">Running Containers</div>
-      <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px;margin-bottom:6px"><div style="font-size:12px;font-weight:500">gateway-api</div><div style="font-size:10px;color:var(--running);margin-top:2px">Running &middot; Up 2h &middot; 128MB</div></div>
-      <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px;margin-bottom:6px"><div style="font-size:12px;font-weight:500">postgres-15</div><div style="font-size:10px;color:var(--running);margin-top:2px">Running &middot; Up 4h &middot; 256MB</div></div>
-      <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px;margin-bottom:6px"><div style="font-size:12px;font-weight:500">redis-cluster</div><div style="font-size:10px;color:var(--running);margin-top:2px">Running &middot; Up 4h &middot; 64MB</div></div>
-      <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px;margin-bottom:6px"><div style="font-size:12px;font-weight:500">nginx-proxy</div><div style="font-size:10px;color:var(--idle);margin-top:2px">Stopped &middot; Exited 30m ago</div></div>
-    </div>
-  </div>
-
-  <!-- LEFT PANEL: Sentry (error) -->
-  <div class="left-panel panel-hidden" id="panel-sentry">
-    <div class="plugin-panel-header">
-      <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="flex-shrink:0"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="10" r="3"/></svg>
-      <span class="plugin-name">Sentry</span>
-      <span class="plugin-badge error">2 Errors</span>
-      <span class="plugin-gear">&#9881;</span>
-    </div>
-    <div class="plugin-panel" style="padding:14px">
-      <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:var(--radius-sm);padding:10px;margin-bottom:8px">
-        <div style="font-size:12px;font-weight:500;color:var(--error)">NullPointerException in TokenStore.Get</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:4px">gateway-api &middot; 14 events &middot; 3 users affected</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">First seen 2h ago &middot; Last seen 5m ago</div>
-      </div>
-      <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:var(--radius-sm);padding:10px;margin-bottom:8px">
-        <div style="font-size:12px;font-weight:500;color:var(--error)">ConnectionTimeout in pool.Acquire</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:4px">gateway-api &middot; 8 events &middot; 5 users affected</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">First seen 1h ago &middot; Last seen 12m ago</div>
-      </div>
-      <div style="font-size:11px;text-transform:uppercase;color:var(--muted);letter-spacing:.5px;margin:16px 0 8px;font-weight:600">Resolved Today</div>
-      <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px;margin-bottom:6px">
-        <div style="font-size:12px;font-weight:500">InvalidStateError in OAuth callback</div>
-        <div style="font-size:10px;color:var(--running);margin-top:2px">Resolved &middot; 23 events</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- LEFT PANEL: Marketplace -->
+  <!-- LEFT PANEL: Plugins -->
   <div class="left-panel panel-hidden" id="panel-marketplace">
     <div class="plugin-panel-header">
-      <span class="plugin-name">Plugin Marketplace</span>
+      <span class="plugin-name">Plugins</span>
     </div>
     <div class="plugin-search"><input placeholder="Search plugins..."></div>
     <div class="plugin-panel" style="padding:14px">
       <div style="font-size:11px;text-transform:uppercase;color:var(--muted);letter-spacing:.5px;margin-bottom:8px;font-weight:600">Installed</div>
       <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px;margin-bottom:6px;display:flex;align-items:center;gap:8px"><span style="font-size:14px">&#128025;</span><div style="flex:1"><div style="font-size:12px;font-weight:500">GitHub</div><div style="font-size:10px;color:var(--running)">Connected</div></div></div>
-      <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px;margin-bottom:6px;display:flex;align-items:center;gap:8px"><span style="font-size:14px">&#9670;</span><div style="flex:1"><div style="font-size:12px;font-weight:500">Linear</div><div style="font-size:10px;color:var(--running)">Connected</div></div></div>
-      <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px;margin-bottom:6px;display:flex;align-items:center;gap:8px"><span style="font-size:14px">#</span><div style="flex:1"><div style="font-size:12px;font-weight:500">Slack</div><div style="font-size:10px;color:var(--muted)">Disconnected</div></div></div>
       <div style="font-size:11px;text-transform:uppercase;color:var(--muted);letter-spacing:.5px;margin:16px 0 8px;font-weight:600">Available</div>
       <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px;margin-bottom:6px;display:flex;align-items:center;gap:8px"><span style="font-size:14px">&#128203;</span><div style="flex:1"><div style="font-size:12px;font-weight:500">Jira</div><div style="font-size:10px;color:var(--muted)">Issue tracking</div></div><button style="font-size:10px;padding:3px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;color:var(--muted)">Install</button></div>
       <div style="background:var(--bg);border-radius:var(--radius-sm);padding:10px;margin-bottom:6px;display:flex;align-items:center;gap:8px"><span style="font-size:14px">&#128221;</span><div style="flex:1"><div style="font-size:12px;font-weight:500">Notion</div><div style="font-size:10px;color:var(--muted)">Documentation</div></div><button style="font-size:10px;padding:3px 10px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;color:var(--muted)">Install</button></div>

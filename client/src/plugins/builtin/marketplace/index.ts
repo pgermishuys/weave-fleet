@@ -4,7 +4,7 @@ import MarketplacePanel from "./MarketplacePanel.vue";
 export const marketplacePluginManifest = {
   descriptor: {
     id: "marketplace",
-    displayName: "Marketplace",
+    displayName: "Plugins",
     trustLevel: "built-in",
     hasFrontend: true,
     hasBackend: false,

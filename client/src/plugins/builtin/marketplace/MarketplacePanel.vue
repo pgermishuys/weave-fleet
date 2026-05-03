@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, shallowRef } from "vue";
+import { computed } from "vue";
 import { useRouter } from "@tanstack/vue-router";
 import { BadgeCheck, CircleAlert, PlugZap, Puzzle, Settings2 } from "lucide-vue-next";
 import { usePluginRuntime } from "@/plugins/composable";
@@ -12,38 +12,8 @@ interface InstalledPlugin {
    configureLabel: string;
 }
 
-interface AvailablePlugin {
-  id: string;
-  name: string;
-  description: string;
-}
-
-const availablePluginCatalog = [
-  {
-    id: "linear",
-    name: "Linear",
-    description: "Sync issues, projects, and roadmap context into Fleet.",
-  },
-  {
-    id: "docker",
-    name: "Docker",
-    description: "Inspect local containers and connect runtime signals to sessions.",
-  },
-  {
-    id: "notion",
-    name: "Notion",
-    description: "Pull workspace docs and planning notes into execution context.",
-  },
-  {
-    id: "jira",
-    name: "Jira",
-    description: "Bring sprint tickets and delivery status into the board.",
-  },
-] as const satisfies readonly AvailablePlugin[];
-
 const router = useRouter();
 const pluginRuntime = usePluginRuntime();
-const installMessage = shallowRef<string | null>(null);
 
 const installedPlugins = computed<readonly InstalledPlugin[]>(() => {
   return pluginRuntime.manifests.value
@@ -56,8 +26,6 @@ const installedPlugins = computed<readonly InstalledPlugin[]>(() => {
     }));
 });
 
-const installedPluginIds = computed(() => new Set(installedPlugins.value.map((plugin) => plugin.id)));
-
 const installedPluginRows = computed(() =>
   installedPlugins.value.map((plugin) => ({
     ...plugin,
@@ -65,10 +33,6 @@ const installedPluginRows = computed(() =>
     statusClass: `is-${plugin.status}`,
     statusIcon: getStatusIcon(plugin.status),
   })),
-);
-
-const availablePlugins = computed(() =>
-  availablePluginCatalog.filter((plugin) => !installedPluginIds.value.has(plugin.id)),
 );
 
 function getStatusLabel(status: PluginConnectionStatus): string {
@@ -98,19 +62,12 @@ function handleConfigure(pluginId: string): void {
     params: { pluginId },
   });
 }
-
-function handleInstall(pluginId: string): void {
-  const plugin = availablePlugins.value.find((candidate) => candidate.id === pluginId);
-  installMessage.value = plugin
-    ? `${plugin.name} install flow is not available in this build yet.`
-    : "Plugin install flow is not available in this build yet.";
-}
 </script>
 
 <template>
   <section
     class="marketplace-panel"
-    aria-label="Marketplace panel"
+    aria-label="Plugins panel"
   >
     <p class="mp-section-label">
       Installed
@@ -159,51 +116,6 @@ function handleInstall(pluginId: string): void {
         </button>
       </article>
     </div>
-
-    <p class="mp-section-label">
-      Available
-    </p>
-
-    <div class="mp-grid">
-      <article
-        v-for="plugin in availablePlugins"
-        :key="plugin.id"
-        class="mp-card"
-      >
-        <div class="mp-card-header">
-          <div
-            class="mp-plugin-icon"
-            aria-hidden="true"
-          >
-            <Puzzle :size="16" />
-          </div>
-
-          <p class="mp-plugin-name">
-            {{ plugin.name }}
-          </p>
-        </div>
-
-        <p class="mp-card-description">
-          {{ plugin.description }}
-        </p>
-
-        <button
-          type="button"
-          class="mp-install-button"
-          @click="handleInstall(plugin.id)"
-        >
-          Install
-        </button>
-      </article>
-    </div>
-
-    <p
-      v-if="installMessage"
-      class="mp-install-message"
-      aria-live="polite"
-    >
-      {{ installMessage }}
-    </p>
   </section>
 </template>
 
@@ -243,29 +155,6 @@ function handleInstall(pluginId: string): void {
   min-width: 0;
   flex-direction: column;
   gap: 3px;
-}
-
-.mp-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding: 8px 12px;
-}
-
-.mp-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  padding: 10px;
-}
-
-.mp-card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .mp-plugin-icon {
@@ -309,23 +198,7 @@ function handleInstall(pluginId: string): void {
   color: var(--error);
 }
 
-.mp-card-description {
-  margin: 0;
-  min-height: 54px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-.mp-install-message {
-  margin: 0;
-  padding: 0 12px 12px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.mp-link-button,
-.mp-install-button {
+.mp-link-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -336,24 +209,13 @@ function handleInstall(pluginId: string): void {
   color: var(--text);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.mp-link-button:hover,
-.mp-install-button:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
-.mp-link-button {
   padding: 7px 10px;
   font-size: 12px;
   white-space: nowrap;
 }
 
-.mp-install-button {
-  width: 100%;
-  padding: 8px 10px;
-  font-size: 12px;
-  font-weight: 600;
+.mp-link-button:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 </style>
