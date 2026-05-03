@@ -464,7 +464,7 @@ const SessionDetailPage = defineComponent({
             </div>
           ) : null}
         </div>
-        <ActivityStream sessionId={params.value.id} instanceId={instanceId.value} />
+        <ActivityStream key={`${params.value.id}-${instanceId.value}`} sessionId={params.value.id} instanceId={instanceId.value} />
         <Composer
           sessionId={params.value.id}
           instanceId={instanceId.value}
