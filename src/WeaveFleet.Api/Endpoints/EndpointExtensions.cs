@@ -62,6 +62,7 @@ public static class EndpointExtensions
         apiScope.MapCredentialEndpoints();
         apiScope.MapClientConfigEndpoints(fleetOptions);
         apiScope.MapBackendPluginEndpoints();
+        apiScope.MapSmartLinkEndpoints();
 
         return app;
     }
