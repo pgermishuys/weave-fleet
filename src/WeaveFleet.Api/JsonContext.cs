@@ -208,6 +208,13 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(List<WeaveFleet.Api.Endpoints.BoardCardResponse>))]
 [JsonSerializable(typeof(List<CredentialResponse>))]
 [JsonSerializable(typeof(List<WeaveFleet.Application.DTOs.SessionListResponse>))]
+// SmartLinks
+[JsonSerializable(typeof(WeaveFleet.Application.DTOs.SmartLinkDto))]
+[JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.DTOs.SmartLinkDto>))]
+[JsonSerializable(typeof(List<WeaveFleet.Application.DTOs.SmartLinkDto>))]
+[JsonSerializable(typeof(WeaveFleet.Application.DTOs.UpsertSmartLinkRequest))]
+[JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.DTOs.UpsertSmartLinkRequest>))]
+[JsonSerializable(typeof(List<WeaveFleet.Application.DTOs.UpsertSmartLinkRequest>))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 internal sealed partial class ApiJsonContext : JsonSerializerContext
 {

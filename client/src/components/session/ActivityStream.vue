@@ -6,6 +6,7 @@ import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
 import { useSessionEvents } from "@/composables/use-session-events";
 import { clearSentPrompts, reconcileSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
+import { useSmartLinks } from "@/plugins/builtin/smart-links";
 import type { CommandEventName } from "@/lib/command-events";
 import { formatTimestamp } from "@/lib/format-utils";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart } from "@/lib/api-types";
@@ -72,6 +73,10 @@ const { messages: sessionMessages, delegations, forceIdle } = useSessionEvents(
   computed(() => props.sessionId),
   resolvedInstanceId,
 );
+useSmartLinks({
+  sessionId: computed(() => props.sessionId),
+  messages: sessionMessages,
+});
 const { sentPrompts } = useSentPrompts(props.sessionId);
 const streamRef = ref<HTMLElement | null>(null);
 const showJumpToLatest = ref(false);

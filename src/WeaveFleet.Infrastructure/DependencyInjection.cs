@@ -69,6 +69,7 @@ public static class DependencyInjection
         services.AddScoped<IHarnessEventLogRepository, DapperHarnessEventLogRepository>();
         services.AddScoped<IUserRepository, DapperUserRepository>();
         services.AddScoped<IBoardRepository, BoardRepository>();
+        services.AddScoped<ISmartLinkRepository, DapperSmartLinkRepository>();
 
         // Credential storage — user-scoped repositories and application services
         services.AddScoped<IUserCredentialRepository, DapperUserCredentialRepository>();
@@ -85,6 +86,7 @@ public static class DependencyInjection
         services.AddScoped<SessionOrchestrator>();
         services.AddScoped<SessionCallbackService>();
         services.AddScoped<DelegationService>();
+        services.AddScoped<SmartLinkService>();
         services.AddScoped<SessionActivityWriteService>();
         services.AddScoped<UserService>();
         services.AddScoped<IBoardSyncService, BoardSyncService>();

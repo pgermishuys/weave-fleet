@@ -4,6 +4,7 @@ import { useRouter } from "@tanstack/vue-router";
 import ConfirmDeleteSessionDialog from "@/components/sessions/ConfirmDeleteSessionDialog.vue";
 import FilesChanged from "@/components/session/FilesChanged.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
+import SmartLinkItem from "@/plugins/builtin/smart-links/SmartLinkItem.vue";
 import TodoListView from "@/components/session/TodoListView.vue";
 import TokenGrid from "@/components/session/TokenGrid.vue";
 import { useSessionTodos } from "@/composables/use-session-todos";
@@ -20,6 +21,7 @@ import { useDiffs } from "@/composables/use-diffs";
 import { apiFetch } from "@/lib/api-client";
 import type { SessionListItem } from "@/lib/api-types";
 import { useSessionsStore } from "@/stores/sessions";
+import { useSmartLinksStore } from "@/stores/smart-links";
 
 interface TokenMetric {
   id: string;
@@ -63,6 +65,7 @@ const props = defineProps<{
 
 const router = useRouter();
 const sessionsStore = useSessionsStore();
+const smartLinksStore = useSmartLinksStore();
 
 const { abortSession, isAborting, error: abortError } = useAbortSession();
 const { archiveSession, isArchiving, error: archiveError } = useArchiveSession();
@@ -87,6 +90,9 @@ const isLoadingFilesChanged = shallowRef(false);
 const filesChangedError = shallowRef<string | null>(null);
 
 const sessionId = computed(() => props.session?.session.id ?? null);
+const activeSmartLinks = computed(() => sessionId.value ? smartLinksStore.getActiveLinks(sessionId.value) : []);
+const smartLinkPRs = computed(() => activeSmartLinks.value.filter(l => l.resourceType === "pull_request"));
+const smartLinkIssues = computed(() => activeSmartLinks.value.filter(l => l.resourceType !== "pull_request"));
 const resolvedInstanceId = computed(() => normalizeString(props.session?.instanceId) ?? normalizeString(remoteSessionDetail.value?.instanceId));
 const todoSessionId = computed(() => sessionId.value ?? "");
 const todoInstanceId = computed(() => resolvedInstanceId.value ?? "");
@@ -461,6 +467,21 @@ function formatCurrency(amount: number | null): string {
     maximumFractionDigits: 2,
   }).format(amount);
 }
+
+async function handleDismissSmartLink(linkId: string): Promise<void> {
+  const sid = sessionId.value;
+  if (!sid) return;
+  try {
+    const response = await apiFetch(`/api/sessions/${sid}/smart-links/${linkId}/dismiss`, {
+      method: "PATCH",
+    });
+    if (response.ok) {
+      smartLinksStore.dismissLink(sid, linkId);
+    }
+  } catch {
+    // silently ignore
+  }
+}
 </script>
 
 <template>
@@ -641,6 +662,48 @@ function formatCurrency(amount: number | null): string {
       <FilesChanged :files="filesChanged" />
     </article>
 
+    <article
+      v-if="activeSmartLinks.length > 0"
+      class="session-section-card"
+    >
+      <div class="session-section-card__header">
+        <p class="session-section-card__title">
+          Smart links
+        </p>
+        <span class="session-section-card__count">{{ activeSmartLinks.length }}</span>
+      </div>
+
+      <div
+        v-if="smartLinkPRs.length > 0"
+        class="smart-links-group"
+      >
+        <p class="smart-links-group__heading">
+          Pull requests
+        </p>
+        <SmartLinkItem
+          v-for="link in smartLinkPRs"
+          :key="link.id"
+          :link="link"
+          @dismiss="handleDismissSmartLink"
+        />
+      </div>
+
+      <div
+        v-if="smartLinkIssues.length > 0"
+        class="smart-links-group"
+      >
+        <p class="smart-links-group__heading">
+          Issues
+        </p>
+        <SmartLinkItem
+          v-for="link in smartLinkIssues"
+          :key="link.id"
+          :link="link"
+          @dismiss="handleDismissSmartLink"
+        />
+      </div>
+    </article>
+
     <ConfirmDeleteSessionDialog
       v-model:open="isDeleteDialogOpen"
       :is-deleting="isDeleting"
@@ -753,6 +816,35 @@ function formatCurrency(amount: number | null): string {
   to {
     transform: rotate(360deg);
   }
+}
+
+.session-section-card__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.smart-links-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.smart-links-group__heading {
+  margin: 0;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
 }
 
 </style>
