@@ -39,6 +39,10 @@ public sealed class HarnessEventRelay : BackgroundService
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(3, "EventPublishFailed"),
             "Event publish failed for instance {InstanceId}");
 
+    private static readonly Action<ILogger, int, Exception?> LogShutdownTimeout =
+        LoggerMessage.Define<int>(LogLevel.Warning, new EventId(4, "ShutdownTimeout"),
+            "Shutdown timed out waiting for {Count} pump task(s) to complete");
+
     private readonly InstanceTracker _tracker;
     private readonly IEventBroadcaster _broadcaster;
     private readonly IEventPublisher _publisher;
@@ -89,11 +93,19 @@ public sealed class HarnessEventRelay : BackgroundService
             _tracker.InstanceRegistered -= OnInstanceRegistered;
             _tracker.InstanceRemoved -= OnInstanceRemoved;
 
-            // Wait for all pump tasks to finish their cleanup (flush deltas, broadcast idle)
+            // Wait for all pump tasks to finish their cleanup (flush deltas, broadcast idle),
+            // but cap the wait so a stuck subscription never blocks shutdown indefinitely.
             var tasks = _pumpTasks.Values.ToArray();
             if (tasks.Length > 0)
             {
-                await Task.WhenAll(tasks).ConfigureAwait(false);
+                var allPumps = Task.WhenAll(tasks);
+                var winner = await Task.WhenAny(allPumps, Task.Delay(TimeSpan.FromSeconds(10), CancellationToken.None))
+                    .ConfigureAwait(false);
+
+                if (winner != allPumps)
+                {
+                    LogShutdownTimeout(_logger, tasks.Count(t => !t.IsCompleted), null);
+                }
             }
         }
     }
