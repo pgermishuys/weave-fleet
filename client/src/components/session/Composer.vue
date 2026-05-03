@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, shallowRef, ref, useTemplateRef, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { Send } from "lucide-vue-next";
+import { Send, Paperclip, X } from "lucide-vue-next";
 import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
 import AgentSelector from "@/components/session/AgentSelector.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
@@ -14,6 +14,8 @@ import { useModels } from "@/composables/use-models";
 import { useSendPrompt } from "@/composables/use-send-prompt";
 import { parseSlashCommand } from "@/lib/slash-command-utils";
 import { useSessionsStore } from "@/stores/sessions";
+import type { ImageAttachment } from "@/lib/api-types";
+import { ALLOWED_IMAGE_MIMES, MAX_IMAGE_BYTES, MAX_ATTACHMENTS_PER_PROMPT } from "@/lib/image-validation";
 
 defineOptions({
   name: "SessionComposer",
@@ -35,7 +37,7 @@ const { draft, setText, setAgentId, setModelId } = useDraftState(props.sessionId
   agentId: "",
   modelId: "",
 });
-const { canSend, error: sendPromptError, sendPrompt } = useSendPrompt(props.sessionId);
+const { error: sendPromptError, sendPrompt } = useSendPrompt(props.sessionId);
 const { error: sendCommandError, sendCommand } = useSendCommand(props.sessionId);
 
 const sessionsStore = useSessionsStore();
@@ -49,6 +51,125 @@ const sendError = computed(() => sendCommandError.value ?? sendPromptError.value
 let disabledStateObserver: MutationObserver | null = null;
 let statusIndicatorTimer: ReturnType<typeof setTimeout> | null = null;
 let statusIndicatorDotsTimer: ReturnType<typeof setInterval> | null = null;
+let pasteErrorTimer: ReturnType<typeof setTimeout> | null = null;
+
+interface PendingAttachment extends ImageAttachment {
+  id: string;
+  previewUrl: string;
+}
+
+const pendingAttachments = ref<PendingAttachment[]>([]);
+const pasteError = shallowRef<string | undefined>(undefined);
+const isDragging = shallowRef(false);
+const lightboxUrl = shallowRef<string | null>(null);
+const fileInputRef = useTemplateRef<HTMLInputElement>("fileInput");
+
+function clearPasteError(): void {
+  pasteError.value = undefined;
+  if (pasteErrorTimer) {
+    clearTimeout(pasteErrorTimer);
+    pasteErrorTimer = null;
+  }
+}
+
+function setPasteError(message: string): void {
+  pasteError.value = message;
+  if (pasteErrorTimer) {
+    clearTimeout(pasteErrorTimer);
+  }
+  pasteErrorTimer = setTimeout(() => {
+    pasteError.value = undefined;
+    pasteErrorTimer = null;
+  }, 5000);
+}
+
+function processImageBlob(blob: File): void {
+  if (!ALLOWED_IMAGE_MIMES.has(blob.type)) {
+    setPasteError(`Unsupported image type: ${blob.type || "unknown"}`);
+    return;
+  }
+  if (blob.size > MAX_IMAGE_BYTES) {
+    setPasteError(`Image exceeds 5MB limit (${(blob.size / 1024 / 1024).toFixed(1)}MB)`);
+    return;
+  }
+  if (pendingAttachments.value.length >= MAX_ATTACHMENTS_PER_PROMPT) {
+    setPasteError(`Too many images (max ${MAX_ATTACHMENTS_PER_PROMPT})`);
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = reader.result as string;
+    const base64 = dataUrl.split(",")[1] ?? "";
+    const previewUrl = URL.createObjectURL(blob);
+    pendingAttachments.value.push({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      mime: blob.type,
+      filename: blob.name || "image.png",
+      data: base64,
+      previewUrl,
+    });
+    clearPasteError();
+  };
+  reader.readAsDataURL(blob);
+}
+
+function removeAttachment(id: string): void {
+  const index = pendingAttachments.value.findIndex((a) => a.id === id);
+  if (index >= 0) {
+    const [removed] = pendingAttachments.value.splice(index, 1);
+    URL.revokeObjectURL(removed.previewUrl);
+  }
+}
+
+function clearAttachments(): void {
+  for (const att of pendingAttachments.value) {
+    URL.revokeObjectURL(att.previewUrl);
+  }
+  pendingAttachments.value = [];
+}
+
+function handlePaste(event: ClipboardEvent): void {
+  const items = Array.from(event.clipboardData?.items ?? []);
+  const imageItems = items.filter((item) => item.type.startsWith("image/"));
+  if (imageItems.length === 0) return;
+  event.preventDefault();
+  for (const item of imageItems) {
+    const blob = item.getAsFile();
+    if (blob) processImageBlob(blob);
+  }
+}
+
+function handleDragOver(event: DragEvent): void {
+  event.preventDefault();
+  isDragging.value = true;
+}
+
+function handleDragLeave(): void {
+  isDragging.value = false;
+}
+
+function handleDrop(event: DragEvent): void {
+  event.preventDefault();
+  isDragging.value = false;
+  const files = Array.from(event.dataTransfer?.files ?? []);
+  for (const file of files) {
+    if (file.type.startsWith("image/")) {
+      processImageBlob(file);
+    }
+  }
+}
+
+function handleFileInput(event: Event): void {
+  const input = event.target as HTMLInputElement;
+  const files = Array.from(input.files ?? []);
+  for (const file of files) {
+    processImageBlob(file);
+  }
+  input.value = "";
+}
+
+const hasContent = computed(() => draft.text.trim().length > 0 || pendingAttachments.value.length > 0);
 
 const STATUS_INDICATOR_LINGER_MS = 1600;
 const STATUS_INDICATOR_DOTS_INTERVAL_MS = 400;
@@ -163,6 +284,8 @@ onUnmounted(() => {
   disabledStateObserver = null;
   clearStatusIndicatorTimer();
   stopStatusIndicatorDots();
+  clearAttachments();
+  clearPasteError();
 });
 
 const { queue, enqueue } = useMessageQueue(
@@ -335,7 +458,9 @@ function sendCurrentDraft(): boolean {
     return sendCommand(parsedCommand.command, parsedCommand.args);
   }
 
-  return sendPrompt();
+  const attachments: ImageAttachment[] = pendingAttachments.value.map(({ mime, filename, data }) => ({ mime, filename, data }));
+  clearAttachments();
+  return sendPrompt(attachments.length > 0 ? attachments : undefined);
 }
 
 function handleSend(): void {
@@ -344,7 +469,7 @@ function handleSend(): void {
   }
 
   const text = draft.text.trim();
-  if (!text) {
+  if (!text && pendingAttachments.value.length === 0) {
     return;
   }
 
@@ -421,15 +546,21 @@ function handleKeydown(event: KeyboardEvent): void {
     </div>
 
     <div
-      v-if="sendError"
+      v-if="sendError || pasteError"
       data-testid="send-prompt-error"
       class="composer-error"
       role="alert"
     >
-      {{ sendError }}
+      {{ sendError || pasteError }}
     </div>
 
-    <div class="composer-box">
+    <div
+      class="composer-box"
+      :class="{ 'composer-box--dragging': isDragging }"
+      @dragover="handleDragOver"
+      @dragleave="handleDragLeave"
+      @drop="handleDrop"
+    >
       <AutocompletePopup
         :open="autocompleteEnabled && autocomplete.isOpen.value"
         :items="autocompleteEnabled ? autocomplete.items.value : []"
@@ -451,9 +582,61 @@ function handleKeydown(event: KeyboardEvent): void {
         @keydown="handleKeydown"
         @keyup="handleCursorPositionChange"
         @click="handleCursorPositionChange"
+        @paste="handlePaste"
+      />
+
+      <div
+        v-if="pendingAttachments.length > 0"
+        class="attachment-strip"
+      >
+        <div
+          v-for="att in pendingAttachments"
+          :key="att.id"
+          class="attachment-chip"
+        >
+          <button
+            type="button"
+            class="attachment-chip__thumb-btn"
+            title="Click to preview"
+            @click="lightboxUrl = att.previewUrl"
+          >
+            <img
+              :src="att.previewUrl"
+              :alt="att.filename ?? 'image'"
+              class="attachment-chip__thumb"
+            />
+          </button>
+          <span class="attachment-chip__name">{{ att.filename ?? 'image.png' }}</span>
+          <button
+            type="button"
+            class="attachment-chip__remove"
+            :title="`Remove ${att.filename ?? 'image'}`"
+            @click="removeAttachment(att.id)"
+          >
+            <X class="attachment-chip__remove-icon" />
+          </button>
+        </div>
+      </div>
+
+      <input
+        ref="fileInput"
+        type="file"
+        accept="image/png,image/jpeg,image/gif,image/webp"
+        multiple
+        class="sr-only"
+        @change="handleFileInput"
       />
 
       <div class="composer-toolbar">
+        <button
+          type="button"
+          class="attach-btn"
+          title="Attach image"
+          :disabled="isDisabled"
+          @click="fileInputRef?.click()"
+        >
+          <Paperclip class="attach-btn__icon" />
+        </button>
         <AgentSelector
           v-model="selectedAgentId"
           :agents="agents"
@@ -467,7 +650,7 @@ function handleKeydown(event: KeyboardEvent): void {
           type="button"
           class="send-btn"
           data-testid="prompt-send-button"
-          :disabled="isDisabled || !canSend"
+          :disabled="isDisabled || !hasContent"
           @click="handleSend"
         >
           <Send class="send-btn__icon" />
@@ -482,6 +665,29 @@ function handleKeydown(event: KeyboardEvent): void {
         </span>
       </div>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="lightboxUrl"
+        class="lightbox-overlay"
+        @click="lightboxUrl = null"
+      >
+        <img
+          :src="lightboxUrl"
+          alt="Image preview"
+          class="lightbox-image"
+          @click.stop
+        />
+        <button
+          type="button"
+          class="lightbox-close"
+          title="Close preview"
+          @click="lightboxUrl = null"
+        >
+          <X class="lightbox-close__icon" />
+        </button>
+      </div>
+    </Teleport>
   </section>
 </template>
 
@@ -622,5 +828,181 @@ function handleKeydown(event: KeyboardEvent): void {
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
+}
+
+.composer-box--dragging {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--card-bg));
+}
+
+.attachment-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px 4px;
+}
+
+.attachment-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  font-size: 11px;
+  color: var(--text);
+  position: relative;
+}
+
+.attachment-chip__thumb-btn {
+  display: inline-flex;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.attachment-chip__thumb-btn:hover {
+  opacity: 0.8;
+}
+
+.attachment-chip__thumb {
+  width: 80px;
+  height: 80px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.attachment-chip__name {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.attachment-chip__remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.attachment-chip:hover .attachment-chip__remove {
+  opacity: 1;
+}
+
+.attachment-chip__remove:hover {
+  background: rgba(220, 38, 38, 0.8);
+}
+
+.attachment-chip__remove-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.attach-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.attach-btn:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+.attach-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.attach-btn__icon {
+  width: 15px;
+  height: 15px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+</style>
+
+<style>
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
+  cursor: pointer;
+}
+
+.lightbox-image {
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: 8px;
+  object-fit: contain;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  cursor: default;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  cursor: pointer;
+}
+
+.lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.lightbox-close__icon {
+  width: 20px;
+  height: 20px;
 }
 </style>
