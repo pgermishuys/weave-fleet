@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Suppress CA rules that are stylistic and don't affect AOT/correctness.
+         These are inherited from WeaveFleet's strict AnalysisLevel but NuCode
+         uses different conventions (e.g. direct ILogger calls, interface naming). -->
+    <NoWarn>$(NoWarn);CA1305;CA1310;CA1711;CA1716;CA1822;CA1836;CA1848;CA1854;CA1859;CA1873;CA1001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Agents.AI" />
+    <PackageReference Include="Microsoft.Agents.AI.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Ulid" />
+    <PackageReference Include="ReverseMarkdown" />
+    <PackageReference Include="ModelContextProtocol" />
+  </ItemGroup>
+
+</Project>
