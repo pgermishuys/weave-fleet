@@ -245,10 +245,20 @@ builder.Services.AddAntiforgery(options =>
 // ── JSON Serialization ───────────────────────────────────────────────────────
 // Register source-generated JsonSerializerContext so minimal API endpoints
 // use compile-time serialization (required for trimming and AOT).
+// DefaultJsonTypeInfoResolver is appended as a fallback so the runtime
+// RequestDelegateFactory can resolve framework types (e.g. Task) for
+// dynamically-registered plugin endpoints that bypass RDG interception.
+// The suppressed warnings apply only to the fallback resolver which is never
+// used for actual serialization — only to satisfy the RDF's type validation.
+#pragma warning disable IL2026 // DefaultJsonTypeInfoResolver: metadata for trimmed types
+#pragma warning disable IL3050 // DefaultJsonTypeInfoResolver: AOT dynamic code
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
-    options.SerializerOptions.TypeInfoResolver = ApiJsonContext.Default;
+    options.SerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default);
+    options.SerializerOptions.TypeInfoResolverChain.Add(new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver());
 });
+#pragma warning restore IL3050
+#pragma warning restore IL2026
 
 // Register ProblemDetails service so Results.Problem() serializes correctly
 // with the source-generated context.
