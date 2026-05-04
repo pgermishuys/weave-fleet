@@ -6,7 +6,7 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Data.Repositories;
 
-public sealed class DapperWorkspaceRepository(
+public sealed class WorkspaceRepository(
     IDbConnectionFactory connectionFactory,
     IUserContext userContext) : IWorkspaceRepository
 {

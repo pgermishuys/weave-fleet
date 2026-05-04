@@ -5,7 +5,7 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Data.Repositories;
 
-public sealed class DapperUserRepository(IDbConnectionFactory connectionFactory) : IUserRepository
+public sealed class UserRepository(IDbConnectionFactory connectionFactory) : IUserRepository
 {
     public async Task<User?> GetByIdAsync(string id)
     {

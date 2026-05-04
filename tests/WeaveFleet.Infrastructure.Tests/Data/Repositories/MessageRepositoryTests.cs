@@ -6,16 +6,16 @@ using WeaveFleet.Infrastructure.Data.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Data.Repositories;
 
-public sealed class DapperMessageRepositoryTests
+public sealed class MessageRepositoryTests
 {
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 
-    private static async Task<(SqliteConnection Keeper, DapperMessageRepository Repo, IDbConnectionFactory Factory)> CreateAsync()
+    private static async Task<(SqliteConnection Keeper, MessageRepository Repo, IDbConnectionFactory Factory)> CreateAsync()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        var repo = new DapperMessageRepository(factory, new TestUserContext());
+        var repo = new MessageRepository(factory, new TestUserContext());
         return (keeper, repo, factory);
     }
 
@@ -414,10 +414,10 @@ public sealed class DapperMessageRepositoryTests
         using var _ = conn;
 
         var otherSessionId = await SeedSessionAsync(factory, userId: "other-user");
-        var otherRepo = new DapperMessageRepository(factory, new TestUserContext("other-user"));
+        var otherRepo = new MessageRepository(factory, new TestUserContext("other-user"));
         await otherRepo.UpsertAsync(MakeMessage(otherSessionId));
 
-        var repo = new DapperMessageRepository(factory, new TestUserContext());
+        var repo = new MessageRepository(factory, new TestUserContext());
         var messages = await repo.GetBySessionAsync(otherSessionId, 10, null);
 
         messages.ShouldBeEmpty();
@@ -430,12 +430,12 @@ public sealed class DapperMessageRepositoryTests
         using var _ = conn;
 
         var otherSessionId = await SeedSessionAsync(factory, userId: "other-user");
-        var countBefore = await new DapperMessageRepository(factory, new TestUserContext("other-user")).CountBySessionAsync(otherSessionId);
-        var repo = new DapperMessageRepository(factory, new TestUserContext());
+        var countBefore = await new MessageRepository(factory, new TestUserContext("other-user")).CountBySessionAsync(otherSessionId);
+        var repo = new MessageRepository(factory, new TestUserContext());
 
         await repo.UpsertAsync(MakeMessage(otherSessionId));
 
-        var otherRepo = new DapperMessageRepository(factory, new TestUserContext("other-user"));
+        var otherRepo = new MessageRepository(factory, new TestUserContext("other-user"));
         var count = await otherRepo.CountBySessionAsync(otherSessionId);
         count.ShouldBe(countBefore);
     }
@@ -447,10 +447,10 @@ public sealed class DapperMessageRepositoryTests
         using var _ = conn;
 
         var otherSessionId = await SeedSessionAsync(factory, userId: "other-user");
-        var otherRepo = new DapperMessageRepository(factory, new TestUserContext("other-user"));
+        var otherRepo = new MessageRepository(factory, new TestUserContext("other-user"));
         await otherRepo.UpsertAsync(MakeMessage(otherSessionId));
 
-        var repo = new DapperMessageRepository(factory, new TestUserContext());
+        var repo = new MessageRepository(factory, new TestUserContext());
         await repo.DeleteBySessionAsync(otherSessionId);
 
         var count = await otherRepo.CountBySessionAsync(otherSessionId);

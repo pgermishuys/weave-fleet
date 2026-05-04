@@ -8,7 +8,7 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Data.Repositories;
 
-public sealed class DapperSessionRepository(
+public sealed class SessionRepository(
     IDbConnectionFactory connectionFactory,
     IUserContext userContext) : ISessionRepository
 {

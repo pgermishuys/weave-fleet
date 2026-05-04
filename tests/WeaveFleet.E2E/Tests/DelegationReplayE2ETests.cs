@@ -73,7 +73,7 @@ public sealed class DelegationReplayE2ETests : E2ETestBase,
         var parentHarness = tracker.Get(parentInstanceId).ShouldBeOfType<TestHarnessSession>();
         var parentHarnessSessionId = parentHarness.InstanceId;
 
-        var messageRepo = new DapperMessageRepository(connFactory, userContext);
+        var messageRepo = new MessageRepository(connFactory, userContext);
         await messageRepo.UpsertAsync(
             MessagePersistenceService.ToPersistedMessage(
                 parentSessionId,

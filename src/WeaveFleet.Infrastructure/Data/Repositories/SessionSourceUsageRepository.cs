@@ -8,13 +8,13 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Data.Repositories;
 
-public sealed class DapperSessionSourceUsageRepository : ISessionSourceUsageRepository
+public sealed class SessionSourceUsageRepository : ISessionSourceUsageRepository
 {
     private readonly IDbConnectionFactory _connectionFactory;
 
     private readonly IUserContext _userContext;
 
-    public DapperSessionSourceUsageRepository(IDbConnectionFactory connectionFactory, IUserContext userContext)
+    public SessionSourceUsageRepository(IDbConnectionFactory connectionFactory, IUserContext userContext)
     {
         _connectionFactory = connectionFactory;
         _userContext = userContext;

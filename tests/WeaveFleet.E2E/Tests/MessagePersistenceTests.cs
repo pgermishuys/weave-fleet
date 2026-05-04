@@ -50,7 +50,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
             var connFactory = _factory.KestrelServices.GetRequiredService<IDbConnectionFactory>();
             var userContext = new TestUserContext("local-user");
 
-            var workspaceRepo = new DapperWorkspaceRepository(connFactory, userContext);
+            var workspaceRepo = new WorkspaceRepository(connFactory, userContext);
             await workspaceRepo.InsertAsync(new Workspace
             {
                 Id = workspaceId,
@@ -60,7 +60,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
                 UserId = userContext.UserId,
             });
 
-            var instanceRepo = new DapperInstanceRepository(connFactory, userContext);
+            var instanceRepo = new InstanceRepository(connFactory, userContext);
             await instanceRepo.InsertAsync(new Instance
             {
                 Id = instanceId,
@@ -72,7 +72,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
                 UserId = userContext.UserId,
             });
 
-            var sessionRepo = new DapperSessionRepository(connFactory, userContext);
+            var sessionRepo = new SessionRepository(connFactory, userContext);
             await sessionRepo.InsertAsync(new Session
             {
                 Id = sessionId,
@@ -88,7 +88,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
                 UserId = userContext.UserId,
             });
 
-            var messageRepo = new DapperMessageRepository(connFactory, userContext);
+            var messageRepo = new MessageRepository(connFactory, userContext);
             await messageRepo.UpsertBatchAsync(
             [
                 MakeMessage("msg-user-1", sessionId, "user", "Hello, can you help?", now, agentName: null),
@@ -134,7 +134,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
             var connFactory = _factory.KestrelServices.GetRequiredService<IDbConnectionFactory>();
             var userContext = new TestUserContext("local-user");
 
-            var workspaceRepo = new DapperWorkspaceRepository(connFactory, userContext);
+            var workspaceRepo = new WorkspaceRepository(connFactory, userContext);
             await workspaceRepo.InsertAsync(new Workspace
             {
                 Id = workspaceId,
@@ -144,7 +144,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
                 UserId = userContext.UserId,
             });
 
-            var instanceRepo = new DapperInstanceRepository(connFactory, userContext);
+            var instanceRepo = new InstanceRepository(connFactory, userContext);
             await instanceRepo.InsertAsync(new Instance
             {
                 Id = instanceId,
@@ -156,7 +156,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
                 UserId = userContext.UserId,
             });
 
-            var sessionRepo = new DapperSessionRepository(connFactory, userContext);
+            var sessionRepo = new SessionRepository(connFactory, userContext);
             await sessionRepo.InsertAsync(new Session
             {
                 Id = sessionId,
@@ -172,7 +172,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
                 UserId = userContext.UserId,
             });
 
-            var messageRepo = new DapperMessageRepository(connFactory, userContext);
+            var messageRepo = new MessageRepository(connFactory, userContext);
             await messageRepo.UpsertBatchAsync(
             [
                 MakeMessage("msg-u-1", sessionId, "user", "What is Weave Fleet?", now, agentName: null),
@@ -209,7 +209,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
             var connFactory = _factory.KestrelServices.GetRequiredService<IDbConnectionFactory>();
             var userContext = new TestUserContext("local-user");
 
-            var workspaceRepo = new DapperWorkspaceRepository(connFactory, userContext);
+            var workspaceRepo = new WorkspaceRepository(connFactory, userContext);
             await workspaceRepo.InsertAsync(new Workspace
             {
                 Id = workspaceId,
@@ -219,7 +219,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
                 UserId = userContext.UserId,
             });
 
-            var instanceRepo = new DapperInstanceRepository(connFactory, userContext);
+            var instanceRepo = new InstanceRepository(connFactory, userContext);
             await instanceRepo.InsertAsync(new Instance
             {
                 Id = instanceId,
@@ -231,7 +231,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
                 UserId = userContext.UserId,
             });
 
-            var sessionRepo = new DapperSessionRepository(connFactory, userContext);
+            var sessionRepo = new SessionRepository(connFactory, userContext);
             await sessionRepo.InsertAsync(new Session
             {
                 Id = sessionId,
@@ -247,7 +247,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
                 UserId = userContext.UserId,
             });
 
-            var messageRepo = new DapperMessageRepository(connFactory, userContext);
+            var messageRepo = new MessageRepository(connFactory, userContext);
             await messageRepo.UpsertBatchAsync(
             [
                 MakeMessage("msg-db-user-1", sessionId, "user", "Load from DB after reload", now, agentName: null),
@@ -279,7 +279,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
             var connFactory = _factory.KestrelServices.GetRequiredService<IDbConnectionFactory>();
             var userContext = new TestUserContext("local-user");
 
-            var workspaceRepo = new DapperWorkspaceRepository(connFactory, userContext);
+            var workspaceRepo = new WorkspaceRepository(connFactory, userContext);
             await workspaceRepo.InsertAsync(new Workspace
             {
                 Id = workspaceId,
@@ -289,7 +289,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
                 UserId = userContext.UserId,
             });
 
-            var instanceRepo = new DapperInstanceRepository(connFactory, userContext);
+            var instanceRepo = new InstanceRepository(connFactory, userContext);
             await instanceRepo.InsertAsync(new Instance
             {
                 Id = instanceId,
@@ -301,7 +301,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
                 UserId = userContext.UserId,
             });
 
-            var sessionRepo = new DapperSessionRepository(connFactory, userContext);
+            var sessionRepo = new SessionRepository(connFactory, userContext);
             await sessionRepo.InsertAsync(new Session
             {
                 Id = sessionId,
@@ -317,7 +317,7 @@ public sealed class MessagePersistenceTests : E2ETestBase,
                 UserId = userContext.UserId,
             });
 
-            var messageRepo = new DapperMessageRepository(connFactory, userContext);
+            var messageRepo = new MessageRepository(connFactory, userContext);
             await messageRepo.UpsertBatchAsync(
             [
                 MakeMessage("msg-db-prompt-1", sessionId, "user", "Persisted prompt text survives reload", now, agentName: null),

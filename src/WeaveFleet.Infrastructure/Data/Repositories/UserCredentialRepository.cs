@@ -10,7 +10,7 @@ namespace WeaveFleet.Infrastructure.Data.Repositories;
 /// Raw ADO.NET implementation of <see cref="IUserCredentialRepository"/>.
 /// All queries are scoped to the current user via <see cref="IUserContext"/>.
 /// </summary>
-public sealed class DapperUserCredentialRepository(
+public sealed class UserCredentialRepository(
     IDbConnectionFactory connectionFactory,
     IUserContext userContext) : IUserCredentialRepository
 {

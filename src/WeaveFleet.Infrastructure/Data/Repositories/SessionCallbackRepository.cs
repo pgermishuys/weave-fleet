@@ -6,12 +6,12 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Data.Repositories;
 
-public sealed class DapperSessionCallbackRepository : ISessionCallbackRepository
+public sealed class SessionCallbackRepository : ISessionCallbackRepository
 {
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly IUserContext _userContext;
 
-    public DapperSessionCallbackRepository(IDbConnectionFactory connectionFactory, IUserContext userContext)
+    public SessionCallbackRepository(IDbConnectionFactory connectionFactory, IUserContext userContext)
     {
         _connectionFactory = connectionFactory;
         _userContext = userContext;

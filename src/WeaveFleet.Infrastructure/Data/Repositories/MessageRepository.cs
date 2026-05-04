@@ -8,13 +8,13 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Data.Repositories;
 
-public sealed class DapperMessageRepository : IMessageRepository
+public sealed class MessageRepository : IMessageRepository
 {
     private readonly IDbConnectionFactory _connectionFactory;
 
     private readonly IUserContext _userContext;
 
-    public DapperMessageRepository(IDbConnectionFactory connectionFactory, IUserContext userContext)
+    public MessageRepository(IDbConnectionFactory connectionFactory, IUserContext userContext)
     {
         _connectionFactory = connectionFactory;
         _userContext = userContext;

@@ -6,12 +6,12 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Data.Repositories;
 
-public sealed class DapperSmartLinkRepository : ISmartLinkRepository
+public sealed class SmartLinkRepository : ISmartLinkRepository
 {
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly IUserContext _userContext;
 
-    public DapperSmartLinkRepository(IDbConnectionFactory connectionFactory, IUserContext userContext)
+    public SmartLinkRepository(IDbConnectionFactory connectionFactory, IUserContext userContext)
     {
         _connectionFactory = connectionFactory;
         _userContext = userContext;

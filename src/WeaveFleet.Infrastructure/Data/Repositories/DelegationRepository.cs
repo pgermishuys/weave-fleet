@@ -7,12 +7,12 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Data.Repositories;
 
-public sealed class DapperDelegationRepository : IDelegationRepository
+public sealed class DelegationRepository : IDelegationRepository
 {
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly IUserContext _userContext;
 
-    public DapperDelegationRepository(IDbConnectionFactory connectionFactory, IUserContext userContext)
+    public DelegationRepository(IDbConnectionFactory connectionFactory, IUserContext userContext)
     {
         _connectionFactory = connectionFactory;
         _userContext = userContext;

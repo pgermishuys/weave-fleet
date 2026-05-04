@@ -8,7 +8,7 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Data.Repositories;
 
-public sealed class DapperOutboxRepository(
+public sealed class OutboxRepository(
     IDbConnectionFactory connectionFactory,
     IUserContext userContext) : IOutboxRepository
 {

@@ -4,7 +4,7 @@ using WeaveFleet.Infrastructure.Data.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Data.Repositories;
 
-public sealed class DapperWorkspaceRootRepositoryTests
+public sealed class WorkspaceRootRepositoryTests
 {
     private static async Task<(SqliteConnection Keeper, WeaveFleet.Application.Data.IDbConnectionFactory Factory)> CreateAsync()
         => await TestDbHelper.CreateSharedDbAsync();
@@ -18,7 +18,7 @@ public sealed class DapperWorkspaceRootRepositoryTests
 
         var ownerUserContext = new TestUserContext("owner-user");
         var ownerService = new WorkspaceRootService(
-            new DapperWorkspaceRootRepository(factory, ownerUserContext),
+            new WorkspaceRootRepository(factory, ownerUserContext),
             ownerUserContext);
 
         var result = await ownerService.AddRootAsync(tempDirectory.Path);
@@ -26,13 +26,13 @@ public sealed class DapperWorkspaceRootRepositoryTests
         result.IsSuccess.ShouldBeTrue();
         result.Value.UserId.ShouldBe("owner-user");
 
-        var ownerRoots = await new DapperWorkspaceRootRepository(factory, ownerUserContext).ListAsync();
+        var ownerRoots = await new WorkspaceRootRepository(factory, ownerUserContext).ListAsync();
         ownerRoots.Count.ShouldBe(1);
         ownerRoots[0].Id.ShouldBe(result.Value.Id);
         ownerRoots[0].Path.ShouldBe(result.Value.Path);
         ownerRoots[0].UserId.ShouldBe("owner-user");
 
-        var otherRoots = await new DapperWorkspaceRootRepository(factory, new TestUserContext("other-user")).ListAsync();
+        var otherRoots = await new WorkspaceRootRepository(factory, new TestUserContext("other-user")).ListAsync();
         otherRoots.ShouldBeEmpty();
     }
 

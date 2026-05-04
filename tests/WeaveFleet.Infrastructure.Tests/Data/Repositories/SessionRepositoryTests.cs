@@ -5,20 +5,20 @@ using WeaveFleet.Infrastructure.Data.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Data.Repositories;
 
-public sealed class DapperSessionRepositoryTests
+public sealed class SessionRepositoryTests
 {
-    private static async Task<(SqliteConnection Keeper, DapperSessionRepository Repo, IDbConnectionFactory Factory)> CreateAsync()
+    private static async Task<(SqliteConnection Keeper, SessionRepository Repo, IDbConnectionFactory Factory)> CreateAsync()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        var repo = new DapperSessionRepository(factory, new TestUserContext());
+        var repo = new SessionRepository(factory, new TestUserContext());
         return (keeper, repo, factory);
     }
 
     private static async Task<(Workspace W, Instance I)> InsertDependenciesAsync(IDbConnectionFactory factory)
     {
         var userContext = new TestUserContext();
-        var wsRepo = new DapperWorkspaceRepository(factory, userContext);
-        var instRepo = new DapperInstanceRepository(factory, userContext);
+        var wsRepo = new WorkspaceRepository(factory, userContext);
+        var instRepo = new InstanceRepository(factory, userContext);
 
         var ws = new Workspace
         {
@@ -431,11 +431,11 @@ public sealed class DapperSessionRepositoryTests
         using var _ = conn;
 
         var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
-        var repo = new DapperSessionRepository(factory, new TestUserContext());
+        var repo = new SessionRepository(factory, new TestUserContext());
 
         await repo.UpdateStatusAsync(ownerGraph.Session.Id, "stopped", DateTime.UtcNow.ToString("O"));
 
-        var ownerRepo = new DapperSessionRepository(factory, new TestUserContext("owner-user"));
+        var ownerRepo = new SessionRepository(factory, new TestUserContext("owner-user"));
         var session = await ownerRepo.GetByIdAsync(ownerGraph.Session.Id);
         session.ShouldNotBeNull();
         session.Status.ShouldBe("active");
@@ -448,7 +448,7 @@ public sealed class DapperSessionRepositoryTests
         using var _ = conn;
 
         var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
-        var repo = new DapperSessionRepository(factory, new TestUserContext());
+        var repo = new SessionRepository(factory, new TestUserContext());
 
         var result = await repo.IncrementTokensAsync(ownerGraph.Session.Id, 50, 1.25);
 
@@ -462,7 +462,7 @@ public sealed class DapperSessionRepositoryTests
         using var _ = conn;
 
         var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
-        var repo = new DapperSessionRepository(factory, new TestUserContext());
+        var repo = new SessionRepository(factory, new TestUserContext());
 
         var sessions = await repo.GetForInstanceAsync(ownerGraph.Instance.Id);
 

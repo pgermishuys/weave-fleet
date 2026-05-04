@@ -7,7 +7,7 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Data.Repositories;
 
-public sealed class DapperHarnessEventLogRepository(
+public sealed class HarnessEventLogRepository(
     IDbConnectionFactory connectionFactory,
     IUserContext userContext) : IHarnessEventLogRepository
 {

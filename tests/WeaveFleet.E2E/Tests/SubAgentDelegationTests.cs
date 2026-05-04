@@ -43,7 +43,7 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
             var tracker = _factory.KestrelServices.GetRequiredService<InstanceTracker>();
             var userContext = new TestUserContext("local-user");
 
-            var workspaceRepo = new DapperWorkspaceRepository(connFactory, userContext);
+            var workspaceRepo = new WorkspaceRepository(connFactory, userContext);
             await workspaceRepo.InsertAsync(new Workspace
             {
                 Id = workspaceId,
@@ -53,7 +53,7 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                 UserId = userContext.UserId,
             });
 
-            var instanceRepo = new DapperInstanceRepository(connFactory, userContext);
+            var instanceRepo = new InstanceRepository(connFactory, userContext);
             await instanceRepo.InsertAsync(new Instance
             {
                 Id = parentInstanceId,
@@ -64,7 +64,7 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                 CreatedAt = now.ToString("O"),
                 UserId = userContext.UserId,
             });
-            var sessionRepo = new DapperSessionRepository(connFactory, userContext);
+            var sessionRepo = new SessionRepository(connFactory, userContext);
             await sessionRepo.InsertAsync(new Session
             {
                 Id = parentSessionId,
@@ -81,7 +81,7 @@ public sealed class SubAgentDelegationTests : E2ETestBase,
                 UserId = userContext.UserId,
             });
 
-            var messageRepo = new DapperMessageRepository(connFactory, userContext);
+            var messageRepo = new MessageRepository(connFactory, userContext);
             await messageRepo.UpsertAsync(
                 MessagePersistenceService.ToPersistedMessage(
                     parentSessionId,
