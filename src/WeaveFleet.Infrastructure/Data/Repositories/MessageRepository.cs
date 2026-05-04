@@ -1,4 +1,5 @@
-using Dapper;
+using System.Data;
+using System.Data.Common;
 using System.Text.Json;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
@@ -7,12 +8,13 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Data.Repositories;
 
-public sealed class DapperMessageRepository : IMessageRepository
-{    private readonly IDbConnectionFactory _connectionFactory;
+public sealed class MessageRepository : IMessageRepository
+{
+    private readonly IDbConnectionFactory _connectionFactory;
 
     private readonly IUserContext _userContext;
 
-    public DapperMessageRepository(IDbConnectionFactory connectionFactory, IUserContext userContext)
+    public MessageRepository(IDbConnectionFactory connectionFactory, IUserContext userContext)
     {
         _connectionFactory = connectionFactory;
         _userContext = userContext;
@@ -24,9 +26,9 @@ public sealed class DapperMessageRepository : IMessageRepository
         await UpsertAsync(conn, null, message);
     }
 
-    public async Task UpsertAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, PersistedMessage message)
+    public async Task UpsertAsync(IDbConnection connection, IDbTransaction? transaction, PersistedMessage message)
     {
-        await connection.ExecuteAsync(
+        await connection.ExecuteNonQueryAsync(
             """
             INSERT INTO messages (id, session_id, role, parts_json, timestamp, created_at, agent_name, model_id)
             SELECT @Id, @SessionId, @Role, @PartsJson, @Timestamp, @CreatedAt, @AgentName, @ModelId
@@ -41,17 +43,17 @@ public sealed class DapperMessageRepository : IMessageRepository
                 agent_name = COALESCE(excluded.agent_name, messages.agent_name),
                 model_id = COALESCE(excluded.model_id, messages.model_id)
             """,
-            new
+            cmd =>
             {
-                message.Id,
-                message.SessionId,
-                message.Role,
-                message.PartsJson,
-                message.Timestamp,
-                message.CreatedAt,
-                message.AgentName,
-                message.ModelId,
-                UserId = _userContext.UserId
+                cmd.AddParameter("Id", message.Id);
+                cmd.AddParameter("SessionId", message.SessionId);
+                cmd.AddParameter("Role", message.Role);
+                cmd.AddParameter("PartsJson", message.PartsJson);
+                cmd.AddParameter("Timestamp", message.Timestamp);
+                cmd.AddParameter("CreatedAt", message.CreatedAt);
+                cmd.AddParameter("AgentName", message.AgentName);
+                cmd.AddParameter("ModelId", message.ModelId);
+                cmd.AddParameter("UserId", _userContext.UserId);
             },
             transaction);
     }
@@ -75,7 +77,7 @@ public sealed class DapperMessageRepository : IMessageRepository
         }
     }
 
-    public async Task UpsertBatchAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction transaction, IReadOnlyList<PersistedMessage> messages)
+    public async Task UpsertBatchAsync(IDbConnection connection, IDbTransaction transaction, IReadOnlyList<PersistedMessage> messages)
     {
         foreach (var message in messages)
             await UpsertAsync(connection, transaction, message);
@@ -86,13 +88,11 @@ public sealed class DapperMessageRepository : IMessageRepository
     {
         using var conn = _connectionFactory.CreateConnection();
 
-        IEnumerable<PersistedMessage> results;
+        List<PersistedMessage> results;
 
         if (beforeMessageId is null)
         {
-            // No cursor: get the last N persisted messages ordered by durable write time DESC,
-            // then reverse for oldest-first delivery within the page.
-            results = await conn.QueryAsync<PersistedMessage>(
+            results = await conn.QueryAsync(
                 """
                 SELECT m.*
                 FROM messages m
@@ -101,24 +101,33 @@ public sealed class DapperMessageRepository : IMessageRepository
                 ORDER BY m.created_at DESC, m.id DESC
                 LIMIT @Limit
                 """,
-                new { SessionId = sessionId, Limit = limit, UserId = _userContext.UserId });
+                cmd =>
+                {
+                    cmd.AddParameter("SessionId", sessionId);
+                    cmd.AddParameter("Limit", limit);
+                    cmd.AddParameter("UserId", _userContext.UserId);
+                },
+                ReadMessage);
         }
         else
         {
-            // Cursor: first look up the cursor message's durable write time.
-            var cursorCreatedAt = await conn.ExecuteScalarAsync<string?>(
+            var cursorCreatedAt = await conn.ExecuteScalarAsync<string>(
                 """
                 SELECT m.created_at
                 FROM messages m
                 INNER JOIN sessions s ON s.id = m.session_id
                 WHERE m.session_id = @SessionId AND m.id = @Id AND s.user_id = @UserId
                 """,
-                new { SessionId = sessionId, Id = beforeMessageId, UserId = _userContext.UserId });
+                cmd =>
+                {
+                    cmd.AddParameter("SessionId", sessionId);
+                    cmd.AddParameter("Id", beforeMessageId);
+                    cmd.AddParameter("UserId", _userContext.UserId);
+                });
 
             if (cursorCreatedAt is null)
             {
-                // Cursor not found — fall back to the latest persisted page.
-                results = await conn.QueryAsync<PersistedMessage>(
+                results = await conn.QueryAsync(
                     """
                     SELECT m.*
                     FROM messages m
@@ -127,12 +136,17 @@ public sealed class DapperMessageRepository : IMessageRepository
                     ORDER BY m.created_at DESC, m.id DESC
                     LIMIT @Limit
                     """,
-                    new { SessionId = sessionId, Limit = limit, UserId = _userContext.UserId });
+                    cmd =>
+                    {
+                        cmd.AddParameter("SessionId", sessionId);
+                        cmd.AddParameter("Limit", limit);
+                        cmd.AddParameter("UserId", _userContext.UserId);
+                    },
+                    ReadMessage);
             }
             else
             {
-                // Compound comparison for deterministic cursor behavior on persisted order.
-                results = await conn.QueryAsync<PersistedMessage>(
+                results = await conn.QueryAsync(
                     """
                     SELECT m.*
                     FROM messages m
@@ -144,33 +158,45 @@ public sealed class DapperMessageRepository : IMessageRepository
                     ORDER BY m.created_at DESC, m.id DESC
                     LIMIT @Limit
                     """,
-                    new { SessionId = sessionId, CursorCreatedAt = cursorCreatedAt, CursorId = beforeMessageId, Limit = limit, UserId = _userContext.UserId });
+                    cmd =>
+                    {
+                        cmd.AddParameter("SessionId", sessionId);
+                        cmd.AddParameter("CursorCreatedAt", cursorCreatedAt);
+                        cmd.AddParameter("CursorId", beforeMessageId);
+                        cmd.AddParameter("Limit", limit);
+                        cmd.AddParameter("UserId", _userContext.UserId);
+                    },
+                    ReadMessage);
             }
         }
 
         // Reverse to ascending order (oldest first), matching live API behavior
-        var list = results.ToList();
-        list.Reverse();
-        return list;
+        results.Reverse();
+        return results;
     }
 
     public async Task<int> CountBySessionAsync(string sessionId)
     {
         using var conn = _connectionFactory.CreateConnection();
-        return await conn.ExecuteScalarAsync<int>(
+        var result = await conn.ExecuteScalarAsync<long>(
             """
             SELECT COUNT(*)
             FROM messages m
             INNER JOIN sessions s ON s.id = m.session_id
             WHERE m.session_id = @SessionId AND s.user_id = @UserId
             """,
-            new { SessionId = sessionId, UserId = _userContext.UserId });
+            cmd =>
+            {
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            });
+        return (int)result;
     }
 
     public async Task<bool> HasMessagesAsync(string sessionId)
     {
         using var conn = _connectionFactory.CreateConnection();
-        return await conn.ExecuteScalarAsync<int>(
+        var result = await conn.ExecuteScalarAsync<long>(
             """
             SELECT CASE WHEN EXISTS (
                 SELECT 1
@@ -179,26 +205,37 @@ public sealed class DapperMessageRepository : IMessageRepository
                 WHERE m.session_id = @SessionId AND s.user_id = @UserId)
             THEN 1 ELSE 0 END
             """,
-            new { SessionId = sessionId, UserId = _userContext.UserId }) > 0;
+            cmd =>
+            {
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            });
+        return result > 0;
     }
 
     public async Task<PersistedMessage?> GetByIdAsync(string id, string sessionId)
     {
         using var conn = _connectionFactory.CreateConnection();
-        return await conn.QuerySingleOrDefaultAsync<PersistedMessage>(
+        return await conn.QueryFirstOrDefaultAsync(
             """
             SELECT m.*
             FROM messages m
             INNER JOIN sessions s ON s.id = m.session_id
             WHERE m.id = @Id AND m.session_id = @SessionId AND s.user_id = @UserId
             """,
-            new { Id = id, SessionId = sessionId, UserId = _userContext.UserId });
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            },
+            ReadMessage);
     }
 
     public async Task DeleteBySessionAsync(string sessionId)
     {
         using var conn = _connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             DELETE FROM messages
             WHERE session_id = @SessionId
@@ -207,13 +244,17 @@ public sealed class DapperMessageRepository : IMessageRepository
                   FROM sessions s
                   WHERE s.id = messages.session_id AND s.user_id = @UserId)
             """,
-            new { SessionId = sessionId, UserId = _userContext.UserId });
+            cmd =>
+            {
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            });
     }
 
     public async Task DeleteByIdAsync(string id, string sessionId)
     {
         using var conn = _connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             DELETE FROM messages
             WHERE id = @Id AND session_id = @SessionId
@@ -222,20 +263,31 @@ public sealed class DapperMessageRepository : IMessageRepository
                   FROM sessions s
                   WHERE s.id = messages.session_id AND s.user_id = @UserId)
             """,
-            new { Id = id, SessionId = sessionId, UserId = _userContext.UserId });
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            });
     }
 
     public async Task RemovePartAsync(string messageId, string sessionId, string partId)
     {
         using var conn = _connectionFactory.CreateConnection();
-        var existing = await conn.QuerySingleOrDefaultAsync<PersistedMessage>(
+        var existing = await conn.QueryFirstOrDefaultAsync(
             """
             SELECT m.*
             FROM messages m
             INNER JOIN sessions s ON s.id = m.session_id
             WHERE m.id = @MessageId AND m.session_id = @SessionId AND s.user_id = @UserId
             """,
-            new { MessageId = messageId, SessionId = sessionId, UserId = _userContext.UserId });
+            cmd =>
+            {
+                cmd.AddParameter("MessageId", messageId);
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            },
+            ReadMessage);
 
         if (existing is null)
             return;
@@ -249,7 +301,7 @@ public sealed class DapperMessageRepository : IMessageRepository
         }).ToList();
 
         string newPartsJson = JsonSerializer.Serialize(filtered, InfrastructureJsonContext.Default.ListJsonElement);
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             UPDATE messages SET parts_json = @PartsJson
             WHERE id = @MessageId AND session_id = @SessionId
@@ -258,6 +310,24 @@ public sealed class DapperMessageRepository : IMessageRepository
                   FROM sessions s
                   WHERE s.id = messages.session_id AND s.user_id = @UserId)
             """,
-            new { PartsJson = newPartsJson, MessageId = messageId, SessionId = sessionId, UserId = _userContext.UserId });
+            cmd =>
+            {
+                cmd.AddParameter("PartsJson", newPartsJson);
+                cmd.AddParameter("MessageId", messageId);
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            });
     }
+
+    private static PersistedMessage ReadMessage(DbDataReader r) => new()
+    {
+        Id = r.GetString(r.GetOrdinal("id")),
+        SessionId = r.GetString(r.GetOrdinal("session_id")),
+        Role = r.GetString(r.GetOrdinal("role")),
+        PartsJson = r.GetString(r.GetOrdinal("parts_json")),
+        Timestamp = r.GetString(r.GetOrdinal("timestamp")),
+        CreatedAt = r.GetString(r.GetOrdinal("created_at")),
+        AgentName = r.GetNullableString(r.GetOrdinal("agent_name")),
+        ModelId = r.GetNullableString(r.GetOrdinal("model_id")),
+    };
 }

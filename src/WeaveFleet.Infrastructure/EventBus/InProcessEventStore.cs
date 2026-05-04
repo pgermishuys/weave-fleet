@@ -1,9 +1,9 @@
 using System.Data;
 using System.Text.Json;
-using Dapper;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Infrastructure.Data;
 
 namespace WeaveFleet.Infrastructure.EventBus;
 
@@ -39,31 +39,41 @@ internal sealed partial class InProcessEventStore
     /// </summary>
     public long Append(InProcessEnvelope envelope)
     {
-        const string sql = """
+        // INSERT and SELECT are separate statements because raw ADO.NET's
+        // ExecuteScalar only returns the first result set. With a compound
+        // "INSERT …; SELECT last_insert_rowid();" statement, ExecuteScalar
+        // returns null (from the INSERT) instead of the rowid, causing every
+        // event to be treated as a duplicate and silently dropped.
+        const string insertSql = """
             INSERT OR IGNORE INTO inproc_events
                 (message_id, session_id, project_id, tenant, event_type,
                  payload, user_id, harness_type, sequence)
             VALUES
                 (@MessageId, @SessionId, @ProjectId, @Tenant, @EventType,
-                 @Payload, @UserId, @HarnessType, @Sequence);
-            SELECT last_insert_rowid();
+                 @Payload, @UserId, @HarnessType, @Sequence)
             """;
 
         using var conn = _db.CreateConnection();
         string serializedPayload = JsonSerializer.Serialize(envelope.Event, HarnessEventJsonContext.Default.HarnessEvent);
-        var id = conn.ExecuteScalar<long>(sql, new
+
+        var rowsAffected = conn.ExecuteNonQuery(insertSql, cmd =>
         {
-            envelope.MessageId,
-            envelope.SessionId,
-            envelope.ProjectId,
-            envelope.Tenant,
-            envelope.EventType,
-            Payload = serializedPayload,
-            envelope.UserId,
-            envelope.HarnessType,
-            envelope.Sequence,
+            cmd.AddParameter("MessageId", envelope.MessageId);
+            cmd.AddParameter("SessionId", envelope.SessionId);
+            cmd.AddParameter("ProjectId", envelope.ProjectId);
+            cmd.AddParameter("Tenant", envelope.Tenant);
+            cmd.AddParameter("EventType", envelope.EventType);
+            cmd.AddParameter("Payload", serializedPayload);
+            cmd.AddParameter("UserId", envelope.UserId);
+            cmd.AddParameter("HarnessType", envelope.HarnessType);
+            cmd.AddParameter("Sequence", envelope.Sequence);
         });
-        return id; // 0 when INSERT OR IGNORE skipped the row
+
+        if (rowsAffected == 0)
+            return 0; // INSERT OR IGNORE skipped the row (duplicate message_id)
+
+        var id = conn.ExecuteScalar<long>("SELECT last_insert_rowid()", _ => { });
+        return id;
     }
 
     /// <summary>
@@ -134,7 +144,7 @@ internal sealed partial class InProcessEventStore
             WHERE  id = @Id
             """;
         using var conn = _db.CreateConnection();
-        conn.Execute(sql, new { Id = id });
+        conn.ExecuteNonQuery(sql, cmd => { cmd.AddParameter("Id", id); });
     }
 
     [LoggerMessage(Level = LogLevel.Warning, EventId = 1,

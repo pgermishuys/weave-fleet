@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using Dapper;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
@@ -43,9 +42,6 @@ public static class DependencyInjection
         this IServiceCollection services,
         FleetOptions options)
     {
-        // Enable snake_case → PascalCase column mapping for Dapper globally
-        DefaultTypeMap.MatchNamesWithUnderscores = true;
-
         // Register FleetOptions so singleton services (e.g. OpenCodeHarness) can inject it.
         services.AddSingleton(options);
 
@@ -56,23 +52,23 @@ public static class DependencyInjection
         services.AddSingleton<MigrationRunner>();
 
         // Repositories (scoped — one per request)
-        services.AddScoped<IProjectRepository, DapperProjectRepository>();
-        services.AddScoped<IWorkspaceRepository, DapperWorkspaceRepository>();
-        services.AddScoped<ISessionSourceUsageRepository, DapperSessionSourceUsageRepository>();
-        services.AddScoped<IInstanceRepository, DapperInstanceRepository>();
-        services.AddScoped<ISessionRepository, DapperSessionRepository>();
-        services.AddScoped<ISessionCallbackRepository, DapperSessionCallbackRepository>();
-        services.AddScoped<IDelegationRepository, DapperDelegationRepository>();
-        services.AddScoped<IWorkspaceRootRepository, DapperWorkspaceRootRepository>();
-        services.AddScoped<IMessageRepository, DapperMessageRepository>();
-        services.AddScoped<IOutboxRepository, DapperOutboxRepository>();
-        services.AddScoped<IHarnessEventLogRepository, DapperHarnessEventLogRepository>();
-        services.AddScoped<IUserRepository, DapperUserRepository>();
+        services.AddScoped<IProjectRepository, ProjectRepository>();
+        services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
+        services.AddScoped<ISessionSourceUsageRepository, SessionSourceUsageRepository>();
+        services.AddScoped<IInstanceRepository, InstanceRepository>();
+        services.AddScoped<ISessionRepository, SessionRepository>();
+        services.AddScoped<ISessionCallbackRepository, SessionCallbackRepository>();
+        services.AddScoped<IDelegationRepository, DelegationRepository>();
+        services.AddScoped<IWorkspaceRootRepository, WorkspaceRootRepository>();
+        services.AddScoped<IMessageRepository, MessageRepository>();
+        services.AddScoped<IOutboxRepository, OutboxRepository>();
+        services.AddScoped<IHarnessEventLogRepository, HarnessEventLogRepository>();
+        services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IBoardRepository, BoardRepository>();
-        services.AddScoped<ISmartLinkRepository, DapperSmartLinkRepository>();
+        services.AddScoped<ISmartLinkRepository, SmartLinkRepository>();
 
         // Credential storage — user-scoped repositories and application services
-        services.AddScoped<IUserCredentialRepository, DapperUserCredentialRepository>();
+        services.AddScoped<IUserCredentialRepository, UserCredentialRepository>();
         services.AddScoped<ICredentialStore, CredentialStore>();
         services.AddScoped<ICredentialProtector, DataProtectionCredentialProtector>();
 

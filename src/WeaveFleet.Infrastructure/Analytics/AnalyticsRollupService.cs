@@ -1,8 +1,8 @@
-using Dapper;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
+using WeaveFleet.Infrastructure.Data;
 
 namespace WeaveFleet.Infrastructure.Analytics;
 
@@ -63,13 +63,17 @@ public sealed partial class AnalyticsRollupService : BackgroundService
             try
             {
                 // Delete existing rollups for the two days we're recomputing
-                await conn.ExecuteAsync(
+                await conn.ExecuteNonQueryAsync(
                     "DELETE FROM daily_rollups WHERE date IN (@Today, @Yesterday)",
-                    new { Today = today, Yesterday = yesterday },
-                    transaction: tx);
+                    cmd =>
+                    {
+                        cmd.AddParameter("Today", today);
+                        cmd.AddParameter("Yesterday", yesterday);
+                    },
+                    tx);
 
                 // Recompute per-project, per-model, per-provider rollups (partitioned by user_id)
-                await conn.ExecuteAsync(
+                await conn.ExecuteNonQueryAsync(
                     """
                     INSERT INTO daily_rollups (
                         date, user_id, project_id, model_id, provider_id,
@@ -91,11 +95,15 @@ public sealed partial class AnalyticsRollupService : BackgroundService
                     WHERE date(created_at) IN (@Today, @Yesterday)
                     GROUP BY date(created_at), user_id, project_id, model_id, provider_id
                     """,
-                    new { Today = today, Yesterday = yesterday },
-                    transaction: tx);
+                    cmd =>
+                    {
+                        cmd.AddParameter("Today", today);
+                        cmd.AddParameter("Yesterday", yesterday);
+                    },
+                    tx);
 
                 // Also insert per-user fleet-wide summary rows (project/model/provider all empty = fleet-wide per user)
-                await conn.ExecuteAsync(
+                await conn.ExecuteNonQueryAsync(
                     """
                     INSERT OR REPLACE INTO daily_rollups (
                         date, user_id, project_id, model_id, provider_id,
@@ -117,8 +125,12 @@ public sealed partial class AnalyticsRollupService : BackgroundService
                     WHERE date(created_at) IN (@Today, @Yesterday)
                     GROUP BY date(created_at), user_id
                     """,
-                    new { Today = today, Yesterday = yesterday },
-                    transaction: tx);
+                    cmd =>
+                    {
+                        cmd.AddParameter("Today", today);
+                        cmd.AddParameter("Yesterday", yesterday);
+                    },
+                    tx);
 
                 tx.Commit();
                 LogRollupCompleted(today, yesterday);

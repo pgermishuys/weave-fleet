@@ -4,12 +4,12 @@ using WeaveFleet.Infrastructure.Data.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Data.Repositories;
 
-public sealed class DapperSessionCallbackRepositoryTests
+public sealed class SessionCallbackRepositoryTests
 {
-    private static async Task<(SqliteConnection Keeper, DapperSessionCallbackRepository Repo, WeaveFleet.Application.Data.IDbConnectionFactory Factory)> CreateAsync()
+    private static async Task<(SqliteConnection Keeper, SessionCallbackRepository Repo, WeaveFleet.Application.Data.IDbConnectionFactory Factory)> CreateAsync()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        var repo = new DapperSessionCallbackRepository(factory, new TestUserContext());
+        var repo = new SessionCallbackRepository(factory, new TestUserContext());
         return (keeper, repo, factory);
     }
 
@@ -21,7 +21,7 @@ public sealed class DapperSessionCallbackRepositoryTests
 
         var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
         var ownerTarget = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user", directory: "/tmp/target");
-        var ownerRepo = new DapperSessionCallbackRepository(factory, new TestUserContext("owner-user"));
+        var ownerRepo = new SessionCallbackRepository(factory, new TestUserContext("owner-user"));
         await ownerRepo.InsertAsync(new SessionCallback
         {
             Id = Guid.NewGuid().ToString(),
@@ -32,7 +32,7 @@ public sealed class DapperSessionCallbackRepositoryTests
             CreatedAt = DateTime.UtcNow.ToString("O")
         });
 
-        var repo = new DapperSessionCallbackRepository(factory, new TestUserContext());
+        var repo = new SessionCallbackRepository(factory, new TestUserContext());
         var callbacks = await repo.GetPendingForSessionAsync(ownerGraph.Session.Id);
 
         callbacks.ShouldBeEmpty();
@@ -46,7 +46,7 @@ public sealed class DapperSessionCallbackRepositoryTests
 
         var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
         var ownerTarget = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user", directory: "/tmp/target");
-        var ownerRepo = new DapperSessionCallbackRepository(factory, new TestUserContext("owner-user"));
+        var ownerRepo = new SessionCallbackRepository(factory, new TestUserContext("owner-user"));
         var callback = new SessionCallback
         {
             Id = Guid.NewGuid().ToString(),
@@ -58,7 +58,7 @@ public sealed class DapperSessionCallbackRepositoryTests
         };
         await ownerRepo.InsertAsync(callback);
 
-        var repo = new DapperSessionCallbackRepository(factory, new TestUserContext());
+        var repo = new SessionCallbackRepository(factory, new TestUserContext());
         var claimed = await repo.ClaimPendingAsync(callback.Id);
 
         claimed.ShouldBeFalse();

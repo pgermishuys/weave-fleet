@@ -3,12 +3,12 @@ using WeaveFleet.Infrastructure.Data.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Data.Repositories;
 
-public sealed class DapperDelegationRepositoryTests
+public sealed class DelegationRepositoryTests
 {
-    private static async Task<(SqliteConnection Keeper, DapperDelegationRepository Repo, WeaveFleet.Application.Data.IDbConnectionFactory Factory)> CreateAsync()
+    private static async Task<(SqliteConnection Keeper, DelegationRepository Repo, WeaveFleet.Application.Data.IDbConnectionFactory Factory)> CreateAsync()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        var repo = new DapperDelegationRepository(factory, new TestUserContext());
+        var repo = new DelegationRepository(factory, new TestUserContext());
         return (keeper, repo, factory);
     }
 
@@ -19,7 +19,7 @@ public sealed class DapperDelegationRepositoryTests
         using var _ = conn;
 
         var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
-        var ownerRepo = new DapperDelegationRepository(factory, new TestUserContext("owner-user"));
+        var ownerRepo = new DelegationRepository(factory, new TestUserContext("owner-user"));
         var delegation = new WeaveFleet.Domain.Entities.Delegation
         {
             Id = Guid.NewGuid().ToString(),
@@ -31,7 +31,7 @@ public sealed class DapperDelegationRepositoryTests
         };
         await ownerRepo.InsertAsync(delegation);
 
-        var repo = new DapperDelegationRepository(factory, new TestUserContext());
+        var repo = new DelegationRepository(factory, new TestUserContext());
         var result = await repo.GetByIdAsync(delegation.Id);
 
         result.ShouldBeNull();
@@ -44,7 +44,7 @@ public sealed class DapperDelegationRepositoryTests
         using var _ = conn;
 
         var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
-        var ownerRepo = new DapperDelegationRepository(factory, new TestUserContext("owner-user"));
+        var ownerRepo = new DelegationRepository(factory, new TestUserContext("owner-user"));
         var delegation = new WeaveFleet.Domain.Entities.Delegation
         {
             Id = Guid.NewGuid().ToString(),
@@ -56,7 +56,7 @@ public sealed class DapperDelegationRepositoryTests
         };
         await ownerRepo.InsertAsync(delegation);
 
-        var repo = new DapperDelegationRepository(factory, new TestUserContext());
+        var repo = new DelegationRepository(factory, new TestUserContext());
         await repo.UpdateStatusAsync(delegation.Id, "completed", DateTime.UtcNow.ToString("O"), DateTime.UtcNow.ToString("O"));
 
         var reloaded = await ownerRepo.GetByIdAsync(delegation.Id);

@@ -1,4 +1,4 @@
-using Dapper;
+using System.Data.Common;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
@@ -6,12 +6,12 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Data.Repositories;
 
-public sealed class DapperSmartLinkRepository : ISmartLinkRepository
+public sealed class SmartLinkRepository : ISmartLinkRepository
 {
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly IUserContext _userContext;
 
-    public DapperSmartLinkRepository(IDbConnectionFactory connectionFactory, IUserContext userContext)
+    public SmartLinkRepository(IDbConnectionFactory connectionFactory, IUserContext userContext)
     {
         _connectionFactory = connectionFactory;
         _userContext = userContext;
@@ -20,7 +20,7 @@ public sealed class DapperSmartLinkRepository : ISmartLinkRepository
     public async Task<IReadOnlyList<SmartLink>> ListBySessionIdAsync(string sessionId)
     {
         using var conn = _connectionFactory.CreateConnection();
-        var results = await conn.QueryAsync<SmartLink>(
+        return await conn.QueryAsync(
             """
             SELECT sl.*
             FROM smart_links sl
@@ -28,14 +28,14 @@ public sealed class DapperSmartLinkRepository : ISmartLinkRepository
             WHERE sl.session_id = @SessionId AND sl.user_id = @UserId
             ORDER BY sl.created_at ASC
             """,
-            new { SessionId = sessionId, UserId = _userContext.UserId });
-        return results.AsList();
+            cmd => { cmd.AddParameter("SessionId", sessionId); cmd.AddParameter("UserId", _userContext.UserId); },
+            MapSmartLink);
     }
 
     public async Task<IReadOnlyList<SmartLink>> ListActiveBySessionIdAsync(string sessionId)
     {
         using var conn = _connectionFactory.CreateConnection();
-        var results = await conn.QueryAsync<SmartLink>(
+        return await conn.QueryAsync(
             """
             SELECT sl.*
             FROM smart_links sl
@@ -43,27 +43,28 @@ public sealed class DapperSmartLinkRepository : ISmartLinkRepository
             WHERE sl.session_id = @SessionId AND sl.user_id = @UserId AND sl.is_dismissed = 0
             ORDER BY sl.created_at ASC
             """,
-            new { SessionId = sessionId, UserId = _userContext.UserId });
-        return results.AsList();
+            cmd => { cmd.AddParameter("SessionId", sessionId); cmd.AddParameter("UserId", _userContext.UserId); },
+            MapSmartLink);
     }
 
     public async Task<SmartLink?> GetBySessionIdAndUrlAsync(string sessionId, string url)
     {
         using var conn = _connectionFactory.CreateConnection();
-        return await conn.QuerySingleOrDefaultAsync<SmartLink>(
+        return await conn.QueryFirstOrDefaultAsync(
             """
             SELECT sl.*
             FROM smart_links sl
             INNER JOIN sessions s ON s.id = sl.session_id
             WHERE sl.session_id = @SessionId AND sl.url = @Url AND sl.user_id = @UserId
             """,
-            new { SessionId = sessionId, Url = url, UserId = _userContext.UserId });
+            cmd => { cmd.AddParameter("SessionId", sessionId); cmd.AddParameter("Url", url); cmd.AddParameter("UserId", _userContext.UserId); },
+            MapSmartLink);
     }
 
     public async Task UpsertAsync(SmartLink smartLink)
     {
         using var conn = _connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             INSERT INTO smart_links (
                 id, session_id, url, provider_id, resource_type, resource_id,
@@ -87,40 +88,63 @@ public sealed class DapperSmartLinkRepository : ISmartLinkRepository
                 updated_at    = excluded.updated_at
             WHERE smart_links.is_dismissed = 0
             """,
-            new
+            cmd =>
             {
-                smartLink.Id,
-                smartLink.SessionId,
-                smartLink.Url,
-                smartLink.ProviderId,
-                smartLink.ResourceType,
-                smartLink.ResourceId,
-                smartLink.Title,
-                smartLink.Status,
-                smartLink.StatusLabel,
-                smartLink.MetadataJson,
-                smartLink.IsDismissed,
-                smartLink.IsTerminal,
-                smartLink.CreatedAt,
-                smartLink.UpdatedAt,
-                UserId = _userContext.UserId
+                cmd.AddParameter("Id", smartLink.Id);
+                cmd.AddParameter("SessionId", smartLink.SessionId);
+                cmd.AddParameter("Url", smartLink.Url);
+                cmd.AddParameter("ProviderId", smartLink.ProviderId);
+                cmd.AddParameter("ResourceType", smartLink.ResourceType);
+                cmd.AddParameter("ResourceId", smartLink.ResourceId);
+                cmd.AddParameter("Title", smartLink.Title);
+                cmd.AddParameter("Status", smartLink.Status);
+                cmd.AddParameter("StatusLabel", smartLink.StatusLabel);
+                cmd.AddParameter("MetadataJson", smartLink.MetadataJson);
+                cmd.AddParameter("IsDismissed", smartLink.IsDismissed);
+                cmd.AddParameter("IsTerminal", smartLink.IsTerminal);
+                cmd.AddParameter("CreatedAt", smartLink.CreatedAt);
+                cmd.AddParameter("UpdatedAt", smartLink.UpdatedAt);
+                cmd.AddParameter("UserId", _userContext.UserId);
             });
     }
 
     public async Task DismissAsync(string id)
     {
         using var conn = _connectionFactory.CreateConnection();
-        await conn.ExecuteAsync(
+        await conn.ExecuteNonQueryAsync(
             """
             UPDATE smart_links
             SET is_dismissed = 1, updated_at = @UpdatedAt
             WHERE id = @Id AND user_id = @UserId
             """,
-            new
+            cmd =>
             {
-                Id = id,
-                UpdatedAt = DateTime.UtcNow.ToString("O"),
-                UserId = _userContext.UserId
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("UpdatedAt", DateTime.UtcNow.ToString("O"));
+                cmd.AddParameter("UserId", _userContext.UserId);
             });
+    }
+
+    private static SmartLink MapSmartLink(DbDataReader r)
+    {
+        var metadataJsonOrd = r.GetOrdinal("metadata_json");
+        return new SmartLink
+        {
+            Id = r.GetString(r.GetOrdinal("id")),
+            SessionId = r.GetString(r.GetOrdinal("session_id")),
+            Url = r.GetString(r.GetOrdinal("url")),
+            ProviderId = r.GetString(r.GetOrdinal("provider_id")),
+            ResourceType = r.GetString(r.GetOrdinal("resource_type")),
+            ResourceId = r.GetString(r.GetOrdinal("resource_id")),
+            Title = r.GetString(r.GetOrdinal("title")),
+            Status = r.GetString(r.GetOrdinal("status")),
+            StatusLabel = r.GetString(r.GetOrdinal("status_label")),
+            MetadataJson = r.GetNullableString(metadataJsonOrd),
+            IsDismissed = r.GetBoolean(r.GetOrdinal("is_dismissed")),
+            IsTerminal = r.GetBoolean(r.GetOrdinal("is_terminal")),
+            CreatedAt = r.GetString(r.GetOrdinal("created_at")),
+            UpdatedAt = r.GetString(r.GetOrdinal("updated_at")),
+            UserId = r.GetString(r.GetOrdinal("user_id")),
+        };
     }
 }

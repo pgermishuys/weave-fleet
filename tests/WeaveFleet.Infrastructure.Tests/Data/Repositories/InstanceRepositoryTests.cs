@@ -4,12 +4,12 @@ using WeaveFleet.Infrastructure.Data.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Data.Repositories;
 
-public sealed class DapperInstanceRepositoryTests
+public sealed class InstanceRepositoryTests
 {
-    private static async Task<(SqliteConnection Keeper, DapperInstanceRepository Repo, WeaveFleet.Application.Data.IDbConnectionFactory Factory)> CreateAsync()
+    private static async Task<(SqliteConnection Keeper, InstanceRepository Repo, WeaveFleet.Application.Data.IDbConnectionFactory Factory)> CreateAsync()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        var repo = new DapperInstanceRepository(factory, new TestUserContext());
+        var repo = new InstanceRepository(factory, new TestUserContext());
         return (keeper, repo, factory);
     }
 
@@ -98,11 +98,11 @@ public sealed class DapperInstanceRepositoryTests
         using var _ = conn;
 
         var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
-        var repo = new DapperInstanceRepository(factory, new TestUserContext());
+        var repo = new InstanceRepository(factory, new TestUserContext());
 
         await repo.UpdateStatusAsync(ownerGraph.Instance.Id, "stopped", DateTime.UtcNow.ToString("O"));
 
-        var ownerRepo = new DapperInstanceRepository(factory, new TestUserContext("owner-user"));
+        var ownerRepo = new InstanceRepository(factory, new TestUserContext("owner-user"));
         var instance = await ownerRepo.GetByIdAsync(ownerGraph.Instance.Id);
         instance.ShouldNotBeNull();
         instance.Status.ShouldBe("running");

@@ -1,6 +1,6 @@
+using System.Data.Common;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using Dapper;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -9,6 +9,7 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Data;
 
 namespace WeaveFleet.Infrastructure.Analytics;
 
@@ -133,7 +134,7 @@ public sealed partial class AnalyticsWriterService : BackgroundService
         {
             foreach (var evt in tokenEvents)
             {
-                await connection.ExecuteAsync("""
+                await connection.ExecuteNonQueryAsync("""
                     INSERT INTO token_events (
                         event_id, session_id, project_id, project_name, workspace_directory,
                         model_id, provider_id,
@@ -159,23 +160,33 @@ public sealed partial class AnalyticsWriterService : BackgroundService
                         cost             = CASE WHEN excluded.tokens_total > token_events.tokens_total THEN excluded.cost             ELSE token_events.cost             END,
                         estimated_cost   = CASE WHEN excluded.tokens_total > token_events.tokens_total THEN excluded.estimated_cost   ELSE token_events.estimated_cost   END
                     """,
-                    new
+                    cmd =>
                     {
-                        evt.EventId, evt.SessionId, evt.ProjectId, evt.ProjectName,
-                        evt.WorkspaceDirectory, evt.ModelId, evt.ProviderId,
-                        evt.TokensInput, evt.TokensOutput, evt.TokensReasoning,
-                        evt.TokensCacheRead, evt.TokensCacheWrite, evt.TokensTotal,
-                        evt.Cost, evt.EstimatedCost,
-                        CreatedAt = evt.CreatedAt.ToString("O"),
-                        evt.UserId
+                        cmd.AddParameter("EventId", evt.EventId);
+                        cmd.AddParameter("SessionId", evt.SessionId);
+                        cmd.AddParameter("ProjectId", evt.ProjectId);
+                        cmd.AddParameter("ProjectName", evt.ProjectName);
+                        cmd.AddParameter("WorkspaceDirectory", evt.WorkspaceDirectory);
+                        cmd.AddParameter("ModelId", evt.ModelId);
+                        cmd.AddParameter("ProviderId", evt.ProviderId);
+                        cmd.AddParameter("TokensInput", evt.TokensInput);
+                        cmd.AddParameter("TokensOutput", evt.TokensOutput);
+                        cmd.AddParameter("TokensReasoning", evt.TokensReasoning);
+                        cmd.AddParameter("TokensCacheRead", evt.TokensCacheRead);
+                        cmd.AddParameter("TokensCacheWrite", evt.TokensCacheWrite);
+                        cmd.AddParameter("TokensTotal", evt.TokensTotal);
+                        cmd.AddParameter("Cost", evt.Cost);
+                        cmd.AddParameter("EstimatedCost", evt.EstimatedCost);
+                        cmd.AddParameter("CreatedAt", evt.CreatedAt.ToString("O"));
+                        cmd.AddParameter("UserId", evt.UserId);
                     },
-                    transaction: tx);
+                    tx);
             }
 
             foreach (var snap in snapshots)
             {
                 string modelIdsJson = System.Text.Json.JsonSerializer.Serialize(snap.ModelIds, InfrastructureJsonContext.Default.ListString);
-                await connection.ExecuteAsync("""
+                await connection.ExecuteNonQueryAsync("""
                     INSERT OR REPLACE INTO session_snapshots (
                         session_id, parent_session_id, project_id, project_name,
                         workspace_directory, title, status,
@@ -190,26 +201,26 @@ public sealed partial class AnalyticsWriterService : BackgroundService
                         @UserId
                     )
                     """,
-                    new
+                    cmd =>
                     {
-                        snap.SessionId,
-                        snap.ParentSessionId,
-                        snap.ProjectId,
-                        snap.ProjectName,
-                        snap.WorkspaceDirectory,
-                        snap.Title,
-                        snap.Status,
-                        snap.TotalTokens,
-                        snap.TotalCost,
-                        snap.TotalEstimatedCost,
-                        snap.MessageCount,
-                        ModelIds = modelIdsJson,
-                        CreatedAt = snap.CreatedAt.ToString("O"),
-                        EndedAt = snap.EndedAt?.ToString("O"),
-                        snap.DurationSeconds,
-                        snap.UserId
+                        cmd.AddParameter("SessionId", snap.SessionId);
+                        cmd.AddParameter("ParentSessionId", snap.ParentSessionId);
+                        cmd.AddParameter("ProjectId", snap.ProjectId);
+                        cmd.AddParameter("ProjectName", snap.ProjectName);
+                        cmd.AddParameter("WorkspaceDirectory", snap.WorkspaceDirectory);
+                        cmd.AddParameter("Title", snap.Title);
+                        cmd.AddParameter("Status", snap.Status);
+                        cmd.AddParameter("TotalTokens", snap.TotalTokens);
+                        cmd.AddParameter("TotalCost", snap.TotalCost);
+                        cmd.AddParameter("TotalEstimatedCost", snap.TotalEstimatedCost);
+                        cmd.AddParameter("MessageCount", snap.MessageCount);
+                        cmd.AddParameter("ModelIds", modelIdsJson);
+                        cmd.AddParameter("CreatedAt", snap.CreatedAt.ToString("O"));
+                        cmd.AddParameter("EndedAt", snap.EndedAt?.ToString("O"));
+                        cmd.AddParameter("DurationSeconds", snap.DurationSeconds);
+                        cmd.AddParameter("UserId", snap.UserId);
                     },
-                    transaction: tx);
+                    tx);
             }
 
             tx.Commit();

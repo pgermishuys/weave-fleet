@@ -4,12 +4,12 @@ using WeaveFleet.Infrastructure.Data.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Data.Repositories;
 
-public sealed class DapperProjectRepositoryTests
+public sealed class ProjectRepositoryTests
 {
-    private static async Task<(SqliteConnection Keeper, DapperProjectRepository Repo)> CreateAsync()
+    private static async Task<(SqliteConnection Keeper, ProjectRepository Repo)> CreateAsync()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        var repo = new DapperProjectRepository(factory, new TestUserContext());
+        var repo = new ProjectRepository(factory, new TestUserContext());
         return (keeper, repo);
     }
 

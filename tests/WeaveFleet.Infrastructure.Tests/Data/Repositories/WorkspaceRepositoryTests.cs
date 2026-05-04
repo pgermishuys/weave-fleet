@@ -4,12 +4,12 @@ using WeaveFleet.Infrastructure.Data.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Data.Repositories;
 
-public sealed class DapperWorkspaceRepositoryTests
+public sealed class WorkspaceRepositoryTests
 {
-    private static async Task<(SqliteConnection Keeper, DapperWorkspaceRepository Repo, WeaveFleet.Application.Data.IDbConnectionFactory Factory)> CreateAsync()
+    private static async Task<(SqliteConnection Keeper, WorkspaceRepository Repo, WeaveFleet.Application.Data.IDbConnectionFactory Factory)> CreateAsync()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        var repo = new DapperWorkspaceRepository(factory, new TestUserContext());
+        var repo = new WorkspaceRepository(factory, new TestUserContext());
         return (keeper, repo, factory);
     }
 
@@ -184,11 +184,11 @@ public sealed class DapperWorkspaceRepositoryTests
         using var _ = conn;
 
         var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
-        var repo = new DapperWorkspaceRepository(factory, new TestUserContext());
+        var repo = new WorkspaceRepository(factory, new TestUserContext());
 
         await repo.UpdateDisplayNameAsync(ownerGraph.Workspace.Id, "Hijacked");
 
-        var ownerRepo = new DapperWorkspaceRepository(factory, new TestUserContext("owner-user"));
+        var ownerRepo = new WorkspaceRepository(factory, new TestUserContext("owner-user"));
         var workspace = await ownerRepo.GetByIdAsync(ownerGraph.Workspace.Id);
         workspace.ShouldNotBeNull();
         workspace.DisplayName.ShouldBeNull();

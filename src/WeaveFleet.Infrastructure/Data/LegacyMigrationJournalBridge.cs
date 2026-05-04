@@ -1,5 +1,5 @@
 using System.Data;
-using Dapper;
+using System.Data.Common;
 using DbUp.Engine;
 using Microsoft.Extensions.Logging;
 
@@ -17,7 +17,7 @@ internal static partial class LegacyMigrationJournalBridge
         ILogger logger)
     {
         if (await TableExistsAsync(connection, journalTable)
-            && await connection.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM {journalTable}") > 0)
+            && (await connection.ExecuteScalarAsync<long>($"SELECT COUNT(*) FROM {journalTable}", static cmd => { })) > 0)
         {
             return;
         }
@@ -25,8 +25,9 @@ internal static partial class LegacyMigrationJournalBridge
         if (!await TableExistsAsync(connection, LegacyJournalTable))
             return;
 
-        var appliedLegacyNames = (await connection.QueryAsync<string>(
-            $"SELECT name FROM {LegacyJournalTable} ORDER BY id")).ToList();
+        var appliedLegacyNames = (await connection.QueryAsync(
+            $"SELECT name FROM {LegacyJournalTable} ORDER BY id",
+            r => r.GetString(0))).ToList();
 
         if (folderSegment == "Migrations")
             await RepairKnownMainDatabaseStatesAsync(connection, appliedLegacyNames, logger);
@@ -47,9 +48,9 @@ internal static partial class LegacyMigrationJournalBridge
                     $"Legacy migration '{legacyName}' from {LegacyJournalTable} cannot be mapped to an embedded DbUp script for segment '{folderSegment}'.");
             }
 
-            await connection.ExecuteAsync(
+            await connection.ExecuteNonQueryAsync(
                 $"INSERT INTO {journalTable} (ScriptName, Applied) VALUES (@ScriptName, datetime('now'))",
-                new { ScriptName = dbUpScriptName });
+                cmd => { cmd.AddParameter("ScriptName", dbUpScriptName); });
         }
 
         LogSeededDbUpJournal(logger, journalTable, appliedLegacyNames.Count, folderSegment);
@@ -66,7 +67,7 @@ internal static partial class LegacyMigrationJournalBridge
         if (appliedLegacyNames.Count > 0 && !projectsTableExists)
         {
             LogCorruptMigrationHistory(logger);
-            await connection.ExecuteAsync($"DELETE FROM {LegacyJournalTable}");
+            await connection.ExecuteNonQueryAsync($"DELETE FROM {LegacyJournalTable}");
             appliedLegacyNames.Clear();
         }
 
@@ -79,7 +80,7 @@ internal static partial class LegacyMigrationJournalBridge
 
     private static async Task EnsureDbUpJournalAsync(IDbConnection connection, string journalTable)
     {
-        await connection.ExecuteAsync($$"""
+        await connection.ExecuteNonQueryAsync($$"""
             CREATE TABLE IF NOT EXISTS {{journalTable}} (
                 SchemaVersionId INTEGER PRIMARY KEY AUTOINCREMENT,
                 ScriptName TEXT NOT NULL,
@@ -90,9 +91,9 @@ internal static partial class LegacyMigrationJournalBridge
 
     private static async Task<bool> TableExistsAsync(IDbConnection connection, string tableName)
     {
-        var count = await connection.ExecuteScalarAsync<int>(
+        var count = await connection.ExecuteScalarAsync<long>(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=@TableName",
-            new { TableName = tableName });
+            cmd => { cmd.AddParameter("TableName", tableName); });
         return count > 0;
     }
 
@@ -108,7 +109,7 @@ internal static partial class LegacyMigrationJournalBridge
         ];
 
         foreach (var table in legacyTables)
-            await connection.ExecuteAsync($"DROP TABLE IF EXISTS {table}");
+            await connection.ExecuteNonQueryAsync($"DROP TABLE IF EXISTS {table}");
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Seeded DbUp journal {JournalTable} from {Count} legacy migration entries for segment {FolderSegment}.")]

@@ -16,13 +16,13 @@ internal static class RepositoryOwnershipTestHelper
         string directory = "/tmp/ws")
     {
         var userContext = new TestUserContext(userId);
-        var workspaceRepository = new DapperWorkspaceRepository(factory, userContext);
-        var instanceRepository = new DapperInstanceRepository(factory, userContext);
-        var sessionRepository = new DapperSessionRepository(factory, userContext);
+        var workspaceRepository = new WorkspaceRepository(factory, userContext);
+        var instanceRepository = new InstanceRepository(factory, userContext);
+        var sessionRepository = new SessionRepository(factory, userContext);
 
         if (projectId is not null)
         {
-            var projectRepository = new DapperProjectRepository(factory, userContext);
+            var projectRepository = new ProjectRepository(factory, userContext);
             await projectRepository.InsertAsync(new Project
             {
                 Id = projectId,

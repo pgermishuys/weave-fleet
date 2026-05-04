@@ -5,12 +5,12 @@ using WeaveFleet.Infrastructure.Data.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Data.Repositories;
 
-public sealed class DapperSessionSourceUsageRepositoryTests
+public sealed class SessionSourceUsageRepositoryTests
 {
-    private static async Task<(SqliteConnection Keeper, DapperSessionSourceUsageRepository Repo, IDbConnectionFactory Factory)> CreateAsync()
+    private static async Task<(SqliteConnection Keeper, SessionSourceUsageRepository Repo, IDbConnectionFactory Factory)> CreateAsync()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        var repo = new DapperSessionSourceUsageRepository(factory, new TestUserContext());
+        var repo = new SessionSourceUsageRepository(factory, new TestUserContext());
         return (keeper, repo, factory);
     }
 
@@ -21,10 +21,10 @@ public sealed class DapperSessionSourceUsageRepositoryTests
         using var _ = conn;
 
         var userContext = new TestUserContext();
-        var projectRepo = new DapperProjectRepository(factory, userContext);
-        var workspaceRepo = new DapperWorkspaceRepository(factory, userContext);
-        var instanceRepo = new DapperInstanceRepository(factory, userContext);
-        var sessionRepo = new DapperSessionRepository(factory, userContext);
+        var projectRepo = new ProjectRepository(factory, userContext);
+        var workspaceRepo = new WorkspaceRepository(factory, userContext);
+        var instanceRepo = new InstanceRepository(factory, userContext);
+        var sessionRepo = new SessionRepository(factory, userContext);
 
         var project = new Project
         {
@@ -106,7 +106,7 @@ public sealed class DapperSessionSourceUsageRepositoryTests
         using var _ = conn;
 
         var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
-        var ownerRepo = new DapperSessionSourceUsageRepository(factory, new TestUserContext("owner-user"));
+        var ownerRepo = new SessionSourceUsageRepository(factory, new TestUserContext("owner-user"));
         await ownerRepo.InsertAsync(new SessionSourceUsage
         {
             Id = Guid.NewGuid().ToString(),
@@ -118,7 +118,7 @@ public sealed class DapperSessionSourceUsageRepositoryTests
             CreatedAt = DateTime.UtcNow.ToString("O")
         });
 
-        var repo = new DapperSessionSourceUsageRepository(factory, new TestUserContext());
+        var repo = new SessionSourceUsageRepository(factory, new TestUserContext());
         var usages = await repo.ListBySessionIdAsync(ownerGraph.Session.Id);
 
         usages.ShouldBeEmpty();
@@ -268,7 +268,7 @@ public sealed class DapperSessionSourceUsageRepositoryTests
         using var _ = conn;
 
         var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
-        var ownerRepo = new DapperSessionSourceUsageRepository(factory, new TestUserContext("owner-user"));
+        var ownerRepo = new SessionSourceUsageRepository(factory, new TestUserContext("owner-user"));
         await ownerRepo.InsertAsync(new SessionSourceUsage
         {
             Id = Guid.NewGuid().ToString(),
@@ -280,7 +280,7 @@ public sealed class DapperSessionSourceUsageRepositoryTests
             CreatedAt = DateTime.UtcNow.ToString("O")
         });
 
-        var repo = new DapperSessionSourceUsageRepository(factory, new TestUserContext());
+        var repo = new SessionSourceUsageRepository(factory, new TestUserContext());
         var usages = await repo.GetPrimaryBySessionIdsAsync([ownerGraph.Session.Id]);
 
         usages.ShouldBeEmpty();
@@ -335,7 +335,7 @@ public sealed class DapperSessionSourceUsageRepositoryTests
         using var _ = conn;
 
         var ownerGraph = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, "owner-user");
-        var repo = new DapperSessionSourceUsageRepository(factory, new TestUserContext());
+        var repo = new SessionSourceUsageRepository(factory, new TestUserContext());
 
         await repo.InsertAsync(new SessionSourceUsage
         {
@@ -348,7 +348,7 @@ public sealed class DapperSessionSourceUsageRepositoryTests
             CreatedAt = DateTime.UtcNow.ToString("O")
         });
 
-        var ownerRepo = new DapperSessionSourceUsageRepository(factory, new TestUserContext("owner-user"));
+        var ownerRepo = new SessionSourceUsageRepository(factory, new TestUserContext("owner-user"));
         var usages = await ownerRepo.ListBySessionIdAsync(ownerGraph.Session.Id);
         usages.ShouldBeEmpty();
     }
