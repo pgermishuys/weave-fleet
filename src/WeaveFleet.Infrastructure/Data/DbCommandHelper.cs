@@ -192,14 +192,14 @@ internal static class DbCommandHelper
         return ConvertScalar<T>(result);
     }
 
-    /// <summary>Synchronously executes a non-query command.</summary>
-    internal static void ExecuteNonQuery(
+    /// <summary>Synchronously executes a non-query command and returns the number of affected rows.</summary>
+    internal static int ExecuteNonQuery(
         this IDbConnection conn,
         string sql,
         Action<DbCommand> configure)
     {
         using var cmd = CreateCommand(conn, sql, configure, null);
-        cmd.ExecuteNonQuery();
+        return cmd.ExecuteNonQuery();
     }
 
     // ── Reader helpers ─────────────────────────────────────────────────────────

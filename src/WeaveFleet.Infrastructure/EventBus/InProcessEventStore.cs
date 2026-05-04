@@ -39,19 +39,24 @@ internal sealed partial class InProcessEventStore
     /// </summary>
     public long Append(InProcessEnvelope envelope)
     {
-        const string sql = """
+        // INSERT and SELECT are separate statements because raw ADO.NET's
+        // ExecuteScalar only returns the first result set. With a compound
+        // "INSERT …; SELECT last_insert_rowid();" statement, ExecuteScalar
+        // returns null (from the INSERT) instead of the rowid, causing every
+        // event to be treated as a duplicate and silently dropped.
+        const string insertSql = """
             INSERT OR IGNORE INTO inproc_events
                 (message_id, session_id, project_id, tenant, event_type,
                  payload, user_id, harness_type, sequence)
             VALUES
                 (@MessageId, @SessionId, @ProjectId, @Tenant, @EventType,
-                 @Payload, @UserId, @HarnessType, @Sequence);
-            SELECT last_insert_rowid();
+                 @Payload, @UserId, @HarnessType, @Sequence)
             """;
 
         using var conn = _db.CreateConnection();
         string serializedPayload = JsonSerializer.Serialize(envelope.Event, HarnessEventJsonContext.Default.HarnessEvent);
-        var id = conn.ExecuteScalar<long>(sql, cmd =>
+
+        var rowsAffected = conn.ExecuteNonQuery(insertSql, cmd =>
         {
             cmd.AddParameter("MessageId", envelope.MessageId);
             cmd.AddParameter("SessionId", envelope.SessionId);
@@ -63,7 +68,12 @@ internal sealed partial class InProcessEventStore
             cmd.AddParameter("HarnessType", envelope.HarnessType);
             cmd.AddParameter("Sequence", envelope.Sequence);
         });
-        return id; // 0 when INSERT OR IGNORE skipped the row
+
+        if (rowsAffected == 0)
+            return 0; // INSERT OR IGNORE skipped the row (duplicate message_id)
+
+        var id = conn.ExecuteScalar<long>("SELECT last_insert_rowid()", _ => { });
+        return id;
     }
 
     /// <summary>
