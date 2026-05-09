@@ -529,8 +529,8 @@ watch(
     >
         <DialogHeader>
           <DialogTitle>New Session</DialogTitle>
-          <DialogDescription>
-            {{ activeGitHubPreset ? "Start a session from a repository with GitHub context." : "Start a session from a repository or local directory." }}
+          <DialogDescription v-if="activeGitHubPreset">
+            Start a session from a repository with GitHub context.
           </DialogDescription>
         </DialogHeader>
 
@@ -590,73 +590,45 @@ watch(
             Source
           </legend>
 
-          <div class="grid gap-3 sm:grid-cols-2">
-            <label
-              for="session-source-repository"
-              class="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-muted/20 p-3 text-sm transition-colors hover:bg-muted/40"
-            >
-              <input
-                id="session-source-repository"
-                v-model="sourceKind"
-                type="radio"
-                value="repository"
-                title="Repository"
-                aria-describedby="session-source-repository-description"
-                class="mt-0.5"
-              >
-              <div class="space-y-1">
-                <span
-                  id="source-label-repository"
-                  class="block font-medium text-foreground"
-                >Repository</span>
-                <p
-                  id="session-source-repository-description"
-                  class="text-muted-foreground"
-                >
-                  Choose a scanned repository and optional branch strategy.
-                </p>
-              </div>
-            </label>
-
-            <label
-              v-if="!isCloudMode"
-              for="session-source-directory"
+          <div class="inline-flex rounded-lg border border-border bg-muted/20 p-1">
+            <button
+              type="button"
               :class="cn(
-                'flex items-start gap-3 rounded-lg border border-border bg-muted/20 p-3 text-sm transition-colors',
-                activeGitHubPreset ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-muted/40',
+                'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors',
+                sourceKind === 'repository'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
               )"
+              @click="sourceKind = 'repository'"
             >
-              <input
-                id="session-source-directory"
-                v-model="sourceKind"
-                type="radio"
-                value="directory"
-                title="Directory"
-                aria-describedby="session-source-directory-description"
-                class="mt-0.5"
-                :disabled="Boolean(activeGitHubPreset)"
-              >
-              <div class="space-y-1">
-                <span
-                  id="source-label-directory"
-                  class="block font-medium text-foreground"
-                >Directory</span>
-                <p
-                  id="session-source-directory-description"
-                  class="text-muted-foreground"
-                >
-                  Use an existing local directory as the workspace.
-                </p>
-              </div>
-            </label>
+              <FolderGit2 class="h-4 w-4" />
+              Repository
+            </button>
+
+            <button
+              v-if="!isCloudMode"
+              type="button"
+              :disabled="Boolean(activeGitHubPreset)"
+              :class="cn(
+                'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors',
+                sourceKind === 'directory'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+                activeGitHubPreset ? 'cursor-not-allowed opacity-60' : '',
+              )"
+              @click="sourceKind = 'directory'"
+            >
+              <Folder class="h-4 w-4" />
+              Directory
+            </button>
           </div>
         </fieldset>
 
         <div
           v-if="sourceKind === 'repository'"
-          class="grid gap-5 md:grid-cols-2"
+          class="space-y-5"
         >
-          <div class="space-y-2 md:col-span-2">
+          <div class="space-y-2">
             <label
               for="new-session-repository"
               class="text-sm font-medium text-foreground"
@@ -667,7 +639,7 @@ watch(
                 id="new-session-repository"
                 v-model="repositoryQuery"
                 autocomplete="off"
-                placeholder="Search repositories"
+                placeholder="Type to filter repositories..."
                 :disabled="isCreating || isRepositoriesLoading"
                 @focus="isRepositoryListOpen = true"
                 @blur="handleRepositoryBlur"
@@ -748,11 +720,11 @@ watch(
             <label
               for="new-session-branch"
               class="text-sm font-medium text-foreground"
-            >Branch</label>
+            >Branch <span class="font-normal text-muted-foreground">(optional)</span></label>
             <Input
               id="new-session-branch"
               :model-value="effectiveBranch"
-              placeholder="feature/my-session"
+              placeholder="feature/my-branch"
               :disabled="isCreating"
               @update:model-value="(value) => {
                 branch = String(value);
@@ -760,7 +732,7 @@ watch(
               }"
             />
             <p class="text-xs text-muted-foreground">
-              Generated from the title until you edit it manually.
+              Auto-generated from title. Edit to override.
             </p>
           </div>
         </div>
@@ -912,23 +884,23 @@ watch(
           </p>
         </div>
 
-        <div class="grid gap-5 md:grid-cols-2">
-          <div class="space-y-2">
-            <label
-              for="session-title"
-              class="text-sm font-medium text-foreground"
-            >Title</label>
-            <Input
-              id="session-title"
-              v-model="title"
-              placeholder="What are you working on?"
-              :disabled="isCreating"
-            />
-            <p class="text-xs text-muted-foreground">
-              Optional session name.
-            </p>
-          </div>
+        <div class="space-y-2">
+          <label
+            for="session-title"
+            class="text-sm font-medium text-foreground"
+          >Title <span class="font-normal text-muted-foreground">(optional)</span></label>
+          <Input
+            id="session-title"
+            v-model="title"
+            placeholder="What are you working on?"
+            :disabled="isCreating"
+          />
+          <p class="text-xs text-muted-foreground">
+            Optional session name.
+          </p>
+        </div>
 
+        <div class="space-y-5">
           <div
             v-if="showProjectSelect"
             class="space-y-2"
