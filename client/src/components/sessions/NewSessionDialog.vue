@@ -69,6 +69,7 @@ const sourceKind = shallowRef<SessionSourceKind>("repository");
 const repositoryQuery = shallowRef("");
 const selectedRepositoryPath = shallowRef<string | null>(null);
 const isRepositoryListOpen = shallowRef(false);
+const highlightedRepoIndex = shallowRef(0);
 const isDirectoryPickerOpen = shallowRef(false);
 const directory = shallowRef("");
 const title = shallowRef("");
@@ -339,6 +340,46 @@ function handleOpenChange(value: boolean): void {
   open.value = value;
 }
 
+function handleSourceToggle(kind: SessionSourceKind): void {
+  if (kind === "directory" && (isCloudMode.value || activeGitHubPreset.value)) {
+    return;
+  }
+
+  sourceKind.value = kind;
+  nextTick(() => {
+    document.querySelector<HTMLElement>('[role="radiogroup"] [tabindex="0"]')?.focus();
+  });
+}
+
+function handleRepositoryKeydown(event: KeyboardEvent): void {
+  if (!isRepositoryListOpen.value || filteredRepositories.value.length === 0) {
+    return;
+  }
+
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    highlightedRepoIndex.value = Math.min(highlightedRepoIndex.value + 1, filteredRepositories.value.length - 1);
+    scrollHighlightedIntoView();
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    highlightedRepoIndex.value = Math.max(highlightedRepoIndex.value - 1, 0);
+    scrollHighlightedIntoView();
+  } else if (event.key === "Enter") {
+    event.preventDefault();
+    const repo = filteredRepositories.value[highlightedRepoIndex.value];
+    if (repo) {
+      selectRepository(repo);
+    }
+  }
+}
+
+function scrollHighlightedIntoView(): void {
+  nextTick(() => {
+    const el = document.querySelector('[data-repo-highlighted="true"]');
+    el?.scrollIntoView({ block: "nearest" });
+  });
+}
+
 function handleRepositoryBlur(): void {
   window.setTimeout(() => {
     isRepositoryListOpen.value = false;
@@ -380,9 +421,11 @@ function syncDirectoryBrowser(): void {
   }
 }
 
-function openDirectoryPicker(): void {
-  syncDirectoryBrowser();
-  isDirectoryPickerOpen.value = true;
+function handleDirectoryPickerOpenChange(value: boolean): void {
+  if (value) {
+    syncDirectoryBrowser();
+  }
+  isDirectoryPickerOpen.value = value;
 }
 
 function handleDirectorySelected(path: string): void {
@@ -424,9 +467,8 @@ watch(open, async (isOpen) => {
     submitAttempted.value = false;
     selectedProjectId.value = getInitialProjectSelection();
     applyInitialSource();
-    void refreshRepositories();
     await nextTick();
-    document.getElementById("session-title")?.focus();
+    document.querySelector<HTMLButtonElement>('[data-testid="new-session-dialog"] fieldset button')?.focus();
     return;
   }
 
@@ -447,8 +489,6 @@ watch(
         return;
       }
     }
-
-    selectRepository(nextRepositories[0]);
   },
   { immediate: true },
 );
@@ -474,6 +514,7 @@ watch(repositoryQuery, (value) => {
   }
 
   selectedRepositoryPath.value = null;
+  highlightedRepoIndex.value = 0;
 });
 
 watch(
@@ -494,7 +535,7 @@ watch(
     @update:open="handleOpenChange"
   >
     <DialogContent
-      class="sm:max-w-2xl"
+      class="sm:max-w-2xl top-[5%] translate-y-0"
       data-testid="new-session-dialog"
       @interact-outside="handleDialogInteractOutside"
     >
@@ -553,22 +594,28 @@ watch(
             </Button>
           </div>
 
-          <fieldset
-            class="space-y-3"
-            aria-label="Source"
-          >
-          <legend class="text-sm font-medium text-foreground">
+          <div class="space-y-3">
+          <span class="text-sm font-medium text-foreground">
             Source
-          </legend>
+          </span>
 
-          <div class="inline-flex rounded-lg border border-border bg-muted/20 p-1">
+          <div
+            class="flex gap-3"
+            role="radiogroup"
+            aria-label="Source"
+            @keydown.left.prevent="handleSourceToggle('repository')"
+            @keydown.right.prevent="handleSourceToggle('directory')"
+          >
             <button
               type="button"
+              role="radio"
+              :aria-checked="sourceKind === 'repository'"
+              :tabindex="sourceKind === 'repository' ? 0 : -1"
               :class="cn(
-                'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors',
+                'inline-flex flex-1 items-center justify-center gap-2 rounded-full border px-5 py-2 text-sm font-medium transition-colors',
                 sourceKind === 'repository'
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border text-muted-foreground hover:text-foreground',
               )"
               @click="sourceKind = 'repository'"
             >
@@ -579,12 +626,15 @@ watch(
             <button
               v-if="!isCloudMode"
               type="button"
+              role="radio"
+              :aria-checked="sourceKind === 'directory'"
+              :tabindex="sourceKind === 'directory' ? 0 : -1"
               :disabled="Boolean(activeGitHubPreset)"
               :class="cn(
-                'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors',
+                'inline-flex flex-1 items-center justify-center gap-2 rounded-full border px-5 py-2 text-sm font-medium transition-colors',
                 sourceKind === 'directory'
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border text-muted-foreground hover:text-foreground',
                 activeGitHubPreset ? 'cursor-not-allowed opacity-60' : '',
               )"
               @click="sourceKind = 'directory'"
@@ -593,7 +643,7 @@ watch(
               Directory
             </button>
           </div>
-        </fieldset>
+        </div>
 
         <div
           v-if="sourceKind === 'repository'"
@@ -612,8 +662,9 @@ watch(
                 autocomplete="off"
                 placeholder="Type to filter repositories..."
                 :disabled="isCreating || isRepositoriesLoading"
-                @focus="isRepositoryListOpen = true"
+                @focus="isRepositoryListOpen = true; highlightedRepoIndex = 0"
                 @blur="handleRepositoryBlur"
+                @keydown="handleRepositoryKeydown"
               />
 
               <LoaderCircle
@@ -626,11 +677,16 @@ watch(
                 class="absolute z-50 mt-2 max-h-64 w-full overflow-auto rounded-md border border-border bg-popover p-1 shadow-md"
               >
                 <button
-                  v-for="repository in filteredRepositories"
+                  v-for="(repository, index) in filteredRepositories"
                   :key="repository.path"
                   type="button"
-                  class="flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                  :data-repo-highlighted="index === highlightedRepoIndex"
+                  :class="cn(
+                    'flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground',
+                    index === highlightedRepoIndex ? 'bg-accent text-accent-foreground' : '',
+                  )"
                   @mousedown.prevent="selectRepository(repository)"
+                  @mouseenter="highlightedRepoIndex = index"
                 >
                   <span class="min-w-0 flex-1">
                     <span class="block truncate font-medium">{{ repository.name }}</span>
@@ -730,7 +786,7 @@ watch(
               :open="isDirectoryPickerOpen"
               mode="navigate"
               :location="directoryPickerLocation"
-              @update:open="isDirectoryPickerOpen = $event"
+              @update:open="handleDirectoryPickerOpenChange"
               @select="handleDirectorySelected"
             >
               <template #trigger>
@@ -738,7 +794,6 @@ watch(
                   type="button"
                   variant="outline"
                   :disabled="isCreating"
-                  @click="openDirectoryPicker"
                 >
                   <Folder class="h-4 w-4" />
                 </Button>
@@ -762,9 +817,7 @@ watch(
             placeholder="What are you working on?"
             :disabled="isCreating"
           />
-          <p class="text-xs text-muted-foreground">
-            Optional session name.
-          </p>
+
         </div>
 
         <div class="space-y-5">

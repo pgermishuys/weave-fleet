@@ -92,7 +92,7 @@ function handleSearchUpdate(value: string | number): void {
 
     <PopoverContent
       align="end"
-      side="top"
+      side="bottom"
       :collision-padding="8"
       :avoid-collisions="false"
       class="w-[32rem] p-0"
