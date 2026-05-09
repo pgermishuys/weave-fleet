@@ -9,7 +9,7 @@ import { clearSentPrompts, reconcileSentPrompts, useSentPrompts } from "@/compos
 import { useSmartLinks } from "@/plugins/builtin/smart-links";
 import type { CommandEventName } from "@/lib/command-events";
 import { formatTimestamp } from "@/lib/format-utils";
-import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart } from "@/lib/api-types";
+import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart } from "@/lib/api-types";
 import { getToolLabel } from "@/lib/tool-labels";
 import { useSessionsStore } from "@/stores/sessions";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
@@ -32,6 +32,11 @@ interface ToolCardItem {
   initiallyCollapsed?: boolean;
 }
 
+interface ImageAttachmentDisplay {
+  url: string;
+  filename: string;
+}
+
 interface ActivityMessage {
   id: string;
   author: string;
@@ -40,6 +45,7 @@ interface ActivityMessage {
   role: AccumulatedMessage["role"];
   timestamp: string;
   body: string;
+  images: ImageAttachmentDisplay[];
   tools?: ToolCardItem[];
   delegationLinks: DelegationLink[];
   clusterPosition: "single" | "first" | "middle" | "last";
@@ -122,6 +128,9 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
         role: message.role,
         timestamp: formatTimestamp(message.createdAt),
         body: renderMessageBody(message.parts),
+        images: message.parts
+          .filter((part): part is AccumulatedFilePart => part.type === "file" && part.mime.startsWith("image/"))
+          .map((part) => ({ url: part.url, filename: part.filename?.trim() || "image" })),
         tools: message.parts
           .filter((part): part is AccumulatedToolPart => part.type === "tool")
           .map(toToolCardItem),
@@ -142,6 +151,7 @@ const optimisticMessages = computed<ActivityMessage[]>(() => {
     role: "user",
     timestamp: prompt.timestamp,
     body: prompt.body,
+    images: [],
     tools: [],
     delegationLinks: [],
     clusterPosition: "single",
@@ -462,6 +472,7 @@ function normalizeIdentity(value: string): string {
 
 function hasVisibleMessageContent(message: ActivityMessage): boolean {
   return message.body.trim().length > 0
+    || message.images.length > 0
     || (message.tools?.length ?? 0) > 0
     || message.delegationLinks.length > 0;
 }
@@ -511,6 +522,9 @@ function renderMessagePart(part: AccumulatedPart): string | null {
   }
 
   if (part.type === "file") {
+    if (part.mime.startsWith("image/")) {
+      return null; // Images are rendered as thumbnails, not inline text
+    }
     const label = part.filename?.trim() || "Attached file";
     return part.url ? `[${label}](${part.url})` : label;
   }
@@ -666,6 +680,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
           :role="message.role"
           :timestamp="message.timestamp"
           :body="message.body"
+          :images="message.images"
           :tools="message.tools"
           :show-identity="message.showIdentity"
           :cluster-position="message.clusterPosition"

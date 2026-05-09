@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { X } from "lucide-vue-next";
 import MarkdownIt from "markdown-it";
 import hljs from "highlight.js";
 import ToolCard from "@/components/session/ToolCard.vue";
@@ -22,16 +23,24 @@ interface ToolCardItem {
   initiallyCollapsed?: boolean;
 }
 
+interface ImageAttachmentDisplay {
+  url: string;
+  filename: string;
+}
+
 const props = defineProps<{
   author: string;
   modelId?: string;
   role: "user" | "assistant";
   timestamp: string;
   body: string;
+  images?: ImageAttachmentDisplay[];
   tools?: ToolCardItem[];
   showIdentity: boolean;
   clusterPosition: "single" | "first" | "middle" | "last";
 }>();
+
+const lightboxUrl = ref<string | null>(null);
 
 function escapeHtml(value: string): string {
   return value
@@ -117,6 +126,51 @@ const displayModelId = computed(() => {
         class="msg-body__content"
         v-html="bodyHtml"
       />
+
+      <div
+        v-if="images && images.length > 0"
+        class="msg-images"
+      >
+        <button
+          v-for="(img, idx) in images"
+          :key="idx"
+          type="button"
+          class="msg-image-thumb"
+          :title="img.filename"
+          @click="lightboxUrl = img.url"
+        >
+          <img
+            :src="img.url"
+            :alt="img.filename"
+            class="msg-image-thumb__img"
+          />
+        </button>
+      </div>
+
+      <Teleport to="body">
+        <div
+          v-if="lightboxUrl"
+          class="lightbox-overlay"
+          @click="lightboxUrl = null"
+        >
+          <img
+            :src="lightboxUrl"
+            alt="Image preview"
+            class="lightbox-image"
+            @click.stop
+          />
+          <button
+            type="button"
+            class="lightbox-close"
+            @click="lightboxUrl = null"
+          >
+            <X
+              class="lightbox-close__icon"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+      </Teleport>
 
       <ToolCard
         v-for="tool in tools ?? []"
@@ -287,5 +341,35 @@ const displayModelId = computed(() => {
   padding-left: 10px;
   border-left: 2px solid rgba(255, 255, 255, 0.12);
   color: #c4c4cc;
+}
+
+.msg-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.msg-image-thumb {
+  display: block;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 140ms ease;
+}
+
+.msg-image-thumb:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.msg-image-thumb__img {
+  display: block;
+  max-width: 180px;
+  max-height: 120px;
+  object-fit: cover;
+  border-radius: 5px;
 }
 </style>
