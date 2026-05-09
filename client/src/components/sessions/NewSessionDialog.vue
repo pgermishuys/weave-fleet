@@ -42,7 +42,7 @@ import { cn } from "@/lib/utils";
 import { useAppShellStore } from "@/stores/app-shell";
 
 type SessionSourceKind = "repository" | "directory";
-type IsolationStrategy = "existing" | "worktree" | "clone";
+type IsolationStrategy = "existing" | "worktree";
 
 interface Props {
   initialProjectId?: string | null;
@@ -364,6 +364,13 @@ function handleRepositoryKeydown(event: KeyboardEvent): void {
     event.preventDefault();
     highlightedRepoIndex.value = Math.max(highlightedRepoIndex.value - 1, 0);
     scrollHighlightedIntoView();
+  } else if (event.key === "Tab") {
+    // Close list and let default tab behavior proceed
+    const repo = filteredRepositories.value[highlightedRepoIndex.value];
+    if (repo) {
+      selectRepository(repo);
+    }
+    isRepositoryListOpen.value = false;
   } else if (event.key === "Enter") {
     event.preventDefault();
     const repo = filteredRepositories.value[highlightedRepoIndex.value];
@@ -612,7 +619,7 @@ watch(
               :aria-checked="sourceKind === 'repository'"
               :tabindex="sourceKind === 'repository' ? 0 : -1"
               :class="cn(
-                'inline-flex flex-1 items-center justify-center gap-2 rounded-full border px-5 py-2 text-sm font-medium transition-colors',
+                'inline-flex flex-1 items-center justify-center gap-2 rounded-md border px-5 py-2 text-sm font-medium transition-colors',
                 sourceKind === 'repository'
                   ? 'border-primary bg-primary/10 text-primary'
                   : 'border-border text-muted-foreground hover:text-foreground',
@@ -631,7 +638,7 @@ watch(
               :tabindex="sourceKind === 'directory' ? 0 : -1"
               :disabled="Boolean(activeGitHubPreset)"
               :class="cn(
-                'inline-flex flex-1 items-center justify-center gap-2 rounded-full border px-5 py-2 text-sm font-medium transition-colors',
+                'inline-flex flex-1 items-center justify-center gap-2 rounded-md border px-5 py-2 text-sm font-medium transition-colors',
                 sourceKind === 'directory'
                   ? 'border-primary bg-primary/10 text-primary'
                   : 'border-border text-muted-foreground hover:text-foreground',
@@ -729,9 +736,6 @@ watch(
               <SelectContent>
                 <SelectItem value="worktree">
                   Worktree
-                </SelectItem>
-                <SelectItem value="clone">
-                  Clone
                 </SelectItem>
                 <SelectItem value="existing">
                   Existing
