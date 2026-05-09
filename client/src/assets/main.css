@@ -44,6 +44,166 @@
   --queued: #7c3aed;
 }
 
+/* ─── Weave Classic (Dark Slate + Purple) ──────────────────────────────── */
+:root[data-theme="weave-classic"] {
+  --rail-bg: #0B1120;
+  --panel-bg: #1E293B;
+  --card-bg: #1E293B;
+  --main-bg: #0F172A;
+  --border: rgba(255, 255, 255, 0.1);
+  --text: #F8FAFC;
+  --muted: #94A3B8;
+  --accent: #A855F7;
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --accent-dim: rgba(168, 85, 247, 0.15);
+  --running: #22c55e;
+  --idle: #f59e0b;
+  --complete: #3b82f6;
+  --error: #ef4444;
+  --queued: #8b5cf6;
+}
+
+/* ─── Black (OLED) ─────────────────────────────────────────────────────── */
+:root[data-theme="black"] {
+  --rail-bg: #000000;
+  --panel-bg: #0A0A0A;
+  --card-bg: #0A0A0A;
+  --main-bg: #000000;
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #FAFAFA;
+  --muted: #A1A1AA;
+  --accent: #A855F7;
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --accent-dim: rgba(168, 85, 247, 0.15);
+  --running: #22c55e;
+  --idle: #f59e0b;
+  --complete: #3b82f6;
+  --error: #ef4444;
+  --queued: #8b5cf6;
+}
+
+/* ─── Nord ─────────────────────────────────────────────────────────────── */
+:root[data-theme="nord"] {
+  --rail-bg: #272C36;
+  --panel-bg: #3B4252;
+  --card-bg: #3B4252;
+  --main-bg: #2E3440;
+  --border: rgba(216, 222, 233, 0.12);
+  --text: #ECEFF4;
+  --muted: #D8DEE9;
+  --accent: #88C0D0;
+  --primary: var(--accent);
+  --primary-foreground: #2E3440;
+  --accent-dim: rgba(136, 192, 208, 0.15);
+  --running: #A3BE8C;
+  --idle: #EBCB8B;
+  --complete: #81A1C1;
+  --error: #BF616A;
+  --queued: #B48EAD;
+}
+
+/* ─── Dracula ──────────────────────────────────────────────────────────── */
+:root[data-theme="dracula"] {
+  --rail-bg: #21222C;
+  --panel-bg: #343746;
+  --card-bg: #343746;
+  --main-bg: #282A36;
+  --border: rgba(248, 248, 242, 0.1);
+  --text: #F8F8F2;
+  --muted: #BFBFBF;
+  --accent: #BD93F9;
+  --primary: var(--accent);
+  --primary-foreground: #282A36;
+  --accent-dim: rgba(189, 147, 249, 0.15);
+  --running: #50FA7B;
+  --idle: #F1FA8C;
+  --complete: #8BE9FD;
+  --error: #FF5555;
+  --queued: #FF79C6;
+}
+
+/* ─── Solarized Dark ──────────────────────────────────────────────────── */
+:root[data-theme="solarized-dark"] {
+  --rail-bg: #001E28;
+  --panel-bg: #073642;
+  --card-bg: #073642;
+  --main-bg: #002B36;
+  --border: rgba(253, 246, 227, 0.1);
+  --text: #FDF6E3;
+  --muted: #839496;
+  --accent: #268BD2;
+  --primary: var(--accent);
+  --primary-foreground: #FDF6E3;
+  --accent-dim: rgba(38, 139, 210, 0.15);
+  --running: #859900;
+  --idle: #B58900;
+  --complete: #268BD2;
+  --error: #DC322F;
+  --queued: #6C71C4;
+}
+
+/* ─── Solarized Light ─────────────────────────────────────────────────── */
+:root[data-theme="solarized-light"] {
+  --rail-bg: #EEE8D5;
+  --panel-bg: #FDF6E3;
+  --card-bg: #EEE8D5;
+  --main-bg: #FDF6E3;
+  --border: #D6CDB7;
+  --text: #073642;
+  --muted: #657B83;
+  --accent: #268BD2;
+  --primary: var(--accent);
+  --primary-foreground: #FDF6E3;
+  --accent-dim: rgba(38, 139, 210, 0.12);
+  --running: #859900;
+  --idle: #B58900;
+  --complete: #268BD2;
+  --error: #DC322F;
+  --queued: #6C71C4;
+}
+
+/* ─── Monokai ──────────────────────────────────────────────────────────── */
+:root[data-theme="monokai"] {
+  --rail-bg: #1E1F1C;
+  --panel-bg: #3E3D32;
+  --card-bg: #3E3D32;
+  --main-bg: #272822;
+  --border: rgba(248, 248, 242, 0.1);
+  --text: #F8F8F2;
+  --muted: #B3B3A6;
+  --accent: #A6E22E;
+  --primary: var(--accent);
+  --primary-foreground: #272822;
+  --accent-dim: rgba(166, 226, 46, 0.15);
+  --running: #A6E22E;
+  --idle: #E6DB74;
+  --complete: #66D9EF;
+  --error: #F92672;
+  --queued: #AE81FF;
+}
+
+/* ─── GitHub Dark ──────────────────────────────────────────────────────── */
+:root[data-theme="github-dark"] {
+  --rail-bg: #010409;
+  --panel-bg: #161B22;
+  --card-bg: #161B22;
+  --main-bg: #0D1117;
+  --border: rgba(240, 246, 252, 0.1);
+  --text: #E6EDF3;
+  --muted: #8B949E;
+  --accent: #58A6FF;
+  --primary: var(--accent);
+  --primary-foreground: #0D1117;
+  --accent-dim: rgba(88, 166, 255, 0.15);
+  --running: #3FB950;
+  --idle: #D29922;
+  --complete: #58A6FF;
+  --error: #F85149;
+  --queued: #BC8CFF;
+}
+
 @theme inline {
   --font-sans: var(--font);
   --color-background: var(--panel-bg);

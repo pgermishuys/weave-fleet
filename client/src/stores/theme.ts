@@ -1,24 +1,69 @@
 import { defineStore } from "pinia";
 import { computed, shallowRef } from "vue";
 
-export type ThemeMode = "light" | "dark" | "system";
+export type ThemeId =
+  | "dark"
+  | "light"
+  | "weave-classic"
+  | "black"
+  | "nord"
+  | "dracula"
+  | "solarized-dark"
+  | "solarized-light"
+  | "monokai"
+  | "github-dark";
 
-const themeStorageKey = "weave:theme-mode";
+export type ThemeSelection = ThemeId | "system";
 
-function readStoredTheme(): ThemeMode {
+export interface ThemeDefinition {
+  id: ThemeId;
+  label: string;
+  colorScheme: "dark" | "light";
+  /** Preview swatches: [background, card, accent, text] */
+  swatches: readonly [string, string, string, string];
+}
+
+export const themes: readonly ThemeDefinition[] = [
+  { id: "dark", label: "Default Dark", colorScheme: "dark", swatches: ["#0a0a0b", "#141416", "#6366f1", "#e4e4e7"] },
+  { id: "light", label: "Light", colorScheme: "light", swatches: ["#f1f5f9", "#ffffff", "#4f46e5", "#0f172a"] },
+  { id: "weave-classic", label: "Weave Classic", colorScheme: "dark", swatches: ["#0F172A", "#1E293B", "#A855F7", "#F8FAFC"] },
+  { id: "black", label: "Black (OLED)", colorScheme: "dark", swatches: ["#000000", "#0A0A0A", "#A855F7", "#FAFAFA"] },
+  { id: "nord", label: "Nord", colorScheme: "dark", swatches: ["#2E3440", "#3B4252", "#88C0D0", "#ECEFF4"] },
+  { id: "dracula", label: "Dracula", colorScheme: "dark", swatches: ["#282A36", "#343746", "#BD93F9", "#F8F8F2"] },
+  { id: "solarized-dark", label: "Solarized Dark", colorScheme: "dark", swatches: ["#002B36", "#073642", "#268BD2", "#FDF6E3"] },
+  { id: "solarized-light", label: "Solarized Light", colorScheme: "light", swatches: ["#FDF6E3", "#EEE8D5", "#268BD2", "#073642"] },
+  { id: "monokai", label: "Monokai", colorScheme: "dark", swatches: ["#272822", "#3E3D32", "#A6E22E", "#F8F8F2"] },
+  { id: "github-dark", label: "GitHub Dark", colorScheme: "dark", swatches: ["#0D1117", "#161B22", "#58A6FF", "#E6EDF3"] },
+] as const;
+
+const themeStorageKey = "weave:theme";
+
+function isValidThemeId(value: string): value is ThemeId {
+  return themes.some((t) => t.id === value);
+}
+
+function readStoredTheme(): ThemeSelection {
   if (typeof window === "undefined") {
     return "system";
   }
 
   try {
     const raw = window.localStorage.getItem(themeStorageKey);
-    return raw === "light" || raw === "dark" || raw === "system" ? raw : "system";
+    if (!raw) {
+      // Migrate from old key
+      const legacy = window.localStorage.getItem("weave:theme-mode");
+      if (legacy === "light") return "light";
+      if (legacy === "dark") return "dark";
+      return "system";
+    }
+    if (raw === "system") return "system";
+    return isValidThemeId(raw) ? raw : "system";
   } catch {
     return "system";
   }
 }
 
-function getSystemTheme(): Exclude<ThemeMode, "system"> {
+function getSystemThemeId(): ThemeId {
   if (typeof window === "undefined") {
     return "dark";
   }
@@ -26,7 +71,7 @@ function getSystemTheme(): Exclude<ThemeMode, "system"> {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-function persistTheme(theme: ThemeMode): void {
+function persistTheme(theme: ThemeSelection): void {
   if (typeof window === "undefined") {
     return;
   }
@@ -39,9 +84,14 @@ function persistTheme(theme: ThemeMode): void {
 }
 
 export const useThemeStore = defineStore("theme", () => {
-  const currentTheme = shallowRef<ThemeMode>(readStoredTheme());
-  const resolvedTheme = computed<Exclude<ThemeMode, "system">>(() => {
-    return currentTheme.value === "system" ? getSystemTheme() : currentTheme.value;
+  const currentTheme = shallowRef<ThemeSelection>(readStoredTheme());
+
+  const resolvedThemeId = computed<ThemeId>(() => {
+    return currentTheme.value === "system" ? getSystemThemeId() : currentTheme.value;
+  });
+
+  const resolvedTheme = computed<ThemeDefinition>(() => {
+    return themes.find((t) => t.id === resolvedThemeId.value) ?? themes[0];
   });
 
   function applyTheme(): void {
@@ -49,8 +99,9 @@ export const useThemeStore = defineStore("theme", () => {
       return;
     }
 
-    document.documentElement.dataset.theme = resolvedTheme.value;
-    document.documentElement.style.colorScheme = resolvedTheme.value;
+    const theme = resolvedTheme.value;
+    document.documentElement.dataset.theme = theme.id;
+    document.documentElement.style.colorScheme = theme.colorScheme;
   }
 
   function initializeTheme(): void {
@@ -71,18 +122,20 @@ export const useThemeStore = defineStore("theme", () => {
     mediaQuery.addEventListener?.("change", handleSystemThemeChange);
   }
 
-  function setTheme(theme: ThemeMode): void {
+  function setTheme(theme: ThemeSelection): void {
     currentTheme.value = theme;
     persistTheme(theme);
     applyTheme();
   }
 
   function toggleTheme(): void {
-    setTheme(resolvedTheme.value === "dark" ? "light" : "dark");
+    const nextColorScheme = resolvedTheme.value.colorScheme === "dark" ? "light" : "dark";
+    setTheme(nextColorScheme);
   }
 
   return {
     currentTheme,
+    resolvedThemeId,
     resolvedTheme,
     initializeTheme,
     setTheme,

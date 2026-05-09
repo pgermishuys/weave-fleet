@@ -36,7 +36,7 @@ import { useCommandStore } from "@/stores/commands";
 import { useKeybindingsStore } from "@/stores/keybindings";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
-import { useThemeStore } from "@/stores/theme";
+import { useThemeStore, type ThemeSelection } from "@/stores/theme";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -81,7 +81,7 @@ export function useCommands() {
   const { sessions, activeSessionId, retentionStatus } = storeToRefs(sessionsStore);
   const { currentTheme } = storeToRefs(themeStore);
 
-  const themeCycle = ["system", "dark", "light"] as const;
+  const themeCycle: ThemeSelection[] = ["system", "dark", "light"];
 
   function navigateToRoute(to: "/" | "/board" | "/analytics" | "/settings"): void {
     if (to === "/") {
@@ -539,8 +539,8 @@ export function useCommands() {
       },
       {
         id: "toggle-dark-light",
-        label: themeStore.resolvedTheme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode",
-        description: `Current resolved theme: ${themeStore.resolvedTheme}.`,
+        label: themeStore.resolvedTheme.colorScheme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode",
+        description: `Current theme: ${themeStore.resolvedTheme.label}.`,
         icon: MoonStar,
         category: "View",
         paletteHotkey: bindings.value["toggle-dark-light"]?.paletteHotkey ?? undefined,
