@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, shallowRef, watch } from "vue";
-import { AlertCircle, ArrowUp, Check, ExternalLink, Folder, FolderGit2, LoaderCircle, RefreshCw } from "lucide-vue-next";
+import { AlertCircle, Check, ExternalLink, Folder, FolderGit2, LoaderCircle, RefreshCw } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import DirectoryPickerPopover from "@/components/ui/DirectoryPickerPopover.vue";
 import {
   Select,
   SelectContent,
@@ -99,20 +99,7 @@ const {
   isLoading: isCreating,
   error: createError,
 } = useCreateSession();
-const {
-  currentPath: directoryBrowserPath,
-  entries: directoryEntries,
-  isLoading: isDirectoryBrowserLoading,
-  error: directoryBrowserError,
-  roots: directoryRoots,
-  parentPath: directoryParentPath,
-  search: directorySearch,
-  browse: browseDirectory,
-  goUp: goUpDirectory,
-  refresh: refreshDirectoryBrowser,
-  setSearch: setDirectorySearch,
-  hasActivated: hasActivatedDirectoryBrowser,
-} = useDirectoryBrowser();
+const directoryBrowser = useDirectoryBrowser();
 
 const userProjects = computed<readonly ProjectResponse[]>(() => {
   return projects.value.filter((project) => project.type !== "scratch");
@@ -185,8 +172,8 @@ const effectiveDirectory = computed(() => {
 });
 
 const directoryPickerLocation = computed(() => {
-  if (directoryBrowserPath.value) {
-    return directoryBrowserPath.value;
+  if (directoryBrowser.currentPath.value) {
+    return directoryBrowser.currentPath.value;
   }
 
   const preferredRoot = getPreferredWorkspaceRoot();
@@ -194,19 +181,7 @@ const directoryPickerLocation = computed(() => {
     return preferredRoot;
   }
 
-  return directoryRoots.value[0] ?? "Workspace roots";
-});
-
-const filteredDirectoryEntries = computed(() => {
-  const query = directorySearch.value.trim().toLowerCase();
-  if (!query) {
-    return directoryEntries.value;
-  }
-
-  return directoryEntries.value.filter((entry) => {
-    const searchableText = `${entry.name} ${entry.path}`.toLowerCase();
-    return searchableText.includes(query);
-  });
+  return directoryBrowser.roots.value[0] ?? "Workspace roots";
 });
 
 const sessionSource = computed<SessionSourceSelection | undefined>(() => {
@@ -286,7 +261,7 @@ const dialogError = computed(() => {
     ?? repositoriesError.value
     ?? projectsError.value
     ?? harnessesError.value
-    ?? directoryBrowserError.value
+    ?? directoryBrowser.error.value
     ?? null;
 });
 
@@ -395,13 +370,13 @@ function getDirectoryBrowserStartPath(): string | null {
     return selectedDirectory;
   }
 
-  return getPreferredWorkspaceRoot() || null;
+  return null;
 }
 
 function syncDirectoryBrowser(): void {
   const nextPath = getDirectoryBrowserStartPath();
-  if (!hasActivatedDirectoryBrowser.value || directoryBrowserPath.value !== nextPath) {
-    browseDirectory(nextPath);
+  if (!directoryBrowser.hasActivated.value || directoryBrowser.currentPath.value !== nextPath) {
+    directoryBrowser.browse(nextPath);
   }
 }
 
@@ -413,10 +388,6 @@ function openDirectoryPicker(): void {
 function handleDirectorySelected(path: string): void {
   directory.value = path;
   isDirectoryPickerOpen.value = false;
-}
-
-function handleDirectorySearchUpdate(value: string | number): void {
-  setDirectorySearch(String(value));
 }
 
 function handleDialogInteractOutside(event: Event): void {
@@ -754,8 +725,15 @@ watch(
               :disabled="isCreating"
             />
 
-            <Popover v-model:open="isDirectoryPickerOpen">
-              <PopoverTrigger as-child>
+            <DirectoryPickerPopover
+              :browser="directoryBrowser"
+              :open="isDirectoryPickerOpen"
+              mode="navigate"
+              :location="directoryPickerLocation"
+              @update:open="isDirectoryPickerOpen = $event"
+              @select="handleDirectorySelected"
+            >
+              <template #trigger>
                 <Button
                   type="button"
                   variant="outline"
@@ -763,120 +741,9 @@ watch(
                   @click="openDirectoryPicker"
                 >
                   <Folder class="h-4 w-4" />
-                  Browse
                 </Button>
-              </PopoverTrigger>
-
-              <PopoverContent
-                align="end"
-                class="w-[32rem] p-0"
-                :style="{ backgroundColor: 'var(--card-bg)', opacity: '1' }"
-              >
-                <div class="border-b border-border bg-card-bg p-3">
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0">
-                      <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        Directory picker
-                      </p>
-                      <p class="truncate font-mono text-xs text-foreground">
-                        {{ directoryPickerLocation }}
-                      </p>
-                    </div>
-
-                    <div class="flex items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        :disabled="isDirectoryBrowserLoading || !directoryParentPath"
-                        @click="goUpDirectory"
-                      >
-                        <ArrowUp class="h-4 w-4" />
-                      </Button>
-
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        :disabled="isDirectoryBrowserLoading"
-                        @click="refreshDirectoryBrowser"
-                      >
-                        <RefreshCw :class="['h-4 w-4', isDirectoryBrowserLoading ? 'animate-spin' : '']" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <Input
-                    class="mt-3"
-                    :model-value="directorySearch"
-                    placeholder="Search directories"
-                    @update:model-value="handleDirectorySearchUpdate"
-                  />
-
-                  <div
-                    v-if="directoryRoots.length > 1"
-                    class="mt-3 flex flex-wrap gap-2"
-                  >
-                    <Button
-                      v-for="root in directoryRoots"
-                      :key="root"
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      class="max-w-full"
-                      @click="browseDirectory(root)"
-                    >
-                      <span class="truncate font-mono text-xs">{{ root }}</span>
-                    </Button>
-                  </div>
-                </div>
-
-                <div class="max-h-72 overflow-y-auto bg-card-bg p-2">
-                  <button
-                    v-for="entry in filteredDirectoryEntries"
-                    :key="entry.path"
-                    type="button"
-                    class="flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-                    @click="handleDirectorySelected(entry.path)"
-                  >
-                    <span class="min-w-0 flex-1">
-                      <span class="flex items-center gap-2 font-medium">
-                        <FolderGit2
-                          v-if="entry.isGitRepo"
-                          class="h-4 w-4 shrink-0"
-                        />
-                        <Folder
-                          v-else
-                          class="h-4 w-4 shrink-0"
-                        />
-                        <span class="truncate">{{ entry.name }}</span>
-                      </span>
-                      <span class="mt-1 block truncate font-mono text-xs text-muted-foreground">{{ entry.path }}</span>
-                    </span>
-
-                    <Check
-                      v-if="directory.trim() === entry.path"
-                      class="mt-0.5 h-4 w-4 shrink-0 text-primary"
-                    />
-                  </button>
-
-                  <div
-                    v-if="isDirectoryBrowserLoading"
-                    class="flex items-center gap-2 px-3 py-6 text-sm text-muted-foreground"
-                  >
-                    <LoaderCircle class="h-4 w-4 animate-spin" />
-                    <span>Loading directories…</span>
-                  </div>
-
-                  <p
-                    v-else-if="filteredDirectoryEntries.length === 0"
-                    class="px-3 py-6 text-sm text-muted-foreground"
-                  >
-                    No directories found.
-                  </p>
-                </div>
-              </PopoverContent>
-            </Popover>
+              </template>
+            </DirectoryPickerPopover>
           </div>
 
           <p class="text-xs text-muted-foreground">

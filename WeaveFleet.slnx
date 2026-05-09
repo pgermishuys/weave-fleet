@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/aspire/">
+    <Project Path="aspire/AppHost/AppHost.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/WeaveFleet.Api/WeaveFleet.Api.csproj" />
     <Project Path="src/WeaveFleet.Application/WeaveFleet.Application.csproj" />

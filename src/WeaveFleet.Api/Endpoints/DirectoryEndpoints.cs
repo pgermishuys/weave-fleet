@@ -14,10 +14,13 @@ public static class DirectoryEndpoints
         // Returns workspace roots if no path provided
         group.MapGet("/directories", async (
             string? path,
+            bool? unconstrained,
             DirectoryService directoryService,
             CancellationToken ct) =>
         {
-            var result = await directoryService.ListDirectoryAsync(path, ct);
+            var result = unconstrained == true
+                ? await directoryService.ListDirectoryUnconstrainedAsync(path, ct)
+                : await directoryService.ListDirectoryAsync(path, ct);
             return Results.Ok(new
             {
                 entries = result.Entries.Select(e => new

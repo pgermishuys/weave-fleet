@@ -60,7 +60,10 @@ public sealed partial class DirectoryService(
                 Roots: allowedRoots);
         }
 
-        var parent = GetParent(normalised);
+        // If this path is exactly a workspace root, parent should be null (back to root list)
+        var isRoot = allowedRoots.Any(r =>
+            normalised.Equals(Path.GetFullPath(r), StringComparison.OrdinalIgnoreCase));
+        var parent = isRoot ? null : GetParent(normalised);
 
         List<DirectoryEntry> entries;
         try
@@ -85,6 +88,72 @@ public sealed partial class DirectoryService(
             CurrentPath: normalised,
             ParentPath: parent,
             Roots: allowedRoots);
+    }
+
+    /// <summary>
+    /// Lists subdirectories at the given path without restricting to workspace roots.
+    /// If <paramref name="path"/> is null/empty, returns filesystem drive roots.
+    /// Used by the workspace settings UI when adding a new root.
+    /// </summary>
+    public Task<DirectoryListingResult> ListDirectoryUnconstrainedAsync(
+        string? path,
+        CancellationToken ct = default)
+    {
+        // If no path given, return filesystem drives as the listing
+        if (string.IsNullOrEmpty(path))
+        {
+            var drives = DriveInfo.GetDrives()
+                .Where(d => d.IsReady)
+                .Select(d => new DirectoryEntry(
+                    Name: d.Name.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                    FullPath: d.RootDirectory.FullName,
+                    IsGitRepo: false,
+                    IsRoot: true))
+                .ToList();
+
+            return Task.FromResult(new DirectoryListingResult(
+                Entries: drives,
+                CurrentPath: null,
+                ParentPath: null,
+                Roots: []));
+        }
+
+        var normalised = Path.GetFullPath(path);
+
+        if (!Directory.Exists(normalised))
+        {
+            return Task.FromResult(new DirectoryListingResult(
+                Entries: [],
+                CurrentPath: normalised,
+                ParentPath: GetParent(normalised),
+                Roots: []));
+        }
+
+        var parent = GetParent(normalised);
+
+        List<DirectoryEntry> entries;
+        try
+        {
+            entries = Directory.EnumerateDirectories(normalised)
+                .OrderBy(d => d, StringComparer.OrdinalIgnoreCase)
+                .Select(d => new DirectoryEntry(
+                    Name: Path.GetFileName(d),
+                    FullPath: d,
+                    IsGitRepo: Directory.Exists(Path.Combine(d, ".git")),
+                    IsRoot: false))
+                .ToList();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            LogAccessDenied(ex, normalised);
+            entries = [];
+        }
+
+        return Task.FromResult(new DirectoryListingResult(
+            Entries: entries,
+            CurrentPath: normalised,
+            ParentPath: parent,
+            Roots: []));
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
