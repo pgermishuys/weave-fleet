@@ -684,22 +684,6 @@ watch(
 
           <div class="space-y-2">
             <label
-              for="session-title"
-              class="text-sm font-medium text-foreground"
-            >Title <span class="font-normal text-muted-foreground">(optional)</span></label>
-            <Input
-              id="session-title"
-              v-model="title"
-              placeholder="What are you working on?"
-              :disabled="isCreating"
-            />
-            <p class="text-xs text-muted-foreground">
-              Optional session name.
-            </p>
-          </div>
-
-          <div class="space-y-2">
-            <label
               for="new-session-isolation"
               class="text-sm font-medium text-foreground"
             >Isolation Strategy</label>
@@ -897,6 +881,22 @@ watch(
 
           <p class="text-xs text-muted-foreground">
             Type a path manually or browse from your configured workspace directory.
+          </p>
+        </div>
+
+        <div class="space-y-2">
+          <label
+            for="session-title"
+            class="text-sm font-medium text-foreground"
+          >Title <span class="font-normal text-muted-foreground">(optional)</span></label>
+          <Input
+            id="session-title"
+            v-model="title"
+            placeholder="What are you working on?"
+            :disabled="isCreating"
+          />
+          <p class="text-xs text-muted-foreground">
+            Optional session name.
           </p>
         </div>
 
