@@ -22,8 +22,8 @@
   --radius-card: 8px;
   --radius-btn: 6px;
   --radius-panel: 12px;
-  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  --font-sans-stack: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono-stack: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
 }
 
 :root[data-theme="light"] {
@@ -206,8 +206,8 @@
 }
 
 @theme inline {
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
+  --font-sans: var(--font-sans-stack);
+  --font-mono: var(--font-mono-stack);
   --color-background: var(--panel-bg);
   --color-foreground: var(--text);
   --color-popover: var(--card-bg);
@@ -240,7 +240,7 @@
   }
 
   html {
-    font-family: var(--font-sans);
+    font-family: var(--font-sans-stack);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -250,7 +250,7 @@
     min-height: 100vh;
     background-color: var(--main-bg);
     color: var(--text);
-    font-family: var(--font-sans);
+    font-family: var(--font-sans-stack);
   }
 
   #app {

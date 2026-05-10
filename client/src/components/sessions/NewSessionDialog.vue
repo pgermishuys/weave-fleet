@@ -428,6 +428,13 @@ function syncDirectoryBrowser(): void {
   }
 }
 
+function handleIsolationToggle(strategy: IsolationStrategy): void {
+  isolationStrategy.value = strategy;
+  nextTick(() => {
+    document.querySelector<HTMLElement>('[aria-label="Isolation Strategy"] [tabindex="0"]')?.focus();
+  });
+}
+
 function handleDirectoryPickerOpenChange(value: boolean): void {
   if (value) {
     syncDirectoryBrowser();
@@ -619,14 +626,14 @@ watch(
               :aria-checked="sourceKind === 'repository'"
               :tabindex="sourceKind === 'repository' ? 0 : -1"
               :class="cn(
-                'inline-flex flex-1 items-center justify-center gap-2 rounded-md border px-5 py-2 text-sm font-medium transition-colors',
+                'inline-flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2 text-xs font-medium transition-colors',
                 sourceKind === 'repository'
                   ? 'border-primary bg-primary/10 text-primary'
                   : 'border-border text-muted-foreground hover:text-foreground',
               )"
               @click="sourceKind = 'repository'"
             >
-              <FolderGit2 class="h-4 w-4" />
+              <FolderGit2 class="h-3.5 w-3.5" />
               Repository
             </button>
 
@@ -638,7 +645,7 @@ watch(
               :tabindex="sourceKind === 'directory' ? 0 : -1"
               :disabled="Boolean(activeGitHubPreset)"
               :class="cn(
-                'inline-flex flex-1 items-center justify-center gap-2 rounded-md border px-5 py-2 text-sm font-medium transition-colors',
+                'inline-flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2 text-xs font-medium transition-colors',
                 sourceKind === 'directory'
                   ? 'border-primary bg-primary/10 text-primary'
                   : 'border-border text-muted-foreground hover:text-foreground',
@@ -646,7 +653,7 @@ watch(
               )"
               @click="sourceKind = 'directory'"
             >
-              <Folder class="h-4 w-4" />
+              <Folder class="h-3.5 w-3.5" />
               Directory
             </button>
           </div>
@@ -689,8 +696,8 @@ watch(
                   type="button"
                   :data-repo-highlighted="index === highlightedRepoIndex"
                   :class="cn(
-                    'flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground',
-                    index === highlightedRepoIndex ? 'bg-accent text-accent-foreground' : '',
+                    'flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm hover:bg-white/[0.06]',
+                    index === highlightedRepoIndex ? 'bg-white/[0.10]' : '',
                   )"
                   @mousedown.prevent="selectRepository(repository)"
                   @mouseenter="highlightedRepoIndex = index"
@@ -717,32 +724,72 @@ watch(
           </div>
 
           <div class="space-y-2">
-            <label
-              for="new-session-isolation"
-              class="text-sm font-medium text-foreground"
-            >Isolation Strategy</label>
+            <span class="text-sm font-medium text-foreground">Isolation Strategy</span>
 
-            <Select
-              v-model="isolationStrategy"
-              :disabled="isCreating"
+            <div
+              class="flex gap-3"
+              role="radiogroup"
+              aria-label="Isolation Strategy"
+              @keydown.left.prevent="handleIsolationToggle('worktree')"
+              @keydown.right.prevent="handleIsolationToggle('existing')"
             >
-              <SelectTrigger
-                id="new-session-isolation"
-                class="w-full"
+              <button
+                type="button"
+                role="radio"
+                :aria-checked="isolationStrategy === 'worktree'"
+                :tabindex="isolationStrategy === 'worktree' ? 0 : -1"
+                :disabled="isCreating"
+                :class="cn(
+                  'inline-flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2 text-xs font-medium transition-colors',
+                  isolationStrategy === 'worktree'
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-muted-foreground hover:text-foreground',
+                )"
+                @click="isolationStrategy = 'worktree'"
               >
-                <SelectValue placeholder="Select a strategy" />
-              </SelectTrigger>
+                <FolderGit2 class="h-3.5 w-3.5" />
+                Worktree
+              </button>
 
-              <SelectContent>
-                <SelectItem value="worktree">
-                  Worktree
-                </SelectItem>
-                <SelectItem value="existing">
-                  Existing
-                </SelectItem>
-              </SelectContent>
-            </Select>
+              <button
+                type="button"
+                role="radio"
+                :aria-checked="isolationStrategy === 'existing'"
+                :tabindex="isolationStrategy === 'existing' ? 0 : -1"
+                :disabled="isCreating"
+                :class="cn(
+                  'inline-flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2 text-xs font-medium transition-colors',
+                  isolationStrategy === 'existing'
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-muted-foreground hover:text-foreground',
+                )"
+                @click="isolationStrategy = 'existing'"
+              >
+                <Folder class="h-3.5 w-3.5" />
+                Directory
+              </button>
+            </div>
+
+            <p class="text-xs text-muted-foreground">
+              {{ isolationStrategy === 'worktree'
+                ? 'Creates a git worktree — ideal for parallel work on the same repo.'
+                : 'Use the repository directory as-is. Simple, no copy or branch.'
+              }}
+            </p>
           </div>
+
+        <div class="space-y-2">
+          <label
+            for="session-title"
+            class="text-sm font-medium text-foreground"
+          >Title <span class="font-normal text-muted-foreground">(optional)</span></label>
+          <Input
+            id="session-title"
+            v-model="title"
+            placeholder="What are you working on?"
+            :disabled="isCreating"
+          />
+        </div>
 
           <div
             v-if="isolationStrategy === 'worktree'"
@@ -765,63 +812,62 @@ watch(
             <p class="text-xs text-muted-foreground">
               Auto-generated from title. Edit to override.
             </p>
-          </div>
+           </div>
         </div>
 
         <div
-          v-else
-          class="space-y-2"
+          v-else-if="sourceKind === 'directory'"
+          class="space-y-5"
         >
-          <label
-            for="new-session-directory"
-            class="text-sm font-medium text-foreground"
-          >Directory</label>
+          <div class="space-y-2">
+            <label
+              for="new-session-directory"
+              class="text-sm font-medium text-foreground"
+            >Directory</label>
 
-          <div class="flex gap-2">
-            <Input
-              id="new-session-directory"
-              v-model="directory"
-              placeholder="/absolute/path/to/workspace"
-              :disabled="isCreating"
-            />
+            <div class="flex gap-2">
+              <Input
+                id="new-session-directory"
+                v-model="directory"
+                placeholder="/path/to/project"
+                :disabled="isCreating"
+                class="flex-1"
+              />
 
-            <DirectoryPickerPopover
-              :browser="directoryBrowser"
-              :open="isDirectoryPickerOpen"
-              mode="navigate"
-              :location="directoryPickerLocation"
-              @update:open="handleDirectoryPickerOpenChange"
-              @select="handleDirectorySelected"
-            >
-              <template #trigger>
-                <Button
-                  type="button"
-                  variant="outline"
-                  :disabled="isCreating"
-                >
-                  <Folder class="h-4 w-4" />
-                </Button>
-              </template>
-            </DirectoryPickerPopover>
+              <DirectoryPickerPopover
+                :browser="directoryBrowser"
+                :open="isDirectoryPickerOpen"
+                mode="navigate"
+                @update:open="handleDirectoryPickerOpenChange"
+                @select="handleDirectorySelected"
+              >
+                <template #trigger>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    class="shrink-0"
+                    :disabled="isCreating"
+                  >
+                    <Folder class="h-4 w-4" />
+                  </Button>
+                </template>
+              </DirectoryPickerPopover>
+            </div>
           </div>
 
-          <p class="text-xs text-muted-foreground">
-            Type a path manually or browse from your configured workspace directory.
-          </p>
-        </div>
-
-        <div class="space-y-2">
-          <label
-            for="session-title"
-            class="text-sm font-medium text-foreground"
-          >Title <span class="font-normal text-muted-foreground">(optional)</span></label>
-          <Input
-            id="session-title"
-            v-model="title"
-            placeholder="What are you working on?"
-            :disabled="isCreating"
-          />
-
+          <div class="space-y-2">
+            <label
+              for="session-title"
+              class="text-sm font-medium text-foreground"
+            >Title <span class="font-normal text-muted-foreground">(optional)</span></label>
+            <Input
+              id="session-title"
+              v-model="title"
+              placeholder="What are you working on?"
+              :disabled="isCreating"
+            />
+          </div>
         </div>
 
         <div class="space-y-5">

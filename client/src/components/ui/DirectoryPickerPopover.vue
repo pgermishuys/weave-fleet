@@ -140,7 +140,7 @@ function handleSearchUpdate(value: string | number): void {
           v-for="entry in filteredEntries"
           :key="entry.path"
           type="button"
-          class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+          class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-white/[0.06]"
           @click="handleEntryClick(entry.path)"
         >
           <FolderGit2
