@@ -688,7 +688,8 @@ watch(
 
               <div
                 v-if="isRepositoryListOpen && !isRepositoriesLoading"
-                class="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md bg-popover shadow-md"
+                class="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md border border-border shadow-xl shadow-black/50 ring-1 ring-white/[0.08]"
+                :style="{ backgroundColor: 'color-mix(in srgb, var(--card-bg) 100%, white 4%)' }"
               >
                 <button
                   v-for="(repository, index) in filteredRepositories"
@@ -770,7 +771,7 @@ watch(
               </button>
             </div>
 
-            <p class="text-xs text-muted-foreground">
+            <p class="text-xs text-muted-foreground opacity-50">
               {{ isolationStrategy === 'worktree'
                 ? 'Creates a git worktree — ideal for parallel work on the same repo.'
                 : 'Use the repository directory as-is. Simple, no copy or branch.'
@@ -809,7 +810,7 @@ watch(
                 branchManuallyEdited = true;
               }"
             />
-            <p class="text-xs text-muted-foreground">
+            <p class="text-xs text-muted-foreground opacity-50">
               Auto-generated from title. Edit to override.
             </p>
            </div>
