@@ -34,6 +34,7 @@ public static class TelemetryExtensions
             || !string.IsNullOrWhiteSpace(telemetryOptions.OtlpEndpoint);
         if (!hasExplicitEndpoint)
         {
+            Console.WriteLine("[Fleet:Telemetry] OTLP disabled — no OTEL_EXPORTER_OTLP_ENDPOINT or Fleet:Telemetry:OtlpEndpoint configured.");
             return builder;
         }
 
@@ -41,14 +42,18 @@ public static class TelemetryExtensions
             ? otlpEndpointEnv
             : telemetryOptions.OtlpEndpoint).TrimEnd('/');
 
+        Console.WriteLine($"[Fleet:Telemetry] OTLP enabled — exporting to {baseEndpoint}");
+
+        var endpoint = new Uri(baseEndpoint);
+
         // Resource: service name + version (used by the logging pipeline)
         var resourceBuilder = ResourceBuilder.CreateDefault()
             .AddService(
                 serviceName: FleetInstrumentation.ServiceName,
                 serviceVersion: FleetInstrumentation.ServiceVersion);
 
-        // Per-signal AddOtlpExporter does NOT auto-append /v1/{signal} paths when
-        // Endpoint is explicitly set, so we build the full URL for each signal.
+        // Aspire Dashboard OTLP endpoint uses gRPC.
+        // gRPC exporters use the base endpoint directly (no per-signal path suffixes).
 
         // --- Tracing & Metrics ---
         builder.Services.AddOpenTelemetry()
@@ -63,8 +68,8 @@ public static class TelemetryExtensions
                     .AddHttpClientInstrumentation()
                     .AddOtlpExporter(otlp =>
                     {
-                        otlp.Endpoint = new Uri($"{baseEndpoint}/v1/traces");
-                        otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
+                        otlp.Endpoint = endpoint;
+                        otlp.Protocol = OtlpExportProtocol.Grpc;
                         otlp.TimeoutMilliseconds = telemetryOptions.ExportTimeoutMilliseconds;
                     });
 
@@ -77,8 +82,8 @@ public static class TelemetryExtensions
                     .AddHttpClientInstrumentation()
                     .AddOtlpExporter(otlp =>
                     {
-                        otlp.Endpoint = new Uri($"{baseEndpoint}/v1/metrics");
-                        otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
+                        otlp.Endpoint = endpoint;
+                        otlp.Protocol = OtlpExportProtocol.Grpc;
                         otlp.TimeoutMilliseconds = telemetryOptions.ExportTimeoutMilliseconds;
                     });
             });
@@ -94,8 +99,8 @@ public static class TelemetryExtensions
 
             logging.AddOtlpExporter(otlp =>
             {
-                otlp.Endpoint = new Uri($"{baseEndpoint}/v1/logs");
-                otlp.Protocol = OtlpExportProtocol.HttpProtobuf;
+                otlp.Endpoint = endpoint;
+                otlp.Protocol = OtlpExportProtocol.Grpc;
                 otlp.TimeoutMilliseconds = telemetryOptions.ExportTimeoutMilliseconds;
             });
         });

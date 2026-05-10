@@ -13,6 +13,7 @@ import type {
   UpdateProjectRequest,
 } from "@/lib/api-types";
 import { apiFetch } from "@/lib/api-client";
+import { trackAction } from "@/lib/track-action";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
 
@@ -211,7 +212,7 @@ function buildForkedSessionListItem(
   };
 }
 
-export function useCreateSession(): UseCreateSessionResult {
+export function useCreateSession(endpoint = "/api/sessions"): UseCreateSessionResult {
   const state = createMutationState();
 
   async function createSession(directory?: string, opts?: CreateSessionOptions): Promise<CreateSessionResponse> {
@@ -226,7 +227,7 @@ export function useCreateSession(): UseCreateSessionResult {
         projectId: opts?.projectId,
       };
 
-      const response = await apiFetch("/api/sessions", {
+      const response = await apiFetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -236,7 +237,9 @@ export function useCreateSession(): UseCreateSessionResult {
         throw new Error(await readErrorMessage(response));
       }
 
-      return (await response.json()) as CreateSessionResponse;
+      const result = (await response.json()) as CreateSessionResponse;
+      trackAction("session.create", result.session.id);
+      return result;
     }, "Failed to create session");
   }
 
@@ -287,6 +290,8 @@ export function useDeleteSession(): UseDeleteSessionResult {
       if (!response.ok) {
         throw new Error(await readErrorMessage(response));
       }
+
+      trackAction("session.delete", sessionId);
     }, "Failed to delete session");
   }
 
@@ -410,7 +415,7 @@ export function useMoveSession(): UseMoveSessionResult {
   };
 }
 
-function createRetentionMutation(targetStatus: "archived" | "active", fallbackMessage: string) {
+function createRetentionMutation(targetStatus: "archived" | "active", actionName: string, fallbackMessage: string) {
   const state = createMutationState();
 
   async function updateRetention(sessionId: string): Promise<void> {
@@ -424,6 +429,8 @@ function createRetentionMutation(targetStatus: "archived" | "active", fallbackMe
       if (!response.ok) {
         throw new Error(await readErrorMessage(response));
       }
+
+      trackAction(actionName, sessionId);
     }, fallbackMessage);
   }
 
@@ -435,7 +442,7 @@ function createRetentionMutation(targetStatus: "archived" | "active", fallbackMe
 }
 
 export function useArchiveSession(): UseArchiveSessionResult {
-  const mutation = createRetentionMutation("archived", "Failed to archive session");
+  const mutation = createRetentionMutation("archived", "session.archive", "Failed to archive session");
 
   return {
     archiveSession: mutation.updateRetention,
@@ -445,7 +452,7 @@ export function useArchiveSession(): UseArchiveSessionResult {
 }
 
 export function useUnarchiveSession(): UseUnarchiveSessionResult {
-  const mutation = createRetentionMutation("active", "Failed to unarchive session");
+  const mutation = createRetentionMutation("active", "session.unarchive", "Failed to unarchive session");
 
   return {
     unarchiveSession: mutation.updateRetention,
@@ -482,6 +489,7 @@ export function useForkSession(): UseForkSessionResult {
       sessionsStore?.upsertSession(nextSession);
       sessionsStore?.setActiveSessionId(payload.session.id);
       dispatchSessionUpsert(nextSession);
+      trackAction("session.fork", sessionId);
 
       return payload;
     } catch (requestError) {
@@ -526,7 +534,9 @@ export function useResumeSession(): UseResumeSessionResult {
         throw new Error(await readErrorMessage(response));
       }
 
-      return (await response.json()) as ResumeSessionResponse;
+      const result = (await response.json()) as ResumeSessionResponse;
+      trackAction("session.resume", sessionId);
+      return result;
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : "Failed to resume session";
       error.value = message;
@@ -557,6 +567,8 @@ export function useAbortSession(): UseAbortSessionResult {
       if (!response.ok) {
         throw new Error(await readErrorMessage(response));
       }
+
+      trackAction("session.abort", sessionId);
     }, "Failed to abort session");
   }
 

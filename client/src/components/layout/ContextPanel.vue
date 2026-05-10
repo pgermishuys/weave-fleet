@@ -5,6 +5,7 @@ import { computed, defineComponent, h, shallowRef } from "vue";
 import { storeToRefs } from "pinia";
 import BoardControlsPanel from "@/components/board/BoardControlsPanel.vue";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
+import SessionsV1Panel from "@/components/sessions-v1/SessionsV1Panel.vue";
 import SettingsNavPanel from "@/components/settings/SettingsNavPanel.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { getSidebarPanels } from "@/plugins/slots";
@@ -85,6 +86,7 @@ const registeredPluginPanels = computed<Record<PluginRailId, Component>>(() => {
 
 const panelComponents = computed<Record<ContextPanelKey, Component>>(() => ({
   sessions: SessionsPanel,
+  "sessions-v1": SessionsV1Panel,
   board: BoardControlsPanel,
   analytics: SessionsPanel,
   ...registeredPluginPanels.value,

@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 using System.Text.Json;
 using WeaveFleet.Application;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.SessionSources;
@@ -188,6 +190,7 @@ public sealed partial class SessionOrchestrator(
 
         // 2. Spawn harness instance
         var sessionId = Guid.NewGuid().ToString();
+        using var _ = BeginSessionScope(sessionId);
         IHarnessSession harnessInstance;
         try
         {
@@ -239,7 +242,8 @@ public sealed partial class SessionOrchestrator(
             Directory = workspace.Directory,
             CreatedAt = DateTime.UtcNow.ToString("O"),
             HarnessType = harnessType,
-            UserId = userContext.UserId
+            UserId = userContext.UserId,
+            ViewMode = request.ViewMode
         };
 
         var createdAt = DateTime.UtcNow.ToString("O");
@@ -247,7 +251,7 @@ public sealed partial class SessionOrchestrator(
         if (sessionActivityWriteService is null)
         {
             await sessionRepository.InsertAsync(session);
-            await eventBroadcaster.BroadcastAsync("sessions", "session_created",
+            await eventBroadcaster.BroadcastAsync(GetSessionsTopic(session.ViewMode), "session_created",
                 JsonSerializer.SerializeToElement(new SessionCreatedOutboxPayload
                 {
                     SessionId = session.Id,
@@ -277,7 +281,8 @@ public sealed partial class SessionOrchestrator(
                                 ProjectId = session.ProjectId
                             }, ApplicationJsonContext.Default.SessionCreatedOutboxPayload),
                             createdAt,
-                            userContext.UserId)
+                            userContext.UserId,
+                            session.ViewMode)
                     ]
                 },
                 ct);
@@ -348,6 +353,7 @@ public sealed partial class SessionOrchestrator(
 
     public async Task<Result<Session>> ResumeSessionAsync(string id, CancellationToken ct = default)
     {
+        using var _ = BeginSessionScope(id);
         var session = await sessionRepository.GetByIdAsync(id);
         if (session is null)
             return FleetError.NotFoundFor(nameof(Session), id);
@@ -528,7 +534,8 @@ public sealed partial class SessionOrchestrator(
             HarnessType = parent.HarnessType,
             HarnessResumeToken = childHarnessSessionId,
             IsHidden = true,
-            UserId = userContext.UserId
+            UserId = userContext.UserId,
+            ViewMode = parent.ViewMode
         };
 
         var createdAt = DateTime.UtcNow.ToString("O");
@@ -536,7 +543,7 @@ public sealed partial class SessionOrchestrator(
         if (sessionActivityWriteService is null)
         {
             await sessionRepository.InsertAsync(session);
-            await eventBroadcaster.BroadcastAsync("sessions", "session_created",
+            await eventBroadcaster.BroadcastAsync(GetSessionsTopic(session.ViewMode), "session_created",
                 JsonSerializer.SerializeToElement(new SessionCreatedOutboxPayload
                 {
                     SessionId = session.Id,
@@ -570,7 +577,8 @@ public sealed partial class SessionOrchestrator(
                                 IsHidden = true
                             }, ApplicationJsonContext.Default.SessionCreatedOutboxPayload),
                             createdAt,
-                            userContext.UserId)
+                            userContext.UserId,
+                            session.ViewMode)
                     ]
                 },
                 ct);
@@ -608,6 +616,7 @@ public sealed partial class SessionOrchestrator(
         PromptOptions? options = null,
         CancellationToken ct = default)
     {
+        using var _ = BeginSessionScope(id);
         var sessionResult = await GetSessionAsync(id);
         if (sessionResult.IsFailure)
             return sessionResult.Error;
@@ -652,6 +661,7 @@ public sealed partial class SessionOrchestrator(
         SessionSourceSelection source,
         CancellationToken ct = default)
     {
+        using var _ = BeginSessionScope(sessionId);
         var session = await sessionRepository.GetByIdAsync(sessionId);
         if (session is null)
             return FleetError.NotFoundFor(nameof(Session), sessionId);
@@ -688,6 +698,7 @@ public sealed partial class SessionOrchestrator(
         bool confirm,
         CancellationToken ct = default)
     {
+        using var _ = BeginSessionScope(sessionId);
         if (!confirm)
         {
             return FleetError.ValidationError(
@@ -747,6 +758,7 @@ public sealed partial class SessionOrchestrator(
 
     public async Task<Result<Unit>> AbortSessionAsync(string id, CancellationToken ct = default)
     {
+        using var _ = BeginSessionScope(id);
         var sessionResult = await GetSessionAsync(id);
         if (sessionResult.IsFailure)
             return sessionResult.Error;
@@ -767,6 +779,7 @@ public sealed partial class SessionOrchestrator(
         CommandOptions options,
         CancellationToken ct = default)
     {
+        using var _ = BeginSessionScope(id);
         var sessionResult = await GetSessionAsync(id);
         if (sessionResult.IsFailure)
             return sessionResult.Error;
@@ -789,6 +802,7 @@ public sealed partial class SessionOrchestrator(
         MessageQuery? query = null,
         CancellationToken ct = default)
     {
+        using var _ = BeginSessionScope(id);
         // Validate session exists
         var session = await sessionRepository.GetByIdAsync(id);
         if (session is null)
@@ -803,6 +817,7 @@ public sealed partial class SessionOrchestrator(
         int? limit,
         CancellationToken ct = default)
     {
+        using var _scope = BeginSessionScope(sessionId);
         _ = ct;
 
         var session = await sessionRepository.GetByIdAsync(sessionId);
@@ -873,6 +888,7 @@ public sealed partial class SessionOrchestrator(
 
     public async Task<Result<Unit>> StopSessionAsync(string id, CancellationToken ct = default)
     {
+        using var _ = BeginSessionScope(id);
         var session = await sessionRepository.GetByIdAsync(id);
         if (session is null)
             return FleetError.NotFoundFor(nameof(Session), id);
@@ -895,7 +911,7 @@ public sealed partial class SessionOrchestrator(
         if (sessionActivityWriteService is null)
         {
             await sessionRepository.UpdateStatusAsync(id, "stopped", stoppedAt);
-            await eventBroadcaster.BroadcastAsync("sessions", "session_stopped",
+            await eventBroadcaster.BroadcastAsync(GetSessionsTopic(session.ViewMode), "session_stopped",
                 JsonSerializer.SerializeToElement(new SessionStoppedOutboxPayload(id, stoppedAt), ApplicationJsonContext.Default.SessionStoppedOutboxPayload),
                 session.UserId, ct);
         }
@@ -911,7 +927,8 @@ public sealed partial class SessionOrchestrator(
                             "session_stopped",
                             JsonSerializer.Serialize(new SessionStoppedOutboxPayload(id, stoppedAt), ApplicationJsonContext.Default.SessionStoppedOutboxPayload),
                             stoppedAt,
-                            session.UserId)
+                            session.UserId,
+                            session.ViewMode)
                     ]
                 },
                 ct);
@@ -922,6 +939,7 @@ public sealed partial class SessionOrchestrator(
 
     public async Task<Result<Unit>> ArchiveSessionAsync(string id, CancellationToken ct = default)
     {
+        using var _ = BeginSessionScope(id);
         var session = await sessionRepository.GetByIdAsync(id);
         if (session is null)
             return FleetError.NotFoundFor(nameof(Session), id);
@@ -933,7 +951,7 @@ public sealed partial class SessionOrchestrator(
         if (sessionActivityWriteService is null)
         {
             await sessionRepository.ArchiveAsync(id, archivedAt);
-            await eventBroadcaster.BroadcastAsync("sessions", "session_archived",
+            await eventBroadcaster.BroadcastAsync(GetSessionsTopic(session.ViewMode), "session_archived",
                 JsonSerializer.SerializeToElement(new SessionArchivedOutboxPayload(id, archivedAt), ApplicationJsonContext.Default.SessionArchivedOutboxPayload),
                 session.UserId, ct);
         }
@@ -949,7 +967,8 @@ public sealed partial class SessionOrchestrator(
                             "session_archived",
                             JsonSerializer.Serialize(new SessionArchivedOutboxPayload(id, archivedAt), ApplicationJsonContext.Default.SessionArchivedOutboxPayload),
                             archivedAt,
-                            session.UserId)
+                            session.UserId,
+                            session.ViewMode)
                     ]
                 },
                 ct);
@@ -960,6 +979,7 @@ public sealed partial class SessionOrchestrator(
 
     public async Task<Result<Unit>> UnarchiveSessionAsync(string id, CancellationToken ct = default)
     {
+        using var _ = BeginSessionScope(id);
         var session = await sessionRepository.GetByIdAsync(id);
         if (session is null)
             return FleetError.NotFoundFor(nameof(Session), id);
@@ -971,7 +991,7 @@ public sealed partial class SessionOrchestrator(
         if (sessionActivityWriteService is null)
         {
             await sessionRepository.UnarchiveAsync(id);
-            await eventBroadcaster.BroadcastAsync("sessions", "session_unarchived",
+            await eventBroadcaster.BroadcastAsync(GetSessionsTopic(session.ViewMode), "session_unarchived",
                 JsonSerializer.SerializeToElement(new SessionUnarchivedOutboxPayload(id), ApplicationJsonContext.Default.SessionUnarchivedOutboxPayload),
                 session.UserId, ct);
         }
@@ -987,7 +1007,8 @@ public sealed partial class SessionOrchestrator(
                             "session_unarchived",
                             JsonSerializer.Serialize(new SessionUnarchivedOutboxPayload(id), ApplicationJsonContext.Default.SessionUnarchivedOutboxPayload),
                             changedAt,
-                            session.UserId)
+                            session.UserId,
+                            session.ViewMode)
                     ]
                 },
                 ct);
@@ -998,6 +1019,7 @@ public sealed partial class SessionOrchestrator(
 
     public async Task<Result<Unit>> DeleteSessionAsync(string id, CancellationToken ct = default)
     {
+        using var _ = BeginSessionScope(id);
         var session = await sessionRepository.GetByIdAsync(id);
         if (session is null)
             return FleetError.NotFoundFor(nameof(Session), id);
@@ -1051,7 +1073,7 @@ public sealed partial class SessionOrchestrator(
                 await delegationRepository.DeleteByParentSessionIdAsync(id);
 
             await sessionRepository.DeleteAsync(id);
-            await eventBroadcaster.BroadcastAsync("sessions", "session_deleted",
+            await eventBroadcaster.BroadcastAsync(GetSessionsTopic(session.ViewMode), "session_deleted",
                 JsonSerializer.SerializeToElement(new SessionDeletedOutboxPayload(id), ApplicationJsonContext.Default.SessionDeletedOutboxPayload),
                 session.UserId, ct);
         }
@@ -1089,7 +1111,8 @@ public sealed partial class SessionOrchestrator(
                     "session_deleted",
                     JsonSerializer.Serialize(new SessionDeletedOutboxPayload(id), ApplicationJsonContext.Default.SessionDeletedOutboxPayload),
                     deletedAtText,
-                    session.UserId));
+                    session.UserId,
+                    session.ViewMode));
 
             await sessionActivityWriteService.WriteAsync(
                 new SessionActivityWriteRequest
@@ -1228,16 +1251,33 @@ public sealed partial class SessionOrchestrator(
         string payloadJson,
         string createdAt,
         string userId)
+        => CreateSessionLifecycleOutboxMessage(eventType, payloadJson, createdAt, userId, "v2");
+
+    private static OutboxMessage CreateSessionLifecycleOutboxMessage(
+        string eventType,
+        string payloadJson,
+        string createdAt,
+        string userId,
+        string viewMode)
     {
         return new OutboxMessage
         {
-            Topic = "sessions",
+            Topic = GetSessionsTopic(viewMode),
             Type = eventType,
             Payload = payloadJson,
             UserId = userId,
             CreatedAt = createdAt,
             AvailableAt = createdAt
         };
+    }
+
+    private static string GetSessionsTopic(string viewMode)
+        => viewMode == "v1" ? "sessions-v1" : "sessions";
+
+    private IDisposable? BeginSessionScope(string sessionId)
+    {
+        Activity.Current?.SetTag(FleetInstrumentation.SessionIdTag, sessionId);
+        return logger.BeginScope(new Dictionary<string, object> { [FleetInstrumentation.SessionIdTag] = sessionId });
     }
 }
 
@@ -1268,6 +1308,12 @@ public sealed record CreateSessionRequest
     /// and directory-path validation is bypassed. Must not be set from external API requests.
     /// </summary>
     internal bool IsInternalRequest { get; init; }
+
+    /// <summary>
+    /// Discriminates between session views: <c>"v1"</c> (workspace-grouped) or <c>"v2"</c> (project-grouped).
+    /// Defaults to <c>"v2"</c>.
+    /// </summary>
+    public string ViewMode { get; init; } = "v2";
 }
 
 /// <summary>Result of a successful <see cref="SessionOrchestrator.CreateSessionAsync"/> call.</summary>

@@ -46,6 +46,7 @@ type IsolationStrategy = "existing" | "worktree";
 interface Props {
   initialProjectId?: string | null;
   initialSource?: GitHubSessionSourcePreset | null;
+  createEndpoint?: string;
 }
 
 const UNGROUPED_PROJECT_ID = "__ungrouped__";
@@ -53,6 +54,7 @@ const UNGROUPED_PROJECT_ID = "__ungrouped__";
 const props = withDefaults(defineProps<Props>(), {
   initialProjectId: null,
   initialSource: null,
+  createEndpoint: "/api/sessions",
 });
 
 const open = defineModel<boolean>("open", { default: false });
@@ -97,7 +99,7 @@ const {
   createSession,
   isLoading: isCreating,
   error: createError,
-} = useCreateSession();
+} = useCreateSession(props.createEndpoint);
 const directoryBrowser = useDirectoryBrowser();
 
 const userProjects = computed<readonly ProjectResponse[]>(() => {
@@ -442,6 +444,8 @@ async function handleSubmit(): Promise<void> {
     const response = await createSession(effectiveDirectory.value || undefined, {
       title: title.value.trim() || undefined,
       source: sessionSource.value,
+      isolationStrategy: isolationStrategy.value,
+      branch: isolationStrategy.value === "worktree" ? effectiveBranch.value || undefined : undefined,
       harnessType: resolvedHarnessType.value || undefined,
       projectId: selectedProjectId.value !== UNGROUPED_PROJECT_ID ? selectedProjectId.value : undefined,
     });

@@ -19,6 +19,7 @@ import {
 } from "@/composables/use-session-actions";
 import { useDiffs } from "@/composables/use-diffs";
 import { apiFetch } from "@/lib/api-client";
+import { trackAction } from "@/lib/track-action";
 import type { SessionListItem } from "@/lib/api-types";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSmartLinksStore } from "@/stores/smart-links";
@@ -204,6 +205,7 @@ watch(
 
       const detail = (await detailResponse.json()) as SessionApiDetail;
       remoteSessionDetail.value = detail;
+      trackAction("session.view", nextSessionId);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         return;

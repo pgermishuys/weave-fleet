@@ -29,6 +29,11 @@ public static class FleetInstrumentation
     /// <summary>Meter for recording custom metrics.</summary>
     public static readonly Meter Meter = new(ServiceName, ServiceVersion);
 
+    // ─── Tag names ────────────────────────────────────────────────────────────
+
+    /// <summary>OTEL tag name for the session identifier.</summary>
+    public const string SessionIdTag = "session.id";
+
     // ─── Analytics metrics ────────────────────────────────────────────────────
 
     /// <summary>Total tokens consumed across all sessions.</summary>
