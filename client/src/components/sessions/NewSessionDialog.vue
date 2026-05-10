@@ -830,7 +830,7 @@ watch(
                 :open="isDirectoryPickerOpen"
                 mode="navigate"
                 align="end"
-                content-class="w-[var(--radix-popover-trigger-width)]"
+                content-class="w-[25rem]"
                 @update:open="handleDirectoryPickerOpenChange"
                 @select="handleDirectorySelected"
               >

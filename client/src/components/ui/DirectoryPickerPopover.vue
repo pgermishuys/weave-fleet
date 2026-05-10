@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ArrowUp, Check, Folder, FolderGit2, LoaderCircle, RefreshCw } from "lucide-vue-next";
+import { Check, ChevronRight, Folder, FolderGit2, GitBranch, LoaderCircle, RefreshCw } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { UseDirectoryBrowserResult } from "@/composables/use-directory-browser";
+import { cn } from "@/lib/utils";
 
 /**
  * mode:
@@ -48,12 +49,37 @@ const filteredEntries = computed(() => {
   });
 });
 
-const displayLocation = computed(() => {
-  if (props.location) {
-    return props.location;
+interface BreadcrumbSegment {
+  label: string;
+  path: string;
+}
+
+const breadcrumbs = computed<BreadcrumbSegment[]>(() => {
+  const current = props.browser.currentPath.value;
+  if (current === null) return [];
+
+  const sep = current.includes("\\") ? "\\" : "/";
+  const roots = props.browser.roots.value;
+  const root = roots.find(
+    (r) => current === r || current.startsWith(r + sep),
+  );
+
+  if (!root) return [{ label: current, path: current }];
+
+  const rootName = root.split(sep).filter(Boolean).pop() ?? root;
+  const crumbs: BreadcrumbSegment[] = [{ label: rootName, path: root }];
+
+  if (current !== root) {
+    const relative = current.slice(root.length + 1);
+    const segments = relative.split(sep);
+    let accumulated = root;
+    for (const segment of segments) {
+      accumulated = `${accumulated}${sep}${segment}`;
+      crumbs.push({ label: segment, path: accumulated });
+    }
   }
 
-  return props.browser.currentPath.value ?? "Workspace roots";
+  return crumbs;
 });
 
 function handleGoUp(): void {
@@ -71,6 +97,11 @@ function handleEntryClick(path: string): void {
   } else {
     props.browser.browse(path);
   }
+}
+
+function handleEntrySelect(path: string): void {
+  emit("select", path);
+  emit("update:open", false);
 }
 
 function selectCurrentDirectory(): void {
@@ -98,53 +129,77 @@ function handleSearchUpdate(value: string | number): void {
       :align="align"
       side="bottom"
       :collision-padding="8"
-      :avoid-collisions="false"
-      :class="[contentClass, 'p-0']"
-      :style="{ backgroundColor: 'var(--card-bg)', opacity: '1' }"
+      :avoid-collisions="true"
+      :class="[contentClass, 'p-0 border-border shadow-xl shadow-black/50 ring-1 ring-white/[0.08]']"
+      :style="{ backgroundColor: 'color-mix(in srgb, var(--card-bg) 100%, white 4%)' }"
     >
-      <div class="border-b border-border bg-card-bg p-2">
-        <div class="flex items-center justify-between gap-2">
-          <p class="min-w-0 truncate font-mono text-xs text-text">
-            {{ displayLocation }}
-          </p>
+      <!-- Breadcrumb navigation -->
+      <div
+        v-if="browser.currentPath.value !== null"
+        class="flex items-center gap-1 overflow-x-auto border-b border-border px-3 py-2 text-xs text-muted-foreground"
+      >
+        <button
+          type="button"
+          class="shrink-0 transition-colors hover:text-foreground"
+          @click="browser.browse(null)"
+        >
+          Roots
+        </button>
+        <template
+          v-for="(crumb, i) in breadcrumbs"
+          :key="crumb.path"
+        >
+          <ChevronRight class="h-3 w-3 shrink-0" />
+          <button
+            type="button"
+            :class="cn(
+              'max-w-[80px] truncate transition-colors hover:text-foreground',
+              i === breadcrumbs.length - 1 && 'font-medium text-foreground',
+            )"
+            :title="crumb.path"
+            @click="browser.browse(crumb.path)"
+          >
+            {{ crumb.label }}
+          </button>
+        </template>
+      </div>
 
-          <div class="flex items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              :disabled="browser.isLoading.value || !canGoUp"
-              @click="handleGoUp"
-            >
-              <ArrowUp class="h-4 w-4" />
-            </Button>
+      <!-- Roots header (when at root level) -->
+      <div
+        v-else
+        class="flex items-center justify-between gap-2 border-b border-border p-2"
+      >
+        <p class="min-w-0 truncate font-mono text-xs text-text">
+          Workspace roots
+        </p>
 
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              :disabled="browser.isLoading.value"
-              @click="browser.refresh"
-            >
-              <RefreshCw :class="['h-4 w-4', browser.isLoading.value ? 'animate-spin' : '']" />
-            </Button>
-          </div>
+        <div class="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            :disabled="browser.isLoading.value"
+            @click="browser.refresh"
+          >
+            <RefreshCw :class="['h-4 w-4', browser.isLoading.value ? 'animate-spin' : '']" />
+          </Button>
         </div>
+      </div>
 
+      <div class="border-b border-border px-2 py-1.5">
         <Input
-          class="mt-2"
           :model-value="browser.search.value"
-          placeholder="Search directories"
+          placeholder="Search directories..."
           @update:model-value="handleSearchUpdate"
         />
       </div>
 
-      <div class="h-72 overflow-y-auto bg-card-bg p-1">
+      <div class="h-72 overflow-y-auto p-1">
         <button
           v-for="entry in filteredEntries"
           :key="entry.path"
           type="button"
-          class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm font-mono hover:bg-white/[0.06]"
+          class="group flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm font-mono hover:bg-white/[0.06]"
           @click="handleEntryClick(entry.path)"
         >
           <FolderGit2
@@ -155,12 +210,26 @@ function handleSearchUpdate(value: string | number): void {
             v-else
             class="h-3.5 w-3.5 shrink-0"
           />
-          <span class="min-w-0 truncate">{{ entry.name }}</span>
+          <span class="min-w-0 flex-1 truncate">{{ entry.name }}</span>
+
+          <GitBranch
+            v-if="entry.isGitRepo"
+            class="h-3 w-3 shrink-0 text-muted-foreground"
+          />
 
           <Check
             v-if="mode === 'select' && selectedPath === entry.path"
             class="ml-auto h-3.5 w-3.5 shrink-0 text-primary"
           />
+
+          <button
+            v-if="mode === 'navigate'"
+            type="button"
+            class="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+            @click.stop="handleEntrySelect(entry.path)"
+          >
+            Select
+          </button>
         </button>
 
         <div
@@ -181,7 +250,7 @@ function handleSearchUpdate(value: string | number): void {
 
       <div
         v-if="mode === 'navigate' && browser.currentPath.value"
-        class="border-t border-border bg-card-bg p-2"
+        class="border-t border-border p-2"
       >
         <Button
           type="button"
