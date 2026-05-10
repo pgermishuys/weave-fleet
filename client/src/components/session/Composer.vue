@@ -604,7 +604,7 @@ function handleKeydown(event: KeyboardEvent): void {
               :src="att.previewUrl"
               :alt="att.filename ?? 'image'"
               class="attachment-chip__thumb"
-            />
+            >
           </button>
           <span class="attachment-chip__name">{{ att.filename ?? 'image.png' }}</span>
           <button
@@ -625,7 +625,7 @@ function handleKeydown(event: KeyboardEvent): void {
         multiple
         class="sr-only"
         @change="handleFileInput"
-      />
+      >
 
       <div class="composer-toolbar">
         <button
@@ -677,7 +677,7 @@ function handleKeydown(event: KeyboardEvent): void {
           alt="Image preview"
           class="lightbox-image"
           @click.stop
-        />
+        >
         <button
           type="button"
           class="lightbox-close"

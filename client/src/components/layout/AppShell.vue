@@ -88,7 +88,11 @@ function handleExpandRightPanel(): void {
         <slot />
       </CenterContent>
 
-      <Transition v-if="!isSettingsRoute" name="right-panel-swap" mode="out-in">
+      <Transition
+        v-if="!isSettingsRoute"
+        name="right-panel-swap"
+        mode="out-in"
+      >
         <CollapsedRightRail
           v-if="rightPanelCollapsed"
           key="collapsed"
@@ -96,7 +100,10 @@ function handleExpandRightPanel(): void {
           @expand="handleExpandRightPanel"
         />
 
-        <RightPanel v-else key="expanded" />
+        <RightPanel
+          v-else
+          key="expanded"
+        />
       </Transition>
     </div>
 

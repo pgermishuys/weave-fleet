@@ -35,8 +35,6 @@ const emit = defineEmits<{
   select: [path: string];
 }>();
 
-const canGoUp = computed(() => props.browser.currentPath.value !== null);
-
 const filteredEntries = computed(() => {
   const query = props.browser.search.value.trim().toLowerCase();
   if (!query) {
@@ -81,14 +79,6 @@ const breadcrumbs = computed<BreadcrumbSegment[]>(() => {
 
   return crumbs;
 });
-
-function handleGoUp(): void {
-  if (props.browser.parentPath.value) {
-    props.browser.goUp();
-  } else {
-    props.browser.browse(null);
-  }
-}
 
 function handleEntryClick(path: string): void {
   if (props.mode === "select") {

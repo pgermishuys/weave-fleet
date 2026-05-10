@@ -34,7 +34,10 @@ function selectTheme(theme: ThemeSelection): void {
         @click="selectTheme('system')"
       >
         <div class="flex h-10 items-center justify-center rounded-btn border border-border/60 bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b] to-[#f1f5f9]">
-          <Monitor :size="14" class="text-white/70" />
+          <Monitor
+            :size="14"
+            class="text-white/70"
+          />
         </div>
 
         <div class="flex items-center justify-between gap-2">

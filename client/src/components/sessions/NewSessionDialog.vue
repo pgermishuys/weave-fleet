@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, shallowRef, watch } from "vue";
-import { AlertCircle, Check, ExternalLink, Folder, FolderGit2, LoaderCircle, RefreshCw } from "lucide-vue-next";
+import { AlertCircle, Check, ExternalLink, Folder, FolderGit2, LoaderCircle } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +37,6 @@ import {
   findRepositoryForGitHubPreset,
   type GitHubSessionSourcePreset,
 } from "@/lib/github-session-source";
-import { readWorkspacePreferences } from "@/lib/workspace-preferences";
 import { cn } from "@/lib/utils";
 import { useAppShellStore } from "@/stores/app-shell";
 
@@ -85,7 +84,6 @@ const {
   repositories,
   isLoading: isRepositoriesLoading,
   error: repositoriesError,
-  refresh: refreshRepositories,
 } = useRepositories();
 const {
   projects,
@@ -170,19 +168,6 @@ const effectiveDirectory = computed(() => {
   }
 
   return directory.value.trim();
-});
-
-const directoryPickerLocation = computed(() => {
-  if (directoryBrowser.currentPath.value) {
-    return directoryBrowser.currentPath.value;
-  }
-
-  const preferredRoot = getPreferredWorkspaceRoot();
-  if (preferredRoot) {
-    return preferredRoot;
-  }
-
-  return directoryBrowser.roots.value[0] ?? "Workspace roots";
 });
 
 const sessionSource = computed<SessionSourceSelection | undefined>(() => {
@@ -404,14 +389,6 @@ function handleRepositoryBlur(): void {
   }, 120);
 }
 
-function getPreferredWorkspaceRoot(): string {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  return readWorkspacePreferences(window.localStorage).preferredRootPath;
-}
-
 function getDirectoryBrowserStartPath(): string | null {
   const selectedDirectory = directory.value.trim();
   if (selectedDirectory) {
@@ -553,62 +530,62 @@ watch(
       data-testid="new-session-dialog"
       @interact-outside="handleDialogInteractOutside"
     >
-        <DialogHeader>
-          <DialogTitle>New Session</DialogTitle>
-          <DialogDescription v-if="activeGitHubPreset">
-            Start a session from a repository with GitHub context.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogHeader>
+        <DialogTitle>New Session</DialogTitle>
+        <DialogDescription v-if="activeGitHubPreset">
+          Start a session from a repository with GitHub context.
+        </DialogDescription>
+      </DialogHeader>
 
-        <form
-          class="space-y-5"
-          @submit.prevent="handleSubmit"
+      <form
+        class="space-y-5"
+        @submit.prevent="handleSubmit"
+      >
+        <div
+          v-if="activeGitHubPreset"
+          class="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3"
         >
-          <div
-            v-if="activeGitHubPreset"
-            class="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3"
-          >
-            <div class="min-w-0 flex-1 space-y-2">
-              <a
-                :href="activeGitHubPreset.htmlUrl"
-                target="_blank"
-                rel="noreferrer noopener"
-                class="inline-flex max-w-full items-center gap-1 text-sm font-medium text-primary hover:underline"
-              >
-                <span class="truncate">{{ activeGitHubPreset.htmlUrl }}</span>
-                <ExternalLink class="h-3.5 w-3.5 shrink-0" />
-              </a>
-
-              <p class="text-sm font-medium text-foreground">
-                GitHub {{ activeGitHubPreset.sourceType === 'github-pull-request' ? 'pull request' : 'issue' }} context
-              </p>
-              <p class="text-sm text-muted-foreground">
-                {{ activeGitHubPreset.repoFullName }} #{{ activeGitHubPreset.number }}
-              </p>
-              <p class="text-sm text-muted-foreground">
-                {{ activeGitHubPreset.title }}
-              </p>
-
-              <p
-                v-if="gitHubContextPreview"
-                class="rounded-md border border-border/60 bg-background/70 px-3 py-2 text-sm text-muted-foreground"
-              >
-                {{ gitHubContextPreview }}
-              </p>
-            </div>
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              :disabled="isCreating"
-              @click="clearGitHubPreset"
+          <div class="min-w-0 flex-1 space-y-2">
+            <a
+              :href="activeGitHubPreset.htmlUrl"
+              target="_blank"
+              rel="noreferrer noopener"
+              class="inline-flex max-w-full items-center gap-1 text-sm font-medium text-primary hover:underline"
             >
-              Clear
-            </Button>
+              <span class="truncate">{{ activeGitHubPreset.htmlUrl }}</span>
+              <ExternalLink class="h-3.5 w-3.5 shrink-0" />
+            </a>
+
+            <p class="text-sm font-medium text-foreground">
+              GitHub {{ activeGitHubPreset.sourceType === 'github-pull-request' ? 'pull request' : 'issue' }} context
+            </p>
+            <p class="text-sm text-muted-foreground">
+              {{ activeGitHubPreset.repoFullName }} #{{ activeGitHubPreset.number }}
+            </p>
+            <p class="text-sm text-muted-foreground">
+              {{ activeGitHubPreset.title }}
+            </p>
+
+            <p
+              v-if="gitHubContextPreview"
+              class="rounded-md border border-border/60 bg-background/70 px-3 py-2 text-sm text-muted-foreground"
+            >
+              {{ gitHubContextPreview }}
+            </p>
           </div>
 
-          <div class="space-y-3">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            :disabled="isCreating"
+            @click="clearGitHubPreset"
+          >
+            Clear
+          </Button>
+        </div>
+
+        <div class="space-y-3">
           <span class="text-sm font-medium text-foreground">
             Source
           </span>
@@ -779,18 +756,18 @@ watch(
             </p>
           </div>
 
-        <div class="space-y-2">
-          <label
-            for="session-title"
-            class="text-sm font-medium text-foreground"
-          >Title <span class="font-normal text-muted-foreground">(optional)</span></label>
-          <Input
-            id="session-title"
-            v-model="title"
-            placeholder="What are you working on?"
-            :disabled="isCreating"
-          />
-        </div>
+          <div class="space-y-2">
+            <label
+              for="session-title"
+              class="text-sm font-medium text-foreground"
+            >Title <span class="font-normal text-muted-foreground">(optional)</span></label>
+            <Input
+              id="session-title"
+              v-model="title"
+              placeholder="What are you working on?"
+              :disabled="isCreating"
+            />
+          </div>
 
           <div
             v-if="isolationStrategy === 'worktree'"
@@ -813,7 +790,7 @@ watch(
             <p class="text-xs text-muted-foreground opacity-50">
               Auto-generated from title. Edit to override.
             </p>
-           </div>
+          </div>
         </div>
 
         <div
@@ -827,36 +804,36 @@ watch(
             >Directory</label>
 
             <DirectoryPickerPopover
-                :browser="directoryBrowser"
-                :open="isDirectoryPickerOpen"
-                mode="navigate"
-                align="end"
-                content-class="w-[25rem]"
-                @update:open="handleDirectoryPickerOpenChange"
-                @select="handleDirectorySelected"
-              >
-                <template #trigger>
-                  <div class="flex gap-2">
-                    <Input
-                      id="new-session-directory"
-                      v-model="directory"
-                      placeholder="/path/to/project"
-                      :disabled="isCreating"
-                      class="flex-1"
-                    />
+              :browser="directoryBrowser"
+              :open="isDirectoryPickerOpen"
+              mode="navigate"
+              align="end"
+              content-class="w-[25rem]"
+              @update:open="handleDirectoryPickerOpenChange"
+              @select="handleDirectorySelected"
+            >
+              <template #trigger>
+                <div class="flex gap-2">
+                  <Input
+                    id="new-session-directory"
+                    v-model="directory"
+                    placeholder="/path/to/project"
+                    :disabled="isCreating"
+                    class="flex-1"
+                  />
 
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      class="shrink-0"
-                      :disabled="isCreating"
-                    >
-                      <Folder class="h-4 w-4" />
-                    </Button>
-                  </div>
-                </template>
-              </DirectoryPickerPopover>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    class="shrink-0"
+                    :disabled="isCreating"
+                  >
+                    <Folder class="h-4 w-4" />
+                  </Button>
+                </div>
+              </template>
+            </DirectoryPickerPopover>
           </div>
 
           <div class="space-y-2">
