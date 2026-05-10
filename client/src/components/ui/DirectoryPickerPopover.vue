@@ -17,12 +17,16 @@ interface Props {
   mode?: "select" | "navigate";
   selectedPath?: string;
   location?: string;
+  align?: "start" | "center" | "end";
+  contentClass?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   mode: "select",
   selectedPath: "",
   location: "",
+  align: "end",
+  contentClass: "w-[32rem]",
 });
 
 const emit = defineEmits<{
@@ -91,11 +95,11 @@ function handleSearchUpdate(value: string | number): void {
     </PopoverTrigger>
 
     <PopoverContent
-      align="end"
+      :align="align"
       side="bottom"
       :collision-padding="8"
       :avoid-collisions="false"
-      class="w-[32rem] p-0"
+      :class="[contentClass, 'p-0']"
       :style="{ backgroundColor: 'var(--card-bg)', opacity: '1' }"
     >
       <div class="border-b border-border bg-card-bg p-2">
@@ -140,7 +144,7 @@ function handleSearchUpdate(value: string | number): void {
           v-for="entry in filteredEntries"
           :key="entry.path"
           type="button"
-          class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-white/[0.06]"
+          class="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm font-mono hover:bg-white/[0.06]"
           @click="handleEntryClick(entry.path)"
         >
           <FolderGit2

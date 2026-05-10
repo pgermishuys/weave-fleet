@@ -549,7 +549,7 @@ watch(
     @update:open="handleOpenChange"
   >
     <DialogContent
-      class="sm:max-w-2xl top-[5%] translate-y-0"
+      class="sm:max-w-md top-[5%] translate-y-0"
       data-testid="new-session-dialog"
       @interact-outside="handleDialogInteractOutside"
     >
@@ -688,7 +688,7 @@ watch(
 
               <div
                 v-if="isRepositoryListOpen && !isRepositoriesLoading"
-                class="absolute z-50 mt-2 max-h-64 w-full overflow-auto rounded-md border border-border bg-popover p-1 shadow-md"
+                class="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md bg-popover shadow-md"
               >
                 <button
                   v-for="(repository, index) in filteredRepositories"
@@ -703,8 +703,8 @@ watch(
                   @mouseenter="highlightedRepoIndex = index"
                 >
                   <span class="min-w-0 flex-1">
-                    <span class="block truncate font-medium">{{ repository.name }}</span>
-                    <span class="block truncate text-xs text-muted-foreground">{{ repository.path }}</span>
+                    <span class="block truncate font-medium font-mono text-xs">{{ repository.name }}</span>
+                    <span class="block truncate text-[10px] text-muted-foreground">{{ repository.path }}</span>
                   </span>
 
                   <Check
@@ -825,35 +825,37 @@ watch(
               class="text-sm font-medium text-foreground"
             >Directory</label>
 
-            <div class="flex gap-2">
-              <Input
-                id="new-session-directory"
-                v-model="directory"
-                placeholder="/path/to/project"
-                :disabled="isCreating"
-                class="flex-1"
-              />
-
-              <DirectoryPickerPopover
+            <DirectoryPickerPopover
                 :browser="directoryBrowser"
                 :open="isDirectoryPickerOpen"
                 mode="navigate"
+                align="end"
+                content-class="w-[var(--radix-popover-trigger-width)]"
                 @update:open="handleDirectoryPickerOpenChange"
                 @select="handleDirectorySelected"
               >
                 <template #trigger>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    class="shrink-0"
-                    :disabled="isCreating"
-                  >
-                    <Folder class="h-4 w-4" />
-                  </Button>
+                  <div class="flex gap-2">
+                    <Input
+                      id="new-session-directory"
+                      v-model="directory"
+                      placeholder="/path/to/project"
+                      :disabled="isCreating"
+                      class="flex-1"
+                    />
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      class="shrink-0"
+                      :disabled="isCreating"
+                    >
+                      <Folder class="h-4 w-4" />
+                    </Button>
+                  </div>
                 </template>
               </DirectoryPickerPopover>
-            </div>
           </div>
 
           <div class="space-y-2">
