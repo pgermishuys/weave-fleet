@@ -152,6 +152,10 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(InstallSkillRequest))]
 // Open Directory
 [JsonSerializable(typeof(OpenDirectoryRequest))]
+// Sessions V1
+[JsonSerializable(typeof(CreateSessionV1ApiRequest))]
+// Telemetry
+[JsonSerializable(typeof(UiActionRequest))]
 // Credentials
 [JsonSerializable(typeof(CredentialResponse))]
 [JsonSerializable(typeof(StoreCredentialRequest))]

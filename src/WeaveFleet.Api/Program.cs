@@ -104,6 +104,7 @@ if (string.Equals(harnessMode, "test", StringComparison.OrdinalIgnoreCase))
     builder.Services.AddSingleton(testHarnessRuntime);
 }
 builder.AddFleetTelemetry();
+builder.Services.AddSingleton<WeaveFleet.Application.Services.ToolDetector>();
 #pragma warning restore IL2026
 builder.Services.AddHealthChecks();
 

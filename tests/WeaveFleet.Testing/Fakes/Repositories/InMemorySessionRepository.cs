@@ -95,6 +95,7 @@ public sealed class InMemorySessionRepository : ISessionRepository
 
     public Task<IReadOnlyList<Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses, string viewMode)
     {
+        ListAsyncCalls.Add((limit, offset, statuses, projectId, retentionStatuses));
         var query = _store.Values.AsEnumerable().Where(s => s.ViewMode == viewMode);
         if (statuses is { Count: > 0 })
             query = query.Where(s => statuses.Contains(s.Status));
