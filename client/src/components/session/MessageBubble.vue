@@ -143,7 +143,7 @@ const displayModelId = computed(() => {
             :src="img.url"
             :alt="img.filename"
             class="msg-image-thumb__img"
-          />
+          >
         </button>
       </div>
 
@@ -158,7 +158,7 @@ const displayModelId = computed(() => {
             alt="Image preview"
             class="lightbox-image"
             @click.stop
-          />
+          >
           <button
             type="button"
             class="lightbox-close"

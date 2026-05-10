@@ -712,7 +712,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
                   class="delegation-link__status-icon"
                   aria-hidden="true"
                 />
-                <span class="delegation-link-status" data-testid="delegation-link-status">
+                <span
+                  class="delegation-link-status"
+                  data-testid="delegation-link-status"
+                >
                   {{ delegationLink.status }}
                 </span>
               </span>

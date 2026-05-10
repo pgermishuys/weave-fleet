@@ -1,42 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Check, Monitor, Moon, Sun } from "lucide-vue-next";
-import { useThemeStore, type ThemeMode } from "@/stores/theme";
-
-interface ThemeOption {
-  value: ThemeMode;
-  label: string;
-  description: string;
-  icon: typeof Sun;
-}
+import { Check, Monitor } from "lucide-vue-next";
+import { useThemeStore, themes, type ThemeSelection } from "@/stores/theme";
 
 const themeStore = useThemeStore();
 
-const themeOptions: readonly ThemeOption[] = [
-  {
-    value: "light",
-    label: "Light",
-    description: "Bright surfaces for daytime work.",
-    icon: Sun,
-  },
-  {
-    value: "dark",
-    label: "Dark",
-    description: "Low-glare colors for focused sessions.",
-    icon: Moon,
-  },
-  {
-    value: "system",
-    label: "System",
-    description: "Match your operating system preference.",
-    icon: Monitor,
-  },
-] as const;
-
 const activeTheme = computed(() => themeStore.currentTheme);
-const resolvedTheme = computed(() => themeStore.resolvedTheme);
 
-function selectTheme(theme: ThemeMode): void {
+function selectTheme(theme: ThemeSelection): void {
   themeStore.setTheme(theme);
 }
 </script>
@@ -52,46 +23,76 @@ function selectTheme(theme: ThemeMode): void {
       </p>
     </div>
 
-    <div class="mt-5 grid gap-3 md:grid-cols-3">
+    <div class="mt-5 grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+      <!-- System option -->
       <button
-        v-for="option in themeOptions"
-        :key="option.value"
         type="button"
-        class="flex flex-col gap-3 rounded-card border p-4 text-left transition-colors"
-        :class="activeTheme === option.value
+        class="flex flex-col gap-3 rounded-card border p-3 text-left transition-colors"
+        :class="activeTheme === 'system'
           ? 'border-accent bg-accent-dim'
           : 'border-border hover:border-accent/50'"
-        @click="selectTheme(option.value)"
+        @click="selectTheme('system')"
       >
-        <div class="flex items-start justify-between gap-3">
-          <div class="rounded-btn border border-border bg-main-bg p-2 text-text">
-            <component
-              :is="option.icon"
-              :size="16"
-              aria-hidden="true"
-            />
-          </div>
-          <Check
-            v-if="activeTheme === option.value"
-            :size="16"
-            class="text-accent"
-            aria-hidden="true"
+        <div class="flex h-10 items-center justify-center rounded-btn border border-border/60 bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b] to-[#f1f5f9]">
+          <Monitor
+            :size="14"
+            class="text-white/70"
           />
         </div>
 
-        <div class="space-y-1">
-          <p class="text-sm font-semibold text-text">
-            {{ option.label }}
-          </p>
-          <p class="text-xs text-muted">
-            {{ option.description }}
-          </p>
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-medium text-text">System</span>
+          <Check
+            v-if="activeTheme === 'system'"
+            :size="14"
+            class="text-accent"
+          />
+        </div>
+      </button>
+
+      <!-- Theme options -->
+      <button
+        v-for="theme in themes"
+        :key="theme.id"
+        type="button"
+        class="flex flex-col gap-3 rounded-card border p-3 text-left transition-colors"
+        :class="activeTheme === theme.id
+          ? 'border-accent bg-accent-dim'
+          : 'border-border hover:border-accent/50'"
+        @click="selectTheme(theme.id)"
+      >
+        <!-- Mini preview swatch -->
+        <div
+          class="flex h-10 items-end gap-0.5 overflow-hidden rounded-btn border border-border/60 p-1.5"
+          :style="{ backgroundColor: theme.swatches[0] }"
+        >
+          <div
+            class="h-full flex-1 rounded-sm"
+            :style="{ backgroundColor: theme.swatches[1] }"
+          />
+          <div
+            class="h-3/4 w-2 rounded-sm"
+            :style="{ backgroundColor: theme.swatches[2] }"
+          />
+          <div
+            class="h-1/2 w-2 rounded-sm"
+            :style="{ backgroundColor: theme.swatches[3], opacity: 0.6 }"
+          />
+        </div>
+
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-medium text-text">{{ theme.label }}</span>
+          <Check
+            v-if="activeTheme === theme.id"
+            :size="14"
+            class="text-accent"
+          />
         </div>
       </button>
     </div>
 
     <p class="mt-4 text-xs text-muted">
-      Active palette: <span class="font-medium text-text">{{ resolvedTheme }}</span>
+      Active: <span class="font-medium text-text">{{ themeStore.resolvedTheme.label }}</span>
     </p>
   </section>
 </template>

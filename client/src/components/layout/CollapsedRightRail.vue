@@ -39,13 +39,28 @@ function handleExpand(): void {
       @click="handleExpand"
     >
       <span class="collapsed-rail__top">
-        <ChevronLeft class="collapsed-rail__chevron" :size="16" aria-hidden="true" />
+        <ChevronLeft
+          class="collapsed-rail__chevron"
+          :size="16"
+          aria-hidden="true"
+        />
       </span>
 
       <span class="collapsed-rail__body">
-        <span class="collapsed-rail__progress" aria-hidden="true">
-          <svg viewBox="0 0 32 32" class="collapsed-rail__progress-chart">
-            <circle class="collapsed-rail__progress-track" cx="16" cy="16" r="12" />
+        <span
+          class="collapsed-rail__progress"
+          aria-hidden="true"
+        >
+          <svg
+            viewBox="0 0 32 32"
+            class="collapsed-rail__progress-chart"
+          >
+            <circle
+              class="collapsed-rail__progress-track"
+              cx="16"
+              cy="16"
+              r="12"
+            />
             <circle
               class="collapsed-rail__progress-value"
               cx="16"
@@ -58,7 +73,10 @@ function handleExpand(): void {
         </span>
 
         <span class="collapsed-rail__label">
-          <ListTodo :size="14" aria-hidden="true" />
+          <ListTodo
+            :size="14"
+            aria-hidden="true"
+          />
           <span>{{ pendingCount }}</span>
         </span>
       </span>

@@ -54,7 +54,10 @@ function handleCollapse(): void {
       aria-label="Collapse right panel"
       @click="handleCollapse"
     >
-      <PanelRightClose :size="14" aria-hidden="true" />
+      <PanelRightClose
+        :size="14"
+        aria-hidden="true"
+      />
     </button>
   </div>
 </template>

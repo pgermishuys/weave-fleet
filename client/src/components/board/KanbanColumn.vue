@@ -380,22 +380,22 @@ function showDropSlot(index: number): boolean {
           class="kanban-col__composer-form"
           @submit.prevent="submitCreateCard"
         >
-            <input
-              v-model="cardDraft"
-              class="kanban-col__composer-input"
-              type="text"
-              maxlength="240"
-              placeholder="Add a card title"
-              :disabled="isMutating"
-              @keydown.esc.prevent="cancelCreateCard"
-            >
+          <input
+            v-model="cardDraft"
+            class="kanban-col__composer-input"
+            type="text"
+            maxlength="240"
+            placeholder="Add a card title"
+            :disabled="isMutating"
+            @keydown.esc.prevent="cancelCreateCard"
+          >
           <div class="kanban-col__composer-actions">
-              <button
-                type="submit"
-                class="kanban-col__composer-button kanban-col__composer-button--primary"
-                :disabled="isMutating || cardDraft.trim().length === 0"
-              >
-                Add card
+            <button
+              type="submit"
+              class="kanban-col__composer-button kanban-col__composer-button--primary"
+              :disabled="isMutating || cardDraft.trim().length === 0"
+            >
+              Add card
             </button>
             <button
               type="button"

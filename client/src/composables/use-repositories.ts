@@ -34,7 +34,7 @@ function broadcastReposUpdate(data: RepositoryScanResponse): void {
 
 export function useRepositories(): UseRepositoriesResult {
   const repositories = ref<ScannedRepository[]>([]);
-  const isLoading = shallowRef(true);
+  const isLoading = shallowRef(false);
   const error = shallowRef<string | null>(null);
   const scannedAt = shallowRef<number | null>(null);
 

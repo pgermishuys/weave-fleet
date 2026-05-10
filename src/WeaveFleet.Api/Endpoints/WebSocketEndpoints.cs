@@ -84,12 +84,17 @@ public static class WebSocketEndpoints
 
             if (result.MessageType == WebSocketMessageType.Close)
             {
-                await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+                if (webSocket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+                {
+                    await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+                }
                 break;
             }
 
             if (result.MessageType != WebSocketMessageType.Text)
+            {
                 continue;
+            }
 
             var messageText = Encoding.UTF8.GetString(buffer, 0, result.Count);
 

@@ -249,7 +249,7 @@ function handleGroupByChange(value: BoardGroupBy): void {
   font-size: 10px;
   font-weight: 500;
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: 6px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;

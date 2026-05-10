@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, shallowRef, watch } from "vue";
-import { AlertCircle, ArrowUp, Check, ExternalLink, Folder, FolderGit2, LoaderCircle, RefreshCw } from "lucide-vue-next";
+import { AlertCircle, Check, ExternalLink, Folder, FolderGit2, LoaderCircle } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import DirectoryPickerPopover from "@/components/ui/DirectoryPickerPopover.vue";
 import {
   Select,
   SelectContent,
@@ -37,12 +37,11 @@ import {
   findRepositoryForGitHubPreset,
   type GitHubSessionSourcePreset,
 } from "@/lib/github-session-source";
-import { readWorkspacePreferences } from "@/lib/workspace-preferences";
 import { cn } from "@/lib/utils";
 import { useAppShellStore } from "@/stores/app-shell";
 
 type SessionSourceKind = "repository" | "directory";
-type IsolationStrategy = "existing" | "worktree" | "clone";
+type IsolationStrategy = "existing" | "worktree";
 
 interface Props {
   initialProjectId?: string | null;
@@ -69,6 +68,7 @@ const sourceKind = shallowRef<SessionSourceKind>("repository");
 const repositoryQuery = shallowRef("");
 const selectedRepositoryPath = shallowRef<string | null>(null);
 const isRepositoryListOpen = shallowRef(false);
+const highlightedRepoIndex = shallowRef(0);
 const isDirectoryPickerOpen = shallowRef(false);
 const directory = shallowRef("");
 const title = shallowRef("");
@@ -84,7 +84,6 @@ const {
   repositories,
   isLoading: isRepositoriesLoading,
   error: repositoriesError,
-  refresh: refreshRepositories,
 } = useRepositories();
 const {
   projects,
@@ -99,20 +98,7 @@ const {
   isLoading: isCreating,
   error: createError,
 } = useCreateSession();
-const {
-  currentPath: directoryBrowserPath,
-  entries: directoryEntries,
-  isLoading: isDirectoryBrowserLoading,
-  error: directoryBrowserError,
-  roots: directoryRoots,
-  parentPath: directoryParentPath,
-  search: directorySearch,
-  browse: browseDirectory,
-  goUp: goUpDirectory,
-  refresh: refreshDirectoryBrowser,
-  setSearch: setDirectorySearch,
-  hasActivated: hasActivatedDirectoryBrowser,
-} = useDirectoryBrowser();
+const directoryBrowser = useDirectoryBrowser();
 
 const userProjects = computed<readonly ProjectResponse[]>(() => {
   return projects.value.filter((project) => project.type !== "scratch");
@@ -182,31 +168,6 @@ const effectiveDirectory = computed(() => {
   }
 
   return directory.value.trim();
-});
-
-const directoryPickerLocation = computed(() => {
-  if (directoryBrowserPath.value) {
-    return directoryBrowserPath.value;
-  }
-
-  const preferredRoot = getPreferredWorkspaceRoot();
-  if (preferredRoot) {
-    return preferredRoot;
-  }
-
-  return directoryRoots.value[0] ?? "Workspace roots";
-});
-
-const filteredDirectoryEntries = computed(() => {
-  const query = directorySearch.value.trim().toLowerCase();
-  if (!query) {
-    return directoryEntries.value;
-  }
-
-  return directoryEntries.value.filter((entry) => {
-    const searchableText = `${entry.name} ${entry.path}`.toLowerCase();
-    return searchableText.includes(query);
-  });
 });
 
 const sessionSource = computed<SessionSourceSelection | undefined>(() => {
@@ -286,7 +247,7 @@ const dialogError = computed(() => {
     ?? repositoriesError.value
     ?? projectsError.value
     ?? harnessesError.value
-    ?? directoryBrowserError.value
+    ?? directoryBrowser.error.value
     ?? null;
 });
 
@@ -364,6 +325,53 @@ function handleOpenChange(value: boolean): void {
   open.value = value;
 }
 
+function handleSourceToggle(kind: SessionSourceKind): void {
+  if (kind === "directory" && (isCloudMode.value || activeGitHubPreset.value)) {
+    return;
+  }
+
+  sourceKind.value = kind;
+  nextTick(() => {
+    document.querySelector<HTMLElement>('[role="radiogroup"] [tabindex="0"]')?.focus();
+  });
+}
+
+function handleRepositoryKeydown(event: KeyboardEvent): void {
+  if (!isRepositoryListOpen.value || filteredRepositories.value.length === 0) {
+    return;
+  }
+
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    highlightedRepoIndex.value = Math.min(highlightedRepoIndex.value + 1, filteredRepositories.value.length - 1);
+    scrollHighlightedIntoView();
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    highlightedRepoIndex.value = Math.max(highlightedRepoIndex.value - 1, 0);
+    scrollHighlightedIntoView();
+  } else if (event.key === "Tab") {
+    // Close list and let default tab behavior proceed
+    const repo = filteredRepositories.value[highlightedRepoIndex.value];
+    if (repo) {
+      selectRepository(repo);
+    }
+    isRepositoryListOpen.value = false;
+  } else if (event.key === "Enter") {
+    event.preventDefault();
+    const repo = filteredRepositories.value[highlightedRepoIndex.value];
+    if (repo) {
+      selectRepository(repo);
+    }
+  }
+}
+
+function scrollHighlightedIntoView(): void {
+  nextTick(() => {
+    const el = document.querySelector('[data-repo-highlighted="true"]');
+    el?.scrollIntoView({ block: "nearest" });
+  });
+}
+
 function handleRepositoryBlur(): void {
   window.setTimeout(() => {
     isRepositoryListOpen.value = false;
@@ -381,42 +389,39 @@ function handleRepositoryBlur(): void {
   }, 120);
 }
 
-function getPreferredWorkspaceRoot(): string {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  return readWorkspacePreferences(window.localStorage).preferredRootPath;
-}
-
 function getDirectoryBrowserStartPath(): string | null {
   const selectedDirectory = directory.value.trim();
   if (selectedDirectory) {
     return selectedDirectory;
   }
 
-  return getPreferredWorkspaceRoot() || null;
+  return null;
 }
 
 function syncDirectoryBrowser(): void {
   const nextPath = getDirectoryBrowserStartPath();
-  if (!hasActivatedDirectoryBrowser.value || directoryBrowserPath.value !== nextPath) {
-    browseDirectory(nextPath);
+  if (!directoryBrowser.hasActivated.value || directoryBrowser.currentPath.value !== nextPath) {
+    directoryBrowser.browse(nextPath);
   }
 }
 
-function openDirectoryPicker(): void {
-  syncDirectoryBrowser();
-  isDirectoryPickerOpen.value = true;
+function handleIsolationToggle(strategy: IsolationStrategy): void {
+  isolationStrategy.value = strategy;
+  nextTick(() => {
+    document.querySelector<HTMLElement>('[aria-label="Isolation Strategy"] [tabindex="0"]')?.focus();
+  });
+}
+
+function handleDirectoryPickerOpenChange(value: boolean): void {
+  if (value) {
+    syncDirectoryBrowser();
+  }
+  isDirectoryPickerOpen.value = value;
 }
 
 function handleDirectorySelected(path: string): void {
   directory.value = path;
   isDirectoryPickerOpen.value = false;
-}
-
-function handleDirectorySearchUpdate(value: string | number): void {
-  setDirectorySearch(String(value));
 }
 
 function handleDialogInteractOutside(event: Event): void {
@@ -453,9 +458,8 @@ watch(open, async (isOpen) => {
     submitAttempted.value = false;
     selectedProjectId.value = getInitialProjectSelection();
     applyInitialSource();
-    void refreshRepositories();
     await nextTick();
-    document.getElementById("session-title")?.focus();
+    document.querySelector<HTMLButtonElement>('[data-testid="new-session-dialog"] fieldset button')?.focus();
     return;
   }
 
@@ -476,8 +480,6 @@ watch(
         return;
       }
     }
-
-    selectRepository(nextRepositories[0]);
   },
   { immediate: true },
 );
@@ -503,6 +505,7 @@ watch(repositoryQuery, (value) => {
   }
 
   selectedRepositoryPath.value = null;
+  highlightedRepoIndex.value = 0;
 });
 
 watch(
@@ -523,106 +526,115 @@ watch(
     @update:open="handleOpenChange"
   >
     <DialogContent
-      class="sm:max-w-2xl"
+      class="sm:max-w-md top-[5%] translate-y-0"
       data-testid="new-session-dialog"
       @interact-outside="handleDialogInteractOutside"
     >
-        <DialogHeader>
-          <DialogTitle>New Session</DialogTitle>
-          <DialogDescription v-if="activeGitHubPreset">
-            Start a session from a repository with GitHub context.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogHeader>
+        <DialogTitle>New Session</DialogTitle>
+        <DialogDescription v-if="activeGitHubPreset">
+          Start a session from a repository with GitHub context.
+        </DialogDescription>
+      </DialogHeader>
 
-        <form
-          class="space-y-5"
-          @submit.prevent="handleSubmit"
+      <form
+        class="space-y-5"
+        @submit.prevent="handleSubmit"
+      >
+        <div
+          v-if="activeGitHubPreset"
+          class="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3"
         >
-          <div
-            v-if="activeGitHubPreset"
-            class="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3"
-          >
-            <div class="min-w-0 flex-1 space-y-2">
-              <a
-                :href="activeGitHubPreset.htmlUrl"
-                target="_blank"
-                rel="noreferrer noopener"
-                class="inline-flex max-w-full items-center gap-1 text-sm font-medium text-primary hover:underline"
-              >
-                <span class="truncate">{{ activeGitHubPreset.htmlUrl }}</span>
-                <ExternalLink class="h-3.5 w-3.5 shrink-0" />
-              </a>
-
-              <p class="text-sm font-medium text-foreground">
-                GitHub {{ activeGitHubPreset.sourceType === 'github-pull-request' ? 'pull request' : 'issue' }} context
-              </p>
-              <p class="text-sm text-muted-foreground">
-                {{ activeGitHubPreset.repoFullName }} #{{ activeGitHubPreset.number }}
-              </p>
-              <p class="text-sm text-muted-foreground">
-                {{ activeGitHubPreset.title }}
-              </p>
-
-              <p
-                v-if="gitHubContextPreview"
-                class="rounded-md border border-border/60 bg-background/70 px-3 py-2 text-sm text-muted-foreground"
-              >
-                {{ gitHubContextPreview }}
-              </p>
-            </div>
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              :disabled="isCreating"
-              @click="clearGitHubPreset"
+          <div class="min-w-0 flex-1 space-y-2">
+            <a
+              :href="activeGitHubPreset.htmlUrl"
+              target="_blank"
+              rel="noreferrer noopener"
+              class="inline-flex max-w-full items-center gap-1 text-sm font-medium text-primary hover:underline"
             >
-              Clear
-            </Button>
+              <span class="truncate">{{ activeGitHubPreset.htmlUrl }}</span>
+              <ExternalLink class="h-3.5 w-3.5 shrink-0" />
+            </a>
+
+            <p class="text-sm font-medium text-foreground">
+              GitHub {{ activeGitHubPreset.sourceType === 'github-pull-request' ? 'pull request' : 'issue' }} context
+            </p>
+            <p class="text-sm text-muted-foreground">
+              {{ activeGitHubPreset.repoFullName }} #{{ activeGitHubPreset.number }}
+            </p>
+            <p class="text-sm text-muted-foreground">
+              {{ activeGitHubPreset.title }}
+            </p>
+
+            <p
+              v-if="gitHubContextPreview"
+              class="rounded-md border border-border/60 bg-background/70 px-3 py-2 text-sm text-muted-foreground"
+            >
+              {{ gitHubContextPreview }}
+            </p>
           </div>
 
-          <fieldset
-            class="space-y-3"
-            aria-label="Source"
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            :disabled="isCreating"
+            @click="clearGitHubPreset"
           >
-          <legend class="text-sm font-medium text-foreground">
-            Source
-          </legend>
+            Clear
+          </Button>
+        </div>
 
-          <div class="inline-flex rounded-lg border border-border bg-muted/20 p-1">
+        <div class="space-y-3">
+          <span class="text-sm font-medium text-foreground">
+            Source
+          </span>
+
+          <div
+            class="flex gap-3"
+            role="radiogroup"
+            aria-label="Source"
+            @keydown.left.prevent="handleSourceToggle('repository')"
+            @keydown.right.prevent="handleSourceToggle('directory')"
+          >
             <button
               type="button"
+              role="radio"
+              :aria-checked="sourceKind === 'repository'"
+              :tabindex="sourceKind === 'repository' ? 0 : -1"
               :class="cn(
-                'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors',
+                'inline-flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2 text-xs font-medium transition-colors',
                 sourceKind === 'repository'
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border text-muted-foreground hover:text-foreground',
               )"
               @click="sourceKind = 'repository'"
             >
-              <FolderGit2 class="h-4 w-4" />
+              <FolderGit2 class="h-3.5 w-3.5" />
               Repository
             </button>
 
             <button
               v-if="!isCloudMode"
               type="button"
+              role="radio"
+              :aria-checked="sourceKind === 'directory'"
+              :tabindex="sourceKind === 'directory' ? 0 : -1"
               :disabled="Boolean(activeGitHubPreset)"
               :class="cn(
-                'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors',
+                'inline-flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2 text-xs font-medium transition-colors',
                 sourceKind === 'directory'
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border text-muted-foreground hover:text-foreground',
                 activeGitHubPreset ? 'cursor-not-allowed opacity-60' : '',
               )"
               @click="sourceKind = 'directory'"
             >
-              <Folder class="h-4 w-4" />
+              <Folder class="h-3.5 w-3.5" />
               Directory
             </button>
           </div>
-        </fieldset>
+        </div>
 
         <div
           v-if="sourceKind === 'repository'"
@@ -641,8 +653,9 @@ watch(
                 autocomplete="off"
                 placeholder="Type to filter repositories..."
                 :disabled="isCreating || isRepositoriesLoading"
-                @focus="isRepositoryListOpen = true"
+                @focus="isRepositoryListOpen = true; highlightedRepoIndex = 0"
                 @blur="handleRepositoryBlur"
+                @keydown="handleRepositoryKeydown"
               />
 
               <LoaderCircle
@@ -652,18 +665,24 @@ watch(
 
               <div
                 v-if="isRepositoryListOpen && !isRepositoriesLoading"
-                class="absolute z-50 mt-2 max-h-64 w-full overflow-auto rounded-md border border-border bg-popover p-1 shadow-md"
+                class="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md border border-border shadow-xl shadow-black/50 ring-1 ring-white/[0.08]"
+                :style="{ backgroundColor: 'color-mix(in srgb, var(--card-bg) 100%, white 4%)' }"
               >
                 <button
-                  v-for="repository in filteredRepositories"
+                  v-for="(repository, index) in filteredRepositories"
                   :key="repository.path"
                   type="button"
-                  class="flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                  :data-repo-highlighted="index === highlightedRepoIndex"
+                  :class="cn(
+                    'flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm hover:bg-white/[0.06]',
+                    index === highlightedRepoIndex ? 'bg-white/[0.10]' : '',
+                  )"
                   @mousedown.prevent="selectRepository(repository)"
+                  @mouseenter="highlightedRepoIndex = index"
                 >
                   <span class="min-w-0 flex-1">
-                    <span class="block truncate font-medium">{{ repository.name }}</span>
-                    <span class="block truncate text-xs text-muted-foreground">{{ repository.path }}</span>
+                    <span class="block truncate font-medium font-mono text-xs">{{ repository.name }}</span>
+                    <span class="block truncate text-[10px] text-muted-foreground">{{ repository.path }}</span>
                   </span>
 
                   <Check
@@ -683,34 +702,71 @@ watch(
           </div>
 
           <div class="space-y-2">
-            <label
-              for="new-session-isolation"
-              class="text-sm font-medium text-foreground"
-            >Isolation Strategy</label>
+            <span class="text-sm font-medium text-foreground">Isolation Strategy</span>
 
-            <Select
-              v-model="isolationStrategy"
-              :disabled="isCreating"
+            <div
+              class="flex gap-3"
+              role="radiogroup"
+              aria-label="Isolation Strategy"
+              @keydown.left.prevent="handleIsolationToggle('worktree')"
+              @keydown.right.prevent="handleIsolationToggle('existing')"
             >
-              <SelectTrigger
-                id="new-session-isolation"
-                class="w-full"
+              <button
+                type="button"
+                role="radio"
+                :aria-checked="isolationStrategy === 'worktree'"
+                :tabindex="isolationStrategy === 'worktree' ? 0 : -1"
+                :disabled="isCreating"
+                :class="cn(
+                  'inline-flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2 text-xs font-medium transition-colors',
+                  isolationStrategy === 'worktree'
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-muted-foreground hover:text-foreground',
+                )"
+                @click="isolationStrategy = 'worktree'"
               >
-                <SelectValue placeholder="Select a strategy" />
-              </SelectTrigger>
+                <FolderGit2 class="h-3.5 w-3.5" />
+                Worktree
+              </button>
 
-              <SelectContent>
-                <SelectItem value="worktree">
-                  Worktree
-                </SelectItem>
-                <SelectItem value="clone">
-                  Clone
-                </SelectItem>
-                <SelectItem value="existing">
-                  Existing
-                </SelectItem>
-              </SelectContent>
-            </Select>
+              <button
+                type="button"
+                role="radio"
+                :aria-checked="isolationStrategy === 'existing'"
+                :tabindex="isolationStrategy === 'existing' ? 0 : -1"
+                :disabled="isCreating"
+                :class="cn(
+                  'inline-flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2 text-xs font-medium transition-colors',
+                  isolationStrategy === 'existing'
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-muted-foreground hover:text-foreground',
+                )"
+                @click="isolationStrategy = 'existing'"
+              >
+                <Folder class="h-3.5 w-3.5" />
+                Directory
+              </button>
+            </div>
+
+            <p class="text-xs text-muted-foreground opacity-50">
+              {{ isolationStrategy === 'worktree'
+                ? 'Creates a git worktree — ideal for parallel work on the same repo.'
+                : 'Use the repository directory as-is. Simple, no copy or branch.'
+              }}
+            </p>
+          </div>
+
+          <div class="space-y-2">
+            <label
+              for="session-title"
+              class="text-sm font-medium text-foreground"
+            >Title <span class="font-normal text-muted-foreground">(optional)</span></label>
+            <Input
+              id="session-title"
+              v-model="title"
+              placeholder="What are you working on?"
+              :disabled="isCreating"
+            />
           </div>
 
           <div
@@ -731,173 +787,67 @@ watch(
                 branchManuallyEdited = true;
               }"
             />
-            <p class="text-xs text-muted-foreground">
+            <p class="text-xs text-muted-foreground opacity-50">
               Auto-generated from title. Edit to override.
             </p>
           </div>
         </div>
 
         <div
-          v-else
-          class="space-y-2"
+          v-else-if="sourceKind === 'directory'"
+          class="space-y-5"
         >
-          <label
-            for="new-session-directory"
-            class="text-sm font-medium text-foreground"
-          >Directory</label>
+          <div class="space-y-2">
+            <label
+              for="new-session-directory"
+              class="text-sm font-medium text-foreground"
+            >Directory</label>
 
-          <div class="flex gap-2">
-            <Input
-              id="new-session-directory"
-              v-model="directory"
-              placeholder="/absolute/path/to/workspace"
-              :disabled="isCreating"
-            />
-
-            <Popover v-model:open="isDirectoryPickerOpen">
-              <PopoverTrigger as-child>
-                <Button
-                  type="button"
-                  variant="outline"
-                  :disabled="isCreating"
-                  @click="openDirectoryPicker"
-                >
-                  <Folder class="h-4 w-4" />
-                  Browse
-                </Button>
-              </PopoverTrigger>
-
-              <PopoverContent
-                align="end"
-                class="w-[32rem] p-0"
-                :style="{ backgroundColor: 'var(--card-bg)', opacity: '1' }"
-              >
-                <div class="border-b border-border bg-card-bg p-3">
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0">
-                      <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        Directory picker
-                      </p>
-                      <p class="truncate font-mono text-xs text-foreground">
-                        {{ directoryPickerLocation }}
-                      </p>
-                    </div>
-
-                    <div class="flex items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        :disabled="isDirectoryBrowserLoading || !directoryParentPath"
-                        @click="goUpDirectory"
-                      >
-                        <ArrowUp class="h-4 w-4" />
-                      </Button>
-
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        :disabled="isDirectoryBrowserLoading"
-                        @click="refreshDirectoryBrowser"
-                      >
-                        <RefreshCw :class="['h-4 w-4', isDirectoryBrowserLoading ? 'animate-spin' : '']" />
-                      </Button>
-                    </div>
-                  </div>
-
+            <DirectoryPickerPopover
+              :browser="directoryBrowser"
+              :open="isDirectoryPickerOpen"
+              mode="navigate"
+              align="end"
+              content-class="w-[25rem]"
+              @update:open="handleDirectoryPickerOpenChange"
+              @select="handleDirectorySelected"
+            >
+              <template #trigger>
+                <div class="flex gap-2">
                   <Input
-                    class="mt-3"
-                    :model-value="directorySearch"
-                    placeholder="Search directories"
-                    @update:model-value="handleDirectorySearchUpdate"
+                    id="new-session-directory"
+                    v-model="directory"
+                    placeholder="/path/to/project"
+                    :disabled="isCreating"
+                    class="flex-1"
                   />
 
-                  <div
-                    v-if="directoryRoots.length > 1"
-                    class="mt-3 flex flex-wrap gap-2"
-                  >
-                    <Button
-                      v-for="root in directoryRoots"
-                      :key="root"
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      class="max-w-full"
-                      @click="browseDirectory(root)"
-                    >
-                      <span class="truncate font-mono text-xs">{{ root }}</span>
-                    </Button>
-                  </div>
-                </div>
-
-                <div class="max-h-72 overflow-y-auto bg-card-bg p-2">
-                  <button
-                    v-for="entry in filteredDirectoryEntries"
-                    :key="entry.path"
+                  <Button
                     type="button"
-                    class="flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-                    @click="handleDirectorySelected(entry.path)"
+                    variant="outline"
+                    size="icon"
+                    class="shrink-0"
+                    :disabled="isCreating"
                   >
-                    <span class="min-w-0 flex-1">
-                      <span class="flex items-center gap-2 font-medium">
-                        <FolderGit2
-                          v-if="entry.isGitRepo"
-                          class="h-4 w-4 shrink-0"
-                        />
-                        <Folder
-                          v-else
-                          class="h-4 w-4 shrink-0"
-                        />
-                        <span class="truncate">{{ entry.name }}</span>
-                      </span>
-                      <span class="mt-1 block truncate font-mono text-xs text-muted-foreground">{{ entry.path }}</span>
-                    </span>
-
-                    <Check
-                      v-if="directory.trim() === entry.path"
-                      class="mt-0.5 h-4 w-4 shrink-0 text-primary"
-                    />
-                  </button>
-
-                  <div
-                    v-if="isDirectoryBrowserLoading"
-                    class="flex items-center gap-2 px-3 py-6 text-sm text-muted-foreground"
-                  >
-                    <LoaderCircle class="h-4 w-4 animate-spin" />
-                    <span>Loading directories…</span>
-                  </div>
-
-                  <p
-                    v-else-if="filteredDirectoryEntries.length === 0"
-                    class="px-3 py-6 text-sm text-muted-foreground"
-                  >
-                    No directories found.
-                  </p>
+                    <Folder class="h-4 w-4" />
+                  </Button>
                 </div>
-              </PopoverContent>
-            </Popover>
+              </template>
+            </DirectoryPickerPopover>
           </div>
 
-          <p class="text-xs text-muted-foreground">
-            Type a path manually or browse from your configured workspace directory.
-          </p>
-        </div>
-
-        <div class="space-y-2">
-          <label
-            for="session-title"
-            class="text-sm font-medium text-foreground"
-          >Title <span class="font-normal text-muted-foreground">(optional)</span></label>
-          <Input
-            id="session-title"
-            v-model="title"
-            placeholder="What are you working on?"
-            :disabled="isCreating"
-          />
-          <p class="text-xs text-muted-foreground">
-            Optional session name.
-          </p>
+          <div class="space-y-2">
+            <label
+              for="session-title"
+              class="text-sm font-medium text-foreground"
+            >Title <span class="font-normal text-muted-foreground">(optional)</span></label>
+            <Input
+              id="session-title"
+              v-model="title"
+              placeholder="What are you working on?"
+              :disabled="isCreating"
+            />
+          </div>
         </div>
 
         <div class="space-y-5">

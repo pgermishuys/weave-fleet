@@ -202,7 +202,7 @@ public sealed class SessionRepository(
             """,
             cmd => { cmd.AddParameter("UserId", userContext.UserId); },
             r => (
-                ActivityStatus: r.GetString(r.GetOrdinal("activity_status")),
+                ActivityStatus: r.IsDBNull(r.GetOrdinal("activity_status")) ? null : r.GetString(r.GetOrdinal("activity_status")),
                 Count: (int)r.GetInt64(r.GetOrdinal("count"))
             ));
 

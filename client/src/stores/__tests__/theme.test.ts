@@ -55,7 +55,7 @@ describe("useThemeStore", () => {
     store.initializeTheme();
 
     expect(store.currentTheme).toBe("system");
-    expect(store.resolvedTheme).toBe("dark");
+    expect(store.resolvedThemeId).toBe("dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(document.documentElement.style.colorScheme).toBe("dark");
     expect(matchMedia).toHaveBeenCalledWith("(prefers-color-scheme: dark)");
@@ -72,14 +72,14 @@ describe("useThemeStore", () => {
     store.setTheme("light");
 
     expect(store.currentTheme).toBe("light");
-    expect(store.resolvedTheme).toBe("light");
-    expect(localStorage.getItem("weave:theme-mode")).toBe("light");
+    expect(store.resolvedThemeId).toBe("light");
+    expect(localStorage.getItem("weave:theme")).toBe("light");
 
     store.toggleTheme();
 
     expect(store.currentTheme).toBe("dark");
-    expect(store.resolvedTheme).toBe("dark");
-    expect(localStorage.getItem("weave:theme-mode")).toBe("dark");
+    expect(store.resolvedThemeId).toBe("dark");
+    expect(localStorage.getItem("weave:theme")).toBe("dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
   });
 });

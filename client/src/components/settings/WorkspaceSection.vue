@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import type { AddWorkspaceRootResponse, WorkspaceRootItem, WorkspaceRootsResponse } from "@/lib/api-types";
 import { onMounted, reactive, ref, shallowRef, watch } from "vue";
-import { AlertCircle, FolderGit2, LoaderCircle, Plus, RefreshCw, Trash2 } from "lucide-vue-next";
+import { AlertCircle, Folder, FolderGit2, LoaderCircle, Plus, RefreshCw, Trash2 } from "lucide-vue-next";
 import { apiFetch } from "@/lib/api-client";
+import DirectoryPickerPopover from "@/components/ui/DirectoryPickerPopover.vue";
+import { useDirectoryBrowser } from "@/composables/use-directory-browser";
 import {
   readWorkspacePreferences,
   writeWorkspacePreferences,
@@ -22,6 +24,21 @@ const isAddingWorkspaceRoot = shallowRef(false);
 const isRefreshingWorkspaceRoots = shallowRef(false);
 const deletingRootId = shallowRef<string | null>(null);
 const addWorkspaceRootError = shallowRef<string | null>(null);
+const isDirectoryPickerOpen = shallowRef(false);
+
+const directoryBrowser = useDirectoryBrowser(false, { unconstrained: true });
+
+function openDirectoryPicker(): void {
+  if (!directoryBrowser.hasActivated.value) {
+    directoryBrowser.browse(null);
+  }
+
+  isDirectoryPickerOpen.value = true;
+}
+
+function handleDirectorySelected(path: string): void {
+  newWorkspaceRoot.value = path;
+}
 
 const workspacePreferences = reactive<WorkspacePreferences>(
   readWorkspacePreferences(typeof window !== "undefined" ? window.localStorage : null),
@@ -328,6 +345,29 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
             :disabled="isAddingWorkspaceRoot"
             @keydown.enter.prevent="addWorkspaceRoot"
           >
+
+          <DirectoryPickerPopover
+            :browser="directoryBrowser"
+            :open="isDirectoryPickerOpen"
+            mode="navigate"
+            @update:open="isDirectoryPickerOpen = $event"
+            @select="handleDirectorySelected"
+          >
+            <template #trigger>
+              <button
+                type="button"
+                :class="buttonSecondaryClass"
+                class="shrink-0"
+                :disabled="isAddingWorkspaceRoot"
+                @click="openDirectoryPicker"
+              >
+                <Folder
+                  :size="16"
+                  aria-hidden="true"
+                />
+              </button>
+            </template>
+          </DirectoryPickerPopover>
 
           <button
             type="button"

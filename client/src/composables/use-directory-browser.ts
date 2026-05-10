@@ -18,7 +18,11 @@ export interface UseDirectoryBrowserResult {
   canBrowse: ComputedRef<boolean>;
 }
 
-export function useDirectoryBrowser(enabled = false): UseDirectoryBrowserResult {
+export interface UseDirectoryBrowserOptions {
+  unconstrained?: boolean;
+}
+
+export function useDirectoryBrowser(enabled = false, options: UseDirectoryBrowserOptions = {}): UseDirectoryBrowserResult {
   const currentPath = shallowRef<string | null>(null);
   const entries = ref<DirectoryEntry[]>([]);
   const isLoading = shallowRef(false);
@@ -62,10 +66,15 @@ export function useDirectoryBrowser(enabled = false): UseDirectoryBrowserResult 
       params.set("search", trimmedSearch);
     }
 
-    const url = `/api/directories${params.toString() ? `?${params.toString()}` : ""}`;
+    if (options.unconstrained) {
+      params.set("unconstrained", "true");
+    }
+
+    const queryString = params.toString();
+    const fetchUrl = `/api/directories${queryString ? `?${queryString}` : ""}`;
 
     try {
-      const response = await apiFetch(url, { signal: controller.signal });
+      const response = await apiFetch(fetchUrl, { signal: controller.signal });
       if (!response.ok) {
         const data = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(data.error ?? `HTTP ${response.status}`);
