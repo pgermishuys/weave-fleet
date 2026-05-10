@@ -310,17 +310,19 @@ public sealed class DelegationReplayE2ETests : E2ETestBase,
             var scenario = await SeedDelegationScenarioAsync();
             var detail = new SessionDetailPage(Page);
 
-            // Navigate to child session
-            await detail.GotoAsync(scenario.ChildSessionId, scenario.ChildInstanceId);
-
             // Intercept any extra REST polling for child messages
             var extraChildRequestCount = 0;
             var childMessagesApiPattern = $"/api/sessions/{scenario.ChildSessionId}/messages";
 
-            // Wait for initial load request first
+            // Register response waiter BEFORE navigation so we don't miss the initial load
             var initialResponse = Page.WaitForResponseAsync(
                 r => r.Url.Contains(childMessagesApiPattern, StringComparison.Ordinal) && r.Ok,
                 new PageWaitForResponseOptions { Timeout = 10_000 });
+
+            // Navigate to child session
+            await detail.GotoAsync(scenario.ChildSessionId, scenario.ChildInstanceId);
+
+            // Wait for initial load request to complete
             await initialResponse;
             await Task.Delay(300); // Let any in-flight requests settle
 
