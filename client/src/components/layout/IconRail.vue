@@ -92,7 +92,19 @@ const currentRouteRail = computed<RailItemId | null>(() => {
     return "sessions-v1";
   }
 
-  if (pathname.value === "/" || pathname.value.startsWith("/sessions/")) {
+  if (pathname.value === "/") {
+    return "sessions";
+  }
+
+  // Session detail pages (/sessions/:id) — preserve whichever sessions rail
+  // is currently active so clicking a session from V1 doesn't jump to V2.
+  if (pathname.value.startsWith("/sessions/")) {
+    const current = activeRail.value;
+
+    if (current === "sessions-v1" || current === "sessions") {
+      return current;
+    }
+
     return "sessions";
   }
 
