@@ -9,7 +9,6 @@ import CollapsedRightRail from "@/components/layout/CollapsedRightRail.vue";
 import ContextPanel from "@/components/layout/ContextPanel.vue";
 import IconRail from "@/components/layout/IconRail.vue";
 import RightPanel from "@/components/layout/RightPanel.vue";
-import TopBar from "@/components/layout/TopBar.vue";
 import { useCommands } from "@/composables/use-commands";
 import { useSessionTodos } from "@/composables/use-session-todos";
 import { useWeaveSocket } from "@/composables/use-weave-socket";
@@ -82,8 +81,6 @@ function handleExpandRightPanel(): void {
 
 <template>
   <div class="app">
-    <TopBar />
-
     <div class="main">
       <IconRail />
       <ContextPanel v-if="!panelCollapsed" />

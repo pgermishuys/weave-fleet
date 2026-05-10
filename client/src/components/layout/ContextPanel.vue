@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Component } from "vue";
 import type { SidebarRail } from "@/stores/sidebar";
-import { computed, defineComponent, h } from "vue";
+import { computed, defineComponent, h, shallowRef } from "vue";
 import { storeToRefs } from "pinia";
 import BoardControlsPanel from "@/components/board/BoardControlsPanel.vue";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
@@ -112,29 +112,77 @@ const activePanelKey = computed(() => {
 
   return isContextPanelKey(rail, panelComponents.value) ? rail : "sessions";
 });
+
+const MIN_WIDTH = 200;
+const MAX_WIDTH = 500;
+const panelWidth = shallowRef(280);
+const isResizing = shallowRef(false);
+
+function onResizeStart(event: PointerEvent): void {
+  const target = event.currentTarget as HTMLElement;
+  target.setPointerCapture(event.pointerId);
+  isResizing.value = true;
+  const startX = event.clientX;
+  const startWidth = panelWidth.value;
+
+  function onMove(e: PointerEvent): void {
+    const delta = e.clientX - startX;
+    panelWidth.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth + delta));
+  }
+
+  function onUp(): void {
+    isResizing.value = false;
+    target.removeEventListener("pointermove", onMove);
+    target.removeEventListener("pointerup", onUp);
+  }
+
+  target.addEventListener("pointermove", onMove);
+  target.addEventListener("pointerup", onUp);
+}
 </script>
 
 <template>
   <aside
     class="context-panel"
+    :style="{ width: `${panelWidth}px`, minWidth: `${panelWidth}px` }"
     aria-label="Context panel"
   >
     <component
       :is="activePanel"
       :key="activePanelKey"
     />
+    <div
+      class="resize-handle"
+      :class="{ 'resize-handle--active': isResizing }"
+      @pointerdown.prevent="onResizeStart"
+    />
   </aside>
 </template>
 
 <style scoped>
 .context-panel {
-  width: 280px;
-  min-width: 280px;
+  position: relative;
   background: var(--panel-bg);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 20;
+}
+
+.resize-handle:hover,
+.resize-handle--active {
+  background: var(--accent);
+  opacity: 0.4;
 }
 
 .context-panel :deep(.context-panel__content) {
