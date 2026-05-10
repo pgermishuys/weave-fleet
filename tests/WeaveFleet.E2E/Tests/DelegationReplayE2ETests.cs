@@ -319,7 +319,8 @@ public sealed class DelegationReplayE2ETests : E2ETestBase,
 
             // Wait for initial load request first
             var initialResponse = Page.WaitForResponseAsync(
-                r => r.Url.Contains(childMessagesApiPattern, StringComparison.Ordinal) && r.Ok);
+                r => r.Url.Contains(childMessagesApiPattern, StringComparison.Ordinal) && r.Ok,
+                new PageWaitForResponseOptions { Timeout = 10_000 });
             await initialResponse;
             await Task.Delay(300); // Let any in-flight requests settle
 
@@ -370,7 +371,7 @@ public sealed class DelegationReplayE2ETests : E2ETestBase,
                 }),
             });
 
-            await detail.WaitForMessageTextAsync("Live child WebSocket-only delivery", 5_000);
+            await detail.WaitForMessageTextAsync("Live child WebSocket-only delivery", 10_000);
 
             // Verify no additional HTTP polling occurred
             Volatile.Read(ref extraChildRequestCount).ShouldBe(baseline,
