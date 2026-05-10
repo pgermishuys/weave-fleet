@@ -44,6 +44,7 @@ public static class EndpointExtensions
         apiScope.MapPluginEndpoints();
         apiScope.MapBoardEndpoints();
         apiScope.MapSessionEndpoints();
+        apiScope.MapSessionV1Endpoints();
         apiScope.MapProjectEndpoints();
         apiScope.MapFleetSummaryEndpoints();
         apiScope.MapSessionSourceEndpoints();
@@ -63,6 +64,7 @@ public static class EndpointExtensions
         apiScope.MapClientConfigEndpoints(fleetOptions);
         apiScope.MapBackendPluginEndpoints();
         apiScope.MapSmartLinkEndpoints();
+        apiScope.MapTelemetryEndpoints();
 
         return app;
     }

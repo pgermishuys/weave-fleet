@@ -479,6 +479,50 @@ public static class SessionEndpoints
         return 0;
     }
 
+    /// <summary>
+    /// Shared helper accessible by <see cref="SessionV1Endpoints"/> (no origin enrichment).
+    /// </summary>
+    internal static SessionListResponse ToListResponseNoOrigin(
+        Session s,
+        HashSet<string> parentIdsWithBusyChildren,
+        Dictionary<string, string> projectNamesById,
+        SessionActivityTracker activityTracker)
+    {
+        var createdMs = TryParseUnixMs(s.CreatedAt);
+        var updatedMs = createdMs;
+        var sessionStatus = DeriveAggregatedSessionStatus(s, parentIdsWithBusyChildren);
+        var lifecycleStatus = s.LifecycleStatus ?? "running";
+        var activityStatus = activityTracker.GetEffectiveActivityStatus(s.Id) ?? s.ActivityStatus;
+
+        return new SessionListResponse(
+            InstanceId: s.InstanceId,
+            WorkspaceId: s.WorkspaceId,
+            WorkspaceDirectory: s.Directory,
+            WorkspaceDisplayName: null,
+            IsolationStrategy: "existing",
+            SessionStatus: sessionStatus,
+            Session: new SessionFleetInfo(
+                Id: s.Id,
+                Title: s.Title,
+                Time: new SessionTime(createdMs, updatedMs)),
+            InstanceStatus: "running",
+            ParentSessionId: s.ParentSessionId,
+            SourceDirectory: null,
+            Branch: null,
+            ActivityStatus: activityStatus,
+            LifecycleStatus: lifecycleStatus,
+            RetentionStatus: s.RetentionStatus,
+            ArchivedAt: s.ArchivedAt,
+            TypedInstanceStatus: "running",
+            IsHidden: s.IsHidden,
+            TotalTokens: s.TotalTokens > 0 ? s.TotalTokens : null,
+            TotalCost: s.TotalCost > 0 ? s.TotalCost : null,
+            ProjectId: s.ProjectId,
+            ProjectName: s.ProjectId is not null && projectNamesById.TryGetValue(s.ProjectId, out var projectName)
+                ? projectName
+                : null);
+    }
+
     private static async Task<ModelResolutionResult> ResolveSessionModelAsync(
         string sessionId,
         ModelRef? model,

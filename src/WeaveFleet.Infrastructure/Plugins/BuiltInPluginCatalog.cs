@@ -10,8 +10,6 @@ public sealed class BuiltInPluginCatalog(IEnumerable<IBackendPlugin> backendPlug
 
     public Task<IReadOnlyList<FleetPluginDescriptor>> GetDescriptorsAsync(CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-
         IReadOnlyList<FleetPluginDescriptor> descriptors = _backendPlugins
             .Select(plugin => plugin.Descriptor)
             .ToArray();

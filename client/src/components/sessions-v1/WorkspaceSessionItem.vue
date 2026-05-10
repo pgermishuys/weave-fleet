@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/context-menu";
 import type { SessionListItem } from "@/lib/api-types";
 import { formatRelativeTime } from "@/lib/format-utils";
-import { useDeleteSession, useResumeSession, useAbortSession, useTerminateSession } from "@/composables/use-session-actions";
+import { useDeleteSessionV1 as useDeleteSession, useResumeSessionV1 as useResumeSession, useAbortSessionV1 as useAbortSession, useTerminateSessionV1 as useTerminateSession } from "@/composables/use-session-actions-v1";
 
 interface Props {
   item: SessionListItem;
@@ -38,8 +38,6 @@ const canTerminate = computed(() => !isStopped.value);
 const canAbort = computed(() => props.item.activityStatus === "busy");
 const canDelete = computed(() => isInactive.value);
 
-const sessionPath = computed(() => `/sessions/${encodeURIComponent(props.item.session.id)}?instanceId=${encodeURIComponent(props.item.instanceId)}`);
-
 async function handleTerminate(): Promise<void> {
   await terminateSession(props.item.session.id, props.item.instanceId);
 }
@@ -57,7 +55,11 @@ async function handleDelete(): Promise<void> {
 }
 
 function navigate(): void {
-  void router.navigate({ to: sessionPath.value as "/" });
+  void router.navigate({
+    to: "/sessions-v1/$id",
+    params: { id: props.item.session.id },
+    search: { instanceId: props.item.instanceId, parentSessionId: undefined },
+  });
 }
 
 function copyPath(): void {
@@ -74,7 +76,7 @@ function copyPath(): void {
         data-tree-leaf
         tabindex="0"
         :aria-label="item.session.title || item.session.id"
-        role="option"
+        role="treeitem"
         @click="navigate"
         @keydown.enter="navigate"
       >

@@ -21,6 +21,7 @@ import { Route as BoardRouteImport } from './routes/board'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SessionsIdRouteImport } from './routes/sessions.$id'
+import { Route as SessionsV1IdRouteImport } from './routes/sessions-v1_.$id'
 import { Route as SettingsPluginsPluginIdRouteImport } from './routes/settings_.plugins.$pluginId'
 import { Route as GithubOwnerRepoPullsNumberRouteImport } from './routes/github.$owner.$repo.pulls.$number'
 import { Route as GithubOwnerRepoIssuesNumberRouteImport } from './routes/github.$owner.$repo.issues.$number'
@@ -85,6 +86,11 @@ const SessionsIdRoute = SessionsIdRouteImport.update({
   path: '/sessions/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SessionsV1IdRoute = SessionsV1IdRouteImport.update({
+  id: '/sessions-v1_/$id',
+  path: '/sessions-v1/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsPluginsPluginIdRoute = SettingsPluginsPluginIdRouteImport.update({
   id: '/settings_/plugins/$pluginId',
   path: '/settings/plugins/$pluginId',
@@ -115,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
+  '/sessions-v1/$id': typeof SessionsV1IdRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
@@ -132,6 +139,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
+  '/sessions-v1/$id': typeof SessionsV1IdRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
@@ -150,6 +158,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
+  '/sessions-v1_/$id': typeof SessionsV1IdRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/settings_/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
@@ -169,6 +178,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/templates'
     | '/welcome'
+    | '/sessions-v1/$id'
     | '/sessions/$id'
     | '/settings/plugins/$pluginId'
     | '/github/$owner/$repo/issues/$number'
@@ -186,6 +196,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/templates'
     | '/welcome'
+    | '/sessions-v1/$id'
     | '/sessions/$id'
     | '/settings/plugins/$pluginId'
     | '/github/$owner/$repo/issues/$number'
@@ -203,6 +214,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/templates'
     | '/welcome'
+    | '/sessions-v1_/$id'
     | '/sessions/$id'
     | '/settings_/plugins/$pluginId'
     | '/github/$owner/$repo/issues/$number'
@@ -221,6 +233,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   TemplatesRoute: typeof TemplatesRoute
   WelcomeRoute: typeof WelcomeRoute
+  SessionsV1IdRoute: typeof SessionsV1IdRoute
   SessionsIdRoute: typeof SessionsIdRoute
   SettingsPluginsPluginIdRoute: typeof SettingsPluginsPluginIdRoute
   GithubOwnerRepoIssuesNumberRoute: typeof GithubOwnerRepoIssuesNumberRoute
@@ -313,6 +326,13 @@ declare module '@tanstack/vue-router' {
       preLoaderRoute: typeof SessionsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sessions-v1_/$id': {
+      id: '/sessions-v1_/$id'
+      path: '/sessions-v1/$id'
+      fullPath: '/sessions-v1/$id'
+      preLoaderRoute: typeof SessionsV1IdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings_/plugins/$pluginId': {
       id: '/settings_/plugins/$pluginId'
       path: '/settings/plugins/$pluginId'
@@ -349,6 +369,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   TemplatesRoute: TemplatesRoute,
   WelcomeRoute: WelcomeRoute,
+  SessionsV1IdRoute: SessionsV1IdRoute,
   SessionsIdRoute: SessionsIdRoute,
   SettingsPluginsPluginIdRoute: SettingsPluginsPluginIdRoute,
   GithubOwnerRepoIssuesNumberRoute: GithubOwnerRepoIssuesNumberRoute,

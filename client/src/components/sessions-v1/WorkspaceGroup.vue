@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { WorkspaceGroup } from "@/composables/use-workspaces";
 import { useRenameWorkspace } from "@/composables/use-rename-workspace";
-import { useTerminateSession } from "@/composables/use-session-actions";
+import { useTerminateSessionV1 as useTerminateSession } from "@/composables/use-session-actions-v1";
 import { nestSessions } from "@/lib/session-utils";
 import { usePersistedState } from "@/composables/use-persisted-state";
 import InlineEdit from "@/components/sessions/InlineEdit.vue";
@@ -97,13 +97,6 @@ async function handleTerminateAll(): Promise<void> {
           />
         </button>
       </CollapsibleTrigger>
-
-      <!-- Status dot -->
-      <span
-        class="status-dot"
-        :class="group.hasRunningSession ? 'status-dot--running' : 'status-dot--idle'"
-        aria-hidden="true"
-      />
 
       <!-- Inline-editable name -->
       <InlineEdit
@@ -236,27 +229,6 @@ async function handleTerminateAll(): Promise<void> {
 
 .chevron--open {
   transform: rotate(90deg);
-}
-
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.status-dot--running {
-  background: #22c55e;
-  animation: pulse 2s ease-in-out infinite;
-}
-
-.status-dot--idle {
-  background: rgba(161, 161, 170, 0.4);
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
 }
 
 .workspace-name {

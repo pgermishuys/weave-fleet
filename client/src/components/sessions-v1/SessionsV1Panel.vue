@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { computed, shallowRef, useTemplateRef } from "vue";
+import { useRouter } from "@tanstack/vue-router";
 import { AlertTriangle, Eye, EyeOff, Loader2, Plus, Trash2 } from "lucide-vue-next";
 import type { SessionListItem } from "@/lib/api-types";
-import { useSessions } from "@/composables/use-sessions";
+import { useSessionsV1 } from "@/composables/use-sessions-v1";
 import { useWorkspaces } from "@/composables/use-workspaces";
 import { usePersistedState } from "@/composables/use-persisted-state";
-import { useDeleteSession } from "@/composables/use-session-actions";
-import { useSessionsStore } from "@/stores/sessions";
+import { useDeleteSessionV1 } from "@/composables/use-session-actions-v1";
+import { useSessionsV1Store } from "@/stores/sessions-v1";
 import { storeToRefs } from "pinia";
 import NewSessionDialog from "@/components/sessions/NewSessionDialog.vue";
 import WorkspaceGroup from "./WorkspaceGroup.vue";
 
 const HIDE_INACTIVE_KEY = "weave:sidebar:hideInactive";
 const isNewSessionOpen = shallowRef(false);
+const router = useRouter();
 
 function isInactiveSession(s: SessionListItem): boolean {
   return s.lifecycleStatus === "stopped"
@@ -20,12 +22,12 @@ function isInactiveSession(s: SessionListItem): boolean {
     || s.lifecycleStatus === "disconnected";
 }
 
-const sessionsStore = useSessionsStore();
+const sessionsStore = useSessionsV1Store();
 const { retentionStatus } = storeToRefs(sessionsStore);
 
-const { sessions, isLoading, error, refetch } = useSessions({ retentionStatus });
+const { sessions, isLoading, error, refetch } = useSessionsV1({ retentionStatus });
 const workspaces = useWorkspaces(sessions);
-const { deleteSession } = useDeleteSession();
+const { deleteSession } = useDeleteSessionV1();
 
 const [hideInactive, setHideInactive] = usePersistedState<boolean>(HIDE_INACTIVE_KEY, false);
 const isRemovingInactive = shallowRef(false);
@@ -140,7 +142,13 @@ function handleKeyDown(event: KeyboardEvent): void {
   >
     <!-- Header row -->
     <div class="panel-header">
-      <span class="panel-title">Sessions</span>
+      <button
+        type="button"
+        class="panel-title"
+        @click="router.navigate({ to: '/sessions-v1' })"
+      >
+        Sessions
+      </button>
 
       <div class="header-actions">
         <!-- Hide/show inactive -->
@@ -190,7 +198,7 @@ function handleKeyDown(event: KeyboardEvent): void {
         >
           <Plus :size="13" />
         </button>
-        <NewSessionDialog v-model:open="isNewSessionOpen" />
+        <NewSessionDialog v-model:open="isNewSessionOpen" create-endpoint="/api/sessions-v1" />
       </div>
     </div>
 
@@ -306,6 +314,15 @@ function handleKeyDown(event: KeyboardEvent): void {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.panel-title:hover {
+  color: var(--text);
 }
 
 .header-actions {

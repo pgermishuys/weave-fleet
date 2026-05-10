@@ -13,6 +13,7 @@ import { useSendCommand } from "@/composables/use-send-command";
 import { useModels } from "@/composables/use-models";
 import { useSendPrompt } from "@/composables/use-send-prompt";
 import { parseSlashCommand } from "@/lib/slash-command-utils";
+import { trackAction } from "@/lib/track-action";
 import { useSessionsStore } from "@/stores/sessions";
 import type { ImageAttachment } from "@/lib/api-types";
 import { ALLOWED_IMAGE_MIMES, MAX_IMAGE_BYTES, MAX_ATTACHMENTS_PER_PROMPT } from "@/lib/image-validation";
@@ -489,6 +490,7 @@ function handleSend(): void {
 
   optimisticBusy.value = true;
   emit("promptSent");
+  trackAction("session.prompt", props.sessionId);
 
   void nextTick(() => {
     resizeTextarea();

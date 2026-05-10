@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
@@ -18,6 +20,15 @@ public sealed class SessionService(
         IReadOnlyList<string>? statuses = null,
         string? projectId = null,
         string? retentionStatus = null)
+        => await ListSessionsAsync(limit, offset, statuses, projectId, retentionStatus, "v2");
+
+    public async Task<Result<IReadOnlyList<Session>>> ListSessionsAsync(
+        int limit,
+        int offset,
+        IReadOnlyList<string>? statuses,
+        string? projectId,
+        string? retentionStatus,
+        string viewMode)
     {
         IReadOnlyList<string>? retentionStatuses = retentionStatus switch
         {
@@ -26,13 +37,14 @@ public sealed class SessionService(
             _ => [retentionStatus]
         };
 
-        var sessions = await sessionRepository.ListAsync(limit, offset, statuses, projectId, retentionStatuses);
+        var sessions = await sessionRepository.ListAsync(limit, offset, statuses, projectId, retentionStatuses, viewMode);
 
         return Result.Success(sessions);
     }
 
     public async Task<Result<Unit>> StopSessionAsync(string id)
     {
+        SetSessionTag(id);
         var result = await sessionOrchestrator.StopSessionAsync(id);
         if (result.IsFailure)
             return result.Error;
@@ -42,6 +54,7 @@ public sealed class SessionService(
 
     public async Task<Result<Unit>> UpdateRetentionAsync(string id, string retentionStatus)
     {
+        SetSessionTag(id);
         return retentionStatus switch
         {
             "archived" => await sessionOrchestrator.ArchiveSessionAsync(id),
@@ -52,6 +65,7 @@ public sealed class SessionService(
 
     public async Task<Result<Session>> GetSessionAsync(string id)
     {
+        SetSessionTag(id);
         var session = await sessionRepository.GetByIdAsync(id);
         if (session is null)
             return FleetError.NotFoundFor(nameof(Session), id);
@@ -60,6 +74,7 @@ public sealed class SessionService(
 
     public async Task<Result<bool>> DeleteSessionAsync(string id)
     {
+        SetSessionTag(id);
         var result = await sessionOrchestrator.DeleteSessionAsync(id);
         if (result.IsFailure)
             return result.Error;
@@ -69,6 +84,7 @@ public sealed class SessionService(
 
     public async Task<Result<Unit>> UpdateSessionTitleAsync(string id, string title)
     {
+        SetSessionTag(id);
         var session = await sessionRepository.GetByIdAsync(id);
         if (session is null)
             return FleetError.NotFoundFor(nameof(Session), id);
@@ -79,6 +95,7 @@ public sealed class SessionService(
 
     public async Task<Result<Unit>> MoveSessionToProjectAsync(string sessionId, string? projectId)
     {
+        SetSessionTag(sessionId);
         var session = await sessionRepository.GetByIdAsync(sessionId);
         if (session is null)
             return FleetError.NotFoundFor(nameof(Session), sessionId);
@@ -93,6 +110,9 @@ public sealed class SessionService(
         await sessionRepository.UpdateProjectAsync(sessionId, projectId);
         return Unit.Value;
     }
+
+    private static void SetSessionTag(string sessionId)
+        => Activity.Current?.SetTag(FleetInstrumentation.SessionIdTag, sessionId);
 
     public async Task<Result<FleetSummary>> GetFleetSummaryAsync()
     {

@@ -5,16 +5,16 @@ import { useRouter } from "@tanstack/vue-router";
 import { LoaderCircle, Plus } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import type { SessionListItem } from "@/lib/api-types";
-import { useSessions } from "@/composables/use-sessions";
+import { useSessionsV1 } from "@/composables/use-sessions-v1";
 import { useWorkspaces } from "@/composables/use-workspaces";
-import { useSessionsStore } from "@/stores/sessions";
+import { useSessionsV1Store } from "@/stores/sessions-v1";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import SessionCard from "@/components/dashboard/SessionCard.vue";
 import SummaryBar from "@/components/dashboard/SummaryBar.vue";
 import WorkspaceToolbar from "./WorkspaceToolbar.vue";
 import type { GroupBy, SortBy } from "./WorkspaceToolbar.vue";
 
-const PREFS_KEY = "weave:fleet:prefs";
+const PREFS_KEY = "weave:fleet:prefs-v1";
 
 interface FleetPrefs {
   groupBy: GroupBy;
@@ -40,11 +40,11 @@ function loadPrefs(): FleetPrefs {
 }
 
 const router = useRouter();
-const sessionsStore = useSessionsStore();
+const sessionsStore = useSessionsV1Store();
 const workspaceUiStore = useWorkspaceUiStore();
 const { retentionStatus } = storeToRefs(sessionsStore);
 
-const { sessions, isLoading, error } = useSessions({ retentionStatus });
+const { sessions, isLoading, error } = useSessionsV1({ retentionStatus });
 const allWorkspaces = useWorkspaces(sessions);
 
 const savedPrefs = loadPrefs();
@@ -84,7 +84,7 @@ const isEmpty = computed(() => !isLoading.value && workspaces.value.length === 0
 
 function handleSessionSelect(session: SessionListItem): void {
   void router.navigate({
-    to: "/sessions/$id",
+    to: "/sessions-v1/$id",
     params: { id: session.session.id },
     search: {
       instanceId: session.instanceId,
@@ -155,10 +155,6 @@ function handleSessionSelect(session: SessionListItem): void {
         class="grid gap-3"
       >
         <div class="flex items-center gap-2">
-          <span
-            class="h-2 w-2 rounded-full"
-            :class="group.hasRunningSession ? 'bg-green-500' : 'bg-zinc-500'"
-          />
           <h2 class="text-sm font-medium text-foreground">
             {{ group.displayName }}
           </h2>
