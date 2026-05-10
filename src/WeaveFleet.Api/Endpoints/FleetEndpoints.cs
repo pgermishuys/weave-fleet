@@ -179,8 +179,12 @@ public static class FleetEndpoints
         })
         .WithName("GetIntegrations");
 
-        // GET /api/available-tools — stub
-        group.MapGet("/available-tools", () => Results.Ok(Array.Empty<object>()))
+        // GET /api/available-tools — detect installed editors, terminals, explorers
+        group.MapGet("/available-tools", async (ToolDetector detector, CancellationToken ct) =>
+        {
+            var tools = await detector.DetectAsync(ct);
+            return Results.Ok(new { tools });
+        })
         .WithName("GetAvailableTools");
 
         return app;

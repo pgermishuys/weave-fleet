@@ -12,21 +12,40 @@ public static class OpenDirectoryEndpoints
     {
         var group = app.MapGroup("/api").WithTags("Directories");
 
-        // POST /api/open-directory — opens a directory in the OS file manager
+        // POST /api/open-directory — open a workspace directory in an editor, terminal, or file explorer
         group.MapPost("/open-directory", async (OpenDirectoryRequest req, WorkspaceRootService workspaceRootService) =>
         {
-            if (string.IsNullOrWhiteSpace(req.Path) || !Directory.Exists(req.Path))
+            var directory = req.Directory ?? req.Path;
+
+            if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
                 return Results.BadRequest(new ErrorResponse("Directory does not exist."));
 
-            var normalised = Path.GetFullPath(req.Path);
+            var normalised = Path.GetFullPath(directory);
             var allowedRoots = await workspaceRootService.GetAllowedRootsAsync();
             if (!IsUnderAllowedRoot(normalised, allowedRoots))
                 return Results.BadRequest(new ErrorResponse("Path is outside allowed workspace roots."));
 
             try
             {
-                OpenInFileManager(normalised);
-                return Results.NoContent();
+                var tool = req.Tool;
+
+                if (!string.IsNullOrWhiteSpace(tool))
+                {
+                    // Use tool registry to spawn the right program
+                    var psi = ToolRegistry.GetSpawnInfo(tool, normalised);
+                    if (psi is null)
+                        return Results.BadRequest(new ErrorResponse($"Tool '{tool}' is not available on this platform."));
+
+                    var proc = Process.Start(psi);
+                    proc?.Dispose();
+                }
+                else
+                {
+                    // Legacy: open in file manager
+                    OpenInFileManager(normalised);
+                }
+
+                return Results.Ok(new { ok = true });
             }
             catch (Exception ex)
             {
@@ -69,5 +88,5 @@ public static class OpenDirectoryEndpoints
     }
 }
 
-internal sealed record OpenDirectoryRequest(string Path);
+internal sealed record OpenDirectoryRequest(string? Directory = null, string? Tool = null, string? Path = null);
 #pragma warning restore IL2026

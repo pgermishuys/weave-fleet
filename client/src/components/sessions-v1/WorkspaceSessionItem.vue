@@ -12,6 +12,7 @@ import {
 import type { SessionListItem } from "@/lib/api-types";
 import { formatRelativeTime } from "@/lib/format-utils";
 import { useDeleteSessionV1 as useDeleteSession, useResumeSessionV1 as useResumeSession, useAbortSessionV1 as useAbortSession, useTerminateSessionV1 as useTerminateSession } from "@/composables/use-session-actions-v1";
+import OpenToolContextSubmenu from "./OpenToolContextSubmenu.vue";
 
 interface Props {
   item: SessionListItem;
@@ -198,6 +199,8 @@ function copyPath(): void {
       <ContextMenuItem @click="navigate">
         Open Session
       </ContextMenuItem>
+      <ContextMenuSeparator />
+      <OpenToolContextSubmenu :directory="item.workspaceDirectory" />
       <ContextMenuSeparator />
       <ContextMenuItem @click="copyPath">
         Copy workspace path
