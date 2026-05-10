@@ -16,8 +16,8 @@ public sealed class NewSessionDialog(IPage page)
     private ILocator TitleInput => Dialog.Locator("#session-title");
     private ILocator SubmitButton => _page.GetByTestId("create-session-submit");
     private ILocator SourceGroup => _page.GetByLabel("Source");
-    private ILocator DirectoryModeButton => SourceGroup.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Directory" });
-    private ILocator RepositoryModeButton => SourceGroup.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Repository" });
+    private ILocator DirectoryModeButton => SourceGroup.GetByRole(AriaRole.Radio, new LocatorGetByRoleOptions { Name = "Directory" });
+    private ILocator RepositoryModeButton => SourceGroup.GetByRole(AriaRole.Radio, new LocatorGetByRoleOptions { Name = "Repository" });
 
     // ── Waits ─────────────────────────────────────────────────────────────────
 
