@@ -4,6 +4,7 @@ import { shallowRef } from "vue";
 export type SidebarRail =
   | "board"
   | "sessions"
+  | "sessions-v1"
   | "analytics"
   | "github"
   | "marketplace"

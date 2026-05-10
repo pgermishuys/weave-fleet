@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SessionsV1RouteImport } from './routes/sessions-v1'
 import { Route as RepositoriesRouteImport } from './routes/repositories'
 import { Route as QueueRouteImport } from './routes/queue'
 import { Route as PipelinesRouteImport } from './routes/pipelines'
@@ -37,6 +38,11 @@ const TemplatesRoute = TemplatesRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SessionsV1Route = SessionsV1RouteImport.update({
+  id: '/sessions-v1',
+  path: '/sessions-v1',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RepositoriesRoute = RepositoriesRouteImport.update({
@@ -105,6 +111,7 @@ export interface FileRoutesByFullPath {
   '/pipelines': typeof PipelinesRoute
   '/queue': typeof QueueRoute
   '/repositories': typeof RepositoriesRoute
+  '/sessions-v1': typeof SessionsV1Route
   '/settings': typeof SettingsRoute
   '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByTo {
   '/pipelines': typeof PipelinesRoute
   '/queue': typeof QueueRoute
   '/repositories': typeof RepositoriesRoute
+  '/sessions-v1': typeof SessionsV1Route
   '/settings': typeof SettingsRoute
   '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
@@ -138,6 +146,7 @@ export interface FileRoutesById {
   '/pipelines': typeof PipelinesRoute
   '/queue': typeof QueueRoute
   '/repositories': typeof RepositoriesRoute
+  '/sessions-v1': typeof SessionsV1Route
   '/settings': typeof SettingsRoute
   '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
@@ -156,6 +165,7 @@ export interface FileRouteTypes {
     | '/pipelines'
     | '/queue'
     | '/repositories'
+    | '/sessions-v1'
     | '/settings'
     | '/templates'
     | '/welcome'
@@ -172,6 +182,7 @@ export interface FileRouteTypes {
     | '/pipelines'
     | '/queue'
     | '/repositories'
+    | '/sessions-v1'
     | '/settings'
     | '/templates'
     | '/welcome'
@@ -188,6 +199,7 @@ export interface FileRouteTypes {
     | '/pipelines'
     | '/queue'
     | '/repositories'
+    | '/sessions-v1'
     | '/settings'
     | '/templates'
     | '/welcome'
@@ -205,6 +217,7 @@ export interface RootRouteChildren {
   PipelinesRoute: typeof PipelinesRoute
   QueueRoute: typeof QueueRoute
   RepositoriesRoute: typeof RepositoriesRoute
+  SessionsV1Route: typeof SessionsV1Route
   SettingsRoute: typeof SettingsRoute
   TemplatesRoute: typeof TemplatesRoute
   WelcomeRoute: typeof WelcomeRoute
@@ -235,6 +248,13 @@ declare module '@tanstack/vue-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sessions-v1': {
+      id: '/sessions-v1'
+      path: '/sessions-v1'
+      fullPath: '/sessions-v1'
+      preLoaderRoute: typeof SessionsV1RouteImport
       parentRoute: typeof rootRouteImport
     }
     '/repositories': {
@@ -325,6 +345,7 @@ const rootRouteChildren: RootRouteChildren = {
   PipelinesRoute: PipelinesRoute,
   QueueRoute: QueueRoute,
   RepositoriesRoute: RepositoriesRoute,
+  SessionsV1Route: SessionsV1Route,
   SettingsRoute: SettingsRoute,
   TemplatesRoute: TemplatesRoute,
   WelcomeRoute: WelcomeRoute,

@@ -4,7 +4,7 @@ import type { SidebarRail } from "@/stores/sidebar";
 import type { PluginConnectionStatus } from "@/plugins/types";
 import { computed, onMounted, onUnmounted, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
-import { BarChart3, LayoutGrid, MessageSquare, Puzzle, Settings } from "lucide-vue-next";
+import { BarChart3, LayoutGrid, MessageSquare, Puzzle, Rows3, Settings } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import weaveLogo from "@/assets/weave_logo.png";
 import { apiFetch } from "@/lib/api-client";
@@ -12,6 +12,7 @@ import type { PluginCatalogResponse } from "@/lib/api-types";
 import { usePluginRuntime } from "@/plugins/composable";
 import { getSidebarViews } from "@/plugins/slots";
 import { useSidebarStore } from "@/stores/sidebar";
+import { useSessionsViewMode } from "@/composables/use-sessions-view-mode";
 
 type RailItemId = SidebarRail | string;
 
@@ -19,14 +20,15 @@ interface RailItem {
   id: RailItemId;
   label: string;
   icon: Component;
-  to?: "/" | "/board" | "/analytics" | "/settings";
+  to?: "/" | "/board" | "/analytics" | "/settings" | "/sessions-v1";
   status?: PluginConnectionStatus;
   badge?: number;
 }
 
-const topItems: readonly RailItem[] = [
+const ALL_TOP_ITEMS: readonly RailItem[] = [
   { id: "board", label: "Board", icon: LayoutGrid, to: "/board" },
-  { id: "sessions", label: "Sessions", icon: MessageSquare, to: "/" },
+  { id: "sessions", label: "Sessions (Projects)", icon: MessageSquare, to: "/" },
+  { id: "sessions-v1", label: "Sessions (Workspaces)", icon: Rows3, to: "/sessions-v1" },
 ];
 
 const bottomItems: readonly RailItem[] = [
@@ -38,6 +40,7 @@ const bottomItems: readonly RailItem[] = [
 const sidebarStore = useSidebarStore();
 const { activeRail } = storeToRefs(sidebarStore);
 const router = useRouter();
+const { isV1Enabled, isV2Enabled } = useSessionsViewMode();
 const pluginRuntime = usePluginRuntime();
 const pathname = useLocation({
   select: (location) => location.pathname,
@@ -64,6 +67,14 @@ const pluginItems = computed<readonly RailItem[]>(() => {
   });
 });
 
+const topItems = computed<readonly RailItem[]>(() =>
+  ALL_TOP_ITEMS.filter((item) => {
+    if (item.id === "sessions") return isV2Enabled.value;
+    if (item.id === "sessions-v1") return isV1Enabled.value;
+    return true;
+  }),
+);
+
 const currentRouteRail = computed<RailItemId | null>(() => {
   if (pathname.value === "/board") {
     return "board";
@@ -75,6 +86,10 @@ const currentRouteRail = computed<RailItemId | null>(() => {
 
   if (pathname.value === "/settings") {
     return "settings";
+  }
+
+  if (pathname.value === "/sessions-v1") {
+    return "sessions-v1";
   }
 
   if (pathname.value === "/" || pathname.value.startsWith("/sessions/")) {
@@ -123,7 +138,7 @@ function getStatusBadgeCount(count: number): number | undefined {
 }
 
 function isSidebarRail(value: RailItemId): value is SidebarRail {
-  return ["board", "sessions", "analytics", "github", "marketplace", "settings"].includes(value);
+  return ["board", "sessions", "sessions-v1", "analytics", "github", "marketplace", "settings"].includes(value);
 }
 
 async function loadPluginStatuses(): Promise<void> {
