@@ -124,7 +124,7 @@ onUnmounted(() => {
           </Badge>
         </div>
 
-        <p class="text-sm text-muted-foreground">
+        <p v-if="props.projectName" class="text-sm text-muted-foreground">
           {{ projectLabel }}
         </p>
         <SessionOriginBadge :origin="props.origin" />

@@ -88,7 +88,7 @@ const currentRouteRail = computed<RailItemId | null>(() => {
     return "settings";
   }
 
-  if (pathname.value === "/sessions-v1") {
+  if (pathname.value === "/sessions-v1" || pathname.value.startsWith("/sessions-v1/")) {
     return "sessions-v1";
   }
 
