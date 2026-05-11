@@ -1035,6 +1035,16 @@ public sealed partial class SessionOrchestrator(
             instanceTracker.Remove(session.InstanceId);
         }
 
+        // Clean up workspace directory (worktree/clone) — best effort, must not block deletion
+        try
+        {
+            await workspaceService.CleanupWorkspaceAsync(session.WorkspaceId);
+        }
+        catch (Exception ex)
+        {
+            LogStopFailed(ex, session.InstanceId);
+        }
+
         var deletedAt = DateTime.UtcNow;
         var instanceUpdateResult = await instanceService.UpdateInstanceStatusAsync(
             session.InstanceId, "stopped", deletedAt.ToString("O"));

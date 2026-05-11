@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
+import { Loader2, OctagonX, Pencil, RotateCcw, Square, Trash2 } from "lucide-vue-next";
 import ConfirmDeleteSessionDialog from "@/components/sessions/ConfirmDeleteSessionDialog.vue";
 import FilesChanged from "@/components/session/FilesChanged.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
@@ -8,20 +9,11 @@ import SmartLinkItem from "@/plugins/builtin/smart-links/SmartLinkItem.vue";
 import TodoListView from "@/components/session/TodoListView.vue";
 import TokenGrid from "@/components/session/TokenGrid.vue";
 import { useSessionTodos } from "@/composables/use-session-todos";
-import {
-  useAbortSession,
-  useArchiveSession,
-  useDeleteSession,
-  useRenameSession,
-  useResumeSession,
-  useTerminateSession,
-  useUnarchiveSession,
-} from "@/composables/use-session-actions";
+import { useSessionDetailContext } from "@/composables/use-session-detail-context";
 import { useDiffs } from "@/composables/use-diffs";
 import { apiFetch } from "@/lib/api-client";
 import { trackAction } from "@/lib/track-action";
 import type { SessionListItem } from "@/lib/api-types";
-import { useSessionsStore } from "@/stores/sessions";
 import { useSmartLinksStore } from "@/stores/smart-links";
 
 interface TokenMetric {
@@ -65,21 +57,21 @@ const props = defineProps<{
 }>();
 
 const router = useRouter();
-const sessionsStore = useSessionsStore();
+const ctx = useSessionDetailContext();
 const smartLinksStore = useSmartLinksStore();
 
-const { abortSession, isAborting, error: abortError } = useAbortSession();
-const { archiveSession, isArchiving, error: archiveError } = useArchiveSession();
-const { deleteSession, isDeleting, error: deleteError } = useDeleteSession();
-const { renameSession, isLoading: isRenaming, error: renameError } = useRenameSession();
+const { abortSession, isAborting, error: abortError } = ctx.abort;
+const { archiveSession, isArchiving, error: archiveError } = ctx.archive;
+const { deleteSession, isDeleting, error: deleteError } = ctx.delete;
+const { renameSession, isLoading: isRenaming, error: renameError } = ctx.rename;
 const {
   resumeSession,
   isResuming,
   resumingSessionId,
   error: resumeError,
-} = useResumeSession();
-const { terminateSession, isTerminating, error: terminateError } = useTerminateSession();
-const { unarchiveSession, isUnarchiving, error: unarchiveError } = useUnarchiveSession();
+} = ctx.resume;
+const { terminateSession, isTerminating, error: terminateError } = ctx.terminate;
+const { unarchiveSession, isUnarchiving, error: unarchiveError } = ctx.unarchive;
 
 const remoteSessionDetail = ref<SessionApiDetail | null>(null);
 const filesChanged = ref<ChangedFile[]>([]);
@@ -195,7 +187,7 @@ watch(
     onCleanup(() => controller.abort());
 
     try {
-      const detailResponse = await apiFetch(`/api/sessions/${encodeURIComponent(nextSessionId)}`, {
+      const detailResponse = await apiFetch(`${ctx.apiBasePath}/${encodeURIComponent(nextSessionId)}`, {
         signal: controller.signal,
       });
 
@@ -266,7 +258,7 @@ async function handleResume(): Promise<void> {
     const response = await resumeSession(sessionId.value);
     refreshPanelData();
     await router.navigate({
-      to: "/sessions/$id",
+      to: ctx.sessionRoutePath,
       params: { id: response.session.id },
       search: {
         instanceId: response.instanceId,
@@ -285,7 +277,7 @@ async function handleStop(): Promise<void> {
 
   try {
     await terminateSession(sessionId.value, resolvedInstanceId.value);
-    sessionsStore.patchSession(sessionId.value, {
+    ctx.patchSession(sessionId.value, {
       activityStatus: "idle",
       lifecycleStatus: "stopped",
       sessionStatus: "stopped",
@@ -358,7 +350,7 @@ async function handleArchive(): Promise<void> {
 
   try {
     await archiveSession(sessionId.value);
-    sessionsStore.patchSession(sessionId.value, {
+    ctx.patchSession(sessionId.value, {
       retentionStatus: "archived",
     });
     refreshPanelData();
@@ -374,7 +366,7 @@ async function handleUnarchive(): Promise<void> {
 
   try {
     await unarchiveSession(sessionId.value);
-    sessionsStore.patchSession(sessionId.value, {
+    ctx.patchSession(sessionId.value, {
       retentionStatus: "active",
     });
     refreshPanelData();
@@ -474,7 +466,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
   const sid = sessionId.value;
   if (!sid) return;
   try {
-    const response = await apiFetch(`/api/sessions/${sid}/smart-links/${linkId}/dismiss`, {
+    const response = await apiFetch(`${ctx.apiBasePath}/${encodeURIComponent(sid)}/smart-links/${encodeURIComponent(linkId)}/dismiss`, {
       method: "PATCH",
     });
     if (response.ok) {
@@ -491,6 +483,126 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
     class="session-detail-panel"
     aria-label="Session details"
   >
+    <!-- Compact icon toolbar (V1 layout) -->
+    <div
+      v-if="ctx.actionsLayout === 'toolbar'"
+      class="session-action-toolbar"
+    >
+      <button
+        v-if="canAbort"
+        type="button"
+        class="session-action-toolbar__btn session-action-toolbar__btn--danger"
+        :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
+        title="Abort"
+        @click="handleAbort"
+      >
+        <Loader2
+          v-if="isAborting"
+          :size="14"
+          class="session-action-toolbar__spinner"
+          aria-hidden="true"
+        />
+        <OctagonX
+          v-else
+          :size="14"
+          aria-hidden="true"
+        />
+      </button>
+
+      <button
+        v-if="canResume"
+        type="button"
+        class="session-action-toolbar__btn"
+        :disabled="isAnyActionPending || !sessionId"
+        title="Resume"
+        @click="handleResume"
+      >
+        <Loader2
+          v-if="isResumingCurrentSession"
+          :size="14"
+          class="session-action-toolbar__spinner"
+          aria-hidden="true"
+        />
+        <RotateCcw
+          v-else
+          :size="14"
+          aria-hidden="true"
+        />
+      </button>
+
+      <button
+        v-if="canStop"
+        type="button"
+        class="session-action-toolbar__btn session-action-toolbar__btn--danger"
+        :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
+        title="Stop"
+        @click="handleStop"
+      >
+        <Loader2
+          v-if="isTerminating"
+          :size="14"
+          class="session-action-toolbar__spinner"
+          aria-hidden="true"
+        />
+        <Square
+          v-else
+          :size="14"
+          aria-hidden="true"
+        />
+      </button>
+
+      <span class="session-action-toolbar__divider" />
+
+      <button
+        type="button"
+        class="session-action-toolbar__btn"
+        :disabled="isAnyActionPending || !sessionId"
+        title="Rename"
+        @click="handleRename"
+      >
+        <Loader2
+          v-if="isRenaming"
+          :size="14"
+          class="session-action-toolbar__spinner"
+          aria-hidden="true"
+        />
+        <Pencil
+          v-else
+          :size="14"
+          aria-hidden="true"
+        />
+      </button>
+
+      <button
+        type="button"
+        class="session-action-toolbar__btn session-action-toolbar__btn--danger"
+        :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
+        title="Delete"
+        @click="handleDelete"
+      >
+        <Loader2
+          v-if="isDeleting"
+          :size="14"
+          class="session-action-toolbar__spinner"
+          aria-hidden="true"
+        />
+        <Trash2
+          v-else
+          :size="14"
+          aria-hidden="true"
+        />
+      </button>
+
+      <p
+        v-for="message in actionErrors"
+        :key="message"
+        class="session-action-toolbar__error"
+        role="alert"
+      >
+        {{ message }}
+      </p>
+    </div>
+
     <article class="session-section-card">
       <div class="session-section-card__header">
         <p class="session-section-card__title">
@@ -507,7 +619,10 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
 
     <TokenGrid :metrics="tokenMetrics" />
 
-    <article class="session-section-card">
+    <article
+      v-if="ctx.actionsLayout === 'card'"
+      class="session-section-card"
+    >
       <div class="session-section-card__header">
         <p class="session-section-card__title">
           Session actions
@@ -567,6 +682,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
         </button>
 
         <button
+          v-if="ctx.supportsFork"
           type="button"
           data-testid="session-archived-fork-button"
           class="session-action-button"
@@ -609,7 +725,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
         </button>
 
         <button
-          v-if="canArchive"
+          v-if="canArchive && ctx.supportsArchive"
           type="button"
           data-testid="session-archive-banner-button"
           class="session-action-button"
@@ -626,7 +742,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
         </button>
 
         <button
-          v-if="canUnarchive"
+          v-if="canUnarchive && ctx.supportsArchive"
           type="button"
           data-testid="session-unarchive-button"
           class="session-action-button"
@@ -714,6 +830,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
     />
 
     <ForkSessionDialog
+      v-if="ctx.supportsFork"
       :open="isForkDialogOpen"
       :session-id="sessionId ?? ''"
       :source-title="sessionTitle"
@@ -847,6 +964,70 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
+}
+
+/* ---- Compact icon toolbar (V1 layout) ---- */
+
+.session-action-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.session-action-toolbar__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.session-action-toolbar__btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.session-action-toolbar__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.session-action-toolbar__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.session-action-toolbar__btn--danger {
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+.session-action-toolbar__divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.session-action-toolbar__spinner {
+  animation: session-detail-panel-spin 0.8s linear infinite;
+}
+
+.session-action-toolbar__error {
+  width: 100%;
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--error);
 }
 
 </style>
