@@ -31,5 +31,6 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+  padding: 24px;
 }
 </style>
