@@ -24,6 +24,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SessionsIdRouteImport } from './routes/sessions.$id'
 import { Route as SessionsV1IdRouteImport } from './routes/sessions-v1_.$id'
 import { Route as SettingsPluginsPluginIdRouteImport } from './routes/settings_.plugins.$pluginId'
+import { Route as GithubOwnerRepoRouteImport } from './routes/github.$owner.$repo'
 import { Route as GithubOwnerRepoPullsNumberRouteImport } from './routes/github.$owner.$repo.pulls.$number'
 import { Route as GithubOwnerRepoIssuesNumberRouteImport } from './routes/github.$owner.$repo.issues.$number'
 
@@ -102,17 +103,22 @@ const SettingsPluginsPluginIdRoute = SettingsPluginsPluginIdRouteImport.update({
   path: '/settings/plugins/$pluginId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GithubOwnerRepoRoute = GithubOwnerRepoRouteImport.update({
+  id: '/$owner/$repo',
+  path: '/$owner/$repo',
+  getParentRoute: () => GithubRoute,
+} as any)
 const GithubOwnerRepoPullsNumberRoute =
   GithubOwnerRepoPullsNumberRouteImport.update({
-    id: '/$owner/$repo/pulls/$number',
-    path: '/$owner/$repo/pulls/$number',
-    getParentRoute: () => GithubRoute,
+    id: '/pulls/$number',
+    path: '/pulls/$number',
+    getParentRoute: () => GithubOwnerRepoRoute,
   } as any)
 const GithubOwnerRepoIssuesNumberRoute =
   GithubOwnerRepoIssuesNumberRouteImport.update({
-    id: '/$owner/$repo/issues/$number',
-    path: '/$owner/$repo/issues/$number',
-    getParentRoute: () => GithubRoute,
+    id: '/issues/$number',
+    path: '/issues/$number',
+    getParentRoute: () => GithubOwnerRepoRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -131,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/sessions-v1/$id': typeof SessionsV1IdRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
+  '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
   '/github/$owner/$repo/pulls/$number': typeof GithubOwnerRepoPullsNumberRoute
 }
@@ -150,6 +157,7 @@ export interface FileRoutesByTo {
   '/sessions-v1/$id': typeof SessionsV1IdRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
+  '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
   '/github/$owner/$repo/pulls/$number': typeof GithubOwnerRepoPullsNumberRoute
 }
@@ -170,6 +178,7 @@ export interface FileRoutesById {
   '/sessions-v1_/$id': typeof SessionsV1IdRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/settings_/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
+  '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
   '/github/$owner/$repo/pulls/$number': typeof GithubOwnerRepoPullsNumberRoute
 }
@@ -191,6 +200,7 @@ export interface FileRouteTypes {
     | '/sessions-v1/$id'
     | '/sessions/$id'
     | '/settings/plugins/$pluginId'
+    | '/github/$owner/$repo'
     | '/github/$owner/$repo/issues/$number'
     | '/github/$owner/$repo/pulls/$number'
   fileRoutesByTo: FileRoutesByTo
@@ -210,6 +220,7 @@ export interface FileRouteTypes {
     | '/sessions-v1/$id'
     | '/sessions/$id'
     | '/settings/plugins/$pluginId'
+    | '/github/$owner/$repo'
     | '/github/$owner/$repo/issues/$number'
     | '/github/$owner/$repo/pulls/$number'
   id:
@@ -229,6 +240,7 @@ export interface FileRouteTypes {
     | '/sessions-v1_/$id'
     | '/sessions/$id'
     | '/settings_/plugins/$pluginId'
+    | '/github/$owner/$repo'
     | '/github/$owner/$repo/issues/$number'
     | '/github/$owner/$repo/pulls/$number'
   fileRoutesById: FileRoutesById
@@ -360,29 +372,47 @@ declare module '@tanstack/vue-router' {
     }
     '/github/$owner/$repo/pulls/$number': {
       id: '/github/$owner/$repo/pulls/$number'
-      path: '/$owner/$repo/pulls/$number'
+      path: '/pulls/$number'
       fullPath: '/github/$owner/$repo/pulls/$number'
       preLoaderRoute: typeof GithubOwnerRepoPullsNumberRouteImport
-      parentRoute: typeof GithubRoute
+      parentRoute: typeof GithubOwnerRepoRoute
     }
     '/github/$owner/$repo/issues/$number': {
       id: '/github/$owner/$repo/issues/$number'
-      path: '/$owner/$repo/issues/$number'
+      path: '/issues/$number'
       fullPath: '/github/$owner/$repo/issues/$number'
       preLoaderRoute: typeof GithubOwnerRepoIssuesNumberRouteImport
+      parentRoute: typeof GithubOwnerRepoRoute
+    }
+    '/github/$owner/$repo': {
+      id: '/github/$owner/$repo'
+      path: '/$owner/$repo'
+      fullPath: '/github/$owner/$repo'
+      preLoaderRoute: typeof GithubOwnerRepoRouteImport
       parentRoute: typeof GithubRoute
     }
   }
 }
 
-interface GithubRouteChildren {
+interface GithubOwnerRepoRouteChildren {
   GithubOwnerRepoIssuesNumberRoute: typeof GithubOwnerRepoIssuesNumberRoute
   GithubOwnerRepoPullsNumberRoute: typeof GithubOwnerRepoPullsNumberRoute
 }
 
-const GithubRouteChildren: GithubRouteChildren = {
+const GithubOwnerRepoRouteChildren: GithubOwnerRepoRouteChildren = {
   GithubOwnerRepoIssuesNumberRoute: GithubOwnerRepoIssuesNumberRoute,
   GithubOwnerRepoPullsNumberRoute: GithubOwnerRepoPullsNumberRoute,
+}
+
+const GithubOwnerRepoRouteWithChildren =
+  GithubOwnerRepoRoute._addFileChildren(GithubOwnerRepoRouteChildren)
+
+interface GithubRouteChildren {
+  GithubOwnerRepoRoute: typeof GithubOwnerRepoRouteWithChildren
+}
+
+const GithubRouteChildren: GithubRouteChildren = {
+  GithubOwnerRepoRoute: GithubOwnerRepoRouteWithChildren,
 }
 
 const GithubRouteWithChildren =
