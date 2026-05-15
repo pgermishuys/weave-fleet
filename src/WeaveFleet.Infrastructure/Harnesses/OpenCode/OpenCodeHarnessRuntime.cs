@@ -175,7 +175,11 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime
                 ? new HarnessAvailability(true, null)
                 : new HarnessAvailability(false, $"opencode --version exited with code {process.ExitCode}.");
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException)
+        {
+            return new HarnessAvailability(false, "Availability check was cancelled.");
+        }
+        catch (Exception ex)
         {
             LogAvailabilityCheckFailed(_logger, ex);
             return new HarnessAvailability(false, "opencode binary not found on PATH.");
