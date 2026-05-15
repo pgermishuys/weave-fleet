@@ -1,6 +1,14 @@
 import { createFileRoute } from "@tanstack/vue-router";
-import GitHubBrowserPage from "@/components/pages/GitHubBrowserPage.vue";
+import { Outlet } from "@tanstack/vue-router";
+import { defineComponent } from "vue";
+
+const GitHubLayout = defineComponent({
+  name: "GitHubLayout",
+  setup() {
+    return () => <Outlet />;
+  },
+});
 
 export const Route = createFileRoute("/github")({
-  component: GitHubBrowserPage,
+  component: GitHubLayout,
 });
