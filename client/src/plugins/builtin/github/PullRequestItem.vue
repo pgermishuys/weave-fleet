@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useRouter } from "@tanstack/vue-router";
 import { computed } from "vue";
-import { GitMerge, GitPullRequest, GitPullRequestClosed } from "lucide-vue-next";
+import { GitMerge, GitPullRequest, GitPullRequestClosed, MessageSquare } from "lucide-vue-next";
 import { formatRelativeTime } from "@/lib/format-utils";
 
 interface GitHubLabel {
@@ -23,6 +23,7 @@ interface GitHubPullRequestItemData {
   repoFullName: string;
   labels: readonly GitHubLabel[];
   user: GitHubUser;
+  comments: number;
   updatedAt: string;
   htmlUrl: string;
 }
@@ -30,6 +31,10 @@ interface GitHubPullRequestItemData {
 const props = defineProps<{
   item: GitHubPullRequestItemData;
 }>();
+
+const emit = defineEmits<{
+  labelClick: [label: string];
+}>(); 
 
 const router = useRouter();
 
@@ -140,6 +145,7 @@ function handleKeydown(event: KeyboardEvent): void {
             :key="label.name"
             class="pull-request-label"
             :style="getLabelStyle(label.color)"
+            @click.stop="emit('labelClick', label.name)"
           >
             {{ label.name }}
           </span>
@@ -154,6 +160,10 @@ function handleKeydown(event: KeyboardEvent): void {
         >
         <span class="pull-request-user">{{ item.user.login }}</span>
         <span class="pull-request-time">{{ relativeTime }}</span>
+        <span v-if="item.comments > 0" class="pull-request-comments">
+          <MessageSquare :size="11" />
+          {{ item.comments }}
+        </span>
       </div>
     </div>
 
@@ -274,6 +284,20 @@ function handleKeydown(event: KeyboardEvent): void {
   border-radius: 999px;
   font-size: 10px;
   font-weight: 600;
+  cursor: pointer;
+}
+
+.pull-request-label:hover {
+  filter: brightness(1.2);
+}
+
+.pull-request-comments {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--muted);
 }
 
 .pull-request-avatar {

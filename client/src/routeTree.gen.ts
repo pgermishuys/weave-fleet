@@ -17,6 +17,7 @@ import { Route as RepositoriesRouteImport } from './routes/repositories'
 import { Route as QueueRouteImport } from './routes/queue'
 import { Route as PipelinesRouteImport } from './routes/pipelines'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as GithubRouteImport } from './routes/github'
 import { Route as BoardRouteImport } from './routes/board'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
@@ -66,6 +67,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GithubRoute = GithubRouteImport.update({
+  id: '/github',
+  path: '/github',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BoardRoute = BoardRouteImport.update({
   id: '/board',
   path: '/board',
@@ -98,21 +104,22 @@ const SettingsPluginsPluginIdRoute = SettingsPluginsPluginIdRouteImport.update({
 } as any)
 const GithubOwnerRepoPullsNumberRoute =
   GithubOwnerRepoPullsNumberRouteImport.update({
-    id: '/github/$owner/$repo/pulls/$number',
-    path: '/github/$owner/$repo/pulls/$number',
-    getParentRoute: () => rootRouteImport,
+    id: '/$owner/$repo/pulls/$number',
+    path: '/$owner/$repo/pulls/$number',
+    getParentRoute: () => GithubRoute,
   } as any)
 const GithubOwnerRepoIssuesNumberRoute =
   GithubOwnerRepoIssuesNumberRouteImport.update({
-    id: '/github/$owner/$repo/issues/$number',
-    path: '/github/$owner/$repo/issues/$number',
-    getParentRoute: () => rootRouteImport,
+    id: '/$owner/$repo/issues/$number',
+    path: '/$owner/$repo/issues/$number',
+    getParentRoute: () => GithubRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/board': typeof BoardRoute
+  '/github': typeof GithubRouteWithChildren
   '/login': typeof LoginRoute
   '/pipelines': typeof PipelinesRoute
   '/queue': typeof QueueRoute
@@ -131,6 +138,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/board': typeof BoardRoute
+  '/github': typeof GithubRouteWithChildren
   '/login': typeof LoginRoute
   '/pipelines': typeof PipelinesRoute
   '/queue': typeof QueueRoute
@@ -150,6 +158,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
   '/board': typeof BoardRoute
+  '/github': typeof GithubRouteWithChildren
   '/login': typeof LoginRoute
   '/pipelines': typeof PipelinesRoute
   '/queue': typeof QueueRoute
@@ -170,6 +179,7 @@ export interface FileRouteTypes {
     | '/'
     | '/analytics'
     | '/board'
+    | '/github'
     | '/login'
     | '/pipelines'
     | '/queue'
@@ -188,6 +198,7 @@ export interface FileRouteTypes {
     | '/'
     | '/analytics'
     | '/board'
+    | '/github'
     | '/login'
     | '/pipelines'
     | '/queue'
@@ -206,6 +217,7 @@ export interface FileRouteTypes {
     | '/'
     | '/analytics'
     | '/board'
+    | '/github'
     | '/login'
     | '/pipelines'
     | '/queue'
@@ -225,6 +237,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnalyticsRoute: typeof AnalyticsRoute
   BoardRoute: typeof BoardRoute
+  GithubRoute: typeof GithubRouteWithChildren
   LoginRoute: typeof LoginRoute
   PipelinesRoute: typeof PipelinesRoute
   QueueRoute: typeof QueueRoute
@@ -236,8 +249,6 @@ export interface RootRouteChildren {
   SessionsV1IdRoute: typeof SessionsV1IdRoute
   SessionsIdRoute: typeof SessionsIdRoute
   SettingsPluginsPluginIdRoute: typeof SettingsPluginsPluginIdRoute
-  GithubOwnerRepoIssuesNumberRoute: typeof GithubOwnerRepoIssuesNumberRoute
-  GithubOwnerRepoPullsNumberRoute: typeof GithubOwnerRepoPullsNumberRoute
 }
 
 declare module '@tanstack/vue-router' {
@@ -298,6 +309,13 @@ declare module '@tanstack/vue-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/github': {
+      id: '/github'
+      path: '/github'
+      fullPath: '/github'
+      preLoaderRoute: typeof GithubRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/board': {
       id: '/board'
       path: '/board'
@@ -342,25 +360,39 @@ declare module '@tanstack/vue-router' {
     }
     '/github/$owner/$repo/pulls/$number': {
       id: '/github/$owner/$repo/pulls/$number'
-      path: '/github/$owner/$repo/pulls/$number'
+      path: '/$owner/$repo/pulls/$number'
       fullPath: '/github/$owner/$repo/pulls/$number'
       preLoaderRoute: typeof GithubOwnerRepoPullsNumberRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof GithubRoute
     }
     '/github/$owner/$repo/issues/$number': {
       id: '/github/$owner/$repo/issues/$number'
-      path: '/github/$owner/$repo/issues/$number'
+      path: '/$owner/$repo/issues/$number'
       fullPath: '/github/$owner/$repo/issues/$number'
       preLoaderRoute: typeof GithubOwnerRepoIssuesNumberRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof GithubRoute
     }
   }
 }
+
+interface GithubRouteChildren {
+  GithubOwnerRepoIssuesNumberRoute: typeof GithubOwnerRepoIssuesNumberRoute
+  GithubOwnerRepoPullsNumberRoute: typeof GithubOwnerRepoPullsNumberRoute
+}
+
+const GithubRouteChildren: GithubRouteChildren = {
+  GithubOwnerRepoIssuesNumberRoute: GithubOwnerRepoIssuesNumberRoute,
+  GithubOwnerRepoPullsNumberRoute: GithubOwnerRepoPullsNumberRoute,
+}
+
+const GithubRouteWithChildren =
+  GithubRoute._addFileChildren(GithubRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalyticsRoute: AnalyticsRoute,
   BoardRoute: BoardRoute,
+  GithubRoute: GithubRouteWithChildren,
   LoginRoute: LoginRoute,
   PipelinesRoute: PipelinesRoute,
   QueueRoute: QueueRoute,
@@ -372,8 +404,6 @@ const rootRouteChildren: RootRouteChildren = {
   SessionsV1IdRoute: SessionsV1IdRoute,
   SessionsIdRoute: SessionsIdRoute,
   SettingsPluginsPluginIdRoute: SettingsPluginsPluginIdRoute,
-  GithubOwnerRepoIssuesNumberRoute: GithubOwnerRepoIssuesNumberRoute,
-  GithubOwnerRepoPullsNumberRoute: GithubOwnerRepoPullsNumberRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
