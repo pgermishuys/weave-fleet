@@ -136,8 +136,8 @@ export interface FileRoutesByFullPath {
   '/welcome': typeof WelcomeRoute
   '/sessions-v1/$id': typeof SessionsV1IdRoute
   '/sessions/$id': typeof SessionsIdRoute
-  '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
+  '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
   '/github/$owner/$repo/pulls/$number': typeof GithubOwnerRepoPullsNumberRoute
 }
@@ -156,8 +156,8 @@ export interface FileRoutesByTo {
   '/welcome': typeof WelcomeRoute
   '/sessions-v1/$id': typeof SessionsV1IdRoute
   '/sessions/$id': typeof SessionsIdRoute
-  '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
+  '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
   '/github/$owner/$repo/pulls/$number': typeof GithubOwnerRepoPullsNumberRoute
 }
@@ -177,8 +177,8 @@ export interface FileRoutesById {
   '/welcome': typeof WelcomeRoute
   '/sessions-v1_/$id': typeof SessionsV1IdRoute
   '/sessions/$id': typeof SessionsIdRoute
-  '/settings_/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
+  '/settings_/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
   '/github/$owner/$repo/pulls/$number': typeof GithubOwnerRepoPullsNumberRoute
 }
@@ -199,8 +199,8 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/sessions-v1/$id'
     | '/sessions/$id'
-    | '/settings/plugins/$pluginId'
     | '/github/$owner/$repo'
+    | '/settings/plugins/$pluginId'
     | '/github/$owner/$repo/issues/$number'
     | '/github/$owner/$repo/pulls/$number'
   fileRoutesByTo: FileRoutesByTo
@@ -219,8 +219,8 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/sessions-v1/$id'
     | '/sessions/$id'
-    | '/settings/plugins/$pluginId'
     | '/github/$owner/$repo'
+    | '/settings/plugins/$pluginId'
     | '/github/$owner/$repo/issues/$number'
     | '/github/$owner/$repo/pulls/$number'
   id:
@@ -239,8 +239,8 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/sessions-v1_/$id'
     | '/sessions/$id'
-    | '/settings_/plugins/$pluginId'
     | '/github/$owner/$repo'
+    | '/settings_/plugins/$pluginId'
     | '/github/$owner/$repo/issues/$number'
     | '/github/$owner/$repo/pulls/$number'
   fileRoutesById: FileRoutesById
@@ -370,6 +370,13 @@ declare module '@tanstack/vue-router' {
       preLoaderRoute: typeof SettingsPluginsPluginIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/github/$owner/$repo': {
+      id: '/github/$owner/$repo'
+      path: '/$owner/$repo'
+      fullPath: '/github/$owner/$repo'
+      preLoaderRoute: typeof GithubOwnerRepoRouteImport
+      parentRoute: typeof GithubRoute
+    }
     '/github/$owner/$repo/pulls/$number': {
       id: '/github/$owner/$repo/pulls/$number'
       path: '/pulls/$number'
@@ -384,13 +391,6 @@ declare module '@tanstack/vue-router' {
       preLoaderRoute: typeof GithubOwnerRepoIssuesNumberRouteImport
       parentRoute: typeof GithubOwnerRepoRoute
     }
-    '/github/$owner/$repo': {
-      id: '/github/$owner/$repo'
-      path: '/$owner/$repo'
-      fullPath: '/github/$owner/$repo'
-      preLoaderRoute: typeof GithubOwnerRepoRouteImport
-      parentRoute: typeof GithubRoute
-    }
   }
 }
 
@@ -404,8 +404,9 @@ const GithubOwnerRepoRouteChildren: GithubOwnerRepoRouteChildren = {
   GithubOwnerRepoPullsNumberRoute: GithubOwnerRepoPullsNumberRoute,
 }
 
-const GithubOwnerRepoRouteWithChildren =
-  GithubOwnerRepoRoute._addFileChildren(GithubOwnerRepoRouteChildren)
+const GithubOwnerRepoRouteWithChildren = GithubOwnerRepoRoute._addFileChildren(
+  GithubOwnerRepoRouteChildren,
+)
 
 interface GithubRouteChildren {
   GithubOwnerRepoRoute: typeof GithubOwnerRepoRouteWithChildren
