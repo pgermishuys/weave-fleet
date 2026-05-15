@@ -116,6 +116,7 @@ const pullItems = computed(() =>
     comments: pr.comments,
     updatedAt: pr.updated_at,
     htmlUrl: pr.html_url,
+    headBranch: pr.head.ref,
   })),
 );
 

@@ -3,6 +3,7 @@ import { useRouter } from "@tanstack/vue-router";
 import { computed } from "vue";
 import { CheckCircle2, CircleDot, MessageSquare } from "lucide-vue-next";
 import { formatRelativeTime } from "@/lib/format-utils";
+import CreateSessionFromGitHubDialog from "./components/CreateSessionFromGitHubDialog.vue";
 
 interface GitHubLabel {
   name: string;
@@ -142,15 +143,26 @@ function handleKeydown(event: KeyboardEvent): void {
       </div>
     </div>
 
-    <a
-      class="link-action"
-      :href="item.htmlUrl"
-      target="_blank"
-      rel="noreferrer noopener"
-      @click.stop
-    >
-      Link →
-    </a>
+    <div class="actions" @click.stop>
+      <CreateSessionFromGitHubDialog
+        type="github-issue"
+        :owner="item.repoFullName.split('/')[0] ?? ''"
+        :repo="item.repoFullName.split('/')[1] ?? ''"
+        :number="item.number"
+        :title="item.title"
+        :body="null"
+        :html-url="item.htmlUrl"
+        :repo-full-name="item.repoFullName"
+      />
+      <a
+        class="link-action"
+        :href="item.htmlUrl"
+        target="_blank"
+        rel="noreferrer noopener"
+      >
+        Link →
+      </a>
+    </div>
   </article>
 </template>
 
@@ -168,6 +180,11 @@ function handleKeydown(event: KeyboardEvent): void {
 
 .issue-item:hover .link-action,
 .issue-item:focus-within .link-action {
+  opacity: 1;
+}
+
+.issue-item:hover :deep(.create-session-trigger),
+.issue-item:focus-within :deep(.create-session-trigger) {
   opacity: 1;
 }
 
@@ -272,13 +289,19 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .link-action {
-  position: absolute;
-  top: 50%;
-  right: 12px;
-  transform: translateY(-50%);
   font-size: 10px;
   color: var(--accent);
   text-decoration: none;
   opacity: 0;
+}
+
+.actions {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 </style>
