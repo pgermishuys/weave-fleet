@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useRouter } from "@tanstack/vue-router";
 import { computed } from "vue";
-import { GitMerge, GitPullRequest, GitPullRequestClosed } from "lucide-vue-next";
+import { GitMerge, GitPullRequest, GitPullRequestClosed, MessageSquare } from "lucide-vue-next";
 import { formatRelativeTime } from "@/lib/format-utils";
+import CreateSessionFromGitHubDialog from "./components/CreateSessionFromGitHubDialog.vue";
 
 interface GitHubLabel {
   name: string;
@@ -23,13 +24,19 @@ interface GitHubPullRequestItemData {
   repoFullName: string;
   labels: readonly GitHubLabel[];
   user: GitHubUser;
+  comments: number;
   updatedAt: string;
   htmlUrl: string;
+  headBranch?: string | null;
 }
 
 const props = defineProps<{
   item: GitHubPullRequestItemData;
 }>();
+
+const emit = defineEmits<{
+  labelClick: [label: string];
+}>(); 
 
 const router = useRouter();
 
@@ -140,6 +147,7 @@ function handleKeydown(event: KeyboardEvent): void {
             :key="label.name"
             class="pull-request-label"
             :style="getLabelStyle(label.color)"
+            @click.stop="emit('labelClick', label.name)"
           >
             {{ label.name }}
           </span>
@@ -154,18 +162,34 @@ function handleKeydown(event: KeyboardEvent): void {
         >
         <span class="pull-request-user">{{ item.user.login }}</span>
         <span class="pull-request-time">{{ relativeTime }}</span>
+        <span v-if="item.comments > 0" class="pull-request-comments">
+          <MessageSquare :size="11" />
+          {{ item.comments }}
+        </span>
       </div>
     </div>
 
-    <a
-      class="link-action"
-      :href="item.htmlUrl"
-      target="_blank"
-      rel="noreferrer noopener"
-      @click.stop
-    >
-      Link →
-    </a>
+    <div class="actions" @click.stop>
+      <CreateSessionFromGitHubDialog
+        type="github-pull-request"
+        :owner="item.repoFullName.split('/')[0] ?? ''"
+        :repo="item.repoFullName.split('/')[1] ?? ''"
+        :number="item.number"
+        :title="item.title"
+        :body="null"
+        :html-url="item.htmlUrl"
+        :repo-full-name="item.repoFullName"
+        :head-branch="item.headBranch"
+      />
+      <a
+        class="link-action"
+        :href="item.htmlUrl"
+        target="_blank"
+        rel="noreferrer noopener"
+      >
+        Link →
+      </a>
+    </div>
   </article>
 </template>
 
@@ -183,6 +207,11 @@ function handleKeydown(event: KeyboardEvent): void {
 
 .pull-request-item:hover .link-action,
 .pull-request-item:focus-within .link-action {
+  opacity: 1;
+}
+
+.pull-request-item:hover :deep(.create-session-trigger),
+.pull-request-item:focus-within :deep(.create-session-trigger) {
   opacity: 1;
 }
 
@@ -274,6 +303,20 @@ function handleKeydown(event: KeyboardEvent): void {
   border-radius: 999px;
   font-size: 10px;
   font-weight: 600;
+  cursor: pointer;
+}
+
+.pull-request-label:hover {
+  filter: brightness(1.2);
+}
+
+.pull-request-comments {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--muted);
 }
 
 .pull-request-avatar {
@@ -284,13 +327,19 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .link-action {
-  position: absolute;
-  top: 50%;
-  right: 12px;
-  transform: translateY(-50%);
   font-size: 10px;
   color: var(--accent);
   text-decoration: none;
   opacity: 0;
+}
+
+.actions {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 </style>

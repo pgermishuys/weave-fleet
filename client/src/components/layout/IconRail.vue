@@ -20,7 +20,7 @@ interface RailItem {
   id: RailItemId;
   label: string;
   icon: Component;
-  to?: "/" | "/board" | "/analytics" | "/settings" | "/sessions-v1";
+  to?: string;
   status?: PluginConnectionStatus;
   badge?: number;
 }
@@ -61,6 +61,7 @@ const pluginItems = computed<readonly RailItem[]>(() => {
       id: item.viewId,
       label: item.label,
       icon: item.icon,
+      to: item.defaultPath,
       status: pluginStatus?.status ?? "disconnected",
       badge,
     };
