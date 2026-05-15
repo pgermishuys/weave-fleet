@@ -12,6 +12,10 @@ function navigateToGitHub() {
   void router.navigate({ to: "/github" as string });
 }
 
+function navigateToRepo(bookmark: { fullName: string; owner: string; name: string }) {
+  void router.navigate({ to: `/github/${bookmark.owner}/${bookmark.name}` as string });
+}
+
 async function handleRemove(fullName: string) {
   await removeBookmark(fullName);
 }
@@ -51,7 +55,7 @@ async function handleRemove(fullName: string) {
           <button
             class="bookmark-link"
             :title="bookmark.fullName"
-            @click="navigateToGitHub()"
+            @click="navigateToRepo(bookmark)"
           >
             <span class="bookmark-name">{{ bookmark.fullName }}</span>
           </button>
