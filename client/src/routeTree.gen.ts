@@ -26,6 +26,7 @@ import { Route as SessionsIdRouteImport } from './routes/sessions.$id'
 import { Route as SessionsV1IdRouteImport } from './routes/sessions-v1_.$id'
 import { Route as SettingsPluginsPluginIdRouteImport } from './routes/settings_.plugins.$pluginId'
 import { Route as GithubOwnerRepoRouteImport } from './routes/github.$owner.$repo'
+import { Route as GithubOwnerRepoIndexRouteImport } from './routes/github.$owner.$repo.index'
 import { Route as GithubOwnerRepoPullsNumberRouteImport } from './routes/github.$owner.$repo.pulls.$number'
 import { Route as GithubOwnerRepoIssuesNumberRouteImport } from './routes/github.$owner.$repo.issues.$number'
 
@@ -114,6 +115,11 @@ const GithubOwnerRepoRoute = GithubOwnerRepoRouteImport.update({
   path: '/$owner/$repo',
   getParentRoute: () => GithubRoute,
 } as any)
+const GithubOwnerRepoIndexRoute = GithubOwnerRepoIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => GithubOwnerRepoRoute,
+} as any)
 const GithubOwnerRepoPullsNumberRoute =
   GithubOwnerRepoPullsNumberRouteImport.update({
     id: '/pulls/$number',
@@ -145,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/github/': typeof GithubIndexRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
+  '/github/$owner/$repo/': typeof GithubOwnerRepoIndexRoute
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
   '/github/$owner/$repo/pulls/$number': typeof GithubOwnerRepoPullsNumberRoute
 }
@@ -163,8 +170,8 @@ export interface FileRoutesByTo {
   '/sessions-v1/$id': typeof SessionsV1IdRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/github': typeof GithubIndexRoute
-  '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
+  '/github/$owner/$repo': typeof GithubOwnerRepoIndexRoute
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
   '/github/$owner/$repo/pulls/$number': typeof GithubOwnerRepoPullsNumberRoute
 }
@@ -187,6 +194,7 @@ export interface FileRoutesById {
   '/github/': typeof GithubIndexRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
   '/settings_/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
+  '/github/$owner/$repo/': typeof GithubOwnerRepoIndexRoute
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
   '/github/$owner/$repo/pulls/$number': typeof GithubOwnerRepoPullsNumberRoute
 }
@@ -210,6 +218,7 @@ export interface FileRouteTypes {
     | '/github/'
     | '/github/$owner/$repo'
     | '/settings/plugins/$pluginId'
+    | '/github/$owner/$repo/'
     | '/github/$owner/$repo/issues/$number'
     | '/github/$owner/$repo/pulls/$number'
   fileRoutesByTo: FileRoutesByTo
@@ -228,8 +237,8 @@ export interface FileRouteTypes {
     | '/sessions-v1/$id'
     | '/sessions/$id'
     | '/github'
-    | '/github/$owner/$repo'
     | '/settings/plugins/$pluginId'
+    | '/github/$owner/$repo'
     | '/github/$owner/$repo/issues/$number'
     | '/github/$owner/$repo/pulls/$number'
   id:
@@ -251,6 +260,7 @@ export interface FileRouteTypes {
     | '/github/'
     | '/github/$owner/$repo'
     | '/settings_/plugins/$pluginId'
+    | '/github/$owner/$repo/'
     | '/github/$owner/$repo/issues/$number'
     | '/github/$owner/$repo/pulls/$number'
   fileRoutesById: FileRoutesById
@@ -394,6 +404,13 @@ declare module '@tanstack/vue-router' {
       preLoaderRoute: typeof GithubOwnerRepoRouteImport
       parentRoute: typeof GithubRoute
     }
+    '/github/$owner/$repo/': {
+      id: '/github/$owner/$repo/'
+      path: '/'
+      fullPath: '/github/$owner/$repo/'
+      preLoaderRoute: typeof GithubOwnerRepoIndexRouteImport
+      parentRoute: typeof GithubOwnerRepoRoute
+    }
     '/github/$owner/$repo/pulls/$number': {
       id: '/github/$owner/$repo/pulls/$number'
       path: '/pulls/$number'
@@ -412,11 +429,13 @@ declare module '@tanstack/vue-router' {
 }
 
 interface GithubOwnerRepoRouteChildren {
+  GithubOwnerRepoIndexRoute: typeof GithubOwnerRepoIndexRoute
   GithubOwnerRepoIssuesNumberRoute: typeof GithubOwnerRepoIssuesNumberRoute
   GithubOwnerRepoPullsNumberRoute: typeof GithubOwnerRepoPullsNumberRoute
 }
 
 const GithubOwnerRepoRouteChildren: GithubOwnerRepoRouteChildren = {
+  GithubOwnerRepoIndexRoute: GithubOwnerRepoIndexRoute,
   GithubOwnerRepoIssuesNumberRoute: GithubOwnerRepoIssuesNumberRoute,
   GithubOwnerRepoPullsNumberRoute: GithubOwnerRepoPullsNumberRoute,
 }

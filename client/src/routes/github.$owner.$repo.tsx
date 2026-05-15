@@ -1,21 +1,13 @@
-import { createFileRoute } from "@tanstack/vue-router";
+import { createFileRoute, Outlet } from "@tanstack/vue-router";
 import { defineComponent } from "vue";
-import GitHubRepoPage from "@/components/pages/GitHubRepoPage.vue";
 
-const GitHubRepoRouteComponent = defineComponent({
-  name: "GitHubRepoRouteComponent",
+const GitHubRepoLayout = defineComponent({
+  name: "GitHubRepoLayout",
   setup() {
-    const params = Route.useParams();
-
-    return () => (
-      <GitHubRepoPage
-        owner={params.value.owner}
-        repo={params.value.repo}
-      />
-    );
+    return () => <Outlet />;
   },
 });
 
 export const Route = createFileRoute("/github/$owner/$repo")({
-  component: GitHubRepoRouteComponent,
+  component: GitHubRepoLayout,
 });
