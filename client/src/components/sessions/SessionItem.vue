@@ -39,6 +39,7 @@ import { sessionCache } from "@/lib/session-cache";
 import { dispatchSessionRemoved } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
 import SessionOriginBadge from "@/components/SessionOriginBadge.vue";
+import OpenToolContextSubmenu from "@/components/sessions-v1/OpenToolContextSubmenu.vue";
 import ConfirmDeleteSessionDialog from "./ConfirmDeleteSessionDialog.vue";
 
 interface Props {
@@ -568,6 +569,8 @@ function removeSessionFromStore(): void {
         <GitFork class="h-4 w-4" />
         Fork
       </ContextMenuItem>
+
+      <OpenToolContextSubmenu :directory="session.workspaceDirectory" />
 
       <ContextMenuSub>
         <ContextMenuSubTrigger :disabled="isAnyActionPending">
