@@ -130,11 +130,15 @@ public static class InstanceEndpoints
             if (string.IsNullOrWhiteSpace(q) || !Directory.Exists(dbInstance.Directory))
                 return Results.Ok(new InstanceFilesResponse(id, Array.Empty<string>()));
 
-            var pattern = $"*{q}*";
+            // Normalize query separators to the OS path separator for consistent matching
+            var normalizedQuery = q.Replace('/', Path.DirectorySeparatorChar)
+                                   .Replace('\\', Path.DirectorySeparatorChar);
+
             var files = Directory
-                .EnumerateFiles(dbInstance.Directory, pattern, SearchOption.AllDirectories)
-                .Take(50)
+                .EnumerateFiles(dbInstance.Directory, "*", SearchOption.AllDirectories)
                 .Select(f => f[dbInstance.Directory.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+                .Where(relative => relative.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase))
+                .Take(50)
                 .ToArray();
 
             return Results.Ok(new InstanceFilesResponse(id, files));
