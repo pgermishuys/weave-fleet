@@ -559,7 +559,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       <button
           v-if="ctx.supportsFork"
           type="button"
-          data-testid="session-fork-button"
+          data-testid="session-archived-fork-button"
           class="session-action-toolbar__btn"
         :disabled="isAnyActionPending || !sessionId"
         title="Fork"
