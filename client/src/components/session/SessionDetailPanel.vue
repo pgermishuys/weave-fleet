@@ -793,11 +793,68 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
   color: var(--error);
 }
 
+/* ---- Compact icon toolbar (V1 layout) ---- */
+
+.session-action-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.session-action-toolbar__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.session-action-toolbar__btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.session-action-toolbar__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.session-action-toolbar__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.session-action-toolbar__btn--danger {
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+.session-action-toolbar__divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+}
+
+.session-action-toolbar__spinner {
+  animation: session-detail-panel-spin 0.8s linear infinite;
+}
+
 .session-action-toolbar__error {
   width: 100%;
   margin: 4px 0 0;
   font-size: 11px;
   color: var(--error);
+}
+
+@keyframes session-detail-panel-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 </style>
