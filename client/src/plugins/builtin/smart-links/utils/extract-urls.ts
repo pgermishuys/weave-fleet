@@ -25,7 +25,7 @@ export function extractUrls(text: string): string[] {
 
   // Match bare URLs (not inside markdown link parentheses)
   const textWithoutMarkdown = text.replace(/\[(?:[^\]]*)\]\((https?:\/\/[^)]+)\)/g, ' ')
-  const bareUrlRegex = /https?:\/\/[^\s<>"')\]]+/g
+  const bareUrlRegex = /https?:\/\/[^\s<>"')\]*]+/g
 
   while ((match = bareUrlRegex.exec(textWithoutMarkdown)) !== null) {
     add(normalizeUrl(match[0]))
@@ -47,6 +47,6 @@ export function extractUrls(text: string): string[] {
  * Strips common trailing punctuation from a URL that is likely not part of it.
  */
 function normalizeUrl(raw: string): string {
-  // Remove trailing punctuation: . , ; : ! ? ) ] >
-  return raw.replace(/[.,;:!?)\]>]+$/, '')
+  // Remove trailing punctuation: . , ; : ! ? ) ] > *
+  return raw.replace(/[.,;:!?)\]>*]+$/, '')
 }

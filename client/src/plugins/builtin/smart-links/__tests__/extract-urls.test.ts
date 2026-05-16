@@ -92,6 +92,17 @@ describe('extractUrls', () => {
     expect(extractUrls(text)).toEqual([])
   })
 
+  it('strips markdown bold markers from URLs', () => {
+    expect(extractUrls('See **https://github.com/owner/repo/pull/58** for details')).toEqual([
+      'https://github.com/owner/repo/pull/58',
+    ])
+  })
+
+  it('does not duplicate URL when both bold and plain versions exist', () => {
+    const text = '**https://github.com/owner/repo/pull/58** and https://github.com/owner/repo/pull/58'
+    expect(extractUrls(text)).toEqual(['https://github.com/owner/repo/pull/58'])
+  })
+
   it('handles shorthand with dots and hyphens in names', () => {
     const text = 'Check my-org/my.repo#99'
     expect(extractUrls(text)).toEqual([
