@@ -61,8 +61,8 @@ public sealed partial class UpdateDownloadService(
 
             using var client = httpClientFactory.CreateClient("GitHubApi");
 
-            // Download the archive.
-            await DownloadFileAsync(client, downloadUrl, archivePath, ct).ConfigureAwait(false);
+            // Download the archive (with progress reporting).
+            await DownloadFileWithProgressAsync(client, downloadUrl, archivePath, state, ct).ConfigureAwait(false);
             LogArchiveDownloaded(assetName);
 
             // Download the checksum file.
@@ -123,6 +123,33 @@ public sealed partial class UpdateDownloadService(
 
     private void SetError(UpdateState state, string message) =>
         stateHolder.SetState(state with { Status = UpdateStatus.Error, Error = message });
+
+    private async Task DownloadFileWithProgressAsync(
+        HttpClient client, string url, string destPath, UpdateState state, CancellationToken ct)
+    {
+        using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+
+        var totalBytes = response.Content.Headers.ContentLength;
+        using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var file = File.Create(destPath);
+
+        var buffer = new byte[81920];
+        long bytesReceived = 0;
+        int bytesRead;
+
+        while ((bytesRead = await stream.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+        {
+            await file.WriteAsync(buffer.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
+            bytesReceived += bytesRead;
+            stateHolder.SetState(state with
+            {
+                Status = UpdateStatus.Downloading,
+                DownloadBytesReceived = bytesReceived,
+                DownloadBytesTotal = totalBytes,
+            });
+        }
+    }
 
     private static async Task DownloadFileAsync(HttpClient client, string url, string destPath, CancellationToken ct)
     {

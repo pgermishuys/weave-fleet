@@ -29,7 +29,9 @@ public sealed record UpdateState(
     string? DownloadUrl,
     string? AssetName,
     DateTimeOffset? CheckedAt,
-    string? Error)
+    string? Error,
+    long? DownloadBytesReceived = null,
+    long? DownloadBytesTotal = null)
 {
     /// <summary>Initial state before any check has run.</summary>
     public static readonly UpdateState Initial = new(

@@ -49,6 +49,27 @@ const canCheck = computed(
 );
 
 const canDownload = computed(() => updateStatus.value?.status === "available");
+
+const downloadProgressPercent = computed(() => {
+  const s = updateStatus.value;
+  if (s?.status !== "downloading" || !s.downloadBytesTotal || s.downloadBytesTotal <= 0)
+    return null;
+  return Math.min(100, Math.round((s.downloadBytesReceived ?? 0) / s.downloadBytesTotal * 100));
+});
+
+const downloadProgressLabel = computed(() => {
+  const s = updateStatus.value;
+  if (s?.status !== "downloading") return null;
+  const received = s.downloadBytesReceived ?? 0;
+  const total = s.downloadBytesTotal;
+  const fmt = (bytes: number) => {
+    if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
+    if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${bytes} B`;
+  };
+  if (total && total > 0) return `${fmt(received)} / ${fmt(total)}`;
+  return `${fmt(received)}`;
+});
 </script>
 
 <template>
@@ -85,76 +106,98 @@ const canDownload = computed(() => updateStatus.value?.status === "available");
       </div>
 
       <!-- Update status row -->
-      <div class="flex items-center justify-between rounded-card border border-border bg-main-bg px-4 py-3">
-        <div class="flex items-center gap-2">
-          <LoaderCircle
-            v-if="isCheckingOrDownloading"
-            :size="15"
-            class="animate-spin text-muted"
-            aria-hidden="true"
-          />
-          <CheckCircle2
-            v-else-if="statusVariant === 'ok'"
-            :size="15"
-            class="text-success"
-            aria-hidden="true"
-          />
-          <Download
-            v-else-if="statusVariant === 'warn'"
-            :size="15"
-            class="text-warn"
-            aria-hidden="true"
-          />
-          <AlertCircle
-            v-else-if="statusVariant === 'error'"
-            :size="15"
-            class="text-danger"
-            aria-hidden="true"
-          />
-          <Download
-            v-else-if="statusVariant === 'info'"
-            :size="15"
-            class="text-accent"
-            aria-hidden="true"
-          />
-
-          <p
-            class="text-sm"
-            :class="{
-              'text-text': statusVariant === 'ok' || statusVariant === 'muted',
-              'text-accent': statusVariant === 'info',
-              'text-warn': statusVariant === 'warn',
-              'text-danger': statusVariant === 'error',
-            }"
-          >
-            {{ statusLabel }}
-          </p>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <button
-            v-if="canDownload"
-            type="button"
-            class="rounded-btn border border-border bg-card-bg px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-main-bg disabled:cursor-not-allowed disabled:opacity-50"
-            @click="downloadUpdate"
-          >
-            Download
-          </button>
-
-          <button
-            v-if="canCheck"
-            type="button"
-            :disabled="isCheckingOrDownloading"
-            class="flex items-center gap-1.5 rounded-btn border border-border bg-card-bg px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-main-bg disabled:cursor-not-allowed disabled:opacity-50"
-            @click="checkForUpdate"
-          >
-            <RefreshCw
-              :size="12"
-              :class="{ 'animate-spin': isCheckingOrDownloading }"
+      <div class="flex flex-col gap-2 rounded-card border border-border bg-main-bg px-4 py-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <LoaderCircle
+              v-if="isCheckingOrDownloading"
+              :size="15"
+              class="animate-spin text-muted"
               aria-hidden="true"
             />
-            Check for updates
-          </button>
+            <CheckCircle2
+              v-else-if="statusVariant === 'ok'"
+              :size="15"
+              class="text-success"
+              aria-hidden="true"
+            />
+            <Download
+              v-else-if="statusVariant === 'warn'"
+              :size="15"
+              class="text-warn"
+              aria-hidden="true"
+            />
+            <AlertCircle
+              v-else-if="statusVariant === 'error'"
+              :size="15"
+              class="text-danger"
+              aria-hidden="true"
+            />
+            <Download
+              v-else-if="statusVariant === 'info'"
+              :size="15"
+              class="text-accent"
+              aria-hidden="true"
+            />
+
+            <p
+              class="text-sm"
+              :class="{
+                'text-text': statusVariant === 'ok' || statusVariant === 'muted',
+                'text-accent': statusVariant === 'info',
+                'text-warn': statusVariant === 'warn',
+                'text-danger': statusVariant === 'error',
+              }"
+            >
+              {{ statusLabel }}
+            </p>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button
+              v-if="canDownload"
+              type="button"
+              class="rounded-btn border border-border bg-card-bg px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-main-bg disabled:cursor-not-allowed disabled:opacity-50"
+              @click="downloadUpdate"
+            >
+              Download
+            </button>
+
+            <button
+              v-if="canCheck"
+              type="button"
+              :disabled="isCheckingOrDownloading"
+              class="flex items-center gap-1.5 rounded-btn border border-border bg-card-bg px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-main-bg disabled:cursor-not-allowed disabled:opacity-50"
+              @click="checkForUpdate"
+            >
+              <RefreshCw
+                :size="12"
+                :class="{ 'animate-spin': isCheckingOrDownloading }"
+                aria-hidden="true"
+              />
+              Check for updates
+            </button>
+          </div>
+        </div>
+
+        <!-- Download progress bar -->
+        <div
+          v-if="updateStatus?.status === 'downloading'"
+          class="flex flex-col gap-1"
+        >
+          <div class="h-1.5 w-full overflow-hidden rounded-full bg-border">
+            <div
+              class="h-full rounded-full bg-accent transition-all duration-300"
+              :style="{ width: downloadProgressPercent != null ? `${downloadProgressPercent}%` : '100%' }"
+              :class="{ 'animate-pulse': downloadProgressPercent == null }"
+            />
+          </div>
+          <p
+            v-if="downloadProgressLabel"
+            class="text-xs text-muted"
+          >
+            {{ downloadProgressLabel }}
+          </p>
         </div>
       </div>
 
