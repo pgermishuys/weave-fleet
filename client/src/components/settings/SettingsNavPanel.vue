@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { Component } from "vue";
+import { computed } from "vue";
 import { FolderGit2, Info, Palette, Wrench } from "lucide-vue-next";
+import { useUpdateStatus } from "@/composables/use-update-status";
 
 type SettingsSectionId =
   | "workspace"
@@ -26,6 +28,10 @@ interface SettingsNavItem {
 
 defineProps<Props>();
 const emit = defineEmits<Emits>();
+
+const { isUpdateAvailable, isUpdateStaged } = useUpdateStatus();
+
+const showUpdateDot = computed(() => isUpdateAvailable.value || isUpdateStaged.value);
 
 const items: readonly SettingsNavItem[] = [
   { id: "workspace", label: "Workspace", icon: FolderGit2 },
@@ -70,6 +76,13 @@ function selectSection(sectionId: SettingsSectionId): void {
           aria-hidden="true"
         />
         <span>{{ item.label }}</span>
+        <!-- Update notification dot for the System nav item -->
+        <span
+          v-if="item.id === 'system' && showUpdateDot"
+          class="ml-auto h-2 w-2 rounded-full"
+          :class="isUpdateStaged ? 'bg-warn' : 'bg-accent'"
+          aria-label="Update available"
+        />
       </button>
     </nav>
   </section>

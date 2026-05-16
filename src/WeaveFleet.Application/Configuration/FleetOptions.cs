@@ -81,6 +81,11 @@ public sealed class FleetOptions
     /// <summary>Claude Code harness configuration.</summary>
     public ClaudeCodeOptions ClaudeCode { get; set; } = new();
 
+    // ─── Update ───────────────────────────────────────────────────────────────
+
+    /// <summary>Automatic update configuration.</summary>
+    public UpdateOptions Update { get; set; } = new();
+
     // ─── Auth ──────────────────────────────────────────────────────────────────
 
     /// <summary>Authentication configuration (Clerk/OIDC).</summary>
@@ -196,6 +201,16 @@ public sealed class DataProtectionOptions
     /// Default: "" (in-memory only — override in cloud/production config).
     /// </summary>
     public string KeyPath { get; set; } = string.Empty;
+}
+
+/// <summary>Configuration for automatic update checking and download.</summary>
+public sealed class UpdateOptions
+{
+    /// <summary>GitHub repository to check for releases. Default: pgermishuys/fleet-releases.</summary>
+    public string GitHubRepo { get; set; } = "pgermishuys/fleet-releases";
+
+    /// <summary>Check for updates automatically on startup. Default: true.</summary>
+    public bool CheckOnStartup { get; set; } = true;
 }
 
 /// <summary>Configuration for the Claude Code harness.</summary>

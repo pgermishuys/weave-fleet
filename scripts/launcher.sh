@@ -14,6 +14,100 @@ VERSION_FILE="$ROOT_DIR/VERSION"
 DEV_VERSION_FILE="$ROOT_DIR/Directory.Build.props"
 INSTALL_SCRIPT_URL="${WEAVE_FLEET_INSTALL_SCRIPT_URL:-https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh}"
 
+# ── Apply staged update (if any) ─────────────────────────────────────────────
+apply_staged_update() {
+  UPDATE_DIR="$ROOT_DIR/update"
+  MANIFEST="$UPDATE_DIR/update-manifest.json"
+
+  if [ ! -f "$MANIFEST" ]; then
+    return 0
+  fi
+
+  # Parse version and asset filename from the JSON manifest using basic shell tools.
+  UPDATE_VERSION=""
+  ASSET_FILE=""
+  while IFS= read -r line; do
+    case "$line" in
+      *'"version"'*)
+        UPDATE_VERSION="$(printf '%s' "$line" | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+        ;;
+      *'"assetFileName"'*)
+        ASSET_FILE="$(printf '%s' "$line" | sed 's/.*"assetFileName"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+        ;;
+    esac
+  done < "$MANIFEST"
+
+  if [ -z "$UPDATE_VERSION" ] || [ -z "$ASSET_FILE" ]; then
+    echo "Warning: update manifest is malformed — skipping update." >&2
+    rm -rf "$UPDATE_DIR"
+    return 0
+  fi
+
+  ARCHIVE="$UPDATE_DIR/$ASSET_FILE"
+  if [ ! -f "$ARCHIVE" ]; then
+    echo "Warning: update archive '$ASSET_FILE' not found — skipping update." >&2
+    rm -rf "$UPDATE_DIR"
+    return 0
+  fi
+
+  echo "Applying Fleet update to v${UPDATE_VERSION}..."
+
+  # Back up existing app dir.
+  APP_BAK="$ROOT_DIR/app.bak"
+  rm -rf "$APP_BAK"
+  cp -a "$ROOT_DIR/app" "$APP_BAK"
+
+  # Extract the archive over the app dir.
+  EXTRACT_TMP="$UPDATE_DIR/extract_tmp"
+  rm -rf "$EXTRACT_TMP"
+  mkdir -p "$EXTRACT_TMP"
+
+  case "$ASSET_FILE" in
+    *.tar.gz)
+      tar -xzf "$ARCHIVE" -C "$EXTRACT_TMP"
+      ;;
+    *.zip)
+      unzip -q "$ARCHIVE" -d "$EXTRACT_TMP"
+      ;;
+    *)
+      echo "Warning: unknown archive format '$ASSET_FILE' — skipping update." >&2
+      rm -rf "$EXTRACT_TMP" "$APP_BAK"
+      rm -rf "$UPDATE_DIR"
+      return 0
+      ;;
+  esac
+
+  # The archive contains a top-level directory (e.g. fleet-v0.2.0-linux-x64/).
+  # Find the extracted root.
+  EXTRACTED_ROOT=""
+  for d in "$EXTRACT_TMP"/*/; do
+    if [ -d "$d" ]; then
+      EXTRACTED_ROOT="$d"
+      break
+    fi
+  done
+
+  if [ -z "$EXTRACTED_ROOT" ] || [ ! -d "${EXTRACTED_ROOT}app" ]; then
+    echo "Warning: expected 'app/' directory in archive — skipping update." >&2
+    rm -rf "$EXTRACT_TMP"
+    cp -a "$APP_BAK/." "$ROOT_DIR/app/"
+    rm -rf "$APP_BAK" "$UPDATE_DIR"
+    return 0
+  fi
+
+  # Replace app dir.
+  rm -rf "$ROOT_DIR/app"
+  cp -a "${EXTRACTED_ROOT}app" "$ROOT_DIR/app"
+
+  # Update VERSION file.
+  printf '%s\n' "$UPDATE_VERSION" > "$ROOT_DIR/VERSION"
+
+  # Clean up.
+  rm -rf "$APP_BAK" "$UPDATE_DIR"
+
+  echo "Fleet updated to v${UPDATE_VERSION}."
+}
+
 APP_DIR=""
 APP_BIN=""
 APP_CONTENT_ROOT=""
@@ -35,6 +129,11 @@ else
   echo "  $REPO_BIN" >&2
   echo "Build or publish Fleet first." >&2
   exit 1
+fi
+
+# Apply staged update after layout detection, only for installed packages.
+if [ "$INSTALL_LAYOUT" -eq 1 ]; then
+  apply_staged_update
 fi
 
 read_version() {

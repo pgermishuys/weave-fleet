@@ -108,6 +108,17 @@ public static class DependencyInjection
 
         // HttpClient factory for GitHub API calls
         services.AddHttpClient();
+        services.AddHttpClient("GitHubApi", client =>
+        {
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("fleet/1.0");
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+        });
+
+        // Auto-update services
+        services.AddSingleton<UpdateStateHolder>();
+        services.AddSingleton<UpdateDownloadService>();
+        services.AddSingleton<UpdateCheckService>();
+        services.AddHostedService(sp => sp.GetRequiredService<UpdateCheckService>());
 
         // GitHub services — singleton
         services.AddScoped<GitHubService>();
