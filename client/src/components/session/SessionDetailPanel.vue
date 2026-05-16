@@ -489,12 +489,13 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       class="session-action-toolbar"
     >
       <button
-        v-if="canAbort"
-        type="button"
-        class="session-action-toolbar__btn session-action-toolbar__btn--danger"
-        :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
-        title="Abort"
-        @click="handleAbort"
+          v-if="canAbort"
+          type="button"
+          data-testid="abort-button"
+          class="session-action-toolbar__btn session-action-toolbar__btn--danger"
+          :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
+          title="Abort"
+          @click="handleAbort"
       >
         <Loader2
           v-if="isAborting"
@@ -510,9 +511,10 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       </button>
 
       <button
-        v-if="canResume"
-        type="button"
-        class="session-action-toolbar__btn"
+          v-if="canResume"
+          type="button"
+          data-testid="session-resume-button"
+          class="session-action-toolbar__btn"
         :disabled="isAnyActionPending || !sessionId"
         title="Resume"
         @click="handleResume"
@@ -531,9 +533,10 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       </button>
 
       <button
-        v-if="canStop"
-        type="button"
-        class="session-action-toolbar__btn session-action-toolbar__btn--danger"
+          v-if="canStop"
+          type="button"
+          data-testid="session-stop-button"
+          class="session-action-toolbar__btn session-action-toolbar__btn--danger"
         :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
         title="Stop"
         @click="handleStop"
@@ -554,9 +557,10 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       <span class="session-action-toolbar__divider" />
 
       <button
-        v-if="ctx.supportsFork"
-        type="button"
-        class="session-action-toolbar__btn"
+          v-if="ctx.supportsFork"
+          type="button"
+          data-testid="session-fork-button"
+          class="session-action-toolbar__btn"
         :disabled="isAnyActionPending || !sessionId"
         title="Fork"
         @click="handleFork"
@@ -588,10 +592,11 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       </button>
 
       <button
-        type="button"
-        class="session-action-toolbar__btn session-action-toolbar__btn--danger"
-        :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
-        title="Delete"
+          type="button"
+          data-testid="session-delete-button"
+          class="session-action-toolbar__btn session-action-toolbar__btn--danger"
+          :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
+          title="Delete"
         @click="handleDelete"
       >
         <Loader2
@@ -608,9 +613,10 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       </button>
 
       <button
-        v-if="canArchive && ctx.supportsArchive"
-        type="button"
-        class="session-action-toolbar__btn"
+          v-if="canArchive && ctx.supportsArchive"
+          type="button"
+          data-testid="session-archive-button"
+          class="session-action-toolbar__btn"
         :disabled="isAnyActionPending || !sessionId"
         title="Archive"
         @click="handleArchive"
@@ -629,9 +635,10 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       </button>
 
       <button
-        v-if="canUnarchive && ctx.supportsArchive"
-        type="button"
-        class="session-action-toolbar__btn"
+          v-if="canUnarchive && ctx.supportsArchive"
+          type="button"
+          data-testid="session-unarchive-button"
+          class="session-action-toolbar__btn"
         :disabled="isAnyActionPending || !sessionId"
         title="Unarchive"
         @click="handleUnarchive"
