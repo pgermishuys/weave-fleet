@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using Dapper;
@@ -6,6 +7,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Data;
+using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
@@ -190,6 +192,161 @@ public sealed class UserAuthEndpointTests
     }
 
     [Fact]
+    public async Task GetUserMe_WhenLocalTokenAuthEnabledAndUnauthenticated_ReturnsUnauthorized()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        var response = await client.GetAsync("/api/user/me");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetUserMe_WhenLocalTokenAuthEnabledAndBearerTokenProvided_ReturnsOk()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        var tokenService = factory.Services.GetRequiredService<ILocalTokenAuthService>();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenService.Token);
+
+        var response = await client.GetAsync("/api/user/me");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var payload = await response.Content.ReadFromJsonAsync<UserMePayload>();
+        payload.ShouldNotBeNull();
+        payload.UserId.ShouldBe("local-user");
+    }
+
+    [Fact]
+    public async Task Should_return_unauthorized_when_getting_config_without_auth_cookie_in_local_token_mode()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        var response = await client.GetAsync("/api/config");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Should_return_auth_status_without_auth_cookie_in_local_token_mode()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        var response = await client.GetAsync("/api/auth/status");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var payload = await response.Content.ReadFromJsonAsync<AuthStatusPayload>();
+        payload.ShouldNotBeNull();
+        payload.AuthEnabled.ShouldBeFalse();
+        payload.TokenAuthEnabled.ShouldBeTrue();
+        payload.Authenticated.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Should_return_authenticated_true_when_getting_auth_status_with_bearer_token_in_local_token_mode()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        var tokenService = factory.Services.GetRequiredService<ILocalTokenAuthService>();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokenService.Token);
+
+        var response = await client.GetAsync("/api/auth/status");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var payload = await response.Content.ReadFromJsonAsync<AuthStatusPayload>();
+        payload.ShouldNotBeNull();
+        payload.AuthEnabled.ShouldBeFalse();
+        payload.TokenAuthEnabled.ShouldBeTrue();
+        payload.Authenticated.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Should_return_unauthorized_without_redirect_when_token_login_token_is_invalid()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        var response = await client.PostAsJsonAsync("/auth/token-login", new { Token = "invalid-token" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        response.Headers.Location.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Should_return_ok_when_getting_client_config_without_auth_cookie_in_local_token_mode()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        var response = await client.GetAsync("/api/config/client");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Should_return_ok_when_getting_login_page_without_auth_cookie_in_local_token_mode()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        var response = await client.GetAsync("/login");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Should_return_ok_when_getting_static_asset_without_auth_cookie_in_local_token_mode()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        });
+
+        var response = await client.GetAsync("/app.js");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task GetUserMe_WhenUserHasCredentialsAndSessions_ReturnsOnboardingStatus()
     {
         await using var factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
@@ -359,5 +516,6 @@ public sealed class UserAuthEndpointTests
 
     private sealed record UserMePayload(string UserId, string? Email, string? DisplayName, bool OnboardingCompleted, OnboardingStatusPayload OnboardingStatus, string CreatedAt);
     private sealed record OnboardingStatusPayload(bool Completed, bool HasStoredCredentials, bool HasCreatedSession);
+    private sealed record AuthStatusPayload(bool AuthEnabled, bool TokenAuthEnabled, bool Authenticated);
     private sealed record ClientConfigPayload(bool CloudMode, bool AuthEnabled, IReadOnlyList<string> AvailableHarnesses);
 }

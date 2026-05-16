@@ -71,6 +71,7 @@ export interface SessionSourceCatalogResponse {
 export interface ClientConfigResponse {
   cloudMode: boolean;
   authEnabled: boolean;
+  tokenAuthEnabled: boolean;
   availableHarnesses: string[];
 }
 

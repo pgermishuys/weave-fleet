@@ -152,6 +152,9 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(UserMeResponse))]
 // Skills (request)
 [JsonSerializable(typeof(InstallSkillRequest))]
+// Auth
+[JsonSerializable(typeof(AuthStatusResponse))]
+[JsonSerializable(typeof(TokenLoginRequest))]
 // Open Directory
 [JsonSerializable(typeof(OpenDirectoryRequest))]
 // Sessions V1

@@ -133,6 +133,7 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
         builder.UseSetting("Fleet:AnalyticsDatabasePath", _analyticsDbPath);
         builder.UseSetting("Fleet:AnalyticsEnabled", "true");
         builder.UseSetting("Fleet:Auth:Enabled", "false");
+        builder.UseSetting("Fleet:Auth:TokenAuthEnabled", "false");
         builder.UseSetting("Fleet:Port", "0");
 
         // Use environment-based configuration to override FleetOptions singleton
@@ -159,6 +160,11 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
                 AnalyticsEnabled = true,
                 Port = 0,
                 Host = "127.0.0.1",
+                Auth = new AuthOptions
+                {
+                    Enabled = false,
+                    TokenAuthEnabled = false
+                },
             };
 
             services.AddSingleton(testOptions);

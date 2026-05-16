@@ -1,8 +1,10 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Http;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Endpoints;
 
@@ -12,6 +14,18 @@ public static class AuthEndpoints
 {
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app, FleetOptions fleetOptions)
     {
+        app.MapGet("/api/auth/status", (HttpContext httpContext) =>
+        {
+            var authenticated = httpContext.User.Identity?.IsAuthenticated ?? false;
+
+            return Results.Ok(new AuthStatusResponse(
+                fleetOptions.Auth.Enabled,
+                fleetOptions.Auth.TokenAuthEnabled,
+                authenticated));
+        })
+        .AllowAnonymous()
+        .WithName("GetAuthStatus");
+
         app.MapGet("/auth/login", (HttpContext httpContext, string? returnUrl) =>
         {
             var redirectUri = NormalizeReturnUrl(httpContext, returnUrl);
@@ -26,12 +40,42 @@ public static class AuthEndpoints
         .AllowAnonymous()
         .WithName("Login");
 
-        app.MapPost("/auth/logout", (HttpContext httpContext, string? returnUrl) =>
+        if (!fleetOptions.Auth.Enabled && fleetOptions.Auth.TokenAuthEnabled)
+        {
+            app.MapPost("/auth/token-login", async Task<IResult> (
+                HttpContext httpContext,
+                TokenLoginRequest request,
+                ILocalTokenAuthService localTokenAuthService) =>
+            {
+                if (string.IsNullOrWhiteSpace(request.Token) || !localTokenAuthService.ValidateToken(request.Token))
+                    return Results.Unauthorized();
+
+                var claims = new[]
+                {
+                    new Claim(ClaimTypes.Name, "local"),
+                    new Claim(ClaimTypes.NameIdentifier, "local"),
+                    new Claim("sub", "local")
+                };
+
+                var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+                var principal = new ClaimsPrincipal(identity);
+
+                await httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+                return Results.Ok();
+            })
+            .AllowAnonymous()
+            .WithName("TokenLogin");
+        }
+
+        app.MapPost("/auth/logout", async (HttpContext httpContext, string? returnUrl) =>
         {
             var redirectUri = NormalizeReturnUrl(httpContext, returnUrl);
 
             if (!fleetOptions.Auth.Enabled)
+            {
+                await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
                 return Results.LocalRedirect(redirectUri);
+            }
 
             return Results.SignOut(
                 new AuthenticationProperties { RedirectUri = redirectUri },
@@ -71,5 +115,13 @@ public static class AuthEndpoints
 
         return false;
     }
+
 }
+
+internal sealed record AuthStatusResponse(
+    bool AuthEnabled,
+    bool TokenAuthEnabled,
+    bool Authenticated);
+
+internal sealed record TokenLoginRequest(string Token);
 #pragma warning restore IL2026
