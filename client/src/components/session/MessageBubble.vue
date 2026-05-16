@@ -249,6 +249,10 @@ const displayModelId = computed(() => {
 
 .message--user .msg-header {
   justify-content: flex-end;
+  float: right;
+  margin-bottom: 0;
+  margin-left: 16px;
+  padding-top: 1px;
 }
 
 .msg-author {
