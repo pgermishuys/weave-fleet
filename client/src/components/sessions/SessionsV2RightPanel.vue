@@ -42,7 +42,7 @@ provideSessionDetailContext({
   sessionRoutePath: "/sessions/$id",
   supportsFork: true,
   supportsArchive: true,
-  actionsLayout: "card",
+  actionsLayout: "toolbar",
   patchSession: (id, patch) => sessionsStore.patchSession(id, patch),
   abort,
   archive,
