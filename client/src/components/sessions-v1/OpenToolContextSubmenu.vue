@@ -17,7 +17,7 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const { tools, isLoading } = useAvailableTools();
+const { tools, isLoading, error } = useAvailableTools();
 const { openDirectory } = useOpenDirectory();
 
 const iconMap: Record<string, typeof Code2> = {
@@ -74,7 +74,7 @@ function handleOpen(toolId: string): void {
         disabled
         class="gap-2 text-xs text-muted-foreground"
       >
-        No tools detected
+        {{ error ? `Error: ${error}` : 'No tools detected' }}
       </ContextMenuItem>
       <template
         v-for="(group, gi) in groups"

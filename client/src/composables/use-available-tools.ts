@@ -18,7 +18,7 @@ export interface UseAvailableToolsResult {
 let moduleCache: AvailableTool[] | null = null;
 let moduleFetchPromise: Promise<AvailableTool[]> | null = null;
 const sharedTools = ref<AvailableTool[]>([]);
-const sharedIsLoading = shallowRef(false);
+const sharedIsLoading = shallowRef(true);
 const sharedError = shallowRef<string | undefined>(undefined);
 
 async function fetchAvailableTools(): Promise<AvailableTool[]> {
@@ -59,6 +59,9 @@ async function loadTools(): Promise<void> {
     moduleFetchPromise = null;
   }
 }
+
+// Eagerly start fetching tools on module load so they're ready when UI renders
+void loadTools();
 
 export function useAvailableTools(): UseAvailableToolsResult {
   onMounted(() => {
