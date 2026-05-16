@@ -615,7 +615,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       <button
           v-if="canArchive && ctx.supportsArchive"
           type="button"
-          data-testid="session-archive-button"
+          data-testid="session-archive-banner-button"
           class="session-action-toolbar__btn"
         :disabled="isAnyActionPending || !sessionId"
         title="Archive"
