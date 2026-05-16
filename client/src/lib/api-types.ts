@@ -422,8 +422,8 @@ export interface DirectoryEntry {
 export interface DirectoryListResponse {
   /** Subdirectories in the listed path */
   entries: DirectoryEntry[];
-  /** The resolved absolute path being listed */
-  currentPath: string;
+  /** The resolved absolute path being listed, or null when showing roots */
+  currentPath: string | null;
   /** Parent directory path, or null if at an allowed root */
   parentPath: string | null;
   /** The allowed workspace roots (for root-level navigation) */
