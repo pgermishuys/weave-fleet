@@ -198,7 +198,10 @@ function handleKeyDown(event: KeyboardEvent): void {
         >
           <Plus :size="13" />
         </button>
-        <NewSessionDialog v-model:open="isNewSessionOpen" create-endpoint="/api/sessions-v1" />
+        <NewSessionDialog
+          v-model:open="isNewSessionOpen"
+          create-endpoint="/api/sessions-v1"
+        />
       </div>
     </div>
 

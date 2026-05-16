@@ -76,7 +76,10 @@ function handleOpen(toolId: string): void {
       >
         No tools detected
       </ContextMenuItem>
-      <template v-for="(group, gi) in groups" :key="group.category">
+      <template
+        v-for="(group, gi) in groups"
+        :key="group.category"
+      >
         <ContextMenuSeparator v-if="gi > 0" />
         <ContextMenuItem
           v-for="tool in group.items"
@@ -84,7 +87,10 @@ function handleOpen(toolId: string): void {
           class="gap-2 text-xs"
           @click="handleOpen(tool.id)"
         >
-          <component :is="getIcon(tool.iconName)" class="size-3.5" />
+          <component
+            :is="getIcon(tool.iconName)"
+            class="size-3.5"
+          />
           <span class="flex-1">{{ tool.label }}</span>
         </ContextMenuItem>
       </template>

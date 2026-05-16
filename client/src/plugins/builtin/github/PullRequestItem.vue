@@ -162,14 +162,20 @@ function handleKeydown(event: KeyboardEvent): void {
         >
         <span class="pull-request-user">{{ item.user.login }}</span>
         <span class="pull-request-time">{{ relativeTime }}</span>
-        <span v-if="item.comments > 0" class="pull-request-comments">
+        <span
+          v-if="item.comments > 0"
+          class="pull-request-comments"
+        >
           <MessageSquare :size="11" />
           {{ item.comments }}
         </span>
       </div>
     </div>
 
-    <div class="actions" @click.stop>
+    <div
+      class="actions"
+      @click.stop
+    >
       <CreateSessionFromGitHubDialog
         type="github-pull-request"
         :owner="item.repoFullName.split('/')[0] ?? ''"

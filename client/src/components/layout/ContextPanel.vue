@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/one-component-per-file -->
 <script setup lang="ts">
 import type { Component } from "vue";
 import type { SidebarRail } from "@/stores/sidebar";

@@ -24,17 +24,31 @@ const open = ref(false);
       <button class="filter-btn">
         <Tag :size="12" />
         <span>Label</span>
-        <span v-if="selected.length > 0" class="filter-badge">{{ selected.length }}</span>
+        <span
+          v-if="selected.length > 0"
+          class="filter-badge"
+        >{{ selected.length }}</span>
       </button>
     </PopoverTrigger>
-    <PopoverContent class="filter-popover-content" align="start">
+    <PopoverContent
+      class="filter-popover-content"
+      align="start"
+    >
       <Command>
         <CommandInput placeholder="Filter labels…" />
         <CommandList class="filter-list">
-          <div v-if="isLoading && labels.length === 0" class="filter-loading">
-            <Loader2 :size="14" class="animate-spin" />
+          <div
+            v-if="isLoading && labels.length === 0"
+            class="filter-loading"
+          >
+            <Loader2
+              :size="14"
+              class="animate-spin"
+            />
           </div>
-          <CommandEmpty v-else-if="!isLoading && labels.length === 0">No labels found.</CommandEmpty>
+          <CommandEmpty v-else-if="!isLoading && labels.length === 0">
+            No labels found.
+          </CommandEmpty>
           <CommandGroup>
             <CommandItem
               v-for="label in labels"
@@ -44,7 +58,10 @@ const open = ref(false);
             >
               <div class="filter-item">
                 <div :class="['filter-checkbox', selected.includes(label.name) && 'filter-checkbox--checked']">
-                  <Check v-if="selected.includes(label.name)" :size="10" />
+                  <Check
+                    v-if="selected.includes(label.name)"
+                    :size="10"
+                  />
                 </div>
                 <span
                   class="label-dot"

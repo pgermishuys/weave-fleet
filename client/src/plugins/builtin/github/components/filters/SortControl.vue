@@ -49,8 +49,14 @@ function handleChange(value: unknown) {
         <span>{{ currentLabel }}</span>
       </button>
     </DropdownMenuTrigger>
-    <DropdownMenuContent align="end" class="sort-menu">
-      <DropdownMenuRadioGroup :model-value="currentValue" @update:model-value="handleChange">
+    <DropdownMenuContent
+      align="end"
+      class="sort-menu"
+    >
+      <DropdownMenuRadioGroup
+        :model-value="currentValue"
+        @update:model-value="handleChange"
+      >
         <DropdownMenuRadioItem
           v-for="option in SORT_OPTIONS"
           :key="option.value"

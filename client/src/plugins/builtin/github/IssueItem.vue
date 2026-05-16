@@ -136,14 +136,20 @@ function handleKeydown(event: KeyboardEvent): void {
         >
         <span class="issue-user">{{ item.user.login }}</span>
         <span class="issue-time">{{ relativeTime }}</span>
-        <span v-if="item.comments > 0" class="issue-comments">
+        <span
+          v-if="item.comments > 0"
+          class="issue-comments"
+        >
           <MessageSquare :size="11" />
           {{ item.comments }}
         </span>
       </div>
     </div>
 
-    <div class="actions" @click.stop>
+    <div
+      class="actions"
+      @click.stop
+    >
       <CreateSessionFromGitHubDialog
         type="github-issue"
         :owner="item.repoFullName.split('/')[0] ?? ''"
