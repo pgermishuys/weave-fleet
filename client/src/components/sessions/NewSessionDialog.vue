@@ -25,6 +25,7 @@ import { useHarnesses } from "@/composables/use-harnesses";
 import { useProjects } from "@/composables/use-projects";
 import { useRepositories } from "@/composables/use-repositories";
 import { useCreateSession } from "@/composables/use-session-actions";
+import { useWorktrees } from "@/composables/use-worktrees";
 import type {
   CreateSessionResponse,
   HarnessInfo,
@@ -66,6 +67,8 @@ const emit = defineEmits<{
 const appShellStore = useAppShellStore();
 const { config } = storeToRefs(appShellStore);
 
+type WorktreeMode = "new" | "existing";
+
 const sourceKind = shallowRef<SessionSourceKind>("repository");
 const repositoryQuery = shallowRef("");
 const selectedRepositoryPath = shallowRef<string | null>(null);
@@ -77,6 +80,8 @@ const title = shallowRef("");
 const isolationStrategy = shallowRef<IsolationStrategy>("worktree");
 const branch = shallowRef("");
 const branchManuallyEdited = shallowRef(false);
+const worktreeMode = shallowRef<WorktreeMode>("new");
+const selectedWorktreePath = shallowRef<string | null>(null);
 const selectedProjectId = shallowRef(props.initialProjectId ?? UNGROUPED_PROJECT_ID);
 const selectedHarnessType = shallowRef("");
 const submitAttempted = shallowRef(false);
@@ -101,6 +106,10 @@ const {
   error: createError,
 } = useCreateSession(props.createEndpoint);
 const directoryBrowser = useDirectoryBrowser();
+const {
+  worktrees,
+  isLoading: isWorktreesLoading,
+} = useWorktrees({ repositoryPath: selectedRepositoryPath, enabled: open });
 
 const userProjects = computed<readonly ProjectResponse[]>(() => {
   return projects.value.filter((project) => project.type !== "scratch");
@@ -197,9 +206,11 @@ const sessionSource = computed<SessionSourceSelection | undefined>(() => {
       input: {
         repositoryPath: selectedRepository.value.path,
         isolationStrategy: isolationStrategy.value,
-        ...(isolationStrategy.value === "worktree" && effectiveBranch.value
-          ? { branch: effectiveBranch.value }
-          : {}),
+        ...(isolationStrategy.value === "worktree" && worktreeMode.value === "existing" && selectedWorktreePath.value
+          ? { existingWorktreePath: selectedWorktreePath.value }
+          : isolationStrategy.value === "worktree" && effectiveBranch.value
+            ? { branch: effectiveBranch.value }
+            : {}),
       },
     };
   }
@@ -235,6 +246,13 @@ const validationMessage = computed(() => {
 
   if (!isCloudMode.value && sourceKind.value === "directory" && !directory.value.trim()) {
     return "Directory is required.";
+  }
+
+  if (sourceKind.value === "repository"
+    && isolationStrategy.value === "worktree"
+    && worktreeMode.value === "existing"
+    && !selectedWorktreePath.value) {
+    return "Select a worktree.";
   }
 
   return null;
@@ -293,6 +311,8 @@ function resetForm(): void {
   isolationStrategy.value = "worktree";
   branch.value = "";
   branchManuallyEdited.value = false;
+  worktreeMode.value = "new";
+  selectedWorktreePath.value = null;
   selectedProjectId.value = getInitialProjectSelection();
   selectedHarnessType.value = "";
   submitAttempted.value = false;
@@ -311,6 +331,8 @@ function applyInitialSource(): void {
   isolationStrategy.value = "worktree";
   branch.value = props.initialSource.suggestedBranch?.trim() ?? "";
   branchManuallyEdited.value = Boolean(props.initialSource.suggestedBranch?.trim());
+  worktreeMode.value = "new";
+  selectedWorktreePath.value = null;
 }
 
 function clearGitHubPreset(): void {
@@ -409,6 +431,10 @@ function syncDirectoryBrowser(): void {
 
 function handleIsolationToggle(strategy: IsolationStrategy): void {
   isolationStrategy.value = strategy;
+  if (strategy !== "worktree") {
+    worktreeMode.value = "new";
+    selectedWorktreePath.value = null;
+  }
   nextTick(() => {
     document.querySelector<HTMLElement>('[aria-label="Isolation Strategy"] [tabindex="0"]')?.focus();
   });
@@ -777,23 +803,104 @@ watch(
             v-if="isolationStrategy === 'worktree'"
             class="space-y-2"
           >
-            <label
-              for="new-session-branch"
-              class="text-sm font-medium text-foreground"
-            >Branch <span class="font-normal text-muted-foreground">(optional)</span></label>
-            <Input
-              id="new-session-branch"
-              :model-value="effectiveBranch"
-              placeholder="feature/my-branch"
-              :disabled="isCreating"
-              @update:model-value="(value) => {
-                branch = String(value);
-                branchManuallyEdited = true;
-              }"
-            />
-            <p class="text-xs text-muted-foreground opacity-50">
-              Auto-generated from title. Edit to override.
-            </p>
+            <!-- Sub-toggle: New worktree vs Existing worktree -->
+            <div class="flex gap-2">
+              <button
+                type="button"
+                :disabled="isCreating"
+                :class="cn(
+                  'inline-flex flex-1 items-center justify-center gap-1.5 rounded border px-3 py-1.5 text-xs font-medium transition-colors',
+                  worktreeMode === 'new'
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-muted-foreground hover:text-foreground',
+                )"
+                @click="worktreeMode = 'new'; selectedWorktreePath = null"
+              >
+                New
+              </button>
+              <button
+                type="button"
+                :disabled="isCreating"
+                :class="cn(
+                  'inline-flex flex-1 items-center justify-center gap-1.5 rounded border px-3 py-1.5 text-xs font-medium transition-colors',
+                  worktreeMode === 'existing'
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border text-muted-foreground hover:text-foreground',
+                )"
+                @click="worktreeMode = 'existing'; selectedWorktreePath = null"
+              >
+                Existing
+              </button>
+            </div>
+
+            <!-- New worktree: branch input -->
+            <div
+              v-if="worktreeMode === 'new'"
+              class="space-y-2"
+            >
+              <label
+                for="new-session-branch"
+                class="text-sm font-medium text-foreground"
+              >Branch <span class="font-normal text-muted-foreground">(optional)</span></label>
+              <Input
+                id="new-session-branch"
+                :model-value="effectiveBranch"
+                placeholder="feature/my-branch"
+                :disabled="isCreating"
+                @update:model-value="(value) => {
+                  branch = String(value);
+                  branchManuallyEdited = true;
+                }"
+              />
+              <p class="text-xs text-muted-foreground opacity-50">
+                Auto-generated from title. Edit to override.
+              </p>
+            </div>
+
+            <!-- Existing worktree: picker -->
+            <div
+              v-else
+              class="space-y-2"
+            >
+              <label
+                for="existing-worktree-select"
+                class="text-sm font-medium text-foreground"
+              >Worktree</label>
+              <div
+                v-if="isWorktreesLoading"
+                class="flex items-center gap-2 text-xs text-muted-foreground"
+              >
+                <LoaderCircle class="h-3.5 w-3.5 animate-spin" />
+                Loading worktrees…
+              </div>
+              <div
+                v-else-if="!selectedRepositoryPath || worktrees.length === 0"
+                class="text-xs text-muted-foreground opacity-50"
+              >
+                {{ !selectedRepositoryPath ? 'Select a repository first.' : 'No linked worktrees found for this repository.' }}
+              </div>
+              <Select
+                v-else
+                id="existing-worktree-select"
+                :model-value="selectedWorktreePath ?? ''"
+                :disabled="isCreating"
+                @update:model-value="(v) => { selectedWorktreePath = String(v) || null; }"
+              >
+                <SelectTrigger class="w-full text-xs">
+                  <SelectValue placeholder="Select a worktree…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="wt in worktrees"
+                    :key="wt.path"
+                    :value="wt.path"
+                    class="text-xs"
+                  >
+                    {{ wt.branch ?? wt.path }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 

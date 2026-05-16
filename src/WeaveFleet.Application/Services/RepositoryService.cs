@@ -46,6 +46,61 @@ public sealed partial class RepositoryService(
         return info;
     }
 
+    /// <summary>
+    /// Returns worktrees associated with the repository at <paramref name="path"/>.
+    /// The main (primary) worktree is excluded — only linked worktrees are returned.
+    /// </summary>
+    public async Task<IReadOnlyList<WorktreeInfo>> ListWorktreesAsync(string path, CancellationToken ct = default)
+    {
+        var output = await RunGitAsync(path, ["worktree", "list", "--porcelain"], ct).ConfigureAwait(false);
+        return ParseWorktrees(output, path);
+    }
+
+    internal static IReadOnlyList<WorktreeInfo> ParseWorktrees(string porcelainOutput, string mainPath)
+    {
+        var results = new List<WorktreeInfo>();
+
+        // Each worktree entry is separated by a blank line.
+        var entries = porcelainOutput.Split(["\n\n", "\r\n\r\n"], StringSplitOptions.RemoveEmptyEntries);
+
+        var isFirst = true;
+        foreach (var entry in entries)
+        {
+            // Skip the main worktree (first entry).
+            if (isFirst)
+            {
+                isFirst = false;
+                continue;
+            }
+
+            string? worktreePath = null;
+            string? commitHash = null;
+            string? branch = null;
+
+            foreach (var rawLine in entry.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (rawLine.StartsWith("worktree ", StringComparison.Ordinal))
+                    worktreePath = rawLine["worktree ".Length..].Trim();
+                else if (rawLine.StartsWith("HEAD ", StringComparison.Ordinal))
+                    commitHash = rawLine["HEAD ".Length..].Trim();
+                else if (rawLine.StartsWith("branch refs/heads/", StringComparison.Ordinal))
+                    branch = rawLine["branch refs/heads/".Length..].Trim();
+                else if (rawLine.StartsWith("branch ", StringComparison.Ordinal))
+                    branch = rawLine["branch ".Length..].Trim();
+            }
+
+            if (worktreePath is not null)
+            {
+                results.Add(new WorktreeInfo(
+                    Path: worktreePath,
+                    Branch: branch,
+                    CommitHash: commitHash));
+            }
+        }
+
+        return results;
+    }
+
     /// <summary>Returns enriched detail for a single repository (includes branch list, remotes, etc.).</summary>
     public async Task<RepositoryDetail?> GetRepositoryDetailAsync(string path, CancellationToken ct = default)
     {
@@ -92,6 +147,35 @@ public sealed partial class RepositoryService(
 
         if (!IsGitRepo(normalizedPath))
             return FleetError.ValidationError("Repository.Path", "Path is not a git repository.");
+
+        return normalizedPath;
+    }
+
+    /// <summary>Validates that a path is within allowed workspace roots (without requiring it to be a git repo).</summary>
+    public async Task<Result<string>> ValidatePathWithinRootsAsync(string path, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return FleetError.ValidationError("Path", "Path is required.");
+
+        IReadOnlyList<string> roots;
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var workspaceRootService = scope.ServiceProvider.GetRequiredService<WorkspaceRootService>();
+            roots = await workspaceRootService.GetAllowedRootsAsync().ConfigureAwait(false);
+        }
+
+        string normalizedPath;
+        try
+        {
+            normalizedPath = WorkspaceRootService.CanonicalizePath(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return FleetError.ValidationError("Path", "Unable to resolve path.");
+        }
+
+        if (!WorkspaceRootService.IsPathWithinRoots(normalizedPath, roots))
+            return FleetError.ValidationError("Path", "Path is outside allowed workspace roots.");
 
         return normalizedPath;
     }
@@ -223,6 +307,12 @@ public sealed record RepositoryInfo(
     string CurrentBranch,
     string RemoteUrl,
     string LastCommitMessage);
+
+/// <summary>A single git linked worktree.</summary>
+public sealed record WorktreeInfo(
+    string Path,
+    string? Branch,
+    string? CommitHash);
 
 /// <summary>Enriched repository detail.</summary>
 public sealed record RepositoryDetail(

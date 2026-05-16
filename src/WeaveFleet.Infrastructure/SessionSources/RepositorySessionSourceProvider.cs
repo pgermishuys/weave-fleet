@@ -67,6 +67,56 @@ public sealed class RepositorySessionSourceProvider(
         if (isolationStrategy.IsFailure)
             return isolationStrategy.Error;
 
+        // When an existing worktree path is supplied with the "worktree" strategy,
+        // validate that path and use it directly (no new worktree is created).
+        if (string.Equals(isolationStrategy.Value, "worktree", StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(input.ExistingWorktreePath))
+        {
+            var existingWorktreePath = input.ExistingWorktreePath.Trim();
+            var worktrees = await repositoryService.ListWorktreesAsync(canonicalPath, cancellationToken);
+            var knownWorktree = worktrees.FirstOrDefault(w =>
+                string.Equals(
+                    Path.GetFullPath(w.Path),
+                    Path.GetFullPath(existingWorktreePath),
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (knownWorktree is null)
+            {
+                return FleetError.ValidationError(
+                    "SessionSource.Input.ExistingWorktreePath",
+                    "The specified path is not a known worktree of this repository.");
+            }
+
+            // Ensure the worktree path is within allowed workspace roots
+            var worktreeRootCheck = await repositoryService.ValidatePathWithinRootsAsync(existingWorktreePath, cancellationToken);
+            if (worktreeRootCheck.IsFailure)
+            {
+                return FleetError.ValidationError(
+                    "SessionSource.Input.ExistingWorktreePath",
+                    "The worktree path is outside allowed workspace roots.");
+            }
+
+            var existingDescriptor = SessionSourceCatalog.RepositoryStartSession with
+            {
+                DisplayName = repositoryInfo.Name
+            };
+
+            return new ResolvedSessionSource(
+                existingDescriptor,
+                new ResolvedSessionInput(
+                    new WorkspaceIntent(existingWorktreePath, "existing", knownWorktree.Branch),
+                    null,
+                    new ProvenanceRecord(
+                        ProviderId,
+                        SessionSourceTypeNames.Repository,
+                        SessionSourceActions.StartSession,
+                        canonicalPath,
+                        null,
+                        repositoryInfo.Name,
+                        null,
+                        DateTime.UtcNow.ToString("O"))));
+        }
+
         var branch = string.IsNullOrWhiteSpace(input.Branch)
             ? null
             : input.Branch.Trim();

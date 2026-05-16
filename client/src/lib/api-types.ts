@@ -571,6 +571,16 @@ export interface RepositoryScanResponse {
   scannedAt: number;   // unix timestamp (ms) of last scan
 }
 
+export interface WorktreeInfo {
+  path: string;
+  branch: string | null;
+  commitHash: string | null;
+}
+
+export interface RepositoryWorktreesResponse {
+  worktrees: WorktreeInfo[];
+}
+
 export interface RepositoryInfo {
   name: string;
   path: string;
