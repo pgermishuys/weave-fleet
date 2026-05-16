@@ -80,7 +80,7 @@ const {
 } = useDeleteProject();
 
 const canShowContextMenu = computed(() => !props.project.isUngrouped && props.project.projectId !== null);
-const sessionCountLabel = computed(() => `${props.project.sessionCount} session${props.project.sessionCount === 1 ? "" : "s"}`);
+const sessionCountLabel = computed(() => `(${props.project.sessionCount})`);
 const isAnyActionPending = computed(() => isUpdating.value || isReordering.value || isDeleting.value);
 
 // Drag-and-drop drop target state
@@ -303,8 +303,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
             />
 
             <span class="project-copy">
-              <span class="project-title">{{ project.name }}</span>
-              <span class="project-count">{{ sessionCountLabel }}</span>
+              <span class="project-title">{{ project.name }} {{ sessionCountLabel }}</span>
             </span>
 
             <span class="project-spacer" />
@@ -392,8 +391,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
         />
 
         <span class="project-copy">
-          <span class="project-title">{{ project.name }}</span>
-          <span class="project-count">{{ sessionCountLabel }}</span>
+          <span class="project-title">{{ project.name }} {{ sessionCountLabel }}</span>
         </span>
 
         <span class="project-spacer" />
@@ -422,7 +420,6 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
             @cancel="cancelRename"
             @commit="handleRename"
           />
-          <span class="project-count">{{ sessionCountLabel }}</span>
         </span>
 
         <span class="project-spacer" />

@@ -166,9 +166,6 @@ function openDeleteDialog(): void {
               :class="statusClasses"
               class="h-2.5 w-2.5 shrink-0 rounded-full"
             />
-            <p class="text-sm font-medium text-muted-foreground">
-              {{ statusLabel }}
-            </p>
             <Badge
               v-if="isArchived"
               data-testid="session-card-archived-badge"

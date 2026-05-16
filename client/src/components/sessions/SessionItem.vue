@@ -465,7 +465,6 @@ function removeSessionFromStore(): void {
 
             <span class="session-copy">
               <span class="session-title">{{ displayTitle }}</span>
-              <span class="session-meta">{{ statusLabel }}</span>
               <span
                 v-if="hasOriginBadge"
                 class="session-origin-badge"
@@ -502,7 +501,6 @@ function removeSessionFromStore(): void {
               @blur="handleRename(renameDraft)"
               @keydown="handleInlineRenameKeydown"
             >
-            <span class="session-meta">{{ statusLabel }}</span>
           </span>
         </div>
       </div>
