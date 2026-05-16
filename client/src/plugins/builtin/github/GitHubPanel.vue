@@ -24,7 +24,10 @@ async function handleRemove(fullName: string) {
 <template>
   <div class="github-panel">
     <div class="panel-header">
-      <button class="panel-title-btn" @click="navigateToGitHub()">
+      <button
+        class="panel-title-btn"
+        @click="navigateToGitHub()"
+      >
         <Github :size="14" />
         <span>GitHub</span>
       </button>
@@ -37,16 +40,25 @@ async function handleRemove(fullName: string) {
       </button>
     </div>
 
-    <div v-if="!isConnected" class="panel-disconnected">
+    <div
+      v-if="!isConnected"
+      class="panel-disconnected"
+    >
       Not connected
     </div>
 
     <template v-else>
-      <div v-if="bookmarks.length === 0" class="panel-empty">
+      <div
+        v-if="bookmarks.length === 0"
+        class="panel-empty"
+      >
         No bookmarked repos.
       </div>
 
-      <div v-else class="bookmark-list">
+      <div
+        v-else
+        class="bookmark-list"
+      >
         <div
           v-for="bookmark in bookmarks"
           :key="bookmark.fullName"

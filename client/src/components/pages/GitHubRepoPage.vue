@@ -129,7 +129,10 @@ function goBack() {
   <div class="github-repo-page">
     <!-- Header -->
     <div class="repo-header">
-      <button class="back-btn" @click="goBack">
+      <button
+        class="back-btn"
+        @click="goBack"
+      >
         <ArrowLeft :size="14" />
       </button>
       <span class="repo-name">{{ repoFullName }}</span>
@@ -143,7 +146,10 @@ function goBack() {
       >
         <CircleDot :size="13" />
         Issues
-        <span v-if="issues.length > 0" class="tab-count">{{ issues.length }}</span>
+        <span
+          v-if="issues.length > 0"
+          class="tab-count"
+        >{{ issues.length }}</span>
       </button>
       <button
         :class="['tab-btn', activeTab === 'pulls' && 'tab-btn--active']"
@@ -151,12 +157,18 @@ function goBack() {
       >
         <GitPullRequest :size="13" />
         Pull Requests
-        <span v-if="pulls.length > 0" class="tab-count">{{ pulls.length }}</span>
+        <span
+          v-if="pulls.length > 0"
+          class="tab-count"
+        >{{ pulls.length }}</span>
       </button>
     </div>
 
     <!-- Issues Tab -->
-    <div v-if="activeTab === 'issues'" class="tab-content">
+    <div
+      v-if="activeTab === 'issues'"
+      class="tab-content"
+    >
       <IssueFilterBar
         :filter="issueFilter"
         :is-searching="isSearching"
@@ -169,16 +181,33 @@ function goBack() {
         @change="handleFilterChange"
       />
 
-      <div v-if="issuesLoading && issues.length === 0" class="list-loading">
-        <Loader2 :size="16" class="animate-spin" />
+      <div
+        v-if="issuesLoading && issues.length === 0"
+        class="list-loading"
+      >
+        <Loader2
+          :size="16"
+          class="animate-spin"
+        />
       </div>
 
-      <div v-else-if="issuesError" class="list-error">
+      <div
+        v-else-if="issuesError"
+        class="list-error"
+      >
         <p>{{ issuesError }}</p>
-        <button class="retry-btn" @click="refetchIssues">Retry</button>
+        <button
+          class="retry-btn"
+          @click="refetchIssues"
+        >
+          Retry
+        </button>
       </div>
 
-      <div v-else-if="!issuesLoading && issues.length === 0" class="list-empty">
+      <div
+        v-else-if="!issuesLoading && issues.length === 0"
+        class="list-empty"
+      >
         No issues found.
       </div>
 
@@ -190,8 +219,14 @@ function goBack() {
           @label-click="handleLabelClick"
         />
 
-        <div v-if="issuesLoading" class="list-loading-more">
-          <Loader2 :size="14" class="animate-spin" />
+        <div
+          v-if="issuesLoading"
+          class="list-loading-more"
+        >
+          <Loader2
+            :size="14"
+            class="animate-spin"
+          />
         </div>
         <button
           v-else-if="issuesHasMore"
@@ -204,7 +239,10 @@ function goBack() {
     </div>
 
     <!-- PRs Tab -->
-    <div v-if="activeTab === 'pulls'" class="tab-content">
+    <div
+      v-if="activeTab === 'pulls'"
+      class="tab-content"
+    >
       <div class="pr-filter-bar">
         <button
           :class="['state-btn', pullsStateFilter === 'open' && 'state-btn--active']"
@@ -219,21 +257,42 @@ function goBack() {
         >
           Closed
         </button>
-        <button class="refresh-btn" title="Refresh" @click="refetchPulls">
+        <button
+          class="refresh-btn"
+          title="Refresh"
+          @click="refetchPulls"
+        >
           <RefreshCw :size="12" />
         </button>
       </div>
 
-      <div v-if="pullsLoading && pulls.length === 0" class="list-loading">
-        <Loader2 :size="16" class="animate-spin" />
+      <div
+        v-if="pullsLoading && pulls.length === 0"
+        class="list-loading"
+      >
+        <Loader2
+          :size="16"
+          class="animate-spin"
+        />
       </div>
 
-      <div v-else-if="pullsError" class="list-error">
+      <div
+        v-else-if="pullsError"
+        class="list-error"
+      >
         <p>{{ pullsError }}</p>
-        <button class="retry-btn" @click="refetchPulls">Retry</button>
+        <button
+          class="retry-btn"
+          @click="refetchPulls"
+        >
+          Retry
+        </button>
       </div>
 
-      <div v-else-if="!pullsLoading && pulls.length === 0" class="list-empty">
+      <div
+        v-else-if="!pullsLoading && pulls.length === 0"
+        class="list-empty"
+      >
         No pull requests found.
       </div>
 
@@ -244,8 +303,14 @@ function goBack() {
           :item="item"
         />
 
-        <div v-if="pullsLoading" class="list-loading-more">
-          <Loader2 :size="14" class="animate-spin" />
+        <div
+          v-if="pullsLoading"
+          class="list-loading-more"
+        >
+          <Loader2
+            :size="14"
+            class="animate-spin"
+          />
         </div>
         <button
           v-else-if="pullsHasMore"

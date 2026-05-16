@@ -159,13 +159,18 @@ async function handleCreate(): Promise<void> {
       </slot>
     </DialogTrigger>
 
-    <DialogContent class="create-session-dialog" @click.stop>
+    <DialogContent
+      class="create-session-dialog"
+      @click.stop
+    >
       <DialogHeader>
         <DialogTitle>{{ dialogTitle }}</DialogTitle>
       </DialogHeader>
 
       <div class="dialog-body">
-        <p class="item-label">{{ itemLabel }}</p>
+        <p class="item-label">
+          {{ itemLabel }}
+        </p>
 
         <label class="field-label">
           Repository
@@ -174,17 +179,19 @@ async function handleCreate(): Promise<void> {
             class="field-select"
           >
             <option
-              v-for="repo in repositories"
-              :key="repo.path"
-              :value="repo.path"
+              v-for="repoOption in repositories"
+              :key="repoOption.path"
+              :value="repoOption.path"
             >
-              {{ repo.name }} — {{ repo.path }}
+              {{ repoOption.name }} — {{ repoOption.path }}
             </option>
           </select>
         </label>
 
         <fieldset class="field-group">
-          <legend class="field-label">Strategy</legend>
+          <legend class="field-label">
+            Strategy
+          </legend>
           <label class="radio-label">
             <input
               v-model="isolationStrategy"
@@ -203,7 +210,10 @@ async function handleCreate(): Promise<void> {
           </label>
         </fieldset>
 
-        <label v-if="isolationStrategy === 'worktree'" class="field-label">
+        <label
+          v-if="isolationStrategy === 'worktree'"
+          class="field-label"
+        >
           Branch
           <input
             v-model="branch"
@@ -213,7 +223,12 @@ async function handleCreate(): Promise<void> {
           >
         </label>
 
-        <p v-if="creationError" class="error-message">{{ creationError }}</p>
+        <p
+          v-if="creationError"
+          class="error-message"
+        >
+          {{ creationError }}
+        </p>
       </div>
 
       <DialogFooter>

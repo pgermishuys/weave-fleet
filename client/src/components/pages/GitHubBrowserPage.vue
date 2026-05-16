@@ -64,18 +64,38 @@ async function handleSelectRepo(repo: { full_name: string; name: string; owner_l
     <!-- Header -->
     <div class="browser-header">
       <div class="header-text">
-        <h1 class="browser-title">GitHub</h1>
-        <p class="browser-subtitle">Browse issues and pull requests for your repositories</p>
+        <h1 class="browser-title">
+          GitHub
+        </h1>
+        <p class="browser-subtitle">
+          Browse issues and pull requests for your repositories
+        </p>
       </div>
-      <span v-if="isLoadingStatus" class="status-pill status-pill--loading">Checking…</span>
-      <span v-else-if="isConnected" class="status-pill status-pill--connected">Connected</span>
-      <span v-else class="status-pill status-pill--disconnected">Disconnected</span>
+      <span
+        v-if="isLoadingStatus"
+        class="status-pill status-pill--loading"
+      >Checking…</span>
+      <span
+        v-else-if="isConnected"
+        class="status-pill status-pill--connected"
+      >Connected</span>
+      <span
+        v-else
+        class="status-pill status-pill--disconnected"
+      >Disconnected</span>
     </div>
 
     <!-- Not connected -->
-    <div v-if="!isLoadingStatus && !isConnected" class="browser-empty">
-      <p class="empty-title">GitHub is not connected.</p>
-      <p class="empty-subtitle">Connect GitHub in Settings to browse repositories.</p>
+    <div
+      v-if="!isLoadingStatus && !isConnected"
+      class="browser-empty"
+    >
+      <p class="empty-title">
+        GitHub is not connected.
+      </p>
+      <p class="empty-subtitle">
+        Connect GitHub in Settings to browse repositories.
+      </p>
     </div>
 
     <template v-else-if="isConnected">
@@ -96,8 +116,14 @@ async function handleSelectRepo(repo: { full_name: string; name: string; owner_l
               <CommandInput placeholder="Search repositories…" />
               <CommandList>
                 <CommandEmpty>
-                  <span v-if="isLoadingRepos" class="dialog-loading">
-                    <Loader2 :size="14" class="animate-spin" />
+                  <span
+                    v-if="isLoadingRepos"
+                    class="dialog-loading"
+                  >
+                    <Loader2
+                      :size="14"
+                      class="animate-spin"
+                    />
                     Loading repositories…
                   </span>
                   <span v-else>No repositories found.</span>
@@ -112,9 +138,19 @@ async function handleSelectRepo(repo: { full_name: string; name: string; owner_l
                     <div class="repo-item">
                       <Github :size="14" />
                       <span class="repo-item-name">{{ repo.full_name }}</span>
-                      <Lock v-if="repo.private" :size="12" class="repo-item-lock" />
-                      <span v-if="repo.language" class="repo-item-lang">{{ repo.language }}</span>
-                      <span v-if="repo.stargazers_count > 0" class="repo-item-stars">
+                      <Lock
+                        v-if="repo.private"
+                        :size="12"
+                        class="repo-item-lock"
+                      />
+                      <span
+                        v-if="repo.language"
+                        class="repo-item-lang"
+                      >{{ repo.language }}</span>
+                      <span
+                        v-if="repo.stargazers_count > 0"
+                        class="repo-item-stars"
+                      >
                         <Star :size="10" />
                         {{ repo.stargazers_count }}
                       </span>
@@ -128,7 +164,10 @@ async function handleSelectRepo(repo: { full_name: string; name: string; owner_l
       </div>
 
       <!-- Repo cards grid -->
-      <div v-if="bookmarks.length > 0" class="repo-grid">
+      <div
+        v-if="bookmarks.length > 0"
+        class="repo-grid"
+      >
         <button
           v-for="repo in bookmarks"
           :key="repo.fullName"
@@ -141,9 +180,16 @@ async function handleSelectRepo(repo: { full_name: string; name: string; owner_l
       </div>
 
       <!-- Empty state -->
-      <div v-else class="browser-empty">
-        <p class="empty-title">No repositories added yet.</p>
-        <p class="empty-subtitle">Click 'Add Repository' to get started.</p>
+      <div
+        v-else
+        class="browser-empty"
+      >
+        <p class="empty-title">
+          No repositories added yet.
+        </p>
+        <p class="empty-subtitle">
+          Click 'Add Repository' to get started.
+        </p>
       </div>
     </template>
   </div>

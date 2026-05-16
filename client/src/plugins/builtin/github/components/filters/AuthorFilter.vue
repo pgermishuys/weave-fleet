@@ -29,17 +29,31 @@ function handleSelect(login: string) {
       <button class="filter-btn">
         <User :size="12" />
         <span>Author</span>
-        <span v-if="selected" class="filter-badge">1</span>
+        <span
+          v-if="selected"
+          class="filter-badge"
+        >1</span>
       </button>
     </PopoverTrigger>
-    <PopoverContent class="filter-popover-content" align="start">
+    <PopoverContent
+      class="filter-popover-content"
+      align="start"
+    >
       <Command>
         <CommandInput placeholder="Filter authors…" />
         <CommandList class="filter-list">
-          <div v-if="isLoading && users.length === 0" class="filter-loading">
-            <Loader2 :size="14" class="animate-spin" />
+          <div
+            v-if="isLoading && users.length === 0"
+            class="filter-loading"
+          >
+            <Loader2
+              :size="14"
+              class="animate-spin"
+            />
           </div>
-          <CommandEmpty v-else-if="!isLoading && users.length === 0">No users found.</CommandEmpty>
+          <CommandEmpty v-else-if="!isLoading && users.length === 0">
+            No users found.
+          </CommandEmpty>
           <CommandGroup>
             <CommandItem
               v-if="selected"
@@ -55,8 +69,16 @@ function handleSelect(login: string) {
               @select="() => handleSelect(user.login)"
             >
               <div class="filter-item">
-                <Check :size="13" :style="{ opacity: selected === user.login ? 1 : 0 }" class="filter-check" />
-                <img :src="user.avatar_url" alt="" class="user-avatar" />
+                <Check
+                  :size="13"
+                  :style="{ opacity: selected === user.login ? 1 : 0 }"
+                  class="filter-check"
+                />
+                <img
+                  :src="user.avatar_url"
+                  alt=""
+                  class="user-avatar"
+                >
                 <span class="filter-item-text">{{ user.login }}</span>
               </div>
             </CommandItem>

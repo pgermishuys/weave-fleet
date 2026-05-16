@@ -57,8 +57,15 @@ function handleClear() {
 <template>
   <div class="expression-field">
     <span class="expression-icon">
-      <Loader2 v-if="isSearching" :size="13" class="animate-spin" />
-      <Search v-else :size="13" />
+      <Loader2
+        v-if="isSearching"
+        :size="13"
+        class="animate-spin"
+      />
+      <Search
+        v-else
+        :size="13"
+      />
     </span>
     <input
       ref="inputRef"
@@ -69,7 +76,7 @@ function handleClear() {
       @focus="handleFocus"
       @blur="commit"
       @keydown="handleKeydown"
-    />
+    >
     <button
       v-if="hasFilters"
       class="expression-clear"

@@ -65,7 +65,7 @@ export function diagLog(cat: string, msg: string, data?: Record<string, unknown>
   };
 
   // Also log to console for live debugging
-  // eslint-disable-next-line no-console
+   
   console.debug(`[diag:${cat}]`, msg, data ?? "");
 
   const log = readLog();
@@ -79,7 +79,7 @@ export function diagLog(cat: string, msg: string, data?: Record<string, unknown>
  */
 export function diagDump(): DiagEntry[] {
   const log = readLog();
-  // eslint-disable-next-line no-console
+   
   console.table(log);
   return log;
 }

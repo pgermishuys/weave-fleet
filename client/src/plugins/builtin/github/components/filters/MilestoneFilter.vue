@@ -29,17 +29,31 @@ function handleSelect(title: string) {
       <button class="filter-btn">
         <Milestone :size="12" />
         <span>Milestone</span>
-        <span v-if="selected" class="filter-badge">1</span>
+        <span
+          v-if="selected"
+          class="filter-badge"
+        >1</span>
       </button>
     </PopoverTrigger>
-    <PopoverContent class="filter-popover-content" align="start">
+    <PopoverContent
+      class="filter-popover-content"
+      align="start"
+    >
       <Command>
         <CommandInput placeholder="Filter milestones…" />
         <CommandList class="filter-list">
-          <div v-if="isLoading && milestones.length === 0" class="filter-loading">
-            <Loader2 :size="14" class="animate-spin" />
+          <div
+            v-if="isLoading && milestones.length === 0"
+            class="filter-loading"
+          >
+            <Loader2
+              :size="14"
+              class="animate-spin"
+            />
           </div>
-          <CommandEmpty v-else-if="!isLoading && milestones.length === 0">No milestones found.</CommandEmpty>
+          <CommandEmpty v-else-if="!isLoading && milestones.length === 0">
+            No milestones found.
+          </CommandEmpty>
           <CommandGroup>
             <CommandItem
               v-if="selected"
@@ -53,7 +67,11 @@ function handleSelect(title: string) {
               @select="() => handleSelect('none')"
             >
               <div class="filter-item">
-                <Check :size="13" :style="{ opacity: selected === 'none' ? 1 : 0 }" class="filter-check" />
+                <Check
+                  :size="13"
+                  :style="{ opacity: selected === 'none' ? 1 : 0 }"
+                  class="filter-check"
+                />
                 <span class="filter-item-text">No milestone</span>
               </div>
             </CommandItem>
@@ -64,7 +82,11 @@ function handleSelect(title: string) {
               @select="() => handleSelect(ms.title)"
             >
               <div class="filter-item">
-                <Check :size="13" :style="{ opacity: selected === ms.title ? 1 : 0 }" class="filter-check" />
+                <Check
+                  :size="13"
+                  :style="{ opacity: selected === ms.title ? 1 : 0 }"
+                  class="filter-check"
+                />
                 <div class="milestone-info">
                   <span class="filter-item-text">{{ ms.title }}</span>
                   <span class="milestone-meta">{{ ms.open_issues }} open · {{ ms.closed_issues }} closed</span>
