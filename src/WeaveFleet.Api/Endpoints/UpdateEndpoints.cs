@@ -21,7 +21,9 @@ public static class UpdateEndpoints
                 state.Status.ToString().ToLowerInvariant(),
                 state.LatestVersion,
                 state.CheckedAt?.ToString("O"),
-                state.Error));
+                state.Error,
+                state.DownloadBytesReceived,
+                state.DownloadBytesTotal));
         })
         .WithName("GetUpdateStatus");
 
@@ -36,7 +38,7 @@ public static class UpdateEndpoints
         .WithName("TriggerUpdateCheck");
 
         // POST /api/update/download — trigger download when state is Available
-        group.MapPost("/download", async (
+        group.MapPost("/download", (
             UpdateStateHolder stateHolder,
             UpdateDownloadService downloadService,
             CancellationToken ct) =>
@@ -45,7 +47,8 @@ public static class UpdateEndpoints
             if (state.Status != UpdateStatus.Available)
                 return Results.BadRequest(new ApiErrorResponse("No update is available to download."));
 
-            await downloadService.DownloadUpdateAsync(state, ct);
+            // Fire-and-forget: download runs in background, client polls /status for progress.
+            _ = downloadService.DownloadUpdateAsync(state, ct);
             return Results.Accepted();
         })
         .WithName("TriggerUpdateDownload");

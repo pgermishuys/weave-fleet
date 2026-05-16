@@ -22,7 +22,9 @@ public sealed record UpdateStatusResponse(
     string Status,
     string? LatestVersion,
     string? CheckedAt,
-    string? Error);
+    string? Error,
+    long? DownloadBytesReceived = null,
+    long? DownloadBytesTotal = null);
 
 // ── Repositories ────────────────────────────────────────────────────────────
 

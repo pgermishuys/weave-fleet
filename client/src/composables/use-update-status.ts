@@ -9,6 +9,8 @@ export interface UpdateStatus {
   latestVersion: string | null;
   checkedAt: string | null;
   error: string | null;
+  downloadBytesReceived: number | null;
+  downloadBytesTotal: number | null;
 }
 
 export interface UseUpdateStatusResult {
@@ -21,7 +23,7 @@ export interface UseUpdateStatusResult {
   refetch: () => Promise<void>;
 }
 
-const POLL_INTERVAL_DOWNLOADING_MS = 5_000;
+const POLL_INTERVAL_DOWNLOADING_MS = 1_500;
 
 // ── Module-scoped shared state ─────────────────────────────────────────────────
 // All consumers of useUpdateStatus() share the same reactive state and fetch loop.
@@ -69,6 +71,7 @@ async function checkForUpdate(): Promise<void> {
 
 async function downloadUpdate(): Promise<void> {
   await apiFetch("/api/update/download", { method: "POST" });
+  // Endpoint returns immediately; start polling for progress.
   schedulePolling(POLL_INTERVAL_DOWNLOADING_MS);
   await fetchStatus();
 }
