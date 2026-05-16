@@ -59,6 +59,8 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(RepositoryBranchItem))]
 [JsonSerializable(typeof(RepositoryCommitItem))]
 [JsonSerializable(typeof(RepositoryRemoteItem))]
+[JsonSerializable(typeof(RepositoryWorktreesResponse))]
+[JsonSerializable(typeof(WorktreeItem))]
 [JsonSerializable(typeof(IntegrationsResponse))]
 [JsonSerializable(typeof(IntegrationItem))]
 // GitHub Auth

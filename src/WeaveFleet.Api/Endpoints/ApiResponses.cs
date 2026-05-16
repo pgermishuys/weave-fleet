@@ -73,6 +73,10 @@ public sealed record RepositoryCommitItem(
 
 public sealed record RepositoryRemoteItem(string Name, string Url, string? Github);
 
+public sealed record RepositoryWorktreesResponse(IReadOnlyList<WorktreeItem> Worktrees);
+
+public sealed record WorktreeItem(string Path, string? Branch, string? CommitHash);
+
 // ── Integrations ────────────────────────────────────────────────────────────
 
 public sealed record IntegrationsResponse(IReadOnlyList<IntegrationItem> Integrations);

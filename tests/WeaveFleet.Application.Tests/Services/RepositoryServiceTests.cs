@@ -175,6 +175,44 @@ public sealed class RepositoryServiceTests
         result.Error.Description.ShouldContain("outside allowed workspace roots");
     }
 
+    [Fact]
+    public void parse_worktrees_returns_linked_worktrees_only()
+    {
+        var porcelain = "worktree /repos/main\nHEAD abc123\nbranch refs/heads/main\n\nworktree /repos/main-worktrees/feature-auth\nHEAD def456\nbranch refs/heads/feature/auth\n\nworktree /repos/main-worktrees/hotfix\nHEAD 789abc\nbranch refs/heads/hotfix-1\n";
+
+        var result = RepositoryService.ParseWorktrees(porcelain, "/repos/main");
+
+        result.Count.ShouldBe(2);
+        result[0].Path.ShouldBe("/repos/main-worktrees/feature-auth");
+        result[0].Branch.ShouldBe("feature/auth");
+        result[0].CommitHash.ShouldBe("def456");
+        result[1].Path.ShouldBe("/repos/main-worktrees/hotfix");
+        result[1].Branch.ShouldBe("hotfix-1");
+    }
+
+    [Fact]
+    public void parse_worktrees_returns_empty_when_only_main_worktree_present()
+    {
+        var porcelain = "worktree /repos/main\nHEAD abc123\nbranch refs/heads/main\n";
+
+        var result = RepositoryService.ParseWorktrees(porcelain, "/repos/main");
+
+        result.Count.ShouldBe(0);
+    }
+
+    [Fact]
+    public void parse_worktrees_handles_detached_head()
+    {
+        var porcelain = "worktree /repos/main\nHEAD abc123\nbranch refs/heads/main\n\nworktree /repos/main-worktrees/detached\nHEAD cafe00\ndetached\n";
+
+        var result = RepositoryService.ParseWorktrees(porcelain, "/repos/main");
+
+        result.Count.ShouldBe(1);
+        result[0].Path.ShouldBe("/repos/main-worktrees/detached");
+        result[0].Branch.ShouldBeNull();
+        result[0].CommitHash.ShouldBe("cafe00");
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         public TempDirectory(bool createGitDirectory = false)

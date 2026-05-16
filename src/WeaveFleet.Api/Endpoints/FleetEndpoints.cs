@@ -86,6 +86,22 @@ public static class FleetEndpoints
         })
         .WithName("GetRepositoryInfo");
 
+        // GET /api/repositories/worktrees?path= — list linked worktrees for a repository
+        group.MapGet("/repositories/worktrees", async (
+            string path,
+            RepositoryService repoService,
+            CancellationToken ct) =>
+        {
+            var resolvedPath = await repoService.ResolveRepositoryPathAsync(path, ct);
+            if (resolvedPath.IsFailure)
+                return Results.BadRequest(new ErrorResponse(resolvedPath.Error.Description));
+
+            var worktrees = await repoService.ListWorktreesAsync(resolvedPath.Value, ct);
+            return Results.Ok(new RepositoryWorktreesResponse(
+                worktrees.Select(w => new WorktreeItem(w.Path, w.Branch, w.CommitHash)).ToList()));
+        })
+        .WithName("GetRepositoryWorktrees");
+
         // GET /api/repositories/detail?path= — enriched repo detail
         group.MapGet("/repositories/detail", async (
             string path,
