@@ -36,12 +36,13 @@ const emit = defineEmits<{
 }>();
 
 const filteredEntries = computed(() => {
+  const allEntries = props.browser.entries.value ?? [];
   const query = props.browser.search.value.trim().toLowerCase();
   if (!query) {
-    return props.browser.entries.value;
+    return allEntries;
   }
 
-  return props.browser.entries.value.filter((entry) => {
+  return allEntries.filter((entry) => {
     const searchableText = `${entry.name} ${entry.path}`.toLowerCase();
     return searchableText.includes(query);
   });

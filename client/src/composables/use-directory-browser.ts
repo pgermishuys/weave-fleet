@@ -86,9 +86,9 @@ export function useDirectoryBrowser(enabled = false, options: UseDirectoryBrowse
       }
 
       currentPath.value = data.currentPath ?? null;
-      entries.value = data.entries;
-      roots.value = data.roots;
-      parentPath.value = data.parentPath;
+      entries.value = data.entries ?? [];
+      roots.value = data.roots ?? [];
+      parentPath.value = data.parentPath ?? null;
     } catch (fetchError) {
       if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
         return;
