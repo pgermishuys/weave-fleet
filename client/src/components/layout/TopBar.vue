@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Bell } from "lucide-vue-next";
+import { Bell, Menu } from "lucide-vue-next";
 import { useLocation } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useSessionsStore } from "@/stores/sessions";
+import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 
 interface BreadcrumbItem {
   id: string;
@@ -15,6 +16,7 @@ interface BreadcrumbItem {
 
 const sessionsStore = useSessionsStore();
 const appShellStore = useAppShellStore();
+const { isMobileNav, mobileDrawerOpen, openDrawer } = useSidebarMobile();
 
 const { sessions, activeSessionId } = storeToRefs(sessionsStore);
 const { config, user } = storeToRefs(appShellStore);
@@ -124,6 +126,17 @@ const showUserAvatar = computed(() => config.value.authEnabled);
 
 <template>
   <header class="topbar flex items-center justify-between pr-4">
+    <button
+      v-if="isMobileNav"
+      type="button"
+      class="topbar__icon-button ml-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent text-[var(--muted)] transition-colors hover:bg-white/5 hover:text-[var(--text)]"
+      :aria-label="mobileDrawerOpen ? 'Close menu' : 'Open menu'"
+      :aria-expanded="mobileDrawerOpen"
+      @click="openDrawer"
+    >
+      <Menu class="h-5 w-5" />
+    </button>
+
     <nav
       class="breadcrumb flex min-w-0 items-center"
       aria-label="Breadcrumb"

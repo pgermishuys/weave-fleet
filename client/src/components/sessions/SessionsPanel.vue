@@ -772,6 +772,8 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
   flex: 1;
   overflow-y: auto;
   padding: 0 0 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
 }
 
 .sessions-empty-state {

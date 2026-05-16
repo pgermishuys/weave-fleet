@@ -767,6 +767,8 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   min-height: 0;
   overflow-y: auto;
   padding: 16px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
 }
 
 .jump-to-latest {

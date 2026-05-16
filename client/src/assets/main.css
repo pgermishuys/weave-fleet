@@ -3,6 +3,8 @@
 @import "./transitions.css";
 
 :root {
+  --visual-vh: 100dvh;
+  --fold-gap: 0px;
   --rail-bg: #0c0c0d;
   --panel-bg: #111113;
   --card-bg: #141416;
@@ -264,5 +266,70 @@
 
   #app {
     min-height: 100vh;
+  }
+}
+
+/* ─── Mobile / Safe Area Utilities ─────────────────────────────────────── */
+@utility safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility safe-left {
+  padding-left: env(safe-area-inset-left);
+}
+
+@utility safe-right {
+  padding-right: env(safe-area-inset-right);
+}
+
+/* ─── Foldable Device Utilities ─────────────────────────────────────────── */
+@utility fold-left {
+  width: env(viewport-segment-width 0 0, 50%);
+}
+
+@utility fold-right {
+  width: env(viewport-segment-width 1 0, 50%);
+}
+
+@utility fold-gap {
+  gap: var(--fold-gap);
+}
+
+/* ─── Scrollbar Utilities ───────────────────────────────────────────────── */
+@utility thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--muted);
+    border-radius: 3px;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ─── Small-screen typography ───────────────────────────────────────────── */
+@media (max-width: 359px) {
+  html {
+    font-size: 12px;
   }
 }

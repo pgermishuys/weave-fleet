@@ -41,6 +41,7 @@ export const useSidebarStore = defineStore("sidebar", () => {
   const activeRail = shallowRef<SidebarRail>("sessions");
   const panelCollapsed = shallowRef(readStoredBoolean(LEFT_PANEL_STORAGE_KEY));
   const rightPanelCollapsed = shallowRef(readStoredBoolean(RIGHT_PANEL_STORAGE_KEY));
+  const mobileDrawerOpen = shallowRef(false);
 
   function setActiveRail(rail: SidebarRail): void {
     activeRail.value = rail;
@@ -64,13 +65,19 @@ export const useSidebarStore = defineStore("sidebar", () => {
     setRightPanelCollapsed(!rightPanelCollapsed.value);
   }
 
+  function setMobileDrawerOpen(open: boolean): void {
+    mobileDrawerOpen.value = open;
+  }
+
   return {
     activeRail,
     panelCollapsed,
     rightPanelCollapsed,
+    mobileDrawerOpen,
     setActiveRail,
     setPanelCollapsed,
     setRightPanelCollapsed,
+    setMobileDrawerOpen,
     togglePanelCollapsed,
     toggleRightPanelCollapsed,
   };
