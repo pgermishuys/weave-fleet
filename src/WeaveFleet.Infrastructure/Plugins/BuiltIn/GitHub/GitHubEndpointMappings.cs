@@ -354,7 +354,7 @@ internal static class GitHubEndpointMappings
             var repos = new JsonArray();
             foreach (var bookmark in request.Bookmarks)
             {
-                repos.Add(JsonValue.Create<string>(bookmark.FullName));
+                repos.Add((JsonNode)bookmark.FullName);
             }
 
             var config = new JsonObject
@@ -384,7 +384,7 @@ internal static class GitHubEndpointMappings
             var repos = config["repos"] as JsonArray ?? new JsonArray();
             var exists = repos.Any(repo => repo?.GetValue<string>() == request.Repo);
             if (!exists)
-                repos.Add(JsonValue.Create<string>(request.Repo));
+                repos.Add((JsonNode)request.Repo);
 
             config["repos"] = repos;
             await store.SetStateAsync("github_bookmarks", userContext.UserId, config, ct).ConfigureAwait(false);
