@@ -11,6 +11,7 @@ import {
   GitBranchPlus,
   LayoutGrid,
   Maximize2,
+  Menu,
   MessageSquare,
   MoonStar,
   PanelLeftClose,
@@ -32,6 +33,7 @@ import { matchesKeyboardShortcut, useKeyboardShortcut } from "@/composables/use-
 import { useAbortSession, useForkSession } from "@/composables/use-session-actions";
 import type { SessionListItem } from "@/lib/api-types";
 import { apiFetch } from "@/lib/api-client";
+import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useCommandStore } from "@/stores/commands";
 import { useKeybindingsStore } from "@/stores/keybindings";
 import { useSessionsStore } from "@/stores/sessions";
@@ -70,6 +72,7 @@ export function useCommands() {
   const sidebarStore = useSidebarStore();
   const themeStore = useThemeStore();
   const workspaceUiStore = useWorkspaceUiStore();
+  const { toggleSidebar, isMobileNav, mobileDrawerOpen } = useSidebarMobile();
   const { abortSession } = useAbortSession();
   const { forkSession } = useForkSession();
   const router = useRouter();
@@ -482,14 +485,18 @@ export function useCommands() {
       },
       {
         id: "toggle-sidebar",
-        label: sidebarStore.panelCollapsed ? "Show Sidebar" : "Hide Sidebar",
-        description: sidebarStore.panelCollapsed ? "Expand the left context panel." : "Collapse the left context panel.",
-        icon: PanelLeftClose,
+        label: isMobileNav.value
+          ? (mobileDrawerOpen.value ? "Close Menu" : "Open Menu")
+          : (sidebarStore.panelCollapsed ? "Show Sidebar" : "Hide Sidebar"),
+        description: isMobileNav.value
+          ? "Open or close the navigation drawer."
+          : (sidebarStore.panelCollapsed ? "Expand the left context panel." : "Collapse the left context panel."),
+        icon: isMobileNav.value ? Menu : PanelLeftClose,
         category: "View",
         paletteHotkey: bindings.value["toggle-sidebar"]?.paletteHotkey ?? undefined,
         globalShortcut: bindings.value["toggle-sidebar"]?.globalShortcut ?? undefined,
         keywords: ["panel", "menu", "collapse", "expand", "sidebar"],
-        action: () => sidebarStore.togglePanelCollapsed(),
+        action: toggleSidebar,
       },
       {
         id: "toggle-right-panel",

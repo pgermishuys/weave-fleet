@@ -10,6 +10,7 @@ import { useAutocomplete } from "@/composables/use-autocomplete";
 import { useDraftState } from "@/composables/use-draft-state";
 import { useInputHistory } from "@/composables/use-input-history";
 import { useMessageQueue } from "@/composables/use-message-queue";
+import { useIsMobile } from "@/composables/use-media-query";
 import { useSendCommand } from "@/composables/use-send-command";
 import { useModels } from "@/composables/use-models";
 import { useSendPrompt } from "@/composables/use-send-prompt";
@@ -44,6 +45,7 @@ const { error: sendCommandError, sendCommand } = useSendCommand(props.sessionId)
 const inputHistory = useInputHistory(props.sessionId);
 
 const sessionsStore = useSessionsStore();
+const isMobile = useIsMobile();
 const { sessions, sessionStateOverrides } = storeToRefs(sessionsStore);
 const optimisticBusy = shallowRef(false);
 const localDisabledOverride = shallowRef<boolean | null>(null);
@@ -560,6 +562,11 @@ function handleKeydown(event: KeyboardEvent): void {
 
   if (event.shiftKey) {
     return; // Shift+Enter inserts a newline
+  }
+
+  // On mobile, Enter inserts a newline; user taps the Send button to submit
+  if (isMobile.value) {
+    return;
   }
 
   event.preventDefault();
