@@ -41,7 +41,7 @@ const { draft, setText, setAgentId, setModelId } = useDraftState(props.sessionId
 });
 const { error: sendPromptError, sendPrompt } = useSendPrompt(props.sessionId);
 const { error: sendCommandError, sendCommand } = useSendCommand(props.sessionId);
-const inputHistory = useInputHistory();
+const inputHistory = useInputHistory(props.sessionId);
 
 const sessionsStore = useSessionsStore();
 const { sessions, sessionStateOverrides } = storeToRefs(sessionsStore);

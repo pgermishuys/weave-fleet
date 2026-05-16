@@ -1,11 +1,15 @@
 import { ref, type Ref } from "vue";
 
-const STORAGE_KEY = "weave:input-history";
+const STORAGE_KEY_PREFIX = "weave:input-history:";
 const MAX_HISTORY = 10;
 
-function loadHistory(): string[] {
+function storageKey(sessionId: string): string {
+  return `${STORAGE_KEY_PREFIX}${sessionId}`;
+}
+
+function loadHistory(sessionId: string): string[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(sessionId));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.slice(0, MAX_HISTORY) : [];
@@ -14,9 +18,9 @@ function loadHistory(): string[] {
   }
 }
 
-function saveHistory(entries: string[]): void {
+function saveHistory(sessionId: string, entries: string[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(0, MAX_HISTORY)));
+    localStorage.setItem(storageKey(sessionId), JSON.stringify(entries.slice(0, MAX_HISTORY)));
   } catch {
     // localStorage may be unavailable
   }
@@ -43,8 +47,8 @@ export interface InputHistory {
   confirm: () => string | undefined;
 }
 
-export function useInputHistory(): InputHistory {
-  const entries = ref<string[]>(loadHistory());
+export function useInputHistory(sessionId: string): InputHistory {
+  const entries = ref<string[]>(loadHistory(sessionId));
   const isOpen = ref(false);
   const selectedIndex = ref(-1);
 
@@ -56,7 +60,7 @@ export function useInputHistory(): InputHistory {
     const filtered = entries.value.filter((e) => e !== trimmed);
     filtered.unshift(trimmed);
     entries.value = filtered.slice(0, MAX_HISTORY);
-    saveHistory(entries.value);
+    saveHistory(sessionId, entries.value);
   }
 
   function open(): void {
