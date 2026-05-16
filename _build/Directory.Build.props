@@ -1,0 +1,3 @@
+<Project>
+  <!-- Stop MSBuild from traversing further up to the repo root Directory.Build.props -->
+</Project>
