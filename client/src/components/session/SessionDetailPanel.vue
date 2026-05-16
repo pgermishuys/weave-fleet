@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { Loader2, OctagonX, Pencil, RotateCcw, Square, Trash2 } from "lucide-vue-next";
+import { Archive, ArchiveRestore, GitFork, Loader2, OctagonX, Pencil, RotateCcw, Square, Trash2 } from "lucide-vue-next";
 import ConfirmDeleteSessionDialog from "@/components/sessions/ConfirmDeleteSessionDialog.vue";
 import FilesChanged from "@/components/session/FilesChanged.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
@@ -554,6 +554,20 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       <span class="session-action-toolbar__divider" />
 
       <button
+        v-if="ctx.supportsFork"
+        type="button"
+        class="session-action-toolbar__btn"
+        :disabled="isAnyActionPending || !sessionId"
+        title="Fork"
+        @click="handleFork"
+      >
+        <GitFork
+          :size="14"
+          aria-hidden="true"
+        />
+      </button>
+
+      <button
         type="button"
         class="session-action-toolbar__btn"
         :disabled="isAnyActionPending || !sessionId"
@@ -593,6 +607,48 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
         />
       </button>
 
+      <button
+        v-if="canArchive && ctx.supportsArchive"
+        type="button"
+        class="session-action-toolbar__btn"
+        :disabled="isAnyActionPending || !sessionId"
+        title="Archive"
+        @click="handleArchive"
+      >
+        <Loader2
+          v-if="isArchiving"
+          :size="14"
+          class="session-action-toolbar__spinner"
+          aria-hidden="true"
+        />
+        <Archive
+          v-else
+          :size="14"
+          aria-hidden="true"
+        />
+      </button>
+
+      <button
+        v-if="canUnarchive && ctx.supportsArchive"
+        type="button"
+        class="session-action-toolbar__btn"
+        :disabled="isAnyActionPending || !sessionId"
+        title="Unarchive"
+        @click="handleUnarchive"
+      >
+        <Loader2
+          v-if="isUnarchiving"
+          :size="14"
+          class="session-action-toolbar__spinner"
+          aria-hidden="true"
+        />
+        <ArchiveRestore
+          v-else
+          :size="14"
+          aria-hidden="true"
+        />
+      </button>
+
       <p
         v-for="message in actionErrors"
         :key="message"
@@ -618,156 +674,6 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
     </article>
 
     <TokenGrid :metrics="tokenMetrics" />
-
-    <article
-      v-if="ctx.actionsLayout === 'card'"
-      class="session-section-card"
-    >
-      <div class="session-section-card__header">
-        <p class="session-section-card__title">
-          Session actions
-        </p>
-      </div>
-
-      <div class="session-action-grid">
-        <button
-          v-if="canAbort"
-          type="button"
-          data-testid="abort-button"
-          class="session-action-button session-action-button--danger"
-          :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
-          :aria-busy="isAborting ? 'true' : 'false'"
-          @click="handleAbort"
-        >
-          <span
-            v-if="isAborting"
-            class="session-action-button__spinner"
-            aria-hidden="true"
-          />
-          <span>{{ isAborting ? "Aborting..." : "Abort" }}</span>
-        </button>
-
-        <button
-          v-if="canResume"
-          type="button"
-          data-testid="session-resume-button"
-          class="session-action-button"
-          :disabled="isAnyActionPending || !sessionId"
-          :aria-busy="isResumingCurrentSession ? 'true' : 'false'"
-          @click="handleResume"
-        >
-          <span
-            v-if="isResumingCurrentSession"
-            class="session-action-button__spinner"
-            aria-hidden="true"
-          />
-          <span>{{ isResumingCurrentSession ? "Resuming..." : "Resume" }}</span>
-        </button>
-
-        <button
-          v-if="canStop"
-          type="button"
-          data-testid="session-stop-button"
-          class="session-action-button session-action-button--danger"
-          :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
-          :aria-busy="isTerminating ? 'true' : 'false'"
-          @click="handleStop"
-        >
-          <span
-            v-if="isTerminating"
-            class="session-action-button__spinner"
-            aria-hidden="true"
-          />
-          <span>{{ isTerminating ? "Stopping..." : "Stop" }}</span>
-        </button>
-
-        <button
-          v-if="ctx.supportsFork"
-          type="button"
-          data-testid="session-archived-fork-button"
-          class="session-action-button"
-          :disabled="isAnyActionPending || !sessionId"
-          :aria-busy="false"
-          @click="handleFork"
-        >
-          <span>Fork</span>
-        </button>
-
-        <button
-          type="button"
-          class="session-action-button"
-          :disabled="isAnyActionPending || !sessionId"
-          :aria-busy="isRenaming ? 'true' : 'false'"
-          @click="handleRename"
-        >
-          <span
-            v-if="isRenaming"
-            class="session-action-button__spinner"
-            aria-hidden="true"
-          />
-          <span>{{ isRenaming ? "Renaming..." : "Rename" }}</span>
-        </button>
-
-        <button
-          type="button"
-          data-testid="session-delete-button"
-          class="session-action-button session-action-button--danger"
-          :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
-          :aria-busy="isDeleting ? 'true' : 'false'"
-          @click="handleDelete"
-        >
-          <span
-            v-if="isDeleting"
-            class="session-action-button__spinner"
-            aria-hidden="true"
-          />
-          <span>{{ isDeleting ? "Deleting..." : "Delete" }}</span>
-        </button>
-
-        <button
-          v-if="canArchive && ctx.supportsArchive"
-          type="button"
-          data-testid="session-archive-banner-button"
-          class="session-action-button"
-          :disabled="isAnyActionPending || !sessionId"
-          :aria-busy="isArchiving ? 'true' : 'false'"
-          @click="handleArchive"
-        >
-          <span
-            v-if="isArchiving"
-            class="session-action-button__spinner"
-            aria-hidden="true"
-          />
-          <span>{{ isArchiving ? "Archiving..." : "Archive" }}</span>
-        </button>
-
-        <button
-          v-if="canUnarchive && ctx.supportsArchive"
-          type="button"
-          data-testid="session-unarchive-button"
-          class="session-action-button"
-          :disabled="isAnyActionPending || !sessionId"
-          :aria-busy="isUnarchiving ? 'true' : 'false'"
-          @click="handleUnarchive"
-        >
-          <span
-            v-if="isUnarchiving"
-            class="session-action-button__spinner"
-            aria-hidden="true"
-          />
-          <span>{{ isUnarchiving ? "Updating..." : "Unarchive" }}</span>
-        </button>
-      </div>
-
-      <p
-        v-for="message in actionErrors"
-        :key="message"
-        class="session-section-card__note session-section-card__note--error"
-        role="alert"
-      >
-        {{ message }}
-      </p>
-    </article>
 
     <article class="session-section-card">
       <p
@@ -878,149 +784,6 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
 
 .session-section-card__note--error {
   color: var(--error);
-}
-
-.session-action-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.session-action-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
-}
-
-.session-action-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.session-action-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.session-action-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.session-action-button--danger {
-  border-color: rgba(239, 68, 68, 0.35);
-  color: #fca5a5;
-}
-
-.session-action-button__spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 999px;
-  animation: session-detail-panel-spin 0.8s linear infinite;
-}
-
-@keyframes session-detail-panel-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.session-section-card__count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--muted);
-}
-
-.smart-links-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.smart-links-group__heading {
-  margin: 0;
-  padding: 4px 8px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-}
-
-/* ---- Compact icon toolbar (V1 layout) ---- */
-
-.session-action-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 4px;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
-}
-
-.session-action-toolbar__btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text);
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
-}
-
-.session-action-toolbar__btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.session-action-toolbar__btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.session-action-toolbar__btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.session-action-toolbar__btn--danger {
-  border-color: rgba(239, 68, 68, 0.35);
-  color: #fca5a5;
-}
-
-.session-action-toolbar__divider {
-  width: 1px;
-  height: 18px;
-  background: var(--border);
-  margin: 0 2px;
-  flex-shrink: 0;
-}
-
-.session-action-toolbar__spinner {
-  animation: session-detail-panel-spin 0.8s linear infinite;
 }
 
 .session-action-toolbar__error {
