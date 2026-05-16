@@ -424,9 +424,7 @@ function getDirectoryBrowserStartPath(): string | null {
 
 function syncDirectoryBrowser(): void {
   const nextPath = getDirectoryBrowserStartPath();
-  if (!directoryBrowser.hasActivated.value || directoryBrowser.currentPath.value !== nextPath) {
-    directoryBrowser.browse(nextPath);
-  }
+  directoryBrowser.browse(nextPath);
 }
 
 function handleIsolationToggle(strategy: IsolationStrategy): void {
