@@ -85,7 +85,7 @@ export function useDirectoryBrowser(enabled = false, options: UseDirectoryBrowse
         return;
       }
 
-      currentPath.value = data.currentPath;
+      currentPath.value = data.currentPath ?? null;
       entries.value = data.entries;
       roots.value = data.roots;
       parentPath.value = data.parentPath;

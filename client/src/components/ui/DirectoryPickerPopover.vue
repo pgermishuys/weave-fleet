@@ -54,7 +54,7 @@ interface BreadcrumbSegment {
 
 const breadcrumbs = computed<BreadcrumbSegment[]>(() => {
   const current = props.browser.currentPath.value;
-  if (current === null) return [];
+  if (current == null) return [];
 
   const sep = current.includes("\\") ? "\\" : "/";
   const roots = props.browser.roots.value;
