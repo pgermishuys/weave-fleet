@@ -511,12 +511,12 @@ function handleKeydown(event: KeyboardEvent): void {
   if (inputHistory.isOpen.value) {
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      inputHistory.moveUp();
+      inputHistory.moveDown();
       return;
     }
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      inputHistory.moveDown();
+      inputHistory.moveUp();
       return;
     }
     if (event.key === "Enter") {
@@ -620,15 +620,15 @@ function handleKeydown(event: KeyboardEvent): void {
         aria-label="Message history"
       >
         <button
-          v-for="(entry, index) in inputHistory.entries.value"
-          :key="index"
+          v-for="(entry, revIdx) in [...inputHistory.entries.value].reverse()"
+          :key="revIdx"
           type="button"
           role="option"
           class="input-history__item"
-          :class="{ 'input-history__item--selected': index === inputHistory.selectedIndex.value }"
-          :aria-selected="index === inputHistory.selectedIndex.value"
+          :class="{ 'input-history__item--selected': (inputHistory.entries.value.length - 1 - revIdx) === inputHistory.selectedIndex.value }"
+          :aria-selected="(inputHistory.entries.value.length - 1 - revIdx) === inputHistory.selectedIndex.value"
           @mousedown.prevent="() => { setText(entry); inputHistory.close(); void nextTick(() => resizeTextarea()); }"
-          @mouseenter="inputHistory.selectedIndex.value = index"
+          @mouseenter="inputHistory.selectedIndex.value = inputHistory.entries.value.length - 1 - revIdx"
         >
           {{ entry }}
         </button>
