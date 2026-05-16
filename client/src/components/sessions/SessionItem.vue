@@ -192,25 +192,6 @@ const projectTargets = computed(() => {
   return targets;
 });
 
-const statusLabel = computed(() => {
-  switch (props.session.sessionStatus) {
-    case "completed":
-      return "Completed";
-    case "idle":
-      return "Idle";
-    case "stopped":
-      return "Stopped";
-    case "disconnected":
-      return "Disconnected";
-    case "error":
-      return "Error";
-    case "waiting_input":
-      return "Waiting for input";
-    case "active":
-    default:
-      return "Active";
-  }
-});
 
 const statusColor = computed(() => {
   switch (props.session.sessionStatus) {
@@ -465,7 +446,6 @@ function removeSessionFromStore(): void {
 
             <span class="session-copy">
               <span class="session-title">{{ displayTitle }}</span>
-              <span class="session-meta">{{ statusLabel }}</span>
               <span
                 v-if="hasOriginBadge"
                 class="session-origin-badge"
@@ -502,7 +482,6 @@ function removeSessionFromStore(): void {
               @blur="handleRename(renameDraft)"
               @keydown="handleInlineRenameKeydown"
             >
-            <span class="session-meta">{{ statusLabel }}</span>
           </span>
         </div>
       </div>
@@ -723,10 +702,6 @@ function removeSessionFromStore(): void {
   outline: none;
 }
 
-.session-meta {
-  font-size: 10px;
-  color: var(--muted);
-}
 
 .session-inline-edit {
   width: 100%;

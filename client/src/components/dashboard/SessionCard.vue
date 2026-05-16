@@ -47,25 +47,6 @@ const isPending = computed(() => {
   return isArchiving.value || isDeleting.value || isTerminating.value || isUnarchiving.value;
 });
 
-const statusLabel = computed(() => {
-  switch (props.session.sessionStatus) {
-    case "completed":
-      return "Completed";
-    case "idle":
-      return "Idle";
-    case "stopped":
-      return "Stopped";
-    case "disconnected":
-      return "Disconnected";
-    case "error":
-      return "Error";
-    case "waiting_input":
-      return "Queued";
-    case "active":
-    default:
-      return "Active";
-  }
-});
 
 const statusClasses = computed(() => {
   switch (props.session.sessionStatus) {
@@ -166,9 +147,6 @@ function openDeleteDialog(): void {
               :class="statusClasses"
               class="h-2.5 w-2.5 shrink-0 rounded-full"
             />
-            <p class="text-sm font-medium text-muted-foreground">
-              {{ statusLabel }}
-            </p>
             <Badge
               v-if="isArchived"
               data-testid="session-card-archived-badge"

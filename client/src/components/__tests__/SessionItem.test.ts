@@ -45,7 +45,6 @@ describe("SessionItem", () => {
     });
 
     expect(wrapper.get(".session-title").text()).toBe("Fix auth bug");
-    expect(wrapper.get(".session-meta").text()).toBe("Active");
     expect(wrapper.get("button").attributes("aria-current")).toBe("true");
     expect(wrapper.get("button").classes()).toContain("active");
     expect(wrapper.get(".session-dot").attributes("style")).toContain("background-color: var(--running)");
@@ -76,7 +75,6 @@ describe("SessionItem", () => {
     await wrapper.get("button").trigger("click");
 
     expect(wrapper.emitted("select")).toEqual([[session]]);
-    expect(wrapper.get(".session-meta").text()).toBe("Completed");
   });
 
   it("sets draggable to true when not editing and no action is pending", () => {
