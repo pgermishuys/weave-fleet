@@ -232,6 +232,13 @@ function handleSearchUpdate(value: string | number): void {
         </div>
 
         <p
+          v-else-if="browser.error.value"
+          class="px-2 py-4 text-sm text-destructive"
+        >
+          {{ browser.error.value }}
+        </p>
+
+        <p
           v-else-if="filteredEntries.length === 0"
           class="px-2 py-4 text-sm text-muted"
         >

@@ -29,10 +29,7 @@ const isDirectoryPickerOpen = shallowRef(false);
 const directoryBrowser = useDirectoryBrowser(false, { unconstrained: true });
 
 function openDirectoryPicker(): void {
-  if (!directoryBrowser.hasActivated.value) {
-    directoryBrowser.browse(null);
-  }
-
+  directoryBrowser.browse(null);
   isDirectoryPickerOpen.value = true;
 }
 
