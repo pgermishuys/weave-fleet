@@ -531,10 +531,6 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
     aria-label="Sessions context panel"
   >
     <div class="panel-header-row">
-      <p class="panel-header">
-        Sessions Context
-      </p>
-
       <div class="panel-actions">
         <button
           type="button"
