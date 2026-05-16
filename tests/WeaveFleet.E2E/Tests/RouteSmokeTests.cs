@@ -50,22 +50,25 @@ public sealed class RouteSmokeTests : E2ETestBase,
     }
 
     [Fact]
-    public async Task LoginRoute_LoadsWithoutClientErrors_AndShowsAuthenticationActions()
+    public async Task LoginRoute_LoadsWithoutClientErrors_AndRedirectsToDashboard_WhenAuthenticationIsDisabled()
     {
         await WithFailureCapture(async () =>
         {
             using var errorMonitor = CreateErrorMonitor();
 
             await Page.GotoAsync("/login", new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await Page.WaitForURLAsync(
+                url => new Uri(url).AbsolutePath.Equals("/", StringComparison.Ordinal),
+                new PageWaitForURLOptions { Timeout = 5_000 });
 
-            var signInLink = Page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "Sign in", Exact = true });
-            var signUpLink = Page.GetByRole(AriaRole.Link, new PageGetByRoleOptions { Name = "Sign up", Exact = true });
-
-            Page.Url.ShouldContain("/login");
+            new Uri(Page.Url).AbsolutePath.ShouldBe("/");
             await Microsoft.Playwright.Assertions.Expect(Page.GetByRole(AriaRole.Main)).ToBeVisibleAsync();
-            await Microsoft.Playwright.Assertions.Expect(signInLink).ToBeVisibleAsync();
-            await Microsoft.Playwright.Assertions.Expect(signUpLink).ToBeVisibleAsync();
-            await Microsoft.Playwright.Assertions.Expect(Page.GetByText("Agent Fleet", new PageGetByTextOptions { Exact = true })).ToBeVisibleAsync();
+            await Microsoft.Playwright.Assertions.Expect(
+                Page.GetByRole(AriaRole.Heading, new PageGetByRoleOptions
+                {
+                    Name = "Fleet Dashboard",
+                    Exact = true
+                })).ToBeVisibleAsync();
 
             await Page.WaitForLoadStateAsync(LoadState.Load);
             errorMonitor.AssertNoClientErrors("/login");

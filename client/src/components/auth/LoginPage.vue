@@ -64,7 +64,12 @@ async function loadAuthMode(): Promise<void> {
       return;
     }
 
-    authMode.value = config.tokenAuthEnabled ? "token" : "unknown";
+    if (config.tokenAuthEnabled) {
+      authMode.value = "token";
+      return;
+    }
+
+    window.location.replace("/");
   } catch {
     authMode.value = "unknown";
   }
