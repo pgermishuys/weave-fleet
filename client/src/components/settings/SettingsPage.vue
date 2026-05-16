@@ -4,6 +4,7 @@ import { computed } from "vue";
 import { Settings2 } from "lucide-vue-next";
 import AppearanceSection from "@/components/settings/AppearanceSection.vue";
 import ConfigOverviewSection from "@/components/settings/ConfigOverviewSection.vue";
+import SystemSection from "@/components/settings/SystemSection.vue";
 import CredentialsSection from "@/components/settings/CredentialsSection.vue";
 import SessionsViewSetting from "@/components/settings/SessionsViewSetting.vue";
 import SkillsSection from "@/components/settings/SkillsSection.vue";
@@ -129,6 +130,9 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
       </div>
     </section>
 
-    <ConfigOverviewSection v-else-if="activeSection === 'system'" />
+    <template v-else-if="activeSection === 'system'">
+      <SystemSection />
+      <ConfigOverviewSection />
+    </template>
   </section>
 </template>

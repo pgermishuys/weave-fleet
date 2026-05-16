@@ -39,7 +39,48 @@ if exist "%PACKAGE_BIN%" (
     exit /b 1
 )
 
+if "%INSTALL_LAYOUT%"=="1" call :apply_staged_update
+
 goto :parse_args
+
+:apply_staged_update
+set "UPDATE_DIR=%ROOT_DIR%\update"
+set "MANIFEST=%UPDATE_DIR%\update-manifest.json"
+if not exist "%MANIFEST%" goto :eof
+
+echo Checking for staged Fleet update...
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$m = Get-Content '%MANIFEST%' | ConvertFrom-Json; ^
+   $v = $m.version; $a = $m.assetFileName; ^
+   if (-not $v -or -not $a) { exit 1 }; ^
+   $archive = '%UPDATE_DIR%\' + $a; ^
+   if (-not (Test-Path $archive)) { Write-Host 'Warning: archive not found.'; exit 1 }; ^
+   Write-Host ('Applying Fleet update to v' + $v + '...'); ^
+   $appDir = '%ROOT_DIR%\app'; $appBak = '%ROOT_DIR%\app.bak'; ^
+   if (Test-Path $appBak) { Remove-Item $appBak -Recurse -Force }; ^
+   Copy-Item $appDir $appBak -Recurse; ^
+   $tmp = '%UPDATE_DIR%\extract_tmp'; ^
+   if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }; ^
+   New-Item -ItemType Directory -Path $tmp | Out-Null; ^
+   if ($a.EndsWith('.zip')) { Expand-Archive -Path $archive -DestinationPath $tmp -Force } ^
+   else { tar -xzf $archive -C $tmp }; ^
+   $extracted = Get-ChildItem $tmp | Where-Object { $_.PSIsContainer } | Select-Object -First 1; ^
+   if (-not $extracted -or -not (Test-Path ($extracted.FullName + '\app'))) { ^
+     Write-Host 'Warning: unexpected archive layout — restoring backup.'; ^
+     Remove-Item $appDir -Recurse -Force -ErrorAction SilentlyContinue; ^
+     Copy-Item $appBak $appDir -Recurse; ^
+     Remove-Item $appBak -Recurse -Force; ^
+     Remove-Item '%UPDATE_DIR%' -Recurse -Force -ErrorAction SilentlyContinue; ^
+     exit 1 ^
+   }; ^
+   Remove-Item $appDir -Recurse -Force; ^
+   Copy-Item ($extracted.FullName + '\app') $appDir -Recurse; ^
+   Set-Content -Path '%ROOT_DIR%\VERSION' -Value $v; ^
+   Remove-Item $appBak -Recurse -Force -ErrorAction SilentlyContinue; ^
+   Remove-Item '%UPDATE_DIR%' -Recurse -Force -ErrorAction SilentlyContinue; ^
+   Write-Host ('Fleet updated to v' + $v + '.')"
+goto :eof
 
 :read_version
 set "VERSION=unknown"

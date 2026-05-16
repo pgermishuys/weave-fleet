@@ -15,6 +15,15 @@ public sealed record ApiErrorResponse(string Error);
 public sealed record VersionResponse(string Version, string Commit);
 public sealed record ProfileResponse(string Profile);
 
+// ── Update ──────────────────────────────────────────────────────────────────
+
+public sealed record UpdateStatusResponse(
+    string CurrentVersion,
+    string Status,
+    string? LatestVersion,
+    string? CheckedAt,
+    string? Error);
+
 // ── Repositories ────────────────────────────────────────────────────────────
 
 public sealed record RepositoriesListResponse(
