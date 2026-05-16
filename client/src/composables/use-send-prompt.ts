@@ -5,6 +5,7 @@ import { useDraftState, type EffortLevel } from "@/composables/use-draft-state";
 import { useModels } from "@/composables/use-models";
 import { apiFetch } from "@/lib/api-client";
 import type { AccumulatedMessage, ImageAttachment } from "@/lib/api-types";
+import { diagLog } from "@/lib/message-diagnostics";
 import { useSessionsStore } from "@/stores/sessions";
 
 export interface SentPromptMessage {
@@ -55,6 +56,13 @@ function removeSentPrompt(sessionId: string, promptId: string): void {
 }
 
 export function clearSentPrompts(sessionId: string): void {
+  const existing = sentPromptRegistry[sessionId];
+  if (existing && existing.length > 0) {
+    diagLog("prompt.clear", `clearing ${existing.length} optimistic prompt(s)`, {
+      sessionId,
+      prompts: existing.map((p) => ({ id: p.id, bodySnippet: p.body.slice(0, 60) })),
+    });
+  }
   delete sentPromptRegistry[sessionId];
 }
 
@@ -110,7 +118,19 @@ export function reconcileSentPrompts(sessionId: string, messages: readonly Accum
   let unmatchedDeliveredPromptCount = 0;
 
   for (const message of messages) {
-    if (message.role === "user") {
+    if (message.role !== "user") {
+      continue;
+    }
+
+    // Only count user messages that have actual text content as "delivered".
+    // Messages that arrived via message.updated but haven't received their
+    // message.part.updated yet have empty parts and must NOT be counted —
+    // otherwise the optimistic prompt is removed before the delivered
+    // message has text, causing a blank bubble.
+    const hasText = message.parts.some(
+      (part) => part.type === "text" && part.text.trim().length > 0,
+    );
+    if (hasText) {
       unmatchedDeliveredPromptCount += 1;
     }
   }
@@ -130,6 +150,15 @@ export function reconcileSentPrompts(sessionId: string, messages: readonly Accum
 
     return true;
   });
+
+  if (remainingPrompts.length < prompts.length) {
+    diagLog("prompt.reconcile", `removed ${prompts.length - remainingPrompts.length} of ${prompts.length} optimistic prompt(s)`, {
+      sessionId,
+      totalUserMessages: messages.filter((m) => m.role === "user").length,
+      userMessagesWithText: messages.filter((m) => m.role === "user" && m.parts.some((p) => p.type === "text" && p.text.trim().length > 0)).length,
+      remaining: remainingPrompts.length,
+    });
+  }
 
   if (remainingPrompts.length === prompts.length) {
     return;
