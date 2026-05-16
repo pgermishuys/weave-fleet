@@ -8,6 +8,7 @@ import ModelSelector from "@/components/session/ModelSelector.vue";
 import { useAgents } from "@/composables/use-agents";
 import { useAutocomplete } from "@/composables/use-autocomplete";
 import { useDraftState } from "@/composables/use-draft-state";
+import { useInputHistory } from "@/composables/use-input-history";
 import { useMessageQueue } from "@/composables/use-message-queue";
 import { useSendCommand } from "@/composables/use-send-command";
 import { useModels } from "@/composables/use-models";
@@ -40,6 +41,7 @@ const { draft, setText, setAgentId, setModelId } = useDraftState(props.sessionId
 });
 const { error: sendPromptError, sendPrompt } = useSendPrompt(props.sessionId);
 const { error: sendCommandError, sendCommand } = useSendCommand(props.sessionId);
+const inputHistory = useInputHistory();
 
 const sessionsStore = useSessionsStore();
 const { sessions, sessionStateOverrides } = storeToRefs(sessionsStore);
@@ -474,6 +476,8 @@ function handleSend(): void {
     return;
   }
 
+  inputHistory.push(text);
+
   if (sessionStatus.value === "busy") {
     enqueue(text);
     setText("");
@@ -500,6 +504,43 @@ function handleSend(): void {
 
 function handleKeydown(event: KeyboardEvent): void {
   if (isDisabled.value) {
+    return;
+  }
+
+  // --- Input history popup handling ---
+  if (inputHistory.isOpen.value) {
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      inputHistory.moveUp();
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      inputHistory.moveDown();
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const selected = inputHistory.confirm();
+      if (selected !== undefined) {
+        setText(selected);
+        void nextTick(() => resizeTextarea());
+      }
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      inputHistory.close();
+      return;
+    }
+    // Any other key closes history and falls through
+    inputHistory.close();
+  }
+
+  // Open history when pressing ArrowUp in an empty textarea
+  if (event.key === "ArrowUp" && !draft.text.trim()) {
+    event.preventDefault();
+    inputHistory.open();
     return;
   }
 
@@ -571,6 +612,27 @@ function handleKeydown(event: KeyboardEvent): void {
         :error="autocompleteEnabled ? autocomplete.error.value : undefined"
         :on-select="autocomplete.onSelect"
       />
+
+      <div
+        v-if="inputHistory.isOpen.value"
+        class="input-history"
+        role="listbox"
+        aria-label="Message history"
+      >
+        <button
+          v-for="(entry, index) in inputHistory.entries.value"
+          :key="index"
+          type="button"
+          role="option"
+          class="input-history__item"
+          :class="{ 'input-history__item--selected': index === inputHistory.selectedIndex.value }"
+          :aria-selected="index === inputHistory.selectedIndex.value"
+          @mousedown.prevent="() => { setText(entry); inputHistory.close(); void nextTick(() => resizeTextarea()); }"
+          @mouseenter="inputHistory.selectedIndex.value = index"
+        >
+          {{ entry }}
+        </button>
+      </div>
 
       <textarea
         ref="textarea"
@@ -767,6 +829,45 @@ function handleKeydown(event: KeyboardEvent): void {
 
 .composer-box:focus-within {
   border-color: var(--accent);
+}
+
+.input-history {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+  background: var(--card-bg);
+  z-index: 20;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.input-history__item {
+  display: block;
+  width: 100%;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.input-history__item--selected {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.input-history__item:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .composer-box__textarea {
