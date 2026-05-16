@@ -18,6 +18,7 @@ function createDefaultConfig(): AppShellConfig {
     profile: "default",
     cloudMode: false,
     authEnabled: false,
+    tokenAuthEnabled: false,
     availableHarnesses: [],
   };
 }

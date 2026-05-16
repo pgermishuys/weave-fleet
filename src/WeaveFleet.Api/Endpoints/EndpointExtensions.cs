@@ -18,11 +18,12 @@ public static class EndpointExtensions
     {
         var fleetOptions = app.Services.GetRequiredService<FleetOptions>();
 
-        // When auth is enabled, wrap all API + WebSocket endpoints under a RequireAuthorization group.
+        // When cloud auth or local token auth is enabled, wrap all API + WebSocket endpoints
+        // under a RequireAuthorization group.
         // Health checks (/healthz, /readyz) are registered separately in Program.cs and remain public.
         IEndpointRouteBuilder apiScope = app;
 
-        if (fleetOptions.Auth.Enabled)
+        if (RequiresFleetAuthorization(fleetOptions))
         {
             var authenticatedGroup = app.MapGroup("/")
                 .RequireAuthorization("FleetUser")
@@ -84,7 +85,7 @@ public static class EndpointExtensions
     }
 
     /// <summary>
-    /// Creates a route group and optionally requires authorization for all routes when auth is enabled.
+    /// Creates a route group and optionally requires authorization for all routes when cloud auth or local token auth is enabled.
     /// </summary>
     public static RouteGroupBuilder MapAuthenticatedGroup(
         this IEndpointRouteBuilder builder,
@@ -93,10 +94,13 @@ public static class EndpointExtensions
     {
         var group = builder.MapGroup(prefix);
 
-        if (options.Auth.Enabled)
+        if (RequiresFleetAuthorization(options))
             group.RequireAuthorization("FleetUser");
 
         return group;
     }
+
+    private static bool RequiresFleetAuthorization(FleetOptions options)
+        => options.Auth.Enabled || (!options.Auth.Enabled && options.Auth.TokenAuthEnabled);
 }
 #pragma warning restore IL2026

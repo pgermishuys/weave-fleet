@@ -146,6 +146,12 @@ public sealed class AuthOptions
     /// <summary>Enable cookie + OIDC authentication. Default: false (local mode).</summary>
     public bool Enabled { get; set; }
 
+    /// <summary>Enable local token authentication when <see cref="Enabled"/> is false. Default: true.</summary>
+    public bool TokenAuthEnabled { get; set; } = true;
+
+    /// <summary>Local authentication token populated at runtime from environment or generation.</summary>
+    public string? Token { get; set; }
+
     /// <summary>OIDC authority URL (e.g. Clerk issuer). Required when <see cref="Enabled"/> is true.</summary>
     public string Authority { get; set; } = string.Empty;
 

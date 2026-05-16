@@ -16,10 +16,13 @@ public static class ConfigEndpoints
         // GET /api/config?directory= — returns merged config (user + optional project-level)
         group.MapGet("/config", async (
             string? directory,
+            FleetOptions fleetOptions,
             ConfigService configService,
             CancellationToken ct) =>
         {
             var config = await configService.GetMergedConfigAsync(directory, ct);
+            config["authEnabled"] = fleetOptions.Auth.Enabled;
+            config["tokenAuthEnabled"] = fleetOptions.Auth.TokenAuthEnabled;
             return Results.Ok(config);
         })
         .WithName("GetConfig");
@@ -65,8 +68,10 @@ public static class ConfigEndpoints
             return Results.Ok(new ClientConfigResponse(
                 fleetOptions.Cloud.Enabled,
                 fleetOptions.Auth.Enabled,
+                fleetOptions.Auth.TokenAuthEnabled,
                 availableHarnesses));
         })
+        .AllowAnonymous()
         .Produces<ClientConfigResponse>(StatusCodes.Status200OK)
         .WithName("GetClientConfig");
 
@@ -77,5 +82,6 @@ public static class ConfigEndpoints
 internal sealed record ClientConfigResponse(
     bool CloudMode,
     bool AuthEnabled,
+    bool TokenAuthEnabled,
     IReadOnlyList<string> AvailableHarnesses);
 #pragma warning restore IL2026

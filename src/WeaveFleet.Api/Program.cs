@@ -13,10 +13,12 @@
 
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using WeaveFleet.Api;
+using WeaveFleet.Api.Auth;
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Api.Telemetry;
 using WeaveFleet.Application.Configuration;
@@ -228,9 +230,78 @@ if (fleetOptions.Auth.Enabled)
 }
 else
 {
-    // Local mode: stub authentication + passthrough IUserContext
-    builder.Services.AddAuthentication();
-    builder.Services.AddAuthorization();
+    // Local mode: cookie authentication + local token service + passthrough IUserContext
+    builder.Services.AddSingleton<LocalTokenAuthService>();
+    builder.Services.AddSingleton<ILocalTokenAuthService>(sp =>
+        sp.GetRequiredService<LocalTokenAuthService>());
+
+    builder.Services.AddAuthentication(options =>
+        {
+            options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+            options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        })
+        .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
+        {
+            options.Cookie.Name = fleetOptions.Auth.CookieName;
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            options.ExpireTimeSpan = TimeSpan.FromMinutes(fleetOptions.Auth.CookieExpirationMinutes);
+            options.SlidingExpiration = true;
+            options.LoginPath = "/login";
+
+            options.Events.OnRedirectToLogin = context =>
+            {
+                if (IsApiOrWebSocketRequest(context.Request.Path))
+                {
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return Task.CompletedTask;
+                }
+
+                context.Response.Redirect(context.RedirectUri);
+                return Task.CompletedTask;
+            };
+            options.Events.OnRedirectToAccessDenied = context =>
+            {
+                if (IsApiOrWebSocketRequest(context.Request.Path))
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return Task.CompletedTask;
+                }
+
+                context.Response.Redirect(context.RedirectUri);
+                return Task.CompletedTask;
+            };
+
+            if (fleetOptions.Auth.TokenAuthEnabled)
+            {
+                options.ForwardDefaultSelector = context =>
+                    HasBearerAuthorizationHeader(context.Request)
+                        ? BearerTokenHandler.SchemeName
+                        : null;
+            }
+        });
+
+    if (fleetOptions.Auth.TokenAuthEnabled)
+    {
+        builder.Services.AddAuthentication()
+            .AddScheme<AuthenticationSchemeOptions, BearerTokenHandler>(
+                BearerTokenHandler.SchemeName,
+                _ => { });
+    }
+
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy("FleetUser", policy =>
+        {
+            if (fleetOptions.Auth.TokenAuthEnabled)
+                policy.AddAuthenticationSchemes(
+                    CookieAuthenticationDefaults.AuthenticationScheme,
+                    BearerTokenHandler.SchemeName);
+
+            policy.RequireAuthenticatedUser();
+        });
+    });
 
     builder.Services.AddScoped<IUserContext, LocalUserContext>();
 }
@@ -260,6 +331,14 @@ builder.Services.AddProblemDetails();
 builder.WebHost.UseUrls(fleetOptions.ListenUrl);
 
 var app = builder.Build();
+
+if (!fleetOptions.Auth.Enabled)
+{
+    var localTokenAuthService = app.Services.GetRequiredService<ILocalTokenAuthService>();
+    Console.WriteLine();
+    Console.WriteLine($"  Access Weave Fleet at http://localhost:{fleetOptions.Port}/login?token={localTokenAuthService.Token}");
+    Console.WriteLine();
+}
 
 if (fleetOptions.Auth.Enabled)
 {
@@ -397,11 +476,8 @@ app.Use(async (context, next) =>
     }
 });
 
-if (fleetOptions.Auth.Enabled)
-{
-    app.UseAuthentication();
-    app.UseAuthorization();
-}
+app.UseAuthentication();
+app.UseAuthorization();
 
 // WebSocket support (for /ws real-time events endpoint)
 app.UseWebSockets();
@@ -424,12 +500,22 @@ app.UseDefaultFiles(); // Serves index.html for "/"
 app.UseStaticFiles(); // Serves files from wwwroot/
 
 // SPA fallback — any unmatched route serves index.html for client-side routing
-app.MapFallbackToFile("index.html");
+app.MapFallbackToFile("index.html")
+    .AllowAnonymous();
 
 await app.RunAsync();
 
 static bool IsApiOrWebSocketRequest(PathString path)
     => path.StartsWithSegments("/api") || path.StartsWithSegments("/ws");
+
+static bool HasBearerAuthorizationHeader(HttpRequest request)
+{
+    if (!request.Headers.TryGetValue(Microsoft.Net.Http.Headers.HeaderNames.Authorization, out var authorizationHeaderValues))
+        return false;
+
+    var authorizationHeader = authorizationHeaderValues.ToString();
+    return authorizationHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase);
+}
 
 /// <summary>Logger message definitions for startup diagnostics.</summary>
 internal static partial class StartupLog
