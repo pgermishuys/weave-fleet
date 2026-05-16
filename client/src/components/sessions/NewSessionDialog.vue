@@ -884,7 +884,7 @@ watch(
                 id="existing-worktree-select"
                 :model-value="selectedWorktreePath ?? ''"
                 :disabled="isCreating"
-                @update:model-value="(v) => { selectedWorktreePath = v || null; }"
+                @update:model-value="(v) => { selectedWorktreePath = String(v) || null; }"
               >
                 <SelectTrigger class="w-full text-xs">
                   <SelectValue placeholder="Select a worktree…" />

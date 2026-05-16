@@ -202,6 +202,8 @@ public sealed class RepositorySessionSourceProviderTests
             Directory.CreateDirectory(Path);
 
             RunGit(Path, "init");
+            RunGit(Path, "config", "user.email", "test@test.com");
+            RunGit(Path, "config", "user.name", "Test");
             RunGit(Path, "commit", "--allow-empty", "-m", "initial");
         }
 
