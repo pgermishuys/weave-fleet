@@ -24,6 +24,7 @@ import { addSessionSyncListener } from "@/lib/session-sync"
 import { useMessagePagination } from "@/composables/use-message-pagination"
 import { clearPendingPrompts, clearSentPrompts } from "@/composables/use-send-prompt"
 import { isWeaveSocketConnected, onDisconnect, onReconnect, useWeaveSocket } from "@/composables/use-weave-socket"
+import { diagLog } from "@/lib/message-diagnostics"
 import { useSessionsStore } from "@/stores/sessions"
 
 export type SessionConnectionStatus =
@@ -699,6 +700,14 @@ export function handleEvent(
       return
     }
 
+    const hasParts = Array.isArray(properties?.parts) && properties.parts.length > 0
+    diagLog("msg.updated", `id=${info.id} role=${info.role ?? "?"} hasParts=${hasParts}`, {
+      messageId: info.id,
+      role: info.role,
+      partsCount: Array.isArray(properties?.parts) ? properties.parts.length : 0,
+      existingMessageCount: state.messages.value.length,
+    })
+
     const nextMessages = mergeMessageUpdate(
       ensureMessage(state.messages.value, info),
       { ...info, parts: properties?.parts },
@@ -743,8 +752,17 @@ export function handleEvent(
     scheduleIdleFallbackForState(state)
     const part = properties?.part
     if (!part?.messageID) {
+      diagLog("msg.part.updated", "DROPPED: missing part.messageID", { properties })
       return
     }
+
+    const msgExists = state.messages.value.some((m) => m.messageId === part.messageID)
+    diagLog("msg.part.updated", `msgId=${part.messageID} partType=${part.type} msgExists=${msgExists}`, {
+      messageId: part.messageID,
+      partId: part.id,
+      partType: part.type,
+      textLength: typeof part.text === "string" ? part.text.length : 0,
+    })
 
     state.messages.value = applyPartUpdate(state.messages.value, { ...part, sessionID: sessionId })
 

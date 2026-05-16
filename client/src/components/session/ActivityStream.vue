@@ -10,6 +10,7 @@ import { useSmartLinks } from "@/plugins/builtin/smart-links";
 import type { CommandEventName } from "@/lib/command-events";
 import { formatTimestamp } from "@/lib/format-utils";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart } from "@/lib/api-types";
+import { diagLog } from "@/lib/message-diagnostics";
 import { getToolLabel } from "@/lib/tool-labels";
 import { useSessionsStore } from "@/stores/sessions";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
@@ -94,6 +95,11 @@ let keepPinnedToBottom = true;
 let scrollFrame: number | null = null;
 const cleanupCallbacks: Array<() => void> = [];
 
+// Track the count of assistant messages with renderable content so we only
+// clear optimistic prompts when a NEW assistant response appears — not when
+// old assistant messages already exist from previous turns.
+let lastRenderableAssistantCount = 0;
+
 watch(
   sessionMessages,
   (nextMessages) => {
@@ -103,11 +109,24 @@ watch(
 
     reconcileSentPrompts(props.sessionId, nextMessages);
 
+    const renderableAssistantCount = nextMessages.filter(
+      (message) => hasRenderableAssistantContent(message),
+    ).length;
+
     if (sentPrompts.value.length === 0) {
+      // Keep the baseline count updated even when there are no prompts,
+      // so that when the user sends a new prompt we don't falsely detect
+      // old assistant messages as "new".
+      lastRenderableAssistantCount = renderableAssistantCount;
       return;
     }
 
-    if (nextMessages.some((message) => hasRenderableAssistantContent(message))) {
+    if (renderableAssistantCount > lastRenderableAssistantCount) {
+      diagLog("stream.clearPrompts", `new assistant content detected (${lastRenderableAssistantCount} → ${renderableAssistantCount})`, {
+        sessionId: props.sessionId,
+        sentPromptsCount: sentPrompts.value.length,
+      });
+      lastRenderableAssistantCount = renderableAssistantCount;
       clearSentPrompts(props.sessionId);
       forceIdle();
     }
