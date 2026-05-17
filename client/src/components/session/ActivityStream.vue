@@ -107,7 +107,6 @@ watch(
       dispatchSessionUpsert({ ...selectedSession.value });
     }
 
-    const promptCountBefore = sentPrompts.value.length;
     reconcileSentPrompts(props.sessionId, nextMessages);
 
     const renderableAssistantCount = nextMessages.filter(
@@ -115,12 +114,6 @@ watch(
     ).length;
 
     if (sentPrompts.value.length === 0) {
-      // If reconciliation just cleared all prompts, force idle so the
-      // activity indicator resets.
-      if (promptCountBefore > 0) {
-        forceIdle();
-      }
-
       // Keep the baseline count updated even when there are no prompts,
       // so that when the user sends a new prompt we don't falsely detect
       // old assistant messages as "new".
