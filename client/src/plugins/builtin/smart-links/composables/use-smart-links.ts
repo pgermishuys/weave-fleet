@@ -4,8 +4,47 @@ import { apiFetch } from '@/lib/api-client'
 import { useSmartLinksStore } from '@/stores/smart-links'
 import { extractUrls } from '../utils/extract-urls'
 import { useSmartLinkProviders } from './use-smart-link-providers'
+import type { SmartLinkResolution } from '../types'
 
 const POLL_INTERVAL_MS = 30_000
+
+/** Build the POST payload for upserting a smart link */
+function buildSmartLinkPayload(url: string, resolution: SmartLinkResolution) {
+  return {
+    url,
+    providerId: resolution.providerId,
+    resourceType: resolution.resourceType,
+    resourceId: resolution.resourceId,
+    title: resolution.title,
+    status: resolution.status,
+    statusLabel: resolution.statusLabel,
+    metadataJson: resolution.metadata ? JSON.stringify(resolution.metadata) : null,
+    isTerminal: resolution.isTerminal,
+  }
+}
+
+/** Refresh a single link by URL — resolves via provider and persists to backend. Silently ignores errors. */
+export async function refreshSingleLink(sessionId: string, url: string): Promise<void> {
+  const providers = useSmartLinkProviders()
+  const store = useSmartLinksStore()
+  const provider = providers.findProvider(url)
+  if (!provider) return
+  try {
+    const resolution = await provider.resolve(url)
+    if (!resolution) return
+    const response = await apiFetch(`/api/sessions/${sessionId}/smart-links`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildSmartLinkPayload(url, resolution)),
+    })
+    if (response.ok) {
+      const updated = await response.json()
+      store.upsertLink(updated)
+    }
+  } catch {
+    // silently ignore
+  }
+}
 
 export interface UseSmartLinksOptions {
   sessionId: Ref<string | null>
@@ -65,17 +104,7 @@ export function useSmartLinks(options: UseSmartLinksOptions): void {
         const response = await apiFetch(`/api/sessions/${sid}/smart-links`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url,
-            providerId: resolution.providerId,
-            resourceType: resolution.resourceType,
-            resourceId: resolution.resourceId,
-            title: resolution.title,
-            status: resolution.status,
-            statusLabel: resolution.statusLabel,
-            metadataJson: resolution.metadata ? JSON.stringify(resolution.metadata) : null,
-            isTerminal: resolution.isTerminal,
-          }),
+          body: JSON.stringify(buildSmartLinkPayload(url, resolution)),
         })
         if (response.ok && !disposed && currentRequestId === requestId) {
           const link = await response.json()
@@ -92,35 +121,7 @@ export function useSmartLinks(options: UseSmartLinksOptions): void {
     const links = store.getAllLinks(sid).filter((l) => !l.isDismissed && !l.isTerminal)
     for (const link of links) {
       if (disposed) return
-      const provider = providers.findProvider(link.url)
-      if (!provider) continue
-
-      try {
-        const resolution = await provider.resolve(link.url)
-        if (!resolution || disposed) continue
-
-        const response = await apiFetch(`/api/sessions/${sid}/smart-links`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url: link.url,
-            providerId: resolution.providerId,
-            resourceType: resolution.resourceType,
-            resourceId: resolution.resourceId,
-            title: resolution.title,
-            status: resolution.status,
-            statusLabel: resolution.statusLabel,
-            metadataJson: resolution.metadata ? JSON.stringify(resolution.metadata) : null,
-            isTerminal: resolution.isTerminal,
-          }),
-        })
-        if (response.ok && !disposed) {
-          const updated = await response.json()
-          store.upsertLink(updated)
-        }
-      } catch {
-        // silently ignore
-      }
+      await refreshSingleLink(sid, link.url)
     }
   }
 

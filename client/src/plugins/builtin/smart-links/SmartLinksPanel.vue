@@ -4,6 +4,7 @@ import { Link } from 'lucide-vue-next'
 import { useSessionsStore } from '@/stores/sessions'
 import { useSmartLinksStore } from '@/stores/smart-links'
 import { apiFetch } from '@/lib/api-client'
+import { refreshSingleLink } from './composables/use-smart-links'
 import SmartLinkItem from './SmartLinkItem.vue'
 
 const sessionsStore = useSessionsStore()
@@ -27,6 +28,12 @@ async function handleDismiss(linkId: string): Promise<void> {
   } catch {
     // silently ignore
   }
+}
+
+function handleRefresh(url: string): void {
+  const sid = sessionId.value
+  if (!sid) return
+  void refreshSingleLink(sid, url)
 }
 </script>
 
@@ -73,6 +80,7 @@ async function handleDismiss(linkId: string): Promise<void> {
         :key="link.id"
         :link="link"
         @dismiss="handleDismiss"
+        @refresh="handleRefresh"
       />
     </div>
   </section>
