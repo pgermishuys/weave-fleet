@@ -608,3 +608,13 @@ internal sealed record OpenCodeCommandRequest
     [JsonPropertyName("model")] public string? Model { get; init; }
     [JsonPropertyName("messageID")] public string? MessageId { get; init; }
 }
+
+// ---------------------------------------------------------------------------
+// Questions
+// ---------------------------------------------------------------------------
+
+/// <summary>Request body for POST /question/{requestID}/reply.</summary>
+internal sealed record OpenCodeQuestionReplyRequest
+{
+    [JsonPropertyName("answers")] public required IReadOnlyList<IReadOnlyList<string>> Answers { get; init; }
+}

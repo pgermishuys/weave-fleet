@@ -283,6 +283,34 @@ internal sealed class OpenCodeHttpClient
         return response.IsSuccessStatusCode;
     }
 
+    /// <summary>POST /question/{requestId}/reply?directory={directory}</summary>
+    public async Task AnswerQuestionAsync(
+        string requestId,
+        IReadOnlyList<IReadOnlyList<string>> answers,
+        string directory,
+        CancellationToken ct)
+    {
+        var url = BuildUrl($"/question/{Uri.EscapeDataString(requestId)}/reply", directory);
+        var body = new OpenCodeQuestionReplyRequest { Answers = answers };
+        await PostVoidAsync(url, body, OpenCodeJsonContext.Default.OpenCodeQuestionReplyRequest, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>POST /question/{requestId}/reject?directory={directory}</summary>
+    public async Task RejectQuestionAsync(string requestId, string directory, CancellationToken ct)
+    {
+        var url = BuildUrl($"/question/{Uri.EscapeDataString(requestId)}/reject", directory);
+        LogRequest(_logger, $"POST {url}", null);
+
+        using var response = await _httpClient.PostAsync(url, null, ct).ConfigureAwait(false);
+        LogResponse(_logger, (int)response.StatusCode, url, null);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            LogRequestFailed(_logger, (int)response.StatusCode, url, null);
+            response.EnsureSuccessStatusCode();
+        }
+    }
+
     /// <summary>POST /session/{sessionId}/fork?directory={directory}</summary>
     public async Task<OpenCodeSessionInfo> ForkSessionAsync(
         string sessionId,
@@ -448,6 +476,25 @@ internal sealed class OpenCodeHttpClient
             .ConfigureAwait(false);
 
         return result!;
+    }
+
+    private async Task PostVoidAsync<TReq>(string url, TReq body, JsonTypeInfo<TReq> reqTypeInfo, CancellationToken ct)
+    {
+        LogRequest(_logger, $"POST {url}", null);
+
+        var content = new StringContent(
+            JsonSerializer.Serialize(body, reqTypeInfo),
+            Encoding.UTF8,
+            "application/json");
+
+        using var response = await _httpClient.PostAsync(url, content, ct).ConfigureAwait(false);
+        LogResponse(_logger, (int)response.StatusCode, url, null);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            LogRequestFailed(_logger, (int)response.StatusCode, url, null);
+            response.EnsureSuccessStatusCode();
+        }
     }
 
     private async Task<TResp> PostAsync<TReq, TResp>(string url, TReq? body, JsonTypeInfo<TReq> reqTypeInfo, JsonTypeInfo<TResp> respTypeInfo, CancellationToken ct)
