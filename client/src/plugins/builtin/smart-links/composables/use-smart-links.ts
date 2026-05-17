@@ -49,10 +49,11 @@ export async function refreshSingleLink(sessionId: string, url: string): Promise
 export interface UseSmartLinksOptions {
   sessionId: Ref<string | null>
   messages: Ref<readonly AccumulatedMessage[]>
+  originUrl?: Ref<string | null>
 }
 
 export function useSmartLinks(options: UseSmartLinksOptions): void {
-  const { sessionId, messages } = options
+  const { sessionId, messages, originUrl } = options
   const store = useSmartLinksStore()
   const providers = useSmartLinkProviders()
 
@@ -83,10 +84,16 @@ export function useSmartLinks(options: UseSmartLinksOptions): void {
     }
   }
 
-  /** Detect new URLs from messages and resolve them via providers */
+  /** Detect new URLs from messages (and origin) and resolve them via providers */
   async function detectAndResolveUrls(sid: string): Promise<void> {
     const text = extractAllText()
     const urls = extractUrls(text)
+
+    // Include the session origin URL if present
+    const origin = originUrl?.value?.trim()
+    if (origin && !urls.includes(origin)) {
+      urls.unshift(origin)
+    }
 
     for (const url of urls) {
       if (disposed) return
