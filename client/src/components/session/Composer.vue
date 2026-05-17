@@ -13,6 +13,7 @@ import { useMessageQueue } from "@/composables/use-message-queue";
 import { useIsMobile } from "@/composables/use-media-query";
 import { useSendCommand } from "@/composables/use-send-command";
 import { useModels } from "@/composables/use-models";
+import { useDraftAttachments } from "@/composables/use-draft-attachments";
 import { useSendPrompt } from "@/composables/use-send-prompt";
 import { parseSlashCommand } from "@/lib/slash-command-utils";
 import { trackAction } from "@/lib/track-action";
@@ -59,12 +60,7 @@ let statusIndicatorTimer: ReturnType<typeof setTimeout> | null = null;
 let statusIndicatorDotsTimer: ReturnType<typeof setInterval> | null = null;
 let pasteErrorTimer: ReturnType<typeof setTimeout> | null = null;
 
-interface PendingAttachment extends ImageAttachment {
-  id: string;
-  previewUrl: string;
-}
-
-const pendingAttachments = ref<PendingAttachment[]>([]);
+const { attachments: pendingAttachments, addAttachment, removeAttachment: removeDraftAttachment, clearAttachments } = useDraftAttachments(props.sessionId);
 const pasteError = shallowRef<string | undefined>(undefined);
 const isDragging = shallowRef(false);
 const lightboxUrl = shallowRef<string | null>(null);
@@ -108,7 +104,7 @@ function processImageBlob(blob: File): void {
     const dataUrl = reader.result as string;
     const base64 = dataUrl.split(",")[1] ?? "";
     const previewUrl = URL.createObjectURL(blob);
-    pendingAttachments.value.push({
+    addAttachment({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       mime: blob.type,
       filename: blob.name || "image.png",
@@ -121,19 +117,9 @@ function processImageBlob(blob: File): void {
 }
 
 function removeAttachment(id: string): void {
-  const index = pendingAttachments.value.findIndex((a) => a.id === id);
-  if (index >= 0) {
-    const [removed] = pendingAttachments.value.splice(index, 1);
-    URL.revokeObjectURL(removed.previewUrl);
-  }
+  removeDraftAttachment(id);
 }
 
-function clearAttachments(): void {
-  for (const att of pendingAttachments.value) {
-    URL.revokeObjectURL(att.previewUrl);
-  }
-  pendingAttachments.value = [];
-}
 
 function handlePaste(event: ClipboardEvent): void {
   const items = Array.from(event.clipboardData?.items ?? []);
@@ -292,7 +278,6 @@ onUnmounted(() => {
   disabledStateObserver = null;
   clearStatusIndicatorTimer();
   stopStatusIndicatorDots();
-  clearAttachments();
   clearPasteError();
 });
 
