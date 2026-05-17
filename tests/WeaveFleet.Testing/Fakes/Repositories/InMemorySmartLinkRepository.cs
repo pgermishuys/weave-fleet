@@ -46,4 +46,19 @@ public sealed class InMemorySmartLinkRepository : ISmartLinkRepository
             link.IsDismissed = true;
         return Task.CompletedTask;
     }
+
+    public Task<IReadOnlyList<SmartLink>> ListNonTerminalPrLinksAsync(CancellationToken ct)
+    {
+        IReadOnlyList<SmartLink> result = [.. _store.Where(l =>
+            l.ResourceType == "pull_request" && !l.IsTerminal && !l.IsDismissed)];
+        return Task.FromResult(result);
+    }
+
+    public Task UpdateMetadataAsync(string id, string metadataJson, CancellationToken ct)
+    {
+        var link = _store.FirstOrDefault(l => l.Id == id);
+        if (link is not null)
+            link.MetadataJson = metadataJson;
+        return Task.CompletedTask;
+    }
 }

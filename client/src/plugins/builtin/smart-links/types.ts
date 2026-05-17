@@ -45,3 +45,50 @@ export interface SmartLinkProvider {
   /** Resolves the URL into enriched metadata. Returns null if resolution fails. */
   resolve(url: string): Promise<SmartLinkResolution | null>
 }
+
+/** A single check run from a GitHub CI status check. */
+export interface CheckRun {
+  id: number
+  name: string
+  status: string
+  conclusion: string | null
+  htmlUrl: string
+  workflowName: string | null
+  startedAt: string | null
+  completedAt: string | null
+}
+
+/** Aggregate CI status for a pull request. */
+export interface CiStatus {
+  /** The commit SHA the CI ran against. */
+  headSha: string
+  /** Aggregate status: "success" | "failure" | "pending" | "neutral" | "none" */
+  ciStatus: string
+  checkRuns: CheckRun[]
+}
+
+/** A single review comment within a thread. */
+export interface ReviewComment {
+  id: string
+  databaseId: number
+  body: string
+  authorLogin: string
+  createdAt: string
+  url: string
+}
+
+/** A review thread on a pull request. */
+export interface ReviewThread {
+  threadNodeId: string
+  isResolved: boolean
+  isOutdated: boolean
+  path: string
+  line: number | null
+  comments: ReviewComment[]
+}
+
+/** Summary of review threads for a pull request. */
+export interface ReviewThreadSummary {
+  unresolvedCount: number
+  threads: ReviewThread[]
+}
