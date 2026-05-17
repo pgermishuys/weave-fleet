@@ -158,6 +158,10 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(TokenLoginRequest))]
 // Open Directory
 [JsonSerializable(typeof(OpenDirectoryRequest))]
+// Available Tools
+[JsonSerializable(typeof(AvailableToolsResponse))]
+[JsonSerializable(typeof(WeaveFleet.Application.Services.ResolvedTool))]
+[JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Services.ResolvedTool>))]
 // Sessions V1
 [JsonSerializable(typeof(CreateSessionV1ApiRequest))]
 // Telemetry
