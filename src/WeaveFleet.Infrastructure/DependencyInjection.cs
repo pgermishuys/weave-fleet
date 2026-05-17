@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.SessionSources;
@@ -12,6 +13,7 @@ using WeaveFleet.Infrastructure.Analytics;
 using WeaveFleet.Infrastructure.Data;
 using WeaveFleet.Infrastructure.Data.Repositories;
 using WeaveFleet.Infrastructure.EventBus;
+using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
@@ -63,6 +65,7 @@ public static class DependencyInjection
         services.AddScoped<IMessageRepository, MessageRepository>();
         services.AddScoped<IOutboxRepository, OutboxRepository>();
         services.AddScoped<IHarnessEventLogRepository, HarnessEventLogRepository>();
+        services.AddScoped<ISessionSnapshotBuilder, SessionSnapshotBuilder>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IBoardRepository, BoardRepository>();
         services.AddScoped<ISmartLinkRepository, SmartLinkRepository>();
@@ -133,6 +136,7 @@ public static class DependencyInjection
 
         // EventBroadcaster is singleton — pub/sub hub shared across all requests
         services.AddSingleton<IEventBroadcaster, InMemoryEventBroadcaster>();
+        services.AddTransient<DomainEventTranslator>();
         services.AddSingleton<InProcessOutboxDispatcher>();
         services.AddSingleton<IOutboxDispatcher>(sp => sp.GetRequiredService<InProcessOutboxDispatcher>());
 

@@ -63,6 +63,7 @@ internal sealed partial class InProcessFanOutService : BackgroundService
         var eventType = envelope.EventType;
         var userId    = envelope.UserId;
         var evt       = envelope.Event;
+        var domainEvent = envelope.DomainEvent;
 
         // Buffer message.part.delta text for the durable merge on next message.updated.
         if (evt.Type == EventTypes.MessagePartDelta && userId is not null)
@@ -78,7 +79,7 @@ internal sealed partial class InProcessFanOutService : BackgroundService
             : InfrastructureJsonContext.EmptyObject;
 
         await _broadcaster.BroadcastAsync(
-            $"session:{sessionId}", eventType, payload, envelope.Sequence, userId, ct)
+            $"session:{sessionId}", eventType, payload, envelope.Sequence, domainEvent, userId, ct)
             .ConfigureAwait(false);
 
         // Activity-status side-channel for the global "sessions" topic.

@@ -30,9 +30,7 @@ export function ensureMessage(
     info.role === "user" ? "user" : "assistant";
   const modelID = typeof info.modelID === "string"
     ? info.modelID
-    : typeof info.modelId === "string"
-      ? info.modelId
-      : undefined;
+    : undefined;
   const newMsg: AccumulatedMessage = {
     messageId,
     sessionId: info.sessionID ?? "",
@@ -64,9 +62,7 @@ export function mergeMessageUpdate(
   const completedAt = info.time?.completed;
   const modelID = typeof info.modelID === "string"
     ? info.modelID
-    : typeof info.modelId === "string"
-      ? info.modelId
-      : undefined;
+    : undefined;
 
   // Merge tokens and cost from the message-level info.
   // step-finish parts accumulate these during streaming, but if any were
@@ -233,7 +229,7 @@ export function applyPartUpdate(
         partId: part.id,
         type: "tool",
         tool: part.tool ?? "",
-        callId: part.callID ?? part.callId ?? "",
+        callId: part.callID ?? "",
         state: part.state,
       };
       const existing = msg.parts.find((p) => p.partId === part.id);

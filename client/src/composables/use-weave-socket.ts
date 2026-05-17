@@ -1,11 +1,24 @@
 import { onMounted, onUnmounted } from "vue"
 import { wsUrl } from "@/lib/api-client"
+import type { DomainEvent } from "@/lib/domain-events"
+import type { HistoryResponse, SessionHistoryPage, SessionSnapshot } from "@/lib/session-snapshot"
 
 export type TopicCallback = (topic: string, data: unknown) => void
 export type Unsubscribe = () => void
+export type SnapshotCallback = (snapshot: SessionSnapshot) => void
+export type DomainEventCallback = (event: DomainEvent) => void
+export type HistoryCallback = (page: SessionHistoryPage) => void
+
+interface TopicV2Callback {
+  onSnapshot: SnapshotCallback
+  onEvent: DomainEventCallback
+  onHistory?: HistoryCallback
+}
 
 export interface WeaveSocketAPI {
   subscribe: (topics: string[], callback: TopicCallback) => Unsubscribe
+  subscribeV2: (topic: string, onSnapshot: SnapshotCallback, onEvent: DomainEventCallback, onHistory?: HistoryCallback) => Unsubscribe
+  sendV2: (message: unknown) => boolean
 }
 
 interface WeaveSocketTestAPI {
@@ -13,6 +26,9 @@ interface WeaveSocketTestAPI {
   resume: () => void
   isSuspended: () => boolean
   hasOpenSocket: () => boolean
+  hasV2Subscriptions: () => boolean
+  hasV2Snapshot: (topic: string) => boolean
+  v2SnapshotHasText: (topic: string, text: string) => boolean
 }
 
 declare global {
@@ -26,6 +42,8 @@ const BASE_DELAY_MS = 1_000
 const MAX_DELAY_MS = 30_000
 
 const topicListeners = new Map<string, Set<TopicCallback>>()
+const topicListenersV2 = new Map<string, Set<TopicV2Callback>>()
+const lastSnapshotsV2 = new Map<string, SessionSnapshot>()
 const reconnectCallbacks = new Map<string, () => void>()
 const disconnectCallbacks = new Map<string, () => void>()
 
@@ -48,22 +66,64 @@ function dispatch(topic: string, data: unknown): void {
   }
 }
 
+function dispatchSnapshot(topic: string, snapshot: SessionSnapshot): void {
+  lastSnapshotsV2.set(topic, snapshot)
+  const callbacks = topicListenersV2.get(topic)
+  if (!callbacks) {
+    return
+  }
+
+  for (const callback of callbacks) {
+    callback.onSnapshot(snapshot)
+  }
+}
+
+function dispatchEventV2(topic: string, event: DomainEvent): void {
+  const callbacks = topicListenersV2.get(topic)
+  if (!callbacks) {
+    return
+  }
+
+  for (const callback of callbacks) {
+    callback.onEvent(event)
+  }
+}
+
+function dispatchHistory(topic: string, page: SessionHistoryPage): void {
+  const callbacks = topicListenersV2.get(topic)
+  if (!callbacks) {
+    return
+  }
+
+  for (const callback of callbacks) {
+    callback.onHistory?.(page)
+  }
+}
+
 function notifyDisconnected(): void {
   for (const callback of disconnectCallbacks.values()) {
     callback()
   }
 }
 
-function sendJson(message: unknown): void {
+function sendJson(message: unknown): boolean {
   if (ws?.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(message))
+    return true
   }
+
+  return false
 }
 
 function resubscribeAll(): void {
   const topics = Array.from(topicListeners.keys()).filter((topic) => (topicListeners.get(topic)?.size ?? 0) > 0)
   if (topics.length > 0) {
     sendJson({ type: "subscribe", topics })
+  }
+
+  const topicsV2 = Array.from(topicListenersV2.keys()).filter((topic) => (topicListenersV2.get(topic)?.size ?? 0) > 0)
+  if (topicsV2.length > 0) {
+    sendJson({ type: "subscribe_v2", topics: topicsV2 })
   }
 }
 
@@ -119,6 +179,21 @@ function connect(): void {
 
       if (message.type === "event" && typeof message.topic === "string") {
         dispatch(message.topic, message.data ?? null)
+        return
+      }
+
+      if (message.type === "snapshot" && typeof message.topic === "string") {
+        dispatchSnapshot(message.topic, message.data as SessionSnapshot)
+        return
+      }
+
+      if (message.type === "event_v2" && typeof message.topic === "string") {
+        dispatchEventV2(message.topic, message.data as DomainEvent)
+        return
+      }
+
+      if (message.type === "history" && typeof message.topic === "string") {
+        dispatchHistory(message.topic, (message as HistoryResponse).data)
       }
     } catch {
       // Ignore invalid frames.
@@ -156,6 +231,10 @@ function disconnect(): void {
   reconnectDelay = BASE_DELAY_MS
 }
 
+function hasListenersForTopic(topic: string): boolean {
+  return (topicListeners.get(topic)?.size ?? 0) > 0 || (topicListenersV2.get(topic)?.size ?? 0) > 0
+}
+
 function addTopicListeners(topics: string[], callback: TopicCallback): Unsubscribe {
   const topicsToSubscribe: string[] = []
 
@@ -184,14 +263,68 @@ function addTopicListeners(topics: string[], callback: TopicCallback): Unsubscri
       }
 
       listeners.delete(callback)
-      if (listeners.size === 0) {
+      if (listeners.size === 0 && !hasListenersForTopic(topic)) {
         topicListeners.delete(topic)
         topicsToUnsubscribe.push(topic)
+      } else if (listeners.size === 0) {
+        topicListeners.delete(topic)
       }
     }
 
     if (topicsToUnsubscribe.length > 0 && ws?.readyState === WebSocket.OPEN) {
       sendJson({ type: "unsubscribe", topics: topicsToUnsubscribe })
+    }
+  }
+}
+
+function addTopicListenerV2(
+  topic: string,
+  onSnapshot: SnapshotCallback,
+  onEvent: DomainEventCallback,
+  onHistory?: HistoryCallback,
+): Unsubscribe {
+  let listeners = topicListenersV2.get(topic)
+
+  if (!listeners) {
+    listeners = new Set<TopicV2Callback>()
+    topicListenersV2.set(topic, listeners)
+  }
+
+  const callback: TopicV2Callback = {
+    onSnapshot,
+    onEvent,
+    onHistory,
+  }
+  listeners.add(callback)
+
+  const lastSnapshot = lastSnapshotsV2.get(topic)
+  if (lastSnapshot) {
+    onSnapshot(lastSnapshot)
+  }
+
+  if (ws?.readyState === WebSocket.OPEN) {
+    sendJson({ type: "subscribe_v2", topics: [topic] })
+  }
+
+  return () => {
+    const currentListeners = topicListenersV2.get(topic)
+    if (!currentListeners) {
+      return
+    }
+
+      currentListeners.delete(callback)
+
+      if (currentListeners.size === 0 && !hasListenersForTopic(topic)) {
+        topicListenersV2.delete(topic)
+        lastSnapshotsV2.delete(topic)
+        if (ws?.readyState === WebSocket.OPEN) {
+          sendJson({ type: "unsubscribe", topics: [topic] })
+      }
+      return
+    }
+
+    if (currentListeners.size === 0) {
+      topicListenersV2.delete(topic)
     }
   }
 }
@@ -217,6 +350,8 @@ export function _resetForTesting(): void {
   subscriberCount = 0
   suspendConnectionsForTesting = false
   topicListeners.clear()
+  topicListenersV2.clear()
+  lastSnapshotsV2.clear()
   reconnectCallbacks.clear()
   disconnectCallbacks.clear()
   syncTestApi()
@@ -255,6 +390,13 @@ export function onDisconnect(callback: () => void): () => void {
 const stableSubscribe = (topics: string[], callback: TopicCallback): Unsubscribe =>
   addTopicListeners(topics, callback)
 
+const stableSubscribeV2 = (
+  topic: string,
+  onSnapshot: SnapshotCallback,
+  onEvent: DomainEventCallback,
+  onHistory?: HistoryCallback,
+): Unsubscribe => addTopicListenerV2(topic, onSnapshot, onEvent, onHistory)
+
 function syncTestApi(): void {
   if (typeof window === "undefined") {
     return
@@ -277,7 +419,27 @@ function syncTestApi(): void {
     },
     isSuspended: () => suspendConnectionsForTesting,
     hasOpenSocket: () => ws?.readyState === WebSocket.OPEN,
+    hasV2Subscriptions: () => topicListenersV2.size > 0,
+    hasV2Snapshot: (topic: string) => lastSnapshotsV2.has(topic),
+    v2SnapshotHasText: (topic: string, text: string) => snapshotHasText(topic, text),
   }
+}
+
+function snapshotHasText(topic: string, text: string): boolean {
+  const snapshot = lastSnapshotsV2.get(topic)
+  if (!snapshot) {
+    return false
+  }
+
+  return snapshot.messages.some((message) =>
+    message.parts.some((part) => {
+      if (part.type !== "text" && part.type !== "reasoning") {
+        return false
+      }
+
+      return part.text.includes(text)
+    }),
+  )
 }
 
 export function useWeaveSocket(): WeaveSocketAPI {
@@ -292,5 +454,7 @@ export function useWeaveSocket(): WeaveSocketAPI {
 
   return {
     subscribe: stableSubscribe,
+    subscribeV2: stableSubscribeV2,
+    sendV2: sendJson,
   }
 }

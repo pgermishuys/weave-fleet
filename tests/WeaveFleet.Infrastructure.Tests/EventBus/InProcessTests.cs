@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Projections;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.EventBus;
 using WeaveFleet.Infrastructure.Tests.Data;
@@ -178,6 +179,49 @@ public sealed class InProcessEventPublisherTests
             // Fan-out must have the event.
             channels.FanOut.Reader.TryRead(out var env).ShouldBeTrue();
             env!.EventType.ShouldBe(EventTypes.SessionStatus);
+        }
+    }
+
+    [Fact]
+    public async Task Should_carry_domain_event_to_fanout_channel_when_published()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        await using (keeper)
+        {
+            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
+            var channels = new InProcessChannels();
+            var metrics = new InProcessMetrics();
+            var publisher = new InProcessEventPublisher(
+                store, channels, metrics,
+                NullLogger<InProcessEventPublisher>.Instance);
+
+            var evt = new HarnessEvent
+            {
+                Type = EventTypes.SessionStatus,
+                SessionId = "sess-domain",
+                Timestamp = DateTimeOffset.UtcNow,
+            };
+
+            var domainEvent = new TurnStarted
+            {
+                Payload = new TurnStartedPayload
+                {
+                    SessionId = "sess-domain",
+                    MessageId = "msg-1",
+                    Index = 0
+                }
+            };
+
+            await publisher.PublishAsync(
+                evt,
+                new WeaveFleet.Application.Events.EventPublishContext("sess-domain", "proj-1", "user-1", null, Sequence: 3)
+                {
+                    DomainEvent = domainEvent
+                },
+                CancellationToken.None);
+
+            channels.FanOut.Reader.TryRead(out var env).ShouldBeTrue();
+            env!.DomainEvent.ShouldBe(domainEvent);
         }
     }
 

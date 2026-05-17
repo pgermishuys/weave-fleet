@@ -147,13 +147,13 @@ public sealed class TestScenarioBuilder
             .AddEvent(MakeEvent(sessionId, "message.updated",
                 new { info = new { id = $"{messageId}-user", sessionID = sessionId, role = "user" } }))
             .AddEvent(MakeEvent(sessionId, "message.part.updated",
-                new { sessionID = sessionId, part = new { id = userPartId, sessionID = sessionId, messageID = $"{messageId}-user", type = "text", text = TestHarnessPromptTokens.UserPromptPlaceholder } }))
+                new { sessionID = sessionId, part = new { type = "text", id = userPartId, sessionID = sessionId, messageID = $"{messageId}-user", text = TestHarnessPromptTokens.UserPromptPlaceholder } }))
             // Assistant response
             .AddEvent(MakeEvent(sessionId, "message.updated",
                 new { info = new { id = messageId, sessionID = sessionId, role = "assistant" } }),
                 responseDelay)
             .AddEvent(MakeEvent(sessionId, "message.part.updated",
-                new { sessionID = sessionId, part = new { id = partId, sessionID = sessionId, messageID = messageId, type = "text", text } }),
+                new { sessionID = sessionId, part = new { type = "text", id = partId, sessionID = sessionId, messageID = messageId, text } }),
                 responseDelay)
             .AddEvent(MakeEvent(sessionId, "session.idle",
                 new { sessionId, status = new { type = "idle" } }),

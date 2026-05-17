@@ -1,5 +1,6 @@
 using System.Text.Json;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.Tests.Services;
@@ -218,5 +219,52 @@ public sealed class InMemoryEventBroadcasterTests
         specificReceived.ShouldContain("sessions");
 
         await cts.CancelAsync();
+    }
+
+    [Fact]
+    public async Task Should_preserve_domain_event_for_subscribers_when_broadcasting()
+    {
+        using var broadcaster = new InMemoryEventBroadcaster();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        BroadcastEvent? received = null;
+        var subscribeTask = Task.Run(async () =>
+        {
+            await foreach (var evt in broadcaster.SubscribeAsync(["*"], subscriberUserId: null, cts.Token))
+            {
+                received = evt;
+                break;
+            }
+        });
+
+        while (broadcaster.SubscriberCount < 1)
+            await Task.Delay(10);
+
+        var domainEvent = new TurnStarted
+        {
+            Payload = new TurnStartedPayload
+            {
+                SessionId = "sess-1",
+                MessageId = "msg-1",
+                Index = 1,
+                Agent = "loom",
+                ModelId = "model-1"
+            }
+        };
+
+        await broadcaster.BroadcastAsync(
+            "session:sess-1",
+            "session.status",
+            JsonSerializer.SerializeToElement(new { status = new { type = "busy" } }),
+            sequenceNumber: 7,
+            domainEvent,
+            userId: null,
+            CancellationToken.None);
+
+        await subscribeTask;
+
+        received.ShouldNotBeNull();
+        received!.DomainEvent.ShouldBe(domainEvent);
+        received.SequenceNumber.ShouldBe(7);
     }
 }

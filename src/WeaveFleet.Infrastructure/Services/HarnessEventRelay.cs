@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 
@@ -181,6 +182,8 @@ public sealed class HarnessEventRelay : BackgroundService
         }
 
         long publishSequence = 0;
+        using var translationScope = _scopeFactory.CreateScope();
+        var translator = translationScope.ServiceProvider.GetRequiredService<DomainEventTranslator>();
 
         try
         {
@@ -202,6 +205,9 @@ public sealed class HarnessEventRelay : BackgroundService
                     eventToPublish = evt with { Payload = filteredPayload };
                 }
 
+                var eventToTranslate = eventToPublish with { FleetSessionId = targetFleetSessionId };
+                var domainEvent = translator.Translate(eventToTranslate);
+
                 try
                 {
                     var seq = Interlocked.Increment(ref publishSequence);
@@ -212,7 +218,10 @@ public sealed class HarnessEventRelay : BackgroundService
                             sessionProjectId,
                             sessionUserId,
                             sessionHarnessType,
-                            seq),
+                            seq)
+                        {
+                            DomainEvent = domainEvent
+                        },
                         ct).ConfigureAwait(false);
                 }
                 catch (Exception pubEx)

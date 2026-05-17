@@ -1,5 +1,6 @@
 using System.Text.Json;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Events;
 
 namespace WeaveFleet.Testing.Fakes;
 
@@ -15,14 +16,28 @@ public sealed class FakeEventBroadcaster : IEventBroadcaster
 
     public Task BroadcastAsync(string topic, string type, JsonElement payload, string? userId, CancellationToken ct)
     {
-        Broadcasts.Add(new(topic, type, payload, null, userId));
+        Broadcasts.Add(new(topic, type, payload, null, userId, null));
+        OnBroadcast?.Invoke(topic, type, payload, userId, ct);
+        return Task.CompletedTask;
+    }
+
+    public Task BroadcastAsync(string topic, string type, JsonElement payload, DomainEvent? domainEvent, string? userId, CancellationToken ct)
+    {
+        Broadcasts.Add(new(topic, type, payload, null, userId, domainEvent));
         OnBroadcast?.Invoke(topic, type, payload, userId, ct);
         return Task.CompletedTask;
     }
 
     public Task BroadcastAsync(string topic, string type, JsonElement payload, long? sequenceNumber, string? userId, CancellationToken ct)
     {
-        Broadcasts.Add(new(topic, type, payload, sequenceNumber, userId));
+        Broadcasts.Add(new(topic, type, payload, sequenceNumber, userId, null));
+        OnBroadcast?.Invoke(topic, type, payload, userId, ct);
+        return Task.CompletedTask;
+    }
+
+    public Task BroadcastAsync(string topic, string type, JsonElement payload, long? sequenceNumber, DomainEvent? domainEvent, string? userId, CancellationToken ct)
+    {
+        Broadcasts.Add(new(topic, type, payload, sequenceNumber, userId, domainEvent));
         OnBroadcast?.Invoke(topic, type, payload, userId, ct);
         return Task.CompletedTask;
     }
@@ -30,5 +45,5 @@ public sealed class FakeEventBroadcaster : IEventBroadcaster
     public IAsyncEnumerable<BroadcastEvent> SubscribeAsync(IReadOnlyList<string> topics, string? subscriberUserId, CancellationToken ct)
         => AsyncEnumerable.Empty<BroadcastEvent>();
 
-    public sealed record BroadcastRecord(string Topic, string Type, JsonElement Payload, long? SequenceNumber, string? UserId);
+    public sealed record BroadcastRecord(string Topic, string Type, JsonElement Payload, long? SequenceNumber, string? UserId, DomainEvent? DomainEvent);
 }
