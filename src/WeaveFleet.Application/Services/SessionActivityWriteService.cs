@@ -12,6 +12,7 @@ public sealed class SessionActivityWriteService(
     IMessageRepository messageRepository,
     IDelegationRepository delegationRepository,
     ISessionRepository sessionRepository,
+    ISmartLinkRepository smartLinkRepository,
     IOutboxRepository outboxRepository,
     IOutboxDispatcher outboxDispatcher)
 {
@@ -72,6 +73,9 @@ public sealed class SessionActivityWriteService(
             foreach (var parentSessionId in request.DelegationDeletesByParentSessionId)
                 await delegationRepository.DeleteByParentSessionIdAsync(connection, transaction, parentSessionId).ConfigureAwait(false);
 
+            foreach (var sessionId in request.SmartLinkDeletesBySessionId)
+                await smartLinkRepository.DeleteBySessionIdAsync(connection, transaction, sessionId).ConfigureAwait(false);
+
             foreach (var sessionId in request.SessionDeletes)
                 await sessionRepository.DeleteAsync(connection, transaction, sessionId).ConfigureAwait(false);
 
@@ -109,6 +113,7 @@ public sealed class SessionActivityWriteRequest
     public IReadOnlyList<DelegationStatusUpdate> DelegationStatusUpdates { get; init; } = [];
     public IReadOnlyList<DelegationChildSessionUpdate> DelegationChildSessionUpdates { get; init; } = [];
     public IReadOnlyList<string> DelegationDeletesByParentSessionId { get; init; } = [];
+    public IReadOnlyList<string> SmartLinkDeletesBySessionId { get; init; } = [];
     public IReadOnlyList<OutboxMessage> OutboxMessages { get; init; } = [];
 }
 

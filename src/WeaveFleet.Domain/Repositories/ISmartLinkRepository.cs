@@ -1,3 +1,4 @@
+using System.Data;
 using WeaveFleet.Domain.Entities;
 
 namespace WeaveFleet.Domain.Repositories;
@@ -11,7 +12,23 @@ public interface ISmartLinkRepository
     Task DismissAsync(string id);
 
     /// <summary>
-    /// Returns all non-dismissed, non-terminal pull request smart links across all users.
+    /// Deletes all smart links belonging to a session.
+    /// </summary>
+    Task DeleteBySessionIdAsync(string sessionId);
+
+    /// <summary>
+    /// Deletes all smart links belonging to a session (transactional overload).
+    /// </summary>
+    Task DeleteBySessionIdAsync(IDbConnection connection, IDbTransaction? transaction, string sessionId);
+
+    /// <summary>
+    /// Deletes orphaned smart links whose sessions no longer exist.
+    /// Used at startup for reconciliation.
+    /// </summary>
+    Task DeleteOrphanedAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Returns all non-dismissed, non-terminal pull request smart links whose sessions are running.
     /// Used by the CI watcher background service.
     /// </summary>
     Task<IReadOnlyList<SmartLink>> ListNonTerminalPrLinksAsync(CancellationToken ct);

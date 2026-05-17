@@ -1,3 +1,4 @@
+using System.Data;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
@@ -46,6 +47,17 @@ public sealed class InMemorySmartLinkRepository : ISmartLinkRepository
             link.IsDismissed = true;
         return Task.CompletedTask;
     }
+
+    public Task DeleteBySessionIdAsync(string sessionId)
+    {
+        _store.RemoveAll(l => l.SessionId == sessionId);
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteBySessionIdAsync(IDbConnection connection, IDbTransaction? transaction, string sessionId)
+        => DeleteBySessionIdAsync(sessionId);
+
+    public Task DeleteOrphanedAsync(CancellationToken ct) => Task.CompletedTask;
 
     public Task<IReadOnlyList<SmartLink>> ListNonTerminalPrLinksAsync(CancellationToken ct)
     {

@@ -41,7 +41,7 @@ public sealed class HarnessEventRelayTests
         var connectionFactory = new FakeDbConnectionFactory();
         var deltaBuffer = new TextDeltaBuffer();
         var activityWriteService = new SessionActivityWriteService(
-            connectionFactory, messageRepo, delegationRepo, sessionRepo, outboxRepo, outboxDispatcher);
+            connectionFactory, messageRepo, delegationRepo, sessionRepo, new InMemorySmartLinkRepository(), outboxRepo, outboxDispatcher);
         var persister = new HarnessEventPersistenceService(messageRepo, sessionRepo, activityWriteService, deltaBuffer);
 
         var scopeFactory = TestServiceScopeFactory.Create(services =>

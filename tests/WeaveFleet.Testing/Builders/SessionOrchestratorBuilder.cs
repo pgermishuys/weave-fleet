@@ -29,6 +29,7 @@ public sealed class SessionOrchestratorBuilder
     public InMemoryMessageRepository MessageRepository { get; } = new();
     public InMemoryOutboxRepository OutboxRepository { get; } = new();
     public InMemoryHarnessEventLogRepository HarnessEventLogRepository { get; } = new();
+    public InMemorySmartLinkRepository SmartLinkRepository { get; } = new();
     public FakeEventBroadcaster EventBroadcaster { get; } = new();
     public FakeAnalyticsCollector AnalyticsCollector { get; } = new();
     public FakeCredentialStore CredentialStore { get; } = new();
@@ -100,6 +101,7 @@ public sealed class SessionOrchestratorBuilder
             CredentialStore,
             _userContext,
             _options,
+            SmartLinkRepository,
             NullLogger<SessionOrchestrator>.Instance,
             sessionActivityWriteService: null);
     }

@@ -57,6 +57,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             messageRepo,
             delegationRepo,
             sessionRepo,
+            new InMemorySmartLinkRepository(),
             outboxRepo,
             outboxDispatcher);
 
@@ -100,6 +101,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             messageRepo,
             delegationRepo,
             sessionRepo,
+            new InMemorySmartLinkRepository(),
             outboxRepo,
             outboxDispatcher);
 
@@ -358,7 +360,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var outboxDispatcher2 = new FakeOutboxDispatcher();
         var connectionFactory2 = new FakeDbConnectionFactory();
         var activityWriteService2 = new SessionActivityWriteService(
-            connectionFactory2, messageRepo, delegationRepo2, sessionRepo2, outboxRepo2, outboxDispatcher2);
+            connectionFactory2, messageRepo, delegationRepo2, sessionRepo2, new InMemorySmartLinkRepository(), outboxRepo2, outboxDispatcher2);
         var sharedPersistenceService = new HarnessEventPersistenceService(
             messageRepo, sessionRepo2, activityWriteService2, ownerUserId: TestUserContext.DefaultUserId);
 
@@ -935,7 +937,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var outboxDispatcher2 = new FakeOutboxDispatcher();
         var connectionFactory2 = new FakeDbConnectionFactory();
         var activityWriteService2 = new SessionActivityWriteService(
-            connectionFactory2, messageRepo, delegationRepo2, sessionRepo2, outboxRepo, outboxDispatcher2);
+            connectionFactory2, messageRepo, delegationRepo2, sessionRepo2, new InMemorySmartLinkRepository(), outboxRepo, outboxDispatcher2);
         var persistenceService = new HarnessEventPersistenceService(
             messageRepo, sessionRepo2, activityWriteService2, ownerUserId: TestUserContext.DefaultUserId);
 
@@ -1000,7 +1002,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var outboxDispatcher2 = new FakeOutboxDispatcher();
         var connectionFactory2 = new FakeDbConnectionFactory();
         var activityWriteService2 = new SessionActivityWriteService(
-            connectionFactory2, messageRepo, delegationRepo2, sessionRepo2, outboxRepo, outboxDispatcher2);
+            connectionFactory2, messageRepo, delegationRepo2, sessionRepo2, new InMemorySmartLinkRepository(), outboxRepo, outboxDispatcher2);
         var persistenceService = new HarnessEventPersistenceService(
             messageRepo, sessionRepo2, activityWriteService2, ownerUserId: TestUserContext.DefaultUserId);
 
@@ -1335,6 +1337,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             builder.CredentialStore,
             userContext,
             options,
+            new InMemorySmartLinkRepository(),
             NullLogger<SessionOrchestrator>.Instance));
         var rootProvider = services.BuildServiceProvider();
         var scopeFactory = rootProvider.GetRequiredService<IServiceScopeFactory>();
@@ -1531,6 +1534,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             builder.CredentialStore,
             userContext,
             options,
+            new InMemorySmartLinkRepository(),
             NullLogger<SessionOrchestrator>.Instance));
         var rootProvider = services.BuildServiceProvider();
         var scopeFactory = rootProvider.GetRequiredService<IServiceScopeFactory>();
@@ -1633,6 +1637,7 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             messageRepo,
             delegationRepo,
             sessionRepo,
+            new InMemorySmartLinkRepository(),
             outboxRepo,
             outboxDispatcher));
         services.AddSingleton(new DelegationService(delegationRepo, eventBroadcaster, new TestUserContext("user-1")));

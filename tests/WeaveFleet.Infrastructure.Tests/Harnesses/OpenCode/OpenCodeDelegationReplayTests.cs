@@ -51,6 +51,7 @@ public sealed class OpenCodeDelegationReplayTests
             messageRepo,
             delegationRepo,
             sessionRepo,
+            new InMemorySmartLinkRepository(),
             outboxRepo,
             outboxDispatcher);
 
