@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { ArrowDown, ArrowUp, ChevronDown, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-vue-next";
+import { ArrowDown, ArrowUp, ChevronDown, Folder, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-vue-next";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -30,7 +30,6 @@ interface ProjectGroupModel {
   id: string;
   projectId: string | null;
   name: string;
-  color: string;
   isUngrouped: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
@@ -296,11 +295,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
               class="project-chevron"
               aria-hidden="true"
             />
-            <span
-              class="project-dot"
-              :style="{ backgroundColor: project.color }"
-              aria-hidden="true"
-            />
+            <Folder class="project-folder-icon" aria-hidden="true" />
 
             <span class="project-copy">
               <span class="project-title">{{ project.name }} {{ sessionCountLabel }}</span>
@@ -384,11 +379,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           class="project-chevron"
           aria-hidden="true"
         />
-        <span
-          class="project-dot"
-          :style="{ backgroundColor: project.color }"
-          aria-hidden="true"
-        />
+        <Folder class="project-folder-icon" aria-hidden="true" />
 
         <span class="project-copy">
           <span class="project-title">{{ project.name }} {{ sessionCountLabel }}</span>
@@ -406,11 +397,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           class="project-chevron"
           aria-hidden="true"
         />
-        <span
-          class="project-dot"
-          :style="{ backgroundColor: project.color }"
-          aria-hidden="true"
-        />
+        <Folder class="project-folder-icon" aria-hidden="true" />
 
         <span class="project-copy">
           <InlineEdit
@@ -522,11 +509,11 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
   transform: rotate(-90deg);
 }
 
-.project-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.project-folder-icon {
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
+  color: var(--muted);
 }
 
 .project-copy {
