@@ -704,14 +704,14 @@ internal static class GitHubEndpointMappings
             var isOutdated = thread["isOutdated"]?.GetValue<bool>() ?? false;
             var threadNodeId = thread["id"]?.GetValue<string>() ?? string.Empty;
             var path = thread["path"]?.GetValue<string>() ?? string.Empty;
-            var line = thread["line"]?.GetValue<int?>();
+            var line = thread["line"] is JsonNode lineNode ? (int?)lineNode.GetValue<long>() : null;
 
             var commentsArray = thread["comments"]?["nodes"] as JsonArray ?? [];
             var comments = commentsArray
                 .OfType<JsonObject>()
                 .Select(c => new GitHubReviewCommentDto(
                     c["id"]?.GetValue<string>() ?? string.Empty,
-                    c["databaseId"]?.GetValue<int>() ?? 0,
+                    (int)(c["databaseId"]?.GetValue<long>() ?? 0),
                     c["body"]?.GetValue<string>() ?? string.Empty,
                     c["author"]?["login"]?.GetValue<string>() ?? string.Empty,
                     c["createdAt"]?.GetValue<string>() ?? string.Empty,
