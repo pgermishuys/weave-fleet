@@ -43,6 +43,7 @@ const { draft, setText, setAgentId, setModelId } = useDraftState(props.sessionId
 const { error: sendPromptError, sendPrompt } = useSendPrompt(props.sessionId);
 const { error: sendCommandError, sendCommand } = useSendCommand(props.sessionId);
 const inputHistory = useInputHistory(props.sessionId);
+const historyEl = ref<HTMLElement | null>(null);
 
 const sessionsStore = useSessionsStore();
 const isMobile = useIsMobile();
@@ -514,11 +515,13 @@ function handleKeydown(event: KeyboardEvent): void {
     if (event.key === "ArrowUp") {
       event.preventDefault();
       inputHistory.moveDown();
+      void nextTick(() => { historyEl.value?.querySelector('.input-history__item--selected')?.scrollIntoView({ block: 'nearest' }); });
       return;
     }
     if (event.key === "ArrowDown") {
       event.preventDefault();
       inputHistory.moveUp();
+      void nextTick(() => { historyEl.value?.querySelector('.input-history__item--selected')?.scrollIntoView({ block: 'nearest' }); });
       return;
     }
     if (event.key === "Enter") {
@@ -543,6 +546,7 @@ function handleKeydown(event: KeyboardEvent): void {
   if (event.key === "ArrowUp" && !draft.text.trim()) {
     event.preventDefault();
     inputHistory.open();
+    void nextTick(() => { if (historyEl.value) historyEl.value.scrollTop = historyEl.value.scrollHeight; });
     return;
   }
 
@@ -622,6 +626,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
       <div
         v-if="inputHistory.isOpen.value"
+        ref="historyEl"
         class="input-history"
         role="listbox"
         aria-label="Message history"
