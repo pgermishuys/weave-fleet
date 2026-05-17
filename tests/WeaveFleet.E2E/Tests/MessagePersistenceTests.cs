@@ -452,6 +452,74 @@ public sealed class MessagePersistenceTests : E2ETestBase,
         });
     }
 
+    /// <summary>
+    /// Verifies that messages maintain correct chronological order when two prompts
+    /// are sent sequentially. The test harness rewrites user echo IDs to match the
+    /// synthetic send-time IDs, so this validates the happy path where deduplication
+    /// works correctly.
+    /// </summary>
+    [Fact]
+    public async Task Message_ordering_preserved_across_sequential_prompt_response_pairs()
+    {
+        await WithFailureCapture(async () =>
+        {
+            ConfigureScenario(b => b
+                .WithSimpleTextResponse("_placeholder_", "msg-resp-1", "First assistant response")
+                .WithSimpleTextResponse("_placeholder_", "msg-resp-2", "Second assistant response"));
+
+            var dashboard = new FleetDashboardPage(Page);
+            await dashboard.GotoAsync();
+
+            var dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+
+            // Send first prompt and wait for assistant response
+            await detail.SendPromptAsync("First user prompt");
+            await detail.WaitForMessageTextAsync("First assistant response", 10_000);
+            await detail.WaitForIdleAsync(10_000);
+
+            // Send second prompt and wait for assistant response
+            await detail.SendPromptAsync("Second user prompt");
+            await detail.WaitForMessageTextAsync("Second assistant response", 10_000);
+            await detail.WaitForIdleAsync(10_000);
+
+            // Assert live ordering: user1 → assistant1 → user2 → assistant2
+            await AssertMessageOrderAsync(detail, 4);
+
+            // Reload and verify persistence ordering matches
+            await Page.ReloadAsync();
+            await detail.WaitForLoadedAsync();
+
+            await detail.WaitForMessageTextAsync("First user prompt", 10_000);
+            await detail.WaitForMessageTextAsync("Second assistant response", 10_000);
+
+            await AssertMessageOrderAsync(detail, 4);
+        });
+    }
+
+    private static async Task AssertMessageOrderAsync(SessionDetailPage detail, int expectedCount)
+    {
+        var items = await detail.GetMessageItemsAsync();
+        items.Count.ShouldBeGreaterThanOrEqualTo(expectedCount);
+
+        var roles = new List<string>();
+        foreach (var item in items)
+        {
+            var role = await item.GetAttributeAsync("data-role");
+            roles.Add(role ?? "unknown");
+        }
+
+        // Verify alternating user/assistant pattern
+        for (var i = 0; i < expectedCount; i++)
+        {
+            var expectedRole = i % 2 == 0 ? "user" : "assistant";
+            roles[i].ShouldBe(expectedRole, $"Message at index {i} should be {expectedRole}");
+        }
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     /// <summary>
