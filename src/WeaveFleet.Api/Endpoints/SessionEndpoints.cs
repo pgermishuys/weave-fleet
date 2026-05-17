@@ -324,8 +324,11 @@ public static class SessionEndpoints
             if (validationError is not null)
                 return Results.BadRequest(new ErrorResponse(validationError));
 
-            var result = await orchestrator.CommandSessionAsync(id, options, ct);
-            return result.Match(_ => Results.Accepted(), err => err.ToSessionApiResult());
+            // Fire-and-forget: dispatch the command without awaiting the LLM turn.
+            // Use CancellationToken.None so client disconnects don't cancel the command.
+            _ = orchestrator.CommandSessionAsync(id, options, CancellationToken.None);
+
+            return Results.Accepted();
         })
         .WithName("SendSessionCommand");
 
