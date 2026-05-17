@@ -21,6 +21,37 @@ internal static class DbCommandHelper
         cmd.Parameters.Add(p);
     }
 
+    // ── QueryAsync (with CancellationToken) ───────────────────────────────────
+
+    /// <summary>Executes a query with cancellation support and maps all rows using <paramref name="map"/>.</summary>
+    internal static async Task<List<T>> QueryAsync<T>(
+        this IDbConnection conn,
+        string sql,
+        Action<DbCommand> configure,
+        Func<DbDataReader, T> map,
+        CancellationToken ct)
+    {
+        await using var cmd = CreateCommand(conn, sql, configure, null);
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        var list = new List<T>();
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            list.Add(map(reader));
+        return list;
+    }
+
+    // ── ExecuteNonQueryAsync (with CancellationToken) ──────────────────────────
+
+    /// <summary>Executes a non-query command with cancellation support and returns the number of affected rows.</summary>
+    internal static async Task<int> ExecuteNonQueryAsync(
+        this IDbConnection conn,
+        string sql,
+        Action<DbCommand> configure,
+        CancellationToken ct)
+    {
+        await using var cmd = CreateCommand(conn, sql, configure, null);
+        return await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
     // ── QueryAsync ─────────────────────────────────────────────────────────────
 
     /// <summary>Executes a query and maps all rows using <paramref name="map"/>.</summary>
