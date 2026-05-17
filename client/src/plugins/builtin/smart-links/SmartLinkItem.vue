@@ -175,9 +175,21 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
           {{ link.title || link.url }}
         </a>
 
-        <!-- CI aggregate badge -->
+        <!-- Review comment count badge -->
+        <span
+          v-if="unresolvedCount > 0"
+          class="review-badge"
+          :title="`${unresolvedCount} unresolved review comment${unresolvedCount === 1 ? '' : 's'}`"
+        >
+          <MessageSquare :size="12" aria-hidden="true" />
+          <span class="review-badge-count">{{ unresolvedCount }}</span>
+        </span>
+      </div>
+
+      <!-- CI aggregate badge -->
+      <div v-if="ciIcon" class="ci-status-row">
         <button
-          v-if="ciIcon && checkRuns.length > 0"
+          v-if="checkRuns.length > 0"
           type="button"
           class="ci-badge-btn"
           :aria-label="ciLabel"
@@ -198,7 +210,7 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
           />
         </button>
         <component
-          v-else-if="ciIcon"
+          v-else
           :is="ciIcon"
           :class="ciIconClass"
           :size="13"
@@ -206,16 +218,6 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
           :title="ciLabel"
           aria-hidden="false"
         />
-
-        <!-- Review comment count badge -->
-        <span
-          v-if="unresolvedCount > 0"
-          class="review-badge"
-          :title="`${unresolvedCount} unresolved review comment${unresolvedCount === 1 ? '' : 's'}`"
-        >
-          <MessageSquare :size="12" aria-hidden="true" />
-          <span class="review-badge-count">{{ unresolvedCount }}</span>
-        </span>
       </div>
 
       <div
@@ -356,6 +358,12 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
 
 .ci-badge--neutral {
   color: var(--muted);
+}
+
+.ci-status-row {
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
 }
 
 .ci-badge-btn {
