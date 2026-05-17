@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, shallowRef, useTemplateRef } from "vue";
+import StatusGlyph from "./StatusGlyph.vue";
 import { useRouter } from "@tanstack/vue-router";
 import {
   Copy,
@@ -192,25 +193,6 @@ const projectTargets = computed(() => {
   return targets;
 });
 
-
-const statusColor = computed(() => {
-  switch (props.session.sessionStatus) {
-    case "completed":
-      return "var(--complete)";
-    case "idle":
-      return "var(--idle)";
-    case "stopped":
-    case "disconnected":
-      return "var(--muted)";
-    case "error":
-      return "var(--error)";
-    case "waiting_input":
-      return "var(--queued)";
-    case "active":
-    default:
-      return "var(--running)";
-  }
-});
 
 function handleSelect(): void {
   if (isInlineEditing.value) {
@@ -438,11 +420,7 @@ function removeSessionFromStore(): void {
             :aria-current="active ? 'true' : undefined"
             @click="handleSelect"
           >
-            <span
-              class="session-dot"
-              :style="{ backgroundColor: statusColor }"
-              aria-hidden="true"
-            />
+            <StatusGlyph :status="session.sessionStatus" />
 
             <span class="session-copy">
               <span class="session-title">{{ displayTitle }}</span>
@@ -464,11 +442,7 @@ function removeSessionFromStore(): void {
           class="session-item session-item--editing"
           :class="{ active }"
         >
-          <span
-            class="session-dot"
-            :style="{ backgroundColor: statusColor }"
-            aria-hidden="true"
-          />
+          <StatusGlyph :status="session.sessionStatus" />
 
           <span class="session-copy">
             <input
@@ -653,13 +627,6 @@ function removeSessionFromStore(): void {
 .session-item:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
-}
-
-.session-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
 }
 
 .session-copy {

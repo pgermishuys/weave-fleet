@@ -47,7 +47,7 @@ describe("SessionItem", () => {
     expect(wrapper.get(".session-title").text()).toBe("Fix auth bug");
     expect(wrapper.get("button").attributes("aria-current")).toBe("true");
     expect(wrapper.get("button").classes()).toContain("active");
-    expect(wrapper.get(".session-dot").attributes("style")).toContain("background-color: var(--running)");
+    expect(wrapper.get(".status-glyph").attributes("aria-label")).toBe("Active");
   });
 
   it("emits the session when clicked", async () => {

@@ -3,7 +3,7 @@ import { computed, onUnmounted, reactive, shallowRef, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
 import { LoaderCircle, Plus, Search } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
-import type { CreateSessionResponse, ProjectResponse, SessionListItem } from "@/lib/api-types";
+import type { CreateSessionResponse, SessionListItem } from "@/lib/api-types";
 import { useActivityStream } from "@/composables/use-activity-stream";
 import { useProjects } from "@/composables/use-projects";
 import { useSessions } from "@/composables/use-sessions";
@@ -30,7 +30,6 @@ interface ProjectTreeGroup {
   id: string;
   projectId: string | null;
   name: string;
-  color: string;
   isUngrouped: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
@@ -45,16 +44,6 @@ interface ActiveSessionDrag {
   projectId: string | null;
 }
 
-const PROJECT_COLOR_PALETTE = [
-  "#8b5cf6",
-  "#22c55e",
-  "#38bdf8",
-  "#f59e0b",
-  "#ef4444",
-  "#14b8a6",
-  "#f97316",
-  "#a855f7",
-] as const;
 
 const sessionsStore = useSessionsStore();
 const sidebarStore = useSidebarStore();
@@ -174,23 +163,6 @@ function getProjectDisplayName(session: SessionListItem): string {
   return "Ungrouped";
 }
 
-function getProjectColor(projectName: string, project?: ProjectResponse): string {
-  if (!project) {
-    return projectName === "Ungrouped" ? "#71717a" : PROJECT_COLOR_PALETTE[getColorIndex(projectName)];
-  }
-
-  return PROJECT_COLOR_PALETTE[Math.abs(project.position) % PROJECT_COLOR_PALETTE.length];
-}
-
-function getColorIndex(value: string): number {
-  let hash = 0;
-
-  for (const character of value) {
-    hash = (hash * 31 + character.charCodeAt(0)) | 0;
-  }
-
-  return Math.abs(hash) % PROJECT_COLOR_PALETTE.length;
-}
 
 function buildReorderTargets(
   projectOrder: Array<{ projectId: string | null }>,
@@ -222,7 +194,6 @@ const projectGroups = computed<ProjectTreeGroup[]>(() => {
     id: string;
     projectId: string | null;
     name: string;
-    color: string;
     sortPosition: number;
     isUngrouped: boolean;
     sessions: SessionListItem[];
@@ -233,7 +204,6 @@ const projectGroups = computed<ProjectTreeGroup[]>(() => {
       id: project.id,
       projectId: project.id,
       name: project.name,
-      color: getProjectColor(project.name, project),
       sortPosition: project.position,
       isUngrouped: false,
       sessions: [],
@@ -255,7 +225,6 @@ const projectGroups = computed<ProjectTreeGroup[]>(() => {
       id: session.projectId ?? "ungrouped",
       projectId: session.projectId ?? null,
       name: projectName,
-      color: getProjectColor(projectName, project),
       sortPosition: project?.position ?? Number.MAX_SAFE_INTEGER,
       isUngrouped: projectName === "Ungrouped",
       sessions: [session],
@@ -315,7 +284,6 @@ const projectGroups = computed<ProjectTreeGroup[]>(() => {
         id: projectGroup.id,
         projectId: projectGroup.projectId,
         name: projectGroup.name,
-        color: projectGroup.color,
         isUngrouped: projectGroup.isUngrouped,
         canMoveUp,
         canMoveDown,
