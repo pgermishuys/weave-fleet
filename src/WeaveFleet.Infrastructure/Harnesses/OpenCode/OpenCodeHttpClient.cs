@@ -154,7 +154,7 @@ internal sealed class OpenCodeHttpClient
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
         using var response = await _httpClient
-            .SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, ct)
+            .SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, CancellationToken.None)
             .ConfigureAwait(false);
         LogResponse(_logger, (int)response.StatusCode, logUrl, null);
 
