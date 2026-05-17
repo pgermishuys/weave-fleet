@@ -9,6 +9,7 @@ import CenterContent from "@/components/layout/CenterContent.vue";
 import ContextPanel from "@/components/layout/ContextPanel.vue";
 import IconRail from "@/components/layout/IconRail.vue";
 import SessionsV2RightPanel from "@/components/sessions/SessionsV2RightPanel.vue";
+import { Menu } from "lucide-vue-next";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useCommands } from "@/composables/use-commands";
 import { useWeaveSocket } from "@/composables/use-weave-socket";
@@ -16,7 +17,6 @@ import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useVisualViewport } from "@/composables/use-visual-viewport";
 import { useKeyboardScroll } from "@/composables/use-keyboard-scroll";
 import { useFoldableScreen } from "@/composables/use-foldable-screen";
-import TopBar from "@/components/layout/TopBar.vue";
 import { useSidebarStore } from "@/stores/sidebar";
 
 useCommands();
@@ -35,7 +35,7 @@ const pathname = useLocation({
   select: (location) => location.pathname,
 });
 const sidebarStore = useSidebarStore();
-const { isMobileNav, mobileDrawerOpen, closeDrawer } = useSidebarMobile();
+const { isMobileNav, mobileDrawerOpen, openDrawer, closeDrawer } = useSidebarMobile();
 
 const { panelCollapsed, activeRail } = storeToRefs(sidebarStore);
 
@@ -119,7 +119,17 @@ function onTouchEnd(e: TouchEvent): void {
       </SheetContent>
     </Sheet>
 
-    <TopBar />
+    <!-- Mobile: hamburger menu button -->
+    <button
+      v-if="isMobileNav"
+      type="button"
+      class="mobile-menu-btn"
+      :aria-label="mobileDrawerOpen ? 'Close menu' : 'Open menu'"
+      :aria-expanded="mobileDrawerOpen"
+      @click="openDrawer"
+    >
+      <Menu class="h-5 w-5" />
+    </button>
 
     <div
       class="main"
@@ -155,5 +165,32 @@ function onTouchEnd(e: TouchEvent): void {
   display: flex;
   flex: 1;
   overflow: hidden;
+}
+
+.mobile-menu-btn {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  display: inline-flex;
+  height: 36px;
+  width: 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-bg);
+  color: var(--muted);
+  transition: background 0.15s, color 0.15s;
+}
+
+.mobile-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+}
+
+.mobile-menu-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 </style>
