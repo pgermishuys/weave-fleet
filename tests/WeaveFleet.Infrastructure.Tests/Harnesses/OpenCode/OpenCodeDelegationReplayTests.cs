@@ -108,18 +108,17 @@ public sealed class OpenCodeDelegationReplayTests
     }
 
     /// <summary>
-    /// Starts consuming events in background, delays briefly to let the fixture SSE body
-    /// be fully consumed, then cancels and awaits the consume task.
+    /// Starts consuming events in background, waits for the stream to end naturally
+    /// (the <see cref="FakeSseHandler"/> terminates on the second call), then returns
+    /// all collected events.  Falls back to cancellation after a generous timeout to
+    /// prevent hangs.
     /// </summary>
     private static async Task<List<HarnessEvent>> ConsumeWithCancelAsync(
         OpenCodeHarnessSession instance,
-        int cancelAfterMs = 400)
+        int timeoutMs = 10_000)
     {
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var consumeTask = Task.Run(() => ConsumeAsync(instance, cts.Token), cts.Token);
-        await Task.Delay(cancelAfterMs, CancellationToken.None);
-        await cts.CancelAsync();
-        return await consumeTask;
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(timeoutMs));
+        return await Task.Run(() => ConsumeAsync(instance, cts.Token), cts.Token);
     }
 
     private sealed class FakeSseHandler(string body) : HttpMessageHandler
@@ -472,7 +471,7 @@ public sealed class OpenCodeDelegationReplayTests
             openCodeSessionId: parentOcSessionId);
 
         // Act
-        var events = await ConsumeWithCancelAsync(instance, cancelAfterMs: 800);
+        var events = await ConsumeWithCancelAsync(instance, timeoutMs: 10_000);
 
         // Assert: child message.updated should be yielded, NOT dropped
         var childMessageEvents = events
