@@ -107,6 +107,7 @@ watch(
       dispatchSessionUpsert({ ...selectedSession.value });
     }
 
+    const promptCountBefore = sentPrompts.value.length;
     reconcileSentPrompts(props.sessionId, nextMessages);
 
     const renderableAssistantCount = nextMessages.filter(
@@ -114,6 +115,12 @@ watch(
     ).length;
 
     if (sentPrompts.value.length === 0) {
+      // If reconciliation just cleared all prompts, force idle so the
+      // activity indicator resets.
+      if (promptCountBefore > 0) {
+        forceIdle();
+      }
+
       // Keep the baseline count updated even when there are no prompts,
       // so that when the user sends a new prompt we don't falsely detect
       // old assistant messages as "new".
@@ -122,13 +129,33 @@ watch(
     }
 
     if (renderableAssistantCount > lastRenderableAssistantCount) {
-      diagLog("stream.clearPrompts", `new assistant content detected (${lastRenderableAssistantCount} → ${renderableAssistantCount})`, {
-        sessionId: props.sessionId,
-        sentPromptsCount: sentPrompts.value.length,
-      });
       lastRenderableAssistantCount = renderableAssistantCount;
-      clearSentPrompts(props.sessionId);
-      forceIdle();
+
+      // Only clear optimistic prompts if every delivered user message already
+      // has its text content.  When messages arrive via SSE the envelope
+      // (`message.updated`) can land before the parts (`message.part.updated`),
+      // so a delivered user message may temporarily have empty parts.  Clearing
+      // the optimistic prompt at that point leaves a blank bubble until the
+      // part arrives.  `reconcileSentPrompts` (called above) already guards
+      // against text-less user messages and will clear them on a subsequent
+      // watch trigger once the parts arrive.
+      const allUserMessagesHaveText = nextMessages
+        .filter((m) => m.role === "user")
+        .every((m) => m.parts.some((p) => p.type === "text" && p.text.trim().length > 0));
+
+      if (allUserMessagesHaveText) {
+        diagLog("stream.clearPrompts", `new assistant content detected – all user messages have text, clearing optimistic prompts`, {
+          sessionId: props.sessionId,
+          sentPromptsCount: sentPrompts.value.length,
+        });
+        clearSentPrompts(props.sessionId);
+        forceIdle();
+      } else {
+        diagLog("stream.clearPrompts", `new assistant content detected but some user messages lack text – deferring to reconciliation`, {
+          sessionId: props.sessionId,
+          sentPromptsCount: sentPrompts.value.length,
+        });
+      }
     }
   },
   { immediate: true, deep: true },
