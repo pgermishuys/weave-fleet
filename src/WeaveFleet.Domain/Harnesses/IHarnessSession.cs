@@ -41,6 +41,12 @@ public interface IHarnessSession : IAsyncDisposable
     /// <summary>Abort the current agent operation.</summary>
     Task AbortAsync(CancellationToken ct);
 
+    /// <summary>Answer a pending question request from the agent.</summary>
+    Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct);
+
+    /// <summary>Reject (dismiss) a pending question request from the agent.</summary>
+    Task RejectQuestionAsync(string requestId, CancellationToken ct);
+
     /// <summary>Retrieve the message history for this instance.</summary>
     Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct);
 

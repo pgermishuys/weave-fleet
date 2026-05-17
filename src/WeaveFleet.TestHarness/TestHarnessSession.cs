@@ -143,6 +143,14 @@ public sealed class TestHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc/>
+    public Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
+        => Task.CompletedTask;
+
+    /// <inheritdoc/>
+    public Task RejectQuestionAsync(string requestId, CancellationToken ct)
+        => Task.CompletedTask;
+
+    /// <inheritdoc/>
     public Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct)
     {
         var messages = (IReadOnlyList<HarnessMessage>)_scenario.Messages;

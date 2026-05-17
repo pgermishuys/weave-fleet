@@ -153,6 +153,7 @@ internal sealed partial class HarnessEventJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(OpenCodeToolCompleted))]
 [JsonSerializable(typeof(OpenCodeToolError))]
 [JsonSerializable(typeof(RawToolPart))]
+[JsonSerializable(typeof(OpenCodeQuestionReplyRequest))]
 internal sealed partial class OpenCodeJsonContext : JsonSerializerContext
 {
 }

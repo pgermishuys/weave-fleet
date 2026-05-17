@@ -4,6 +4,9 @@ import { X } from "lucide-vue-next";
 import MarkdownIt from "markdown-it";
 import hljs from "highlight.js";
 import ToolCard from "@/components/session/ToolCard.vue";
+import QuestionCard from "@/components/session/QuestionCard.vue";
+import type { AccumulatedToolPart } from "@/lib/api-types";
+import { useQuestionAnswer } from "@/composables/use-question-answer";
 
 interface ToolCardDiffLine {
   type: "add" | "remove" | "context";
@@ -36,11 +39,30 @@ const props = defineProps<{
   body: string;
   images?: ImageAttachmentDisplay[];
   tools?: ToolCardItem[];
+  questionParts?: AccumulatedToolPart[];
+  sessionId?: string;
   showIdentity: boolean;
   clusterPosition: "single" | "first" | "middle" | "last";
 }>();
 
 const lightboxUrl = ref<string | null>(null);
+
+// ── Question answer handler (only created when there are question parts) ──
+const questionAnswer = props.sessionId ? useQuestionAnswer(props.sessionId) : null;
+
+function makeSubmitHandler(callId: string) {
+  return async (answers: string[][]) => {
+    if (!questionAnswer) throw new Error("No session ID");
+    await questionAnswer.answerQuestion(callId, answers);
+  };
+}
+
+function makeDismissHandler(callId: string) {
+  return async () => {
+    if (!questionAnswer) throw new Error("No session ID");
+    await questionAnswer.rejectQuestion(callId);
+  };
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -183,6 +205,15 @@ const displayModelId = computed(() => {
         :output="tool.output"
         :diff-lines="tool.diffLines"
         :initially-collapsed="tool.initiallyCollapsed"
+      />
+
+      <QuestionCard
+        v-for="qpart in questionParts ?? []"
+        :key="qpart.partId"
+        :part="qpart"
+        :session-id="sessionId ?? ''"
+        :on-submit="makeSubmitHandler(qpart.callId)"
+        :on-dismiss="makeDismissHandler(qpart.callId)"
       />
     </div>
   </article>
