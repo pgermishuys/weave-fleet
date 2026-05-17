@@ -104,11 +104,17 @@ public sealed partial class DirectoryService(
         {
             var drives = DriveInfo.GetDrives()
                 .Where(d => d.IsReady)
-                .Select(d => new DirectoryEntry(
-                    Name: d.Name.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                    FullPath: d.RootDirectory.FullName,
-                    IsGitRepo: false,
-                    IsRoot: true))
+                .Select(d =>
+                {
+                    var name = d.Name.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    if (string.IsNullOrEmpty(name))
+                        name = d.RootDirectory.FullName; // e.g. "/" on Linux/macOS
+                    return new DirectoryEntry(
+                        Name: name,
+                        FullPath: d.RootDirectory.FullName,
+                        IsGitRepo: false,
+                        IsRoot: true);
+                })
                 .ToList();
 
             return Task.FromResult(new DirectoryListingResult(
