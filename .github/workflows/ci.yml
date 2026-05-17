@@ -59,6 +59,11 @@ jobs:
           --no-build
           -p:SkipFrontendBuild=true
 
+      - name: Run NuCode tests (MTP)
+        run: |
+          dotnet build tests/NuCode.Tests --configuration Release
+          dotnet exec tests/NuCode.Tests/bin/Release/net10.0/NuCode.Tests.dll
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4

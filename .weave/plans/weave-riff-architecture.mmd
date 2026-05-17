@@ -1,0 +1,64 @@
+---
+title: weave-riff Architecture
+---
+graph TB
+    %% External Services
+    OIDC["OIDC Provider<br/>(Keycloak / Entra / GitHub)"]
+    TURN["STUN / TURN Server<br/>(coturn, self-hosted)"]
+
+    %% Host
+    subgraph Host["Host (Fleet App)"]
+        H_WebRTC["WebRTC Module<br/>(DataChannels)"]
+        H_EventHub["InstanceEventHub<br/>→ DataChannel"]
+        H_Auth["Auth: API Key"]
+    end
+
+    %% Viewer
+    subgraph Viewer["Viewer (Fleet App)"]
+        V_WebRTC["WebRTC Module<br/>(DataChannels)"]
+        V_Session["Remote Session<br/>Viewer"]
+        V_Auth["Auth: OIDC"]
+    end
+
+    %% Signaling Server
+    subgraph Server["weave-riff Signaling Server (.NET 10)"]
+        S_OIDC["OIDC Auth<br/>Middleware"]
+        S_APIKey["API Key Auth<br/>Middleware"]
+        S_WS["WebSocket<br/>Signaling"]
+        S_UI["Razor Pages UI<br/>(Dashboard + Admin)"]
+        S_Mgmt["Session & Share Management<br/>Register/end shares · Track participants<br/>Generate tokens · Route signaling"]
+        S_DB["EF Core + SQLite/Postgres<br/>Users │ ApiKeys │ SharedSessions │ SessionParticipants"]
+        S_ICE["STUN/TURN Config Provider"]
+
+        S_OIDC --> S_Mgmt
+        S_APIKey --> S_Mgmt
+        S_WS --> S_Mgmt
+        S_UI --> S_Mgmt
+        S_Mgmt --> S_DB
+        S_ICE --> S_Mgmt
+    end
+
+    %% Auth flows
+    OIDC -->|"OIDC tokens"| Host
+    OIDC -->|"OIDC tokens"| Viewer
+    OIDC -->|"OIDC tokens"| Server
+
+    %% Signaling flows
+    Host -->|"WSS /ws/signal<br/>(SDP + ICE)"| S_WS
+    Viewer -->|"WSS /ws/signal<br/>(SDP + ICE)"| S_WS
+    Viewer -->|"HTTPS"| S_UI
+
+    %% Direct P2P
+    H_WebRTC <-->|"WebRTC DataChannel<br/>(DTLS E2E Encrypted)"| V_WebRTC
+
+    %% TURN
+    H_WebRTC -.->|"NAT traversal"| TURN
+    V_WebRTC -.->|"NAT traversal"| TURN
+
+    %% Styling
+    classDef server fill:#1a1a2e,stroke:#16213e,color:#e0e0e0
+    classDef client fill:#0f3460,stroke:#533483,color:#e0e0e0
+    classDef external fill:#2d2d2d,stroke:#666,color:#e0e0e0
+    class Server server
+    class Host,Viewer client
+    class OIDC,TURN external

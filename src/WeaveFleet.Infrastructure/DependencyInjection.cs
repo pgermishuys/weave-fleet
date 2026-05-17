@@ -17,6 +17,7 @@ using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
+using WeaveFleet.Infrastructure.Harnesses.NuCode;
 using WeaveFleet.Infrastructure.Plugins;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 using WeaveFleet.Infrastructure.SessionSources;
@@ -71,6 +72,7 @@ public static class DependencyInjection
         services.AddScoped<ISmartLinkRepository, SmartLinkRepository>();
 
         // Credential storage — user-scoped repositories and application services
+        services.AddScoped<IUserPreferenceRepository, DapperUserPreferenceRepository>();
         services.AddScoped<IUserCredentialRepository, UserCredentialRepository>();
         services.AddScoped<ICredentialStore, CredentialStore>();
         services.AddScoped<ICredentialProtector, DataProtectionCredentialProtector>();
@@ -217,6 +219,12 @@ public static class DependencyInjection
         services.AddSingleton<IHarness>(sp => sp.GetRequiredService<ClaudeCodeHarness>());
         services.AddSingleton<ClaudeCodeHarnessRuntime>();
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<ClaudeCodeHarnessRuntime>());
+
+        // Register NuCodeHarness (descriptor) and NuCodeHarnessRuntime (provisioning) as separate singletons.
+        services.AddSingleton<NuCodeHarness>();
+        services.AddSingleton<IHarness>(sp => sp.GetRequiredService<NuCodeHarness>());
+        services.AddSingleton<NuCodeHarnessRuntime>();
+        services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<NuCodeHarnessRuntime>());
 
         return services;
     }

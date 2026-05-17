@@ -9,6 +9,7 @@
     <Project Path="src/WeaveFleet.Domain/WeaveFleet.Domain.csproj" />
     <Project Path="src/WeaveFleet.Infrastructure/WeaveFleet.Infrastructure.csproj" />
     <Project Path="src/WeaveFleet.TestHarness/WeaveFleet.TestHarness.csproj" />
+    <Project Path="src/NuCode/NuCode.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/WeaveFleet.Testing/WeaveFleet.Testing.csproj" />

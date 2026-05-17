@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
+using WeaveFleet.Infrastructure.Harnesses.NuCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Services;
 
@@ -165,6 +166,46 @@ internal sealed partial class OpenCodeJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(ClaudeCodeStreamMessage))]
 internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
 {
+}
+
+/// <summary>CamelCase + WhenWritingNull options for NuCode harness event payloads.</summary>
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(NuCodeMessageCreatedPayload))]
+[JsonSerializable(typeof(NuCodeMessageUpdatedPayload))]
+[JsonSerializable(typeof(NuCodePartUpdatedPayload))]
+[JsonSerializable(typeof(NuCodePartDeltaPayload))]
+[JsonSerializable(typeof(Dictionary<string, object?>))]
+[JsonSerializable(typeof(CopilotTokenResponse))]
+internal sealed partial class NuCodeJsonContext : JsonSerializerContext
+{
+}
+
+internal sealed record NuCodeMessageCreatedPayload
+{
+    [JsonPropertyName("messageId")] public required string MessageId { get; init; }
+    [JsonPropertyName("role")] public required string Role { get; init; }
+    [JsonPropertyName("content")] public required string Content { get; init; }
+}
+
+internal sealed record NuCodeMessageUpdatedPayload
+{
+    [JsonPropertyName("messageId")] public required string MessageId { get; init; }
+}
+
+internal sealed record NuCodePartUpdatedPayload
+{
+    [JsonPropertyName("messageId")] public required string MessageId { get; init; }
+    [JsonPropertyName("partId")] public required string PartId { get; init; }
+}
+
+internal sealed record NuCodePartDeltaPayload
+{
+    [JsonPropertyName("messageId")] public required string MessageId { get; init; }
+    [JsonPropertyName("partId")] public required string PartId { get; init; }
+    [JsonPropertyName("field")] public required string Field { get; init; }
+    [JsonPropertyName("delta")] public required string Delta { get; init; }
 }
 
 /// <summary>CamelCase + WhenWritingNull options for Infrastructure-specific payloads.</summary>

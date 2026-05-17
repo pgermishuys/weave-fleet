@@ -12,11 +12,28 @@
     <PackageVersion Include="Dapper" Version="2.1.66" />
     <PackageVersion Include="Dapper.AOT" Version="1.0.48" />
     <PackageVersion Include="dbup-sqlite" Version="6.0.1" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="9.0.4" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.5" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.5" />
+    <PackageVersion Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.5" />
+    <!-- Microsoft Agent Framework (NuCode) -->
+    <PackageVersion Include="Microsoft.Agents.AI" Version="1.0.0-rc4" />
+    <PackageVersion Include="Microsoft.Agents.AI.Abstractions" Version="1.0.0-rc4" />
+    <!-- Microsoft.Extensions.AI (NuCode) -->
+    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.4.1" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.4.1" />
+    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.4.1" />
+    <!-- Utilities (NuCode) -->
+    <PackageVersion Include="Ulid" Version="1.4.1" />
+    <PackageVersion Include="ReverseMarkdown" Version="5.0.0" />
+    <!-- MCP (NuCode) -->
+    <PackageVersion Include="ModelContextProtocol" Version="1.1.0" />
+    <!-- Anthropic (NuCode LLM provider) -->
+    <PackageVersion Include="Anthropic.SDK" Version="3.12.2" />
     <!-- Observability -->
     <PackageVersion Include="NATS.Net" Version="2.7.3" />
     <PackageVersion Include="OpenTelemetry" Version="1.15.3" />
@@ -29,6 +46,7 @@
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="Shouldly" Version="4.2.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.v3.core.mtp-v2" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <!-- E2E Testing -->
