@@ -72,82 +72,82 @@ Make NuCode available as an in-process harness type (`"nucode"`) alongside openc
   **Files**: `src/WeaveFleet.Infrastructure/Harnesses/NuCode/NuCodeHarness.cs`
   **Acceptance**: Class compiles and implements `IHarness`
 
-- [ ] 5. Create `NuCodeHarnessRuntime` with availability check and credential resolution
+- [x] 5. Create `NuCodeHarnessRuntime` with availability check and credential resolution
   **What**: Create `NuCodeHarnessRuntime : IHarnessRuntime`. `CheckAvailabilityAsync` always returns `Available = true` (in-process, no binary needed). `PrepareRuntimeAsync` resolves credentials same as OpenCode (reuse the same `provider/model` → credential namespace mapping). Create `NuCodeLaunchArtifacts : RuntimeLaunchArtifacts` to carry the resolved API key + provider info. `SpawnAsync` creates a scoped DI container with NuCode services, injects the `IChatClient` built from the API key, and returns a `NuCodeHarnessSession`. `ResumeAsync` loads an existing NuCode session by ID and resumes.
   **Files**: `src/WeaveFleet.Infrastructure/Harnesses/NuCode/NuCodeHarnessRuntime.cs`, `src/WeaveFleet.Infrastructure/Harnesses/NuCode/NuCodeLaunchArtifacts.cs`
   **Acceptance**: Class compiles, `SpawnAsync` creates a session that transitions to `Idle` status
 
-- [ ] 6. Create `NuCodeHarnessSession` shell
+- [x] 6. Create `NuCodeHarnessSession` shell
   **What**: Create `NuCodeHarnessSession : IHarnessSession`. Constructor takes the NuCode DI scope, `ISessionService`, `INuCodeEventBus`, and session metadata. Implement `SendPromptAsync` to create a user message + invoke the agent loop via `ISessionProcessor`. Implement `StopAsync`/`DisposeAsync` to dispose the DI scope. Implement `AbortAsync` with a `CancellationTokenSource`. Stub `GetMessagesAsync`, `SubscribeAsync`, `GetAgentsAsync`, `GetCommandsAsync`, `GetProvidersAsync`. `ProcessId` returns `null` (in-process). `HarnessType` returns `"nucode"`.
   **Files**: `src/WeaveFleet.Infrastructure/Harnesses/NuCode/NuCodeHarnessSession.cs`
   **Acceptance**: A session can be spawned and `SendPromptAsync` triggers the NuCode agent loop
 
-- [ ] 7. Create `IChatClientFactory` for building `IChatClient` from credentials
+- [x] 7. Create `IChatClientFactory` for building `IChatClient` from credentials
   **What**: Create a small factory/helper that takes a provider ID (anthropic/openai) and API key, and returns a configured `IChatClient`. For Anthropic: use the Anthropic SDK's `IChatClient` implementation. For OpenAI: use `Microsoft.Extensions.AI.OpenAI`. This isolates LLM SDK dependencies.
   **Files**: `src/WeaveFleet.Infrastructure/Harnesses/NuCode/ChatClientFactory.cs`
   **Acceptance**: Factory creates working `IChatClient` for both providers
 
-- [ ] 8. Add project reference and DI registration
+- [x] 8. Add project reference and DI registration
   **What**: Add `<ProjectReference>` from `WeaveFleet.Infrastructure` to `NuCode`. Register `NuCodeHarness` and `NuCodeHarnessRuntime` as singletons in `DependencyInjection.cs`, following the OpenCode pattern.
   **Files**: `src/WeaveFleet.Infrastructure/WeaveFleet.Infrastructure.csproj`, `src/WeaveFleet.Infrastructure/DependencyInjection.cs`
   **Acceptance**: NuCode harness appears in `GET /api/harnesses` response
 
 ### Phase 3: Event Bridge
 
-- [ ] 9. Create `NuCodeMapper` for event mapping
+- [x] 9. Create `NuCodeMapper` for event mapping
   **What**: Create `NuCodeMapper` static class. Map `NuCodeEvent` → `HarnessEvent`: serialize the event properties to `JsonElement` for the `Payload` field. Map event types 1:1 (they already use the same string constants). Handle `message.part.delta` events for streaming text to the UI. Handle `session.created`/`session.updated` for status changes.
   **Files**: `src/WeaveFleet.Infrastructure/Harnesses/NuCode/NuCodeMapper.cs`
   **Acceptance**: All NuCode event types produce valid `HarnessEvent` instances
 
-- [ ] 10. Implement `SubscribeAsync` with event bus bridge
+- [x] 10. Implement `SubscribeAsync` with event bus bridge
   **What**: In `NuCodeHarnessSession.SubscribeAsync`, subscribe to the session-scoped `INuCodeEventBus` using `SubscribeAll`. Use a `Channel<HarnessEvent>` to bridge the synchronous callback to the `IAsyncEnumerable<HarnessEvent>` return type. Map each `NuCodeEvent` through `NuCodeMapper.ToHarnessEvent`. Emit `session.idle` when the agent loop completes (agent returns `ProcessResult.Stop`).
   **Files**: `src/WeaveFleet.Infrastructure/Harnesses/NuCode/NuCodeHarnessSession.cs`
   **Acceptance**: Real-time events stream to the UI during prompt processing
 
 ### Phase 4: Message History
 
-- [ ] 11. Implement message mapping in `NuCodeMapper`
+- [x] 11. Implement message mapping in `NuCodeMapper`
   **What**: Add `ToHarnessMessage` and `ToHarnessMessages` methods to `NuCodeMapper`. Map NuCode `MessageWithParts` → `HarnessMessage`. Map part types: `NuCode.Sessions.TextPart` → `WeaveFleet.Domain.Harnesses.TextPart`, `ToolPart` → `ToolUsePart` (map `ToolCallState` to `ToolUseState`), `ReasoningPart` → `ReasoningPart`, `FilePart` → `FilePart`, `StepFinishPart` → `StepFinishPart` (with token/cost data). Map `UserMessage` role → `"user"`, `AssistantMessage` → `"assistant"`.
   **Files**: `src/WeaveFleet.Infrastructure/Harnesses/NuCode/NuCodeMapper.cs`
   **Acceptance**: `GetMessagesAsync` returns correctly mapped messages with all part types
 
-- [ ] 12. Implement `GetMessagesAsync`
+- [x] 12. Implement `GetMessagesAsync`
   **What**: In `NuCodeHarnessSession`, call `ISessionService.GetMessagesAsync` with the NuCode session ID, then map through `NuCodeMapper.ToHarnessMessages`. Support `MessageQuery.Limit` and `Before` parameters.
   **Files**: `src/WeaveFleet.Infrastructure/Harnesses/NuCode/NuCodeHarnessSession.cs`
   **Acceptance**: Conversation history displays correctly in the UI
 
-- [ ] 13. Implement `GetAgentsAsync` and `GetProvidersAsync`
+- [x] 13. Implement `GetAgentsAsync` and `GetProvidersAsync`
   **What**: `GetAgentsAsync` returns NuCode's built-in agent profiles mapped to `AgentInfo` (build, plan, explore, general — filter out hidden agents like compaction/title/summary). `GetProvidersAsync` returns the provider/model that was configured for this session. `GetCommandsAsync` returns empty list (NuCode doesn't have slash commands).
   **Files**: `src/WeaveFleet.Infrastructure/Harnesses/NuCode/NuCodeHarnessSession.cs`
   **Acceptance**: Agent selector and provider selector work in the UI
 
 ### Phase 5: Credential & Model Resolution
 
-- [ ] 14. Wire `PrepareRuntimeAsync` credential flow end-to-end
+- [x] 14. Wire `PrepareRuntimeAsync` credential flow end-to-end
   **What**: Ensure the full flow works: user selects model → `PrepareRuntimeAsync` resolves API key → `NuCodeLaunchArtifacts` carries key + provider + model → `SpawnAsync` uses `ChatClientFactory` to build `IChatClient` with the correct model → NuCode agent uses it. Support model override per-prompt via `PromptOptions.ModelId` (requires creating a new `IChatClient` or reconfiguring).
   **Files**: `src/WeaveFleet.Infrastructure/Harnesses/NuCode/NuCodeHarnessRuntime.cs`, `src/WeaveFleet.Infrastructure/Harnesses/NuCode/NuCodeHarnessSession.cs`
   **Acceptance**: Sessions work with both Anthropic and OpenAI API keys from user credentials
 
-- [ ] 15. Handle `QuestionTool` in orchestrator context
+- [x] 15. Handle `QuestionTool` in orchestrator context
   **What**: Configure NuCode's `IQuestionService` to auto-deny all questions when running as a harness. Either provide a custom `IQuestionService` implementation that immediately returns a denial, or configure permission rules to deny the `question` tool. Prefer the permission rules approach for consistency.
   **Files**: `src/WeaveFleet.Infrastructure/Harnesses/NuCode/NuCodeHarnessRuntime.cs` (or a new `DenyAllQuestionService.cs`)
   **Acceptance**: Agent doesn't block on questions; receives a denial response and continues
 
 ### Phase 6: Sub-agent Delegation
 
-- [ ] 16. Bridge NuCode child sessions to WeaveFleet delegations
+- [x] 16. Bridge NuCode child sessions to WeaveFleet delegations
   **What**: Subscribe to `SessionEvents.Created` on the `INuCodeEventBus`. When a child session is created (has a `parentId`), call `SessionOrchestrator.EnsureDelegatedChildSessionAsync` and `DelegationService.HandleDelegationDetectedAsync` — same pattern as `OpenCodeHarnessSession.TryEmitDelegationAsync`. Detect delegation completion by subscribing to tool completion events for `task` tool calls.
   **Files**: `src/WeaveFleet.Infrastructure/Harnesses/NuCode/NuCodeHarnessSession.cs`
   **Acceptance**: Child sessions from `TaskTool` appear as delegations in the WeaveFleet UI
 
-- [ ] 17. Route child session events to child fleet sessions
+- [x] 17. Route child session events to child fleet sessions
   **What**: In `SubscribeAsync`, detect events with a session ID different from the parent NuCode session. Look up the child fleet session ID (same as `OpenCodeHarnessSession.TryResolveChildFleetSessionIdAsync`). Set `FleetSessionId` on the `HarnessEvent` so `HarnessEventRelay` routes events to the correct child session.
   **Files**: `src/WeaveFleet.Infrastructure/Harnesses/NuCode/NuCodeHarnessSession.cs`
   **Acceptance**: Child session events stream correctly to their own fleet sessions
 
 ### Phase 7: Analytics & Token Tracking
 
-- [ ] 18. Extract token/cost data from NuCode events
+- [x] 18. Extract token/cost data from NuCode events
   **What**: Map NuCode's `StepFinishPart` (which contains `TokenUsage` and `Cost`) to `TokenEventData` for the analytics pipeline. Subscribe to `message.part.updated` events for `step-finish` parts and emit `TokenEventData` via `IAnalyticsCollector.AcceptTokenEvent`.
   **Files**: `src/WeaveFleet.Infrastructure/Harnesses/NuCode/NuCodeHarnessSession.cs`, `src/WeaveFleet.Infrastructure/Harnesses/NuCode/NuCodeMapper.cs`
   **Acceptance**: Token usage and costs appear in the analytics dashboard for NuCode sessions

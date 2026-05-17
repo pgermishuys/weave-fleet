@@ -175,6 +175,7 @@ internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(NuCodeMessageCreatedPayload))]
 [JsonSerializable(typeof(NuCodeMessageUpdatedPayload))]
 [JsonSerializable(typeof(NuCodePartUpdatedPayload))]
+[JsonSerializable(typeof(NuCodePartDeltaPayload))]
 [JsonSerializable(typeof(Dictionary<string, object?>))]
 [JsonSerializable(typeof(CopilotTokenResponse))]
 internal sealed partial class NuCodeJsonContext : JsonSerializerContext
@@ -197,6 +198,14 @@ internal sealed record NuCodePartUpdatedPayload
 {
     [JsonPropertyName("messageId")] public required string MessageId { get; init; }
     [JsonPropertyName("partId")] public required string PartId { get; init; }
+}
+
+internal sealed record NuCodePartDeltaPayload
+{
+    [JsonPropertyName("messageId")] public required string MessageId { get; init; }
+    [JsonPropertyName("partId")] public required string PartId { get; init; }
+    [JsonPropertyName("field")] public required string Field { get; init; }
+    [JsonPropertyName("delta")] public required string Delta { get; init; }
 }
 
 /// <summary>CamelCase + WhenWritingNull options for Infrastructure-specific payloads.</summary>

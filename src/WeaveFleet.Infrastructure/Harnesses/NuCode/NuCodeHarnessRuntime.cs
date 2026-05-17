@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using global::NuCode;
+using global::NuCode.Tools;
+using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Harnesses;
 
@@ -16,17 +18,20 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<NuCodeHarnessRuntime> _logger;
+    private readonly IAnalyticsCollector? _analyticsCollector;
 
     public NuCodeHarnessRuntime(
         IServiceScopeFactory scopeFactory,
         IHttpClientFactory httpClientFactory,
         ILoggerFactory loggerFactory,
-        ILogger<NuCodeHarnessRuntime> logger)
+        ILogger<NuCodeHarnessRuntime> logger,
+        IAnalyticsCollector? analyticsCollector = null)
     {
         _scopeFactory = scopeFactory;
         _httpClientFactory = httpClientFactory;
         _loggerFactory = loggerFactory;
         _logger = logger;
+        _analyticsCollector = analyticsCollector;
     }
 
     /// <inheritdoc />
@@ -120,6 +125,9 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
             nuCodeOptions.WorkingDirectory = options.WorkingDirectory;
         });
 
+        // Override IQuestionService — questions are not supported in the orchestrator context.
+        nuCodeServices.AddSingleton<IQuestionService, DenyAllQuestionService>();
+
         // Build the IChatClient from credentials
         var chatClient = ChatClientFactory.Create(artifacts.Provider, artifacts.ModelId, apiKeyOrToken);
         nuCodeServices.AddSingleton(chatClient);
@@ -127,13 +135,21 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
         var nuCodeProvider = nuCodeServices.BuildServiceProvider();
 
         var instanceId = $"nucode-{Guid.NewGuid():N}";
+
         var session = new NuCodeHarnessSession(
             instanceId: instanceId,
             fleetSessionId: options.SessionId,
             workingDirectory: options.WorkingDirectory,
+            provider: artifacts.Provider,
+            modelId: artifacts.ModelId,
+            projectId: options.ProjectId,
+            projectName: options.ProjectName,
+            ownerUserId: options.OwnerUserId,
+            scopeFactory: _scopeFactory,
             nuCodeProvider: nuCodeProvider,
             chatClient: chatClient,
-            logger: _loggerFactory.CreateLogger<NuCodeHarnessSession>());
+            logger: _loggerFactory.CreateLogger<NuCodeHarnessSession>(),
+            analyticsCollector: _analyticsCollector);
 
         if (options.InitialPrompt is not null)
         {
@@ -209,12 +225,12 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
 
         // Infer from model name
         if (modelId.StartsWith("claude", StringComparison.OrdinalIgnoreCase))
-            return "copilot"; // Default Claude models through Copilot
+            return "anthropic"; // Bare claude-* models default to direct Anthropic API
         if (modelId.StartsWith("gpt", StringComparison.OrdinalIgnoreCase) ||
             modelId.StartsWith("o1", StringComparison.OrdinalIgnoreCase) ||
             modelId.StartsWith("o3", StringComparison.OrdinalIgnoreCase) ||
             modelId.StartsWith("o4", StringComparison.OrdinalIgnoreCase))
-            return "copilot"; // GPT/o-series also available via Copilot
+            return "openai"; // Bare GPT/o-series default to direct OpenAI API
         return "copilot"; // Default to Copilot
     }
 
