@@ -56,7 +56,7 @@ function handleOpen(toolId: string): void {
 
 <template>
   <ContextMenuSub>
-    <ContextMenuSubTrigger class="gap-2 text-xs">
+    <ContextMenuSubTrigger>
       <ExternalLink class="size-3.5" />
       Open in...
     </ContextMenuSubTrigger>
@@ -64,7 +64,6 @@ function handleOpen(toolId: string): void {
       <ContextMenuItem
         v-if="isLoading && tools.length === 0"
         disabled
-        class="gap-2 text-xs"
       >
         <Loader2 class="size-3.5 animate-spin" />
         Detecting tools…
@@ -72,7 +71,7 @@ function handleOpen(toolId: string): void {
       <ContextMenuItem
         v-if="!isLoading && tools.length === 0"
         disabled
-        class="gap-2 text-xs text-muted-foreground"
+        class="text-muted-foreground"
       >
         {{ error ? `Error: ${error}` : 'No tools detected' }}
       </ContextMenuItem>
@@ -84,7 +83,6 @@ function handleOpen(toolId: string): void {
         <ContextMenuItem
           v-for="tool in group.items"
           :key="tool.id"
-          class="gap-2 text-xs"
           @click="handleOpen(tool.id)"
         >
           <component

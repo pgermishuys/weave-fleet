@@ -466,7 +466,7 @@ function removeSessionFromStore(): void {
         :disabled="isAnyActionPending"
         @select="startRename"
       >
-        <Pencil class="h-4 w-4" />
+        <Pencil class="size-3.5" />
         Rename
       </ContextMenuItem>
 
@@ -475,7 +475,7 @@ function removeSessionFromStore(): void {
         :disabled="isAnyActionPending"
         @select="handleInterrupt"
       >
-        <OctagonX class="h-4 w-4" />
+        <OctagonX class="size-3.5" />
         Interrupt
       </ContextMenuItem>
 
@@ -484,7 +484,7 @@ function removeSessionFromStore(): void {
         :disabled="isAnyActionPending"
         @select="handleStop"
       >
-        <StopCircle class="h-4 w-4" />
+        <StopCircle class="size-3.5" />
         Stop
       </ContextMenuItem>
 
@@ -493,7 +493,7 @@ function removeSessionFromStore(): void {
         :disabled="isAnyActionPending"
         @select="handleResume"
       >
-        <Play class="h-4 w-4" />
+        <Play class="size-3.5" />
         Resume
       </ContextMenuItem>
 
@@ -502,7 +502,7 @@ function removeSessionFromStore(): void {
         :disabled="isAnyActionPending"
         @select="handleArchive"
       >
-        <Square class="h-4 w-4" />
+        <Square class="size-3.5" />
         Archive
       </ContextMenuItem>
 
@@ -511,7 +511,7 @@ function removeSessionFromStore(): void {
         :disabled="isAnyActionPending"
         @select="handleUnarchive"
       >
-        <Play class="h-4 w-4" />
+        <Play class="size-3.5" />
         Unarchive
       </ContextMenuItem>
 
@@ -519,7 +519,7 @@ function removeSessionFromStore(): void {
         :disabled="isAnyActionPending"
         @select="handleFork"
       >
-        <GitFork class="h-4 w-4" />
+        <GitFork class="size-3.5" />
         Fork
       </ContextMenuItem>
 
@@ -527,7 +527,7 @@ function removeSessionFromStore(): void {
 
       <ContextMenuSub>
         <ContextMenuSubTrigger :disabled="isAnyActionPending">
-          <FolderOpen class="h-4 w-4" />
+          <FolderOpen class="size-3.5" />
           Move to Project
         </ContextMenuSubTrigger>
         <ContextMenuSubContent class="w-52">
@@ -556,7 +556,7 @@ function removeSessionFromStore(): void {
         :disabled="isAnyActionPending"
         @select="handleCopySessionId"
       >
-        <Copy class="h-4 w-4" />
+        <Copy class="size-3.5" />
         Copy Session ID
       </ContextMenuItem>
 
@@ -565,7 +565,7 @@ function removeSessionFromStore(): void {
         :disabled="isAnyActionPending"
         @select="openDeleteDialog"
       >
-        <Trash2 class="h-4 w-4" />
+        <Trash2 class="size-3.5" />
         Permanently Delete
       </ContextMenuItem>
     </ContextMenuContent>
