@@ -10,8 +10,10 @@ namespace WeaveFleet.Infrastructure.Harnesses.NuCode;
 /// <param name="ModelId">The model identifier.</param>
 /// <param name="ApiKey">The API key (for anthropic/openai) or empty for copilot.</param>
 /// <param name="GitHubToken">GitHub OAuth token for Copilot token exchange (null for non-copilot providers).</param>
+/// <param name="BaseUrl">Optional custom base URL for OpenAI-compatible endpoints (proxies, self-hosted, etc.).</param>
 public sealed record NuCodeLaunchArtifacts(
     string Provider,
     string ModelId,
     string ApiKey,
-    string? GitHubToken = null) : RuntimeLaunchArtifacts;
+    string? GitHubToken = null,
+    string? BaseUrl = null) : RuntimeLaunchArtifacts;
