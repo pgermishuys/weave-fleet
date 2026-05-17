@@ -16,6 +16,7 @@ import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useVisualViewport } from "@/composables/use-visual-viewport";
 import { useKeyboardScroll } from "@/composables/use-keyboard-scroll";
 import { useFoldableScreen } from "@/composables/use-foldable-screen";
+import TopBar from "@/components/layout/TopBar.vue";
 import { useSidebarStore } from "@/stores/sidebar";
 
 useCommands();
@@ -117,6 +118,8 @@ function onTouchEnd(e: TouchEvent): void {
         </div>
       </SheetContent>
     </Sheet>
+
+    <TopBar />
 
     <div
       class="main"
