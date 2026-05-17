@@ -5,6 +5,13 @@
          These are inherited from WeaveFleet's strict AnalysisLevel but NuCode
          uses different conventions (e.g. direct ILogger calls, interface naming). -->
     <NoWarn>$(NoWarn);CA1305;CA1310;CA1711;CA1716;CA1822;CA1836;CA1848;CA1854;CA1859;CA1873;CA1001</NoWarn>
+    <!-- NuCode uses reflection-based JsonSerializer in a few places (LspTool, SessionProcessor).
+         It is not itself AOT-published; suppress trim/AOT analysis warnings from propagating
+         to the consuming WeaveFleet.Api AOT publish. -->
+    <IsAotCompatible>false</IsAotCompatible>
+    <IsTrimmable>false</IsTrimmable>
+    <EnableAotAnalyzer>false</EnableAotAnalyzer>
+    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
   </PropertyGroup>
 
   <ItemGroup>
