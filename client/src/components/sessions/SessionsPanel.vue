@@ -15,12 +15,6 @@ import NewProjectDialog from "./NewProjectDialog.vue";
 import NewSessionDialog from "./NewSessionDialog.vue";
 import ProjectGroup from "./ProjectGroup.vue";
 
-interface ProjectTreeSubgroup {
-  id: string;
-  label: string;
-  sessions: SessionListItem[];
-}
-
 interface ProjectReorderTarget {
   projectId: string;
   position: number;
@@ -37,7 +31,7 @@ interface ProjectTreeGroup {
   moveUpTargets: ProjectReorderTarget[];
   moveDownTargets: ProjectReorderTarget[];
   sessionCount: number;
-  subgroups: ProjectTreeSubgroup[];
+  sessions: SessionListItem[];
 }
 
 interface ActiveSessionDrag {
@@ -291,26 +285,6 @@ const projectGroups = computed<ProjectTreeGroup[]>(() => {
       const moveDownTargets = canMoveDown
         ? buildReorderTargets(swapProjects(orderedUserGroups, orderedIndex, orderedIndex + 1))
         : [];
-      const openSessions = projectGroup.sessions.filter((session) => session.sessionStatus !== "completed");
-      const completedSessions = projectGroup.sessions.filter((session) => session.sessionStatus === "completed");
-      const subgroups: ProjectTreeSubgroup[] = [];
-
-      if (openSessions.length > 0) {
-        subgroups.push({
-          id: `${projectGroup.name}-open`,
-          label: "Open Sessions",
-          sessions: openSessions,
-        });
-      }
-
-      if (completedSessions.length > 0) {
-        subgroups.push({
-          id: `${projectGroup.name}-completed`,
-          label: "Completed",
-          sessions: completedSessions,
-        });
-      }
-
       return {
         id: projectGroup.id,
         projectId: projectGroup.projectId,
@@ -322,7 +296,7 @@ const projectGroups = computed<ProjectTreeGroup[]>(() => {
         moveUpTargets,
         moveDownTargets,
         sessionCount: projectGroup.sessions.length,
-        subgroups,
+        sessions: projectGroup.sessions,
       } satisfies ProjectTreeGroup;
     });
 });
@@ -335,32 +309,27 @@ const filteredProjectGroups = computed<ProjectTreeGroup[]>(() => {
   return projectGroups.value
     .map((project) => {
       const projectMatch = project.name.toLowerCase().includes(normalizedQuery.value);
-      const subgroups = project.subgroups
-        .map((subgroup) => ({
-          ...subgroup,
-          sessions: projectMatch
-            ? subgroup.sessions
-            : subgroup.sessions.filter((session) => {
-              const searchable = [
-                session.session.title,
-                session.session.id,
-                getProjectDisplayName(session),
-                session.sessionStatus,
-              ].join(" ").toLowerCase();
+      const sessions = projectMatch
+        ? project.sessions
+        : project.sessions.filter((session) => {
+            const searchable = [
+              session.session.title,
+              session.session.id,
+              getProjectDisplayName(session),
+              session.sessionStatus,
+            ].join(" ").toLowerCase();
 
-              return searchable.includes(normalizedQuery.value);
-            }),
-        }))
-        .filter((subgroup) => subgroup.sessions.length > 0);
+            return searchable.includes(normalizedQuery.value);
+          });
 
       return {
         ...project,
-        sessionCount: subgroups.reduce((count, subgroup) => count + subgroup.sessions.length, 0),
-        ...(projectMatch && project.subgroups.length === 0 ? { sessionCount: 0 } : {}),
-        subgroups,
+        sessionCount: sessions.length,
+        ...(projectMatch && project.sessions.length === 0 ? { sessionCount: 0 } : {}),
+        sessions,
       } satisfies ProjectTreeGroup;
     })
-    .filter((project) => project.subgroups.length > 0 || project.name.toLowerCase().includes(normalizedQuery.value));
+    .filter((project) => project.sessions.length > 0 || project.name.toLowerCase().includes(normalizedQuery.value));
 });
 
 function handleToggleProject(projectId: string): void {

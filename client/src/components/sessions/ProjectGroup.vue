@@ -20,12 +20,6 @@ import ConfirmDeleteProjectDialog from "./ConfirmDeleteProjectDialog.vue";
 import InlineEdit from "./InlineEdit.vue";
 import SessionItem from "./SessionItem.vue";
 
-interface ProjectSessionGroup {
-  id: string;
-  label: string;
-  sessions: SessionListItem[];
-}
-
 interface ProjectGroupModel {
   id: string;
   projectId: string | null;
@@ -37,7 +31,7 @@ interface ProjectGroupModel {
   moveUpTargets: Array<{ projectId: string; position: number }>;
   moveDownTargets: Array<{ projectId: string; position: number }>;
   sessionCount: number;
-  subgroups: ProjectSessionGroup[];
+  sessions: SessionListItem[];
 }
 
 interface Props {
@@ -431,26 +425,16 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
         v-if="expanded"
         class="project-content"
       >
-        <div
-          v-for="subgroup in project.subgroups"
-          :key="subgroup.id"
-          class="project-subgroup"
-        >
-          <p class="project-subgroup__label">
-            {{ subgroup.label }}
-          </p>
-
-          <SessionItem
-            v-for="session in subgroup.sessions"
-            :key="session.session.id"
-            :session="session"
-            :active="session.session.id === activeSessionId"
-            @changed="emit('sessionChanged')"
-            @select="handleSessionSelect"
-            @drag-session-start="handleSessionDragStart"
-            @drag-session-end="handleSessionDragEnd"
-          />
-        </div>
+        <SessionItem
+          v-for="session in project.sessions"
+          :key="session.session.id"
+          :session="session"
+          :active="session.session.id === activeSessionId"
+          @changed="emit('sessionChanged')"
+          @select="handleSessionSelect"
+          @drag-session-start="handleSessionDragStart"
+          @drag-session-end="handleSessionDragEnd"
+        />
       </div>
     </Transition>
 
@@ -570,18 +554,5 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 .project-content {
   padding-bottom: 2px;
   overflow: hidden;
-}
-
-.project-subgroup {
-  padding-bottom: 4px;
-}
-
-.project-subgroup__label {
-  margin: 4px 12px 4px 38px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted);
 }
 </style>
