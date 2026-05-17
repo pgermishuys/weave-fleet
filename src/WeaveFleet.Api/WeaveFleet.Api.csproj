@@ -7,8 +7,8 @@
     <!-- AOT/trimming only for Release (publish) builds; Debug uses JIT so Dapper reflection works -->
     <PublishTrimmed Condition="'$(Configuration)' == 'Release'">true</PublishTrimmed>
     <PublishAot Condition="'$(Configuration)' == 'Release'">true</PublishAot>
-    <!-- Dapper 2.x does not have full AOT annotations; suppress aggregate trim warning for its assembly -->
-    <NoWarn>$(NoWarn);IL2104;IL3053</NoWarn>
+    <!-- Dapper 2.x and NuCode do not have full AOT annotations; suppress aggregate trim/AOT warnings -->
+    <NoWarn>$(NoWarn);IL2104;IL3053;IL2026;IL3050</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

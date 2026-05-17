@@ -2,7 +2,10 @@
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
-    <IsTestProject>true</IsTestProject>
+    <!-- xunit.v3 uses Microsoft Testing Platform (MTP) which is incompatible with VSTest on .NET 10.
+         Disable VSTest discovery; this project runs as a standalone MTP executable in CI. -->
+    <IsTestProject Condition="'$(SkipNuCodeTests)' == 'true'">false</IsTestProject>
+    <IsTestProject Condition="'$(SkipNuCodeTests)' != 'true'">true</IsTestProject>
     <OutputType>Exe</OutputType>
     <RootNamespace>NuCode</RootNamespace>
     <NoWarn>$(NoWarn);CA1305;CA1310;CA1826;CA1861;CA1859;CA2201</NoWarn>

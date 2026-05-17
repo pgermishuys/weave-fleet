@@ -58,6 +58,11 @@ jobs:
           --results-directory test-results/
           --no-build
           -p:SkipFrontendBuild=true
+          -p:SkipNuCodeTests=true
+
+      - name: Run NuCode tests (MTP)
+        run: >
+          dotnet exec tests/NuCode.Tests/bin/Release/net10.0/NuCode.Tests.dll
 
       - name: Upload test results
         if: always()
