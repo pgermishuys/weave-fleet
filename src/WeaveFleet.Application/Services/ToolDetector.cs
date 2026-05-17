@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Microsoft.Extensions.Logging;
 
 namespace WeaveFleet.Application.Services;
 
@@ -7,14 +8,20 @@ namespace WeaveFleet.Application.Services;
 /// Detects which tools from the registry are installed on the current system.
 /// Results are cached with a 5-minute TTL.
 /// </summary>
-public sealed class ToolDetector : IDisposable
+public sealed partial class ToolDetector : IDisposable
 {
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(2);
 
+    private readonly ILogger<ToolDetector> _logger;
     private List<ToolDefinition>? _cache;
     private DateTime _cacheTime = DateTime.MinValue;
     private readonly SemaphoreSlim _lock = new(1, 1);
+
+    public ToolDetector(ILogger<ToolDetector> logger)
+    {
+        _logger = logger;
+    }
 
     public void Dispose() => _lock.Dispose();
 
@@ -35,11 +42,19 @@ public sealed class ToolDetector : IDisposable
                 .Where(t => t.Platforms.ContainsKey(platform))
                 .ToList();
 
+            LogDetectionStarted(_logger, platform, candidates.Count);
+
             var tasks = candidates.Select(t => DetectToolAsync(t, platform, ct));
             var results = await Task.WhenAll(tasks);
 
             _cache = results.Where(t => t is not null).Cast<ToolDefinition>().ToList();
             _cacheTime = DateTime.UtcNow;
+
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                var toolIds = string.Join(", ", _cache.Select(t => t.Id));
+                LogDetectionComplete(_logger, _cache.Count, candidates.Count, toolIds);
+            }
 
             return Resolve(_cache);
         }
@@ -52,10 +67,14 @@ public sealed class ToolDetector : IDisposable
     private static List<ResolvedTool> Resolve(List<ToolDefinition> tools) =>
         tools.Select(t => new ResolvedTool(t.Id, t.Label, t.IconName, t.Category)).ToList();
 
-    private static async Task<ToolDefinition?> DetectToolAsync(
+    private async Task<ToolDefinition?> DetectToolAsync(
         ToolDefinition tool, string platform, CancellationToken ct)
     {
-        if (tool.AlwaysAvailable) return tool;
+        if (tool.AlwaysAvailable)
+        {
+            LogToolAlwaysAvailable(_logger, tool.Id);
+            return tool;
+        }
 
         // Check binaries on PATH
         var binaries = tool.DetectBinaries?.GetValueOrDefault(platform);
@@ -64,7 +83,10 @@ public sealed class ToolDetector : IDisposable
             foreach (var bin in binaries)
             {
                 if (await IsBinaryOnPathAsync(bin, platform, ct))
+                {
+                    LogToolDetectedViaBinary(_logger, tool.Id, bin);
                     return tool;
+                }
             }
         }
         else
@@ -73,14 +95,18 @@ public sealed class ToolDetector : IDisposable
             if (tool.Platforms.TryGetValue(platform, out var cmd) && cmd.Command != "open")
             {
                 if (await IsBinaryOnPathAsync(cmd.Command, platform, ct))
+                {
+                    LogToolDetectedViaCommand(_logger, tool.Id, cmd.Command);
                     return tool;
+                }
             }
         }
 
+        LogToolNotFound(_logger, tool.Id);
         return null;
     }
 
-    private static async Task<bool> IsBinaryOnPathAsync(string binary, string platform, CancellationToken ct)
+    private async Task<bool> IsBinaryOnPathAsync(string binary, string platform, CancellationToken ct)
     {
         try
         {
@@ -98,7 +124,11 @@ public sealed class ToolDetector : IDisposable
             };
 
             using var proc = Process.Start(psi);
-            if (proc is null) return false;
+            if (proc is null)
+            {
+                LogProbeProcessFailed(_logger, binary);
+                return false;
+            }
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(ProbeTimeout);
@@ -106,9 +136,34 @@ public sealed class ToolDetector : IDisposable
             await proc.WaitForExitAsync(cts.Token);
             return proc.ExitCode == 0;
         }
-        catch
+        catch (Exception ex)
         {
+            LogProbeFailed(_logger, binary, ex);
             return false;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Tool detection: platform={Platform}, candidates={Count}")]
+    private static partial void LogDetectionStarted(ILogger logger, string platform, int count);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Tool detection complete: {Detected}/{Candidates} tools found ({Tools})")]
+    private static partial void LogDetectionComplete(ILogger logger, int detected, int candidates, string tools);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Tool '{ToolId}' is always available")]
+    private static partial void LogToolAlwaysAvailable(ILogger logger, string toolId);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Tool '{ToolId}' detected via binary '{Binary}'")]
+    private static partial void LogToolDetectedViaBinary(ILogger logger, string toolId, string binary);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Tool '{ToolId}' detected via command '{Command}'")]
+    private static partial void LogToolDetectedViaCommand(ILogger logger, string toolId, string command);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Tool '{ToolId}' not found")]
+    private static partial void LogToolNotFound(ILogger logger, string toolId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to start probe process for '{Binary}'")]
+    private static partial void LogProbeProcessFailed(ILogger logger, string binary);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Probe failed for binary '{Binary}'")]
+    private static partial void LogProbeFailed(ILogger logger, string binary, Exception ex);
 }

@@ -199,7 +199,7 @@ public static class FleetEndpoints
         group.MapGet("/available-tools", async (ToolDetector detector, CancellationToken ct) =>
         {
             var tools = await detector.DetectAsync(ct);
-            return Results.Ok(new { tools });
+            return Results.Ok(new AvailableToolsResponse(tools));
         })
         .WithName("GetAvailableTools");
 
@@ -228,4 +228,7 @@ public static class FleetEndpoints
         return parts.Length > 1 ? parts[1] : string.Empty;
     }
 }
+
+internal sealed record AvailableToolsResponse(IReadOnlyList<ResolvedTool> Tools);
+
 #pragma warning restore IL2026
