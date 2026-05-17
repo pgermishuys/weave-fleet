@@ -715,6 +715,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
           v-for="link in smartLinkPRs"
           :key="link.id"
           :link="link"
+          :session-id="sessionId"
           @dismiss="handleDismissSmartLink"
         />
       </div>
@@ -730,6 +731,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
           v-for="link in smartLinkIssues"
           :key="link.id"
           :link="link"
+          :session-id="sessionId"
           @dismiss="handleDismissSmartLink"
         />
       </div>
