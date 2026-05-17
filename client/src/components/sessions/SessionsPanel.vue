@@ -680,9 +680,9 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
 .panel-search__icon {
   position: absolute;
   top: 50%;
-  left: 10px;
-  width: 14px;
-  height: 14px;
+  left: 8px;
+  width: 12px;
+  height: 12px;
   color: var(--muted);
   transform: translateY(-50%);
 }
@@ -692,7 +692,8 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-btn);
-  padding: 7px 10px 7px 30px;
+  padding: 5px 8px 5px 28px;
+  font-size: 12px;
   color: var(--text);
   outline: none;
 }
