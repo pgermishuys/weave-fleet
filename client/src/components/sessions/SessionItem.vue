@@ -39,7 +39,7 @@ import { sessionCache } from "@/lib/session-cache";
 import { dispatchSessionRemoved } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
 import SessionOriginBadge from "@/components/SessionOriginBadge.vue";
-import OpenToolContextSubmenu from "@/components/sessions-v1/OpenToolContextSubmenu.vue";
+import OpenToolContextSubmenu from "@/components/sessions/OpenToolContextSubmenu.vue";
 import ConfirmDeleteSessionDialog from "./ConfirmDeleteSessionDialog.vue";
 
 interface Props {

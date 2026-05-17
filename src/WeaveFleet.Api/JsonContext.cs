@@ -162,8 +162,6 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(AvailableToolsResponse))]
 [JsonSerializable(typeof(WeaveFleet.Application.Services.ResolvedTool))]
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Services.ResolvedTool>))]
-// Sessions V1
-[JsonSerializable(typeof(CreateSessionV1ApiRequest))]
 // Telemetry
 [JsonSerializable(typeof(UiActionRequest))]
 // Credentials

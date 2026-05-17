@@ -36,10 +36,4 @@ public sealed class Session
     public string? SelectedProviderId { get; set; }
     /// <inheritdoc cref="SelectedProviderId" />
     public string? SelectedModelId { get; set; }
-
-    /// <summary>
-    /// Discriminates between session views: <c>"v1"</c> (workspace-grouped) or <c>"v2"</c> (project-grouped).
-    /// All sessions default to <c>"v2"</c>.
-    /// </summary>
-    public string ViewMode { get; set; } = "v2";
 }

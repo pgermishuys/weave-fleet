@@ -8,7 +8,6 @@ import BoardRightPanel from "@/components/board/BoardRightPanel.vue";
 import CenterContent from "@/components/layout/CenterContent.vue";
 import ContextPanel from "@/components/layout/ContextPanel.vue";
 import IconRail from "@/components/layout/IconRail.vue";
-import SessionsV1RightPanel from "@/components/sessions-v1/SessionsV1RightPanel.vue";
 import SessionsV2RightPanel from "@/components/sessions/SessionsV2RightPanel.vue";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useCommands } from "@/composables/use-commands";
@@ -43,10 +42,6 @@ const isSettingsRoute = computed(() => pathname.value.startsWith("/settings"));
 
 const showSessionsV2Panel = computed(() =>
   !isSettingsRoute.value && (activeRail.value === "sessions" || activeRail.value === "analytics"),
-);
-
-const showSessionsV1Panel = computed(() =>
-  !isSettingsRoute.value && activeRail.value === "sessions-v1",
 );
 
 const showBoardPanel = computed(() =>
@@ -138,7 +133,6 @@ function onTouchEnd(e: TouchEvent): void {
       </CenterContent>
 
       <SessionsV2RightPanel v-if="showSessionsV2Panel" />
-      <SessionsV1RightPanel v-else-if="showSessionsV1Panel" />
       <BoardRightPanel v-else-if="showBoardPanel" />
     </div>
 

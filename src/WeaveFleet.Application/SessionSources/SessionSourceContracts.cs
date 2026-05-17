@@ -19,7 +19,6 @@ public static class SessionSourceActions
 public static class SessionSourceProviderIds
 {
     public const string Local = "builtin.local";
-    public const string Managed = "builtin.managed";
     public const string Repository = "builtin.repository";
     public const string GitHub = "builtin.github";
 }
@@ -27,7 +26,6 @@ public static class SessionSourceProviderIds
 public static class SessionSourceTypeNames
 {
     public const string Directory = "directory";
-    public const string ManagedWorkspace = "managed-workspace";
     public const string Repository = "repository";
     public const string ExternalDocument = "external-document";
     public const string GitHubIssue = "github-issue";
@@ -136,21 +134,6 @@ public static class SessionSourceCatalog
         ProducesContext: false,
         RequiresConfirmation: false);
 
-    public static SessionSourceDescriptor ManagedWorkspaceStartSession { get; } = new(
-        new SessionSourceKey
-        {
-            ProviderId = SessionSourceProviderIds.Managed,
-            SourceType = SessionSourceTypeNames.ManagedWorkspace,
-            ActionId = SessionSourceActions.StartSession,
-            ContractVersion = 1
-        },
-        "Managed workspace",
-        SessionSourceKinds.Workspace,
-        [],
-        ProducesWorkspace: true,
-        ProducesContext: false,
-        RequiresConfirmation: false);
-
     public static SessionSourceDescriptor ExternalDocumentAddToSession { get; } = new(
         new SessionSourceKey
         {
@@ -172,7 +155,6 @@ public static class SessionSourceCatalog
     public static IReadOnlyList<SessionSourceDescriptor> CoreDescriptors { get; } =
     [
         DirectoryStartSession,
-        ManagedWorkspaceStartSession,
         RepositoryStartSession,
         ExternalDocumentAddToSession
     ];

@@ -11,16 +11,12 @@ public interface ISessionRepository
     Task<Session?> GetByHarnessIdAsync(string harnessSessionId);
     Task<IReadOnlyList<Session>> ListAsync(int limit = 100, int offset = 0, IReadOnlyList<string>? statuses = null, string? projectId = null);
     Task<IReadOnlyList<Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses);
-    Task<IReadOnlyList<Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses, string viewMode);
     Task DeleteByProjectIdAsync(string projectId);
     Task<int> CountAsync(IReadOnlyList<string>? statuses = null);
     Task<int> CountAsync(IReadOnlyList<string>? statuses, IReadOnlyList<string>? retentionStatuses);
-    Task<int> CountAsync(IReadOnlyList<string>? statuses, IReadOnlyList<string>? retentionStatuses, string viewMode);
     Task<(int Active, int Idle)> GetStatusCountsAsync();
-    Task<(int Active, int Idle)> GetStatusCountsAsync(string viewMode);
     Task<IReadOnlyList<Session>> ListActiveAsync();
     Task<IReadOnlyList<Session>> ListActiveAsync(IReadOnlyList<string>? retentionStatuses);
-    Task<IReadOnlyList<Session>> ListActiveAsync(IReadOnlyList<string>? retentionStatuses, string viewMode);
     Task UpdateStatusAsync(string id, string status, string? stoppedAt = null);
     Task UpdateStatusAsync(IDbConnection connection, IDbTransaction? transaction, string id, string status, string? stoppedAt);
     Task ArchiveAsync(string id, string archivedAt);

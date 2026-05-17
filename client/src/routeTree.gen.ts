@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as SessionsV1RouteImport } from './routes/sessions-v1'
 import { Route as RepositoriesRouteImport } from './routes/repositories'
 import { Route as QueueRouteImport } from './routes/queue'
 import { Route as PipelinesRouteImport } from './routes/pipelines'
@@ -23,7 +22,6 @@ import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as GithubIndexRouteImport } from './routes/github.index'
 import { Route as SessionsIdRouteImport } from './routes/sessions.$id'
-import { Route as SessionsV1IdRouteImport } from './routes/sessions-v1_.$id'
 import { Route as SettingsPluginsPluginIdRouteImport } from './routes/settings_.plugins.$pluginId'
 import { Route as GithubOwnerRepoRouteImport } from './routes/github.$owner.$repo'
 import { Route as GithubOwnerRepoIndexRouteImport } from './routes/github.$owner.$repo.index'
@@ -43,11 +41,6 @@ const TemplatesRoute = TemplatesRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SessionsV1Route = SessionsV1RouteImport.update({
-  id: '/sessions-v1',
-  path: '/sessions-v1',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RepositoriesRoute = RepositoriesRouteImport.update({
@@ -100,11 +93,6 @@ const SessionsIdRoute = SessionsIdRouteImport.update({
   path: '/sessions/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SessionsV1IdRoute = SessionsV1IdRouteImport.update({
-  id: '/sessions-v1_/$id',
-  path: '/sessions-v1/$id',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SettingsPluginsPluginIdRoute = SettingsPluginsPluginIdRouteImport.update({
   id: '/settings_/plugins/$pluginId',
   path: '/settings/plugins/$pluginId',
@@ -142,11 +130,9 @@ export interface FileRoutesByFullPath {
   '/pipelines': typeof PipelinesRoute
   '/queue': typeof QueueRoute
   '/repositories': typeof RepositoriesRoute
-  '/sessions-v1': typeof SessionsV1Route
   '/settings': typeof SettingsRoute
   '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
-  '/sessions-v1/$id': typeof SessionsV1IdRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/github/': typeof GithubIndexRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
@@ -163,11 +149,9 @@ export interface FileRoutesByTo {
   '/pipelines': typeof PipelinesRoute
   '/queue': typeof QueueRoute
   '/repositories': typeof RepositoriesRoute
-  '/sessions-v1': typeof SessionsV1Route
   '/settings': typeof SettingsRoute
   '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
-  '/sessions-v1/$id': typeof SessionsV1IdRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/github': typeof GithubIndexRoute
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
@@ -185,11 +169,9 @@ export interface FileRoutesById {
   '/pipelines': typeof PipelinesRoute
   '/queue': typeof QueueRoute
   '/repositories': typeof RepositoriesRoute
-  '/sessions-v1': typeof SessionsV1Route
   '/settings': typeof SettingsRoute
   '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
-  '/sessions-v1_/$id': typeof SessionsV1IdRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/github/': typeof GithubIndexRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
@@ -209,11 +191,9 @@ export interface FileRouteTypes {
     | '/pipelines'
     | '/queue'
     | '/repositories'
-    | '/sessions-v1'
     | '/settings'
     | '/templates'
     | '/welcome'
-    | '/sessions-v1/$id'
     | '/sessions/$id'
     | '/github/'
     | '/github/$owner/$repo'
@@ -230,11 +210,9 @@ export interface FileRouteTypes {
     | '/pipelines'
     | '/queue'
     | '/repositories'
-    | '/sessions-v1'
     | '/settings'
     | '/templates'
     | '/welcome'
-    | '/sessions-v1/$id'
     | '/sessions/$id'
     | '/github'
     | '/settings/plugins/$pluginId'
@@ -251,11 +229,9 @@ export interface FileRouteTypes {
     | '/pipelines'
     | '/queue'
     | '/repositories'
-    | '/sessions-v1'
     | '/settings'
     | '/templates'
     | '/welcome'
-    | '/sessions-v1_/$id'
     | '/sessions/$id'
     | '/github/'
     | '/github/$owner/$repo'
@@ -274,11 +250,9 @@ export interface RootRouteChildren {
   PipelinesRoute: typeof PipelinesRoute
   QueueRoute: typeof QueueRoute
   RepositoriesRoute: typeof RepositoriesRoute
-  SessionsV1Route: typeof SessionsV1Route
   SettingsRoute: typeof SettingsRoute
   TemplatesRoute: typeof TemplatesRoute
   WelcomeRoute: typeof WelcomeRoute
-  SessionsV1IdRoute: typeof SessionsV1IdRoute
   SessionsIdRoute: typeof SessionsIdRoute
   SettingsPluginsPluginIdRoute: typeof SettingsPluginsPluginIdRoute
 }
@@ -304,13 +278,6 @@ declare module '@tanstack/vue-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sessions-v1': {
-      id: '/sessions-v1'
-      path: '/sessions-v1'
-      fullPath: '/sessions-v1'
-      preLoaderRoute: typeof SessionsV1RouteImport
       parentRoute: typeof rootRouteImport
     }
     '/repositories': {
@@ -381,13 +348,6 @@ declare module '@tanstack/vue-router' {
       path: '/sessions/$id'
       fullPath: '/sessions/$id'
       preLoaderRoute: typeof SessionsIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sessions-v1_/$id': {
-      id: '/sessions-v1_/$id'
-      path: '/sessions-v1/$id'
-      fullPath: '/sessions-v1/$id'
-      preLoaderRoute: typeof SessionsV1IdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings_/plugins/$pluginId': {
@@ -466,11 +426,9 @@ const rootRouteChildren: RootRouteChildren = {
   PipelinesRoute: PipelinesRoute,
   QueueRoute: QueueRoute,
   RepositoriesRoute: RepositoriesRoute,
-  SessionsV1Route: SessionsV1Route,
   SettingsRoute: SettingsRoute,
   TemplatesRoute: TemplatesRoute,
   WelcomeRoute: WelcomeRoute,
-  SessionsV1IdRoute: SessionsV1IdRoute,
   SessionsIdRoute: SessionsIdRoute,
   SettingsPluginsPluginIdRoute: SettingsPluginsPluginIdRoute,
 }

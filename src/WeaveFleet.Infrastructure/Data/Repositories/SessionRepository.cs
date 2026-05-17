@@ -29,11 +29,11 @@ public sealed class SessionRepository(
             INSERT INTO sessions (id, workspace_id, instance_id, project_id, opencode_session_id, title,
                 status, directory, created_at, stopped_at, parent_session_id, activity_status,
                 lifecycle_status, retention_status, archived_at, is_hidden, total_tokens, total_cost,
-                harness_type, harness_resume_token, user_id, view_mode)
+                harness_type, harness_resume_token, user_id)
             SELECT @Id, @WorkspaceId, @InstanceId, @ProjectId, @OpencodeSessionId, @Title,
                 @Status, @Directory, @CreatedAt, @StoppedAt, @ParentSessionId, @ActivityStatus,
                 @LifecycleStatus, @RetentionStatus, @ArchivedAt, @IsHidden, @TotalTokens, @TotalCost,
-                @HarnessType, @HarnessResumeToken, @UserId, @ViewMode
+                @HarnessType, @HarnessResumeToken, @UserId
             FROM workspaces workspace_row
             WHERE workspace_row.id = @WorkspaceId
               AND workspace_row.user_id = @UserId
@@ -69,7 +69,6 @@ public sealed class SessionRepository(
                 cmd.AddParameter("HarnessType", session.HarnessType);
                 cmd.AddParameter("HarnessResumeToken", session.HarnessResumeToken);
                 cmd.AddParameter("UserId", insertUserId);
-                cmd.AddParameter("ViewMode", session.ViewMode);
             },
             transaction);
     }
@@ -149,50 +148,6 @@ public sealed class SessionRepository(
         return list;
     }
 
-    public async Task<IReadOnlyList<Session>> ListAsync(
-        int limit,
-        int offset,
-        IReadOnlyList<string>? statuses,
-        string? projectId,
-        IReadOnlyList<string>? retentionStatuses,
-        string viewMode)
-    {
-        using var conn = connectionFactory.CreateConnection();
-        var dbConn = (DbConnection)conn;
-        await using var cmd = dbConn.CreateCommand();
-
-        var sql = new StringBuilder("SELECT * FROM sessions WHERE user_id = @UserId AND parent_session_id IS NULL AND view_mode = @ViewMode");
-        cmd.AddParameter("UserId", userContext.UserId);
-        cmd.AddParameter("ViewMode", viewMode);
-        cmd.AddParameter("Limit", limit);
-        cmd.AddParameter("Offset", offset);
-
-        if (statuses is { Count: > 0 })
-        {
-            sql.Append(" AND status ");
-            SqlInExpander.AppendInClause(sql, cmd, "Status", statuses);
-        }
-        if (projectId is not null)
-        {
-            sql.Append(" AND project_id = @ProjectId");
-            cmd.AddParameter("ProjectId", projectId);
-        }
-        if (retentionStatuses is { Count: > 0 })
-        {
-            sql.Append(" AND retention_status ");
-            SqlInExpander.AppendInClause(sql, cmd, "RetentionStatus", retentionStatuses);
-        }
-
-        sql.Append(" ORDER BY created_at DESC LIMIT @Limit OFFSET @Offset");
-
-        cmd.CommandText = sql.ToString();
-        await using var reader = await cmd.ExecuteReaderAsync();
-        var list = new List<Session>();
-        while (await reader.ReadAsync())
-            list.Add(ReadSession(reader));
-        return list;
-    }
-
     public async Task DeleteByProjectIdAsync(string projectId)
     {
         using var conn = connectionFactory.CreateConnection();
@@ -235,65 +190,24 @@ public sealed class SessionRepository(
         return (int)(long)(result ?? 0L);
     }
 
-    public async Task<int> CountAsync(
-        IReadOnlyList<string>? statuses,
-        IReadOnlyList<string>? retentionStatuses,
-        string viewMode)
-    {
-        using var conn = connectionFactory.CreateConnection();
-        var dbConn = (DbConnection)conn;
-        await using var cmd = dbConn.CreateCommand();
-
-        var sql = new StringBuilder("SELECT COUNT(*) FROM sessions WHERE user_id = @UserId AND view_mode = @ViewMode");
-        cmd.AddParameter("UserId", userContext.UserId);
-        cmd.AddParameter("ViewMode", viewMode);
-
-        if (statuses is { Count: > 0 })
-        {
-            sql.Append(" AND status ");
-            SqlInExpander.AppendInClause(sql, cmd, "Status", statuses);
-        }
-        if (retentionStatuses is { Count: > 0 })
-        {
-            sql.Append(" AND retention_status ");
-            SqlInExpander.AppendInClause(sql, cmd, "RetentionStatus", retentionStatuses);
-        }
-
-        cmd.CommandText = sql.ToString();
-        var result = await cmd.ExecuteScalarAsync();
-        return (int)(long)(result ?? 0L);
-    }
-
     public async Task<(int Active, int Idle)> GetStatusCountsAsync()
     {
         using var conn = connectionFactory.CreateConnection();
-        return await GetStatusCountsInternalAsync(conn, viewMode: null);
+        return await GetStatusCountsInternalAsync(conn);
     }
 
-    public async Task<(int Active, int Idle)> GetStatusCountsAsync(string viewMode)
+    private async Task<(int Active, int Idle)> GetStatusCountsInternalAsync(IDbConnection conn)
     {
-        using var conn = connectionFactory.CreateConnection();
-        return await GetStatusCountsInternalAsync(conn, viewMode);
-    }
-
-    private async Task<(int Active, int Idle)> GetStatusCountsInternalAsync(IDbConnection conn, string? viewMode)
-    {
-        var whereClause = viewMode is not null
-            ? "WHERE status = 'active' AND user_id = @UserId AND view_mode = @ViewMode"
-            : "WHERE status = 'active' AND user_id = @UserId";
-
         var rows = await conn.QueryAsync(
-            $"""
+            """
             SELECT activity_status, COUNT(*) as count
             FROM sessions
-            {whereClause}
+            WHERE status = 'active' AND user_id = @UserId
             GROUP BY activity_status
             """,
             cmd =>
             {
                 cmd.AddParameter("UserId", userContext.UserId);
-                if (viewMode is not null)
-                    cmd.AddParameter("ViewMode", viewMode);
             },
             r => (
                 ActivityStatus: r.IsDBNull(r.GetOrdinal("activity_status")) ? null : r.GetString(r.GetOrdinal("activity_status")),
@@ -324,32 +238,6 @@ public sealed class SessionRepository(
 
         var sql = new StringBuilder("SELECT * FROM sessions WHERE status = 'active' AND user_id = @UserId");
         cmd.AddParameter("UserId", userContext.UserId);
-
-        if (retentionStatuses is { Count: > 0 })
-        {
-            sql.Append(" AND retention_status ");
-            SqlInExpander.AppendInClause(sql, cmd, "RetentionStatus", retentionStatuses);
-        }
-
-        sql.Append(" ORDER BY created_at DESC");
-
-        cmd.CommandText = sql.ToString();
-        await using var reader = await cmd.ExecuteReaderAsync();
-        var list = new List<Session>();
-        while (await reader.ReadAsync())
-            list.Add(ReadSession(reader));
-        return list;
-    }
-
-    public async Task<IReadOnlyList<Session>> ListActiveAsync(IReadOnlyList<string>? retentionStatuses, string viewMode)
-    {
-        using var conn = connectionFactory.CreateConnection();
-        var dbConn = (DbConnection)conn;
-        await using var cmd = dbConn.CreateCommand();
-
-        var sql = new StringBuilder("SELECT * FROM sessions WHERE status = 'active' AND user_id = @UserId AND view_mode = @ViewMode");
-        cmd.AddParameter("UserId", userContext.UserId);
-        cmd.AddParameter("ViewMode", viewMode);
 
         if (retentionStatuses is { Count: > 0 })
         {
@@ -695,6 +583,5 @@ public sealed class SessionRepository(
         UserId = r.GetString(r.GetOrdinal("user_id")),
         SelectedProviderId = r.GetNullableString(r.GetOrdinal("selected_provider_id")),
         SelectedModelId = r.GetNullableString(r.GetOrdinal("selected_model_id")),
-        ViewMode = r.GetString(r.GetOrdinal("view_mode")),
     };
 }

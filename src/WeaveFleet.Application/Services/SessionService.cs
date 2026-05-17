@@ -20,15 +20,6 @@ public sealed class SessionService(
         IReadOnlyList<string>? statuses = null,
         string? projectId = null,
         string? retentionStatus = null)
-        => await ListSessionsAsync(limit, offset, statuses, projectId, retentionStatus, "v2");
-
-    public async Task<Result<IReadOnlyList<Session>>> ListSessionsAsync(
-        int limit,
-        int offset,
-        IReadOnlyList<string>? statuses,
-        string? projectId,
-        string? retentionStatus,
-        string viewMode)
     {
         IReadOnlyList<string>? retentionStatuses = retentionStatus switch
         {
@@ -37,7 +28,7 @@ public sealed class SessionService(
             _ => [retentionStatus]
         };
 
-        var sessions = await sessionRepository.ListAsync(limit, offset, statuses, projectId, retentionStatuses, viewMode);
+        var sessions = await sessionRepository.ListAsync(limit, offset, statuses, projectId, retentionStatuses);
 
         return Result.Success(sessions);
     }

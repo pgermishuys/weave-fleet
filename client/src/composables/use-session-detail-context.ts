@@ -1,15 +1,11 @@
 /**
  * Provide/inject contract for the session detail panel.
- *
- * This file is intentionally version-agnostic — it defines the minimum interface
- * that both V1 and V2 session action composables satisfy, so that
- * `SessionDetailPanel` can be driven by either without importing from either.
  */
 import { type ComputedRef, type InjectionKey, type ShallowRef, inject, provide } from "vue";
 import type { ResumeSessionResponse, SessionListItem } from "@/lib/api-types";
 
 // ---------------------------------------------------------------------------
-// Action composable interfaces (duck-typed — matched by both V1 and V2)
+// Action composable interfaces
 // ---------------------------------------------------------------------------
 
 export interface SessionAbortActions {
@@ -61,23 +57,22 @@ export interface SessionUnarchiveActions {
 
 export interface SessionDetailContext {
   /**
-   * Base path for session API calls, e.g. "/api/sessions" or "/api/sessions-v1".
+   * Base path for session API calls, e.g. "/api/sessions".
    */
   apiBasePath: string;
 
   /**
-   * Route id used when navigating after a resume, e.g. "/sessions/$id" or
-   * "/sessions-v1/$id".
+   * Route id used when navigating after a resume, e.g. "/sessions/$id".
    */
   sessionRoutePath: string;
 
   /**
-   * Whether the Fork action is available. V1 has no fork endpoint.
+   * Whether the Fork action is available.
    */
   supportsFork: boolean;
 
   /**
-   * Whether the Archive/Unarchive actions are available. V1 has no archive capability.
+   * Whether the Archive/Unarchive actions are available.
    */
   supportsArchive: boolean;
 
@@ -116,7 +111,7 @@ export function useSessionDetailContext(): SessionDetailContext {
   if (!ctx) {
     throw new Error(
       "useSessionDetailContext() was called outside a component that provides SessionDetailContext. "
-      + "Make sure a parent renders SessionsV2RightPanel or SessionsV1RightPanel.",
+      + "Make sure a parent renders SessionsV2RightPanel.",
     );
   }
 

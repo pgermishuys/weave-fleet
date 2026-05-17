@@ -76,9 +76,8 @@ public sealed class SessionOrchestratorBuilder
 
         var instanceService = new InstanceService(InstanceRepository, SessionRepository, _userContext);
         var sessionSourceResolutionService = new SessionSourceResolutionService([
-            new LocalDirectorySessionSourceProvider(workspaceRootService),
-            new ManagedWorkspaceSessionSourceProvider(_options)
-        ], _options);
+            new LocalDirectorySessionSourceProvider(workspaceRootService)
+        ]);
 
         var delegationService = new DelegationService(DelegationRepository, EventBroadcaster, _userContext);
 
