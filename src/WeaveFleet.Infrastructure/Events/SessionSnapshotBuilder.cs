@@ -263,7 +263,7 @@ public sealed class SessionSnapshotBuilder(
                 ModelId = message.ModelId,
                 Time = new MessageEventTime
                 {
-                    Created = ParseUnixTimeMilliseconds(message.Timestamp),
+                    Created = ParseUnixTimeMilliseconds(message.CreatedAt),
                     Completed = completedAt,
                 },
                 Cost = totalCost > 0 ? totalCost : null,

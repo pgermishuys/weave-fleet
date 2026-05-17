@@ -164,7 +164,11 @@ public sealed class MessagePersistenceService
                 persisted.SessionId,
                 message.Agent,
                 message.ModelId,
-                new CommittedMessageTime(message.Timestamp.ToUnixTimeMilliseconds())),
+                new CommittedMessageTime(
+                    DateTimeOffset.Parse(
+                        persisted.CreatedAt,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.RoundtripKind).ToUnixTimeMilliseconds())),
             parts),
             ApplicationJsonContext.Default.CommittedMessage);
     }
