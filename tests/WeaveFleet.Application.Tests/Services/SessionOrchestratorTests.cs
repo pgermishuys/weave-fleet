@@ -1064,6 +1064,7 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
             _builder.CredentialStore,
             userContext,
             options,
+            _builder.SmartLinkRepository,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance,
             sessionActivityWriteService: null);
     }
