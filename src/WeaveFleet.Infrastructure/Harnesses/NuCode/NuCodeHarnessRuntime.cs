@@ -5,6 +5,7 @@ using global::NuCode.Tools;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Harnesses.NuCode;
 
@@ -38,19 +39,45 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
     public string HarnessType => "nucode";
 
     /// <inheritdoc />
-    public Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
+    public async Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
     {
-        // NuCode is in-process — always available.
-        return Task.FromResult(new HarnessAvailability(true, null));
+        using var scope = _scopeFactory.CreateScope();
+        var prefs = scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>();
+        var enabled = await prefs.GetAsync(NuCodePreferenceKeys.Enabled).ConfigureAwait(false);
+
+        if (!string.Equals(enabled, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return new HarnessAvailability(false,
+                "NuCode is not enabled. Enable it in Settings → NuCode.");
+        }
+
+        return new HarnessAvailability(true, null);
     }
 
     /// <inheritdoc />
-    public Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
+    public async Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
     {
-        var requirements = ResolveRequirements(context.ModelId);
+        // Read provider/model from preferences; fall back to inference from modelId
+        using var scope = _scopeFactory.CreateScope();
+        var prefs = scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>();
+
+        var prefProvider = await prefs.GetAsync(NuCodePreferenceKeys.Provider).ConfigureAwait(false);
+        var prefModelId = await prefs.GetAsync(NuCodePreferenceKeys.ModelId).ConfigureAwait(false);
+        var prefBaseUrl = await prefs.GetAsync(NuCodePreferenceKeys.BaseUrl).ConfigureAwait(false);
+
+        // Resolve provider: preference wins, then context modelId inference, then default
+        var effectiveProvider = !string.IsNullOrWhiteSpace(prefProvider)
+            ? prefProvider
+            : (!string.IsNullOrEmpty(context.ModelId) ? InferProvider(context.ModelId) : "copilot");
+
+        // Resolve modelId: preference wins, then context modelId
+        var effectiveModelId = !string.IsNullOrWhiteSpace(prefModelId)
+            ? prefModelId
+            : (context.ModelId ?? "claude-sonnet-4-20250514");
+
+        var requirements = ResolveRequirements(effectiveProvider);
 
         var errors = new List<RuntimePreparationError>();
-        string? resolvedProvider = null;
         string? resolvedApiKey = null;
         string? resolvedGitHubToken = null;
 
@@ -70,33 +97,26 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
             }
             else
             {
-                resolvedProvider = requirement.ProviderName;
                 if (requirement.IsCopilot)
-                {
                     resolvedGitHubToken = match.EncryptedValue;
-                }
                 else
-                {
                     resolvedApiKey = match.EncryptedValue;
-                }
             }
         }
 
         if (errors.Count > 0)
         {
-            return Task.FromResult<RuntimePreparation>(new RuntimePreparation.NotReady(errors));
+            return new RuntimePreparation.NotReady(errors);
         }
 
-        var modelId = context.ModelId ?? "claude-sonnet-4-20250514";
-        var provider = resolvedProvider ?? "anthropic";
-
         var artifacts = new NuCodeLaunchArtifacts(
-            Provider: provider,
-            ModelId: modelId,
+            Provider: effectiveProvider,
+            ModelId: effectiveModelId,
             ApiKey: resolvedApiKey ?? "",
-            GitHubToken: resolvedGitHubToken);
+            GitHubToken: resolvedGitHubToken,
+            BaseUrl: string.IsNullOrWhiteSpace(prefBaseUrl) ? null : prefBaseUrl);
 
-        return Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(artifacts));
+        return new RuntimePreparation.Ready(artifacts);
     }
 
     /// <inheritdoc />
@@ -129,7 +149,8 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
         nuCodeServices.AddSingleton<IQuestionService, DenyAllQuestionService>();
 
         // Build the IChatClient from credentials
-        var chatClient = ChatClientFactory.Create(artifacts.Provider, artifacts.ModelId, apiKeyOrToken);
+        var chatClient = ChatClientFactory.Create(
+            artifacts.Provider, artifacts.ModelId, apiKeyOrToken, artifacts.BaseUrl);
         nuCodeServices.AddSingleton(chatClient);
 
         var nuCodeProvider = nuCodeServices.BuildServiceProvider();
@@ -163,8 +184,6 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
     /// <inheritdoc />
     public Task<IHarnessSession> ResumeAsync(HarnessResumeOptions options, CancellationToken ct)
     {
-        // For now, resume creates a fresh session (NuCode sessions are ephemeral in-memory by default).
-        // TODO: Implement proper resume using NuCode's SQLite session store.
         var spawnOptions = new HarnessSpawnOptions
         {
             SessionId = options.SessionId,
@@ -178,10 +197,8 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
         return SpawnAsync(spawnOptions, ct);
     }
 
-    private static IReadOnlyList<CredentialRequirement> ResolveRequirements(string? modelId)
+    private static IReadOnlyList<CredentialRequirement> ResolveRequirements(string provider)
     {
-        var provider = string.IsNullOrEmpty(modelId) ? "copilot" : InferProvider(modelId);
-
         return provider.ToLowerInvariant() switch
         {
             "copilot" => [new CredentialRequirement(
@@ -205,6 +222,13 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
                 IsCopilot: false,
                 UserFacingMessage: "An OpenAI API key is required to use this model.",
                 Guidance: "Add an API key in Settings → Credentials")],
+            "custom" => [new CredentialRequirement(
+                ProviderName: "custom",
+                Namespace: "custom",
+                Kind: "api-key",
+                IsCopilot: false,
+                UserFacingMessage: "An API key is required for the custom endpoint (leave empty for local models).",
+                Guidance: "Add an API key in Settings → Credentials, or leave empty for local models like Ollama")],
             _ => [new CredentialRequirement(
                 ProviderName: "copilot",
                 Namespace: "github",
@@ -215,7 +239,7 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
         };
     }
 
-    private static string InferProvider(string modelId)
+    internal static string InferProvider(string modelId)
     {
         // Explicit prefix: "copilot/claude-sonnet-4-20250514"
         if (modelId.Contains('/'))
@@ -225,13 +249,13 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
 
         // Infer from model name
         if (modelId.StartsWith("claude", StringComparison.OrdinalIgnoreCase))
-            return "anthropic"; // Bare claude-* models default to direct Anthropic API
+            return "anthropic";
         if (modelId.StartsWith("gpt", StringComparison.OrdinalIgnoreCase) ||
             modelId.StartsWith("o1", StringComparison.OrdinalIgnoreCase) ||
             modelId.StartsWith("o3", StringComparison.OrdinalIgnoreCase) ||
             modelId.StartsWith("o4", StringComparison.OrdinalIgnoreCase))
-            return "openai"; // Bare GPT/o-series default to direct OpenAI API
-        return "copilot"; // Default to Copilot
+            return "openai";
+        return "copilot";
     }
 
     private sealed record CredentialRequirement(

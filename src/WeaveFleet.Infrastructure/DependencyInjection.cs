@@ -225,6 +225,7 @@ public static class DependencyInjection
         services.AddSingleton<IHarness>(sp => sp.GetRequiredService<NuCodeHarness>());
         services.AddSingleton<NuCodeHarnessRuntime>();
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<NuCodeHarnessRuntime>());
+        services.AddScoped<INuCodeConnectionTester, NuCodeConnectionTester>();
 
         return services;
     }
