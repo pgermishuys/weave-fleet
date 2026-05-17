@@ -73,7 +73,7 @@ public static class DependencyInjection
 
         // Credential storage — user-scoped repositories and application services
         services.AddScoped<IUserPreferenceRepository, DapperUserPreferenceRepository>();
-        services.AddScoped<IUserCredentialRepository, DapperUserCredentialRepository>();
+        services.AddScoped<IUserCredentialRepository, UserCredentialRepository>();
         services.AddScoped<ICredentialStore, CredentialStore>();
         services.AddScoped<ICredentialProtector, DataProtectionCredentialProtector>();
 
