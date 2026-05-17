@@ -81,6 +81,7 @@ public sealed class NuCodeHarnessRuntimeTests
     public async Task prepare_runtime_uses_provider_and_model_from_preferences()
     {
         var prefs = new InMemoryUserPreferenceRepository();
+        prefs.Seed("nucode.enabled", "true");
         prefs.Seed("nucode.provider", "anthropic");
         prefs.Seed("nucode.modelId", "claude-opus-4-20250514");
 
@@ -116,6 +117,7 @@ public sealed class NuCodeHarnessRuntimeTests
     public async Task prepare_runtime_includes_base_url_from_preferences()
     {
         var prefs = new InMemoryUserPreferenceRepository();
+        prefs.Seed("nucode.enabled", "true");
         prefs.Seed("nucode.provider", "openai");
         prefs.Seed("nucode.modelId", "gpt-4o");
         prefs.Seed("nucode.baseUrl", "http://localhost:11434/v1");
@@ -147,9 +149,31 @@ public sealed class NuCodeHarnessRuntimeTests
     }
 
     [Fact]
+    public async Task prepare_runtime_returns_not_ready_when_nucode_disabled()
+    {
+        var prefs = new InMemoryUserPreferenceRepository();
+        // nucode.enabled not set — disabled by default
+
+        var runtime = CreateRuntime(prefs);
+
+        var context = new RuntimePreparationContext
+        {
+            UserId = "user-1",
+            WorkingDirectory = "/tmp",
+            UserCredentials = [],
+        };
+
+        var result = await runtime.PrepareRuntimeAsync(context, CancellationToken.None);
+
+        var notReady = result.ShouldBeOfType<RuntimePreparation.NotReady>();
+        notReady.Errors.ShouldContain(e => e.Code == "NuCodeDisabled");
+    }
+
+    [Fact]
     public async Task prepare_runtime_returns_not_ready_when_credential_missing()
     {
         var prefs = new InMemoryUserPreferenceRepository();
+        prefs.Seed("nucode.enabled", "true");
         prefs.Seed("nucode.provider", "anthropic");
         prefs.Seed("nucode.modelId", "claude-sonnet-4-20250514");
 

@@ -61,6 +61,19 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
         using var scope = _scopeFactory.CreateScope();
         var prefs = scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>();
 
+        // Guard: NuCode must be explicitly enabled
+        var enabled = await prefs.GetAsync(NuCodePreferenceKeys.Enabled).ConfigureAwait(false);
+        if (!string.Equals(enabled, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return new RuntimePreparation.NotReady(
+            [
+                new RuntimePreparationError(
+                    Code: "NuCodeDisabled",
+                    Message: "NuCode is not enabled.",
+                    Guidance: "Enable it in Settings → NuCode.")
+            ]);
+        }
+
         var prefProvider = await prefs.GetAsync(NuCodePreferenceKeys.Provider).ConfigureAwait(false);
         var prefModelId = await prefs.GetAsync(NuCodePreferenceKeys.ModelId).ConfigureAwait(false);
         var prefBaseUrl = await prefs.GetAsync(NuCodePreferenceKeys.BaseUrl).ConfigureAwait(false);
