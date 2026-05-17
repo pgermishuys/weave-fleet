@@ -1,19 +1,13 @@
 using System.Text.Json;
-using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Common;
 
 namespace WeaveFleet.Application.Services;
 
-public sealed class SessionSourceResolutionService(IEnumerable<ISessionSourceProvider> providers, FleetOptions options)
+public sealed class SessionSourceResolutionService(IEnumerable<ISessionSourceProvider> providers)
 {
     private readonly Dictionary<string, ISessionSourceProvider> _providers = providers
         .ToDictionary(provider => provider.ProviderId, StringComparer.Ordinal);
-
-    public SessionSourceResolutionService(IEnumerable<ISessionSourceProvider> providers)
-        : this(providers, new FleetOptions())
-    {
-    }
 
     public Task<Result<ResolvedSessionSource>> ResolveCreateRequestAsync(CreateSessionRequest request, CancellationToken cancellationToken)
     {
@@ -80,17 +74,8 @@ public sealed class SessionSourceResolutionService(IEnumerable<ISessionSourcePro
         return selection;
     }
 
-    private Result<SessionSourceSelection> TranslateLegacyRequest(CreateSessionRequest request)
+    private static Result<SessionSourceSelection> TranslateLegacyRequest(CreateSessionRequest request)
     {
-        if (request.Source is null && options.Cloud.Enabled && string.IsNullOrWhiteSpace(request.Directory))
-        {
-            return new SessionSourceSelection
-            {
-                Key = SessionSourceCatalog.ManagedWorkspaceStartSession.Key,
-                Input = JsonDocument.Parse("{}").RootElement.Clone()
-            };
-        }
-
         if (string.IsNullOrWhiteSpace(request.Directory))
             return FleetError.ValidationError(
                 "SessionSource.Selection",

@@ -93,21 +93,6 @@ public sealed class InMemorySessionRepository : ISessionRepository
         return Task.FromResult(result);
     }
 
-    public Task<IReadOnlyList<Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses, string viewMode)
-    {
-        ListAsyncCalls.Add((limit, offset, statuses, projectId, retentionStatuses));
-        var query = _store.Values.AsEnumerable().Where(s => s.ViewMode == viewMode);
-        if (statuses is { Count: > 0 })
-            query = query.Where(s => statuses.Contains(s.Status));
-        if (projectId is not null)
-            query = query.Where(s => s.ProjectId == projectId);
-        if (retentionStatuses is { Count: > 0 })
-            query = query.Where(s => retentionStatuses.Contains(s.RetentionStatus));
-        query = query.Where(s => s.ParentSessionId is null);
-        IReadOnlyList<Session> result = [.. query.Skip(offset).Take(limit)];
-        return Task.FromResult(result);
-    }
-
     public Task DeleteByProjectIdAsync(string projectId)
     {
         var ids = _store.Values.Where(s => s.ProjectId == projectId).Select(s => s.Id).ToList();
@@ -134,28 +119,10 @@ public sealed class InMemorySessionRepository : ISessionRepository
         return Task.FromResult(query.Count());
     }
 
-    public Task<int> CountAsync(IReadOnlyList<string>? statuses, IReadOnlyList<string>? retentionStatuses, string viewMode)
-    {
-        var query = _store.Values.AsEnumerable().Where(s => s.ViewMode == viewMode);
-        if (statuses is { Count: > 0 })
-            query = query.Where(s => statuses.Contains(s.Status));
-        if (retentionStatuses is { Count: > 0 })
-            query = query.Where(s => retentionStatuses.Contains(s.RetentionStatus));
-        return Task.FromResult(query.Count());
-    }
-
     public Task<(int Active, int Idle)> GetStatusCountsAsync()
     {
         var active = _store.Values.Count(s => s.Status == "active");
         var idle = _store.Values.Count(s => s.Status == "idle");
-        return Task.FromResult((active, idle));
-    }
-
-    public Task<(int Active, int Idle)> GetStatusCountsAsync(string viewMode)
-    {
-        var query = _store.Values.Where(s => s.ViewMode == viewMode);
-        var active = query.Count(s => s.Status == "active");
-        var idle = query.Count(s => s.Status == "idle");
         return Task.FromResult((active, idle));
     }
 
@@ -168,15 +135,6 @@ public sealed class InMemorySessionRepository : ISessionRepository
     public Task<IReadOnlyList<Session>> ListActiveAsync(IReadOnlyList<string>? retentionStatuses)
     {
         var query = _store.Values.Where(s => s.Status == "active");
-        if (retentionStatuses is { Count: > 0 })
-            query = query.Where(s => retentionStatuses.Contains(s.RetentionStatus));
-        IReadOnlyList<Session> result = [.. query];
-        return Task.FromResult(result);
-    }
-
-    public Task<IReadOnlyList<Session>> ListActiveAsync(IReadOnlyList<string>? retentionStatuses, string viewMode)
-    {
-        var query = _store.Values.Where(s => s.Status == "active" && s.ViewMode == viewMode);
         if (retentionStatuses is { Count: > 0 })
             query = query.Where(s => retentionStatuses.Contains(s.RetentionStatus));
         IReadOnlyList<Session> result = [.. query];

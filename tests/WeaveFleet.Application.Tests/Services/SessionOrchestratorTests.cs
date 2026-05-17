@@ -189,38 +189,6 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task CreateSessionAsync_InCloudModeWithoutDirectory_CreatesManagedWorkspaceSession()
-    {
-        using var workspaceRoot = new TempDirectory();
-        var builder = new SessionOrchestratorBuilder()
-            .WithUserContext(new TestUserContext("user-1"))
-            .WithOptions(new FleetOptions
-            {
-                Cloud = new CloudOptions { Enabled = true, WorkspaceRoot = workspaceRoot.Path }
-            });
-        builder.WorkspaceRootRepository.Seed(
-            new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") }
-        );
-        var runtime = builder.RegisterHarness("opencode", "OpenCode");
-        runtime.DefaultSession = new FakeHarnessSession("inst-1");
-        builder.ProjectRepository.Seed(new Project
-        {
-            Id = "scratch-1", Name = "Scratch", Type = "scratch", Position = 0,
-            CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01"
-        });
-        var sut = builder.Build();
-
-        var result = await sut.CreateSessionAsync(new CreateSessionRequest());
-
-        result.IsSuccess.ShouldBeTrue();
-        builder.SessionRepository.InsertedSessions
-            .ShouldContain(s => s.Directory.StartsWith(workspaceRoot.Path, StringComparison.OrdinalIgnoreCase));
-        builder.SessionSourceUsageRepository.All
-            .ShouldContain(u => u.ProviderId == SessionSourceProviderIds.Managed &&
-                                u.SourceType == SessionSourceTypeNames.ManagedWorkspace);
-    }
-
-    [Fact]
     public async Task PreviewAddSourceToSessionAsync_WhenSourceResolves_ReturnsEnvelope()
     {
         var sessionId = "session-1";
@@ -1073,9 +1041,8 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         var instanceService = new InstanceService(_builder.InstanceRepository, _builder.SessionRepository, userContext);
         var sessionSourceResolutionService = new SessionSourceResolutionService([
             new LocalDirectorySessionSourceProvider(workspaceRootService),
-            new ManagedWorkspaceSessionSourceProvider(options),
             .. additionalProviders
-        ], options);
+        ]);
         var delegationService = new DelegationService(_builder.DelegationRepository, _builder.EventBroadcaster, userContext);
 
         return new SessionOrchestrator(

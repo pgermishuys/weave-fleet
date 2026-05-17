@@ -6,7 +6,6 @@ import AppearanceSection from "@/components/settings/AppearanceSection.vue";
 import ConfigOverviewSection from "@/components/settings/ConfigOverviewSection.vue";
 import SystemSection from "@/components/settings/SystemSection.vue";
 import CredentialsSection from "@/components/settings/CredentialsSection.vue";
-import SessionsViewSetting from "@/components/settings/SessionsViewSetting.vue";
 import SkillsSection from "@/components/settings/SkillsSection.vue";
 import WorkspaceSection from "@/components/settings/WorkspaceSection.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
@@ -61,7 +60,6 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
       v-else-if="activeSection === 'appearance'"
     >
       <AppearanceSection />
-      <SessionsViewSetting />
     </template>
 
     <SkillsSection v-else-if="activeSection === 'skills'" />

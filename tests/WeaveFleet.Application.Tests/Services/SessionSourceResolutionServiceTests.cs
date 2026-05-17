@@ -21,37 +21,7 @@ public sealed class SessionSourceResolutionServiceTests
 
         _sut = new SessionSourceResolutionService([
             new LocalDirectorySessionSourceProvider(new WorkspaceRootService(_workspaceRootRepository, _userContext))
-        ], new WeaveFleet.Application.Configuration.FleetOptions());
-    }
-
-    [Fact]
-    public async Task ResolveCreateRequestAsync_InCloudModeWithoutDirectory_ReturnsManagedWorkspaceSelection()
-    {
-        var sut = new SessionSourceResolutionService([
-            new LocalDirectorySessionSourceProvider(new WorkspaceRootService(_workspaceRootRepository, _userContext)),
-            new ManagedWorkspaceSessionSourceProvider(new WeaveFleet.Application.Configuration.FleetOptions
-            {
-                Cloud = new WeaveFleet.Application.Configuration.CloudOptions
-                {
-                    Enabled = true,
-                    WorkspaceRoot = Path.GetTempPath()
-                }
-            })
-        ], new WeaveFleet.Application.Configuration.FleetOptions
-        {
-            Cloud = new WeaveFleet.Application.Configuration.CloudOptions
-            {
-                Enabled = true,
-                WorkspaceRoot = Path.GetTempPath()
-            }
-        });
-
-        var result = await sut.ResolveCreateRequestAsync(new CreateSessionRequest(), CancellationToken.None);
-
-        result.IsSuccess.ShouldBeTrue();
-        result.Value.Descriptor.Key.ProviderId.ShouldBe(SessionSourceProviderIds.Managed);
-        result.Value.Input.WorkspaceIntent.ShouldNotBeNull();
-        result.Value.Input.WorkspaceIntent.IsolationStrategy.ShouldBe("managed");
+        ]);
     }
 
     private static bool CanCreateDirectorySymlink()

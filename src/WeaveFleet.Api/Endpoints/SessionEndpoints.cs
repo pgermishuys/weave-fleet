@@ -480,7 +480,7 @@ public static class SessionEndpoints
     }
 
     /// <summary>
-    /// Shared helper accessible by <see cref="SessionV1Endpoints"/> (no origin enrichment).
+    /// Shared helper (no origin enrichment).
     /// </summary>
     internal static SessionListResponse ToListResponseNoOrigin(
         Session s,

@@ -87,7 +87,6 @@ public static class DependencyInjection
         services.AddScoped<UserService>();
         services.AddScoped<IBoardSyncService, BoardSyncService>();
         services.AddScoped<ISessionSourceProvider, LocalDirectorySessionSourceProvider>();
-        services.AddSingleton<ISessionSourceProvider, ManagedWorkspaceSessionSourceProvider>();
         services.AddSingleton<ISessionSourceProvider, RepositorySessionSourceProvider>();
         services.AddScoped<ISessionSourceProvider, GitHubSessionSourceProvider>();
         services.AddScoped<SystemUserContext>();
