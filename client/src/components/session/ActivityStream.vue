@@ -83,6 +83,7 @@ const { messages: sessionMessages, delegations, forceIdle } = useSessionEventsSw
 useSmartLinks({
   sessionId: computed(() => props.sessionId),
   messages: sessionMessages,
+  originUrl: computed(() => selectedSession.value?.origin?.resourceUrl ?? null),
 });
 const { sentPrompts } = useSentPrompts(props.sessionId);
 const streamRef = ref<HTMLElement | null>(null);
