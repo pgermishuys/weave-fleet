@@ -117,6 +117,10 @@ export function useDirectoryBrowser(enabled = false, options: UseDirectoryBrowse
     const requestRefreshToken = ++refreshToken;
     const delay = search.value.trim() ? 200 : 0;
 
+    if (delay === 0) {
+      return fetchDirectory(requestRefreshToken);
+    }
+
     return new Promise((resolve) => {
       timeoutId = setTimeout(() => {
         void fetchDirectory(requestRefreshToken).finally(resolve);
@@ -128,12 +132,14 @@ export function useDirectoryBrowser(enabled = false, options: UseDirectoryBrowse
     hasActivated.value = true;
     currentPath.value = path;
     search.value = "";
+    isLoading.value = true;
     void queueFetch();
   }
 
   function goUp(): void {
     currentPath.value = parentPath.value;
     search.value = "";
+    isLoading.value = true;
     void queueFetch();
   }
 

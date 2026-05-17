@@ -239,10 +239,17 @@ function handleSearchUpdate(value: string | number): void {
         </p>
 
         <p
+          v-else-if="filteredEntries.length === 0 && browser.currentPath.value === null"
+          class="px-2 py-4 text-sm text-muted"
+        >
+          No roots available. Configure workspace roots in settings.
+        </p>
+
+        <p
           v-else-if="filteredEntries.length === 0"
           class="px-2 py-4 text-sm text-muted"
         >
-          No directories found.
+          No subdirectories found.
         </p>
       </div>
 
