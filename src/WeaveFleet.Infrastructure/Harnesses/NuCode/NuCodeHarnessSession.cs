@@ -245,6 +245,14 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc />
+    public Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
+        => throw new NotSupportedException("The NuCode harness does not support the question tool.");
+
+    /// <inheritdoc />
+    public Task RejectQuestionAsync(string requestId, CancellationToken ct)
+        => throw new NotSupportedException("The NuCode harness does not support the question tool.");
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
     {
         using var scope = _nuCodeProvider.CreateScope();
