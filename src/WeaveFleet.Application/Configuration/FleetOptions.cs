@@ -211,6 +211,9 @@ public sealed class UpdateOptions
 
     /// <summary>Check for updates automatically on startup. Default: true.</summary>
     public bool CheckOnStartup { get; set; } = true;
+
+    /// <summary>Interval in hours between periodic update checks while running. Default: 4. Set to 0 to disable.</summary>
+    public int CheckIntervalHours { get; set; } = 4;
 }
 
 /// <summary>Configuration for the Claude Code harness.</summary>

@@ -11,8 +11,9 @@ using WeaveFleet.Application.Services;
 namespace WeaveFleet.Infrastructure.Services;
 
 /// <summary>
-/// Hosted service that checks for a newer Fleet release on startup and, when found,
-/// triggers a background download via <see cref="UpdateDownloadService"/>.
+/// Hosted service that checks for a newer Fleet release on startup and periodically
+/// thereafter, triggering a background download via <see cref="UpdateDownloadService"/>
+/// when a newer version is found.
 /// Only runs when Fleet is running from an installed package layout (VERSION file present).
 /// </summary>
 public sealed partial class UpdateCheckService(
@@ -26,12 +27,6 @@ public sealed partial class UpdateCheckService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!options.Update.CheckOnStartup)
-        {
-            LogCheckDisabled();
-            return;
-        }
-
         // Only run update checks from an installed layout (VERSION file exists next to the binary).
         if (!IsInstalledLayout())
         {
@@ -42,7 +37,30 @@ public sealed partial class UpdateCheckService(
         // Short delay so the app finishes startup before hitting the network.
         await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
 
-        await CheckForUpdateAsync(stoppingToken).ConfigureAwait(false);
+        if (options.Update.CheckOnStartup)
+        {
+            await CheckForUpdateAsync(stoppingToken).ConfigureAwait(false);
+        }
+        else
+        {
+            LogCheckDisabled();
+        }
+
+        // Periodic checks while running.
+        var intervalHours = options.Update.CheckIntervalHours;
+        if (intervalHours <= 0)
+        {
+            return;
+        }
+
+        var interval = TimeSpan.FromHours(intervalHours);
+        LogScheduleEnabled(intervalHours);
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            await Task.Delay(interval, stoppingToken).ConfigureAwait(false);
+            await CheckForUpdateAsync(stoppingToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>Performs an update check and triggers download if a newer version is found.</summary>
@@ -199,6 +217,9 @@ public sealed partial class UpdateCheckService(
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Unexpected error during update check.")]
     private partial void LogCheckException(Exception ex);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Periodic update checks enabled every {Hours} hour(s).")]
+    private partial void LogScheduleEnabled(int hours);
 }
 
 // ── AOT-safe JSON deserialization for GitHub release response ─────────────────
