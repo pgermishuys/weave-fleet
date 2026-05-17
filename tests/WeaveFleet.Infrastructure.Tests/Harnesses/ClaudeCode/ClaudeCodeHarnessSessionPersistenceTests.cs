@@ -42,6 +42,7 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
             messageRepo,
             delegationRepo,
             sessionRepo,
+            new InMemorySmartLinkRepository(),
             outboxRepo,
             outboxDispatcher);
 
@@ -76,6 +77,7 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
             messageRepo,
             delegationRepo,
             sessionRepo,
+            new InMemorySmartLinkRepository(),
             outboxRepo,
             outboxDispatcher);
 

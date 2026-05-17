@@ -1,3 +1,4 @@
+using System.Data;
 using System.Data.Common;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
@@ -130,15 +131,45 @@ public sealed class SmartLinkRepository : ISmartLinkRepository
         using var conn = _connectionFactory.CreateConnection();
         return await conn.QueryAsync(
             """
-            SELECT *
-            FROM smart_links
-            WHERE resource_type = 'pull_request'
-              AND is_terminal = 0
-              AND is_dismissed = 0
-            ORDER BY created_at ASC
+            SELECT sl.*
+            FROM smart_links sl
+            INNER JOIN sessions s ON s.id = sl.session_id
+            WHERE sl.resource_type = 'pull_request'
+              AND sl.is_terminal = 0
+              AND sl.is_dismissed = 0
+              AND s.lifecycle_status = 'running'
+            ORDER BY sl.created_at ASC
             """,
             cmd => { },
             MapSmartLink,
+            ct);
+    }
+
+    public async Task DeleteBySessionIdAsync(string sessionId)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        await DeleteBySessionIdAsync(conn, null, sessionId);
+    }
+
+    public async Task DeleteBySessionIdAsync(IDbConnection connection, IDbTransaction? transaction, string sessionId)
+    {
+        await connection.ExecuteNonQueryAsync(
+            "DELETE FROM smart_links WHERE session_id = @SessionId",
+            cmd => cmd.AddParameter("SessionId", sessionId),
+            transaction);
+    }
+
+    public async Task DeleteOrphanedAsync(CancellationToken ct)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            """
+            DELETE FROM smart_links
+            WHERE NOT EXISTS (
+                SELECT 1 FROM sessions s WHERE s.id = smart_links.session_id
+            )
+            """,
+            cmd => { },
             ct);
     }
 

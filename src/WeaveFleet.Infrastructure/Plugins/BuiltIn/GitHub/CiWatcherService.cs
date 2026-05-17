@@ -27,6 +27,18 @@ internal sealed partial class CiWatcherService(
     {
         LogStarted();
 
+        // Reconcile: remove smart links whose sessions no longer exist
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<ISmartLinkRepository>();
+            await repository.DeleteOrphanedAsync(stoppingToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            LogPollError(ex);
+        }
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try

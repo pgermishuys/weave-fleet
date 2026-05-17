@@ -38,6 +38,7 @@ public sealed partial class SessionOrchestrator(
     ICredentialStore credentialStore,
     IUserContext userContext,
     FleetOptions options,
+    ISmartLinkRepository smartLinkRepository,
     ILogger<SessionOrchestrator> logger,
     SessionActivityWriteService? sessionActivityWriteService = null)
 {
@@ -72,6 +73,7 @@ public sealed partial class SessionOrchestrator(
         ICredentialStore credentialStore,
         IUserContext userContext,
         FleetOptions options,
+        ISmartLinkRepository smartLinkRepository,
         ILogger<SessionOrchestrator> logger)
         : this(
             workspaceService,
@@ -92,6 +94,7 @@ public sealed partial class SessionOrchestrator(
             credentialStore,
             userContext,
             options,
+            smartLinkRepository,
             logger,
             sessionActivityWriteService: null)
     {
@@ -1120,6 +1123,7 @@ public sealed partial class SessionOrchestrator(
             if (parentDelegations.Count > 0)
                 await delegationRepository.DeleteByParentSessionIdAsync(id);
 
+            await smartLinkRepository.DeleteBySessionIdAsync(id);
             await sessionRepository.DeleteAsync(id);
             await eventBroadcaster.BroadcastAsync("sessions", "session_deleted",
                 JsonSerializer.SerializeToElement(new SessionDeletedOutboxPayload(id), ApplicationJsonContext.Default.SessionDeletedOutboxPayload),
@@ -1182,6 +1186,7 @@ public sealed partial class SessionOrchestrator(
                         }]
                         : [],
                     DelegationDeletesByParentSessionId = parentDelegations.Count > 0 ? [id] : [],
+                    SmartLinkDeletesBySessionId = [id],
                     SessionDeletes = [id],
                     OutboxMessages = outboxMessages
                 },
