@@ -321,10 +321,155 @@ internal static class GitHubEndpointMappings
                 return;
             }
 
-            var status = await proxy.FetchAsync(token, $"repos/{owner}/{repo}/commits/{sha}/check-runs", ct: ct).ConfigureAwait(false);
-            await Results.Ok(status).ExecuteAsync(httpContext).ConfigureAwait(false);
+            var checkRunsNode = await proxy.FetchAsync(token, $"repos/{owner}/{repo}/commits/{sha}/check-runs", ct: ct).ConfigureAwait(false);
+            var ciStatusResponse = BuildCiStatusResponse(sha, checkRunsNode);
+            await Results.Ok(ciStatusResponse).ExecuteAsync(httpContext).ConfigureAwait(false);
         })
         .WithName("GitHubGetPRStatus");
+
+        group.MapGet("/repos/{owner}/{repo}/pulls/{number:int}/review-threads", async (HttpContext httpContext) =>
+        {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var owner = GetRouteString(httpContext, "owner");
+            var repo = GetRouteString(httpContext, "repo");
+            var number = GetRouteInt(httpContext, "number");
+
+            var token = await gitHubService.GetTokenAsync(userContext.UserId, ct).ConfigureAwait(false);
+            if (token is null)
+            {
+                await Results.Unauthorized().ExecuteAsync(httpContext).ConfigureAwait(false);
+                return;
+            }
+
+            var variables = new JsonObject
+            {
+                ["owner"] = JsonValue.Create(owner),
+                ["repo"] = JsonValue.Create(repo),
+                ["number"] = JsonValue.Create(number),
+            };
+
+            var graphqlResponse = await proxy.PostGraphQLAsync(token, ReviewThreadsQuery, variables, ct).ConfigureAwait(false);
+            var response = BuildReviewThreadsResponse(graphqlResponse);
+            await Results.Ok(response).ExecuteAsync(httpContext).ConfigureAwait(false);
+        })
+        .WithName("GitHubGetPRReviewThreads");
+
+        group.MapPost("/repos/{owner}/{repo}/pulls/{number:int}/comments/{commentId:int}/replies", async (HttpContext httpContext) =>
+        {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var owner = GetRouteString(httpContext, "owner");
+            var repo = GetRouteString(httpContext, "repo");
+            var number = GetRouteInt(httpContext, "number");
+            var commentId = GetRouteInt(httpContext, "commentId");
+
+            var request = await httpContext.Request.ReadFromJsonAsync<GitHubReplyToCommentRequest>(ct).ConfigureAwait(false);
+            if (request is null || string.IsNullOrWhiteSpace(request.Body))
+            {
+                await Results.BadRequest(new GitHubEndpointError("body is required.")).ExecuteAsync(httpContext).ConfigureAwait(false);
+                return;
+            }
+
+            var token = await gitHubService.GetTokenAsync(userContext.UserId, ct).ConfigureAwait(false);
+            if (token is null)
+            {
+                await Results.Unauthorized().ExecuteAsync(httpContext).ConfigureAwait(false);
+                return;
+            }
+
+            var body = new JsonObject
+            {
+                ["body"] = JsonValue.Create(request.Body),
+                ["in_reply_to"] = JsonValue.Create(commentId),
+            };
+
+            var result = await proxy.FetchAsync(token, $"repos/{owner}/{repo}/pulls/{number}/comments", method: "POST", body: (JsonNode)body, ct: ct).ConfigureAwait(false);
+            if (result is null)
+            {
+                await Results.Problem("Failed to post reply to GitHub.").ExecuteAsync(httpContext).ConfigureAwait(false);
+                return;
+            }
+
+            await Results.Ok(result).ExecuteAsync(httpContext).ConfigureAwait(false);
+        })
+        .WithName("GitHubReplyToComment");
+
+        group.MapPost("/repos/{owner}/{repo}/pulls/{number:int}/threads/{threadNodeId}/resolve", async (HttpContext httpContext) =>
+        {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var threadNodeId = GetRouteString(httpContext, "threadNodeId");
+            if (string.IsNullOrWhiteSpace(threadNodeId))
+            {
+                await Results.BadRequest(new GitHubEndpointError("threadNodeId is required.")).ExecuteAsync(httpContext).ConfigureAwait(false);
+                return;
+            }
+
+            var token = await gitHubService.GetTokenAsync(userContext.UserId, ct).ConfigureAwait(false);
+            if (token is null)
+            {
+                await Results.Unauthorized().ExecuteAsync(httpContext).ConfigureAwait(false);
+                return;
+            }
+
+            var variables = new JsonObject
+            {
+                ["threadId"] = JsonValue.Create(threadNodeId),
+            };
+
+            var result = await proxy.PostGraphQLAsync(token, ResolveThreadMutation, variables, ct).ConfigureAwait(false);
+            var isResolved = result?["data"]?["resolveReviewThread"]?["thread"]?["isResolved"]?.GetValue<bool>() ?? false;
+
+            if (isResolved)
+            {
+                await Results.Ok(new { resolved = true }).ExecuteAsync(httpContext).ConfigureAwait(false);
+            }
+            else
+            {
+                await Results.Problem("Failed to resolve review thread.").ExecuteAsync(httpContext).ConfigureAwait(false);
+            }
+        })
+        .WithName("GitHubResolveThread");
+
+        group.MapGet("/repos/{owner}/{repo}/actions/jobs/{jobId:long}/logs", async (HttpContext httpContext) =>
+        {
+            var gitHubService = httpContext.RequestServices.GetRequiredService<GitHubService>();
+            var proxy = httpContext.RequestServices.GetRequiredService<GitHubApiProxy>();
+            var userContext = httpContext.RequestServices.GetRequiredService<IUserContext>();
+            var ct = httpContext.RequestAborted;
+
+            var owner = GetRouteString(httpContext, "owner");
+            var repo = GetRouteString(httpContext, "repo");
+            var jobId = GetRouteInt64(httpContext, "jobId");
+
+            var token = await gitHubService.GetTokenAsync(userContext.UserId, ct).ConfigureAwait(false);
+            if (token is null)
+            {
+                await Results.Unauthorized().ExecuteAsync(httpContext).ConfigureAwait(false);
+                return;
+            }
+
+            var logs = await proxy.FetchTextAsync(token, $"repos/{owner}/{repo}/actions/jobs/{jobId}/logs", ct).ConfigureAwait(false);
+            if (logs is null)
+            {
+                await Results.NotFound(new GitHubEndpointError("Job logs not found.")).ExecuteAsync(httpContext).ConfigureAwait(false);
+                return;
+            }
+
+            httpContext.Response.ContentType = "text/plain";
+            await httpContext.Response.WriteAsync(logs, ct).ConfigureAwait(false);
+        })
+        .WithName("GitHubGetJobLogs");
 
         group.MapGet("/bookmarks", async (HttpContext httpContext) =>
         {
@@ -428,6 +573,9 @@ internal static class GitHubEndpointMappings
     private static int GetRouteInt(HttpContext httpContext, string key)
         => int.TryParse(httpContext.Request.RouteValues[key]?.ToString(), CultureInfo.InvariantCulture, out var value) ? value : 0;
 
+    private static long GetRouteInt64(HttpContext httpContext, string key)
+        => long.TryParse(httpContext.Request.RouteValues[key]?.ToString(), CultureInfo.InvariantCulture, out var value) ? value : 0L;
+
     private static string? GetQueryString(HttpContext httpContext, string key)
         => httpContext.Request.Query.TryGetValue(key, out var values) ? (string?)values : null;
 
@@ -456,6 +604,127 @@ internal static class GitHubEndpointMappings
             ? Results.Problem("GitHub API request failed.")
             : Results.Ok(result);
         await response.ExecuteAsync(httpContext).ConfigureAwait(false);
+    }
+
+    internal static GitHubCiStatusResponse BuildCiStatusResponse(string headSha, JsonNode? checkRunsNode)
+    {
+        var checkRunsArray = checkRunsNode?["check_runs"] as JsonArray ?? [];
+
+        var checkRuns = checkRunsArray
+            .OfType<JsonObject>()
+            .Select(cr => new GitHubCheckRunDto(
+                cr["id"]?.GetValue<long>() ?? 0,
+                cr["name"]?.GetValue<string>() ?? string.Empty,
+                cr["status"]?.GetValue<string>() ?? string.Empty,
+                cr["conclusion"]?.GetValue<string?>(),
+                cr["html_url"]?.GetValue<string>() ?? string.Empty,
+                cr["app"]?["slug"]?.GetValue<string?>() ?? cr["app"]?["name"]?.GetValue<string?>(),
+                cr["started_at"]?.GetValue<string?>(),
+                cr["completed_at"]?.GetValue<string?>()))
+            .ToArray();
+
+        var ciStatus = ComputeAggregateCiStatus(checkRuns);
+        return new GitHubCiStatusResponse(headSha, ciStatus, checkRuns);
+    }
+
+    private static string ComputeAggregateCiStatus(GitHubCheckRunDto[] checkRuns)
+    {
+        if (checkRuns.Length == 0)
+            return "none";
+
+        if (checkRuns.Any(cr => string.Equals(cr.Conclusion, "failure", StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(cr.Conclusion, "timed_out", StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(cr.Conclusion, "startup_failure", StringComparison.OrdinalIgnoreCase)))
+            return "failure";
+
+        if (checkRuns.Any(cr => string.Equals(cr.Status, "in_progress", StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(cr.Status, "queued", StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(cr.Status, "waiting", StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(cr.Status, "pending", StringComparison.OrdinalIgnoreCase)))
+            return "pending";
+
+        if (checkRuns.All(cr => string.Equals(cr.Conclusion, "success", StringComparison.OrdinalIgnoreCase)
+                              || string.Equals(cr.Conclusion, "skipped", StringComparison.OrdinalIgnoreCase)
+                              || string.Equals(cr.Conclusion, "neutral", StringComparison.OrdinalIgnoreCase)))
+            return "success";
+
+        return "neutral";
+    }
+
+    internal const string ReviewThreadsQuery = """
+        query($owner: String!, $repo: String!, $number: Int!) {
+          repository(owner: $owner, name: $repo) {
+            pullRequest(number: $number) {
+              reviewThreads(first: 100) {
+                nodes {
+                  id
+                  isResolved
+                  isOutdated
+                  path
+                  line
+                  comments(first: 10) {
+                    nodes {
+                      id
+                      databaseId
+                      body
+                      author { login }
+                      createdAt
+                      url
+                      path
+                      line
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """;
+
+    internal const string ResolveThreadMutation = """
+        mutation($threadId: ID!) {
+          resolveReviewThread(input: { threadId: $threadId }) {
+            thread { id isResolved }
+          }
+        }
+        """;
+
+    internal static GitHubReviewThreadsResponse BuildReviewThreadsResponse(JsonNode? graphqlResponse)
+    {
+        var threads = graphqlResponse?["data"]?["repository"]?["pullRequest"]?["reviewThreads"]?["nodes"] as JsonArray;
+        if (threads is null || threads.Count == 0)
+            return new GitHubReviewThreadsResponse(0, []);
+
+        var result = new List<GitHubReviewThreadDto>();
+        var unresolvedCount = 0;
+
+        foreach (var thread in threads.OfType<JsonObject>())
+        {
+            var isResolved = thread["isResolved"]?.GetValue<bool>() ?? false;
+            var isOutdated = thread["isOutdated"]?.GetValue<bool>() ?? false;
+            var threadNodeId = thread["id"]?.GetValue<string>() ?? string.Empty;
+            var path = thread["path"]?.GetValue<string>() ?? string.Empty;
+            var line = thread["line"]?.GetValue<int?>();
+
+            var commentsArray = thread["comments"]?["nodes"] as JsonArray ?? [];
+            var comments = commentsArray
+                .OfType<JsonObject>()
+                .Select(c => new GitHubReviewCommentDto(
+                    c["id"]?.GetValue<string>() ?? string.Empty,
+                    c["databaseId"]?.GetValue<int>() ?? 0,
+                    c["body"]?.GetValue<string>() ?? string.Empty,
+                    c["author"]?["login"]?.GetValue<string>() ?? string.Empty,
+                    c["createdAt"]?.GetValue<string>() ?? string.Empty,
+                    c["url"]?.GetValue<string>() ?? string.Empty))
+                .ToArray();
+
+            if (!isResolved && !isOutdated)
+                unresolvedCount++;
+
+            result.Add(new GitHubReviewThreadDto(threadNodeId, isResolved, isOutdated, path, line, comments));
+        }
+
+        return new GitHubReviewThreadsResponse(unresolvedCount, result.ToArray());
     }
 
     private static string BuildQuery(params (string Key, string? Value)[] pairs)
@@ -507,3 +776,46 @@ public sealed record GitHubConnectionStatusApiResponse(bool Connected);
 
 /// <summary>Error response body for GitHub plugin endpoints.</summary>
 public sealed record GitHubEndpointError(string Error);
+
+/// <summary>Structured CI status response for a PR.</summary>
+public sealed record GitHubCiStatusResponse(
+    string HeadSha,
+    string CiStatus,
+    IReadOnlyList<GitHubCheckRunDto> CheckRuns);
+
+/// <summary>A single check run within a CI status response.</summary>
+public sealed record GitHubCheckRunDto(
+    long Id,
+    string Name,
+    string Status,
+    string? Conclusion,
+    string HtmlUrl,
+    string? WorkflowName,
+    string? StartedAt,
+    string? CompletedAt);
+
+/// <summary>Structured review threads response for a PR.</summary>
+public sealed record GitHubReviewThreadsResponse(
+    int UnresolvedCount,
+    IReadOnlyList<GitHubReviewThreadDto> Threads);
+
+/// <summary>A single review thread within a PR.</summary>
+public sealed record GitHubReviewThreadDto(
+    string ThreadNodeId,
+    bool IsResolved,
+    bool IsOutdated,
+    string Path,
+    int? Line,
+    IReadOnlyList<GitHubReviewCommentDto> Comments);
+
+/// <summary>A single review comment within a thread.</summary>
+public sealed record GitHubReviewCommentDto(
+    string Id,
+    int DatabaseId,
+    string Body,
+    string AuthorLogin,
+    string CreatedAt,
+    string Url);
+
+/// <summary>Request body for replying to a review comment.</summary>
+public sealed record GitHubReplyToCommentRequest(string Body);

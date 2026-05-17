@@ -126,6 +126,8 @@ public static class DependencyInjection
         services.AddScoped<GitHubService>();
         services.AddSingleton<GitHubApiProxy>();
         services.AddBuiltInPlugin<GitHubBackendPlugin>();
+        services.AddHostedService<WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.CiWatcherService>();
+        services.AddHostedService<WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.ReviewCommentWatcherService>();
 
         // InstanceTracker is singleton — holds live in-process handles across requests
         services.AddSingleton<InstanceTracker>();

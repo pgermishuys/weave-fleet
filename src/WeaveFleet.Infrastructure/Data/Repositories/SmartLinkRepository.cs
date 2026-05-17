@@ -125,6 +125,41 @@ public sealed class SmartLinkRepository : ISmartLinkRepository
             });
     }
 
+    public async Task<IReadOnlyList<SmartLink>> ListNonTerminalPrLinksAsync(CancellationToken ct)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        return await conn.QueryAsync(
+            """
+            SELECT *
+            FROM smart_links
+            WHERE resource_type = 'pull_request'
+              AND is_terminal = 0
+              AND is_dismissed = 0
+            ORDER BY created_at ASC
+            """,
+            cmd => { },
+            MapSmartLink,
+            ct);
+    }
+
+    public async Task UpdateMetadataAsync(string id, string metadataJson, CancellationToken ct)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            """
+            UPDATE smart_links
+            SET metadata_json = @MetadataJson, updated_at = @UpdatedAt
+            WHERE id = @Id
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("MetadataJson", metadataJson);
+                cmd.AddParameter("UpdatedAt", DateTime.UtcNow.ToString("O"));
+            },
+            ct);
+    }
+
     private static SmartLink MapSmartLink(DbDataReader r)
     {
         var metadataJsonOrd = r.GetOrdinal("metadata_json");

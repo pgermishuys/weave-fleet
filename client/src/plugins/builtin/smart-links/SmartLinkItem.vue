@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import {
   CircleDot,
   CircleCheck,
@@ -7,9 +7,17 @@ import {
   GitMerge,
   GitPullRequest,
   GitPullRequestClosed,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Minus,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  MessageSquare,
   X,
 } from 'lucide-vue-next'
-import type { SmartLink } from './types'
+import type { SmartLink, CiStatus, CheckRun, ReviewThreadSummary } from './types'
 
 const props = defineProps<{ link: SmartLink }>()
 const emit = defineEmits<{ dismiss: [linkId: string]; refresh: [url: string] }>()
@@ -32,6 +40,8 @@ function onMouseLeave(): void {
 onUnmounted(() => {
   clearTimeout(hoverTimer)
 })
+
+const ciExpanded = ref(false)
 
 const statusIcon = computed(() => {
   if (props.link.resourceType === 'pull_request') {
@@ -75,6 +85,61 @@ const labels = computed<LinkLabel[]>(() => {
 
 const HEX_COLOR_RE = /^[0-9a-fA-F]{3,6}$/
 
+const ciStatus = computed<CiStatus | null>(() => {
+  const meta = props.link.metadata
+  if (props.link.resourceType !== 'pull_request' || !meta?.ci) return null
+  return meta.ci as CiStatus
+})
+
+const ciIcon = computed(() => {
+  const s = ciStatus.value?.ciStatus
+  if (!s || s === 'none') return null
+  if (s === 'success') return CheckCircle2
+  if (s === 'failure') return XCircle
+  if (s === 'pending') return Clock
+  return Minus
+})
+
+const ciIconClass = computed(() => {
+  const s = ciStatus.value?.ciStatus
+  if (!s || s === 'none') return ''
+  if (s === 'success') return 'ci-badge ci-badge--success'
+  if (s === 'failure') return 'ci-badge ci-badge--failure'
+  if (s === 'pending') return 'ci-badge ci-badge--pending'
+  return 'ci-badge ci-badge--neutral'
+})
+
+const ciLabel = computed(() => {
+  const s = ciStatus.value?.ciStatus
+  if (!s || s === 'none') return ''
+  if (s === 'success') return 'CI passed'
+  if (s === 'failure') return 'CI failed'
+  if (s === 'pending') return 'CI running'
+  return 'CI neutral'
+})
+
+const checkRuns = computed<CheckRun[]>(() => ciStatus.value?.checkRuns ?? [])
+
+function checkRunIcon(cr: CheckRun) {
+  if (cr.status !== 'completed') return Clock
+  if (cr.conclusion === 'success') return CheckCircle2
+  if (cr.conclusion === 'failure' || cr.conclusion === 'timed_out' || cr.conclusion === 'startup_failure') return XCircle
+  return Minus
+}
+
+function checkRunIconClass(cr: CheckRun): string {
+  if (cr.status !== 'completed') return 'cr-icon cr-icon--pending'
+  if (cr.conclusion === 'success') return 'cr-icon cr-icon--success'
+  if (cr.conclusion === 'failure' || cr.conclusion === 'timed_out' || cr.conclusion === 'startup_failure') return 'cr-icon cr-icon--failure'
+  return 'cr-icon cr-icon--neutral'
+}
+
+const unresolvedCount = computed(() => {
+  const meta = props.link.metadata
+  if (props.link.resourceType !== 'pull_request' || !meta?.reviewThreads) return 0
+  return (meta.reviewThreads as ReviewThreadSummary).unresolvedCount ?? 0
+})
+
 function getLabelStyle(color: string): { backgroundColor: string; borderColor: string; color: string } {
   const safeColor = HEX_COLOR_RE.test(color) ? color : '888888'
   return {
@@ -99,15 +164,60 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
     />
 
     <div class="smart-link-body">
-      <a
-        class="smart-link-title"
-        :href="link.url"
-        target="_blank"
-        rel="noopener noreferrer"
-        @click.stop
-      >
-        {{ link.title || link.url }}
-      </a>
+      <div class="smart-link-title-row">
+        <a
+          class="smart-link-title"
+          :href="link.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          @click.stop
+        >
+          {{ link.title || link.url }}
+        </a>
+
+        <!-- CI aggregate badge -->
+        <button
+          v-if="ciIcon && checkRuns.length > 0"
+          type="button"
+          class="ci-badge-btn"
+          :aria-label="ciLabel"
+          :title="ciLabel"
+          @click.stop="ciExpanded = !ciExpanded"
+        >
+          <component
+            :is="ciIcon"
+            :class="ciIconClass"
+            :size="13"
+            aria-hidden="true"
+          />
+          <component
+            :is="ciExpanded ? ChevronDown : ChevronRight"
+            class="ci-chevron"
+            :size="10"
+            aria-hidden="true"
+          />
+        </button>
+        <component
+          v-else-if="ciIcon"
+          :is="ciIcon"
+          :class="ciIconClass"
+          :size="13"
+          :aria-label="ciLabel"
+          :title="ciLabel"
+          aria-hidden="false"
+        />
+
+        <!-- Review comment count badge -->
+        <span
+          v-if="unresolvedCount > 0"
+          class="review-badge"
+          :title="`${unresolvedCount} unresolved review comment${unresolvedCount === 1 ? '' : 's'}`"
+        >
+          <MessageSquare :size="12" aria-hidden="true" />
+          <span class="review-badge-count">{{ unresolvedCount }}</span>
+        </span>
+      </div>
+
       <div
         v-if="labels.length > 0"
         class="smart-link-labels"
@@ -121,6 +231,38 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
           {{ label.name }}
         </span>
       </div>
+
+      <!-- Expandable check-run list -->
+      <ul
+        v-if="ciExpanded && checkRuns.length > 0"
+        class="check-run-list"
+        aria-label="CI check runs"
+      >
+        <li
+          v-for="cr in checkRuns"
+          :key="cr.id"
+          class="check-run-item"
+        >
+          <component
+            :is="checkRunIcon(cr)"
+            :class="checkRunIconClass(cr)"
+            :size="11"
+            aria-hidden="true"
+          />
+          <span class="cr-name" :title="cr.name">{{ cr.name }}</span>
+          <a
+            v-if="cr.htmlUrl"
+            :href="cr.htmlUrl"
+            class="cr-link"
+            target="_blank"
+            rel="noopener noreferrer"
+            :aria-label="`Open ${cr.name} on GitHub`"
+            @click.stop
+          >
+            <ExternalLink :size="10" aria-hidden="true" />
+          </a>
+        </li>
+      </ul>
     </div>
 
     <button
@@ -172,8 +314,17 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
   min-width: 0;
 }
 
+.smart-link-title-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
 .smart-link-title {
   display: block;
+  flex: 1;
+  min-width: 0;
   margin: 0;
   font-size: 12px;
   font-weight: 500;
@@ -186,6 +337,65 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
   text-decoration: underline;
 }
 
+/* CI badge */
+.ci-badge {
+  flex-shrink: 0;
+}
+
+.ci-badge--success {
+  color: #22c55e;
+}
+
+.ci-badge--failure {
+  color: #ef4444;
+}
+
+.ci-badge--pending {
+  color: #f59e0b;
+}
+
+.ci-badge--neutral {
+  color: var(--muted);
+}
+
+.ci-badge-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  padding: 1px 2px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ci-badge-btn:hover,
+.ci-badge-btn:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+
+.ci-chevron {
+  color: var(--muted);
+}
+
+/* Review comment badge */
+.review-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.review-badge-count {
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* Labels */
 .smart-link-labels {
   display: flex;
   align-items: center;
@@ -205,6 +415,55 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
   font-weight: 600;
 }
 
+/* Check run list */
+.check-run-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.check-run-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cr-icon {
+  flex-shrink: 0;
+}
+
+.cr-icon--success { color: #22c55e; }
+.cr-icon--failure { color: #ef4444; }
+.cr-icon--pending { color: #f59e0b; }
+.cr-icon--neutral { color: var(--muted); }
+
+.cr-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.cr-link {
+  flex-shrink: 0;
+  color: var(--muted);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.cr-link:hover {
+  color: var(--text);
+}
+
+/* Dismiss button */
 .smart-link-dismiss {
   flex-shrink: 0;
   display: inline-flex;
