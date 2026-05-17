@@ -454,6 +454,125 @@ public sealed class MessagePersistenceTests : E2ETestBase,
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Verifies that user prompt text is persisted at send time and survives
+    /// when the harness SSE stream echoes <c>message.updated</c> for the user
+    /// message but omits <c>message.part.updated</c> (the text part event).
+    /// This reproduces the production bug where OpenCode sometimes drops the
+    /// user text part event, resulting in empty user message bubbles.
+    /// </summary>
+    [Fact]
+    public async Task UserPromptText_PersistedAtSendTime_SurvivesMissingPartEvent()
+    {
+        await WithFailureCapture(async () =>
+        {
+            // Configure a response that echoes message.updated for the user (no parts)
+            // but does NOT emit message.part.updated for the user message.
+            // Only the assistant response has both events.
+            ConfigureScenario(b => b.WithPromptResponse(r => r
+                // User message echo — message.updated only, NO message.part.updated
+                .AddEvent(new HarnessEvent
+                {
+                    Type = "session.status",
+                    SessionId = "_placeholder_",
+                    Timestamp = DateTimeOffset.UtcNow,
+                    Payload = JsonSerializer.SerializeToElement(new
+                    {
+                        sessionId = "_placeholder_",
+                        status = new { type = "busy" },
+                    }),
+                })
+                .AddEvent(new HarnessEvent
+                {
+                    Type = "message.updated",
+                    SessionId = "_placeholder_",
+                    Timestamp = DateTimeOffset.UtcNow,
+                    Payload = JsonSerializer.SerializeToElement(new
+                    {
+                        info = new
+                        {
+                            id = "msg-user-echo-no-parts",
+                            sessionID = "_placeholder_",
+                            role = "user",
+                        },
+                    }),
+                })
+                // NOTE: No message.part.updated for the user message — this is the bug scenario
+                // Assistant response — normal flow with both events
+                .AddEvent(new HarnessEvent
+                {
+                    Type = "message.updated",
+                    SessionId = "_placeholder_",
+                    Timestamp = DateTimeOffset.UtcNow,
+                    Payload = JsonSerializer.SerializeToElement(new
+                    {
+                        info = new
+                        {
+                            id = "msg-assistant-response",
+                            sessionID = "_placeholder_",
+                            role = "assistant",
+                        },
+                    }),
+                }, TimeSpan.FromMilliseconds(50))
+                .AddEvent(new HarnessEvent
+                {
+                    Type = "message.part.updated",
+                    SessionId = "_placeholder_",
+                    Timestamp = DateTimeOffset.UtcNow,
+                    Payload = JsonSerializer.SerializeToElement(new
+                    {
+                        part = new
+                        {
+                            id = "part-assistant-1",
+                            messageID = "msg-assistant-response",
+                            sessionID = "_placeholder_",
+                            type = "text",
+                            text = "Assistant reply to the prompt",
+                        },
+                    }),
+                }, TimeSpan.FromMilliseconds(50))
+                .AddEvent(new HarnessEvent
+                {
+                    Type = "session.idle",
+                    SessionId = "_placeholder_",
+                    Timestamp = DateTimeOffset.UtcNow,
+                    Payload = JsonSerializer.SerializeToElement(new
+                    {
+                        sessionId = "_placeholder_",
+                        status = new { type = "idle" },
+                    }),
+                }, TimeSpan.FromMilliseconds(50))));
+
+            var dashboard = new FleetDashboardPage(Page);
+            await dashboard.GotoAsync();
+
+            var dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+
+            // Send the prompt — the user message text should be persisted at send time
+            await detail.SendPromptAsync("This prompt must survive missing part events");
+
+            // Wait for the assistant response to confirm the full flow completed
+            await detail.WaitForMessageTextAsync("Assistant reply to the prompt", 10_000);
+
+            // Reload the page to force the frontend to load messages from the database.
+            // During the live session, the frontend shows the optimistic prompt which is
+            // cleared on idle. After reload, it fetches persisted messages from the REST API.
+            // This is the critical path: the user message text must come from the DB row
+            // that was persisted at send time, not from the SSE echo (which had no text).
+            await Page.ReloadAsync();
+            await detail.WaitForLoadedAsync();
+
+            // The critical assertion: the user prompt text is visible in the UI
+            // even though the harness never sent message.part.updated for the user message.
+            await detail.WaitForMessageTextAsync("This prompt must survive missing part events", 10_000);
+            await detail.WaitForMessageTextAsync("Assistant reply to the prompt", 10_000);
+        });
+    }
+
     private static async Task PushDurableAssistantMessageAsync(
         TestHarnessSession harness,
         string harnessSessionId,

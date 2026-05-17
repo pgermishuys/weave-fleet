@@ -436,6 +436,14 @@ public sealed class TestHarnessSession : IHarnessSession
                 return false;
 
             var existing = await messageRepo.GetByIdAsync(messageId, _fleetSessionId).ConfigureAwait(false);
+
+            // User messages are persisted at send time (PersistUserPromptAsync) with a
+            // synthetic ID. The echoed message.updated from the harness carries a different
+            // ID and no parts — creating a stub here would produce an empty duplicate.
+            // Skip it; the send-time row already has the text.
+            if (existing is null && role is "user")
+                return false;
+
             var persisted = existing ?? new PersistedMessage
             {
                 Id = messageId,
