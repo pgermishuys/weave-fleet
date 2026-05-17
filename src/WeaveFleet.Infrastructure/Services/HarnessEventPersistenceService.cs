@@ -253,6 +253,14 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
                 // message.part.updated for the same id will create a fresh row defaulting to
                 // role=assistant. ApplyBufferedTextDeltaIfPresent merges any buffered streaming
                 // deltas that arrived ahead of this snapshot.
+                //
+                // Exception: user messages are persisted at send time by the harness session
+                // (with a synthetic ID). The echoed message.updated from OpenCode carries a
+                // different ID and no parts — creating a stub here would produce an empty
+                // duplicate. Skip it; the send-time row already has the text.
+                if (harnessMessage.Role is "user")
+                    return false;
+
                 var stub = ApplyBufferedTextDeltaIfPresent(fleetSessionId, persisted, persisted.Id, persisted.Role, persisted.AgentName);
                 await WriteDurableEventAsync(fleetSessionId, ownerUserId, evt, stub).ConfigureAwait(false);
                 return true;

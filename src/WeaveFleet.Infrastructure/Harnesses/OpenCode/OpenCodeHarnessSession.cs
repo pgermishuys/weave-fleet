@@ -177,6 +177,12 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         };
 
         LogSendPrompt(_logger, InstanceId, null);
+
+        // Persist synthetic user message immediately so the prompt text is never
+        // lost when OpenCode omits the message.part.updated SSE event for user
+        // messages (observed in production — see persist-user-message-at-send-time plan).
+        await PersistUserPromptAsync(text, options?.Agent).ConfigureAwait(false);
+
         await _httpClient.SendPromptAsyncFireAndForget(
             _openCodeSessionId!,
             request,
@@ -206,6 +212,11 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         };
 
         LogSendCommand(_logger, InstanceId, null);
+
+        // Persist synthetic user message for commands (same rationale as SendPromptAsync).
+        var commandPrompt = CommandFormatting.FormatCommandPrompt(options);
+        await PersistUserPromptAsync(commandPrompt, options.Agent).ConfigureAwait(false);
+
         await _httpClient.SendCommandAsync(
             _openCodeSessionId!,
             request,
@@ -622,6 +633,27 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             using var scope = _scopeFactory.CreateScope();
             var repo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
             await repo.UpdateResumeTokenAsync(_fleetSessionId, token).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            LogPersistFailed(_logger, _fleetSessionId, ex);
+        }
+    }
+
+    private async Task PersistUserPromptAsync(string text, string? agentName)
+    {
+        try
+        {
+            using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
+            using var scope = _scopeFactory.CreateScope();
+            var writer = scope.ServiceProvider.GetRequiredService<SessionActivityWriteService>();
+
+            var message = MessagePersistenceService.CreateUserPromptMessage(text, DateTimeOffset.UtcNow, agentName);
+            var persisted = MessagePersistenceService.ToPersistedMessage(_fleetSessionId, message);
+
+            await writer.WriteAsync(
+                new SessionActivityWriteRequest { MessagesToUpsert = [persisted] },
+                CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
