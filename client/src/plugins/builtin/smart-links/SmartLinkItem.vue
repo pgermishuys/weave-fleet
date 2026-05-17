@@ -379,6 +379,7 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
   display: flex;
   align-items: center;
   margin-top: 4px;
+  margin-left: -23px; /* align CI glyph with PR icon (15px icon + 8px gap) */
 }
 
 .ci-badge-btn {
