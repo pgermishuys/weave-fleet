@@ -13,8 +13,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/WeaveFleet.Testing/WeaveFleet.Testing.csproj" />
-    <Project Path="tests/NuCode.Tests.MockLspServer/NuCode.Tests.MockLspServer.csproj" />
-    <Project Path="tests/NuCode.Tests/NuCode.Tests.csproj" />
     <Project Path="tests/WeaveFleet.Api.Tests/WeaveFleet.Api.Tests.csproj" />
     <Project Path="tests/WeaveFleet.Application.Tests/WeaveFleet.Application.Tests.csproj" />
     <Project Path="tests/WeaveFleet.Domain.Tests/WeaveFleet.Domain.Tests.csproj" />
