@@ -618,3 +618,6 @@ internal sealed record OpenCodeQuestionReplyRequest
 {
     [JsonPropertyName("answers")] public required IReadOnlyList<IReadOnlyList<string>> Answers { get; init; }
 }
+
+/// <summary>Request body for POST /question/{requestID}/reject.</summary>
+internal sealed record OpenCodeQuestionRejectRequest;
