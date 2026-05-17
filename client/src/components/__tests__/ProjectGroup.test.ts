@@ -14,7 +14,7 @@ function createProjectGroup() {
     moveUpTargets: [],
     moveDownTargets: [],
     sessionCount: 0,
-    subgroups: [],
+    sessions: [],
   };
 }
 
