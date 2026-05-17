@@ -13,7 +13,7 @@ import { useMessageQueue } from "@/composables/use-message-queue";
 import { useIsMobile } from "@/composables/use-media-query";
 import { useSendCommand } from "@/composables/use-send-command";
 import { useModels } from "@/composables/use-models";
-import { useDraftAttachments, type PendingAttachment } from "@/composables/use-draft-attachments";
+import { useDraftAttachments } from "@/composables/use-draft-attachments";
 import { useSendPrompt } from "@/composables/use-send-prompt";
 import { parseSlashCommand } from "@/lib/slash-command-utils";
 import { trackAction } from "@/lib/track-action";
