@@ -15,20 +15,29 @@ import {
   ChevronRight,
   ExternalLink,
   MessageSquare,
+  LoaderCircle,
   X,
 } from 'lucide-vue-next'
 import type { SmartLink, CiStatus, CheckRun, ReviewThreadSummary } from './types'
+import { refreshSingleLink } from './composables/use-smart-links'
 
-const props = defineProps<{ link: SmartLink }>()
-const emit = defineEmits<{ dismiss: [linkId: string]; refresh: [url: string] }>()
+const props = defineProps<{ link: SmartLink; sessionId: string | null }>()
+const emit = defineEmits<{ dismiss: [linkId: string] }>()
+
+const refreshing = ref(false)
 
 let hoverTimer: ReturnType<typeof setTimeout> | undefined
 
 function onMouseEnter(): void {
   if (props.link.isTerminal || props.link.isDismissed) return
-  hoverTimer = setTimeout(() => {
-    if (props.link.isTerminal || props.link.isDismissed) return
-    emit('refresh', props.link.url)
+  hoverTimer = setTimeout(async () => {
+    if (props.link.isTerminal || props.link.isDismissed || !props.sessionId) return
+    refreshing.value = true
+    try {
+      await refreshSingleLink(props.sessionId, props.link.url)
+    } finally {
+      refreshing.value = false
+    }
   }, 1000)
 }
 
@@ -187,9 +196,15 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
       </div>
 
       <!-- CI aggregate badge -->
-      <div v-if="ciIcon" class="ci-status-row">
+      <div v-if="ciIcon || refreshing" class="ci-status-row">
+        <LoaderCircle
+          v-if="refreshing"
+          class="refreshing-spinner"
+          :size="13"
+          aria-label="Refreshing"
+        />
         <button
-          v-if="checkRuns.length > 0"
+          v-if="checkRuns.length > 0 && !refreshing"
           type="button"
           class="ci-badge-btn"
           :aria-label="ciLabel"
@@ -210,7 +225,7 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
           />
         </button>
         <component
-          v-else
+          v-else-if="ciIcon && !refreshing"
           :is="ciIcon"
           :class="ciIconClass"
           :size="13"
@@ -469,6 +484,17 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
 
 .cr-link:hover {
   color: var(--text);
+}
+
+/* Refreshing spinner */
+.refreshing-spinner {
+  color: var(--muted);
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* Dismiss button */
