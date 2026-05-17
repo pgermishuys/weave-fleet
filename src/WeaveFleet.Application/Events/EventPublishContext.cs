@@ -1,3 +1,5 @@
+using WeaveFleet.Domain.Events;
+
 namespace WeaveFleet.Application.Events;
 
 /// <summary>
@@ -13,4 +15,10 @@ public readonly record struct EventPublishContext(
     string? ProjectId,
     string? UserId,
     string? HarnessType,
-    long Sequence);
+    long Sequence)
+{
+    /// <summary>
+    /// Gets the translated domain event associated with the published raw harness event when one exists.
+    /// </summary>
+    public DomainEvent? DomainEvent { get; init; }
+}

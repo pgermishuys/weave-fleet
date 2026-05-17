@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
@@ -174,6 +175,14 @@ internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(ClaudeCodeTextPartPayload))]
 [JsonSerializable(typeof(ClaudeCodeToolPartPayload))]
 [JsonSerializable(typeof(ClaudeCodeSessionStatusPayload))]
+[JsonSerializable(typeof(MessageLifecyclePayload))]
+[JsonSerializable(typeof(MessagePartUpdatedPayload))]
+[JsonSerializable(typeof(MessagePartDeltaStreamedPayload))]
+[JsonSerializable(typeof(DelegationCreatedPayload))]
+[JsonSerializable(typeof(DelegationUpdatedPayload))]
+[JsonSerializable(typeof(DelegationCompletedPayload))]
+[JsonSerializable(typeof(SessionStartedPayload))]
+[JsonSerializable(typeof(SessionDeletedPayload))]
 [JsonSerializable(typeof(List<JsonElement>))]
 [JsonSerializable(typeof(List<string>))]
 [JsonSerializable(typeof(RepositorySourceInput))]

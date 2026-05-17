@@ -1,3 +1,4 @@
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.EventBus;
@@ -17,4 +18,7 @@ internal sealed record InProcessEnvelope(
     string? UserId,
     string? HarnessType,
     long Sequence,
-    bool IsDurable);
+    bool IsDurable)
+{
+    public DomainEvent? DomainEvent { get; init; }
+}

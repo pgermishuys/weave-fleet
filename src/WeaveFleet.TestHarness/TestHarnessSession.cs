@@ -91,7 +91,7 @@ public sealed class TestHarnessSession : IHarnessSession
         if (_scenario.ThrowOnSendPrompt)
             throw new InvalidOperationException("TestHarness: configured to fail on SendPromptAsync.");
 
-        await PersistUserPromptAsync(text).ConfigureAwait(false);
+        var persistedPromptMessageId = await PersistUserPromptAsync(text).ConfigureAwait(false);
 
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -109,7 +109,7 @@ public sealed class TestHarnessSession : IHarnessSession
                 : [];
 
             // Fire and forget: emit events in background so caller returns immediately
-            _ = Task.Run(() => EmitEventsAsync(ApplyPromptText(events, text), promptToken), promptToken);
+            _ = Task.Run(() => EmitEventsAsync(ApplyPromptText(events, text, persistedPromptMessageId), promptToken), promptToken);
         }
         finally
         {
@@ -256,15 +256,19 @@ public sealed class TestHarnessSession : IHarnessSession
         return evt.Type is "message.part.updated";
     }
 
-    private static List<ScenarioEvent> ApplyPromptText(IReadOnlyList<ScenarioEvent> events, string promptText)
+    private static List<ScenarioEvent> ApplyPromptText(IReadOnlyList<ScenarioEvent> events, string promptText, string? persistedPromptMessageId)
     {
         var updatedEvents = new List<ScenarioEvent>(events.Count);
 
         foreach (var scenarioEvent in events)
         {
-            if (scenarioEvent.Event.Type is not "message.part.updated"
-                || !scenarioEvent.Event.Payload.HasValue
-                || !TryRewritePromptPayload(scenarioEvent.Event.Payload.Value, promptText, out var rewrittenPayload))
+            if (!scenarioEvent.Event.Payload.HasValue
+                || !TryRewritePromptPayload(
+                    scenarioEvent.Event.Type,
+                    scenarioEvent.Event.Payload.Value,
+                    promptText,
+                    persistedPromptMessageId,
+                    out var rewrittenPayload))
             {
                 updatedEvents.Add(scenarioEvent);
                 continue;
@@ -282,9 +286,20 @@ public sealed class TestHarnessSession : IHarnessSession
 
     [UnconditionalSuppressMessage("AOT", "IL2026", Justification = "Test infrastructure only")]
     [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test infrastructure only")]
-    private static bool TryRewritePromptPayload(JsonElement payload, string promptText, out JsonElement rewrittenPayload)
+    private static bool TryRewritePromptPayload(
+        string eventType,
+        JsonElement payload,
+        string promptText,
+        string? persistedPromptMessageId,
+        out JsonElement rewrittenPayload)
     {
         rewrittenPayload = payload;
+
+        if (eventType == "message.updated")
+            return TryRewritePromptMessagePayload(payload, persistedPromptMessageId, out rewrittenPayload);
+
+        if (eventType != "message.part.updated")
+            return false;
 
         if (payload.ValueKind != JsonValueKind.Object
             || !payload.TryGetProperty("part", out var part)
@@ -305,11 +320,46 @@ public sealed class TestHarnessSession : IHarnessSession
             sessionID = sessionId,
             part = new
             {
-                id = part.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.String ? idEl.GetString() : null,
-                sessionID = part.TryGetProperty("sessionID", out var partSessionEl) && partSessionEl.ValueKind == JsonValueKind.String ? partSessionEl.GetString() : sessionId,
-                messageID = part.TryGetProperty("messageID", out var messageIdEl) && messageIdEl.ValueKind == JsonValueKind.String ? messageIdEl.GetString() : null,
                 type = "text",
+                id = persistedPromptMessageId is null
+                    ? part.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.String ? idEl.GetString() : null
+                    : $"{persistedPromptMessageId}-text-0",
+                sessionID = part.TryGetProperty("sessionID", out var partSessionEl) && partSessionEl.ValueKind == JsonValueKind.String ? partSessionEl.GetString() : sessionId,
+                messageID = persistedPromptMessageId
+                    ?? (part.TryGetProperty("messageID", out var messageIdEl) && messageIdEl.ValueKind == JsonValueKind.String ? messageIdEl.GetString() : null),
                 text = promptText,
+            }
+        });
+
+        return true;
+    }
+
+    [UnconditionalSuppressMessage("AOT", "IL2026", Justification = "Test infrastructure only")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test infrastructure only")]
+    private static bool TryRewritePromptMessagePayload(JsonElement payload, string? persistedPromptMessageId, out JsonElement rewrittenPayload)
+    {
+        rewrittenPayload = payload;
+
+        if (string.IsNullOrWhiteSpace(persistedPromptMessageId)
+            || payload.ValueKind != JsonValueKind.Object
+            || !payload.TryGetProperty("info", out var info)
+            || !info.TryGetProperty("role", out var role)
+            || !string.Equals(role.GetString(), "user", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var sessionId = info.TryGetProperty("sessionID", out var sessionEl) && sessionEl.ValueKind == JsonValueKind.String
+            ? sessionEl.GetString()
+            : null;
+
+        rewrittenPayload = JsonSerializer.SerializeToElement(new
+        {
+            info = new
+            {
+                id = persistedPromptMessageId,
+                sessionID = sessionId,
+                role = "user",
             }
         });
 
@@ -338,33 +388,20 @@ public sealed class TestHarnessSession : IHarnessSession
 
     [UnconditionalSuppressMessage("AOT", "IL2026", Justification = "Test infrastructure only")]
     [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test infrastructure only")]
-    private async Task PersistUserPromptAsync(string text)
+    private async Task<string?> PersistUserPromptAsync(string text)
     {
         if (_scopeFactory is null || string.IsNullOrWhiteSpace(_ownerUserId))
-            return;
+            return null;
 
         using var scope = _scopeFactory.CreateScope();
         var writer = scope.ServiceProvider.GetService<SessionActivityWriteService>();
         if (writer is null)
-            return;
+            return null;
 
-        var messageId = Guid.NewGuid().ToString("N");
         var createdAt = DateTimeOffset.UtcNow;
 
-        var partsJson = System.Text.Json.JsonSerializer.Serialize(new object[]
-        {
-            new { type = "text", kind = 0, text }
-        });
-
-        var persisted = new PersistedMessage
-        {
-            Id = messageId,
-            SessionId = _fleetSessionId,
-            Role = "user",
-            PartsJson = partsJson,
-            Timestamp = createdAt.ToString("O"),
-            CreatedAt = createdAt.ToString("O")
-        };
+        var message = MessagePersistenceService.CreateUserPromptMessage(text, createdAt);
+        var persisted = MessagePersistenceService.ToPersistedMessage(_fleetSessionId, message);
 
         await writer.WriteAsync(
             new SessionActivityWriteRequest
@@ -372,6 +409,8 @@ public sealed class TestHarnessSession : IHarnessSession
                 MessagesToUpsert = [persisted],
             },
             CancellationToken.None).ConfigureAwait(false);
+
+        return persisted.Id;
     }
 
     private async Task<bool> TryHandleDurableEventAsync(HarnessEvent evt)

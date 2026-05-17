@@ -4,7 +4,7 @@ import { ArrowUpRight, Bot } from "lucide-vue-next";
 import { useRouter } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
-import { useSessionEvents } from "@/composables/use-session-events";
+import { useSessionEventsSwitch } from "@/composables/use-session-events-switch";
 import { clearSentPrompts, reconcileSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { useSmartLinks } from "@/plugins/builtin/smart-links";
 import type { CommandEventName } from "@/lib/command-events";
@@ -76,7 +76,7 @@ const selectedSession = computed(() => {
 
 const resolvedInstanceId = computed(() => props.instanceId ?? selectedSession.value?.instanceId ?? "");
 
-const { messages: sessionMessages, delegations, forceIdle } = useSessionEvents(
+const { messages: sessionMessages, delegations, forceIdle } = useSessionEventsSwitch(
   computed(() => props.sessionId),
   resolvedInstanceId,
 );

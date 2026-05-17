@@ -1,4 +1,5 @@
 using System.Text.Json;
+using WeaveFleet.Domain.Events;
 
 namespace WeaveFleet.Application.Services;
 
@@ -12,6 +13,12 @@ public sealed record BroadcastEvent(
     /// <summary>
     /// The user ID that owns this event. Subscribers receive only events whose
     /// <see cref="UserId"/> matches their own, or events with a null UserId (system-level).
-    /// Track 3 will extend delivery to session participants.
+     /// Track 3 will extend delivery to session participants.
+     /// </summary>
+    string? UserId = null)
+{
+    /// <summary>
+    /// Gets the translated domain event carried alongside the raw event payload when available.
     /// </summary>
-    string? UserId = null);
+    public DomainEvent? DomainEvent { get; init; }
+}

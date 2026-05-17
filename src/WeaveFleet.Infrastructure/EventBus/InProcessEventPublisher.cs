@@ -76,7 +76,10 @@ internal sealed class InProcessEventPublisher : IEventPublisher
             UserId:      context.UserId,
             HarnessType: context.HarnessType,
             Sequence:    context.Sequence,
-            IsDurable:   true);
+            IsDurable:   true)
+        {
+            DomainEvent = context.DomainEvent
+        };
 
         var sw = Stopwatch.StartNew();
         string result = "ok";
@@ -124,7 +127,10 @@ internal sealed class InProcessEventPublisher : IEventPublisher
             UserId:      context.UserId,
             HarnessType: context.HarnessType,
             Sequence:    context.Sequence,
-            IsDurable:   false);
+            IsDurable:   false)
+        {
+            DomainEvent = context.DomainEvent
+        };
 
         string result = "ok";
         try

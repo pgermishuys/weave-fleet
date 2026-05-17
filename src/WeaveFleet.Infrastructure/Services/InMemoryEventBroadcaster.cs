@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading.Channels;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Events;
 
 namespace WeaveFleet.Infrastructure.Services;
 
@@ -31,10 +32,10 @@ public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
 
     /// <inheritdoc />
     public Task BroadcastAsync(string topic, string type, JsonElement payload)
-        => BroadcastAsync(topic, type, payload, sequenceNumber: null, userId: null, CancellationToken.None);
+        => BroadcastAsync(topic, type, payload, sequenceNumber: null, domainEvent: null, userId: null, CancellationToken.None);
 
     public Task BroadcastAsync(string topic, string type, JsonElement payload, CancellationToken ct)
-        => BroadcastAsync(topic, type, payload, sequenceNumber: null, userId: null, ct);
+        => BroadcastAsync(topic, type, payload, sequenceNumber: null, domainEvent: null, userId: null, ct);
 
     public Task BroadcastAsync(
         string topic,
@@ -42,7 +43,16 @@ public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
         JsonElement payload,
         string? userId,
         CancellationToken ct)
-        => BroadcastAsync(topic, type, payload, sequenceNumber: null, userId, ct);
+        => BroadcastAsync(topic, type, payload, sequenceNumber: null, domainEvent: null, userId, ct);
+
+    public Task BroadcastAsync(
+        string topic,
+        string type,
+        JsonElement payload,
+        DomainEvent? domainEvent,
+        string? userId,
+        CancellationToken ct)
+        => BroadcastAsync(topic, type, payload, sequenceNumber: null, domainEvent, userId, ct);
 
     public Task BroadcastAsync(
         string topic,
@@ -51,8 +61,21 @@ public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
         long? sequenceNumber,
         string? userId,
         CancellationToken ct)
+        => BroadcastAsync(topic, type, payload, sequenceNumber, domainEvent: null, userId, ct);
+
+    public Task BroadcastAsync(
+        string topic,
+        string type,
+        JsonElement payload,
+        long? sequenceNumber,
+        DomainEvent? domainEvent,
+        string? userId,
+        CancellationToken ct)
     {
-        var evt = new BroadcastEvent(topic, type, payload, DateTimeOffset.UtcNow, sequenceNumber, userId);
+        var evt = new BroadcastEvent(topic, type, payload, DateTimeOffset.UtcNow, sequenceNumber, userId)
+        {
+            DomainEvent = domainEvent
+        };
 
         foreach (var sub in _subscriptions.Values)
         {

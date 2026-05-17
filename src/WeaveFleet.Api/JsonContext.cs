@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
@@ -33,6 +34,14 @@ internal sealed record WsSubscribedPayload(string Type, IReadOnlyList<string> To
 
 internal sealed record WsActivityStatusProperties(string SessionId, string ActivityStatus);
 
+internal sealed record WsSnapshotPayload(string Type, string Topic, SessionSnapshot Data);
+
+internal sealed record WsEventV2Payload(string Type, string Topic, DomainEvent Data);
+
+internal sealed record WsHistoryPagePayload(IReadOnlyList<MessageLifecyclePayload> Messages, string? Cursor, bool HasMore);
+
+internal sealed record WsHistoryPayload(string Type, string Topic, WsHistoryPagePayload Data);
+
 internal sealed record ErrorResponse(string Error);
 
 [JsonSerializable(typeof(SseSessionEventPayload))]
@@ -42,6 +51,19 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WsEventPayload))]
 [JsonSerializable(typeof(WsSubscribedPayload))]
 [JsonSerializable(typeof(WsActivityStatusProperties))]
+[JsonSerializable(typeof(WsSnapshotPayload))]
+[JsonSerializable(typeof(WsEventV2Payload))]
+[JsonSerializable(typeof(WsHistoryPagePayload))]
+[JsonSerializable(typeof(WsHistoryPayload))]
+[JsonSerializable(typeof(SessionSnapshot))]
+[JsonSerializable(typeof(DomainEvent))]
+[JsonSerializable(typeof(MessageLifecyclePayload))]
+[JsonSerializable(typeof(MessagePartUpdatedPayload))]
+[JsonSerializable(typeof(MessagePartDeltaStreamedPayload))]
+[JsonSerializable(typeof(DelegationCreatedPayload))]
+[JsonSerializable(typeof(DelegationUpdatedPayload))]
+[JsonSerializable(typeof(DelegationCompletedPayload))]
+[JsonSerializable(typeof(SessionDeletedPayload))]
 [JsonSerializable(typeof(ErrorResponse))]
 // Shared
 [JsonSerializable(typeof(ApiErrorResponse))]

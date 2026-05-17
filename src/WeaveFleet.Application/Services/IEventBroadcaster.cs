@@ -1,4 +1,5 @@
 using System.Text.Json;
+using WeaveFleet.Domain.Events;
 
 namespace WeaveFleet.Application.Services;
 
@@ -11,6 +12,16 @@ public interface IEventBroadcaster
     Task BroadcastAsync(string topic, string type, JsonElement payload, string? userId, CancellationToken ct);
 
     Task BroadcastAsync(string topic, string type, JsonElement payload, long? sequenceNumber, string? userId, CancellationToken ct);
+
+    /// <summary>
+    /// Broadcasts a raw event together with an optional translated domain event.
+    /// </summary>
+    Task BroadcastAsync(string topic, string type, JsonElement payload, DomainEvent? domainEvent, string? userId, CancellationToken ct);
+
+    /// <summary>
+    /// Broadcasts a raw event together with an optional translated domain event and sequence number.
+    /// </summary>
+    Task BroadcastAsync(string topic, string type, JsonElement payload, long? sequenceNumber, DomainEvent? domainEvent, string? userId, CancellationToken ct);
 
     /// <summary>
     /// Subscribe to one or more <paramref name="topics"/>.

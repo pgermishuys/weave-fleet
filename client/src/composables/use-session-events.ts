@@ -75,6 +75,8 @@ type SessionStorePatch = Partial<{
 }>
 
 const MAX_MESSAGES = 500
+// Flag-off mode still uses the legacy v1 stream, which does not emit turn.ended.
+// Keep the idle fallback so reconnects/crashes do not leave sessions stuck busy.
 const IDLE_FALLBACK_MS = 2500
 
 export function useSessionEvents(
@@ -82,6 +84,7 @@ export function useSessionEvents(
   instanceId: MaybeRefOrGetter<string>,
   onAgentSwitch?: MaybeRefOrGetter<((agent: string) => void) | undefined>,
   suppressAutoScrollRef?: ShallowRef<boolean>,
+  enabled: MaybeRefOrGetter<boolean> = true,
 ): UseSessionEventsResult {
   const sessionsStore = useSessionsStore()
   const messages = ref<AccumulatedMessage[]>([])
@@ -100,6 +103,7 @@ export function useSessionEvents(
 
   const currentSessionId = computed(() => toValue(sessionId))
   const currentInstanceId = computed(() => toValue(instanceId))
+  const isEnabled = computed(() => toValue(enabled))
   const pagination = useMessagePagination()
   const { subscribe } = useWeaveSocket()
 
@@ -114,8 +118,8 @@ export function useSessionEvents(
   )
 
   watch(
-    () => [currentSessionId.value, currentInstanceId.value] as const,
-    ([activeSessionId, activeInstanceId], _, onCleanup) => {
+    () => [currentSessionId.value, currentInstanceId.value, isEnabled.value] as const,
+    ([activeSessionId, activeInstanceId, enabledForSession], _, onCleanup) => {
       let disposed = false
       const abortController = new AbortController()
       const { signal } = abortController
@@ -192,6 +196,8 @@ export function useSessionEvents(
         }
       }
 
+      // Flag-off mode still relies on the committed-events REST gap-fill because the
+      // legacy v1 socket protocol cannot replay missed events after reconnect.
       async function loadCommittedEventsSince(
         afterSequenceNumber: number | null,
         loadSignal?: AbortSignal,
@@ -299,6 +305,19 @@ export function useSessionEvents(
 
       if (suppressAutoScrollRef) {
         suppressAutoScrollRef.value = false
+      }
+
+      if (!enabledForSession) {
+        status.value = "connected"
+        pagination.resetPagination()
+
+        onCleanup(() => {
+          disposed = true
+          abortController.abort()
+          clearIdleFallback()
+        })
+
+        return
       }
 
       if (!activeSessionId || !activeInstanceId) {
@@ -608,12 +627,12 @@ export function handleEvent(
     state.lastSequenceNumber.value = Math.max(state.lastSequenceNumber.value ?? 0, event.sequenceNumber)
   }
 
-  const delegationId = properties?.delegationId ?? properties?.DelegationId
-  const parentToolCallId = properties?.parentToolCallId ?? properties?.ParentToolCallId
-  const childSessionId = properties?.childSessionId ?? properties?.ChildSessionId
-  const delegationTitle = properties?.title ?? properties?.Title
-  const delegationStatus = properties?.status ?? properties?.Status
-  const delegationCreatedAt = properties?.createdAt ?? properties?.CreatedAt
+  const delegationId = properties?.delegationId
+  const parentToolCallId = properties?.parentToolCallId
+  const childSessionId = properties?.childSessionId
+  const delegationTitle = properties?.title
+  const delegationStatus = properties?.status
+  const delegationCreatedAt = properties?.createdAt
 
   if (type === "server.connected") {
     state.status.value = "connected"

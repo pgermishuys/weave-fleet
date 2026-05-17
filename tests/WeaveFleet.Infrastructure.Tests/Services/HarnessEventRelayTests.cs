@@ -4,8 +4,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
@@ -44,6 +46,7 @@ public sealed class HarnessEventRelayTests
 
         var scopeFactory = TestServiceScopeFactory.Create(services =>
         {
+            services.AddLogging();
             services.AddSingleton<ISessionRepository>((ISessionRepository)sessionRepo);
             services.AddSingleton<IMessageRepository>((IMessageRepository)messageRepo);
             services.AddSingleton<IDelegationRepository>((IDelegationRepository)delegationRepo);
@@ -53,6 +56,7 @@ public sealed class HarnessEventRelayTests
             services.AddSingleton(deltaBuffer);
             services.AddSingleton(activityWriteService);
             services.AddSingleton<IHarnessEventPersister>(persister);
+            services.AddTransient<DomainEventTranslator>();
         });
 
         return (broadcaster, sessionRepo, scopeFactory, activityTracker, persister);
@@ -299,6 +303,56 @@ public sealed class HarnessEventRelayTests
 
         for (int i = 0; i < 50 && publisher.Calls.IsEmpty; i++) await Task.Delay(50);
         publisher.Calls.Count.ShouldBeGreaterThanOrEqualTo(1);
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Should_attach_translated_domain_event_to_publish_context()
+    {
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
+
+        const string fleetSessionId = "fleet-domain";
+        const string instanceId = "instance-domain";
+        sessionRepo.Seed(new Session { Id = fleetSessionId, InstanceId = instanceId, UserId = "u" });
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeHarnessSession(instanceId);
+        tracker.Register(instanceId, instance);
+        instance.Emit(new HarnessEvent
+        {
+            Type = EventTypes.SessionStatus,
+            SessionId = "oc-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                status = new
+                {
+                    type = "busy",
+                    messageID = "msg-1",
+                    index = 3,
+                    agent = "loom",
+                    modelID = "model-1"
+                }
+            })
+        });
+        instance.Complete();
+
+        for (int i = 0; i < 50 && publisher.Calls.IsEmpty; i++)
+            await Task.Delay(50);
+
+        publisher.Calls.TryPeek(out var published).ShouldBeTrue();
+        var domainEvent = published!.Context.DomainEvent.ShouldBeOfType<TurnStarted>();
+        domainEvent.Payload.SessionId.ShouldBe(fleetSessionId);
+        domainEvent.Payload.MessageId.ShouldBe("msg-1");
+        domainEvent.Payload.Index.ShouldBe(3);
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);
