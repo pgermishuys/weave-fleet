@@ -227,6 +227,14 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc />
+    public Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
+        => throw new NotSupportedException("The ClaudeCode harness does not support the question tool.");
+
+    /// <inheritdoc />
+    public Task RejectQuestionAsync(string requestId, CancellationToken ct)
+        => throw new NotSupportedException("The ClaudeCode harness does not support the question tool.");
+
+    /// <inheritdoc />
     public Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct)
     {
         if (_activeProcess?.IsRunning == true)

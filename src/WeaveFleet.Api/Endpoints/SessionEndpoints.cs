@@ -203,6 +203,29 @@ public static class SessionEndpoints
         })
         .WithName("AbortSession");
 
+        // POST /api/sessions/{id}/questions/{requestId}/answer
+        group.MapPost("/{id}/questions/{requestId}/answer", async (
+            string id,
+            string requestId,
+            QuestionAnswerApiRequest request,
+            SessionOrchestrator orchestrator) =>
+        {
+            var result = await orchestrator.AnswerQuestionAsync(id, requestId, request.Answers);
+            return result.Match(_ => Results.Ok(), err => err.ToSessionApiResult());
+        })
+        .WithName("AnswerQuestion");
+
+        // POST /api/sessions/{id}/questions/{requestId}/reject
+        group.MapPost("/{id}/questions/{requestId}/reject", async (
+            string id,
+            string requestId,
+            SessionOrchestrator orchestrator) =>
+        {
+            var result = await orchestrator.RejectQuestionAsync(id, requestId);
+            return result.Match(_ => Results.Ok(), err => err.ToSessionApiResult());
+        })
+        .WithName("RejectQuestion");
+
         // POST /api/sessions/{id}/resume
         group.MapPost("/{id}/resume", async (string id, SessionOrchestrator orchestrator) =>
         {
@@ -598,6 +621,8 @@ internal sealed record SendCommandApiRequest(
     string? Arguments,
     string? Agent,
     ModelRef? Model);
+
+internal sealed record QuestionAnswerApiRequest(IReadOnlyList<IReadOnlyList<string>> Answers);
 
 internal sealed record SessionOriginRecordDto(
     string SourceType,

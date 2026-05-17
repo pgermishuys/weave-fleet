@@ -198,13 +198,15 @@ const isDisabled = computed(() => {
     || (lifecycleStatus !== undefined && lifecycleStatus !== "running");
 });
 
-const sessionStatus = computed<"idle" | "busy">(() => {
+const sessionStatus = computed<"idle" | "busy" | "waiting_input">(() => {
   if (optimisticBusy.value) {
     return "busy";
   }
 
   const activity = selectedSession.value?.activityStatus;
-  return activity === "busy" ? "busy" : "idle";
+  if (activity === "busy") return "busy";
+  if (activity === "waiting_input") return "waiting_input";
+  return "idle";
 });
 
 watch(
@@ -295,7 +297,7 @@ onUnmounted(() => {
 });
 
 const { queue, enqueue } = useMessageQueue(
-  sessionStatus,
+  computed<"idle" | "busy">(() => sessionStatus.value === "idle" ? "idle" : "busy"),
   async (text) => {
     setText(text);
     await nextTick();
@@ -343,6 +345,9 @@ const busyAgentName = computed(() => {
 });
 
 const busyStatusLabel = computed(() => {
+  if (sessionStatus.value === "waiting_input") {
+    return "Waiting for your input";
+  }
   return statusIndicatorPhase.value === "responding"
     ? `${busyAgentName.value} is responding`
     : `${busyAgentName.value} is thinking`;
@@ -389,7 +394,7 @@ watch(
   (nextStatus) => {
     clearStatusIndicatorTimer();
 
-    if (nextStatus === "busy") {
+    if (nextStatus === "busy" || nextStatus === "waiting_input") {
       statusIndicatorVisible.value = true;
       statusIndicatorPhase.value = "thinking";
       return;

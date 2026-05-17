@@ -10,6 +10,7 @@ import { useSmartLinks } from "@/plugins/builtin/smart-links";
 import type { CommandEventName } from "@/lib/command-events";
 import { formatTimestamp } from "@/lib/format-utils";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart } from "@/lib/api-types";
+import { isQuestionPart } from "@/lib/question-types";
 import { diagLog } from "@/lib/message-diagnostics";
 import { getToolLabel } from "@/lib/tool-labels";
 import { useSessionsStore } from "@/stores/sessions";
@@ -48,6 +49,7 @@ interface ActivityMessage {
   body: string;
   images: ImageAttachmentDisplay[];
   tools?: ToolCardItem[];
+  questionParts?: AccumulatedToolPart[];
   delegationLinks: DelegationLink[];
   clusterPosition: "single" | "first" | "middle" | "last";
   showIdentity: boolean;
@@ -171,8 +173,10 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
           .filter((part): part is AccumulatedFilePart => part.type === "file" && part.mime.startsWith("image/"))
           .map((part) => ({ url: part.url, filename: part.filename?.trim() || "image" })),
         tools: message.parts
-          .filter((part): part is AccumulatedToolPart => part.type === "tool")
+          .filter((part): part is AccumulatedToolPart => part.type === "tool" && !isQuestionPart(part as AccumulatedToolPart))
           .map(toToolCardItem),
+        questionParts: message.parts
+          .filter((part): part is AccumulatedToolPart => part.type === "tool" && isQuestionPart(part as AccumulatedToolPart)),
         delegationLinks: getDelegationLinks(message),
         clusterPosition: "single" as const,
         showIdentity: true,
@@ -192,6 +196,7 @@ const optimisticMessages = computed<ActivityMessage[]>(() => {
     body: prompt.body,
     images: [],
     tools: [],
+    questionParts: [],
     delegationLinks: [],
     clusterPosition: "single",
     showIdentity: true,
@@ -513,6 +518,7 @@ function hasVisibleMessageContent(message: ActivityMessage): boolean {
   return message.body.trim().length > 0
     || message.images.length > 0
     || (message.tools?.length ?? 0) > 0
+    || (message.questionParts?.length ?? 0) > 0
     || message.delegationLinks.length > 0;
 }
 
@@ -721,6 +727,8 @@ function asRecord(value: unknown): Record<string, unknown> | null {
           :body="message.body"
           :images="message.images"
           :tools="message.tools"
+          :question-parts="message.questionParts"
+          :session-id="props.sessionId"
           :show-identity="message.showIdentity"
           :cluster-position="message.clusterPosition"
         />

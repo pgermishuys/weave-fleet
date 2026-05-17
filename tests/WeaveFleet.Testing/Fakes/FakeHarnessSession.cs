@@ -70,6 +70,12 @@ public sealed class FakeHarnessSession : IHarnessSession
         return Task.CompletedTask;
     }
 
+    public Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
+        => Task.CompletedTask;
+
+    public Task RejectQuestionAsync(string requestId, CancellationToken ct)
+        => Task.CompletedTask;
+
     public Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct)
         => GetMessagesBehavior?.Invoke(query, ct)
            ?? Task.FromResult(new MessagePage([], false));

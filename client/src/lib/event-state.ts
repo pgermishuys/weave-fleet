@@ -366,6 +366,11 @@ export function isRelevantToSession(
     return properties?.parentSessionId === sessionId;
   }
 
+  // question.* events emitted by OpenCode when question tool is used
+  if (type.startsWith("question.")) {
+    return properties?.sessionID === sessionId;
+  }
+
   // Unknown events — skip to avoid noise
   return false;
 }

@@ -458,6 +458,18 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc />
+    public async Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
+    {
+        await _httpClient.AnswerQuestionAsync(requestId, answers, _workingDirectory, ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task RejectQuestionAsync(string requestId, CancellationToken ct)
+    {
+        await _httpClient.RejectQuestionAsync(requestId, _workingDirectory, ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct)
     {
         if (!_processManager.IsRunning)

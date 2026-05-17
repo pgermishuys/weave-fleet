@@ -770,6 +770,51 @@ public sealed partial class SessionOrchestrator(
         return Unit.Value;
     }
 
+    public async Task<Result<Unit>> AnswerQuestionAsync(
+        string id,
+        string requestId,
+        IReadOnlyList<IReadOnlyList<string>> answers,
+        CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(id);
+        var instanceResult = await GetLiveInstanceAsync(id);
+        if (instanceResult.IsFailure)
+            return instanceResult.Error;
+
+        try
+        {
+            await instanceResult.Value.AnswerQuestionAsync(requestId, answers, ct);
+        }
+        catch (NotSupportedException ex)
+        {
+            return new FleetError("Session.QuestionNotSupported", ex.Message);
+        }
+
+        return Unit.Value;
+    }
+
+    public async Task<Result<Unit>> RejectQuestionAsync(
+        string id,
+        string requestId,
+        CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(id);
+        var instanceResult = await GetLiveInstanceAsync(id);
+        if (instanceResult.IsFailure)
+            return instanceResult.Error;
+
+        try
+        {
+            await instanceResult.Value.RejectQuestionAsync(requestId, ct);
+        }
+        catch (NotSupportedException ex)
+        {
+            return new FleetError("Session.QuestionNotSupported", ex.Message);
+        }
+
+        return Unit.Value;
+    }
+
     public async Task<Result<Unit>> CommandSessionAsync(
         string id,
         CommandOptions options,
