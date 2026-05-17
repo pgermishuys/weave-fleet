@@ -7,6 +7,7 @@ import ConfigOverviewSection from "@/components/settings/ConfigOverviewSection.v
 import SystemSection from "@/components/settings/SystemSection.vue";
 import CredentialsSection from "@/components/settings/CredentialsSection.vue";
 import SkillsSection from "@/components/settings/SkillsSection.vue";
+import NuCodeSection from "@/components/settings/NuCodeSection.vue";
 import WorkspaceSection from "@/components/settings/WorkspaceSection.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { usePluginRuntime } from "@/plugins/composable";
@@ -63,6 +64,8 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
     </template>
 
     <SkillsSection v-else-if="activeSection === 'skills'" />
+
+    <NuCodeSection v-else-if="activeSection === 'nucode'" />
 
     <section
       v-else-if="activeSection === 'plugins'"
