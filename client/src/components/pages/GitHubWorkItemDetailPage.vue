@@ -872,6 +872,28 @@ async function handleCreateSession(): Promise<void> {
   color: var(--accent);
 }
 
+.detail-markdown :deep(table) {
+  width: auto;
+  margin: 0 0 12px;
+  border-collapse: collapse;
+}
+
+.detail-markdown :deep(th),
+.detail-markdown :deep(td) {
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  text-align: left;
+}
+
+.detail-markdown :deep(th) {
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.detail-markdown :deep(tr:nth-child(even)) {
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .detail-state {
   display: flex;
   align-items: flex-start;

@@ -378,6 +378,29 @@ const displayModelId = computed(() => {
   color: #c4c4cc;
 }
 
+.msg-body__content :deep(table) {
+  width: auto;
+  margin: 0 0 8px;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+
+.msg-body__content :deep(th),
+.msg-body__content :deep(td) {
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  text-align: left;
+}
+
+.msg-body__content :deep(th) {
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.msg-body__content :deep(tr:nth-child(even)) {
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .msg-images {
   display: flex;
   flex-wrap: wrap;
