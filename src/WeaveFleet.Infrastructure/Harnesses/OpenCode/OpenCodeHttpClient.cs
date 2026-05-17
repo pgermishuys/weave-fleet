@@ -299,16 +299,8 @@ internal sealed class OpenCodeHttpClient
     public async Task RejectQuestionAsync(string requestId, string directory, CancellationToken ct)
     {
         var url = BuildUrl($"/question/{Uri.EscapeDataString(requestId)}/reject", directory);
-        LogRequest(_logger, $"POST {url}", null);
-
-        using var response = await _httpClient.PostAsync(url, null, ct).ConfigureAwait(false);
-        LogResponse(_logger, (int)response.StatusCode, url, null);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            LogRequestFailed(_logger, (int)response.StatusCode, url, null);
-            response.EnsureSuccessStatusCode();
-        }
+        var body = new OpenCodeQuestionRejectRequest();
+        await PostVoidAsync(url, body, OpenCodeJsonContext.Default.OpenCodeQuestionRejectRequest, ct).ConfigureAwait(false);
     }
 
     /// <summary>POST /session/{sessionId}/fork?directory={directory}</summary>
