@@ -584,22 +584,6 @@ function handleKeydown(event: KeyboardEvent): void {
     aria-label="Message composer"
   >
     <div
-      v-show="statusIndicatorVisible"
-      class="composer-status"
-      aria-live="polite"
-    >
-      <span
-        class="composer-status__dot"
-        aria-hidden="true"
-      />
-      <span class="composer-status__label">{{ busyStatusLabel }}</span>
-      <span
-        class="composer-status__dots"
-        aria-hidden="true"
-      >{{ busyStatusDots }}</span>
-    </div>
-
-    <div
       v-if="sendError || pasteError"
       data-testid="send-prompt-error"
       class="composer-error"
@@ -722,6 +706,22 @@ function handleKeydown(event: KeyboardEvent): void {
           :models="models"
         />
 
+        <div
+          v-show="statusIndicatorVisible"
+          class="composer-status"
+          aria-live="polite"
+        >
+          <span
+            class="composer-status__dot"
+            aria-hidden="true"
+          />
+          <span class="composer-status__label">{{ busyStatusLabel }}</span>
+          <span
+            class="composer-status__dots"
+            aria-hidden="true"
+          >{{ busyStatusDots }}</span>
+        </div>
+
         <button
           type="button"
           class="send-btn"
@@ -779,7 +779,7 @@ function handleKeydown(event: KeyboardEvent): void {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 10px;
+  margin: 0;
   color: var(--muted);
   font-size: 11px;
   line-height: 1.4;
