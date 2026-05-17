@@ -1,14 +1,32 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Check, Monitor } from "lucide-vue-next";
-import { useThemeStore, themes, type ThemeSelection } from "@/stores/theme";
+import { useThemeStore, themes, type FontFamily, type ThemeSelection } from "@/stores/theme";
 
 const themeStore = useThemeStore();
 
 const activeTheme = computed(() => themeStore.currentTheme);
+const activeFontFamily = computed(() => themeStore.fontFamily);
+
+const fontOptions: ReadonlyArray<{ id: FontFamily; label: string; fontFamily: string }> = [
+  {
+    id: "inter",
+    label: "Inter",
+    fontFamily: '"Inter Variable", "Inter", system-ui, -apple-system, sans-serif',
+  },
+  {
+    id: "dm-sans",
+    label: "DM Sans",
+    fontFamily: '"DM Sans Variable", "DM Sans", system-ui, -apple-system, sans-serif',
+  },
+];
 
 function selectTheme(theme: ThemeSelection): void {
   themeStore.setTheme(theme);
+}
+
+function selectFontFamily(fontFamily: FontFamily): void {
+  themeStore.setFontFamily(fontFamily);
 }
 </script>
 
@@ -89,6 +107,38 @@ function selectTheme(theme: ThemeSelection): void {
           />
         </div>
       </button>
+    </div>
+
+    <div class="mt-6 flex flex-col gap-3">
+      <div class="flex flex-col gap-1">
+        <h3 class="text-sm font-medium text-text">
+          Font
+        </h3>
+        <p class="text-xs text-muted">
+          Choose the interface font used across the workspace shell.
+        </p>
+      </div>
+
+      <div class="grid gap-3 sm:grid-cols-2">
+        <button
+          v-for="font in fontOptions"
+          :key="font.id"
+          type="button"
+          class="flex items-center justify-between gap-3 rounded-card border p-3 text-left transition-colors"
+          :class="activeFontFamily === font.id
+            ? 'border-accent bg-accent-dim'
+            : 'border-border hover:border-accent/50'"
+          :style="{ fontFamily: font.fontFamily }"
+          @click="selectFontFamily(font.id)"
+        >
+          <span class="text-sm font-medium text-text">{{ font.label }}</span>
+          <Check
+            v-if="activeFontFamily === font.id"
+            :size="14"
+            class="shrink-0 text-accent"
+          />
+        </button>
+      </div>
     </div>
 
     <p class="mt-4 text-xs text-muted">

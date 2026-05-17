@@ -15,6 +15,8 @@ export type ThemeId =
 
 export type ThemeSelection = ThemeId | "system";
 
+export type FontFamily = "inter" | "dm-sans";
+
 export interface ThemeDefinition {
   id: ThemeId;
   label: string;
@@ -37,9 +39,19 @@ export const themes: readonly ThemeDefinition[] = [
 ] as const;
 
 const themeStorageKey = "weave:theme";
+const fontFamilyStorageKey = "weave:font-family";
+
+const fontStacks: Record<FontFamily, string> = {
+  inter: '"Inter Variable", "Inter", system-ui, -apple-system, sans-serif',
+  "dm-sans": '"DM Sans Variable", "DM Sans", system-ui, -apple-system, sans-serif',
+};
 
 function isValidThemeId(value: string): value is ThemeId {
   return themes.some((t) => t.id === value);
+}
+
+function isValidFontFamily(value: string): value is FontFamily {
+  return value === "inter" || value === "dm-sans";
 }
 
 function readStoredTheme(): ThemeSelection {
@@ -63,6 +75,19 @@ function readStoredTheme(): ThemeSelection {
   }
 }
 
+function readStoredFontFamily(): FontFamily {
+  if (typeof window === "undefined") {
+    return "dm-sans";
+  }
+
+  try {
+    const raw = window.localStorage.getItem(fontFamilyStorageKey);
+    return raw && isValidFontFamily(raw) ? raw : "dm-sans";
+  } catch {
+    return "dm-sans";
+  }
+}
+
 function getSystemThemeId(): ThemeId {
   if (typeof window === "undefined") {
     return "dark";
@@ -83,8 +108,21 @@ function persistTheme(theme: ThemeSelection): void {
   }
 }
 
+function persistFontFamily(fontFamily: FontFamily): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(fontFamilyStorageKey, fontFamily);
+  } catch {
+    // localStorage unavailable
+  }
+}
+
 export const useThemeStore = defineStore("theme", () => {
   const currentTheme = shallowRef<ThemeSelection>(readStoredTheme());
+  const fontFamily = shallowRef<FontFamily>(readStoredFontFamily());
 
   const resolvedThemeId = computed<ThemeId>(() => {
     return currentTheme.value === "system" ? getSystemThemeId() : currentTheme.value;
@@ -104,8 +142,17 @@ export const useThemeStore = defineStore("theme", () => {
     document.documentElement.style.colorScheme = theme.colorScheme;
   }
 
+  function applyFontFamily(): void {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    document.documentElement.style.setProperty("--font-sans-stack", fontStacks[fontFamily.value]);
+  }
+
   function initializeTheme(): void {
     applyTheme();
+    applyFontFamily();
 
     if (typeof window === "undefined") {
       return;
@@ -128,6 +175,12 @@ export const useThemeStore = defineStore("theme", () => {
     applyTheme();
   }
 
+  function setFontFamily(font: FontFamily): void {
+    fontFamily.value = font;
+    persistFontFamily(font);
+    applyFontFamily();
+  }
+
   function toggleTheme(): void {
     const nextColorScheme = resolvedTheme.value.colorScheme === "dark" ? "light" : "dark";
     setTheme(nextColorScheme);
@@ -135,9 +188,11 @@ export const useThemeStore = defineStore("theme", () => {
 
   return {
     currentTheme,
+    fontFamily,
     resolvedThemeId,
     resolvedTheme,
     initializeTheme,
+    setFontFamily,
     setTheme,
     toggleTheme,
   };
