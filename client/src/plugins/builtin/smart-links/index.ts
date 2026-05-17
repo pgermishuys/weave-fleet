@@ -5,6 +5,6 @@ import { githubSmartLinkProvider } from './providers/github-smart-link-provider'
 const registry = useSmartLinkProviders()
 registry.register(githubSmartLinkProvider)
 
-export { useSmartLinks } from './composables/use-smart-links'
+export { useSmartLinks, refreshSingleLink } from './composables/use-smart-links'
 export { useSmartLinkProviders } from './composables/use-smart-link-providers'
 export type { SmartLink, SmartLinkProvider, SmartLinkResolution } from './types'

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onUnmounted } from 'vue'
 import {
   CircleDot,
   CircleCheck,
@@ -12,7 +12,26 @@ import {
 import type { SmartLink } from './types'
 
 const props = defineProps<{ link: SmartLink }>()
-const emit = defineEmits<{ dismiss: [linkId: string] }>()
+const emit = defineEmits<{ dismiss: [linkId: string]; refresh: [url: string] }>()
+
+let hoverTimer: ReturnType<typeof setTimeout> | undefined
+
+function onMouseEnter(): void {
+  if (props.link.isTerminal || props.link.isDismissed) return
+  hoverTimer = setTimeout(() => {
+    if (props.link.isTerminal || props.link.isDismissed) return
+    emit('refresh', props.link.url)
+  }, 1000)
+}
+
+function onMouseLeave(): void {
+  clearTimeout(hoverTimer)
+  hoverTimer = undefined
+}
+
+onUnmounted(() => {
+  clearTimeout(hoverTimer)
+})
 
 const statusIcon = computed(() => {
   if (props.link.resourceType === 'pull_request') {
@@ -54,17 +73,24 @@ const labels = computed<LinkLabel[]>(() => {
   return []
 })
 
+const HEX_COLOR_RE = /^[0-9a-fA-F]{3,6}$/
+
 function getLabelStyle(color: string): { backgroundColor: string; borderColor: string; color: string } {
+  const safeColor = HEX_COLOR_RE.test(color) ? color : '888888'
   return {
-    backgroundColor: `#${color}22`,
-    borderColor: `#${color}55`,
-    color: `#${color}`,
+    backgroundColor: `#${safeColor}22`,
+    borderColor: `#${safeColor}55`,
+    color: `#${safeColor}`,
   }
 }
 </script>
 
 <template>
-  <article class="smart-link-item">
+  <article
+    class="smart-link-item"
+    @mouseenter="onMouseEnter"
+    @mouseleave="onMouseLeave"
+  >
     <component
       :is="statusIcon"
       :class="statusClass"
