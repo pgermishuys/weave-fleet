@@ -204,7 +204,7 @@ export function convertFleetMessageToAccumulated(msg: FleetMessage): Accumulated
         type: "tool",
         tool: part.toolName ?? "",
         callId: part.toolCallId ?? "",
-        state: mapToolState(part.state),
+        state: mapToolState(part.state, part.arguments),
       });
     } else if (part.type === "file") {
       parts.push({
@@ -258,10 +258,15 @@ export function sortAccumulatedMessagesChronologically(messages: readonly Accumu
     .map(({ message }) => message)
 }
 
-function mapToolState(state?: number): unknown {
+function mapToolState(state?: number, toolArguments?: unknown): unknown {
   // ToolUseState enum: 0=Pending, 1=Running, 2=Completed, 3=Error
   const statusMap: Record<number, string> = { 0: "pending", 1: "running", 2: "completed", 3: "error" };
-  return state != null ? { status: statusMap[state] ?? "pending" } : { status: "pending" };
+  const status = state != null ? (statusMap[state] ?? "pending") : "pending";
+  const result: Record<string, unknown> = { status };
+  if (toolArguments != null) {
+    result.input = toolArguments;
+  }
+  return result;
 }
 
 // ─── convertSDKMessageToAccumulated ─────────────────────────────────────────
