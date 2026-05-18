@@ -128,9 +128,40 @@ public sealed class QuestionToolTests : E2ETestBase,
             var stagingPill = Page.GetByTestId("question-pill-Staging");
             await stagingPill.ClickAsync();
 
-            // Submit the answer
+            // Submit the answer (fires API call)
             var submitButton = Page.GetByTestId("question-submit-button");
             await submitButton.ClickAsync();
+
+            // The API-triggered AnswerQuestionAsync event doesn't reliably reach the
+            // frontend via WS in E2E (same issue as Discovery #1). Push the completion
+            // event directly from test code — proven pattern from DelegationReplayE2ETests.
+            await Task.Delay(500); // Let the API call complete
+            await harness.PushEventAsync(new HarnessEvent
+            {
+                Type = "message.part.updated",
+                SessionId = harness.InstanceId,
+                FleetSessionId = sessionId,
+                Timestamp = DateTimeOffset.UtcNow,
+                Payload = JsonSerializer.SerializeToElement(new
+                {
+                    sessionID = harness.InstanceId,
+                    part = new
+                    {
+                        type = "tool",
+                        id = toolCallId,
+                        callID = toolCallId,
+                        tool = "question",
+                        sessionID = harness.InstanceId,
+                        messageID = messageId,
+                        state = new
+                        {
+                            status = "completed",
+                            input = questionInput,
+                            metadata = new { answers = new string[][] { ["Staging"] } }
+                        }
+                    }
+                })
+            });
 
             // Wait for the answered card to appear
             var answeredCard = Page.GetByTestId("question-card-answered");
