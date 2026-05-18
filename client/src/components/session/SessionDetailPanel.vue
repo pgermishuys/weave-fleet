@@ -198,6 +198,19 @@ watch(
       const detail = (await detailResponse.json()) as SessionApiDetail;
       remoteSessionDetail.value = detail;
       trackAction("session.view", nextSessionId);
+
+      // Load persisted smart links so they appear immediately (without waiting for ActivityStream)
+      try {
+        const linksResponse = await apiFetch(`/api/sessions/${encodeURIComponent(nextSessionId)}/smart-links/all`, {
+          signal: controller.signal,
+        });
+        if (linksResponse.ok) {
+          const links = await linksResponse.json();
+          smartLinksStore.setLinks(nextSessionId, links);
+        }
+      } catch {
+        // Smart links are non-critical — silently ignore
+      }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         return;
