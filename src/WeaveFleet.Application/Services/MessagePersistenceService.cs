@@ -51,10 +51,20 @@ public sealed class MessagePersistenceService
     /// Creates a synthetic user message for durable prompt history.
     /// </summary>
     public static HarnessMessage CreateUserPromptMessage(string prompt, DateTimeOffset timestamp, string? agentName)
+        => CreateUserPromptMessage(prompt, timestamp, agentName, userMessageId: null);
+
+    /// <summary>
+    /// Creates a synthetic user message for durable prompt history.
+    /// </summary>
+    public static HarnessMessage CreateUserPromptMessage(
+        string prompt,
+        DateTimeOffset timestamp,
+        string? agentName,
+        string? userMessageId)
     {
         return new HarnessMessage
         {
-            Id = $"user-{Guid.NewGuid():N}",
+            Id = string.IsNullOrWhiteSpace(userMessageId) ? $"user-{Guid.NewGuid():N}" : userMessageId,
             Role = "user",
             Parts = [new TextPart(prompt)],
             Timestamp = timestamp,

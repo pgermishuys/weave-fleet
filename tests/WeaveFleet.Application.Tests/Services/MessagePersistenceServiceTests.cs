@@ -136,6 +136,22 @@ public sealed class MessagePersistenceServiceTests
     }
 
     [Fact]
+    public void CreateUserPromptMessage_WithUserMessageId_UsesSuppliedId()
+    {
+        var timestamp = new DateTimeOffset(2026, 4, 15, 6, 0, 0, TimeSpan.Zero);
+
+        var message = MessagePersistenceService.CreateUserPromptMessage(
+            "Hello from prompt",
+            timestamp,
+            "loom",
+            "user-client-owned-id");
+
+        message.Id.ShouldBe("user-client-owned-id");
+        message.Role.ShouldBe("user");
+        message.Parts[0].ShouldBeOfType<TextPart>().Text.ShouldBe("Hello from prompt");
+    }
+
+    [Fact]
     public void CreateUserCommandMessage_PreservesSlashCommandAndSanitizesArguments()
     {
         var timestamp = new DateTimeOffset(2026, 4, 15, 7, 0, 0, TimeSpan.Zero);

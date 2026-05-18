@@ -14,6 +14,7 @@ namespace WeaveFleet.Application.Services;
 public sealed partial class SessionCallbackService(
     ISessionCallbackRepository callbackRepository,
     ISessionRepository sessionRepository,
+    IMessageRepository messageRepository,
     InstanceTracker instanceTracker,
     ILogger<SessionCallbackService> logger)
 {
@@ -88,6 +89,10 @@ public sealed partial class SessionCallbackService(
 
             try
             {
+                var userMsg = MessagePersistenceService.CreateUserPromptMessage(completionSummary, DateTimeOffset.UtcNow);
+                var persisted = MessagePersistenceService.ToPersistedMessage(cb.TargetSessionId, userMsg);
+                await messageRepository.UpsertAsync(persisted);
+
                 await targetInstance.SendPromptAsync(completionSummary, null, ct);
                 await callbackRepository.MarkFiredAsync(cb.Id);
                 fired++;

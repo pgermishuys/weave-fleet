@@ -498,38 +498,9 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         await instance.DisposeAsync();
     }
 
-    [Fact]
-    public async Task SubscribeAsync_MessageCreatedEvent_PersistsMessage()
-    {
-        var fleetSessionId = "fleet-persist-2";
-        var persistSignal = new TaskCompletionSource();
-
-        var (instance, messageRepo, persistenceService) = await CreateInstanceWithSseLines(
-            fleetSessionId,
-            [BuildMessageCreatedSseLine("user", "msg-user-1")],
-            repo =>
-            {
-                repo.UpsertBehavior = _ =>
-                {
-                    persistSignal.TrySetResult();
-                    return Task.CompletedTask;
-                };
-            });
-
-        // Start consuming in background — the stream reconnects, so we cancel after persist fires
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var consumeTask = ConsumeEventsAsync(instance, cts.Token, persistenceService, fleetSessionId);
-
-        // Wait for persist to fire, then cancel the stream
-        await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await cts.CancelAsync();
-        await consumeTask;
-
-        messageRepo.UpsertCalls.ShouldContain(m =>
-            m.SessionId == fleetSessionId && m.Role == "user");
-
-        await instance.DisposeAsync();
-    }
+    // User message.created echo persistence is intentionally not tested here.
+    // User prompt persistence is owned by SessionOrchestrator; OpenCode user
+    // echoes are suppressed to avoid duplicate prompt rows.
 
     [Fact]
     public async Task SubscribeAsync_NonMessageEvent_DoesNotPersist()

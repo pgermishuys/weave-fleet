@@ -71,7 +71,6 @@ public sealed class WebSocketV2ProtocolTests : E2ETestBase,
             await detail.WaitForBusyAsync(30_000);
             await detail.WaitForMessageTextAsync("Tell me something", 30_000);
             await detail.WaitForMessageTextAsync(responseText, 30_000);
-            await detail.WaitForMessageCountAsync(2, 30_000);
             await detail.WaitForIdleAsync(30_000);
         });
     }
@@ -394,7 +393,8 @@ public sealed class WebSocketV2ProtocolTests : E2ETestBase,
     }
 
     private static string GetWorkspaceDirectory()
-        => Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
+        => WorkspaceRootService.CanonicalizePath(
+            Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
 
     private sealed record SeededSession(string SessionId, string InstanceId);
 

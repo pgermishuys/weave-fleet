@@ -32,6 +32,9 @@ public sealed class MessagePersistenceProjection : IProjection<HarnessEvent>
     {
         if (ctx.UserId is null) return;
 
+        if (IsUserMessageEcho(evt))
+            return;
+
         await _persister.HandleAsync(ctx.FleetSessionId, ctx.UserId, evt, ct).ConfigureAwait(false);
 
         // Log every durable event regardless of whether the persister wrote a row.
@@ -53,4 +56,27 @@ public sealed class MessagePersistenceProjection : IProjection<HarnessEvent>
             }).ConfigureAwait(false);
         }
     }
+
+    private static bool IsUserMessageEcho(HarnessEvent evt)
+    {
+        if (evt.Type is EventTypes.MessageCreated or EventTypes.MessageUpdated)
+            return HasUserRole(evt.Payload);
+
+        return false;
+    }
+
+    private static bool HasUserRole(JsonElement? payload)
+    {
+        if (!payload.HasValue
+            || payload.Value.ValueKind != JsonValueKind.Object
+            || !payload.Value.TryGetProperty("info", out var info)
+            || info.ValueKind != JsonValueKind.Object
+            || !info.TryGetProperty("role", out var role))
+        {
+            return false;
+        }
+
+        return role.GetString() is "user";
+    }
+
 }

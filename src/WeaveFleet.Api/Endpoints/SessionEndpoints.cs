@@ -190,7 +190,7 @@ public static class SessionEndpoints
             var options = req.Agent is not null || req.Model is not null || attachments is { Count: > 0 }
                 ? new PromptOptions { Agent = req.Agent, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId, Attachments = attachments }
                 : null;
-            var result = await orchestrator.PromptSessionAsync(id, req.Text, options, ct);
+            var result = await orchestrator.PromptSessionAsync(id, req.Text, options, req.UserMessageId, ct);
             return result.Match(_ => Results.Ok(), err => err.ToSessionApiResult());
         })
         .WithName("PromptSession");
@@ -610,7 +610,12 @@ internal sealed record PreviewSessionSourceApiRequest(SessionSourceSelection Sou
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record AddSessionSourceApiRequest(SessionSourceSelection Source, bool Confirm);
 
-internal sealed record SendPromptApiRequest(string Text, string? Agent, ModelRef? Model, ImageAttachmentDto[]? Attachments);
+internal sealed record SendPromptApiRequest(
+    string Text,
+    string? Agent,
+    ModelRef? Model,
+    ImageAttachmentDto[]? Attachments,
+    string? UserMessageId);
 
 internal sealed record ImageAttachmentDto(string Mime, string? Filename, string Data);
 
