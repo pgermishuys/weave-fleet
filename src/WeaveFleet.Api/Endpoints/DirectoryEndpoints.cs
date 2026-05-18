@@ -21,23 +21,31 @@ public static class DirectoryEndpoints
             var result = unconstrained == true
                 ? await directoryService.ListDirectoryUnconstrainedAsync(path, ct)
                 : await directoryService.ListDirectoryAsync(path, ct);
-            return Results.Ok(new
-            {
-                entries = result.Entries.Select(e => new
-                {
-                    name = e.Name,
-                    path = e.FullPath,
-                    isGitRepo = e.IsGitRepo,
-                    isRoot = e.IsRoot
-                }),
-                currentPath = result.CurrentPath,
-                parentPath = result.ParentPath,
-                roots = result.Roots
-            });
+            return Results.Ok(new DirectoryListingResponse(
+                Entries: result.Entries.Select(e => new DirectoryEntryResponse(
+                    Name: e.Name,
+                    Path: e.FullPath,
+                    IsGitRepo: e.IsGitRepo,
+                    IsRoot: e.IsRoot)).ToList(),
+                CurrentPath: result.CurrentPath,
+                ParentPath: result.ParentPath,
+                Roots: result.Roots));
         })
         .WithName("GetDirectories");
 
         return app;
     }
 }
+
+public sealed record DirectoryListingResponse(
+    IReadOnlyList<DirectoryEntryResponse> Entries,
+    string? CurrentPath,
+    string? ParentPath,
+    IReadOnlyList<string> Roots);
+
+public sealed record DirectoryEntryResponse(
+    string Name,
+    string Path,
+    bool IsGitRepo,
+    bool IsRoot);
 #pragma warning restore IL2026
