@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUpdate, onMounted, onUnmounted, ref, watch } from "vue";
 import { ArrowUpRight, Bot } from "lucide-vue-next";
 import { useRouter } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
@@ -78,7 +78,7 @@ const selectedSession = computed(() => {
 
 const resolvedInstanceId = computed(() => props.instanceId ?? selectedSession.value?.instanceId ?? "");
 
-const { messages: sessionMessages, delegations, forceIdle } = useSessionEventsSwitch(
+const { messages: sessionMessages, delegations, forceIdle, hasMoreMessages, isLoadingOlder, loadOlderMessages } = useSessionEventsSwitch(
   computed(() => props.sessionId),
   resolvedInstanceId,
 );
@@ -92,10 +92,15 @@ const streamRef = ref<HTMLElement | null>(null);
 const showJumpToLatest = ref(false);
 
 const SCROLL_BOTTOM_THRESHOLD = 80;
+const SCROLL_TOP_THRESHOLD = 100;
 
 let mutationObserver: MutationObserver | null = null;
 let keepPinnedToBottom = true;
 let scrollFrame: number | null = null;
+let isRestoringScroll = false;
+let preUpdateScrollHeight = 0;
+let preUpdateScrollTop = 0;
+let wasLoadingOlder = false;
 const cleanupCallbacks: Array<() => void> = [];
 
 // Track the count of assistant messages with renderable content so we only
@@ -233,6 +238,11 @@ function updatePinnedState(): void {
 
   keepPinnedToBottom = isNearBottom(element);
   showJumpToLatest.value = !keepPinnedToBottom;
+
+  // Trigger loading older messages when scrolled near the top
+  if (!isRestoringScroll && element.scrollTop <= SCROLL_TOP_THRESHOLD && hasMoreMessages.value && !isLoadingOlder.value) {
+    loadOlderMessages();
+  }
 }
 
 function scrollToBottom(): void {
@@ -406,7 +416,39 @@ watch(
   () => messages.value.length,
   async () => {
     await nextTick();
+
+    // If older messages were just prepended, restore scroll position
+    if (wasLoadingOlder && streamRef.value) {
+      const element = streamRef.value;
+      const newScrollHeight = element.scrollHeight;
+      const heightDelta = newScrollHeight - preUpdateScrollHeight;
+
+      if (heightDelta > 0) {
+        isRestoringScroll = true;
+        element.scrollTop = preUpdateScrollTop + heightDelta;
+        // Allow scroll handler to settle before re-enabling load-older detection
+        requestAnimationFrame(() => {
+          isRestoringScroll = false;
+        });
+      }
+
+      wasLoadingOlder = false;
+      return;
+    }
+
     scheduleScrollToBottom();
+  },
+);
+
+// Capture scroll position before older messages start loading
+watch(
+  isLoadingOlder,
+  (loading) => {
+    if (loading && streamRef.value) {
+      preUpdateScrollHeight = streamRef.value.scrollHeight;
+      preUpdateScrollTop = streamRef.value.scrollTop;
+      wasLoadingOlder = true;
+    }
   },
 );
 
@@ -711,6 +753,20 @@ function asRecord(value: unknown): Record<string, unknown> | null {
       data-testid="activity-stream"
       @scroll.passive="updatePinnedState"
     >
+      <!-- Load older messages indicator -->
+      <div v-if="isLoadingOlder" class="load-older-indicator">
+        <span class="load-older-spinner" />
+        Loading older messages…
+      </div>
+      <button
+        v-else-if="hasMoreMessages"
+        type="button"
+        class="load-older-button"
+        @click="loadOlderMessages"
+      >
+        Load older messages
+      </button>
+
       <div
         v-for="message in messages"
         :key="message.id"
@@ -820,6 +876,45 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 .jump-to-latest:hover {
   border-color: rgba(129, 140, 248, 0.65);
   background: rgba(39, 39, 42, 0.96);
+}
+
+.load-older-indicator,
+.load-older-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 0;
+  color: #a1a1aa;
+  font-size: 0.8125rem;
+}
+
+.load-older-button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.load-older-button:hover {
+  opacity: 1;
+  color: #e4e4e7;
+}
+
+.load-older-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(129, 140, 248, 0.3);
+  border-top-color: rgba(129, 140, 248, 0.8);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .activity-message {
