@@ -150,6 +150,7 @@ public sealed record InstanceFilesResponse(
 public sealed record GetSessionResponse(
     string Id,
     string? InstanceId,
+    string? ParentSessionId,
     string WorkspaceId,
     string WorkspaceDirectory,
     string? WorkspaceDisplayName,
