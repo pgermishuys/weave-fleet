@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -71,6 +72,13 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     private HarnessSessionStatus _status = HarnessSessionStatus.Starting;
     private bool _disposed;
     private Dictionary<string, OpenCodeAgentModelInfo>? _agentModelCache;
+
+    /// <summary>
+    /// Maps tool call IDs to OpenCode question IDs.
+    /// Populated from <c>question.asked</c> SSE events so that the UI (which only knows
+    /// the tool call ID) can reply to the correct OpenCode question endpoint.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, string> _toolCallToQuestionId = new();
 
     private sealed record OpenCodeAgentModelInfo(string? ProviderId, string? ModelId);
 
@@ -299,6 +307,11 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             if (harnessEvent.Type == EventTypes.MessagePartUpdated)
                 _ = TryEmitDelegationAsync(sseEvt);
 
+            // Track tool-call-ID → question-ID so AnswerQuestionAsync / RejectQuestionAsync
+            // can translate the UI-provided tool call ID into the OpenCode question ID.
+            if (harnessEvent.Type == "question.asked")
+                TryCacheQuestionMapping(harnessEvent);
+
             yield return harnessEvent;
         }
     }
@@ -451,13 +464,56 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public async Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
     {
-        await _httpClient.AnswerQuestionAsync(requestId, answers, _workingDirectory, ct).ConfigureAwait(false);
+        var questionId = ResolveQuestionId(requestId);
+        await _httpClient.AnswerQuestionAsync(questionId, answers, _workingDirectory, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task RejectQuestionAsync(string requestId, CancellationToken ct)
     {
-        await _httpClient.RejectQuestionAsync(requestId, _workingDirectory, ct).ConfigureAwait(false);
+        var questionId = ResolveQuestionId(requestId);
+        await _httpClient.RejectQuestionAsync(questionId, _workingDirectory, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Resolves a request ID to an OpenCode question ID.
+    /// The UI sends tool call IDs (e.g. <c>tooluse_...</c>) but OpenCode expects
+    /// question IDs (e.g. <c>que_...</c>). If the ID is already a question ID or
+    /// no mapping exists, returns the original value unchanged.
+    /// </summary>
+    private string ResolveQuestionId(string requestId) =>
+        _toolCallToQuestionId.TryGetValue(requestId, out var questionId) ? questionId : requestId;
+
+    /// <summary>
+    /// Extracts the tool-call-ID → question-ID mapping from a <c>question.asked</c> event.
+    /// The event payload is <c>{ id: "que_...", tool: { callID: "tooluse_..." } }</c>.
+    /// </summary>
+    private void TryCacheQuestionMapping(HarnessEvent evt)
+    {
+        if (!evt.Payload.HasValue || evt.Payload.Value.ValueKind != JsonValueKind.Object)
+            return;
+
+        var payload = evt.Payload.Value;
+
+        if (!payload.TryGetProperty("id", out var idEl) || idEl.ValueKind != JsonValueKind.String)
+            return;
+
+        var questionId = idEl.GetString();
+        if (string.IsNullOrWhiteSpace(questionId))
+            return;
+
+        if (!payload.TryGetProperty("tool", out var toolEl) || toolEl.ValueKind != JsonValueKind.Object)
+            return;
+
+        // OpenCode may serialize the field as "callID" or "callId"
+        string? callId = null;
+        if (toolEl.TryGetProperty("callID", out var callIdEl) && callIdEl.ValueKind == JsonValueKind.String)
+            callId = callIdEl.GetString();
+        else if (toolEl.TryGetProperty("callId", out callIdEl) && callIdEl.ValueKind == JsonValueKind.String)
+            callId = callIdEl.GetString();
+
+        if (!string.IsNullOrWhiteSpace(callId))
+            _toolCallToQuestionId[callId] = questionId;
     }
 
     /// <inheritdoc />
