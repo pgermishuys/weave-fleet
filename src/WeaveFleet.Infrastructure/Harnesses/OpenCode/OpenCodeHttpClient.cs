@@ -27,6 +27,14 @@ internal sealed class OpenCodeHttpClient
         LoggerMessage.Define<int, string>(LogLevel.Warning, new EventId(3, "RequestFailed"),
             "OpenCode API call failed with status {StatusCode}: {Url}");
 
+    private static readonly Action<ILogger, string, Exception?> LogRequestBody =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(6, "RequestBody"),
+            "OpenCode API request body: {Body}");
+
+    private static readonly Action<ILogger, string, Exception?> LogResponseBody =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(7, "ResponseBody"),
+            "OpenCode API error response body: {Body}");
+
     private static readonly Action<ILogger, string, Exception?> LogSseHeartbeat =
         LoggerMessage.Define<string>(LogLevel.Trace, new EventId(4, "SseHeartbeat"),
             "SSE heartbeat or control event: {Type}");
@@ -472,19 +480,20 @@ internal sealed class OpenCodeHttpClient
 
     private async Task PostVoidAsync<TReq>(string url, TReq body, JsonTypeInfo<TReq> reqTypeInfo, CancellationToken ct)
     {
+        var requestBody = JsonSerializer.Serialize(body, reqTypeInfo);
         LogRequest(_logger, $"POST {url}", null);
+        LogRequestBody(_logger, requestBody, null);
 
-        var content = new StringContent(
-            JsonSerializer.Serialize(body, reqTypeInfo),
-            Encoding.UTF8,
-            "application/json");
+        var content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
         using var response = await _httpClient.PostAsync(url, content, ct).ConfigureAwait(false);
         LogResponse(_logger, (int)response.StatusCode, url, null);
 
         if (!response.IsSuccessStatusCode)
         {
+            var responseBody = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             LogRequestFailed(_logger, (int)response.StatusCode, url, null);
+            LogResponseBody(_logger, responseBody, null);
             response.EnsureSuccessStatusCode();
         }
     }
@@ -496,10 +505,9 @@ internal sealed class OpenCodeHttpClient
         StringContent? content = null;
         if (body is not null)
         {
-            content = new StringContent(
-                JsonSerializer.Serialize(body, reqTypeInfo),
-                Encoding.UTF8,
-                "application/json");
+            var requestBody = JsonSerializer.Serialize(body, reqTypeInfo);
+            LogRequestBody(_logger, requestBody, null);
+            content = new StringContent(requestBody, Encoding.UTF8, "application/json");
         }
 
         using var response = await _httpClient.PostAsync(url, content, ct).ConfigureAwait(false);
@@ -507,7 +515,9 @@ internal sealed class OpenCodeHttpClient
 
         if (!response.IsSuccessStatusCode)
         {
+            var responseBody = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             LogRequestFailed(_logger, (int)response.StatusCode, url, null);
+            LogResponseBody(_logger, responseBody, null);
             response.EnsureSuccessStatusCode();
         }
 
