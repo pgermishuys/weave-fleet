@@ -573,7 +573,11 @@ public sealed class TestHarnessSession : IHarnessSession
             "tool" => new ToolUsePart(
                 ToolCallId: part.TryGetProperty("callID", out var callIdEl) ? callIdEl.GetString() ?? "" : "",
                 ToolName: part.TryGetProperty("tool", out var toolEl) ? toolEl.GetString() ?? "" : "",
-                Arguments: part.TryGetProperty("input", out var inputEl) ? inputEl.Clone() : default,
+                Arguments: part.TryGetProperty("input", out var inputEl)
+                    ? inputEl.Clone()
+                    : (part.TryGetProperty("state", out var stateEl2) && stateEl2.TryGetProperty("input", out var nestedInput)
+                        ? nestedInput.Clone()
+                        : JsonDocument.Parse("{}").RootElement.Clone()),
                 State: MapToolState(part)),
             _ => null,
         };
