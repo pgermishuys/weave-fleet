@@ -215,7 +215,14 @@ const optimisticMessages = computed<ActivityMessage[]>(() => {
 });
 
 const messages = computed<ActivityMessage[]>(() => {
-  const baseMessages = [...deliveredMessages.value, ...optimisticMessages.value];
+  const deliveredIds = new Set(deliveredMessages.value.map((message) => message.id));
+  const pendingOptimisticMessages = optimisticMessages.value.filter((message) => {
+    const deliveredId = message.id.startsWith("optimistic-")
+      ? message.id.slice("optimistic-".length)
+      : message.id;
+    return !deliveredIds.has(deliveredId);
+  });
+  const baseMessages = [...deliveredMessages.value, ...pendingOptimisticMessages];
 
   return baseMessages.map((message, index) => {
     const previousMessage = baseMessages[index - 1];

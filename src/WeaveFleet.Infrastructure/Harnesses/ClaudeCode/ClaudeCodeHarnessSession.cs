@@ -130,10 +130,6 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         {
             LogSendPrompt(_logger, InstanceId, null);
 
-            // 1. Persist synthetic user message (await to avoid race with frontend load)
-            var userMsg = MessagePersistenceService.CreateUserPromptMessage(text, DateTimeOffset.UtcNow, options?.Agent);
-            await PersistMessageAsync(userMsg).ConfigureAwait(false);
-
             // 2. Emit session busy status
             var busyEvent = ClaudeCodeMapper.CreateSessionStatusEvent(_fleetSessionId, "busy");
             await _eventChannel.Writer.WriteAsync(busyEvent, ct).ConfigureAwait(false);

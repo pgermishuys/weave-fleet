@@ -357,4 +357,104 @@ public sealed class HarnessEventRelayTests
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);
     }
+
+    [Fact]
+    public async Task Relay_suppresses_user_echo_parts_and_keeps_assistant_parts()
+    {
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
+
+        const string fleetSessionId = "fleet-user-echo";
+        const string instanceId = "instance-user-echo";
+        const string userMessageId = "msg-user";
+        const string assistantMessageId = "msg-assistant";
+        sessionRepo.Seed(new Session { Id = fleetSessionId, InstanceId = instanceId, UserId = "u" });
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeHarnessSession(instanceId);
+        tracker.Register(instanceId, instance);
+
+        instance.Emit(new HarnessEvent
+        {
+            Type = EventTypes.MessageCreated,
+            SessionId = "oc-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                info = new
+                {
+                    id = userMessageId,
+                    role = "user"
+                }
+            })
+        });
+
+        instance.Emit(new HarnessEvent
+        {
+            Type = EventTypes.MessagePartUpdated,
+            SessionId = "oc-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                part = new
+                {
+                    id = "part-1",
+                    messageID = userMessageId,
+                    type = "text",
+                    text = "user prompt"
+                }
+            })
+        });
+
+        instance.Emit(new HarnessEvent
+        {
+            Type = EventTypes.MessageUpdated,
+            SessionId = "oc-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                info = new
+                {
+                    id = assistantMessageId,
+                    role = "assistant"
+                }
+            })
+        });
+
+        instance.Emit(new HarnessEvent
+        {
+            Type = EventTypes.MessagePartUpdated,
+            SessionId = "oc-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                part = new
+                {
+                    id = "part-2",
+                    messageID = assistantMessageId,
+                    type = "text",
+                    text = "assistant reply"
+                }
+            })
+        });
+        instance.Complete();
+
+        for (int i = 0; i < 50 && publisher.Calls.IsEmpty; i++)
+            await Task.Delay(50);
+
+        publisher.Calls.Count.ShouldBe(2);
+        publisher.Calls.Select(call => call.Event.Type).ToArray().ShouldBe([
+            EventTypes.MessageUpdated,
+            EventTypes.MessagePartUpdated
+        ]);
+        publisher.Calls.All(call => call.Event.Payload?.GetRawText().Contains(userMessageId) is not true).ShouldBeTrue();
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
 }

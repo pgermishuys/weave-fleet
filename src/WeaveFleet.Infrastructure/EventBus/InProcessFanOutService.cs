@@ -65,6 +65,9 @@ internal sealed partial class InProcessFanOutService : BackgroundService
         var evt       = envelope.Event;
         var domainEvent = envelope.DomainEvent;
 
+        if (IsUserMessageEcho(evt))
+            return;
+
         // Buffer message.part.delta text for the durable merge on next message.updated.
         if (evt.Type == EventTypes.MessagePartDelta && userId is not null)
         {
@@ -111,6 +114,28 @@ internal sealed partial class InProcessFanOutService : BackgroundService
             return typeProp.GetString();
         }
         return null;
+    }
+
+    private static bool IsUserMessageEcho(HarnessEvent evt)
+    {
+        if (evt.Type is EventTypes.MessageCreated or EventTypes.MessageUpdated)
+            return HasUserRole(evt.Payload);
+
+        return false;
+    }
+
+    private static bool HasUserRole(JsonElement? payload)
+    {
+        if (!payload.HasValue
+            || payload.Value.ValueKind != JsonValueKind.Object
+            || !payload.Value.TryGetProperty("info", out var info)
+            || info.ValueKind != JsonValueKind.Object
+            || !info.TryGetProperty("role", out var role))
+        {
+            return false;
+        }
+
+        return role.GetString() is "user";
     }
 
     [LoggerMessage(Level = LogLevel.Warning, EventId = 1,

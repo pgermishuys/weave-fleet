@@ -169,6 +169,9 @@ public sealed class WorkspaceRootService(
         {
             currentPath = Path.Combine(currentPath, segment);
 
+            if (!Directory.Exists(currentPath))
+                continue;
+
             var directoryInfo = new DirectoryInfo(currentPath);
             var resolvedTarget = directoryInfo.ResolveLinkTarget(true);
             if (resolvedTarget is not null)

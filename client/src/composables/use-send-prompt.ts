@@ -114,6 +114,30 @@ export function reconcileSentPrompts(sessionId: string, messages: readonly Accum
     return;
   }
 
+  const deliveredPromptIds = new Set(
+    messages
+      .filter((message) => message.role === "user")
+      .map((message) => message.messageId),
+  );
+
+  const remainingAfterIdMatch = prompts.filter((prompt) => !deliveredPromptIds.has(prompt.id));
+  if (remainingAfterIdMatch.length !== prompts.length) {
+    diagLog("prompt.reconcile", `removed ${prompts.length - remainingAfterIdMatch.length} optimistic prompt(s) by id`, {
+      sessionId,
+      removedPromptIds: prompts
+        .filter((prompt) => deliveredPromptIds.has(prompt.id))
+        .map((prompt) => prompt.id),
+    });
+
+    if (remainingAfterIdMatch.length === 0) {
+      delete sentPromptRegistry[sessionId];
+      return;
+    }
+
+    sentPromptRegistry[sessionId] = remainingAfterIdMatch;
+    return;
+  }
+
   const deliveredPromptCounts = buildDeliveredPromptCounts(messages);
   let unmatchedDeliveredPromptCount = 0;
 
@@ -197,6 +221,7 @@ interface BackendSendPromptRequest {
   agent?: string;
   model?: { providerID: string; modelID: string };
   attachments?: ImageAttachment[];
+  userMessageId?: string;
 }
 
 async function readPromptErrorMessage(response: Response): Promise<string> {
@@ -281,7 +306,7 @@ export function useSendPrompt(sessionId: string) {
     const agent = agentsById.value[draft.agentId] ?? agentsById.value[defaultAgentId.value];
     const model = modelsByKey.value[draft.modelId] ?? modelsByKey.value[defaultModelKey.value];
     const now = new Date();
-    const promptId = `${sessionId}-${now.getTime()}`;
+    const promptId = `user-${crypto.randomUUID().replaceAll("-", "")}`;
     const resolvedAgentId = agent?.id ?? draft.agentId ?? defaultAgentId.value;
     const resolvedModelId = model?.id ?? "";
     const usesDefaultAgent = !draft.agentId;
@@ -308,6 +333,7 @@ export function useSendPrompt(sessionId: string) {
     resetText();
     const request: BackendSendPromptRequest = {
       text: body,
+      userMessageId: promptId,
     };
 
     if (resolvedAgentId && !usesDefaultAgent) {

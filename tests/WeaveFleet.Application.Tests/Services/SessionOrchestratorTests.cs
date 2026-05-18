@@ -314,6 +314,76 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task PromptSessionAsync_HappyPath_PersistsUserMessage()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active",
+            Directory = "/tmp", CreatedAt = "2026-01-01", RetentionStatus = "active"
+        });
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.PromptSessionAsync("s1", "hello");
+
+        result.IsSuccess.ShouldBeTrue();
+        var messages = await _builder.MessageRepository.GetBySessionAsync("s1", 10, null);
+        messages.Count.ShouldBe(1);
+        messages[0].Role.ShouldBe("user");
+        messages[0].SessionId.ShouldBe("s1");
+        messages[0].PartsJson.ShouldContain("hello");
+    }
+
+    [Fact]
+    public async Task PromptSessionAsync_WithUserMessageId_PersistsSuppliedId()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active",
+            Directory = "/tmp", CreatedAt = "2026-01-01", RetentionStatus = "active"
+        });
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.PromptSessionAsync(
+            "s1",
+            "hello",
+            options: null,
+            userMessageId: "user-client-owned-id",
+            CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue();
+        var messages = await _builder.MessageRepository.GetBySessionAsync("s1", 10, null);
+        messages.Count.ShouldBe(1);
+        messages[0].Id.ShouldBe("user-client-owned-id");
+        messages[0].Role.ShouldBe("user");
+        messages[0].PartsJson.ShouldContain("hello");
+    }
+
+    [Fact]
+    public async Task CommandSessionAsync_HappyPath_PersistsUserCommandMessage()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active",
+            Directory = "/tmp", CreatedAt = "2026-01-01", RetentionStatus = "active"
+        });
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.CommandSessionAsync("s1", new CommandOptions
+        {
+            Command = "start-work",
+        });
+
+        result.IsSuccess.ShouldBeTrue();
+        var messages = await _builder.MessageRepository.GetBySessionAsync("s1", 10, null);
+        messages.Count.ShouldBe(1);
+        messages[0].Role.ShouldBe("user");
+        messages[0].PartsJson.ShouldContain("start-work");
+    }
+
+    [Fact]
     public async Task PromptSessionAsync_WithExplicitProviderAndModel_SendsStructuredPromptOptions()
     {
         _builder.SessionRepository.Seed(new Session
