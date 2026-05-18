@@ -18,7 +18,7 @@ import {
   LoaderCircle,
   X,
 } from 'lucide-vue-next'
-import type { SmartLink, CiStatus, CheckRun, ReviewThreadSummary } from './types'
+import type { SmartLink, CiStatus, CheckRun, ReviewThreadSummary, ReviewThread } from './types'
 import { refreshSingleLink } from './composables/use-smart-links'
 
 const props = defineProps<{ link: SmartLink; sessionId: string | null }>()
@@ -51,6 +51,7 @@ onUnmounted(() => {
 })
 
 const ciExpanded = ref(false)
+const reviewExpanded = ref(false)
 
 const statusIcon = computed(() => {
   if (props.link.resourceType === 'pull_request') {
@@ -149,6 +150,13 @@ const unresolvedCount = computed(() => {
   return (meta.reviewThreads as ReviewThreadSummary).unresolvedCount ?? 0
 })
 
+const unresolvedThreads = computed<ReviewThread[]>(() => {
+  const meta = props.link.metadata
+  if (props.link.resourceType !== 'pull_request' || !meta?.reviewThreads) return []
+  const summary = meta.reviewThreads as ReviewThreadSummary
+  return (summary.threads ?? []).filter(t => !t.isResolved)
+})
+
 function getLabelStyle(color: string): { backgroundColor: string; borderColor: string; color: string } {
   const safeColor = HEX_COLOR_RE.test(color) ? color : '888888'
   return {
@@ -185,14 +193,6 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
         </a>
 
         <!-- Review comment count badge -->
-        <span
-          v-if="unresolvedCount > 0"
-          class="review-badge"
-          :title="`${unresolvedCount} unresolved review comment${unresolvedCount === 1 ? '' : 's'}`"
-        >
-          <MessageSquare :size="12" aria-hidden="true" />
-          <span class="review-badge-count">{{ unresolvedCount }}</span>
-        </span>
       </div>
 
       <!-- CI aggregate badge -->
@@ -274,6 +274,67 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
             target="_blank"
             rel="noopener noreferrer"
             :aria-label="`Open ${cr.name} on GitHub`"
+            @click.stop
+          >
+            <ExternalLink :size="10" aria-hidden="true" />
+          </a>
+        </li>
+      </ul>
+
+      <!-- Review comments row -->
+      <div v-if="unresolvedCount > 0" class="review-status-row">
+        <button
+          v-if="unresolvedThreads.length > 0"
+          type="button"
+          class="review-badge-btn"
+          :aria-label="`${unresolvedCount} unresolved review comment${unresolvedCount === 1 ? '' : 's'}`"
+          :title="`${unresolvedCount} unresolved review comment${unresolvedCount === 1 ? '' : 's'}`"
+          @click.stop="reviewExpanded = !reviewExpanded"
+        >
+          <MessageSquare :class="'review-icon review-icon--active'" :size="13" aria-hidden="true" />
+          <span class="review-badge-label">{{ unresolvedCount }}</span>
+          <component
+            :is="reviewExpanded ? ChevronDown : ChevronRight"
+            class="review-chevron"
+            :size="10"
+            aria-hidden="true"
+          />
+        </button>
+        <span
+          v-else
+          class="review-badge-static"
+          :title="`${unresolvedCount} unresolved review comment${unresolvedCount === 1 ? '' : 's'}`"
+        >
+          <MessageSquare :class="'review-icon review-icon--active'" :size="13" aria-hidden="true" />
+          <span class="review-badge-label">{{ unresolvedCount }}</span>
+        </span>
+      </div>
+
+      <!-- Expandable review thread list -->
+      <ul
+        v-if="reviewExpanded && unresolvedThreads.length > 0"
+        class="review-thread-list"
+        aria-label="Unresolved review threads"
+      >
+        <li
+          v-for="thread in unresolvedThreads"
+          :key="thread.threadNodeId"
+          class="review-thread-item"
+        >
+          <MessageSquare :size="11" class="review-thread-icon" aria-hidden="true" />
+          <span class="review-thread-path" :title="`${thread.path}${thread.line ? ':' + thread.line : ''}`">
+            {{ thread.path }}{{ thread.line ? ':' + thread.line : '' }}
+          </span>
+          <span v-if="thread.comments.length > 0" class="review-thread-author">
+            @{{ thread.comments[0].authorLogin }}
+          </span>
+          <a
+            v-if="thread.comments.length > 0 && thread.comments[0].url"
+            :href="thread.comments[0].url"
+            class="review-thread-link"
+            target="_blank"
+            rel="noopener noreferrer"
+            :aria-label="`Open thread on ${thread.path}`"
             @click.stop
           >
             <ExternalLink :size="10" aria-hidden="true" />
@@ -404,19 +465,103 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
   color: var(--muted);
 }
 
-/* Review comment badge */
-.review-badge {
+/* Review comments row */
+.review-status-row {
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+  margin-left: -23px; /* align with PR icon */
+}
+
+.review-badge-btn {
   display: inline-flex;
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
-  color: var(--muted);
+  padding: 1px 2px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
   font-size: 11px;
+  color: var(--muted);
 }
 
-.review-badge-count {
+.review-badge-btn:hover,
+.review-badge-btn:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+
+.review-badge-static {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.review-badge-label {
   font-weight: 600;
   line-height: 1;
+}
+
+.review-icon--active {
+  color: #f59e0b;
+}
+
+.review-chevron {
+  color: var(--muted);
+}
+
+/* Review thread list */
+.review-thread-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.review-thread-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.review-thread-icon {
+  flex-shrink: 0;
+  color: #f59e0b;
+}
+
+.review-thread-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.review-thread-author {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.review-thread-link {
+  flex-shrink: 0;
+  color: var(--muted);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.review-thread-link:hover {
+  color: var(--text);
 }
 
 /* Labels */
