@@ -134,6 +134,7 @@ async function dismiss() {
   <article
     v-if="!isActive && submittedAnswers !== null"
     class="qcard qcard--answered"
+    data-testid="question-card-answered"
   >
     <div class="qcard__header">
       <span class="qcard__kind">Question</span>
@@ -166,6 +167,7 @@ async function dismiss() {
   <article
     v-else-if="isActive && questionInput"
     class="qcard qcard--active"
+    data-testid="question-card-active"
   >
     <div
       v-for="(q, qi) in questionInput.questions"
@@ -189,6 +191,7 @@ async function dismiss() {
           :key="opt.label"
           type="button"
           class="qcard__pill"
+          :data-testid="`question-pill-${opt.label}`"
           :class="{ 'qcard__pill--selected': isSelected(qi, opt.label) }"
           :disabled="loading"
           @click="toggleOption(qi, opt.label, false)"
@@ -256,6 +259,7 @@ async function dismiss() {
       <button
         type="button"
         class="qcard__btn qcard__btn--submit"
+        data-testid="question-submit-button"
         :disabled="loading"
         @click="submit"
       >

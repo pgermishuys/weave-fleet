@@ -26,6 +26,8 @@ public sealed class TestHarnessSession : IHarnessSession
     private readonly string _fleetSessionId;
     private readonly IServiceScopeFactory? _scopeFactory;
     private readonly string? _ownerUserId;
+    private string? _lastQuestionMessageId;
+    private JsonElement? _lastQuestionInput;
 
     public TestHarnessSession(string instanceId, TestScenario scenario)
         : this(instanceId, scenario, instanceId, scopeFactory: null, ownerUserId: null)
@@ -143,8 +145,40 @@ public sealed class TestHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc/>
-    public Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
-        => Task.CompletedTask;
+    [UnconditionalSuppressMessage("AOT", "IL2026", Justification = "Test infrastructure only")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test infrastructure only")]
+    public async Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
+    {
+        // Emit a message.part.updated event that transitions the tool part to completed,
+        // mimicking the real harness behaviour after an answer is accepted.
+        var evt = new HarnessEvent
+        {
+            Type = "message.part.updated",
+            SessionId = InstanceId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                sessionID = InstanceId,
+                part = new
+                {
+                    type = "tool",
+                    id = $"{requestId}-part",
+                    callID = requestId,
+                    tool = "question",
+                    sessionID = InstanceId,
+                    messageID = _lastQuestionMessageId ?? "msg-question",
+                    state = new
+                    {
+                        status = "completed",
+                        input = _lastQuestionInput,
+                        metadata = new { answers }
+                    }
+                }
+            })
+        };
+
+        await PushEventCoreAsync(evt, ct).ConfigureAwait(false);
+    }
 
     /// <inheritdoc/>
     public Task RejectQuestionAsync(string requestId, CancellationToken ct)
@@ -227,6 +261,9 @@ public sealed class TestHarnessSession : IHarnessSession
                 // persisted by PersistUserPromptAsync.
                 if (IsDurableAssistantEvent(scenarioEvent.Event))
                     await TryHandleDurableEventAsync(scenarioEvent.Event).ConfigureAwait(false);
+
+                // Track question tool context for AnswerQuestionAsync
+                TryTrackQuestionContext(scenarioEvent.Event);
 
                 await _channel.Writer.WriteAsync(scenarioEvent.Event, ct).ConfigureAwait(false);
             }
@@ -383,6 +420,16 @@ public sealed class TestHarnessSession : IHarnessSession
 
     /// <summary>Signal the subscription stream is complete (no more events).</summary>
     public void CompleteStream() => _channel.Writer.TryComplete();
+
+    /// <summary>
+    /// Tracks the question context so that <see cref="AnswerQuestionAsync"/> can emit
+    /// a properly-formed completion event. Call this after pushing the question tool part.
+    /// </summary>
+    public void SetQuestionContext(string messageId, JsonElement input)
+    {
+        _lastQuestionMessageId = messageId;
+        _lastQuestionInput = input;
+    }
 
     private async ValueTask PushEventCoreAsync(HarnessEvent evt, CancellationToken ct)
     {
@@ -547,5 +594,27 @@ public sealed class TestHarnessSession : IHarnessSession
             "pending" => ToolUseState.Pending,
             _ => ToolUseState.Running,
         };
+    }
+
+    /// <summary>
+    /// Tracks question tool context from emitted events so that <see cref="AnswerQuestionAsync"/>
+    /// can produce a proper completion event without manual setup.
+    /// </summary>
+    private void TryTrackQuestionContext(HarnessEvent evt)
+    {
+        if (evt.Type != "message.part.updated" || !evt.Payload.HasValue)
+            return;
+
+        var payload = evt.Payload.Value;
+        if (!payload.TryGetProperty("part", out var part))
+            return;
+        if (!part.TryGetProperty("tool", out var toolEl) || toolEl.GetString() != "question")
+            return;
+
+        if (part.TryGetProperty("messageID", out var msgIdEl))
+            _lastQuestionMessageId = msgIdEl.GetString();
+
+        if (part.TryGetProperty("state", out var stateEl) && stateEl.TryGetProperty("input", out var inputEl))
+            _lastQuestionInput = inputEl.Clone();
     }
 }
