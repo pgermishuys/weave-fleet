@@ -161,6 +161,57 @@ public sealed class TestScenarioBuilder
         );
     }
 
+    /// <summary>
+    /// Enqueue a response that presents a question tool form to the user.
+    /// Emits: session.status(busy) → message.updated → message.part.updated (tool/question pending) → stays busy.
+    /// The session remains busy until the user answers or dismisses the question.
+    /// </summary>
+    public TestScenarioBuilder WithQuestionToolResponse(
+        string sessionId,
+        string messageId,
+        string toolCallId,
+        object questionsInput,
+        TimeSpan? delay = null)
+    {
+        var partId = $"{toolCallId}-part";
+        var userPartId = $"{messageId}-user-part-1";
+        var responseDelay = delay ?? TimeSpan.FromMilliseconds(10);
+
+        return WithPromptResponse(b => b
+            .AddEvent(MakeEvent(sessionId, "session.status",
+                new { sessionId, status = new { type = "busy" } }))
+            // User message echo
+            .AddEvent(MakeEvent(sessionId, "message.updated",
+                new { info = new { id = $"{messageId}-user", sessionID = sessionId, role = "user" } }))
+            .AddEvent(MakeEvent(sessionId, "message.part.updated",
+                new { sessionID = sessionId, part = new { type = "text", id = userPartId, sessionID = sessionId, messageID = $"{messageId}-user", text = TestHarnessPromptTokens.UserPromptPlaceholder } }))
+            // Assistant message with question tool part
+            .AddEvent(MakeEvent(sessionId, "message.updated",
+                new { info = new { id = messageId, sessionID = sessionId, role = "assistant" } }),
+                responseDelay)
+            .AddEvent(MakeEvent(sessionId, "message.part.updated",
+                new
+                {
+                    sessionID = sessionId,
+                    part = new
+                    {
+                        type = "tool",
+                        id = partId,
+                        callID = toolCallId,
+                        tool = "question",
+                        sessionID = sessionId,
+                        messageID = messageId,
+                        state = new
+                        {
+                            status = "running",
+                            input = questionsInput
+                        }
+                    }
+                }),
+                responseDelay)
+        );
+    }
+
     // ── Error scenarios ──────────────────────────────────────────────────────
 
     /// <summary>Configure the harness to throw when <c>SpawnAsync</c> is called.</summary>
