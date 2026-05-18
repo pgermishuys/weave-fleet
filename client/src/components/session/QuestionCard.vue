@@ -127,13 +127,6 @@ async function dismiss() {
   }
 }
 
-// ── Display label for a completed answer ─────────────────────────────────────
-
-function formatAnswers(answers: string[][]): string {
-  return answers
-    .map((a) => (a.length === 0 ? "(unanswered)" : a.join(", ")))
-    .join(" | ");
-}
 </script>
 
 <template>
