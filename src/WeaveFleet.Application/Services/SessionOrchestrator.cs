@@ -305,6 +305,16 @@ public sealed partial class SessionOrchestrator(
         });
         LogSessionCreated(session.Id, workspace.Id, harnessInstance.InstanceId);
 
+        // Persist initial prompt as a user message (server-authoritative).
+        // The harness runtime calls SendPromptAsync directly, bypassing PromptSessionAsync.
+        if (initialPrompt is not null)
+        {
+            var userMsg = MessagePersistenceService.CreateUserPromptMessage(initialPrompt, DateTimeOffset.UtcNow);
+            var persistedMsg = MessagePersistenceService.ToPersistedMessage(sessionId, userMsg);
+            await messageRepository.UpsertAsync(persistedMsg);
+            await BroadcastPersistedUserMessageAsync(sessionId, persistedMsg, ct).ConfigureAwait(false);
+        }
+
         // Emit analytics snapshot for the new session
         analyticsCollector.AcceptSessionSnapshot(new SessionSnapshotData(
             SessionId: session.Id,
@@ -614,6 +624,14 @@ public sealed partial class SessionOrchestrator(
         string text,
         PromptOptions? options = null,
         CancellationToken ct = default)
+        => await PromptSessionAsync(id, text, options, userMessageId: null, ct).ConfigureAwait(false);
+
+    public async Task<Result<Unit>> PromptSessionAsync(
+        string id,
+        string text,
+        PromptOptions? options,
+        string? userMessageId,
+        CancellationToken ct)
     {
         using var _ = BeginSessionScope(id);
         var sessionResult = await GetSessionAsync(id);
@@ -629,6 +647,17 @@ public sealed partial class SessionOrchestrator(
 
         try
         {
+            // Persist user message at send time (server-authoritative).
+            // The harness echo is suppressed in HarnessEventPersistenceService to avoid duplicates.
+            var userMsg = MessagePersistenceService.CreateUserPromptMessage(
+                text,
+                DateTimeOffset.UtcNow,
+                options?.Agent,
+                userMessageId);
+            var persisted = MessagePersistenceService.ToPersistedMessage(id, userMsg);
+            await messageRepository.UpsertAsync(persisted);
+            await BroadcastPersistedUserMessageAsync(id, persisted, ct).ConfigureAwait(false);
+
             await instanceResult.Value.SendPromptAsync(text, options, ct);
 
             // Persist the model selection so a SPA refresh (which loses local state) can
@@ -835,6 +864,12 @@ public sealed partial class SessionOrchestrator(
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 
+        // Persist user command message at send time (server-authoritative).
+        var userMsg = MessagePersistenceService.CreateUserCommandMessage(options, DateTimeOffset.UtcNow);
+        var persisted = MessagePersistenceService.ToPersistedMessage(id, userMsg);
+        await messageRepository.UpsertAsync(persisted);
+        await BroadcastPersistedUserMessageAsync(id, persisted, ct).ConfigureAwait(false);
+
         await instanceResult.Value.SendCommandAsync(options, ct);
         return Unit.Value;
     }
@@ -906,6 +941,22 @@ public sealed partial class SessionOrchestrator(
 
         var messages = MessagePersistenceService.ToHarnessMessages(pageRows);
         return Result.Success(new MessagePage(messages, hasMore));
+    }
+
+    private async Task BroadcastPersistedUserMessageAsync(
+        string sessionId,
+        PersistedMessage persisted,
+        CancellationToken ct)
+    {
+        if (persisted.Role is not "user")
+            return;
+
+        await eventBroadcaster.BroadcastAsync(
+            $"session:{sessionId}",
+            EventTypes.MessageUpdated,
+            MessagePersistenceService.BuildCommittedMessagePayload(persisted),
+            userContext.UserId,
+            ct).ConfigureAwait(false);
     }
 
     private static string? BuildCreateSessionInitialPrompt(string? initialPrompt, ContextEnvelope? contextEnvelope)

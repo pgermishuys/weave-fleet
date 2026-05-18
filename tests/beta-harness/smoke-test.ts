@@ -79,6 +79,31 @@ async function main(): Promise<void> {
       .map((p) => p.text ?? "")
       .join("");
 
+    // Verify user message was persisted at send time (server-authoritative)
+    const userMessage = messages.find((m) =>
+      m.role === "user" && (m.parts ?? []).some((p) => p.type === "text" && (p.text ?? "").includes("Hello, world!"))
+    );
+    if (!userMessage) {
+      const path = recordFinding({
+        scenarioId: SCENARIO_ID,
+        result: "suspected-bug",
+        repro: [
+          "Start fleet with --harness=test.",
+          `POST /api/sessions with scenarioId=${SCENARIO_ID}.`,
+          `POST /api/sessions/{id}/prompt with text="Hello, world!".`,
+          "Poll GET /api/sessions/{id}/messages for a user message.",
+        ],
+        evidence: [
+          `No user message with text "Hello, world!" found in messages API.`,
+          `All messages: ${JSON.stringify(messages)}`,
+        ],
+        nextProbe: "Check SessionOrchestrator.PromptSessionAsync persists user message before forwarding to harness.",
+      });
+      process.stderr.write(`smoke: FAIL — user message not persisted. Finding: ${path}\n`);
+      process.exit(1);
+    }
+    process.stdout.write(`smoke: user message persisted: ${userMessage.id}\n`);
+
     if (!assistant) {
       const tail = tailLog({ grep: "(?i)error|harness|scenario", lines: 50 });
       const path = recordFinding({

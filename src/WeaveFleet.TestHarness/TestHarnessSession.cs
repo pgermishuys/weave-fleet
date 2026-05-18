@@ -91,8 +91,6 @@ public sealed class TestHarnessSession : IHarnessSession
         if (_scenario.ThrowOnSendPrompt)
             throw new InvalidOperationException("TestHarness: configured to fail on SendPromptAsync.");
 
-        var persistedPromptMessageId = await PersistUserPromptAsync(text).ConfigureAwait(false);
-
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -109,7 +107,7 @@ public sealed class TestHarnessSession : IHarnessSession
                 : [];
 
             // Fire and forget: emit events in background so caller returns immediately
-            _ = Task.Run(() => EmitEventsAsync(ApplyPromptText(events, text, persistedPromptMessageId), promptToken), promptToken);
+            _ = Task.Run(() => EmitEventsAsync(ApplyPromptText(events, text, null), promptToken), promptToken);
         }
         finally
         {
@@ -207,8 +205,8 @@ public sealed class TestHarnessSession : IHarnessSession
     /// Durable events for assistant messages are persisted via
     /// <see cref="TryHandleDurableEventAsync"/> so tool parts (question, bash, etc.)
     /// are available when the frontend fetches messages via the REST API.
-    /// User message echoes are skipped because <see cref="PersistUserPromptAsync"/>
-    /// already handles user message persistence.
+    /// User message echoes are skipped because the orchestrator
+    /// already handles user message persistence at send time.
     /// </summary>
     private async Task EmitEventsAsync(IReadOnlyList<ScenarioEvent> events, CancellationToken ct)
     {
@@ -394,33 +392,6 @@ public sealed class TestHarnessSession : IHarnessSession
         await _channel.Writer.WriteAsync(evt, ct).ConfigureAwait(false);
     }
 
-    [UnconditionalSuppressMessage("AOT", "IL2026", Justification = "Test infrastructure only")]
-    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test infrastructure only")]
-    private async Task<string?> PersistUserPromptAsync(string text)
-    {
-        if (_scopeFactory is null || string.IsNullOrWhiteSpace(_ownerUserId))
-            return null;
-
-        using var scope = _scopeFactory.CreateScope();
-        var writer = scope.ServiceProvider.GetService<SessionActivityWriteService>();
-        if (writer is null)
-            return null;
-
-        var createdAt = DateTimeOffset.UtcNow;
-
-        var message = MessagePersistenceService.CreateUserPromptMessage(text, createdAt);
-        var persisted = MessagePersistenceService.ToPersistedMessage(_fleetSessionId, message);
-
-        await writer.WriteAsync(
-            new SessionActivityWriteRequest
-            {
-                MessagesToUpsert = [persisted],
-            },
-            CancellationToken.None).ConfigureAwait(false);
-
-        return persisted.Id;
-    }
-
     private async Task<bool> TryHandleDurableEventAsync(HarnessEvent evt)
     {
         if (_scopeFactory is null || string.IsNullOrWhiteSpace(_ownerUserId))
@@ -445,10 +416,10 @@ public sealed class TestHarnessSession : IHarnessSession
 
             var existing = await messageRepo.GetByIdAsync(messageId, _fleetSessionId).ConfigureAwait(false);
 
-            // User messages are persisted at send time (PersistUserPromptAsync) with a
+            // User messages are persisted at send time by the orchestrator with a
             // synthetic ID. The echoed message.updated from the harness carries a different
             // ID and no parts — creating a stub here would produce an empty duplicate.
-            // Skip it; the send-time row already has the text.
+            // Skip it; the orchestrator row already has the text.
             if (existing is null && role is "user")
                 return false;
 

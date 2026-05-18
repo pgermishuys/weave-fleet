@@ -182,6 +182,7 @@ public sealed class HarnessEventRelay : BackgroundService
         }
 
         long publishSequence = 0;
+        var suppressedUserMessageIds = new HashSet<string>(StringComparer.Ordinal);
         using var translationScope = _scopeFactory.CreateScope();
         var translator = translationScope.ServiceProvider.GetRequiredService<DomainEventTranslator>();
 
@@ -204,6 +205,9 @@ public sealed class HarnessEventRelay : BackgroundService
                         continue;
                     eventToPublish = evt with { Payload = filteredPayload };
                 }
+
+                if (ShouldSuppressUserEcho(eventToPublish, suppressedUserMessageIds))
+                    continue;
 
                 var eventToTranslate = eventToPublish with { FleetSessionId = targetFleetSessionId };
                 var domainEvent = translator.Translate(eventToTranslate);
@@ -274,5 +278,54 @@ public sealed class HarnessEventRelay : BackgroundService
                 sessionUserId,
                 CancellationToken.None).ConfigureAwait(false);
         }
+    }
+
+    private static bool ShouldSuppressUserEcho(HarnessEvent evt, HashSet<string> suppressedUserMessageIds)
+    {
+        if (evt.Type is EventTypes.MessageCreated or EventTypes.MessageUpdated)
+        {
+            var userMessageId = TryGetUserMessageId(evt.Payload);
+            if (userMessageId is null)
+                return false;
+
+            suppressedUserMessageIds.Add(userMessageId);
+            return true;
+        }
+
+        if (evt.Type is not (EventTypes.MessagePartUpdated or EventTypes.MessagePartDelta))
+            return false;
+
+        var partMessageId = TryGetPartMessageId(evt.Payload);
+        return partMessageId is not null && suppressedUserMessageIds.Contains(partMessageId);
+    }
+
+    private static string? TryGetUserMessageId(System.Text.Json.JsonElement? payload)
+    {
+        if (!payload.HasValue
+            || payload.Value.ValueKind != System.Text.Json.JsonValueKind.Object
+            || !payload.Value.TryGetProperty("info", out var info)
+            || info.ValueKind != System.Text.Json.JsonValueKind.Object
+            || !info.TryGetProperty("role", out var role)
+            || role.GetString() is not "user"
+            || !info.TryGetProperty("id", out var id))
+        {
+            return null;
+        }
+
+        return id.GetString();
+    }
+
+    private static string? TryGetPartMessageId(System.Text.Json.JsonElement? payload)
+    {
+        if (!payload.HasValue
+            || payload.Value.ValueKind != System.Text.Json.JsonValueKind.Object
+            || !payload.Value.TryGetProperty("part", out var part)
+            || part.ValueKind != System.Text.Json.JsonValueKind.Object
+            || !part.TryGetProperty("messageID", out var messageId))
+        {
+            return null;
+        }
+
+        return messageId.GetString();
     }
 }

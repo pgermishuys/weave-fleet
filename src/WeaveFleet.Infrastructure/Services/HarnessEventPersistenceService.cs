@@ -209,6 +209,11 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
             if (role is not ("user" or "assistant"))
                 return false;
 
+            // User messages are persisted at send time in SessionOrchestrator.PromptSessionAsync.
+            // Skip the echo from the harness to avoid duplicates.
+            if (role is "user")
+                return false;
+
             OpenCodeMessageInfo? info = role == "assistant"
                 ? OpenCodeMessageDeserializer.DeserializeAssistantMessage(infoEl)
                 : OpenCodeMessageDeserializer.DeserializeUserMessage(infoEl);

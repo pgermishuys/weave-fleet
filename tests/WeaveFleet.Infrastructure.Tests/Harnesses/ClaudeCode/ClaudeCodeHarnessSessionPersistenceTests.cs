@@ -277,73 +277,9 @@ public sealed class ClaudeCodeHarnessSessionPersistenceTests
     // SendPromptAsync persistence tests
     // -----------------------------------------------------------------------
 
-    [Fact]
-    public async Task SendPromptAsync_PersistsSyntheticUserMessage()
-    {
-        // NOTE: SendPromptAsync persists the user message as fire-and-forget BEFORE
-        // spawning the process. The process launch will fail (non-existent binary),
-        // but the persist task was already enqueued.
-        var fleetSessionId = "fleet-cc-send-1";
-        var (scopeFactory, messageRepo) = BuildPersistenceDependencies();
-
-        var persistSignal = new TaskCompletionSource();
-        messageRepo.UpsertBehavior = message =>
-        {
-            persistSignal.TrySetResult();
-            return Task.CompletedTask;
-        };
-
-        await using var instance = CreateInstance(fleetSessionId, scopeFactory);
-
-        // Act — the send will throw because the binary doesn't exist, but
-        // the fire-and-forget persist was already scheduled
-        try
-        {
-            await instance.SendPromptAsync("Hello", null, CancellationToken.None);
-        }
-        catch
-        {
-            // Expected — the binary doesn't exist
-        }
-
-        // Wait for the fire-and-forget persist to complete
-        await persistSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
-
-        messageRepo.UpsertCalls.Count.ShouldBe(1);
-        var upserted = messageRepo.UpsertCalls[0];
-        upserted.SessionId.ShouldBe(fleetSessionId);
-        upserted.Role.ShouldBe("user");
-        upserted.PartsJson.ShouldContain("Hello");
-    }
-
-    [Fact]
-    public async Task SendPromptAsync_PersistenceFailure_DoesNotCrashInstance()
-    {
-        var fleetSessionId = "fleet-cc-send-2";
-        var (scopeFactory, messageRepo) = BuildPersistenceDependencies();
-
-        // DB throws — should be silently swallowed
-        messageRepo.UpsertBehavior = _ => Task.FromException(new InvalidOperationException("DB is on fire"));
-
-        await using var instance = CreateInstance(fleetSessionId, scopeFactory);
-
-        // Act — should not throw due to DB error
-        try
-        {
-            await instance.SendPromptAsync("Hello", null, CancellationToken.None);
-        }
-        catch
-        {
-            // Process launch failure is expected — we only care that DB failure is silent
-        }
-
-        // Give fire-and-forget time to settle
-        await Task.Delay(300);
-
-        // Instance should still be disposeably healthy (no unhandled exception propagated)
-        // Verify UpsertAsync was called (and swallowed the exception)
-        messageRepo.UpsertCalls.Count.ShouldBeGreaterThanOrEqualTo(1);
-    }
+    // SendPromptAsync no longer persists user messages directly. User prompt
+    // persistence is owned by SessionOrchestrator so the frontend and backend
+    // share one client-owned prompt ID.
 
     // -----------------------------------------------------------------------
     // Message content round-trip

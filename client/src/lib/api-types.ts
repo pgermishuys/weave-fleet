@@ -156,6 +156,7 @@ export interface SendPromptRequest {
   text: string;
   agent?: string;
   model?: string;
+  userMessageId?: string;
 }
 
 /** An image attachment sent alongside a prompt (base64-encoded). */
