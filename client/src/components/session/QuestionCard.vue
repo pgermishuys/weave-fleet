@@ -127,13 +127,6 @@ async function dismiss() {
   }
 }
 
-// ── Display label for a completed answer ─────────────────────────────────────
-
-function formatAnswers(answers: string[][]): string {
-  return answers
-    .map((a) => (a.length === 0 ? "(unanswered)" : a.join(", ")))
-    .join(" | ");
-}
 </script>
 
 <template>
@@ -141,13 +134,21 @@ function formatAnswers(answers: string[][]): string {
   <article
     v-if="!isActive && submittedAnswers !== null"
     class="qcard qcard--answered"
+    data-testid="question-card-answered"
   >
     <div class="qcard__header">
       <span class="qcard__kind">Question</span>
       <span class="qcard__title">{{ questionInput?.questions[0]?.header ?? "Question" }}</span>
       <span class="qcard__badge qcard__badge--answered">Answered</span>
     </div>
-    <p class="qcard__summary">{{ formatAnswers(submittedAnswers) }}</p>
+    <div
+      v-for="(q, qi) in questionInput?.questions ?? []"
+      :key="qi"
+      class="qcard__answered-detail"
+    >
+      <p class="qcard__question-text qcard__question-text--answered">{{ q.question }}</p>
+      <p class="qcard__answer-value">→ {{ submittedAnswers[qi]?.join(", ") ?? "(unanswered)" }}</p>
+    </div>
   </article>
 
   <!-- ── Dismissed state ── -->
@@ -166,6 +167,7 @@ function formatAnswers(answers: string[][]): string {
   <article
     v-else-if="isActive && questionInput"
     class="qcard qcard--active"
+    data-testid="question-card-active"
   >
     <div
       v-for="(q, qi) in questionInput.questions"
@@ -189,6 +191,7 @@ function formatAnswers(answers: string[][]): string {
           :key="opt.label"
           type="button"
           class="qcard__pill"
+          :data-testid="`question-pill-${opt.label}`"
           :class="{ 'qcard__pill--selected': isSelected(qi, opt.label) }"
           :disabled="loading"
           @click="toggleOption(qi, opt.label, false)"
@@ -256,6 +259,7 @@ function formatAnswers(answers: string[][]): string {
       <button
         type="button"
         class="qcard__btn qcard__btn--submit"
+        data-testid="question-submit-button"
         :disabled="loading"
         @click="submit"
       >
@@ -337,12 +341,23 @@ function formatAnswers(answers: string[][]): string {
   color: var(--muted);
 }
 
-/* ── Summary (answered) ── */
-.qcard__summary {
-  margin: 0;
+/* ── Answered detail ── */
+.qcard__answered-detail {
   padding: 0 12px 10px;
+}
+
+.qcard__question-text--answered {
+  margin: 0 0 4px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.qcard__answer-value {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 /* ── Per-question block ── */
