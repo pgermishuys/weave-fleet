@@ -162,7 +162,7 @@ public sealed class TestHarnessSession : IHarnessSession
                 part = new
                 {
                     type = "tool",
-                    id = $"{requestId}-part",
+                    id = requestId,
                     callID = requestId,
                     tool = "question",
                     sessionID = InstanceId,
