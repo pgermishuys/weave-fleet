@@ -138,6 +138,9 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WorkspaceRootsResponse))]
 [JsonSerializable(typeof(WorkspaceRootItem))]
 [JsonSerializable(typeof(WorkspaceRootAddedResponse))]
+// Directories
+[JsonSerializable(typeof(DirectoryListingResponse))]
+[JsonSerializable(typeof(DirectoryEntryResponse))]
 // Boards
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.CreateBoardRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.UpdateBoardRequest))]
