@@ -257,10 +257,16 @@ function navigateToCredentials(): void {
       <!-- Enable toggle -->
       <button
         type="button"
-        :class="enabled ? buttonPrimaryClass : buttonSecondaryClass"
+        role="switch"
+        :aria-checked="enabled"
+        class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg"
+        :class="enabled ? 'bg-accent' : 'bg-border'"
         @click="toggleEnabled"
       >
-        {{ enabled ? "Enabled" : "Disabled" }}
+        <span
+          class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+          :class="enabled ? 'translate-x-5' : 'translate-x-0'"
+        />
       </button>
     </div>
 
