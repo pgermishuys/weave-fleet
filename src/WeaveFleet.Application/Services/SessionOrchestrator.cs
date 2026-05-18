@@ -190,6 +190,7 @@ public sealed partial class SessionOrchestrator(
             return workspaceResult.Error;
 
         var workspace = workspaceResult.Value;
+        var canonicalWorkspaceDirectory = WorkspaceRootService.CanonicalizePath(workspace.Directory);
 
         // 2. Spawn harness instance
         var sessionId = Guid.NewGuid().ToString();
@@ -200,7 +201,7 @@ public sealed partial class SessionOrchestrator(
             harnessInstance = await harnessRuntime.SpawnAsync(new HarnessSpawnOptions
             {
                 SessionId = sessionId,
-                WorkingDirectory = workspace.Directory,
+                WorkingDirectory = canonicalWorkspaceDirectory,
                 OwnerUserId = userContext.UserId,
                 InitialPrompt = initialPrompt,
                 Branch = workspaceIntent.Branch,
@@ -221,7 +222,7 @@ public sealed partial class SessionOrchestrator(
             id: harnessInstance.InstanceId,
             port: 0,           // port is harness-implementation detail; 0 = unknown
             pid: harnessInstance.ProcessId,
-            directory: workspace.Directory,
+            directory: canonicalWorkspaceDirectory,
             url: string.Empty);
         if (instanceResult.IsFailure)
         {
@@ -242,7 +243,7 @@ public sealed partial class SessionOrchestrator(
             OpencodeSessionId = harnessInstance.InstanceId,
             Title = request.Title ?? "Untitled",
             Status = "active",
-            Directory = workspace.Directory,
+            Directory = canonicalWorkspaceDirectory,
             CreatedAt = DateTime.UtcNow.ToString("O"),
             HarnessType = harnessType,
             UserId = userContext.UserId,
@@ -321,7 +322,7 @@ public sealed partial class SessionOrchestrator(
             ParentSessionId: null,
             ProjectId: projectId,
             ProjectName: projectName,
-            WorkspaceDirectory: workspace.Directory,
+            WorkspaceDirectory: canonicalWorkspaceDirectory,
             Title: session.Title,
             Status: "active",
             TotalTokens: 0,
@@ -497,13 +498,14 @@ public sealed partial class SessionOrchestrator(
             return FleetError.NotFoundFor("HarnessRuntime", parent.HarnessType);
 
         var childSessionId = Guid.NewGuid().ToString();
+        var canonicalParentDirectory = WorkspaceRootService.CanonicalizePath(parent.Directory);
         IHarnessSession harnessInstance;
         try
         {
             harnessInstance = await delegationRuntime.ResumeAsync(new HarnessResumeOptions
             {
                 SessionId = childSessionId,
-                WorkingDirectory = parent.Directory,
+                WorkingDirectory = canonicalParentDirectory,
                 OwnerUserId = parent.UserId,
                 ResumeToken = childHarnessSessionId,
                 ProjectId = parent.ProjectId,
@@ -520,7 +522,7 @@ public sealed partial class SessionOrchestrator(
             id: harnessInstance.InstanceId,
             port: 0,
             pid: harnessInstance.ProcessId,
-            directory: parent.Directory,
+            directory: canonicalParentDirectory,
             url: string.Empty);
         if (instanceResult.IsFailure)
         {
@@ -538,7 +540,7 @@ public sealed partial class SessionOrchestrator(
             Title = string.IsNullOrWhiteSpace(title) ? "Delegated Session" : title,
             Status = "active",
             ActivityStatus = "idle",
-            Directory = parent.Directory,
+            Directory = canonicalParentDirectory,
             CreatedAt = DateTime.UtcNow.ToString("O"),
             ParentSessionId = parent.Id,
             LifecycleStatus = "running",

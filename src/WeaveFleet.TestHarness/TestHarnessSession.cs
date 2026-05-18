@@ -359,6 +359,13 @@ public sealed class TestHarnessSession : IHarnessSession
             ? sessionEl.GetString()
             : null;
 
+        var time = info.TryGetProperty("time", out var timeEl) && timeEl.ValueKind == JsonValueKind.Object
+            ? timeEl.Clone()
+            : JsonSerializer.SerializeToElement(new
+            {
+                created = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            });
+
         rewrittenPayload = JsonSerializer.SerializeToElement(new
         {
             info = new
@@ -366,6 +373,7 @@ public sealed class TestHarnessSession : IHarnessSession
                 id = persistedPromptMessageId,
                 sessionID = sessionId,
                 role = "user",
+                time,
             }
         });
 

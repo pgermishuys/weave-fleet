@@ -139,18 +139,20 @@ public sealed class TestScenarioBuilder
         var partId = $"{messageId}-part-1";
         var userPartId = $"{messageId}-user-part-1";
         var responseDelay = delay ?? TimeSpan.FromMilliseconds(10);
+        var userCreatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var assistantCreatedAt = userCreatedAt + 1;
 
         return WithPromptResponse(b => b
             .AddEvent(MakeEvent(sessionId, "session.status",
                 new { sessionId, status = new { type = "busy" } }))
             // User message echo — matches the real harness event flow
             .AddEvent(MakeEvent(sessionId, "message.updated",
-                new { info = new { id = $"{messageId}-user", sessionID = sessionId, role = "user" } }))
+                new { info = new { id = $"{messageId}-user", sessionID = sessionId, role = "user", time = new { created = userCreatedAt } } }))
             .AddEvent(MakeEvent(sessionId, "message.part.updated",
                 new { sessionID = sessionId, part = new { type = "text", id = userPartId, sessionID = sessionId, messageID = $"{messageId}-user", text = TestHarnessPromptTokens.UserPromptPlaceholder } }))
             // Assistant response
             .AddEvent(MakeEvent(sessionId, "message.updated",
-                new { info = new { id = messageId, sessionID = sessionId, role = "assistant" } }),
+                new { info = new { id = messageId, sessionID = sessionId, role = "assistant", time = new { created = assistantCreatedAt } } }),
                 responseDelay)
             .AddEvent(MakeEvent(sessionId, "message.part.updated",
                 new { sessionID = sessionId, part = new { type = "text", id = partId, sessionID = sessionId, messageID = messageId, text } }),

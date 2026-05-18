@@ -76,8 +76,8 @@ public sealed class RepositorySessionSourceProvider(
             var worktrees = await repositoryService.ListWorktreesAsync(canonicalPath, cancellationToken);
             var knownWorktree = worktrees.FirstOrDefault(w =>
                 string.Equals(
-                    Path.GetFullPath(w.Path),
-                    Path.GetFullPath(existingWorktreePath),
+                    WorkspaceRootService.CanonicalizePath(w.Path),
+                    WorkspaceRootService.CanonicalizePath(existingWorktreePath),
                     StringComparison.OrdinalIgnoreCase));
 
             if (knownWorktree is null)
@@ -104,7 +104,10 @@ public sealed class RepositorySessionSourceProvider(
             return new ResolvedSessionSource(
                 existingDescriptor,
                 new ResolvedSessionInput(
-                    new WorkspaceIntent(existingWorktreePath, "existing", knownWorktree.Branch),
+                    new WorkspaceIntent(
+                        WorkspaceRootService.CanonicalizePath(existingWorktreePath),
+                        "existing",
+                        knownWorktree.Branch),
                     null,
                     new ProvenanceRecord(
                         ProviderId,
