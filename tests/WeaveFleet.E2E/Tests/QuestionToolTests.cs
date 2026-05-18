@@ -73,9 +73,9 @@ public sealed class QuestionToolTests : E2ETestBase,
                         question = "Which environment should we deploy to?",
                         options = new[]
                         {
-                            new { label = "Production", description = "Live environment" },
-                            new { label = "Staging", description = "Pre-production testing" },
-                            new { label = "Development", description = "Local dev cluster" }
+                            new { label = "Production", description = "" },
+                            new { label = "Staging", description = "" },
+                            new { label = "Development", description = "" }
                         },
                         multiple = false,
                         custom = false
