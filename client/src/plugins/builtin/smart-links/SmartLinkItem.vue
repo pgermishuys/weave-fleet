@@ -325,8 +325,8 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
           <span class="review-thread-path" :title="`${thread.path}${thread.line ? ':' + thread.line : ''}`">
             {{ thread.path }}{{ thread.line ? ':' + thread.line : '' }}
           </span>
-          <span v-if="thread.comments.length > 0" class="review-thread-author">
-            @{{ thread.comments[0].authorLogin }}
+          <span v-if="thread.comments.length > 0 && thread.comments[0].body" class="review-thread-snippet" :title="thread.comments[0].body">
+            {{ thread.comments[0].body.length > 50 ? thread.comments[0].body.slice(0, 50) + '…' : thread.comments[0].body }}
           </span>
           <a
             v-if="thread.comments.length > 0 && thread.comments[0].url"
@@ -548,6 +548,16 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
 
 .review-thread-author {
   flex-shrink: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.review-thread-snippet {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--muted);
   font-size: 10px;
 }

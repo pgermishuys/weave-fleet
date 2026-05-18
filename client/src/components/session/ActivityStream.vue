@@ -7,6 +7,7 @@ import MessageBubble from "@/components/session/MessageBubble.vue";
 import { useSessionEventsSwitch } from "@/composables/use-session-events-switch";
 import { clearSentPrompts, reconcileSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { useSmartLinks } from "@/plugins/builtin/smart-links";
+import { useReviewCommentQueue } from "@/plugins/builtin/smart-links/composables/use-review-comment-queue";
 import type { CommandEventName } from "@/lib/command-events";
 import { formatTimestamp } from "@/lib/format-utils";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart } from "@/lib/api-types";
@@ -86,6 +87,10 @@ useSmartLinks({
   sessionId: computed(() => props.sessionId),
   messages: sessionMessages,
   originUrl: computed(() => selectedSession.value?.origin?.resourceUrl ?? null),
+});
+useReviewCommentQueue({
+  sessionId: computed(() => props.sessionId),
+  messages: sessionMessages,
 });
 const { sentPrompts } = useSentPrompts(props.sessionId);
 const streamRef = ref<HTMLElement | null>(null);

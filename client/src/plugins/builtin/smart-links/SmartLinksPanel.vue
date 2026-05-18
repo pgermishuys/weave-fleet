@@ -1,18 +1,50 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch, ref } from 'vue'
 import { Link } from 'lucide-vue-next'
 import { useSessionsStore } from '@/stores/sessions'
 import { useSmartLinksStore } from '@/stores/smart-links'
+import { useReviewCommentQueueStore } from '@/stores/review-comment-queue'
 import { apiFetch } from '@/lib/api-client'
 import SmartLinkItem from './SmartLinkItem.vue'
+import ReviewCommentQueue from './ReviewCommentQueue.vue'
+import { useReviewCommentQueue } from './composables/use-review-comment-queue'
+import type { AccumulatedMessage } from '@/lib/api-types'
+import type { ReviewCommentQueueItem } from '@/stores/review-comment-queue'
 
 const sessionsStore = useSessionsStore()
 const smartLinksStore = useSmartLinksStore()
+const queueStore = useReviewCommentQueueStore()
 
 const sessionId = computed(() => sessionsStore.activeSessionId)
 const activeLinks = computed(() =>
   sessionId.value ? smartLinksStore.getActiveLinks(sessionId.value) : [],
 )
+const queueItems = computed(() =>
+  sessionId.value ? queueStore.getItemsForSession(sessionId.value) : [],
+)
+
+// Notification banner
+const notificationText = ref<string | null>(null)
+let notificationTimer: ReturnType<typeof setTimeout> | undefined
+watch(
+  () => queueStore.latestNotification,
+  (text) => {
+    if (!text) return
+    notificationText.value = text
+    queueStore.clearNotification()
+    clearTimeout(notificationTimer)
+    notificationTimer = setTimeout(() => {
+      notificationText.value = null
+    }, 6000)
+  },
+)
+
+// Provide empty messages ref so the composable is a no-op here (already wired in ActivityStream)
+const emptyMessages = computed<readonly AccumulatedMessage[]>(() => [])
+const { approve, skip, updateReply, approveAll } = useReviewCommentQueue({
+  sessionId,
+  messages: emptyMessages,
+})
 
 async function handleDismiss(linkId: string): Promise<void> {
   const sid = sessionId.value
@@ -29,6 +61,14 @@ async function handleDismiss(linkId: string): Promise<void> {
   }
 }
 
+function handleApprove(item: ReviewCommentQueueItem): void {
+  void approve(item)
+}
+
+function handleApproveAll(): void {
+  const sid = sessionId.value
+  if (sid) void approveAll(sid)
+}
 </script>
 
 <template>
@@ -46,6 +86,16 @@ async function handleDismiss(linkId: string): Promise<void> {
         Smart Links
       </h2>
     </header>
+
+    <!-- Notification banner -->
+    <div
+      v-if="notificationText"
+      class="smart-links-notification"
+      role="status"
+      aria-live="polite"
+    >
+      {{ notificationText }}
+    </div>
 
     <div
       v-if="!sessionId"
@@ -77,6 +127,16 @@ async function handleDismiss(linkId: string): Promise<void> {
         @dismiss="handleDismiss"
       />
     </div>
+
+    <!-- Review comment queue panel -->
+    <ReviewCommentQueue
+      v-if="sessionId && queueItems.length > 0"
+      :items="queueItems"
+      @approve="handleApprove"
+      @skip="skip"
+      @update-reply="(item, reply) => updateReply(item, reply)"
+      @approve-all="handleApproveAll"
+    />
   </section>
 </template>
 
@@ -128,5 +188,14 @@ async function handleDismiss(linkId: string): Promise<void> {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+.smart-links-notification {
+  background: color-mix(in srgb, var(--accent, #f97316) 15%, transparent);
+  border-left: 3px solid var(--accent, #f97316);
+  color: var(--text);
+  font-size: 11px;
+  padding: 6px 12px;
+  line-height: 1.4;
 }
 </style>
