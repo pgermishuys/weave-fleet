@@ -35,6 +35,7 @@ export type SessionActivityStatus = "busy" | "delegating" | "idle" | "waiting_in
  */
 export type SessionLifecycleStatus =
   | "running"
+  | "resuming"
   | "completed"
   | "stopped"
   | "error"

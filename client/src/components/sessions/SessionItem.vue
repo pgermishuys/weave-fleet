@@ -283,10 +283,12 @@ async function handleStop(): Promise<void> {
 
 async function handleResume(): Promise<void> {
   try {
+    syncSessionStore({ activityStatus: "idle", lifecycleStatus: "resuming", sessionStatus: "resuming" });
     await resumeSession(sessionId.value);
     syncSessionStore({ activityStatus: "idle", lifecycleStatus: "running", sessionStatus: "idle" });
   } catch {
-    // Errors are handled by the mutation composable state.
+    // Revert to stopped on failure
+    syncSessionStore({ activityStatus: "idle", lifecycleStatus: "stopped", sessionStatus: "stopped" });
   }
 }
 
@@ -366,9 +368,9 @@ async function handleDelete(): Promise<void> {
 function syncSessionStore(
   patch: Partial<{
     activityStatus: "busy" | "delegating" | "idle";
-    lifecycleStatus: "running" | "stopped" | "completed" | "disconnected" | "error";
+    lifecycleStatus: "running" | "resuming" | "stopped" | "completed" | "disconnected" | "error";
     retentionStatus: "active" | "archived";
-    sessionStatus: "active" | "idle" | "stopped" | "completed" | "disconnected" | "error" | "waiting_input";
+    sessionStatus: "active" | "idle" | "stopped" | "completed" | "disconnected" | "error" | "waiting_input" | "resuming";
   }>,
 ): void {
   sessionsStore.patchSession(sessionId.value, patch);
