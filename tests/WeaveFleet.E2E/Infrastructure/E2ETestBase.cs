@@ -13,6 +13,7 @@ namespace WeaveFleet.E2E.Infrastructure;
 [Trait("Category", "E2E")]
 public abstract class E2ETestBase : IAsyncLifetime
 {
+    private const string AlwaysSaveTraceEnvironmentVariable = "ALWAYS_SAVE_TRACE";
     private readonly FleetWebApplicationFactory _factory;
     private readonly PlaywrightFixture _playwright;
     private IBrowserContext? _context;
@@ -82,19 +83,24 @@ public abstract class E2ETestBase : IAsyncLifetime
         if (_context is null)
             return;
 
-        if (_testFailed)
+        var saveTrace = _testFailed || ShouldAlwaysSaveTrace();
+
+        if (saveTrace)
         {
-            // Capture trace artifact for debugging
             var artifactsDir = GetArtifactsDirectory();
             var testName = GetTestName();
             var tracePath = Path.Combine(artifactsDir, $"{testName}-trace.zip");
-            var screenshotPath = Path.Combine(artifactsDir, $"{testName}-screenshot.png");
 
             try
             {
                 Directory.CreateDirectory(artifactsDir);
                 await _context.Tracing.StopAsync(new TracingStopOptions { Path = tracePath });
-                await Page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath });
+
+                if (_testFailed)
+                {
+                    var screenshotPath = Path.Combine(artifactsDir, $"{testName}-screenshot.png");
+                    await Page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath });
+                }
             }
             catch
             {
@@ -147,6 +153,17 @@ public abstract class E2ETestBase : IAsyncLifetime
         var assemblyDir = Path.GetDirectoryName(
             System.Reflection.Assembly.GetExecutingAssembly().Location) ?? ".";
         return Path.Combine(assemblyDir, "test-results");
+    }
+
+    private static bool ShouldAlwaysSaveTrace()
+    {
+        var value = Environment.GetEnvironmentVariable(AlwaysSaveTraceEnvironmentVariable);
+
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        return string.Equals(value, "1", StringComparison.Ordinal) ||
+            bool.TryParse(value, out var enabled) && enabled;
     }
 
     private string GetTestName()

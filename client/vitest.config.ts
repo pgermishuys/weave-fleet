@@ -18,7 +18,12 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       reporter: ["text", "html"],
-      include: ["src/composables/**/*.ts", "src/stores/**/*.ts"],
+      include: [
+        "src/composables/**/*.ts",
+        "src/stores/**/*.ts",
+        "src/lib/event-state.ts",
+        "src/components/session/activity-stream-tool-card.ts",
+      ],
       exclude: [
         "src/**/*.d.ts",
         "src/**/__tests__/**",

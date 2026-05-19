@@ -91,6 +91,61 @@ public sealed class SessionDetailPage(IPage page)
         => await Assertions.Expect(MessageItems.Filter(new LocatorFilterOptions { HasText = text }))
             .ToHaveCountAsync(1, new LocatorAssertionsToHaveCountOptions { Timeout = timeoutMs });
 
+    /// <summary>Get a tool card by its stable tool-part identifier.</summary>
+    public ILocator GetToolCard(string toolCardId)
+        => _page.Locator($"[data-testid='tool-card'][data-tool-card-id='{toolCardId}']");
+
+    /// <summary>Get the header button for a tool card.</summary>
+    public ILocator GetToolCardHeader(string toolCardId)
+        => GetToolCard(toolCardId).GetByTestId("tool-card-header");
+
+    /// <summary>Get the body container for a tool card.</summary>
+    public ILocator GetToolCardBody(string toolCardId)
+        => GetToolCard(toolCardId).GetByTestId("tool-card-body");
+
+    /// <summary>Get the summary element for a tool card.</summary>
+    public ILocator GetToolCardSummary(string toolCardId)
+        => GetToolCard(toolCardId).GetByTestId("tool-card-summary");
+
+    /// <summary>Get the output element for a tool card.</summary>
+    public ILocator GetToolCardOutput(string toolCardId)
+        => GetToolCard(toolCardId).GetByTestId("tool-card-output");
+
+    /// <summary>Get the empty-state element for a tool card.</summary>
+    public ILocator GetToolCardEmptyState(string toolCardId)
+        => GetToolCard(toolCardId).GetByTestId("tool-card-empty-state");
+
+    /// <summary>Get the diff container for a tool card.</summary>
+    public ILocator GetToolCardDiff(string toolCardId)
+        => GetToolCard(toolCardId).GetByTestId("tool-card-diff");
+
+    /// <summary>Get the diff rows for a tool card.</summary>
+    public ILocator GetToolCardDiffRows(string toolCardId)
+        => GetToolCard(toolCardId).GetByTestId("tool-card-diff-row");
+
+    /// <summary>Wait for a tool card to be visible.</summary>
+    public Task WaitForToolCardAsync(string toolCardId)
+        => GetToolCard(toolCardId).WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
+
+    /// <summary>Expand a collapsed tool card.</summary>
+    public async Task ExpandToolCardAsync(string toolCardId)
+    {
+        var header = GetToolCardHeader(toolCardId);
+        var isExpanded = string.Equals(
+            await header.GetAttributeAsync("aria-expanded"),
+            "true",
+            StringComparison.Ordinal);
+
+        if (!isExpanded)
+            await header.ClickAsync();
+
+        await Assertions.Expect(GetToolCardBody(toolCardId)).ToBeVisibleAsync();
+    }
+
+    /// <summary>Toggle inline tool diffs through the browser test API.</summary>
+    public Task SetInlineToolDiffsAsync(bool enabled)
+        => _page.EvaluateAsync("(enabled) => window.__WEAVE_TEST_API?.setInlineToolDiffs(enabled)", enabled);
+
     /// <summary>Get the sender name displayed on a specific message item (e.g. "You", "Loom", "Assistant").</summary>
     public static async Task<string?> GetMessageSenderNameAsync(ILocator messageItem)
         => (await messageItem.GetByTestId("message-sender-name").TextContentAsync())?.Trim();

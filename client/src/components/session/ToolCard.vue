@@ -34,8 +34,9 @@ const props = withDefaults(
 
 const workspaceUiStore = useWorkspaceUiStore();
 
-const isCollapsed = shallowRef(props.initiallyCollapsed);
 const shouldShowDiff = computed(() => workspaceUiStore.inlineToolDiffs && props.diffLines.length > 0);
+const isCollapsed = shallowRef(props.initiallyCollapsed && !shouldShowDiff.value);
+const shouldShowEmptyState = computed(() => !props.summary && !props.output && props.diffLines.length === 0);
 
 watch(
   () => props.initiallyCollapsed,
@@ -68,12 +69,15 @@ function toggleCollapsed(): void {
   <article
     class="tool-card"
     :class="cardClassName"
+    data-testid="tool-card"
+    :data-tool-card-id="id"
   >
     <button
       type="button"
       class="tool-header"
       :aria-expanded="!isCollapsed"
       :aria-controls="`${id}-body`"
+      data-testid="tool-card-header"
       @click="toggleCollapsed"
     >
       <ChevronDown
@@ -92,10 +96,12 @@ function toggleCollapsed(): void {
         v-if="!isCollapsed"
         :id="`${id}-body`"
         class="tool-body"
+        data-testid="tool-card-body"
       >
         <p
           v-if="summary"
           class="tool-summary"
+          data-testid="tool-card-summary"
         >
           {{ summary }}
         </p>
@@ -108,7 +114,16 @@ function toggleCollapsed(): void {
         <pre
           v-if="output"
           class="tool-output"
+          data-testid="tool-card-output"
         ><code>{{ output }}</code></pre>
+
+        <p
+          v-if="shouldShowEmptyState"
+          class="tool-empty-state"
+          data-testid="tool-card-empty-state"
+        >
+          No output captured
+        </p>
       </div>
     </Transition>
   </article>
@@ -212,5 +227,14 @@ function toggleCollapsed(): void {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.tool-empty-state {
+  margin: 0;
+  padding: 0 12px 12px;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: italic;
+  line-height: 1.6;
 }
 </style>
