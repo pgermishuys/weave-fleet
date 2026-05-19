@@ -62,3 +62,6 @@ Ensure every expanded tool card displays meaningful content.
 - [x] Backend, API, and E2E .NET suites pass
 - [x] Manual equivalent: E2E opens a session with tool calls, expands cards, and asserts non-blank content
 - [x] Manual equivalent: E2E verifies inline diff-view cards render diff rows correctly
+
+## Pull Request
+- https://github.com/pgermishuys/weave-fleet/pull/115
