@@ -295,12 +295,13 @@ function openCompleteDialog(): void {
   isCompleteDialogOpen.value = true;
 }
 
-async function handleArchive(_deleteWorktree: boolean): Promise<void> {
+async function handleArchive(deleteWorktree: boolean): Promise<void> {
   try {
     await archiveSession(sessionId.value);
     syncSessionStore({ retentionStatus: "archived" });
     isCompleteDialogOpen.value = false;
-    // TODO: if _deleteWorktree, delete the worktree
+    // TODO: if deleteWorktree, call backend to remove the worktree
+    void deleteWorktree;
   } catch {
     // Errors are handled by the mutation composable state.
   }
