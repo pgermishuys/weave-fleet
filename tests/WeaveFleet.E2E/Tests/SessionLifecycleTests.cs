@@ -438,7 +438,7 @@ public sealed class SessionLifecycleTests : E2ETestBase,
 
             await Page.GotoAsync("/");
             await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
-            await sidebar.ClickSessionMenuItemAsync(sessionId, "Completed");
+            await sidebar.ClickSessionMenuItemAsync(sessionId, "Complete");
             await Page.GetByTestId("complete-dialog-confirm").ClickAsync();
 
             await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToHaveCountAsync(0);
@@ -623,7 +623,7 @@ public sealed class SessionLifecycleTests : E2ETestBase,
     {
         await Page.GotoAsync("/");
         await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
-        await sidebar.ClickSessionMenuItemAsync(sessionId, "Completed");
+        await sidebar.ClickSessionMenuItemAsync(sessionId, "Complete");
         await Page.GetByTestId("complete-dialog-confirm").ClickAsync();
         await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToHaveCountAsync(0);
     }

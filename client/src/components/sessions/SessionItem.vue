@@ -470,7 +470,7 @@ function removeSessionFromStore(): void {
         @select="openCompleteDialog"
       >
         <Check class="size-3.5" />
-        Completed
+        Complete
       </ContextMenuItem>
 
       <ContextMenuItem
