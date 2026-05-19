@@ -108,7 +108,7 @@ describe("toToolCardItem", () => {
       kind: "read",
       status: "Pending",
       output: undefined,
-      initiallyCollapsed: false,
+      initiallyCollapsed: true,
     });
     expect(item.diffLines).toEqual([]);
   });

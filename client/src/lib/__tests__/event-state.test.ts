@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPartUpdate } from "@/lib/event-state";
+import { applyPartUpdate, mergeMessageUpdate } from "@/lib/event-state";
 
 describe("applyPartUpdate", () => {
   it("creates_a_message_for_the_first_tool_part", () => {
@@ -103,5 +103,75 @@ describe("applyPartUpdate", () => {
         },
       },
     ]);
+  });
+});
+
+describe("mergeMessageUpdate preserves file parts from snapshot", () => {
+  it("includes file parts from committed snapshot even when no prior file part existed", () => {
+    // Simulate: message exists with a text part only (file part.updated was missed)
+    const messages = [
+      {
+        messageId: "msg-1",
+        sessionId: "session-1",
+        role: "user" as const,
+        parts: [
+          { partId: "text-1", type: "text" as const, text: "hello" },
+        ],
+      },
+    ];
+
+    const updated = mergeMessageUpdate(messages, {
+      id: "msg-1",
+      time: { completed: 1234 },
+      parts: [
+        { id: "text-1", type: "text", text: "hello" },
+        { id: "file-1", type: "file", mime: "image/png", filename: "screenshot.png", url: "data:image/png;base64,abc" },
+      ],
+    });
+
+    const msg = updated.find((m) => m.messageId === "msg-1");
+    expect(msg).toBeDefined();
+    const filePart = msg!.parts.find((p) => p.type === "file");
+    expect(filePart).toBeDefined();
+    expect(filePart).toMatchObject({
+      partId: "file-1",
+      type: "file",
+      mime: "image/png",
+      filename: "screenshot.png",
+      url: "data:image/png;base64,abc",
+    });
+  });
+
+  it("preserves file parts already accumulated when snapshot arrives without them", () => {
+    // Simulate: file part arrived via part.updated, then message.updated arrives without file in parts array
+    const messages = [
+      {
+        messageId: "msg-1",
+        sessionId: "session-1",
+        role: "user" as const,
+        parts: [
+          { partId: "text-1", type: "text" as const, text: "hello" },
+          { partId: "file-1", type: "file" as const, mime: "image/png", filename: "screenshot.png", url: "data:image/png;base64,abc" },
+        ],
+      },
+    ];
+
+    const updated = mergeMessageUpdate(messages, {
+      id: "msg-1",
+      time: { completed: 1234 },
+      parts: [
+        { id: "text-1", type: "text", text: "hello" },
+      ],
+    });
+
+    const msg = updated.find((m) => m.messageId === "msg-1");
+    expect(msg).toBeDefined();
+    const filePart = msg!.parts.find((p) => p.type === "file");
+    expect(filePart).toBeDefined();
+    expect(filePart).toMatchObject({
+      partId: "file-1",
+      type: "file",
+      mime: "image/png",
+    });
   });
 });

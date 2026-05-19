@@ -121,7 +121,7 @@ function mapCommittedSnapshotPart(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   part: Record<string, any>,
   index: number,
-): AccumulatedTextPart | null {
+): AccumulatedTextPart | AccumulatedFilePart | null {
   if (part.type === "text") {
     return {
       partId: typeof part.id === "string" ? part.id : `${messageId}-text-${index}`,
@@ -130,20 +130,33 @@ function mapCommittedSnapshotPart(
     };
   }
 
+  if (part.type === "file") {
+    return {
+      partId: typeof part.id === "string" ? part.id : `${messageId}-file-${index}`,
+      type: "file",
+      mime: typeof part.mime === "string" ? part.mime : "",
+      filename: typeof part.filename === "string" ? part.filename : undefined,
+      url: typeof part.url === "string" ? part.url : "",
+    };
+  }
+
   return null;
 }
 
 function mergeCommittedSnapshotParts(
   existingParts: AccumulatedMessage["parts"],
-  snapshotParts: Array<AccumulatedTextPart>,
+  snapshotParts: Array<AccumulatedTextPart | AccumulatedFilePart>,
 ): AccumulatedMessage["parts"] {
+  const snapshotTextParts = snapshotParts.filter((p): p is AccumulatedTextPart => p.type === "text");
+  const snapshotFileParts = snapshotParts.filter((p): p is AccumulatedFilePart => p.type === "file");
+
   const existingTextByPartId = new Map(
     existingParts
       .filter((p): p is AccumulatedTextPart => p.type === "text")
       .map((p) => [p.partId, p]),
   );
 
-  const mergedText = snapshotParts.map((snap) => {
+  const mergedText = snapshotTextParts.map((snap) => {
     const existing = existingTextByPartId.get(snap.partId);
     if (existing && existing.text.length > snap.text.length) {
       return existing;
@@ -151,11 +164,18 @@ function mergeCommittedSnapshotParts(
     return snap;
   });
 
-  const nonTextParts = existingParts.filter(
-    (part) => part.type !== "text" && part.type !== "reasoning",
+  // Merge file parts: snapshot wins for matching IDs, preserve existing ones not in snapshot
+  const snapshotFilePartIds = new Set(snapshotFileParts.map((p) => p.partId));
+  const existingFileParts = existingParts.filter(
+    (p): p is AccumulatedFilePart => p.type === "file" && !snapshotFilePartIds.has(p.partId),
+  );
+  const mergedFiles = [...snapshotFileParts, ...existingFileParts];
+
+  const otherParts = existingParts.filter(
+    (part) => part.type !== "text" && part.type !== "reasoning" && part.type !== "file",
   );
 
-  return [...mergedText, ...nonTextParts];
+  return [...mergedText, ...mergedFiles, ...otherParts];
 }
 
 export function applyPartUpdate(

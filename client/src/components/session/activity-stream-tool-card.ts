@@ -35,7 +35,7 @@ export function toToolCardItem(part: AccumulatedToolPart): ToolCardItem {
     summary: getStringValue(state?.summary),
     output: getToolOutput(state),
     diffLines: getDiffLines(state),
-    initiallyCollapsed: state?.status === "completed",
+    initiallyCollapsed: state?.status !== "error",
   };
 }
 
