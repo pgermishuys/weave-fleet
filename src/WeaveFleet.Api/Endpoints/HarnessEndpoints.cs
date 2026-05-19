@@ -1,4 +1,5 @@
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Endpoints;
 
@@ -12,14 +13,35 @@ public static class HarnessEndpoints
 
         group.MapGet("/harnesses", async (
             IHarnessRegistry registry,
+            IUserPreferenceRepository preferences,
             CancellationToken ct) =>
         {
             var harnesses = await registry.GetAvailabilityAsync(ct);
-            return Results.Ok(harnesses);
+            var preferenceValues = await preferences.GetAllAsync();
+
+            var response = harnesses.Select(harness => harness with
+            {
+                UserEnabled = IsHarnessUserEnabled(harness.Type, preferenceValues)
+            }).ToList();
+
+            return Results.Ok(response);
         })
         .WithName("GetHarnesses");
 
         return app;
+    }
+
+    private static bool IsHarnessUserEnabled(
+        string harnessType,
+        IReadOnlyDictionary<string, string> preferenceValues)
+    {
+        var preferenceKey = $"{harnessType}.enabled";
+        if (preferenceValues.TryGetValue(preferenceKey, out var value))
+        {
+            return string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return string.Equals(harnessType, "opencode", StringComparison.OrdinalIgnoreCase);
     }
 }
 #pragma warning restore IL2026

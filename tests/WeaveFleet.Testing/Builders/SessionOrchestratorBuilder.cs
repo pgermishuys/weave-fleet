@@ -34,6 +34,7 @@ public sealed class SessionOrchestratorBuilder
     public FakeAnalyticsCollector AnalyticsCollector { get; } = new();
     public FakeCredentialStore CredentialStore { get; } = new();
     public FakeHarnessRegistry HarnessRegistry { get; } = new();
+    public InMemoryUserPreferenceRepository UserPreferenceRepository { get; } = new();
 
     // ── Overridable dependencies ─────────────────────────────────────────────
 
@@ -99,6 +100,7 @@ public sealed class SessionOrchestratorBuilder
             HarnessEventLogRepository,
             delegationService,
             CredentialStore,
+            UserPreferenceRepository,
             _userContext,
             _options,
             SmartLinkRepository,

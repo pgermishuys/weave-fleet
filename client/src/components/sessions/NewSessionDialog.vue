@@ -21,14 +21,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useDirectoryBrowser } from "@/composables/use-directory-browser";
-import { useHarnesses } from "@/composables/use-harnesses";
+import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useProjects } from "@/composables/use-projects";
 import { useRepositories } from "@/composables/use-repositories";
 import { useCreateSession } from "@/composables/use-session-actions";
 import { useWorktrees } from "@/composables/use-worktrees";
 import type {
   CreateSessionResponse,
-  HarnessInfo,
   ProjectResponse,
   ScannedRepository,
   SessionSourceSelection,
@@ -40,7 +39,6 @@ import {
 } from "@/lib/github-session-source";
 import { cn } from "@/lib/utils";
 import { useAppShellStore } from "@/stores/app-shell";
-import { usePreferencesStore } from "@/stores/preferences";
 
 type SessionSourceKind = "repository" | "directory";
 type IsolationStrategy = "existing" | "worktree";
@@ -66,12 +64,13 @@ const emit = defineEmits<{
 }>();
 
 const appShellStore = useAppShellStore();
-const preferencesStore = usePreferencesStore();
 const { config } = storeToRefs(appShellStore);
+const {
+  enabledHarnesses,
+  defaultHarnessType,
+} = useEnabledHarnesses();
 
 type WorktreeMode = "new" | "existing";
-
-preferencesStore.ensureLoaded();
 
 const sourceKind = shallowRef<SessionSourceKind>("repository");
 const repositoryQuery = shallowRef("");
@@ -87,11 +86,7 @@ const branchManuallyEdited = shallowRef(false);
 const worktreeMode = shallowRef<WorktreeMode>("new");
 const selectedWorktreePath = shallowRef<string | null>(null);
 const selectedProjectId = shallowRef(props.initialProjectId ?? UNGROUPED_PROJECT_ID);
-function getDefaultHarnessType(): string {
-  return preferencesStore.get("defaultHarnessType", "opencode");
-}
-
-const selectedHarnessType = shallowRef(getDefaultHarnessType());
+const selectedHarnessType = shallowRef(defaultHarnessType.value);
 const submitAttempted = shallowRef(false);
 const activeGitHubPreset = shallowRef<GitHubSessionSourcePreset | null>(null);
 
@@ -104,10 +99,6 @@ const {
   projects,
   error: projectsError,
 } = useProjects({ enabled: open });
-const {
-  harnesses,
-  error: harnessesError,
-} = useHarnesses();
 const {
   createSession,
   isLoading: isCreating,
@@ -123,11 +114,7 @@ const userProjects = computed<readonly ProjectResponse[]>(() => {
   return projects.value.filter((project) => project.type !== "scratch");
 });
 
-const availableHarnesses = computed<readonly HarnessInfo[]>(() => {
-  return harnesses.value.filter((harness) => harness.available);
-});
-
-const showHarnessSelect = computed(() => availableHarnesses.value.length > 1);
+const showHarnessSelect = computed(() => enabledHarnesses.value.length > 1);
 const showProjectSelect = computed(() => userProjects.value.length > 0);
 const isCloudMode = computed(() => config.value.cloudMode);
 
@@ -174,11 +161,11 @@ const effectiveBranch = computed(() => {
 });
 
 const resolvedHarnessType = computed(() => {
-  if (selectedHarnessType.value && availableHarnesses.value.some((harness) => harness.type === selectedHarnessType.value)) {
+  if (selectedHarnessType.value && enabledHarnesses.value.some((harness) => harness.type === selectedHarnessType.value)) {
     return selectedHarnessType.value;
   }
 
-  return availableHarnesses.value[0]?.type ?? "";
+  return getPreferredHarnessType();
 });
 
 const effectiveDirectory = computed(() => {
@@ -274,7 +261,6 @@ const dialogError = computed(() => {
   return createError.value
     ?? repositoriesError.value
     ?? projectsError.value
-    ?? harnessesError.value
     ?? directoryBrowser.error.value
     ?? null;
 });
@@ -308,6 +294,14 @@ function getInitialProjectSelection(): string {
   return props.initialProjectId ?? UNGROUPED_PROJECT_ID;
 }
 
+function getPreferredHarnessType(): string {
+  if (enabledHarnesses.value.some((harness) => harness.type === defaultHarnessType.value)) {
+    return defaultHarnessType.value;
+  }
+
+  return enabledHarnesses.value[0]?.type ?? "opencode";
+}
+
 function resetForm(): void {
   sourceKind.value = "repository";
   repositoryQuery.value = "";
@@ -322,7 +316,7 @@ function resetForm(): void {
   worktreeMode.value = "new";
   selectedWorktreePath.value = null;
   selectedProjectId.value = getInitialProjectSelection();
-  selectedHarnessType.value = getDefaultHarnessType();
+  selectedHarnessType.value = getPreferredHarnessType();
   submitAttempted.value = false;
   activeGitHubPreset.value = null;
 }
@@ -501,6 +495,22 @@ watch(open, async (isOpen) => {
 
   resetForm();
 });
+
+watch(
+  [enabledHarnesses, defaultHarnessType],
+  () => {
+    if (enabledHarnesses.value.length === 0 && selectedHarnessType.value === defaultHarnessType.value) {
+      return;
+    }
+
+    if (enabledHarnesses.value.some((harness) => harness.type === selectedHarnessType.value)) {
+      return;
+    }
+
+    selectedHarnessType.value = getPreferredHarnessType();
+  },
+  { immediate: true },
+);
 
 watch(
   [open, sourceKind, repositories, activeGitHubPreset],
@@ -1025,7 +1035,7 @@ watch(
 
               <SelectContent>
                 <SelectItem
-                  v-for="harness in availableHarnesses"
+                  v-for="harness in enabledHarnesses"
                   :key="harness.type"
                   :value="harness.type"
                 >
