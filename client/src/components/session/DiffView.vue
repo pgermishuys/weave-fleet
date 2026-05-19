@@ -15,11 +15,15 @@ defineProps<{
   <div
     class="diff-view"
     aria-label="Diff view"
+    data-testid="tool-card-diff"
   >
     <div
       v-for="(line, index) in lines"
       :key="`${index}-${line.content}`"
       class="diff-line"
+      data-testid="tool-card-diff-row"
+      :data-diff-type="line.type"
+      :data-diff-index="index"
       :class="{
         'diff-add': line.type === 'add',
         'diff-remove': line.type === 'remove',

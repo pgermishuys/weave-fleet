@@ -8,32 +8,15 @@ import { useSessionEventsSwitch } from "@/composables/use-session-events-switch"
 import { clearSentPrompts, reconcileSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { useSmartLinks } from "@/plugins/builtin/smart-links";
 import { useReviewCommentQueue } from "@/plugins/builtin/smart-links/composables/use-review-comment-queue";
+import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
+import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { CommandEventName } from "@/lib/command-events";
 import { formatTimestamp } from "@/lib/format-utils";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart } from "@/lib/api-types";
 import { isQuestionPart } from "@/lib/question-types";
 import { diagLog } from "@/lib/message-diagnostics";
-import { getToolLabel } from "@/lib/tool-labels";
 import { useSessionsStore } from "@/stores/sessions";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
-
-interface DiffLine {
-  type: "add" | "remove" | "context";
-  content: string;
-  oldLineNumber?: number;
-  newLineNumber?: number;
-}
-
-interface ToolCardItem {
-  id: string;
-  title: string;
-  kind?: string;
-  status?: string;
-  summary?: string;
-  output?: string;
-  diffLines?: DiffLine[];
-  initiallyCollapsed?: boolean;
-}
 
 interface ImageAttachmentDisplay {
   url: string;
@@ -632,80 +615,6 @@ function renderMessagePart(part: AccumulatedPart): string | null {
   return null;
 }
 
-function toToolCardItem(part: AccumulatedToolPart): ToolCardItem {
-  const state = asRecord(part.state);
-  const input = asRecord(state?.input);
-  const title = getToolLabel(part.tool, input) || part.tool;
-
-  return {
-    id: part.partId,
-    title,
-    kind: part.tool,
-    status: formatToolStatus(state?.status),
-    summary: getStringValue(state?.summary),
-    output: stringifyToolValue(state?.output),
-    diffLines: getDiffLines(state),
-    initiallyCollapsed: state?.status === "completed",
-  };
-}
-
-function getDiffLines(state: Record<string, unknown> | null): DiffLine[] {
-  const candidates = [state?.diffLines, state?.diff, state?.patch];
-
-  for (const candidate of candidates) {
-    const lines = normalizeDiffLines(candidate);
-
-    if (lines.length > 0) {
-      return lines;
-    }
-  }
-
-  return [];
-}
-
-function normalizeDiffLines(value: unknown): DiffLine[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.flatMap((entry) => {
-    const record = asRecord(entry);
-    const content = getStringValue(record?.content) ?? getStringValue(record?.text) ?? getStringValue(record?.line);
-    const type = getStringValue(record?.type) ?? inferDiffType(content);
-
-    if (!content || !type || !isDiffType(type)) {
-      return [];
-    }
-
-    return [{
-      type,
-      content,
-      oldLineNumber: getNumberValue(record?.oldLineNumber),
-      newLineNumber: getNumberValue(record?.newLineNumber),
-    } satisfies DiffLine];
-  });
-}
-
-function inferDiffType(content: string | undefined): DiffLine["type"] | null {
-  if (!content) {
-    return null;
-  }
-
-  if (content.startsWith("+")) {
-    return "add";
-  }
-
-  if (content.startsWith("-")) {
-    return "remove";
-  }
-
-  return "context";
-}
-
-function isDiffType(value: string): value is DiffLine["type"] {
-  return value === "add" || value === "remove" || value === "context";
-}
-
 function formatToolStatus(value: unknown): string {
   const status = getStringValue(value);
   if (!status) {
@@ -715,36 +624,8 @@ function formatToolStatus(value: unknown): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-function stringifyToolValue(value: unknown): string | undefined {
-  if (typeof value === "string") {
-    return value;
-  }
-
-  if (value == null) {
-    return undefined;
-  }
-
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
-
 function getStringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function getNumberValue(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
 }
 </script>
 
@@ -766,7 +647,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
       @scroll.passive="updatePinnedState"
     >
       <!-- Load older messages indicator -->
-      <div v-if="isLoadingOlder" class="load-older-indicator">
+      <div
+        v-if="isLoadingOlder"
+        class="load-older-indicator"
+      >
         <span class="load-older-spinner" />
         Loading older messages…
       </div>

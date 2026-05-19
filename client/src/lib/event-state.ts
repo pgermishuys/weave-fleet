@@ -225,15 +225,21 @@ export function applyPartUpdate(
     }
 
     if (part.type === "tool") {
+      const existingPart = msg.parts.find(
+        (p): p is AccumulatedToolPart => p.type === "tool" && p.partId === part.id,
+      );
+      const existingState = (existingPart?.state ?? {}) as Record<string, unknown>;
+      const incomingState = (part.state ?? {}) as Record<string, unknown>;
       const newPart: AccumulatedToolPart = {
         partId: part.id,
         type: "tool",
         tool: part.tool ?? "",
         callId: part.callID ?? "",
-        state: part.state,
+        state: existingPart
+          ? { ...existingState, ...incomingState }
+          : part.state,
       };
-      const existing = msg.parts.find((p) => p.partId === part.id);
-      if (existing) {
+      if (existingPart) {
         return {
           ...msg,
           parts: msg.parts.map((p) => (p.partId === part.id ? newPart : p)),

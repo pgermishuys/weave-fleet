@@ -164,6 +164,68 @@ public sealed class TestScenarioBuilder
     }
 
     /// <summary>
+    /// Enqueue a tool response for the next prompt.
+    /// Emits: session.status(busy) → user echo → assistant message.updated → message.part.updated (tool) → session.idle.
+    /// </summary>
+    public TestScenarioBuilder WithToolResponse(
+        string sessionId,
+        string messageId,
+        string toolPartId,
+        string toolCallId,
+        string toolName,
+        object toolState)
+    {
+        return WithToolResponse(sessionId, messageId, toolPartId, toolCallId, toolName, toolState, TimeSpan.FromMilliseconds(10));
+    }
+
+    /// <summary>
+    /// Enqueue a tool response for the next prompt with a custom assistant delay.
+    /// </summary>
+    public TestScenarioBuilder WithToolResponse(
+        string sessionId,
+        string messageId,
+        string toolPartId,
+        string toolCallId,
+        string toolName,
+        object toolState,
+        TimeSpan delay)
+    {
+        var userPartId = $"{messageId}-user-part-1";
+        var userCreatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var assistantCreatedAt = userCreatedAt + 1;
+
+        return WithPromptResponse(b => b
+            .AddEvent(MakeEvent(sessionId, "session.status",
+                new { sessionId, status = new { type = "busy" } }))
+            .AddEvent(MakeEvent(sessionId, "message.updated",
+                new { info = new { id = $"{messageId}-user", sessionID = sessionId, role = "user", time = new { created = userCreatedAt } } }))
+            .AddEvent(MakeEvent(sessionId, "message.part.updated",
+                new { sessionID = sessionId, part = new { type = "text", id = userPartId, sessionID = sessionId, messageID = $"{messageId}-user", text = TestHarnessPromptTokens.UserPromptPlaceholder } }))
+            .AddEvent(MakeEvent(sessionId, "message.updated",
+                new { info = new { id = messageId, sessionID = sessionId, role = "assistant", time = new { created = assistantCreatedAt } } }),
+                delay)
+            .AddEvent(MakeEvent(sessionId, "message.part.updated",
+                new
+                {
+                    sessionID = sessionId,
+                    part = new
+                    {
+                        type = "tool",
+                        id = toolPartId,
+                        callID = toolCallId,
+                        tool = toolName,
+                        sessionID = sessionId,
+                        messageID = messageId,
+                        state = toolState,
+                    }
+                }),
+                delay)
+            .AddEvent(MakeEvent(sessionId, "session.idle",
+                new { sessionId, status = new { type = "idle" } }),
+                delay));
+    }
+
+    /// <summary>
     /// Enqueue a response that presents a question tool form to the user.
     /// Emits: session.status(busy) → message.updated → message.part.updated (tool/question pending) → stays busy.
     /// The session remains busy until the user answers or dismisses the question.
