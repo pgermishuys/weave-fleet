@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/vue-router";
-import { computed, defineComponent, shallowRef, watch } from "vue";
+import { computed, defineComponent, nextTick, shallowRef, watch, type ComponentPublicInstance } from "vue";
 import { ArrowLeft, Bot } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import ActivityStream from "@/components/session/ActivityStream.vue";
@@ -31,6 +31,10 @@ interface SessionDetailResponse {
   retentionStatus?: string | null;
   origin?: SessionOrigin | null;
 }
+
+type ComposerInstance = ComponentPublicInstance & {
+  focusPrompt: () => void;
+};
 
 function getStringField(
   value: Record<string, unknown>,
@@ -109,6 +113,7 @@ const SessionDetailPage = defineComponent({
     const sessionsStore = useSessionsStore();
     const { sessions, sessionStateOverrides } = storeToRefs(sessionsStore);
     const remoteSession = shallowRef<SessionDetailResponse | null>(null);
+    const composerRef = shallowRef<ComposerInstance | null>(null);
     const optimisticWorking = shallowRef(false);
     const optimisticSessionState = shallowRef<{
       activityStatus?: string | null;
@@ -138,6 +143,12 @@ const SessionDetailPage = defineComponent({
         const abortController = new AbortController();
         onCleanup(() => {
           abortController.abort();
+        });
+
+        void nextTick(() => {
+          if (!abortController.signal.aborted) {
+            composerRef.value?.focusPrompt();
+          }
         });
 
         try {
@@ -466,6 +477,7 @@ const SessionDetailPage = defineComponent({
         </div>
         <ActivityStream key={`${params.value.id}-${instanceId.value}`} sessionId={params.value.id} instanceId={instanceId.value} />
         <Composer
+          ref={composerRef}
           sessionId={params.value.id}
           instanceId={instanceId.value}
           disabled={isComposerDisabled.value}
