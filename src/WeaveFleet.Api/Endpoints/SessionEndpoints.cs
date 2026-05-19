@@ -71,6 +71,7 @@ public static class SessionEndpoints
                     return Results.Ok(new GetSessionResponse(
                         Id: session.Id,
                         InstanceId: session.InstanceId,
+                        ParentSessionId: session.ParentSessionId,
                         WorkspaceId: session.WorkspaceId,
                         WorkspaceDirectory: workspace?.Directory ?? session.Directory,
                         WorkspaceDisplayName: workspace?.DisplayName,
