@@ -175,6 +175,7 @@ internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(NuCodeMessageCreatedPayload))]
 [JsonSerializable(typeof(NuCodeMessageUpdatedPayload))]
+[JsonSerializable(typeof(NuCodeSessionUpdatedPayload))]
 [JsonSerializable(typeof(NuCodePartUpdatedPayload))]
 [JsonSerializable(typeof(NuCodePartDeltaPayload))]
 [JsonSerializable(typeof(Dictionary<string, object?>))]
@@ -193,6 +194,11 @@ internal sealed record NuCodeMessageCreatedPayload
 internal sealed record NuCodeMessageUpdatedPayload
 {
     [JsonPropertyName("messageId")] public required string MessageId { get; init; }
+}
+
+internal sealed record NuCodeSessionUpdatedPayload
+{
+    [JsonPropertyName("title")] public required string Title { get; init; }
 }
 
 internal sealed record NuCodePartUpdatedPayload

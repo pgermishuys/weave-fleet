@@ -43,7 +43,10 @@ internal sealed class SessionProcessor : ISessionProcessor
         SessionContext.Set(assistantMessage.SessionId);
         try
         {
-            var stream = agent.RunStreamingAsync(chatMessages, session, cancellationToken: ct);
+            // ChatClientAgent requires a ChatClientAgentSession — create one via the agent's factory method.
+            // NuCodeAgentSession (which extends AgentSession) is not compatible with ChatClientAgent.
+            var agentSession = await agent.CreateSessionAsync(ct);
+            var stream = agent.RunStreamingAsync(chatMessages, agentSession, cancellationToken: ct);
             return await ProcessStreamAsync(stream, assistantMessage, session, ct);
         }
         finally
@@ -84,6 +87,10 @@ internal sealed class SessionProcessor : ISessionProcessor
         try
         {
             session.Status = new BusySessionStatus();
+
+            // Insert the assistant message placeholder before streaming starts,
+            // so that TextPart and ToolPart foreign key constraints are satisfied.
+            await _sessionService.UpsertMessageAsync(assistantMessage, ct);
 
             await foreach (var update in updates.WithCancellation(ct))
             {

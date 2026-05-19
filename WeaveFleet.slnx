@@ -12,6 +12,8 @@
     <Project Path="src/NuCode/NuCode.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/FakeLlmServer/FakeLlmServer.csproj" />
+    <Project Path="tests/NuCode.ConformanceTests/NuCode.ConformanceTests.csproj" />
     <Project Path="tests/WeaveFleet.Testing/WeaveFleet.Testing.csproj" />
     <Project Path="tests/WeaveFleet.Api.Tests/WeaveFleet.Api.Tests.csproj" />
     <Project Path="tests/WeaveFleet.Application.Tests/WeaveFleet.Application.Tests.csproj" />

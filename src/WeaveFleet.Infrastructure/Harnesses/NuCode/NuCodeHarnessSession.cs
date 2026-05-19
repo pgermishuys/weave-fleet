@@ -124,6 +124,9 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
             {
                 _nuCodeSession = await sessionService.CreateSessionAsync(
                     _workingDirectory, text.Length > 50 ? text[..50] : text, linkedToken);
+
+                EmitSessionCreatedEvent();
+                EmitSessionUpdatedEvent(text.Length > 50 ? text[..50] : text);
             }
 
             // Create user message
@@ -332,6 +335,33 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
             Timestamp = DateTimeOffset.UtcNow,
         };
         _eventChannel.Writer.TryWrite(evt);
+    }
+
+    private void EmitSessionCreatedEvent()
+    {
+        _eventChannel.Writer.TryWrite(new HarnessEvent
+        {
+            Type = EventTypes.SessionCreated,
+            SessionId = FleetSessionId,
+            FleetSessionId = FleetSessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+        });
+    }
+
+    private void EmitSessionUpdatedEvent(string title)
+    {
+        var payload = JsonSerializer.SerializeToElement(
+            new NuCodeSessionUpdatedPayload { Title = title },
+            NuCodeJsonContext.Default.NuCodeSessionUpdatedPayload);
+
+        _eventChannel.Writer.TryWrite(new HarnessEvent
+        {
+            Type = EventTypes.SessionUpdated,
+            SessionId = FleetSessionId,
+            FleetSessionId = FleetSessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = payload,
+        });
     }
 
     private void EmitMessageEvent(UserMessage msg, string text)
