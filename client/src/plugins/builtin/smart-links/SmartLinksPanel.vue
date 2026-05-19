@@ -1,50 +1,30 @@
 <script setup lang="ts">
-import { computed, watch, ref } from 'vue'
+import { computed } from 'vue'
 import { Link } from 'lucide-vue-next'
 import { useSessionsStore } from '@/stores/sessions'
 import { useSmartLinksStore } from '@/stores/smart-links'
-import { useReviewCommentQueueStore } from '@/stores/review-comment-queue'
 import { apiFetch } from '@/lib/api-client'
 import SmartLinkItem from './SmartLinkItem.vue'
-import ReviewCommentQueue from './ReviewCommentQueue.vue'
-import { useReviewCommentQueue } from './composables/use-review-comment-queue'
-import type { AccumulatedMessage } from '@/lib/api-types'
-import type { ReviewCommentQueueItem } from '@/stores/review-comment-queue'
+import { secondsUntilRefresh, isRefreshing, refreshNow, POLL_INTERVAL_SECONDS } from './composables/use-smart-links'
 
 const sessionsStore = useSessionsStore()
 const smartLinksStore = useSmartLinksStore()
-const queueStore = useReviewCommentQueueStore()
 
 const sessionId = computed(() => sessionsStore.activeSessionId)
 const activeLinks = computed(() =>
   sessionId.value ? smartLinksStore.getActiveLinks(sessionId.value) : [],
 )
-const queueItems = computed(() =>
-  sessionId.value ? queueStore.getItemsForSession(sessionId.value) : [],
+
+// Circular arc countdown: r=7, circumference = 2π*7 ≈ 43.98
+const ARC_RADIUS = 7
+const ARC_CIRCUMFERENCE = 2 * Math.PI * ARC_RADIUS
+const arcOffset = computed(() =>
+  ARC_CIRCUMFERENCE * (1 - secondsUntilRefresh.value / POLL_INTERVAL_SECONDS),
 )
 
-// Notification banner
-const notificationText = ref<string | null>(null)
-let notificationTimer: ReturnType<typeof setTimeout> | undefined
-watch(
-  () => queueStore.latestNotification,
-  (text) => {
-    if (!text) return
-    notificationText.value = text
-    queueStore.clearNotification()
-    clearTimeout(notificationTimer)
-    notificationTimer = setTimeout(() => {
-      notificationText.value = null
-    }, 6000)
-  },
-)
-
-// Provide empty messages ref so the composable is a no-op here (already wired in ActivityStream)
-const emptyMessages = computed<readonly AccumulatedMessage[]>(() => [])
-const { approve, skip, updateReply, approveAll } = useReviewCommentQueue({
-  sessionId,
-  messages: emptyMessages,
-})
+async function handleRefreshNow(): Promise<void> {
+  await refreshNow()
+}
 
 async function handleDismiss(linkId: string): Promise<void> {
   const sid = sessionId.value
@@ -59,15 +39,6 @@ async function handleDismiss(linkId: string): Promise<void> {
   } catch {
     // silently ignore
   }
-}
-
-function handleApprove(item: ReviewCommentQueueItem): void {
-  void approve(item)
-}
-
-function handleApproveAll(): void {
-  const sid = sessionId.value
-  if (sid) void approveAll(sid)
 }
 </script>
 
@@ -85,17 +56,47 @@ function handleApproveAll(): void {
       <h2 class="plugin-header-title">
         Smart Links
       </h2>
+      <button
+        type="button"
+        class="refresh-timer-btn"
+        :aria-label="isRefreshing ? 'Refreshing…' : `Refresh now (next refresh in ${secondsUntilRefresh}s)`"
+        :title="isRefreshing ? 'Refreshing…' : `Refresh now (next refresh in ${secondsUntilRefresh}s)`"
+        :disabled="isRefreshing"
+        @click="handleRefreshNow"
+      >
+        <svg
+          class="refresh-arc"
+          :class="{ 'refresh-arc--spinning': isRefreshing }"
+          width="18"
+          height="18"
+          viewBox="0 0 18 18"
+          aria-hidden="true"
+        >
+          <!-- Track circle -->
+          <circle
+            class="arc-track"
+            cx="9"
+            cy="9"
+            :r="ARC_RADIUS"
+            fill="none"
+            stroke-width="2"
+          />
+          <!-- Countdown arc — rotated so it starts at top -->
+          <circle
+            class="arc-fill"
+            cx="9"
+            cy="9"
+            :r="ARC_RADIUS"
+            fill="none"
+            stroke-width="2"
+            :stroke-dasharray="ARC_CIRCUMFERENCE"
+            :stroke-dashoffset="arcOffset"
+            stroke-linecap="round"
+            transform="rotate(-90 9 9)"
+          />
+        </svg>
+      </button>
     </header>
-
-    <!-- Notification banner -->
-    <div
-      v-if="notificationText"
-      class="smart-links-notification"
-      role="status"
-      aria-live="polite"
-    >
-      {{ notificationText }}
-    </div>
 
     <div
       v-if="!sessionId"
@@ -127,16 +128,6 @@ function handleApproveAll(): void {
         @dismiss="handleDismiss"
       />
     </div>
-
-    <!-- Review comment queue panel -->
-    <ReviewCommentQueue
-      v-if="sessionId && queueItems.length > 0"
-      :items="queueItems"
-      @approve="handleApprove"
-      @skip="skip"
-      @update-reply="(item, reply) => updateReply(item, reply)"
-      @approve-all="handleApproveAll"
-    />
   </section>
 </template>
 
@@ -162,6 +153,7 @@ function handleApproveAll(): void {
 
 .plugin-header-title {
   margin: 0;
+  flex: 1;
   font-size: 16px;
   font-weight: 700;
 }
@@ -190,12 +182,53 @@ function handleApproveAll(): void {
   overflow-y: auto;
 }
 
-.smart-links-notification {
-  background: color-mix(in srgb, var(--accent, #f97316) 15%, transparent);
-  border-left: 3px solid var(--accent, #f97316);
+/* Refresh arc timer button */
+.refresh-timer-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.refresh-timer-btn:hover:not(:disabled),
+.refresh-timer-btn:focus-visible:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text);
-  font-size: 11px;
-  padding: 6px 12px;
-  line-height: 1.4;
+  outline: none;
+}
+
+.refresh-timer-btn:disabled {
+  cursor: default;
+}
+
+.refresh-arc {
+  display: block;
+}
+
+.arc-track {
+  stroke: rgba(255, 255, 255, 0.1);
+}
+
+.arc-fill {
+  stroke: currentColor;
+  transition: stroke-dashoffset 0.9s linear;
+}
+
+.refresh-arc--spinning .arc-fill {
+  animation: arc-spin 1s linear infinite;
+  stroke-dashoffset: 11; /* ~quarter arc visible */
+}
+
+@keyframes arc-spin {
+  from { transform: rotate(-90deg); transform-origin: 9px 9px; }
+  to { transform: rotate(270deg); transform-origin: 9px 9px; }
 }
 </style>
