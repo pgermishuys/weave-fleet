@@ -268,6 +268,11 @@ async function handleResume(): Promise<void> {
   }
 
   try {
+    ctx.patchSession(sessionId.value, {
+      activityStatus: "idle",
+      lifecycleStatus: "resuming",
+      sessionStatus: "resuming",
+    });
     const response = await resumeSession(sessionId.value);
     refreshPanelData();
     await router.navigate({
@@ -279,7 +284,14 @@ async function handleResume(): Promise<void> {
       },
     });
   } catch {
-    // Error is exposed inline by the composable.
+    // Revert to stopped on failure
+    if (sessionId.value) {
+      ctx.patchSession(sessionId.value, {
+        activityStatus: "idle",
+        lifecycleStatus: "stopped",
+        sessionStatus: "stopped",
+      });
+    }
   }
 }
 
@@ -401,7 +413,7 @@ function normalizeString(value: string | null | undefined): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
-function normalizeLifecycleStatus(value: string | null | undefined): "running" | "completed" | "stopped" | "error" | "disconnected" | null {
+function normalizeLifecycleStatus(value: string | null | undefined): "running" | "resuming" | "completed" | "stopped" | "error" | "disconnected" | null {
   switch (value) {
     case "active":
     case "delegating":
@@ -409,6 +421,8 @@ function normalizeLifecycleStatus(value: string | null | undefined): "running" |
     case "waiting_input":
     case "running":
       return "running";
+    case "resuming":
+      return "resuming";
     case "complete":
     case "completed":
       return "completed";

@@ -8,6 +8,7 @@ const props = defineProps<Props>();
 const COLOR_MAP: Record<string, string> = {
   completed: "var(--complete)",
   idle: "var(--idle)",
+  resuming: "var(--running)",
   stopped: "var(--muted)",
   disconnected: "var(--muted)",
   error: "var(--error)",
@@ -22,6 +23,7 @@ function statusLabel(status: string): string {
   switch (status) {
     case "active": return "Active";
     case "idle": return "Idle";
+    case "resuming": return "Resuming";
     case "completed": return "Completed";
     case "error": return "Error";
     case "waiting_input": return "Waiting for input";
@@ -43,6 +45,20 @@ function statusLabel(status: string): string {
     aria-hidden="false"
     :aria-label="statusLabel(props.status)"
     class="status-glyph"
+  >
+    <circle cx="4" cy="4" r="4" :fill="statusColor(props.status)" />
+  </svg>
+
+  <!-- resuming: pulsing filled circle -->
+  <svg
+    v-else-if="props.status === 'resuming'"
+    width="8"
+    height="8"
+    viewBox="0 0 8 8"
+    fill="none"
+    aria-hidden="false"
+    :aria-label="statusLabel(props.status)"
+    class="status-glyph status-glyph--pulsing"
   >
     <circle cx="4" cy="4" r="4" :fill="statusColor(props.status)" />
   </svg>
@@ -122,5 +138,14 @@ function statusLabel(status: string): string {
 .status-glyph {
   flex-shrink: 0;
   display: block;
+}
+
+.status-glyph--pulsing {
+  animation: glyph-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes glyph-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 </style>

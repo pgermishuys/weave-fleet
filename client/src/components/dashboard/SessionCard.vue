@@ -59,6 +59,8 @@ const statusClasses = computed(() => {
       return "bg-slate-400";
     case "error":
       return "bg-rose-500";
+    case "resuming":
+      return "bg-sky-500 animate-pulse";
     case "waiting_input":
       return "bg-violet-500";
     case "active":
