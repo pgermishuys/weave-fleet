@@ -97,18 +97,60 @@ const sessionActivityEvents = [
   "session_deleted",
 ] as const;
 
+interface ActivityStatusPayload {
+  sessionId?: string;
+  activityStatus?: string;
+}
+
 function handleSessionActivity(): void {
   void refetchSessions();
+}
+
+function handleActivityStatus(payload: unknown): void {
+  const data = payload as { properties?: ActivityStatusPayload } | null;
+  const sessionId = data?.properties?.sessionId;
+  const activityStatus = data?.properties?.activityStatus;
+
+  if (!sessionId) {
+    return;
+  }
+
+  switch (activityStatus) {
+    case "busy":
+    case "working":
+      sessionsStore.patchSession(sessionId, {
+        activityStatus: "busy",
+        lifecycleStatus: "running",
+        sessionStatus: "active",
+      });
+      break;
+    case "delegating":
+      sessionsStore.patchSession(sessionId, {
+        activityStatus: "delegating",
+        lifecycleStatus: "running",
+        sessionStatus: "active",
+      });
+      break;
+    case "idle":
+      sessionsStore.patchSession(sessionId, {
+        activityStatus: "idle",
+        lifecycleStatus: "running",
+        sessionStatus: "idle",
+      });
+      break;
+  }
 }
 
 for (const eventType of sessionActivityEvents) {
   activityStream.on(eventType, handleSessionActivity);
 }
+activityStream.on("activity_status", handleActivityStatus);
 
 onUnmounted(() => {
   for (const eventType of sessionActivityEvents) {
     activityStream.off(eventType, handleSessionActivity);
   }
+  activityStream.off("activity_status", handleActivityStatus);
 });
 
 watch(

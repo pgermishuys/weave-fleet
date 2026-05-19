@@ -8,6 +8,7 @@ import SessionDetailHeader from "@/components/session/SessionDetailHeader.vue";
 import { incrementPendingPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { apiFetch } from "@/lib/api-client";
 import type { SessionListItem, SessionOrigin } from "@/lib/api-types";
+import type { SessionActivityStatus } from "@/lib/types";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
 
@@ -88,6 +89,7 @@ function normalizeSessionDetailResponse(payload: unknown): SessionDetailResponse
 function normalizeLifecycleStatus(value: string | null | undefined): "running" | "completed" | "stopped" | "error" | "disconnected" | null {
   switch (value) {
     case "active":
+    case "delegating":
     case "idle":
     case "waiting_input":
     case "running":
@@ -104,6 +106,26 @@ function normalizeLifecycleStatus(value: string | null | undefined): "running" |
     default:
       return null;
   }
+}
+
+function normalizeActivityStatus(value: string | null | undefined): SessionActivityStatus | null {
+  switch (value) {
+    case "active":
+    case "busy":
+      return "busy";
+    case "delegating":
+      return "delegating";
+    case "waiting_input":
+      return "waiting_input";
+    case "idle":
+      return "idle";
+    default:
+      return null;
+  }
+}
+
+function isActiveActivityStatus(value: string | null | undefined): value is "busy" | "delegating" {
+  return value === "busy" || value === "delegating";
 }
 
 const SessionDetailPage = defineComponent({
@@ -167,9 +189,7 @@ const SessionDetailPage = defineComponent({
           const normalizedLifecycleStatus = normalizeLifecycleStatus(
             nextRemoteSession.lifecycleStatus ?? nextRemoteSession.status,
           ) ?? "running";
-          const normalizedActivityStatus = nextRemoteSession.activityStatus === "busy"
-            ? "busy"
-            : "idle";
+          const normalizedActivityStatus = normalizeActivityStatus(nextRemoteSession.activityStatus) ?? "idle";
 
           const nextSession = {
             instanceId: nextRemoteSession.instanceId ?? search.value.instanceId ?? selectedSession.value?.instanceId ?? "",
@@ -178,7 +198,9 @@ const SessionDetailPage = defineComponent({
             workspaceDisplayName: nextRemoteSession.workspaceDisplayName ?? selectedSession.value?.workspaceDisplayName ?? null,
             isolationStrategy: nextRemoteSession.isolationStrategy ?? selectedSession.value?.isolationStrategy ?? "existing",
             sessionStatus: normalizedLifecycleStatus === "running"
-              ? normalizedActivityStatus === "busy"
+              ? normalizedActivityStatus === "waiting_input"
+                ? "waiting_input"
+                : isActiveActivityStatus(normalizedActivityStatus)
                 ? "active"
                 : "idle"
               : normalizedLifecycleStatus,
@@ -302,21 +324,30 @@ const SessionDetailPage = defineComponent({
       ) ?? "running";
     });
 
-    const effectiveActivityStatus = computed<"busy" | "idle">(() => {
-      return optimisticWorking.value
+    const effectiveActivityStatus = computed<SessionActivityStatus>(() => {
+      if (
+        optimisticWorking.value
         || sentPrompts.value.length > 0
         || hasPendingPrompts.value
-        || optimisticSessionState.value?.activityStatus === "busy"
-        || sessionStateOverride.value?.activityStatus === "busy"
-        || (selectedSession.value?.activityStatus ?? remoteSession.value?.activityStatus) === "busy"
-        ? "busy"
-        : "idle";
+        || isActiveActivityStatus(optimisticSessionState.value?.activityStatus)
+        || isActiveActivityStatus(sessionStateOverride.value?.activityStatus)
+        || isActiveActivityStatus(selectedSession.value?.activityStatus ?? remoteSession.value?.activityStatus)
+      ) {
+        return "busy";
+      }
+
+      return normalizeActivityStatus(
+        optimisticSessionState.value?.activityStatus
+          ?? sessionStateOverride.value?.activityStatus
+          ?? selectedSession.value?.activityStatus
+          ?? remoteSession.value?.activityStatus,
+      ) ?? "idle";
     });
 
     watch(
       () => [selectedSession.value?.activityStatus, hasPendingPrompts.value, sentPrompts.value.length] as const,
       ([nextActivityStatus, nextHasPendingPrompts, nextSentPromptCount]) => {
-        if (nextActivityStatus === "busy" || nextHasPendingPrompts || nextSentPromptCount > 0) {
+        if (isActiveActivityStatus(nextActivityStatus) || nextHasPendingPrompts || nextSentPromptCount > 0) {
           return;
         }
 

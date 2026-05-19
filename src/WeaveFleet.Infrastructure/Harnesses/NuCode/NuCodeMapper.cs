@@ -1,14 +1,14 @@
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.AI;
 using global::NuCode.Sessions;
+using Microsoft.Extensions.AI;
 using WeaveFleet.Domain.Harnesses;
-using NuCodeTextPart = global::NuCode.Sessions.TextPart;
-using NuCodeReasoningPart = global::NuCode.Sessions.ReasoningPart;
-using NuCodeFilePart = global::NuCode.Sessions.FilePart;
-using NuCodeStepFinishPart = global::NuCode.Sessions.StepFinishPart;
-using NuCodeMessagePart = global::NuCode.Sessions.MessagePart;
 using HarnessMessagePart = WeaveFleet.Domain.Harnesses.MessagePart;
+using NuCodeFilePart = global::NuCode.Sessions.FilePart;
+using NuCodeMessagePart = global::NuCode.Sessions.MessagePart;
+using NuCodeReasoningPart = global::NuCode.Sessions.ReasoningPart;
+using NuCodeStepFinishPart = global::NuCode.Sessions.StepFinishPart;
+using NuCodeTextPart = global::NuCode.Sessions.TextPart;
 
 namespace WeaveFleet.Infrastructure.Harnesses.NuCode;
 

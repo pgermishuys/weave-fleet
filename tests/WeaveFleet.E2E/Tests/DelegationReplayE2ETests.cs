@@ -1,5 +1,5 @@
-using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
@@ -293,6 +293,18 @@ public sealed class DelegationReplayE2ETests : E2ETestBase,
                     status = new { type = "idle" },
                 }),
             });
+            await scenario.ParentHarness.PushEventAsync(new HarnessEvent
+            {
+                Type = EventTypes.SessionIdle,
+                SessionId = scenario.ParentHarnessSessionId,
+                FleetSessionId = scenario.ParentSessionId,
+                Timestamp = DateTimeOffset.UtcNow,
+                Payload = JsonSerializer.SerializeToElement(new
+                {
+                    sessionID = scenario.ParentHarnessSessionId,
+                }),
+            });
+            await scenario.ParentHarness.PushEventAsync(BuildCompletedTaskToolEvent(scenario));
 
             await detail.WaitForIdleAsync(5_000);
         });
@@ -426,10 +438,57 @@ public sealed class DelegationReplayE2ETests : E2ETestBase,
                     status = new { type = "idle" },
                 }),
             });
+            await scenario.ChildHarness.PushEventAsync(new HarnessEvent
+            {
+                Type = EventTypes.SessionIdle,
+                SessionId = scenario.ChildHarnessSessionId,
+                FleetSessionId = scenario.ChildSessionId,
+                Timestamp = DateTimeOffset.UtcNow,
+                Payload = JsonSerializer.SerializeToElement(new
+                {
+                    sessionID = scenario.ChildHarnessSessionId,
+                }),
+            });
+            await scenario.ParentHarness.PushEventAsync(BuildCompletedTaskToolEvent(scenario));
 
             await detail.WaitForIdleAsync(8_000);
         });
     }
+
+    private static HarnessEvent BuildCompletedTaskToolEvent(DelegationScenario scenario)
+        => new()
+        {
+            Type = EventTypes.MessagePartUpdated,
+            SessionId = scenario.ParentHarnessSessionId,
+            FleetSessionId = scenario.ParentSessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                sessionID = scenario.ParentHarnessSessionId,
+                part = new
+                {
+                    id = $"part-{scenario.ParentToolCallId}",
+                    type = "tool",
+                    tool = "task",
+                    callID = scenario.ParentToolCallId,
+                    sessionID = scenario.ParentHarnessSessionId,
+                    messageID = $"msg-parent-{scenario.ParentToolCallId}",
+                    state = new
+                    {
+                        status = "completed",
+                        input = new
+                        {
+                            subagent_type = DelegationReplayFixture.ChildAgent,
+                        },
+                        metadata = new
+                        {
+                            parentSessionId = scenario.ParentSessionId,
+                            sessionId = scenario.ChildHarnessSessionId,
+                        },
+                    },
+                },
+            }),
+        };
 
     private static string GetRequiredQueryValue(Uri uri, string key)
     {

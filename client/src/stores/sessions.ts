@@ -2,12 +2,7 @@ import { defineStore } from "pinia";
 import { ref, shallowRef } from "vue";
 import type { SessionListItem } from "@/lib/api-types";
 
-interface SessionStateOverride {
-  activityStatus?: string | null;
-  lifecycleStatus?: string | null;
-  retentionStatus?: string | null;
-  sessionStatus?: string | null;
-}
+type SessionStateOverride = Partial<Pick<SessionListItem, "activityStatus" | "lifecycleStatus" | "retentionStatus" | "sessionStatus">>;
 
 export const useSessionsStore = defineStore("sessions", () => {
   const sessions = ref<SessionListItem[]>([]);

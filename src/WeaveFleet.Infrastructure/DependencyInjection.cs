@@ -6,8 +6,8 @@ using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Plugins;
-using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Analytics;
 using WeaveFleet.Infrastructure.Data;
@@ -15,13 +15,13 @@ using WeaveFleet.Infrastructure.Data.Repositories;
 using WeaveFleet.Infrastructure.EventBus;
 using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Infrastructure.Harnesses;
-using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 using WeaveFleet.Infrastructure.Harnesses.NuCode;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Plugins;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
-using WeaveFleet.Infrastructure.SessionSources;
 using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.SessionSources;
 
 namespace WeaveFleet.Infrastructure;
 

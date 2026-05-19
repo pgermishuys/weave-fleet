@@ -4,21 +4,36 @@ import type { DelegationCompleted, DelegationCreated, DelegationUpdated, DomainE
 import { applyPartUpdate, applyTextDelta, ensureMessage, mergeMessageUpdate } from "@/lib/event-state"
 import type { SessionSnapshot, SessionSnapshotDelegation } from "@/lib/session-snapshot"
 
+export type SessionStreamExplicitStatus = "idle" | "busy"
+
+export type SessionStreamStatus = SessionStreamExplicitStatus | "delegating"
+
 export interface SessionStreamState {
   messages: AccumulatedMessage[]
   delegations: DelegationDto[]
-  sessionStatus: "idle" | "busy"
+  explicitStatus: SessionStreamExplicitStatus
+  /**
+   * Derived reducer/composable status. This may be tri-state even while
+   * downstream list/store activity badges temporarily map "delegating" to
+   * busy/active until those consumers become delegation-aware.
+   */
+  sessionStatus: SessionStreamStatus
   lastSequenceNumber: number | null
 }
 
 const IDLE_ACTIVITY_STATUSES = new Set(["idle"])
 const BUSY_ACTIVITY_STATUSES = new Set(["busy", "working"])
+const ACTIVE_DELEGATION_STATUSES = new Set<DelegationDto["status"]>(["pending", "running"])
 
 export function createSessionStreamState(snapshot: SessionSnapshot): SessionStreamState {
+  const explicitStatus = toExplicitStatus(snapshot.activityStatus)
+  const delegations = snapshot.delegations.map(mapSnapshotDelegation)
+
   const baseState: SessionStreamState = {
     messages: [],
-    delegations: snapshot.delegations.map(mapSnapshotDelegation),
-    sessionStatus: toSessionStatus(snapshot.activityStatus),
+    delegations,
+    explicitStatus,
+    sessionStatus: deriveSnapshotSessionStatus(explicitStatus, delegations),
     lastSequenceNumber: snapshot.lastSequenceNumber,
   }
 
@@ -65,44 +80,20 @@ export function applyDomainEvent(state: SessionStreamState, event: DomainEvent):
       }
 
     case "turn.started":
-      return {
-        ...state,
-        sessionStatus: "busy",
-      }
+      return withExplicitStatus(state, "busy")
 
     case "turn.ended":
-      return {
-        ...state,
-        sessionStatus: "idle",
-      }
+      return state
 
     case "delegation.created":
-      return {
-        ...state,
-        delegations: applyDelegationCreated(state.delegations, mapDelegationEvent(event)),
-      }
+      return withDelegations(state, applyDelegationCreated(state.delegations, mapDelegationEvent(event)))
 
     case "delegation.updated":
     case "delegation.completed":
-      return {
-        ...state,
-        delegations: upsertDelegation(state.delegations, mapDelegationEvent(event)),
-      }
-
-    case "session.started":
-      return {
-        ...state,
-        sessionStatus: "idle",
-      }
+      return withDelegations(state, upsertDelegation(state.delegations, mapDelegationEvent(event)))
 
     case "session.idled":
-    case "session.stopped":
-    case "session.deleted":
-    case "session.archived":
-      return {
-        ...state,
-        sessionStatus: "idle",
-      }
+      return withExplicitStatus(state, "idle")
 
     default:
       return state
@@ -122,7 +113,7 @@ function applyMessageLifecycle(messages: AccumulatedMessage[], payload: MessageL
   })
 }
 
-function toSessionStatus(activityStatus: string): "idle" | "busy" {
+function toExplicitStatus(activityStatus: string): SessionStreamExplicitStatus {
   if (BUSY_ACTIVITY_STATUSES.has(activityStatus)) {
     return "busy"
   }
@@ -132,6 +123,54 @@ function toSessionStatus(activityStatus: string): "idle" | "busy" {
   }
 
   return "idle"
+}
+
+function deriveSessionStatus(
+  explicitStatus: SessionStreamExplicitStatus,
+  delegations: DelegationDto[],
+): SessionStreamStatus {
+  if (explicitStatus === "busy") {
+    return "busy"
+  }
+
+  if (hasActiveDelegations(delegations)) {
+    return "delegating"
+  }
+
+  return "idle"
+}
+
+function deriveSnapshotSessionStatus(
+  explicitStatus: SessionStreamExplicitStatus,
+  delegations: DelegationDto[],
+): SessionStreamStatus {
+  // Snapshot hydration/reconnect can land while the parent activity status still
+  // reflects turn work, but active delegations must surface immediately.
+  if (hasActiveDelegations(delegations)) {
+    return "delegating"
+  }
+
+  return deriveSessionStatus(explicitStatus, delegations)
+}
+
+function hasActiveDelegations(delegations: DelegationDto[]): boolean {
+  return delegations.some((delegation) => ACTIVE_DELEGATION_STATUSES.has(delegation.status))
+}
+
+function withExplicitStatus(state: SessionStreamState, explicitStatus: SessionStreamExplicitStatus): SessionStreamState {
+  return {
+    ...state,
+    explicitStatus,
+    sessionStatus: deriveSessionStatus(explicitStatus, state.delegations),
+  }
+}
+
+function withDelegations(state: SessionStreamState, delegations: DelegationDto[]): SessionStreamState {
+  return {
+    ...state,
+    delegations,
+    sessionStatus: deriveSessionStatus(state.explicitStatus, delegations),
+  }
 }
 
 function mapSnapshotDelegation(delegation: SessionSnapshotDelegation): DelegationDto {

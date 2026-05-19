@@ -116,7 +116,7 @@ const instanceId = computed(() => props.session.instanceId);
 const rawTitle = computed(() => props.session.session.title ?? "");
 const displayTitle = computed(() => props.session.session.title?.trim() || "Untitled session");
 const isRunningSession = computed(() => props.session.lifecycleStatus === "running");
-const isBusySession = computed(() => props.session.activityStatus === "busy");
+const isBusySession = computed(() => isActiveActivityStatus(props.session.activityStatus));
 const isArchivedSession = computed(() => props.session.retentionStatus === "archived");
 const canInterrupt = computed(() => isRunningSession.value && isBusySession.value);
 const canStop = computed(() => isRunningSession.value);
@@ -372,13 +372,17 @@ async function handleDelete(): Promise<void> {
 
 function syncSessionStore(
   patch: Partial<{
-    activityStatus: "busy" | "idle";
+    activityStatus: "busy" | "delegating" | "idle";
     lifecycleStatus: "running" | "stopped" | "completed" | "disconnected" | "error";
     retentionStatus: "active" | "archived";
     sessionStatus: "active" | "idle" | "stopped" | "completed" | "disconnected" | "error" | "waiting_input";
   }>,
 ): void {
   sessionsStore.patchSession(sessionId.value, patch);
+}
+
+function isActiveActivityStatus(value: string | null | undefined): value is "busy" | "delegating" {
+  return value === "busy" || value === "delegating";
 }
 
 function removeSessionFromStore(): void {

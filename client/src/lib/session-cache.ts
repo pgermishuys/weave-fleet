@@ -7,6 +7,7 @@
  */
 
 import type { AccumulatedMessage, DelegationDto } from "@/lib/api-types";
+import type { SessionStreamStatus } from "@/lib/domain-event-reducer";
 import type { PrReference } from "@/lib/pr-utils";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -33,7 +34,7 @@ export interface CacheEntry {
   /** viewport.scrollHeight at the time of save — used to compute relative restore position. */
   scrollHeight: number;
   /** Last known session activity status. */
-  sessionStatus: "idle" | "busy";
+  sessionStatus: SessionStreamStatus;
   /** Last known delegations for this session. */
   delegations: DelegationDto[];
   /** The last committed sequence number processed for this session. */

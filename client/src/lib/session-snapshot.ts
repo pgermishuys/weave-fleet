@@ -1,3 +1,4 @@
+import type { DelegationDto } from "@/lib/api-types";
 import type { MessageLifecyclePayload } from "@/lib/domain-events";
 
 export interface SessionSnapshotSession {
@@ -11,7 +12,7 @@ export interface SessionSnapshotDelegation {
   parentToolCallId: string | null;
   childSessionId: string | null;
   title: string;
-  status: string;
+  status: DelegationDto["status"];
   createdAt: string;
 }
 

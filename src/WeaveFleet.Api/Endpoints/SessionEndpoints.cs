@@ -1,9 +1,9 @@
-using WeaveFleet.Api;
-using System.Text.Json.Serialization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using WeaveFleet.Api;
 using WeaveFleet.Application.DTOs;
-using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -59,7 +59,8 @@ public static class SessionEndpoints
             string id,
             SessionService sessionService,
             IWorkspaceRepository workspaceRepository,
-            ISessionSourceUsageRepository sessionSourceUsageRepository) =>
+            ISessionSourceUsageRepository sessionSourceUsageRepository,
+            SessionActivityTracker activityTracker) =>
         {
             var result = await sessionService.GetSessionAsync(id);
             return await result.Match<Task<IResult>>(
@@ -67,6 +68,7 @@ public static class SessionEndpoints
                 {
                     var workspace = await workspaceRepository.GetByIdAsync(session.WorkspaceId);
                     var primaryOrigin = await sessionSourceUsageRepository.GetPrimaryBySessionIdAsync(session.Id);
+                    var activityStatus = activityTracker.GetEffectiveActivityStatus(session.Id) ?? session.ActivityStatus;
 
                     return Results.Ok(new GetSessionResponse(
                         Id: session.Id,
@@ -81,7 +83,7 @@ public static class SessionEndpoints
                         Title: session.Title,
                         CreatedAt: session.CreatedAt,
                         StoppedAt: session.StoppedAt,
-                        ActivityStatus: session.ActivityStatus,
+                        ActivityStatus: activityStatus,
                         LifecycleStatus: session.LifecycleStatus,
                         RetentionStatus: session.RetentionStatus,
                         ArchivedAt: session.ArchivedAt,

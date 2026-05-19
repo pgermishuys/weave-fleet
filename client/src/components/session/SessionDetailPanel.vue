@@ -114,7 +114,7 @@ const effectiveRetentionStatus = computed(() => normalizeRetentionStatus(
   props.session?.retentionStatus ?? remoteSessionDetail.value?.retentionStatus,
 ));
 const isRunningSession = computed(() => effectiveLifecycleStatus.value === "running");
-const isBusySession = computed(() => effectiveActivityStatus.value === "busy");
+const isBusySession = computed(() => isActiveActivityStatus(effectiveActivityStatus.value));
 const canAbort = computed(() => isRunningSession.value && isBusySession.value);
 const canResume = computed(() => {
   switch (effectiveLifecycleStatus.value) {
@@ -404,6 +404,7 @@ function normalizeString(value: string | null | undefined): string | null {
 function normalizeLifecycleStatus(value: string | null | undefined): "running" | "completed" | "stopped" | "error" | "disconnected" | null {
   switch (value) {
     case "active":
+    case "delegating":
     case "idle":
     case "waiting_input":
     case "running":
@@ -423,11 +424,13 @@ function normalizeLifecycleStatus(value: string | null | undefined): "running" |
   }
 }
 
-function normalizeActivityStatus(value: string | null | undefined): "busy" | "idle" | "waiting_input" | null {
+function normalizeActivityStatus(value: string | null | undefined): "busy" | "delegating" | "idle" | "waiting_input" | null {
   switch (value) {
     case "active":
     case "busy":
       return "busy";
+    case "delegating":
+      return "delegating";
     case "idle":
       return "idle";
     case "waiting_input":
@@ -435,6 +438,10 @@ function normalizeActivityStatus(value: string | null | undefined): "busy" | "id
     default:
       return null;
   }
+}
+
+function isActiveActivityStatus(value: string | null | undefined): value is "busy" | "delegating" {
+  return value === "busy" || value === "delegating";
 }
 
 function normalizeRetentionStatus(value: string | null | undefined): "active" | "archived" {
