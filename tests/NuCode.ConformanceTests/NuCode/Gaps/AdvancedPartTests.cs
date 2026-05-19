@@ -3,18 +3,14 @@ using NuCode.ConformanceTests.NuCode;
 namespace NuCode.ConformanceTests.NuCode.Gaps;
 
 /// <summary>
-/// Documents that the domain <see cref="MessagePart"/> hierarchy does not include
-/// agent delegation, subtask, or patch/diff part types. These part types exist in
-/// OpenCode's internal model (<c>OpenCodeAgentPart</c>, <c>OpenCodeSubtaskPart</c>,
-/// <c>OpenCodePatchPart</c>) but are silently dropped by <c>OpenCodeMapper.MapPart</c>
-/// (returns <c>null</c> for unrecognised types). This is a domain model gap that
-/// affects both harnesses, not a NuCode-specific limitation.
-///
-/// These tests are expected to FAIL until the domain model is extended with new
-/// <see cref="MessagePart"/> subtypes and both mappers are updated.
+/// Validates that the domain <see cref="MessagePart"/> hierarchy includes
+/// <c>AgentPart</c>, <c>SubtaskPart</c>, and <c>PatchPart</c> types for
+/// representing sub-agent delegation, child session activity, and file edit diffs.
+/// The OpenCode mapper now maps these from <c>OpenCodeAgentPart</c>,
+/// <c>OpenCodeSubtaskPart</c>, and <c>OpenCodePatchPart</c> respectively.
 /// </summary>
 [Trait("Gap", "advanced-parts")]
-public sealed class AdvancedPartGapTests
+public sealed class AdvancedPartTests
 {
     [Fact]
     public void MessagePartHierarchy_IncludesAgentPartType()
