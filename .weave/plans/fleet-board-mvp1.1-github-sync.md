@@ -3,6 +3,7 @@
 ## TL;DR
 > **Summary**: Add GitHub Issues as the first board integration — configure repo sources, trigger manual sync, upsert issues into the inbox lane by source key, and preserve local lane/order assignments.
 > **Estimated Effort**: Medium
+> **Related PR**: https://github.com/pgermishuys/weave-fleet/pull/119
 
 ## Context
 ### Original Request
