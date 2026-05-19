@@ -117,4 +117,70 @@ public sealed class CiWatcherDedupTests
         }
         return new JsonObject { ["check_runs"] = arr };
     }
+
+    [Fact]
+    public void get_ci_failures_returns_empty_when_no_failures_key()
+    {
+        var metadata = new JsonObject();
+        var result = CiWatcherService.GetCiFailures(metadata);
+        result.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void set_and_get_ci_failures_round_trips_correctly()
+    {
+        var metadata = new JsonObject();
+        var failures = new List<CiWatcherService.CiFailure>
+        {
+            new("abc123", "build", 42, "failure", "https://github.com/actions/run/1", "error: build failed", "2024-01-01T00:00:00Z"),
+            new("abc123", "tests", 43, "timed_out", "https://github.com/actions/run/2", null, "2024-01-01T00:01:00Z"),
+        };
+
+        CiWatcherService.SetCiFailures(metadata, failures);
+        var result = CiWatcherService.GetCiFailures(metadata);
+
+        result.Count.ShouldBe(2);
+
+        result[0].Sha.ShouldBe("abc123");
+        result[0].CheckRunName.ShouldBe("build");
+        result[0].CheckRunId.ShouldBe(42);
+        result[0].Conclusion.ShouldBe("failure");
+        result[0].HtmlUrl.ShouldBe("https://github.com/actions/run/1");
+        result[0].LogContent.ShouldBe("error: build failed");
+        result[0].DetectedAt.ShouldBe("2024-01-01T00:00:00Z");
+
+        result[1].CheckRunName.ShouldBe("tests");
+        result[1].LogContent.ShouldBeNull();
+    }
+
+    [Fact]
+    public void dedup_filters_already_stored_failures_by_sha_and_name()
+    {
+        var metadata = new JsonObject();
+        var existing = new List<CiWatcherService.CiFailure>
+        {
+            new("sha1", "build", 10, "failure", "https://github.com", null, "2024-01-01T00:00:00Z"),
+        };
+        CiWatcherService.SetCiFailures(metadata, existing);
+
+        var stored = CiWatcherService.GetCiFailures(metadata);
+
+        // Same sha + name → should be filtered out
+        var candidates = new List<(string Sha, string Name)>
+        {
+            ("sha1", "build"),  // already stored
+            ("sha1", "tests"),  // new — different name
+            ("sha2", "build"),  // new — different sha
+        };
+
+        var newFailures = candidates
+            .Where(c => !stored.Any(f =>
+                string.Equals(f.Sha, c.Sha, StringComparison.Ordinal) &&
+                string.Equals(f.CheckRunName, c.Name, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        newFailures.Count.ShouldBe(2);
+        newFailures.ShouldContain(c => c.Sha == "sha1" && c.Name == "tests");
+        newFailures.ShouldContain(c => c.Sha == "sha2" && c.Name == "build");
+    }
 }
