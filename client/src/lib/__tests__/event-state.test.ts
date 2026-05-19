@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPartUpdate, ensureMessage, mergeMessageUpdate } from "@/lib/event-state";
+import { applyPartUpdate, mergeMessageUpdate } from "@/lib/event-state";
 
 describe("applyPartUpdate", () => {
   it("creates_a_message_for_the_first_tool_part", () => {
