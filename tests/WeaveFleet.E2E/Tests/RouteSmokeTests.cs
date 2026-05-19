@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
+using WeaveFleet.Domain.Repositories;
 using WeaveFleet.E2E.Infrastructure;
 
 namespace WeaveFleet.E2E.Tests;
@@ -13,8 +15,13 @@ public sealed class RouteSmokeTests : E2ETestBase,
     IClassFixture<FleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>
 {
+    private readonly FleetWebApplicationFactory _factory;
+
     public RouteSmokeTests(FleetWebApplicationFactory factory, PlaywrightFixture playwright)
-        : base(factory, playwright) { }
+        : base(factory, playwright)
+    {
+        _factory = factory;
+    }
 
     [Theory]
     [InlineData("/settings", "Settings")]
@@ -104,8 +111,16 @@ public sealed class RouteSmokeTests : E2ETestBase,
         => route switch
         {
             "/settings" => StubSkillsEndpointAsync(),
+            "/board" => EnableBoardFeatureAsync(),
             _ => Task.CompletedTask
         };
+
+    private async Task EnableBoardFeatureAsync()
+    {
+        await using var scope = _factory.KestrelServices.CreateAsyncScope();
+        var preferences = scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>();
+        await preferences.SetAsync("features.board.enabled", "true");
+    }
 
     private Task StubSkillsEndpointAsync()
         => Page.RouteAsync("**/api/skills", async route =>
