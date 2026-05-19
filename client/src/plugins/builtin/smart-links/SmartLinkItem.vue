@@ -130,6 +130,11 @@ const ciLabel = computed(() => {
 
 const checkRuns = computed<CheckRun[]>(() => ciStatus.value?.checkRuns ?? [])
 
+const hasMergeConflict = computed(() => {
+  if (props.link.resourceType !== 'pull_request') return false
+  return props.link.metadata?.mergeable === false
+})
+
 function checkRunIcon(cr: CheckRun) {
   if (cr.status !== 'completed') return Clock
   if (cr.conclusion === 'success') return CheckCircle2
@@ -233,6 +238,11 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
           :title="ciLabel"
           aria-hidden="false"
         />
+      </div>
+
+      <!-- Merge conflict indicator -->
+      <div v-if="hasMergeConflict" class="merge-conflict-row">
+        <span class="merge-conflict-badge" title="This branch has conflicts that must be resolved">⚠️ Merge conflict</span>
       </div>
 
       <div
@@ -572,6 +582,20 @@ function getLabelStyle(color: string): { backgroundColor: string; borderColor: s
 
 .review-thread-link:hover {
   color: var(--text);
+}
+
+/* Merge conflict indicator */
+.merge-conflict-row {
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+  margin-left: -23px;
+}
+
+.merge-conflict-badge {
+  font-size: 11px;
+  color: #f59e0b;
+  font-weight: 500;
 }
 
 /* Labels */

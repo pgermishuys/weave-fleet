@@ -15,6 +15,7 @@ interface GitHubPRResponse {
   state: 'open' | 'closed'
   merged: boolean
   draft: boolean
+  mergeable: boolean | null
   html_url: string
   labels: GitHubLabel[]
 }
@@ -140,6 +141,7 @@ export const githubSmartLinkProvider: SmartLinkProvider = {
             number: pr.number,
             draft: pr.draft,
             labels: pr.labels ?? [],
+            mergeable: pr.mergeable,
             ...(ci ? { ci } : {}),
             ...(reviewThreads ? { reviewThreads } : {}),
           },
