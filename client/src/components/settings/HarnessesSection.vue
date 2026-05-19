@@ -3,10 +3,8 @@ import type { Component } from "vue";
 import { computed, onMounted, shallowRef } from "vue";
 import {
   AlertTriangle,
-  ArrowLeft,
   Cable,
   CheckCircle2,
-  ChevronRight,
   CircleDashed,
   Cpu,
   Hexagon,
@@ -14,7 +12,6 @@ import {
   Star,
   TerminalSquare,
 } from "lucide-vue-next";
-import NuCodeSection from "@/components/settings/NuCodeSection.vue";
 import { useHarnesses } from "@/composables/use-harnesses";
 import { usePreferencesStore } from "@/stores/preferences";
 
@@ -37,7 +34,6 @@ interface HarnessCard {
 
 const prefsStore = usePreferencesStore();
 const { harnesses: registeredHarnesses } = useHarnesses();
-const selectedHarness = shallowRef<HarnessId | null>(null);
 
 onMounted(async () => {
   await prefsStore.refresh();
@@ -80,7 +76,7 @@ const harnesses = computed<readonly HarnessCard[]>(() => [
     icon: Cpu,
     status: nucodeStatus.value,
     enabled: nucodeEnabled.value,
-    configurable: true,
+    configurable: false,
     canToggle: true,
     canDefault: true,
   },
@@ -127,17 +123,7 @@ const harnesses = computed<readonly HarnessCard[]>(() => [
   },
 ]);
 
-const activeHarness = computed(() => harnesses.value.find((harness) => harness.id === selectedHarness.value));
 const defaultHarness = computed(() => harnesses.value.find((harness) => harness.id === defaultHarnessId.value));
-
-function selectHarness(harness: HarnessCard): void {
-  if (!harness.configurable) return;
-  selectedHarness.value = harness.id;
-}
-
-function showHarnessList(): void {
-  selectedHarness.value = null;
-}
 
 async function toggleHarness(harness: HarnessCard): Promise<void> {
   if (!harness.canToggle) return;
@@ -155,12 +141,6 @@ async function toggleHarness(harness: HarnessCard): Promise<void> {
 async function makeDefaultHarness(harness: HarnessCard): Promise<void> {
   if (!harness.canDefault || !harness.enabled) return;
   await prefsStore.set("defaultHarnessType", harness.id);
-}
-
-function handleCardClick(harness: HarnessCard, event: MouseEvent): void {
-  const target = event.target;
-  if (target instanceof Element && target.closest("button")) return;
-  selectHarness(harness);
 }
 
 function formatProvider(value: string): string {
@@ -256,18 +236,16 @@ function statusIcon(status: HarnessStatus): Component {
       </div>
     </section>
 
-    <template v-if="selectedHarness === null">
-      <section class="grid gap-4">
-        <article
-          v-for="harness in harnesses"
-          :key="harness.id"
-          class="group rounded-card border border-border bg-card-bg p-5 shadow-sm transition-colors"
-          :class="[
-            harness.configurable ? 'cursor-pointer hover:border-accent/50 hover:bg-panel-bg' : 'opacity-80',
-            defaultHarnessId === harness.id ? 'border-accent/45' : '',
-          ]"
-          @click="handleCardClick(harness, $event)"
-        >
+    <section class="grid gap-4">
+      <article
+        v-for="harness in harnesses"
+        :key="harness.id"
+        class="group rounded-card border border-border bg-card-bg p-5 shadow-sm transition-colors"
+        :class="[
+          harness.configurable ? 'hover:border-accent/50 hover:bg-panel-bg' : 'opacity-80',
+          defaultHarnessId === harness.id ? 'border-accent/45' : '',
+        ]"
+      >
           <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div class="flex min-w-0 items-start gap-4">
               <div class="rounded-2xl border border-border bg-main-bg p-3 text-text shadow-sm">
@@ -356,61 +334,13 @@ function statusIcon(status: HarnessStatus): Component {
                   {{ defaultHarnessId === harness.id ? "Default" : "Set default" }}
                 </button>
 
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-1 rounded-btn px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-main-bg hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
-                  :disabled="!harness.configurable"
-                  @click="selectHarness(harness)"
-                >
-                  <span>{{ harness.configurable ? "Configure" : "No settings" }}</span>
-                  <ChevronRight
-                    v-if="harness.configurable"
-                    :size="14"
-                    class="transition-transform group-hover:translate-x-0.5"
-                    aria-hidden="true"
-                  />
-                </button>
+                <span class="inline-flex items-center rounded-btn px-2.5 py-1.5 text-xs font-medium text-muted">
+                  No settings yet
+                </span>
               </div>
             </div>
           </div>
-        </article>
-      </section>
-
-    </template>
-
-    <template v-else>
-      <section class="rounded-card border border-border bg-card-bg p-4 shadow-sm">
-        <button
-          type="button"
-          class="inline-flex items-center gap-2 text-sm font-medium text-muted transition-colors hover:text-text"
-          @click="showHarnessList"
-        >
-          <ArrowLeft
-            :size="14"
-            aria-hidden="true"
-          />
-          Harnesses
-        </button>
-
-        <div
-          v-if="activeHarness"
-          class="mt-4 flex flex-wrap items-center gap-2"
-        >
-          <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
-            {{ activeHarness.eyebrow }}
-          </p>
-          <ChevronRight
-            :size="12"
-            class="text-muted"
-            aria-hidden="true"
-          />
-          <p class="text-sm font-semibold text-text">
-            {{ activeHarness.name }}
-          </p>
-        </div>
-      </section>
-
-      <NuCodeSection v-if="selectedHarness === 'nucode'" />
-    </template>
+      </article>
+    </section>
   </div>
 </template>
