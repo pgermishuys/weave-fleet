@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
 using Shouldly;
+using WeaveFleet.Domain.Repositories;
 using WeaveFleet.E2E.Infrastructure;
 
 namespace WeaveFleet.E2E.Tests;
@@ -62,6 +64,8 @@ public sealed class BoardSmokeTests : E2ETestBase, IClassFixture<PlaywrightFixtu
     {
         await WithFailureCapture(async () =>
         {
+            await EnableBoardFeatureAsync(_factory);
+
             await Page.AddInitScriptAsync("window.confirm = () => true;");
             await Page.GotoAsync("/board", new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
 
@@ -99,6 +103,7 @@ public sealed class BoardSmokeTests : E2ETestBase, IClassFixture<PlaywrightFixtu
 
             await using var restartedFactory = new FleetWebApplicationFactory(_databasePath, _analyticsDatabasePath);
             await restartedFactory.EnsureStartedAsync();
+            await EnableBoardFeatureAsync(restartedFactory);
 
             await using var restartedContext = await _playwright.Browser.NewContextAsync(new BrowserNewContextOptions
             {
@@ -164,6 +169,13 @@ public sealed class BoardSmokeTests : E2ETestBase, IClassFixture<PlaywrightFixtu
             Name = heading,
             Exact = true
         })).ToBeVisibleAsync();
+
+    private static async Task EnableBoardFeatureAsync(FleetWebApplicationFactory factory)
+    {
+        await using var scope = factory.KestrelServices.CreateAsyncScope();
+        var preferences = scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>();
+        await preferences.SetAsync("features.board.enabled", "true");
+    }
 
     private static ILocator GetLaneColumn(IPage page, string laneName)
         => page.GetByLabel($"{laneName} column", new PageGetByLabelOptions { Exact = true });
