@@ -298,6 +298,15 @@ const { queue, enqueue } = useMessageQueue(
 );
 
 const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
+
+function focusPrompt(): void {
+  textareaRef.value?.focus();
+}
+
+defineExpose({
+  focusPrompt,
+});
+
 const cursorPosition = shallowRef(0);
 const normalizedInstanceId = props.instanceId?.trim() ?? "";
 const autocompleteEnabled = computed(() => normalizedInstanceId.length > 0);
