@@ -11,6 +11,8 @@
 //   → Frontend: http://localhost:3001 (hot reload)
 //   → Backend:  http://localhost:5001 (API only)
 
+using System.Net;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -250,16 +252,35 @@ else
             options.SlidingExpiration = true;
             options.LoginPath = "/login";
 
-            options.Events.OnRedirectToLogin = context =>
+            options.Events.OnRedirectToLogin = async context =>
             {
                 if (IsApiOrWebSocketRequest(context.Request.Path))
                 {
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    return Task.CompletedTask;
+                    return;
+                }
+
+                // Auto-sign-in for localhost requests — no token challenge needed
+                if (IsLocalhostRequest(context.HttpContext))
+                {
+                    var claims = new[]
+                    {
+                        new Claim(ClaimTypes.Name, "local"),
+                        new Claim(ClaimTypes.NameIdentifier, "local"),
+                        new Claim("sub", "local")
+                    };
+
+                    var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+                    var principal = new ClaimsPrincipal(identity);
+
+                    await context.HttpContext.SignInAsync(
+                        CookieAuthenticationDefaults.AuthenticationScheme, principal);
+
+                    context.Response.Redirect(context.RedirectUri);
+                    return;
                 }
 
                 context.Response.Redirect(context.RedirectUri);
-                return Task.CompletedTask;
             };
             options.Events.OnRedirectToAccessDenied = context =>
             {
@@ -507,6 +528,12 @@ await app.RunAsync();
 
 static bool IsApiOrWebSocketRequest(PathString path)
     => path.StartsWithSegments("/api") || path.StartsWithSegments("/ws");
+
+static bool IsLocalhostRequest(HttpContext context)
+{
+    var remoteIp = context.Connection.RemoteIpAddress;
+    return remoteIp is not null && IPAddress.IsLoopback(remoteIp);
+}
 
 static bool HasBearerAuthorizationHeader(HttpRequest request)
 {
