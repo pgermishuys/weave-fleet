@@ -5,6 +5,7 @@ export type SettingsSectionId =
   | "credentials"
   | "appearance"
   | "skills"
+  | "features"
   | "nucode"
   | "plugins"
   | "system";
