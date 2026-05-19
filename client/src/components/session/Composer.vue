@@ -174,6 +174,10 @@ const sessionStateOverride = computed(() => {
   return sessionStateOverrides.value[props.sessionId] ?? null;
 });
 
+const effectiveActivityStatus = computed(() => {
+  return sessionStateOverride.value?.activityStatus ?? selectedSession.value?.activityStatus;
+});
+
 const isDisabled = computed(() => {
   const lifecycleStatus = sessionStateOverride.value?.lifecycleStatus ?? selectedSession.value?.lifecycleStatus;
   const retentionStatus = sessionStateOverride.value?.retentionStatus ?? selectedSession.value?.retentionStatus;
@@ -189,16 +193,17 @@ const sessionStatus = computed<"idle" | "busy" | "waiting_input">(() => {
     return "busy";
   }
 
-  const activity = selectedSession.value?.activityStatus;
+  const activity = effectiveActivityStatus.value;
   if (activity === "busy") return "busy";
+  if (activity === "delegating") return "busy";
   if (activity === "waiting_input") return "waiting_input";
   return "idle";
 });
 
 watch(
-  () => selectedSession.value?.activityStatus,
+  effectiveActivityStatus,
   (activityStatus) => {
-    if (activityStatus === "busy") {
+    if (activityStatus === "busy" || activityStatus === "delegating") {
       optimisticBusy.value = false;
     }
   },

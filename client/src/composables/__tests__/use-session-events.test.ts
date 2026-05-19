@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createPinia, setActivePinia } from "pinia"
-import { nextTick } from "vue"
+import { nextTick, watch } from "vue"
 import { dispatchSessionUpsert } from "@/lib/session-sync"
 import { sessionCache } from "@/lib/session-cache"
 import { sortAccumulatedMessagesChronologically } from "@/lib/pagination-utils"
@@ -118,6 +118,27 @@ function createSessionListItem() {
   }
 }
 
+function createDelegation(
+  overrides: Partial<{
+    delegationId: string
+    parentToolCallId: string | null
+    childSessionId: string | null
+    title: string
+    status: "pending" | "running" | "completed" | "error" | "cancelled"
+    createdAt: string | null
+  }> = {},
+) {
+  return {
+    delegationId: "delegation-1",
+    parentToolCallId: "tool-1",
+    childSessionId: "child-1",
+    title: "Child task",
+    status: "running" as const,
+    createdAt: "2026-05-19T00:00:00.000Z",
+    ...overrides,
+  }
+}
+
 describe("useSessionEvents", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -168,6 +189,8 @@ describe("useSessionEvents", () => {
 
   afterEach(() => {
     sessionCache.clear()
+    vi.clearAllTimers()
+    vi.useRealTimers()
   })
 
   it("does not fetch session status during initial load", async () => {
@@ -248,6 +271,264 @@ describe("useSessionEvents", () => {
 
     expect(result.sessionStatus.value).toBe("idle")
     expect(store.sessions[0]?.sessionStatus).toBe("active")
+  })
+
+  it("flips non-delegation sessions idle on explicit websocket idle signals", async () => {
+    const store = useSessionsStore()
+    store.setSessions([createSessionListItem()])
+
+    const { useSessionEvents } = await import("@/composables/use-session-events")
+    const { result } = await mountComposable(() => useSessionEvents("session-1", "instance-1"))
+    const session_status_history: string[] = []
+    const stopWatching = watch(result.sessionStatus, (value) => {
+      session_status_history.push(value)
+    }, { immediate: true })
+
+    socketCallback?.("session:session-1", {
+      type: "session.status",
+      properties: { status: "busy" },
+    })
+    await nextTick()
+
+    expect(result.sessionStatus.value).toBe("busy")
+    expect(store.sessions[0]?.activityStatus).toBe("busy")
+    expect(store.sessions[0]?.sessionStatus).toBe("active")
+
+    socketCallback?.("session:session-1", {
+      type: "session.idle",
+      properties: {},
+    })
+    await nextTick()
+
+    expect(result.sessionStatus.value).toBe("idle")
+    expect(store.sessions[0]?.activityStatus).toBe("idle")
+    expect(store.sessions[0]?.sessionStatus).toBe("idle")
+    expect(session_status_history).toEqual(["idle", "busy", "idle"])
+
+    stopWatching()
+  })
+
+  it("keeps idle session-sync updates delegating while active delegations exist", async () => {
+    apiFetchMock.mockImplementation((url: string) => {
+      if (url.includes("/delegations")) {
+        return Promise.resolve(createJsonResponse([createDelegation({ status: "pending" })]))
+      }
+
+      if (url.includes("/committed-events")) {
+        return Promise.resolve(createJsonResponse({ events: [] }))
+      }
+
+      throw new Error(`Unexpected apiFetch call: ${url}`)
+    })
+
+    const store = useSessionsStore()
+    store.setSessions([createSessionListItem()])
+
+    const { useSessionEvents } = await import("@/composables/use-session-events")
+    const { result } = await mountComposable(() => useSessionEvents("session-1", "instance-1"))
+
+    await flushAll()
+
+    expect(result.sessionStatus.value).toBe("delegating")
+    expect(store.sessions[0]?.activityStatus).toBe("busy")
+    expect(store.sessions[0]?.sessionStatus).toBe("active")
+
+    dispatchSessionUpsert({
+      ...createSessionListItem(),
+      activityStatus: "idle",
+      sessionStatus: "idle",
+    })
+    await nextTick()
+
+    expect(result.sessionStatus.value).toBe("delegating")
+    expect(store.sessions[0]?.activityStatus).toBe("busy")
+    expect(store.sessions[0]?.sessionStatus).toBe("active")
+  })
+
+  it("does not let the v1 idle fallback flicker idle during active delegation", async () => {
+    vi.useFakeTimers()
+
+    const store = useSessionsStore()
+    store.setSessions([createSessionListItem()])
+
+    const { useSessionEvents } = await import("@/composables/use-session-events")
+    const { result } = await mountComposable(() => useSessionEvents("session-1", "instance-1"))
+    const session_status_history: string[] = []
+    const stopWatching = watch(result.sessionStatus, (value) => {
+      session_status_history.push(value)
+    }, { immediate: true })
+
+    socketCallback?.("session:session-1", {
+      type: "session.status",
+      properties: { status: "busy" },
+    })
+    await nextTick()
+
+    socketCallback?.("session:session-1", {
+      type: "delegation.created",
+      properties: createDelegation(),
+    })
+    await nextTick()
+
+    await vi.advanceTimersByTimeAsync(2_500)
+    await flushAll()
+
+    expect(result.sessionStatus.value).toBe("busy")
+    expect(store.sessions[0]?.activityStatus).toBe("busy")
+    expect(store.sessions[0]?.sessionStatus).toBe("active")
+    expect(session_status_history).toEqual(["idle", "busy"])
+
+    socketCallback?.("session:session-1", {
+      type: "session.status",
+      properties: { status: "idle" },
+    })
+    await nextTick()
+
+    expect(result.sessionStatus.value).toBe("delegating")
+    expect(store.sessions[0]?.activityStatus).toBe("delegating")
+    expect(store.sessions[0]?.sessionStatus).toBe("active")
+    expect(session_status_history).toEqual(["idle", "busy", "delegating"])
+
+    socketCallback?.("session:session-1", {
+      type: "delegation.updated",
+      properties: createDelegation({ status: "completed" }),
+    })
+    await nextTick()
+
+    expect(result.sessionStatus.value).toBe("idle")
+    expect(store.sessions[0]?.activityStatus).toBe("idle")
+    expect(session_status_history).toEqual(["idle", "busy", "delegating", "idle"])
+
+    stopWatching()
+  })
+
+  it("stays busy when child completion arrives before explicit idle", async () => {
+    const store = useSessionsStore()
+    store.setSessions([createSessionListItem()])
+
+    const { useSessionEvents } = await import("@/composables/use-session-events")
+    const { result } = await mountComposable(() => useSessionEvents("session-1", "instance-1"))
+    const session_status_history: string[] = []
+    const stopWatching = watch(result.sessionStatus, (value) => {
+      session_status_history.push(value)
+    }, { immediate: true })
+
+    socketCallback?.("session:session-1", {
+      type: "session.status",
+      properties: { status: "busy" },
+    })
+    await nextTick()
+
+    socketCallback?.("session:session-1", {
+      type: "delegation.created",
+      properties: createDelegation(),
+    })
+    await nextTick()
+
+    socketCallback?.("session:session-1", {
+      type: "delegation.updated",
+      properties: createDelegation({ status: "completed" }),
+    })
+    await nextTick()
+
+    expect(result.sessionStatus.value).toBe("busy")
+    expect(store.sessions[0]?.activityStatus).toBe("busy")
+    expect(store.sessions[0]?.sessionStatus).toBe("active")
+    expect(session_status_history).toEqual(["idle", "busy"])
+
+    socketCallback?.("session:session-1", {
+      type: "session.status",
+      properties: { status: "idle" },
+    })
+    await nextTick()
+
+    expect(result.sessionStatus.value).toBe("idle")
+    expect(store.sessions[0]?.activityStatus).toBe("idle")
+    expect(store.sessions[0]?.sessionStatus).toBe("idle")
+    expect(session_status_history).toEqual(["idle", "busy", "idle"])
+
+    stopWatching()
+  })
+
+  it("keeps parent non-idle when child explicit idle arrives before parent task completion", async () => {
+    vi.useFakeTimers()
+
+    const store = useSessionsStore()
+    store.setSessions([createSessionListItem()])
+
+    const { useSessionEvents } = await import("@/composables/use-session-events")
+    const { result } = await mountComposable(() => useSessionEvents("session-1", "instance-1"))
+    const session_status_history: string[] = []
+    const stopWatching = watch(result.sessionStatus, (value) => {
+      session_status_history.push(value)
+    }, { immediate: true })
+
+    socketCallback?.("session:session-1", {
+      type: "session.status",
+      properties: { status: "busy" },
+    })
+    await nextTick()
+
+    socketCallback?.("session:session-1", {
+      type: "delegation.created",
+      properties: createDelegation(),
+    })
+    await nextTick()
+
+    socketCallback?.("session:session-1", {
+      type: "session.status",
+      properties: { status: "idle" },
+    })
+    await nextTick()
+
+    socketCallback?.("session:session-1", {
+      type: "session.idle",
+      properties: {},
+    })
+    await nextTick()
+
+    expect(result.sessionStatus.value).toBe("delegating")
+    expect(store.sessions[0]?.activityStatus).toBe("delegating")
+    expect(store.sessions[0]?.sessionStatus).toBe("active")
+    expect(session_status_history).toEqual(["idle", "busy", "delegating"])
+
+    socketCallback?.("session:session-1", {
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "part-task-completed",
+          messageID: "message-1",
+          sessionID: "session-1",
+          type: "tool",
+          tool: "task",
+          state: {
+            status: "completed",
+          },
+        },
+      },
+    })
+    await nextTick()
+
+    await vi.advanceTimersByTimeAsync(2_500)
+    await flushAll()
+
+    expect(result.sessionStatus.value).toBe("delegating")
+    expect(store.sessions[0]?.activityStatus).toBe("delegating")
+    expect(store.sessions[0]?.sessionStatus).toBe("active")
+    expect(session_status_history).toEqual(["idle", "busy", "delegating"])
+
+    socketCallback?.("session:session-1", {
+      type: "delegation.updated",
+      properties: createDelegation({ status: "completed" }),
+    })
+    await nextTick()
+
+    expect(result.sessionStatus.value).toBe("idle")
+    expect(store.sessions[0]?.activityStatus).toBe("idle")
+    expect(store.sessions[0]?.sessionStatus).toBe("idle")
+    expect(session_status_history).toEqual(["idle", "busy", "delegating", "idle"])
+
+    stopWatching()
   })
 
   it("keeps replayed older messages in chronological order", async () => {

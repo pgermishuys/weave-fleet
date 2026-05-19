@@ -5,9 +5,9 @@ using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using Dapper;
 using Microsoft.Extensions.DependencyInjection;
+using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
-using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
@@ -15,9 +15,9 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 [Collection("NonParallelApiFactoryTests")]
 public sealed class SessionCommandEndpointTests : IAsyncLifetime, IDisposable
 {
-    private const string UserId = "local-user";
-    private const string SessionId = "session-cmd-1";
-    private const string InstanceId = "instance-cmd-1";
+    private const string _userId = "local-user";
+    private const string _sessionId = "session-cmd-1";
+    private const string _instanceId = "instance-cmd-1";
 
     private ApiWebApplicationFactory? _factory;
     private HttpClient? _client;
@@ -25,14 +25,14 @@ public sealed class SessionCommandEndpointTests : IAsyncLifetime, IDisposable
 
     public async Task InitializeAsync()
     {
-        _slowSession = new SlowFakeHarnessSession(InstanceId);
+        _slowSession = new SlowFakeHarnessSession(_instanceId);
 
         _factory = new ApiWebApplicationFactory(authEnabled: false);
         _client = _factory.CreateClient();
 
         // Register the slow session in the InstanceTracker
         var tracker = _factory.Services.GetRequiredService<InstanceTracker>();
-        tracker.Register(InstanceId, _slowSession);
+        tracker.Register(_instanceId, _slowSession);
 
         // Seed DB with instance and session
         using var scope = _factory.Services.CreateScope();
@@ -40,9 +40,9 @@ public sealed class SessionCommandEndpointTests : IAsyncLifetime, IDisposable
         using var connection = connectionFactory.CreateConnection();
 
         var createdAt = "2026-01-01T00:00:00.0000000Z";
-        await InsertWorkspaceAsync(connection, $"ws-{SessionId}", "/tmp/cmd-test", createdAt);
-        await InsertInstanceAsync(connection, InstanceId, "/tmp/cmd-test", createdAt);
-        await InsertSessionAsync(connection, SessionId, InstanceId, "/tmp/cmd-test", createdAt);
+        await InsertWorkspaceAsync(connection, $"ws-{_sessionId}", "/tmp/cmd-test", createdAt);
+        await InsertInstanceAsync(connection, _instanceId, "/tmp/cmd-test", createdAt);
+        await InsertSessionAsync(connection, _sessionId, _instanceId, "/tmp/cmd-test", createdAt);
     }
 
     public Task DisposeAsync()
@@ -63,7 +63,7 @@ public sealed class SessionCommandEndpointTests : IAsyncLifetime, IDisposable
         var sw = Stopwatch.StartNew();
 
         var response = await _client!.PostAsJsonAsync(
-            $"/api/sessions/{SessionId}/command",
+            $"/api/sessions/{_sessionId}/command",
             new { command = "start-work" });
 
         sw.Stop();
@@ -83,7 +83,7 @@ public sealed class SessionCommandEndpointTests : IAsyncLifetime, IDisposable
     public async Task Command_passes_cancellation_token_none_to_orchestrator()
     {
         var response = await _client!.PostAsJsonAsync(
-            $"/api/sessions/{SessionId}/command",
+            $"/api/sessions/{_sessionId}/command",
             new { command = "start-work" });
 
         response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
@@ -109,7 +109,7 @@ public sealed class SessionCommandEndpointTests : IAsyncLifetime, IDisposable
                 CreatedAt = createdAt,
                 CleanedUpAt = (string?)null,
                 DisplayName = id,
-                UserId
+                UserId = _userId
             });
 
     private static Task<int> InsertInstanceAsync(IDbConnection connection, string id, string directory, string createdAt) =>
@@ -125,7 +125,7 @@ public sealed class SessionCommandEndpointTests : IAsyncLifetime, IDisposable
                 Status = "running",
                 CreatedAt = createdAt,
                 StoppedAt = (string?)null,
-                UserId
+                UserId = _userId
             });
 
     private static Task<int> InsertSessionAsync(IDbConnection connection, string id, string instanceId, string directory, string createdAt) =>
@@ -153,7 +153,7 @@ public sealed class SessionCommandEndpointTests : IAsyncLifetime, IDisposable
                 IsHidden = false,
                 RetentionStatus = "active",
                 ArchivedAt = (string?)null,
-                UserId
+                UserId = _userId
             });
 
     /// <summary>

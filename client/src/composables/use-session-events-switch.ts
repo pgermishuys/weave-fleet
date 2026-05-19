@@ -8,6 +8,7 @@ import {
   type ShallowRef,
 } from "vue"
 import type { AccumulatedMessage, DelegationDto } from "@/lib/api-types"
+import type { SessionStreamStatus } from "@/lib/domain-event-reducer"
 import { useSessionEvents, type SessionConnectionStatus, type UseSessionEventsResult } from "@/composables/use-session-events"
 import { useSessionStream } from "@/composables/use-session-stream"
 
@@ -92,7 +93,7 @@ export function useSessionEventsSwitch(
   const messages = computed<readonly AccumulatedMessage[]>(() => useStreamProtocolV2.value ? v2.messages.value : v1.messages.value)
   const delegations = computed<readonly DelegationDto[]>(() => useStreamProtocolV2.value ? v2.delegations.value : v1.delegations.value)
   const status = computed<SessionConnectionStatus>(() => useStreamProtocolV2.value ? v2Status.value : v1.status.value)
-  const sessionStatus = computed<"idle" | "busy">(() => useStreamProtocolV2.value ? v2.sessionStatus.value : v1.sessionStatus.value)
+  const sessionStatus = computed<SessionStreamStatus>(() => useStreamProtocolV2.value ? v2.sessionStatus.value : v1.sessionStatus.value)
   const error = computed<string | undefined>(() => useStreamProtocolV2.value ? v2Error.value : v1.error.value)
   const reconnectAttempt = computed<number>(() => useStreamProtocolV2.value ? v2ReconnectAttempt.value : v1.reconnectAttempt.value)
   const hasMoreMessages = computed<boolean>(() => useStreamProtocolV2.value ? v2.hasMore.value : v1.hasMoreMessages.value)

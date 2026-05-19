@@ -1,7 +1,7 @@
 using System.Globalization;
 using Dapper;
-using Microsoft.Playwright;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Playwright;
 using WeaveFleet.Application.Data;
 using WeaveFleet.E2E.Infrastructure;
 using WeaveFleet.E2E.Pages;
@@ -17,7 +17,7 @@ public sealed class AnalyticsPageTests : E2ETestBase,
     IClassFixture<FleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>
 {
-    private const string LocalUserId = "local-user";
+    private const string _localUserId = "local-user";
     private readonly FleetWebApplicationFactory _factory;
 
     public AnalyticsPageTests(FleetWebApplicationFactory factory, PlaywrightFixture playwright)
@@ -102,7 +102,7 @@ public sealed class AnalyticsPageTests : E2ETestBase,
                 seed.CreatedAt1,
                 seed.CreatedAt2,
                 seed.CreatedAt3,
-                UserId = LocalUserId,
+                UserId = _localUserId,
             });
 
         await connection.ExecuteAsync(
@@ -135,7 +135,7 @@ public sealed class AnalyticsPageTests : E2ETestBase,
                 seed.CreatedAt1,
                 seed.CreatedAt3,
                 seed.EndedAt1,
-                UserId = LocalUserId,
+                UserId = _localUserId,
             });
 
         await connection.ExecuteAsync(
@@ -159,7 +159,7 @@ public sealed class AnalyticsPageTests : E2ETestBase,
             {
                 seed.RollupDate1,
                 seed.RollupDate2,
-                UserId = LocalUserId,
+                UserId = _localUserId,
             });
     }
 

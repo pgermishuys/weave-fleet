@@ -15,6 +15,7 @@ import type {
   DelegationDto,
   WebSocketEvent,
 } from "@/lib/api-types"
+import type { SessionStreamStatus } from "@/lib/domain-event-reducer"
 import { apiFetch } from "@/lib/api-client"
 import { applyDelegationCreated, applyDelegationUpdated } from "@/lib/delegation-state"
 import { applyPartUpdate, applyTextDelta, ensureMessage, mergeMessageUpdate } from "@/lib/event-state"
@@ -39,7 +40,7 @@ export interface UseSessionEventsResult {
   messages: Ref<readonly AccumulatedMessage[]>
   delegations: Ref<readonly DelegationDto[]>
   status: Readonly<ShallowRef<SessionConnectionStatus>>
-  sessionStatus: Readonly<ShallowRef<"idle" | "busy">>
+  sessionStatus: Readonly<ShallowRef<SessionStreamStatus>>
   error: Readonly<ShallowRef<string | undefined>>
   forceBusy: () => void
   forceIdle: () => void
@@ -55,21 +56,25 @@ export interface UseSessionEventsResult {
   scrollPositionRef: ShallowRef<{ scrollTop: number; scrollHeight: number } | null>
 }
 
+type SessionStreamExplicitStatus = "idle" | "busy" | "delegating"
+
 interface SessionEventState {
   messages: Ref<AccumulatedMessage[]>
   delegations: Ref<DelegationDto[]>
   status: ShallowRef<SessionConnectionStatus>
-  sessionStatus: ShallowRef<"idle" | "busy">
+  sessionStatus: ShallowRef<SessionStreamStatus>
+  explicitStatus: ShallowRef<SessionStreamExplicitStatus>
   error: ShallowRef<string | undefined>
   onAgentSwitch: ShallowRef<((agent: string) => void) | undefined>
   lastSequenceNumber: ShallowRef<number | null>
   scheduleIdleFallback?: () => void
   clearIdleFallback?: () => void
+  maybeResolveIdleFallback?: () => void
   syncSessionStore?: (patch: SessionStorePatch) => void
 }
 
 type SessionStorePatch = Partial<{
-  activityStatus: "busy" | "idle"
+  activityStatus: "busy" | "delegating" | "idle"
   lifecycleStatus: "running" | "stopped" | "completed" | "disconnected" | "error"
   sessionStatus: "active" | "idle" | "stopped" | "completed" | "disconnected" | "error" | "waiting_input"
 }>
@@ -78,6 +83,7 @@ const MAX_MESSAGES = 500
 // Flag-off mode still uses the legacy v1 stream, which does not emit turn.ended.
 // Keep the idle fallback so reconnects/crashes do not leave sessions stuck busy.
 const IDLE_FALLBACK_MS = 2500
+const ACTIVE_DELEGATION_STATUSES = new Set<DelegationDto["status"]>(["pending", "running"])
 
 export function useSessionEvents(
   sessionId: MaybeRefOrGetter<string>,
@@ -90,7 +96,8 @@ export function useSessionEvents(
   const messages = ref<AccumulatedMessage[]>([])
   const delegations = ref<DelegationDto[]>([])
   const status = shallowRef<SessionConnectionStatus>("connecting")
-  const sessionStatus = shallowRef<"idle" | "busy">("idle")
+  const sessionStatus = shallowRef<SessionStreamStatus>("idle")
+  const explicitStatus = shallowRef<SessionStreamExplicitStatus>("idle")
   const error = shallowRef<string | undefined>(undefined)
   const cacheHit = shallowRef(false)
   const initialScrollPosition = shallowRef<{ scrollTop: number; scrollHeight: number } | null>(null)
@@ -99,6 +106,7 @@ export function useSessionEvents(
   const lastSequenceNumber = shallowRef<number | null>(null)
   const onAgentSwitchRef = shallowRef<((agent: string) => void) | undefined>(toValue(onAgentSwitch))
   let idleFallbackTimer: ReturnType<typeof setTimeout> | null = null
+  let idleFallbackPending = false
   let skipInitialGapFill = true
 
   const currentSessionId = computed(() => toValue(sessionId))
@@ -173,11 +181,13 @@ export function useSessionEvents(
           delegations,
           status,
           sessionStatus,
+          explicitStatus,
           error,
           onAgentSwitch: onAgentSwitchRef,
           lastSequenceNumber,
           scheduleIdleFallback,
           clearIdleFallback,
+          maybeResolveIdleFallback,
           syncSessionStore: (patch) => {
             syncSessionStore(activeSessionId, patch)
           },
@@ -282,7 +292,10 @@ export function useSessionEvents(
 
           const data = (await response.json()) as DelegationDto[]
           if (!loadSignal?.aborted && isActive()) {
-            delegations.value = Array.isArray(data) ? data : []
+            const nextDelegations = Array.isArray(data) ? data : []
+            delegations.value = nextDelegations
+            syncDerivedSessionStatus(activeSessionId, sessionStatus, explicitStatus, delegations)
+            maybeResolveIdleFallback()
           }
         } catch (loadError) {
           if (loadError instanceof DOMException && loadError.name === "AbortError") {
@@ -298,6 +311,7 @@ export function useSessionEvents(
 
       messages.value = []
       delegations.value = []
+      explicitStatus.value = "idle"
       sessionStatus.value = "idle"
       status.value = "connecting"
       error.value = undefined
@@ -341,7 +355,8 @@ export function useSessionEvents(
 
         messages.value = cached.messages
         delegations.value = cached.delegations
-        sessionStatus.value = cached.sessionStatus
+        explicitStatus.value = toExplicitStatus(cached.sessionStatus)
+        syncDerivedSessionStatus(activeSessionId, sessionStatus, explicitStatus, delegations)
         lastSequenceNumber.value = cached.lastSequenceNumber
         pagination.hydratePagination(cached.pagination)
         cacheHit.value = true
@@ -384,11 +399,13 @@ export function useSessionEvents(
           delegations,
           status,
           sessionStatus,
+          explicitStatus,
           error,
           onAgentSwitch: onAgentSwitchRef,
           lastSequenceNumber,
           scheduleIdleFallback,
           clearIdleFallback,
+          maybeResolveIdleFallback,
           syncSessionStore: (patch) => {
             syncSessionStore(activeSessionId, patch)
           },
@@ -417,14 +434,23 @@ export function useSessionEvents(
 
         const incomingActivityStatus = operation.session.activityStatus
         if (incomingActivityStatus === "busy") {
-          sessionStatus.value = "busy"
+          explicitStatus.value = "busy"
+          syncDerivedSessionStatus(activeSessionId, sessionStatus, explicitStatus, delegations)
           scheduleIdleFallback()
+          return
+        }
+
+        if (incomingActivityStatus === "delegating") {
+          clearIdleFallback()
+          explicitStatus.value = "delegating"
+          syncDerivedSessionStatus(activeSessionId, sessionStatus, explicitStatus, delegations)
           return
         }
 
         if (incomingActivityStatus === "idle") {
           clearIdleFallback()
-          sessionStatus.value = "idle"
+          explicitStatus.value = "idle"
+          syncDerivedSessionStatus(activeSessionId, sessionStatus, explicitStatus, delegations)
         }
       })
 
@@ -494,20 +520,14 @@ export function useSessionEvents(
 
   function forceIdle(): void {
     clearIdleFallback()
-    sessionStatus.value = "idle"
-    clearPendingPrompts(currentSessionId.value)
-    clearSentPrompts(currentSessionId.value)
-    syncSessionStore(currentSessionId.value, { activityStatus: "idle", sessionStatus: "idle" })
+    explicitStatus.value = "idle"
+    syncDerivedSessionStatus(currentSessionId.value, sessionStatus, explicitStatus, delegations)
   }
 
   function forceBusy(): void {
-    sessionStatus.value = "busy"
+    explicitStatus.value = "busy"
+    syncDerivedSessionStatus(currentSessionId.value, sessionStatus, explicitStatus, delegations)
     scheduleIdleFallback()
-    syncSessionStore(currentSessionId.value, {
-      activityStatus: "busy",
-      lifecycleStatus: "running",
-      sessionStatus: "active",
-    })
   }
 
   function syncSessionStore(
@@ -536,13 +556,23 @@ export function useSessionEvents(
 
   function stateSyncRunning(
     targetSessionId: string | undefined,
-    currentSessionStatus: "idle" | "busy",
+    currentSessionStatus: SessionStreamStatus,
   ): void {
+    const mappedActivityStatus = mapSessionStatusToActivityStatus(currentSessionStatus)
+
     syncSessionStore(targetSessionId, {
-      activityStatus: currentSessionStatus,
+      activityStatus: mappedActivityStatus,
       lifecycleStatus: "running",
-      sessionStatus: currentSessionStatus === "busy" ? "active" : "idle",
+      sessionStatus: mappedActivityStatus === "idle" ? "idle" : "active",
     })
+  }
+
+  function mapSessionStatusToActivityStatus(status: SessionStreamStatus): "idle" | "busy" | "delegating" {
+    if (status === "delegating") {
+      return "delegating"
+    }
+
+    return status === "idle" ? "idle" : "busy"
   }
 
   async function loadOlderMessages(): Promise<void> {
@@ -558,19 +588,41 @@ export function useSessionEvents(
 
   function clearIdleFallback(): void {
     if (idleFallbackTimer === null) {
+      idleFallbackPending = false
       return
     }
 
     clearTimeout(idleFallbackTimer)
     idleFallbackTimer = null
+    idleFallbackPending = false
   }
 
   function scheduleIdleFallback(): void {
     clearIdleFallback()
+    idleFallbackPending = true
     idleFallbackTimer = setTimeout(() => {
       idleFallbackTimer = null
-      forceIdle()
+
+      if (hasActiveDelegations(delegations.value)) {
+        return
+      }
+
+      resolveIdleFallback()
     }, IDLE_FALLBACK_MS)
+  }
+
+  function maybeResolveIdleFallback(): void {
+    if (!idleFallbackPending || idleFallbackTimer !== null || hasActiveDelegations(delegations.value)) {
+      return
+    }
+
+    resolveIdleFallback()
+  }
+
+  function resolveIdleFallback(): void {
+    idleFallbackPending = false
+    explicitStatus.value = "idle"
+    syncDerivedSessionStatus(currentSessionId.value, sessionStatus, explicitStatus, delegations)
   }
 
   function reconnect(): void {
@@ -649,23 +701,17 @@ export function handleEvent(
     const rawActivityStatus = properties?.activityStatus
 
     if (rawActivityStatus === "idle") {
-      clearSentPrompts(sessionId)
-      clearPendingPrompts(sessionId)
       clearIdleFallbackForState(state)
-      state.sessionStatus.value = "idle"
-      state.syncSessionStore?.({
-        activityStatus: "idle",
-        lifecycleStatus: "running",
-        sessionStatus: "idle",
-      })
+      state.explicitStatus.value = "idle"
+      syncDerivedSessionStatusForState(sessionId, state)
     } else if (rawActivityStatus === "busy" || rawActivityStatus === "working") {
-      state.sessionStatus.value = "busy"
+      state.explicitStatus.value = "busy"
+      syncDerivedSessionStatusForState(sessionId, state)
       scheduleIdleFallbackForState(state)
-      state.syncSessionStore?.({
-        activityStatus: "busy",
-        lifecycleStatus: "running",
-        sessionStatus: "active",
-      })
+    } else if (rawActivityStatus === "delegating") {
+      clearIdleFallbackForState(state)
+      state.explicitStatus.value = "delegating"
+      syncDerivedSessionStatusForState(sessionId, state)
     }
 
     return
@@ -678,37 +724,25 @@ export function handleEvent(
       : rawStatus?.type
 
     if (statusType === "idle") {
-      clearSentPrompts(sessionId)
-      clearPendingPrompts(sessionId)
       clearIdleFallbackForState(state)
-      state.sessionStatus.value = "idle"
-      state.syncSessionStore?.({
-        activityStatus: "idle",
-        lifecycleStatus: "running",
-        sessionStatus: "idle",
-      })
+      state.explicitStatus.value = "idle"
+      syncDerivedSessionStatusForState(sessionId, state)
     } else if (statusType === "busy" || statusType === "working") {
-      state.sessionStatus.value = "busy"
+      state.explicitStatus.value = "busy"
+      syncDerivedSessionStatusForState(sessionId, state)
       scheduleIdleFallbackForState(state)
-      state.syncSessionStore?.({
-        activityStatus: "busy",
-        lifecycleStatus: "running",
-        sessionStatus: "active",
-      })
+    } else if (statusType === "delegating") {
+      clearIdleFallbackForState(state)
+      state.explicitStatus.value = "delegating"
+      syncDerivedSessionStatusForState(sessionId, state)
     }
     return
   }
 
   if (type === "session.idle") {
-    clearSentPrompts(sessionId)
-    clearPendingPrompts(sessionId)
     clearIdleFallbackForState(state)
-    state.sessionStatus.value = "idle"
-    state.syncSessionStore?.({
-      activityStatus: "idle",
-      lifecycleStatus: "running",
-      sessionStatus: "idle",
-    })
+    state.explicitStatus.value = "idle"
+    syncDerivedSessionStatusForState(sessionId, state)
     return
   }
 
@@ -748,6 +782,8 @@ export function handleEvent(
       status: delegationStatus,
       createdAt: delegationCreatedAt,
     })
+    syncDerivedSessionStatusForState(sessionId, state)
+    maybeResolveIdleFallbackForState(state)
     return
   }
 
@@ -764,6 +800,8 @@ export function handleEvent(
       status: delegationStatus,
       createdAt: delegationCreatedAt,
     })
+    syncDerivedSessionStatusForState(sessionId, state)
+    maybeResolveIdleFallbackForState(state)
     return
   }
 
@@ -814,4 +852,70 @@ function scheduleIdleFallbackForState(state: SessionEventState): void {
 function clearIdleFallbackForState(state: SessionEventState): void {
   const clearer = (state as SessionEventState & { clearIdleFallback?: () => void }).clearIdleFallback
   clearer?.()
+}
+
+function maybeResolveIdleFallbackForState(state: SessionEventState): void {
+  const resolver = (state as SessionEventState & { maybeResolveIdleFallback?: () => void }).maybeResolveIdleFallback
+  resolver?.()
+}
+
+function syncDerivedSessionStatusForState(sessionId: string, state: SessionEventState): void {
+  syncDerivedSessionStatus(sessionId, state.sessionStatus, state.explicitStatus, state.delegations, state.syncSessionStore)
+}
+
+function syncDerivedSessionStatus(
+  sessionId: string | undefined,
+  sessionStatus: ShallowRef<SessionStreamStatus>,
+  explicitStatus: ShallowRef<SessionStreamExplicitStatus>,
+  delegations: Ref<DelegationDto[]>,
+  syncSessionStorePatch?: (patch: SessionStorePatch) => void,
+): void {
+  const nextStatus = deriveSessionStatus(explicitStatus.value, delegations.value)
+  sessionStatus.value = nextStatus
+
+  if (nextStatus === "idle" && sessionId) {
+    clearSentPrompts(sessionId)
+    clearPendingPrompts(sessionId)
+  }
+
+  syncSessionStorePatch?.({
+    activityStatus: mapSessionStatusToActivityStatus(nextStatus),
+    lifecycleStatus: "running",
+    sessionStatus: nextStatus === "idle" ? "idle" : "active",
+  })
+}
+
+function deriveSessionStatus(
+  explicitStatus: SessionStreamExplicitStatus,
+  delegations: DelegationDto[],
+): SessionStreamStatus {
+  if (explicitStatus === "busy") {
+    return "busy"
+  }
+
+  if (explicitStatus === "delegating") {
+    return "delegating"
+  }
+
+  if (hasActiveDelegations(delegations)) {
+    return "delegating"
+  }
+
+  return "idle"
+}
+
+function hasActiveDelegations(delegations: DelegationDto[]): boolean {
+  return delegations.some((delegation) => ACTIVE_DELEGATION_STATUSES.has(delegation.status))
+}
+
+function toExplicitStatus(status: SessionStreamStatus): SessionStreamExplicitStatus {
+  return status
+}
+
+function mapSessionStatusToActivityStatus(status: SessionStreamStatus): "idle" | "busy" | "delegating" {
+  if (status === "delegating") {
+    return "delegating"
+  }
+
+  return status === "idle" ? "idle" : "busy"
 }

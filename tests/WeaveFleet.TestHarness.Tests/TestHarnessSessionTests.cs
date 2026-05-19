@@ -63,18 +63,19 @@ public sealed class TestHarnessSessionTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         // Start subscription BEFORE sending prompt so we don't miss events
-        var eventsTask = CollectEventsAsync(instance, expectedCount: 6, cts.Token);
+        var eventsTask = CollectEventsAsync(instance, expectedCount: 7, cts.Token);
 
         await instance.SendPromptAsync("Hello!", null, cts.Token);
         var events = await eventsTask;
 
-        events.Count.ShouldBe(6);
+        events.Count.ShouldBe(7);
         events[0].Type.ShouldBe("session.status");
         events[1].Type.ShouldBe("message.updated");   // user message
         events[2].Type.ShouldBe("message.part.updated"); // user part
         events[3].Type.ShouldBe("message.updated");   // assistant message
         events[4].Type.ShouldBe("message.part.updated"); // assistant part
-        events[5].Type.ShouldBe("session.idle");
+        events[5].Type.ShouldBe("session.status");
+        events[6].Type.ShouldBe("session.idle");
     }
 
     [Fact]
@@ -88,7 +89,7 @@ public sealed class TestHarnessSessionTests
         var instance = new TestHarnessSession(sessionId, scenario);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
-        var eventsTask = CollectEventsAsync(instance, expectedCount: 6, cts.Token);
+        var eventsTask = CollectEventsAsync(instance, expectedCount: 7, cts.Token);
 
         await instance.SendPromptAsync("Actual prompt text", null, cts.Token);
         var events = await eventsTask;
@@ -130,23 +131,23 @@ public sealed class TestHarnessSessionTests
         var instance = new TestHarnessSession(sessionId, scenario);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
-        // Send first prompt and wait for its 6 events to be fully emitted.
+        // Send first prompt and wait for its 7 events to be fully emitted.
         // This avoids a race where the second SendPromptAsync cancels the
         // first prompt's in-flight CTS before all events are written.
-        var firstEventsTask = CollectEventsAsync(instance, expectedCount: 6, cts.Token);
+        var firstEventsTask = CollectEventsAsync(instance, expectedCount: 7, cts.Token);
         await instance.SendPromptAsync("First prompt", null, cts.Token);
         var firstBatch = await firstEventsTask;
-        firstBatch.Count.ShouldBe(6);
+        firstBatch.Count.ShouldBe(7);
 
         // Now send the second prompt and collect its events
-        var secondEventsTask = CollectEventsAsync(instance, expectedCount: 6, cts.Token);
+        var secondEventsTask = CollectEventsAsync(instance, expectedCount: 7, cts.Token);
         await instance.SendPromptAsync("Second prompt", null, cts.Token);
         var secondBatch = await secondEventsTask;
-        secondBatch.Count.ShouldBe(6);
+        secondBatch.Count.ShouldBe(7);
 
         // Verify both batches were dequeued in order
         var allEvents = firstBatch.Concat(secondBatch).ToList();
-        allEvents.Count.ShouldBe(12);
+        allEvents.Count.ShouldBe(14);
     }
 
     // ── AbortAsync cancellation ──────────────────────────────────────────────

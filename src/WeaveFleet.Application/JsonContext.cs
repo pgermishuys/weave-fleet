@@ -43,6 +43,7 @@ internal sealed record SessionStoppedOutboxPayload(string SessionId, string Stop
 internal sealed record SessionArchivedOutboxPayload(string SessionId, string ArchivedAt);
 internal sealed record SessionUnarchivedOutboxPayload(string SessionId);
 internal sealed record SessionDeletedOutboxPayload(string SessionId);
+internal sealed record ActivityStatusBroadcastPayload(string SessionId, string ActivityStatus);
 
 // ── Session source input types (moved from private nested records so they can be source-generated) ──
 
@@ -78,6 +79,7 @@ internal sealed record DirectorySourceInput
 [JsonSerializable(typeof(SessionArchivedOutboxPayload))]
 [JsonSerializable(typeof(SessionUnarchivedOutboxPayload))]
 [JsonSerializable(typeof(SessionDeletedOutboxPayload))]
+[JsonSerializable(typeof(ActivityStatusBroadcastPayload))]
 [JsonSerializable(typeof(LegacyDirectoryInput))]
 [JsonSerializable(typeof(DirectorySourceInput))]
 internal sealed partial class ApplicationJsonContext : JsonSerializerContext

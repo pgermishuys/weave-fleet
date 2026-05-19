@@ -223,6 +223,7 @@ export interface SessionListItem {
   /**
    * Activity status — what the session's agent is currently doing.
    * Only meaningful while lifecycleStatus is "running".
+   * "delegating" is currently rendered with the same busy/active UX as "busy".
    */
   activityStatus: SessionActivityStatus | null;
   /**

@@ -3,8 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Dapper;
 using Microsoft.Extensions.DependencyInjection;
-using WeaveFleet.Application.Data;
 using WeaveFleet.Api.Tests.Infrastructure;
+using WeaveFleet.Application.Data;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
@@ -14,7 +14,7 @@ public sealed class NonParallelApiFactoryTestGroup;
 [Collection("NonParallelApiFactoryTests")]
 public sealed class SessionListEndpointAggregationTests : IAsyncLifetime, IDisposable
 {
-    private const string UserId = "local-user";
+    private const string _userId = "local-user";
 
     private ApiWebApplicationFactory? _factory;
     private HttpClient? _client;
@@ -42,7 +42,7 @@ public sealed class SessionListEndpointAggregationTests : IAsyncLifetime, IDispo
                 CreatedAt = createdAt,
                 CleanedUpAt = (string?)null,
                 DisplayName = "Parent Workspace",
-                UserId
+                UserId = _userId
             });
 
         await connection.ExecuteAsync(
@@ -57,7 +57,7 @@ public sealed class SessionListEndpointAggregationTests : IAsyncLifetime, IDispo
                 Status = "running",
                 CreatedAt = createdAt,
                 StoppedAt = (string?)null,
-                UserId
+                UserId = _userId
             });
 
         await connection.ExecuteAsync(
@@ -72,7 +72,7 @@ public sealed class SessionListEndpointAggregationTests : IAsyncLifetime, IDispo
                 CreatedAt = createdAt,
                 CleanedUpAt = (string?)null,
                 DisplayName = "Standalone Workspace",
-                UserId
+                UserId = _userId
             });
 
         await connection.ExecuteAsync(
@@ -87,7 +87,7 @@ public sealed class SessionListEndpointAggregationTests : IAsyncLifetime, IDispo
                 Status = "running",
                 CreatedAt = createdAt,
                 StoppedAt = (string?)null,
-                UserId
+                UserId = _userId
             });
 
         await connection.ExecuteAsync(
@@ -102,7 +102,7 @@ public sealed class SessionListEndpointAggregationTests : IAsyncLifetime, IDispo
                 Status = "running",
                 CreatedAt = createdAt,
                 StoppedAt = (string?)null,
-                UserId
+                UserId = _userId
             });
 
         await connection.ExecuteAsync(
@@ -129,7 +129,7 @@ public sealed class SessionListEndpointAggregationTests : IAsyncLifetime, IDispo
                 IsHidden = false,
                 RetentionStatus = "active",
                 ArchivedAt = (string?)null,
-                UserId
+                UserId = _userId
             });
 
         await connection.ExecuteAsync(
@@ -156,7 +156,7 @@ public sealed class SessionListEndpointAggregationTests : IAsyncLifetime, IDispo
                 IsHidden = true,
                 RetentionStatus = "active",
                 ArchivedAt = (string?)null,
-                UserId
+                UserId = _userId
             });
 
         await connection.ExecuteAsync(
@@ -183,7 +183,7 @@ public sealed class SessionListEndpointAggregationTests : IAsyncLifetime, IDispo
                 IsHidden = false,
                 RetentionStatus = "active",
                 ArchivedAt = (string?)null,
-                UserId
+                UserId = _userId
             });
     }
 

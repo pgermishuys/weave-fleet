@@ -12,7 +12,12 @@ import {
 } from "vue"
 import type { AccumulatedMessage, DelegationDto } from "@/lib/api-types"
 import type { DomainEvent } from "@/lib/domain-events"
-import { applyDomainEvent, createSessionStreamState, type SessionStreamState } from "@/lib/domain-event-reducer"
+import {
+  applyDomainEvent,
+  createSessionStreamState,
+  type SessionStreamState,
+  type SessionStreamStatus,
+} from "@/lib/domain-event-reducer"
 import { ensureMessage, mergeMessageUpdate } from "@/lib/event-state"
 import type { SessionHistoryPage } from "@/lib/session-snapshot"
 import { useWeaveSocket, type Unsubscribe } from "@/composables/use-weave-socket"
@@ -20,7 +25,7 @@ import { useWeaveSocket, type Unsubscribe } from "@/composables/use-weave-socket
 export interface UseSessionStreamResult {
   messages: ComputedRef<readonly AccumulatedMessage[]>
   delegations: ComputedRef<readonly DelegationDto[]>
-  sessionStatus: ComputedRef<"idle" | "busy">
+  sessionStatus: ComputedRef<SessionStreamStatus>
   isLoading: Readonly<ShallowRef<boolean>>
   hasMore: Readonly<ShallowRef<boolean>>
   isLoadingOlder: Readonly<ShallowRef<boolean>>
@@ -31,6 +36,7 @@ function createEmptyState(): SessionStreamState {
   return {
     messages: [],
     delegations: [],
+    explicitStatus: "idle",
     sessionStatus: "idle",
     lastSequenceNumber: null,
   }
@@ -54,7 +60,7 @@ export function useSessionStream(
 
   const messages = computed<readonly AccumulatedMessage[]>(() => streamState.value.messages)
   const delegations = computed<readonly DelegationDto[]>(() => streamState.value.delegations)
-  const sessionStatus = computed<"idle" | "busy">(() => streamState.value.sessionStatus)
+  const sessionStatus = computed<SessionStreamStatus>(() => streamState.value.sessionStatus)
 
   function resetState(loading: boolean): void {
     streamState.value = createEmptyState()

@@ -4,15 +4,15 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Dapper;
 using Microsoft.Extensions.DependencyInjection;
-using WeaveFleet.Application.Data;
 using WeaveFleet.Api.Tests.Infrastructure;
+using WeaveFleet.Application.Data;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
 [Collection("NonParallelApiFactoryTests")]
 public sealed class SessionEndpointOriginTests : IAsyncLifetime, IDisposable
 {
-    private const string UserId = "local-user";
+    private const string _userId = "local-user";
 
     private ApiWebApplicationFactory? _factory;
     private HttpClient? _client;
@@ -135,7 +135,7 @@ public sealed class SessionEndpointOriginTests : IAsyncLifetime, IDisposable
                 CreatedAt = createdAt,
                 CleanedUpAt = (string?)null,
                 DisplayName = id,
-                UserId
+                UserId = _userId
             });
 
     private static Task<int> InsertInstanceAsync(IDbConnection connection, string id, string directory, string createdAt) =>
@@ -151,7 +151,7 @@ public sealed class SessionEndpointOriginTests : IAsyncLifetime, IDisposable
                 Status = "running",
                 CreatedAt = createdAt,
                 StoppedAt = (string?)null,
-                UserId
+                UserId = _userId
             });
 
     private static Task<int> InsertSessionAsync(IDbConnection connection, string id, string workspaceId, string instanceId, string directory, string createdAt) =>
@@ -179,6 +179,6 @@ public sealed class SessionEndpointOriginTests : IAsyncLifetime, IDisposable
                 IsHidden = false,
                 RetentionStatus = "active",
                 ArchivedAt = (string?)null,
-                UserId
+                UserId = _userId
             });
 }

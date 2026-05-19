@@ -1,6 +1,6 @@
+using System.Net.Http.Json;
 using WeaveFleet.E2E.Infrastructure;
 using WeaveFleet.E2E.Pages;
-using System.Net.Http.Json;
 
 namespace WeaveFleet.E2E.Tests;
 
