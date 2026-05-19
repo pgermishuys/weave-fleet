@@ -170,6 +170,20 @@ On failure, each test saves:
 | Screenshot | `bin/{config}/net10.0/test-results/{TestClass}-{timestamp}-screenshot.png` |
 | Playwright trace | `bin/{config}/net10.0/test-results/{TestClass}-{timestamp}-trace.zip` |
 
+To also save a Playwright trace when a test passes, opt in with `ALWAYS_SAVE_TRACE=1`:
+
+```bash
+ALWAYS_SAVE_TRACE=1 dotnet test tests/WeaveFleet.E2E/ --filter "Category=E2E"
+```
+
+This keeps the artifact path unchanged:
+
+| Artifact | Location |
+|----------|----------|
+| Playwright trace on success (opt-in) | `bin/{config}/net10.0/test-results/{TestClass}-{timestamp}-trace.zip` |
+
+Passing runs do not save screenshots unless the test fails.
+
 View traces with:
 
 ```bash

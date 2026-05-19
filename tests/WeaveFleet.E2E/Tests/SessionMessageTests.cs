@@ -1,3 +1,4 @@
+using Microsoft.Playwright;
 using WeaveFleet.E2E.Infrastructure;
 using WeaveFleet.E2E.Pages;
 
@@ -193,6 +194,112 @@ public sealed class SessionMessageTests : E2ETestBase,
 
             var finalStatus = await detail.GetStatusAsync();
             finalStatus.ShouldBe("idle");
+        });
+    }
+
+    [Fact]
+    public async Task expanded_tool_cards_show_non_blank_content()
+    {
+        await WithFailureCapture(async () =>
+        {
+            const string toolCardId = "tool-output-card";
+
+            ConfigureScenario(b =>
+                b.WithToolResponse(
+                    "_placeholder_",
+                    "msg-tool-output-1",
+                    toolCardId,
+                    "call-tool-output-1",
+                    "bash",
+                    new
+                    {
+                        status = "completed",
+                        summary = "Completed command execution",
+                        output = "line 1\nline 2"
+                    },
+                    TimeSpan.FromMilliseconds(200)));
+
+            var dashboard = new FleetDashboardPage(Page);
+            await dashboard.GotoAsync();
+
+            var dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+
+            await detail.SendPromptAsync("Run the tool");
+            await detail.WaitForIdleAsync(10_000);
+            await detail.WaitForToolCardAsync(toolCardId);
+
+            await detail.ExpandToolCardAsync(toolCardId);
+
+            var summaryText = (await detail.GetToolCardSummary(toolCardId).TextContentAsync())?.Trim();
+            var outputText = (await detail.GetToolCardOutput(toolCardId).TextContentAsync())?.Trim();
+
+            string.IsNullOrWhiteSpace(summaryText).ShouldBeFalse();
+            string.IsNullOrWhiteSpace(outputText).ShouldBeFalse();
+            await Assertions.Expect(detail.GetToolCardEmptyState(toolCardId)).ToHaveCountAsync(0);
+        });
+    }
+
+    [Fact]
+    public async Task diff_view_tool_cards_render_diff_rows_when_inline_diffs_enabled()
+    {
+        await WithFailureCapture(async () =>
+        {
+            const string toolCardId = "tool-diff-card";
+
+            ConfigureScenario(b =>
+                b.WithToolResponse(
+                    "_placeholder_",
+                    "msg-tool-diff-1",
+                    toolCardId,
+                    "call-tool-diff-1",
+                    "edit",
+                    new
+                    {
+                        status = "completed",
+                        summary = "Applied patch",
+                        diff = new object[]
+                        {
+                            new { type = "context", content = "@@ -1,2 +1,2 @@" },
+                            new { type = "remove", content = "-old line", oldLineNumber = 1 },
+                            new { type = "add", content = "+new line", newLineNumber = 1 },
+                        }
+                    },
+                    TimeSpan.FromMilliseconds(200)));
+
+            var dashboard = new FleetDashboardPage(Page);
+            await dashboard.GotoAsync();
+
+            var dialog = await dashboard.ClickNewSessionAsync();
+            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
+
+            var detail = await dialog.SubmitAsync();
+            await detail.WaitForLoadedAsync();
+            await detail.SetInlineToolDiffsAsync(true);
+
+            await detail.SendPromptAsync("Apply the patch");
+            await detail.WaitForIdleAsync(10_000);
+            await detail.WaitForToolCardAsync(toolCardId);
+
+            await Assertions.Expect(detail.GetToolCardBody(toolCardId)).ToBeVisibleAsync();
+            await Assertions.Expect(detail.GetToolCardDiff(toolCardId)).ToBeVisibleAsync();
+            await Assertions.Expect(detail.GetToolCardDiffRows(toolCardId)).ToHaveCountAsync(3);
+            await Assertions.Expect(detail.GetToolCardOutput(toolCardId)).ToHaveCountAsync(0);
+
+            var diffRows = detail.GetToolCardDiffRows(toolCardId);
+            (await diffRows.Nth(0).GetAttributeAsync("data-diff-type")).ShouldBe("context");
+            (await diffRows.Nth(1).GetAttributeAsync("data-diff-type")).ShouldBe("remove");
+            (await diffRows.Nth(2).GetAttributeAsync("data-diff-type")).ShouldBe("add");
+            var removedLineText = await diffRows.Nth(1).TextContentAsync();
+            var addedLineText = await diffRows.Nth(2).TextContentAsync();
+
+            removedLineText.ShouldNotBeNull();
+            addedLineText.ShouldNotBeNull();
+            removedLineText.ShouldContain("-old line");
+            addedLineText.ShouldContain("+new line");
         });
     }
 
