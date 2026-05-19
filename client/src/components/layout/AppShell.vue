@@ -17,6 +17,7 @@ import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useVisualViewport } from "@/composables/use-visual-viewport";
 import { useKeyboardScroll } from "@/composables/use-keyboard-scroll";
 import { useFoldableScreen } from "@/composables/use-foldable-screen";
+import { useBoardFeature } from "@/composables/use-board-feature";
 import { useSidebarStore } from "@/stores/sidebar";
 
 useCommands();
@@ -36,6 +37,7 @@ const pathname = useLocation({
 });
 const sidebarStore = useSidebarStore();
 const { isMobileNav, mobileDrawerOpen, openDrawer, closeDrawer } = useSidebarMobile();
+const { isBoardFeatureEnabled } = useBoardFeature();
 
 const { panelCollapsed, activeRail } = storeToRefs(sidebarStore);
 
@@ -46,7 +48,7 @@ const showSessionsV2Panel = computed(() =>
 );
 
 const showBoardPanel = computed(() =>
-  !isSettingsRoute.value && activeRail.value === "board",
+  isBoardFeatureEnabled.value && !isSettingsRoute.value && activeRail.value === "board",
 );
 
 // Touch swipe support: swipe right from left edge to open drawer

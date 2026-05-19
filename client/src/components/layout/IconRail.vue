@@ -11,6 +11,7 @@ import { apiFetch } from "@/lib/api-client";
 import type { PluginCatalogResponse } from "@/lib/api-types";
 import { usePluginRuntime } from "@/plugins/composable";
 import { getSidebarViews } from "@/plugins/slots";
+import { useBoardFeature } from "@/composables/use-board-feature";
 import { useSidebarStore } from "@/stores/sidebar";
 
 type RailItemId = SidebarRail | string;
@@ -39,6 +40,7 @@ const sidebarStore = useSidebarStore();
 const { activeRail } = storeToRefs(sidebarStore);
 const router = useRouter();
 const pluginRuntime = usePluginRuntime();
+const { isBoardFeatureEnabled } = useBoardFeature();
 const pathname = useLocation({
   select: (location) => location.pathname,
 });
@@ -65,7 +67,9 @@ const pluginItems = computed<readonly RailItem[]>(() => {
   });
 });
 
-const topItems = computed<readonly RailItem[]>(() => ALL_TOP_ITEMS);
+const topItems = computed<readonly RailItem[]>(() => {
+  return ALL_TOP_ITEMS.filter((item) => item.id !== "board" || isBoardFeatureEnabled.value);
+});
 
 const currentRouteRail = computed<RailItemId | null>(() => {
   if (pathname.value === "/board") {
