@@ -6,8 +6,7 @@ import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
 import { useSessionEventsSwitch } from "@/composables/use-session-events-switch";
 import { clearSentPrompts, reconcileSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
-import { useSmartLinks } from "@/plugins/builtin/smart-links";
-import { useReviewCommentQueue } from "@/plugins/builtin/smart-links/composables/use-review-comment-queue";
+import { useSmartLinks } from "@/plugins/builtin/smart-links"
 import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { CommandEventName } from "@/lib/command-events";
@@ -70,10 +69,6 @@ useSmartLinks({
   sessionId: computed(() => props.sessionId),
   messages: sessionMessages,
   originUrl: computed(() => selectedSession.value?.origin?.resourceUrl ?? null),
-});
-useReviewCommentQueue({
-  sessionId: computed(() => props.sessionId),
-  messages: sessionMessages,
 });
 const { sentPrompts } = useSentPrompts(props.sessionId);
 const streamRef = ref<HTMLElement | null>(null);
