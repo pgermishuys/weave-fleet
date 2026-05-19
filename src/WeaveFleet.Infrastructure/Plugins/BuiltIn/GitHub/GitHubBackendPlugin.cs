@@ -1,9 +1,9 @@
 using System.Diagnostics.CodeAnalysis;
-using WeaveFleet.Application.Plugins;
-using WeaveFleet.Application.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using WeaveFleet.Application.Plugins;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;

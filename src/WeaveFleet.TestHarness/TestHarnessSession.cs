@@ -1,7 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using System.Threading.Channels;
 using System.Text.Json;
+using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
@@ -135,11 +135,35 @@ public sealed class TestHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc/>
-    public Task AbortAsync(CancellationToken ct)
+    public async Task AbortAsync(CancellationToken ct)
     {
         _promptCts?.Cancel();
         _status = HarnessSessionStatus.Idle;
-        return Task.CompletedTask;
+
+        await PushEventCoreAsync(new HarnessEvent
+        {
+            Type = EventTypes.SessionStatus,
+            SessionId = InstanceId,
+            FleetSessionId = _fleetSessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                sessionID = InstanceId,
+                status = new { type = "idle" }
+            })
+        }, ct).ConfigureAwait(false);
+
+        await PushEventCoreAsync(new HarnessEvent
+        {
+            Type = EventTypes.SessionIdle,
+            SessionId = InstanceId,
+            FleetSessionId = _fleetSessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                sessionID = InstanceId
+            })
+        }, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -444,7 +468,66 @@ public sealed class TestHarnessSession : IHarnessSession
         // through the channel — the relay publishes it to the event bus and the fan-out
         // subscriber forwards it to WebSocket clients.
         await TryHandleDurableEventAsync(evt).ConfigureAwait(false);
+        await TryHandleDelegationEventAsync(evt).ConfigureAwait(false);
         await _channel.Writer.WriteAsync(evt, ct).ConfigureAwait(false);
+    }
+
+    private async Task TryHandleDelegationEventAsync(HarnessEvent evt)
+    {
+        if (_scopeFactory is null || string.IsNullOrWhiteSpace(_ownerUserId) || !evt.Payload.HasValue)
+            return;
+
+        if (!TryExtractTaskCompletion(evt.Payload.Value, out var toolCallId, out var status))
+            return;
+
+        using var scope = _scopeFactory.CreateScope();
+        var delegationRepository = scope.ServiceProvider.GetService<IDelegationRepository>();
+        var delegationService = scope.ServiceProvider.GetService<DelegationService>();
+        if (delegationRepository is null || delegationService is null)
+            return;
+
+        var delegation = await delegationRepository.GetByParentToolCallIdAsync(
+            _fleetSessionId,
+            toolCallId).ConfigureAwait(false);
+
+        if (delegation is null)
+            return;
+
+        await delegationService.HandleDelegationFinishedAsync(
+            delegation.Id,
+            status).ConfigureAwait(false);
+    }
+
+    private static bool TryExtractTaskCompletion(JsonElement payload, out string toolCallId, out string status)
+    {
+        toolCallId = string.Empty;
+        status = string.Empty;
+
+        if (!payload.TryGetProperty("part", out var part)
+            || part.ValueKind != JsonValueKind.Object
+            || !part.TryGetProperty("type", out var typeEl)
+            || typeEl.GetString() != "tool"
+            || !part.TryGetProperty("tool", out var toolEl)
+            || toolEl.GetString() != "task")
+        {
+            return false;
+        }
+
+        if (!part.TryGetProperty("state", out var state)
+            || state.ValueKind != JsonValueKind.Object
+            || !state.TryGetProperty("status", out var statusEl))
+        {
+            return false;
+        }
+
+        status = statusEl.GetString() ?? string.Empty;
+        if (status is not ("completed" or "error" or "cancelled"))
+            return false;
+
+        if (part.TryGetProperty("callID", out var callIdEl) || part.TryGetProperty("callId", out callIdEl))
+            toolCallId = callIdEl.GetString() ?? string.Empty;
+
+        return !string.IsNullOrWhiteSpace(toolCallId);
     }
 
     private async Task<bool> TryHandleDurableEventAsync(HarnessEvent evt)

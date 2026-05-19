@@ -1,8 +1,8 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
-using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.E2E.Infrastructure;
 using WeaveFleet.E2E.Pages;
 using WeaveFleet.TestHarness;

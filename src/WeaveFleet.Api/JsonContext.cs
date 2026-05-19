@@ -2,8 +2,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Application.DTOs;
-using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 

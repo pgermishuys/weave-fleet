@@ -2,10 +2,10 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
-using WeaveFleet.Domain.Entities;
-using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Services;
 
@@ -18,15 +18,15 @@ public sealed class GitHubService(
     IUserCredentialRepository credentialRepository,
     ICredentialProtector credentialProtector)
 {
-    private const string IntegrationId = "github";
-    private const string CredentialNamespace = "github";
-    private const string CredentialKind = "oauth-access-token";
-    private const string CredentialLabel = "GitHub";
-    private const string ClientId = "Ov23liJT2Q0HXHj9xLGM";
-    private const string DeviceCodeUrl = "https://github.com/login/device/code";
-    private const string TokenUrl = "https://github.com/login/oauth/access_token";
-    private const string UserUrl = "https://api.github.com/user";
-    private const string Scopes = "repo,read:user,read:org";
+    private const string _integrationId = "github";
+    private const string _credentialNamespace = "github";
+    private const string _credentialKind = "oauth-access-token";
+    private const string _credentialLabel = "GitHub";
+    private const string _clientId = "Ov23liJT2Q0HXHj9xLGM";
+    private const string _deviceCodeUrl = "https://github.com/login/device/code";
+    private const string _tokenUrl = "https://github.com/login/oauth/access_token";
+    private const string _userUrl = "https://api.github.com/user";
+    private const string _scopes = "repo,read:user,read:org";
 
     // ── Device Flow ────────────────────────────────────────────────────────────
 
@@ -37,10 +37,10 @@ public sealed class GitHubService(
         client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
 
         var response = await client.PostAsync(
-            DeviceCodeUrl,
+            _deviceCodeUrl,
             new FormUrlEncodedContent([
-                new("client_id", ClientId),
-                new("scope", Scopes)
+                new("client_id", _clientId),
+                new("scope", _scopes)
             ]),
             ct).ConfigureAwait(false);
 
@@ -55,9 +55,9 @@ public sealed class GitHubService(
         client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
 
         var response = await client.PostAsync(
-            TokenUrl,
+            _tokenUrl,
             new FormUrlEncodedContent([
-                new("client_id", ClientId),
+                new("client_id", _clientId),
                 new("device_code", deviceCode),
                 new("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
             ]),
@@ -159,8 +159,8 @@ public sealed class GitHubService(
     /// <summary>Removes stored GitHub token (disconnect) for the given user.</summary>
     public async Task DisconnectAsync(string userId, CancellationToken ct = default)
     {
-        var credentials = await credentialRepository.ListByUserNamespaceAndKindAsync(userId, CredentialNamespace, CredentialKind).ConfigureAwait(false);
-        foreach (var credential in credentials.Where(c => string.Equals(c.Label, CredentialLabel, StringComparison.Ordinal)))
+        var credentials = await credentialRepository.ListByUserNamespaceAndKindAsync(userId, _credentialNamespace, _credentialKind).ConfigureAwait(false);
+        foreach (var credential in credentials.Where(c => string.Equals(c.Label, _credentialLabel, StringComparison.Ordinal)))
         {
             await credentialRepository.DeleteAsync(credential.Id, userId).ConfigureAwait(false);
         }
@@ -180,9 +180,9 @@ public sealed class GitHubService(
         {
             Id = Guid.NewGuid().ToString(),
             UserId = userId,
-            Namespace = CredentialNamespace,
-            Kind = CredentialKind,
-            Label = CredentialLabel,
+            Namespace = _credentialNamespace,
+            Kind = _credentialKind,
+            Label = _credentialLabel,
             EncryptedValue = credentialProtector.Encrypt(token),
             DisplayHint = ComputeDisplayHint(token),
             Metadata = CreateMetadata(now, source, login),
@@ -213,13 +213,13 @@ public sealed class GitHubService(
 
     private async Task<UserCredential?> GetCredentialAsync(string userId, CancellationToken ct)
     {
-        var credentials = await credentialRepository.ListByUserNamespaceAndKindAsync(userId, CredentialNamespace, CredentialKind).ConfigureAwait(false);
-        return credentials.FirstOrDefault(c => string.Equals(c.Label, CredentialLabel, StringComparison.Ordinal));
+        var credentials = await credentialRepository.ListByUserNamespaceAndKindAsync(userId, _credentialNamespace, _credentialKind).ConfigureAwait(false);
+        return credentials.FirstOrDefault(c => string.Equals(c.Label, _credentialLabel, StringComparison.Ordinal));
     }
 
     private async Task<UserCredential?> MigrateLegacyTokenAsync(string userId, CancellationToken ct)
     {
-        var legacyState = await pluginStateStore.GetStateAsync(IntegrationId, userId, ct).ConfigureAwait(false);
+        var legacyState = await pluginStateStore.GetStateAsync(_integrationId, userId, ct).ConfigureAwait(false);
         if (legacyState is null)
             return null;
 
@@ -235,9 +235,9 @@ public sealed class GitHubService(
         {
             Id = Guid.NewGuid().ToString(),
             UserId = userId,
-            Namespace = CredentialNamespace,
-            Kind = CredentialKind,
-            Label = CredentialLabel,
+            Namespace = _credentialNamespace,
+            Kind = _credentialKind,
+            Label = _credentialLabel,
             EncryptedValue = credentialProtector.Encrypt(token),
             DisplayHint = ComputeDisplayHint(token),
             Metadata = CreateMetadata(connectedAt, "legacy-plugin-state"),
@@ -252,7 +252,7 @@ public sealed class GitHubService(
 
     private async Task RemoveLegacyStateAsync(string userId, CancellationToken ct)
     {
-        var legacyState = await pluginStateStore.GetStateAsync(IntegrationId, userId, ct).ConfigureAwait(false);
+        var legacyState = await pluginStateStore.GetStateAsync(_integrationId, userId, ct).ConfigureAwait(false);
         if (legacyState is null)
             return;
 
@@ -261,11 +261,11 @@ public sealed class GitHubService(
 
         if (legacyState.Count == 0)
         {
-            await pluginStateStore.RemoveStateAsync(IntegrationId, userId, ct).ConfigureAwait(false);
+            await pluginStateStore.RemoveStateAsync(_integrationId, userId, ct).ConfigureAwait(false);
             return;
         }
 
-        await pluginStateStore.SetStateAsync(IntegrationId, userId, legacyState, ct).ConfigureAwait(false);
+        await pluginStateStore.SetStateAsync(_integrationId, userId, legacyState, ct).ConfigureAwait(false);
     }
 
     private static string CreateMetadata(DateTimeOffset connectedAt, string source)
@@ -292,7 +292,7 @@ public sealed class GitHubService(
         client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
         client.DefaultRequestHeaders.UserAgent.ParseAdd("fleet/1.0");
 
-        var response = await client.GetAsync(UserUrl, ct).ConfigureAwait(false);
+        var response = await client.GetAsync(_userUrl, ct).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             return null;
 

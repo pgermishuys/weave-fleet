@@ -4,9 +4,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Services;
-using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Events;
 
 namespace WeaveFleet.Infrastructure.Services;
 
@@ -28,19 +28,19 @@ namespace WeaveFleet.Infrastructure.Services;
 /// </summary>
 public sealed class HarnessEventRelay : BackgroundService
 {
-    private static readonly Action<ILogger, string, Exception?> LogSessionNotFound =
+    private static readonly Action<ILogger, string, Exception?> _logSessionNotFound =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(1, "SessionNotFound"),
             "Could not resolve fleet session for instance {InstanceId} after retries");
 
-    private static readonly Action<ILogger, string, Exception?> LogPumpFailed =
+    private static readonly Action<ILogger, string, Exception?> _logPumpFailed =
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(2, "PumpFailed"),
             "Event pump failed for instance {InstanceId}");
 
-    private static readonly Action<ILogger, string, Exception?> LogPublishFailed =
+    private static readonly Action<ILogger, string, Exception?> _logPublishFailed =
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(3, "EventPublishFailed"),
             "Event publish failed for instance {InstanceId}");
 
-    private static readonly Action<ILogger, int, Exception?> LogShutdownTimeout =
+    private static readonly Action<ILogger, int, Exception?> _logShutdownTimeout =
         LoggerMessage.Define<int>(LogLevel.Warning, new EventId(4, "ShutdownTimeout"),
             "Shutdown timed out waiting for {Count} pump task(s) to complete");
 
@@ -105,7 +105,7 @@ public sealed class HarnessEventRelay : BackgroundService
 
                 if (winner != allPumps)
                 {
-                    LogShutdownTimeout(_logger, tasks.Count(t => !t.IsCompleted), null);
+                    _logShutdownTimeout(_logger, tasks.Count(t => !t.IsCompleted), null);
                 }
             }
         }
@@ -177,7 +177,7 @@ public sealed class HarnessEventRelay : BackgroundService
 
         if (fleetSessionId is null)
         {
-            LogSessionNotFound(_logger, instanceId, null);
+            _logSessionNotFound(_logger, instanceId, null);
             return;
         }
 
@@ -230,7 +230,7 @@ public sealed class HarnessEventRelay : BackgroundService
                 }
                 catch (Exception pubEx)
                 {
-                    LogPublishFailed(_logger, instanceId, pubEx);
+                    _logPublishFailed(_logger, instanceId, pubEx);
                 }
             }
         }
@@ -240,7 +240,7 @@ public sealed class HarnessEventRelay : BackgroundService
         }
         catch (Exception ex)
         {
-            LogPumpFailed(_logger, instanceId, ex);
+            _logPumpFailed(_logger, instanceId, ex);
         }
         finally
         {

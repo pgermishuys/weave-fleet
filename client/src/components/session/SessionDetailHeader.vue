@@ -33,7 +33,7 @@ const sessionStatusIndicator = computed(() => {
     return "disconnected";
   }
 
-  return effectiveActivityStatus.value === "busy" ? "working" : "idle";
+  return effectiveActivityStatus.value === "busy" || effectiveActivityStatus.value === "delegating" ? "working" : "idle";
 });
 const isArchived = computed(() => props.retentionStatus === "archived");
 const showStoppedBanner = computed(() => {

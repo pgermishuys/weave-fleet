@@ -1,9 +1,9 @@
-using WeaveFleet.Application.SessionSources;
+using Shouldly;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
-using Shouldly;
 
 namespace WeaveFleet.Application.Tests.Services;
 

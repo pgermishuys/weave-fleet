@@ -126,7 +126,7 @@ public sealed class TestScenarioBuilder
 
     /// <summary>
     /// Enqueue a simple text response for the next prompt.
-    /// Emits: session.status(busy) → message.updated → message.part.updated → session.idle
+    /// Emits: session.status(busy) → message.updated → message.part.updated → session.status(idle) → session.idle
     /// Payload structure matches the OpenCode SSE contract so the frontend can parse them.
     /// See tests/contracts/opencode-to-fleet-events.json for the canonical format.
     /// </summary>
@@ -157,8 +157,11 @@ public sealed class TestScenarioBuilder
             .AddEvent(MakeEvent(sessionId, "message.part.updated",
                 new { sessionID = sessionId, part = new { type = "text", id = partId, sessionID = sessionId, messageID = messageId, text } }),
                 responseDelay)
-            .AddEvent(MakeEvent(sessionId, "session.idle",
+            .AddEvent(MakeEvent(sessionId, "session.status",
                 new { sessionId, status = new { type = "idle" } }),
+                responseDelay)
+            .AddEvent(MakeEvent(sessionId, "session.idle",
+                new { sessionId }),
                 responseDelay)
         );
     }

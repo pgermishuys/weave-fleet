@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
-using WeaveFleet.Application.Plugins;
 using WeaveFleet.Api.Endpoints;
+using WeaveFleet.Application.Plugins;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 

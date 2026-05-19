@@ -1,6 +1,6 @@
-using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using WeaveFleet.Application;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
@@ -100,8 +100,8 @@ public sealed partial class SessionOrchestrator(
     {
     }
 
-    private const string DefaultHarnessType = "opencode";
-    private const string ScratchProjectName = "Scratch";
+    private const string _defaultHarnessType = "opencode";
+    private const string _scratchProjectName = "Scratch";
 
     // ── Create ─────────────────────────────────────────────────────────────────
 
@@ -140,7 +140,7 @@ public sealed partial class SessionOrchestrator(
             sourceResolutionResult.Value.Input.ContextEnvelope);
 
         // Resolve harness
-        var harnessType = request.HarnessType ?? DefaultHarnessType;
+        var harnessType = request.HarnessType ?? _defaultHarnessType;
         var harness = harnessRegistry.GetByType(harnessType);
         if (harness is null)
             return FleetError.NotFoundFor("Harness", harnessType);
@@ -1299,7 +1299,7 @@ public sealed partial class SessionOrchestrator(
         // Find the Scratch project by name convention
         var projects = await projectRepository.ListAsync();
         return projects.FirstOrDefault(p =>
-            p.Name.Equals(ScratchProjectName, StringComparison.OrdinalIgnoreCase))?.Id;
+            p.Name.Equals(_scratchProjectName, StringComparison.OrdinalIgnoreCase))?.Id;
     }
 
     private async Task SafeStopAsync(IHarnessSession instance, CancellationToken ct)

@@ -190,8 +190,29 @@ public sealed class DelegationService(
                 CancellationToken.None);
         }
 
-        if (delegation.ChildSessionId is not null)
-            activityTracker?.UnregisterChild(delegation.ChildSessionId);
+        if (delegation.ChildSessionId is not null && activityTracker is not null)
+        {
+            activityTracker.UnregisterChild(delegation.ChildSessionId);
+
+            var parentActivityStatus = activityTracker.GetEffectiveActivityStatus(delegation.ParentSessionId) ?? "idle";
+            var activityPayload = JsonSerializer.SerializeToElement(
+                new ActivityStatusBroadcastPayload(delegation.ParentSessionId, parentActivityStatus),
+                ApplicationJsonContext.Default.ActivityStatusBroadcastPayload);
+
+            await eventBroadcaster.BroadcastAsync(
+                $"session:{delegation.ParentSessionId}",
+                "activity_status",
+                activityPayload,
+                userContext.UserId,
+                CancellationToken.None).ConfigureAwait(false);
+
+            await eventBroadcaster.BroadcastAsync(
+                "sessions",
+                "activity_status",
+                activityPayload,
+                userContext.UserId,
+                CancellationToken.None).ConfigureAwait(false);
+        }
 
         return ToDto(delegation);
     }

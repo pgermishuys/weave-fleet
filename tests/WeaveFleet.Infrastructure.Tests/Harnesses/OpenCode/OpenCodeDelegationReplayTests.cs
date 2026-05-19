@@ -13,9 +13,9 @@ using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Testing.Builders;
-using WeaveFleet.Testing.Fixtures;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
+using WeaveFleet.Testing.Fixtures;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
 

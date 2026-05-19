@@ -1,6 +1,6 @@
+using System.Security.Claims;
 using Duende.IdentityServer.Models;
 using Duende.IdentityServer.Test;
-using System.Security.Claims;
 
 namespace WeaveFleet.IdP;
 

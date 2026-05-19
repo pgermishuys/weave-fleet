@@ -28,7 +28,7 @@ export type SessionStatus =
  * Activity status — what the session's agent is currently doing.
  * Only meaningful while the lifecycle is "running".
  */
-export type SessionActivityStatus = "busy" | "idle" | "waiting_input";
+export type SessionActivityStatus = "busy" | "delegating" | "idle" | "waiting_input";
 
 /**
  * Lifecycle status — the overall terminal/non-terminal state of the session.
