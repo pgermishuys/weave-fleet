@@ -136,12 +136,14 @@ builder.Services.AddCors(options =>
         }
         else if (builder.Environment.IsDevelopment())
         {
-            // Allow localhost frontend dev servers during split-mode development
+            // Allow dev-domain frontend servers during split-mode development.
+            // weave-fleet-dev.localhost avoids cookie conflicts with any
+            // installed instance running on plain localhost.
             policy.WithOrigins(
-                    "http://localhost:3001",
-                    "https://localhost:3001",
-                    "http://localhost:3002",
-                    "https://localhost:3002")
+                    "http://weave-fleet-dev.localhost:3001",
+                    "https://weave-fleet-dev.localhost:3001",
+                    "http://weave-fleet-dev.localhost:3002",
+                    "https://weave-fleet-dev.localhost:3002")
                 .AllowAnyMethod()
                 .AllowAnyHeader()
                 .AllowCredentials();
