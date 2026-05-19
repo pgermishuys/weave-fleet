@@ -1,13 +1,19 @@
 using System.Diagnostics;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
@@ -28,6 +34,10 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime
     private static readonly Action<ILogger, Exception?> LogAvailabilityCheckFailed =
         LoggerMessage.Define(LogLevel.Warning, new EventId(3, "AvailabilityCheckFailed"),
             "opencode binary availability check failed.");
+
+    private static readonly Action<ILogger, string, Exception?> LogExpireQuestionsFailed =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(4, "ExpireQuestionsFailed"),
+            "Failed to expire pending questions for session {SessionId}.");
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly PortAllocator _portAllocator;
@@ -114,17 +124,23 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime
 
         return provider.ToLowerInvariant() switch
         {
-            "anthropic" => [new CredentialRequirement(
-                Namespace: "anthropic",
-                Kind: "api-key",
-                EnvironmentVariableName: "ANTHROPIC_API_KEY",
-                UserFacingMessage: "An Anthropic API key is required to use this model.")],
+            "anthropic" =>
+            [
+                new CredentialRequirement(
+                    Namespace: "anthropic",
+                    Kind: "api-key",
+                    EnvironmentVariableName: "ANTHROPIC_API_KEY",
+                    UserFacingMessage: "An Anthropic API key is required to use this model.")
+            ],
 
-            "openai" => [new CredentialRequirement(
-                Namespace: "openai",
-                Kind: "api-key",
-                EnvironmentVariableName: "OPENAI_API_KEY",
-                UserFacingMessage: "An OpenAI API key is required to use this model.")],
+            "openai" =>
+            [
+                new CredentialRequirement(
+                    Namespace: "openai",
+                    Kind: "api-key",
+                    EnvironmentVariableName: "OPENAI_API_KEY",
+                    UserFacingMessage: "An OpenAI API key is required to use this model.")
+            ],
 
             _ => []
         };
@@ -297,10 +313,12 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime
             {
                 await processManager.DisposeAsync().ConfigureAwait(false);
             }
+
             if (allocatedPort > 0)
             {
                 _portAllocator.ReleasePort(allocatedPort);
             }
+
             throw;
         }
     }
@@ -394,6 +412,11 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime
                 projectName: options.ProjectName,
                 openCodeSessionId: options.ResumeToken);
 
+            // Expire any pending question tool parts from the previous harness lifetime.
+            // When an OpenCode session is resumed, the previous process is gone and any
+            // unanswered questions are no longer valid.
+            await ExpirePendingQuestionsAsync(options.SessionId, options.OwnerUserId, ct).ConfigureAwait(false);
+
             LogSpawned(_logger, instanceId, null);
             return instance;
         }
@@ -404,11 +427,99 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime
             {
                 await processManager.DisposeAsync().ConfigureAwait(false);
             }
+
             if (allocatedPort > 0)
             {
                 _portAllocator.ReleasePort(allocatedPort);
             }
+
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Expires any pending/running question tool parts for the given session.
+    /// Called during resume to ensure stale questions are marked as errors
+    /// before the new harness instance starts streaming events.
+    /// Broadcasts <c>message.part.updated</c> so already-subscribed clients
+    /// (v2 WebSocket) see the state change without requiring a page refresh.
+    /// </summary>
+    private async Task ExpirePendingQuestionsAsync(string fleetSessionId, string ownerUserId, CancellationToken ct)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            using var userScope = BackgroundUserContext.BeginScope(ownerUserId);
+            var messageRepository = scope.ServiceProvider.GetRequiredService<IMessageRepository>();
+            var broadcaster = scope.ServiceProvider.GetRequiredService<IEventBroadcaster>();
+
+            var messages = await messageRepository.GetBySessionAsync(fleetSessionId, limit: 200, beforeMessageId: null)
+                .ConfigureAwait(false);
+
+            foreach (var message in messages)
+            {
+                var parts = JsonSerializer.Deserialize(message.PartsJson,
+                    ApplicationJsonContext.Default.ListMessagePart);
+                if (parts is null) continue;
+
+                var modified = false;
+                for (var i = 0; i < parts.Count; i++)
+                {
+                    if (parts[i] is ToolUsePart
+                        {
+                            ToolName: "question", State: ToolUseState.Pending or ToolUseState.Running
+                        } tool)
+                    {
+                        parts[i] = tool with { State = ToolUseState.Error };
+                        modified = true;
+
+                        // Broadcast using toolCallId as the part ID — this matches
+                        // the v1 client which sets partId = toolCallId in convertFleetMessageToAccumulated.
+                        var partPayload = new MessagePartUpdatedPayload
+                        {
+                            SessionId = fleetSessionId,
+                            Part = new ToolMessageEventPart
+                            {
+                                Id = tool.ToolCallId,
+                                SessionId = fleetSessionId,
+                                MessageId = message.Id,
+                                ToolName = tool.ToolName,
+                                CallId = tool.ToolCallId,
+                                State = new ToolErrorState { Input = tool.Arguments },
+                            },
+                        };
+
+                        var payload = JsonSerializer.SerializeToElement(partPayload,
+                            InfrastructureJsonContext.Default.MessagePartUpdatedPayload);
+                        await broadcaster.BroadcastAsync(
+                            $"session:{fleetSessionId}",
+                            EventTypes.MessagePartUpdated,
+                            payload,
+                            ownerUserId,
+                            ct).ConfigureAwait(false);
+                    }
+                }
+
+                if (modified)
+                {
+                    var updated = new PersistedMessage
+                    {
+                        Id = message.Id,
+                        SessionId = message.SessionId,
+                        Role = message.Role,
+                        PartsJson = JsonSerializer.Serialize(parts, ApplicationJsonContext.Default.ListMessagePart),
+                        Timestamp = message.Timestamp,
+                        CreatedAt = message.CreatedAt,
+                        AgentName = message.AgentName,
+                        ModelId = message.ModelId,
+                    };
+                    await messageRepository.UpsertAsync(updated).ConfigureAwait(false);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            LogExpireQuestionsFailed(_logger, fleetSessionId, ex);
         }
     }
 }
