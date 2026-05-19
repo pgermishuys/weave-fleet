@@ -3,6 +3,7 @@
 ## TL;DR
 > **Summary**: Fix premature busy→idle flips during subagent delegation by deriving UI state from explicit idle signals AND delegation lifecycle, not turn/message completion.
 > **Estimated Effort**: Medium
+> **Pull Request**: https://github.com/pgermishuys/weave-fleet/pull/116
 
 ## Context
 ### Original Request
