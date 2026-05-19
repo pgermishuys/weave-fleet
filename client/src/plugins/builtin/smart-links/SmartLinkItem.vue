@@ -158,10 +158,37 @@ function formatDiagnoseMessage(
   return lines.join('\n')
 }
 
+function getDiagnoseKey(cr: CheckRun): string {
+  const failure = findCiFailure(cr)
+  if (failure) return `${failure.sha}:${failure.checkRunName}`
+  const sha = ciStatus.value?.headSha ?? 'unknown'
+  return `${sha}:${cr.name}`
+}
+
+function formatMinimalDiagnoseMessage(
+  cr: CheckRun,
+  owner: string,
+  repo: string,
+  number: number,
+): string {
+  const sha = ciStatus.value?.headSha ?? 'unknown'
+  const shortSha = sha.slice(0, 7)
+  const lines: string[] = [
+    `[CI Failure — ${owner}/${repo} PR #${number}]`,
+    '',
+    `Workflow: ${cr.name}`,
+    `Status: ${cr.conclusion ?? 'failed'}`,
+    `Commit: ${shortSha}`,
+  ]
+  if (cr.htmlUrl) {
+    lines.push(`Link: ${cr.htmlUrl}`)
+  }
+  lines.push('', 'Please analyze this CI failure and suggest fixes.')
+  return lines.join('\n')
+}
+
 async function diagnose(cr: CheckRun): Promise<void> {
   if (!props.sessionId) return
-  const failure = findCiFailure(cr)
-  if (!failure) return
 
   const meta = props.link.metadata
   const owner = meta.owner as string | undefined
@@ -169,13 +196,16 @@ async function diagnose(cr: CheckRun): Promise<void> {
   const number = meta.number as number | undefined
   if (!owner || !repo || !number) return
 
-  const key = `${failure.sha}:${failure.checkRunName}`
+  const key = getDiagnoseKey(cr)
   if (diagnosingRuns.value.has(key)) return
 
   diagnosingRuns.value = new Set([...diagnosingRuns.value, key])
   diagnoseError.value = undefined
   try {
-    const text = formatDiagnoseMessage(failure, owner, repo, number)
+    const failure = findCiFailure(cr)
+    const text = failure
+      ? formatDiagnoseMessage(failure, owner, repo, number)
+      : formatMinimalDiagnoseMessage(cr, owner, repo, number)
     const response = await apiFetch(`/api/sessions/${encodeURIComponent(props.sessionId)}/prompt`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -401,16 +431,16 @@ async function diagnoseThread(thread: ReviewThread): Promise<void> {
           />
           <span class="cr-name" :title="cr.name">{{ cr.name }}</span>
           <button
-            v-if="isFailedRun(cr) && findCiFailure(cr)"
+            v-if="isFailedRun(cr)"
             type="button"
             class="cr-diagnose-btn"
             :aria-label="`Diagnose ${cr.name} failure`"
-            :title="`Diagnose ${cr.name} failure`"
-            :disabled="diagnosingRuns.has(`${findCiFailure(cr)!.sha}:${cr.name}`)"
+            :title="findCiFailure(cr) ? `Diagnose ${cr.name} failure` : `Diagnose ${cr.name} failure (logs may not be available yet)`"
+            :disabled="diagnosingRuns.has(getDiagnoseKey(cr))"
             @click.stop="diagnose(cr)"
           >
             <LoaderCircle
-              v-if="diagnosingRuns.has(`${findCiFailure(cr)!.sha}:${cr.name}`)"
+              v-if="diagnosingRuns.has(getDiagnoseKey(cr))"
               :size="10"
               class="cr-diagnose-spinner"
               aria-hidden="true"
