@@ -15,6 +15,7 @@ import { apiFetch } from "@/lib/api-client";
 import { trackAction } from "@/lib/track-action";
 import type { SessionListItem } from "@/lib/api-types";
 import { useSmartLinksStore } from "@/stores/smart-links";
+import { secondsUntilRefresh, isRefreshing, refreshNow, POLL_INTERVAL_SECONDS } from "@/plugins/builtin/smart-links/composables/use-smart-links";
 
 interface TokenMetric {
   id: string;
@@ -72,6 +73,17 @@ const {
 } = ctx.resume;
 const { terminateSession, isTerminating, error: terminateError } = ctx.terminate;
 const { unarchiveSession, isUnarchiving, error: unarchiveError } = ctx.unarchive;
+
+// Circular arc countdown for smart links refresh
+const ARC_RADIUS = 7;
+const ARC_CIRCUMFERENCE = 2 * Math.PI * ARC_RADIUS;
+const arcOffset = computed(() =>
+  ARC_CIRCUMFERENCE * (1 - secondsUntilRefresh.value / POLL_INTERVAL_SECONDS),
+);
+
+async function handleSmartLinksRefreshNow(): Promise<void> {
+  await refreshNow();
+}
 
 const remoteSessionDetail = ref<SessionApiDetail | null>(null);
 const filesChanged = ref<ChangedFile[]>([]);
@@ -735,7 +747,44 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
         <p class="session-section-card__title">
           Smart links
         </p>
-        <span class="session-section-card__count">{{ activeSmartLinks.length }}</span>
+        <button
+          type="button"
+          class="refresh-timer-btn"
+          :aria-label="isRefreshing ? 'Refreshing…' : `Refresh now (next refresh in ${secondsUntilRefresh}s)`"
+          :title="isRefreshing ? 'Refreshing…' : `Refresh now (next refresh in ${secondsUntilRefresh}s)`"
+          :disabled="isRefreshing"
+          @click="handleSmartLinksRefreshNow"
+        >
+          <svg
+            class="refresh-arc"
+            :class="{ 'refresh-arc--spinning': isRefreshing }"
+            width="18"
+            height="18"
+            viewBox="0 0 18 18"
+            aria-hidden="true"
+          >
+            <circle
+              class="arc-track"
+              cx="9"
+              cy="9"
+              :r="ARC_RADIUS"
+              fill="none"
+              stroke-width="2"
+            />
+            <circle
+              class="arc-fill"
+              cx="9"
+              cy="9"
+              :r="ARC_RADIUS"
+              fill="none"
+              stroke-width="2"
+              :stroke-dasharray="ARC_CIRCUMFERENCE"
+              :stroke-dashoffset="arcOffset"
+              stroke-linecap="round"
+              transform="rotate(-90 9 9)"
+            />
+          </svg>
+        </button>
       </div>
 
       <div
@@ -891,6 +940,56 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
 @keyframes session-detail-panel-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* Smart links refresh arc timer */
+.refresh-timer-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.refresh-timer-btn:hover:not(:disabled),
+.refresh-timer-btn:focus-visible:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  outline: none;
+}
+
+.refresh-timer-btn:disabled {
+  cursor: default;
+}
+
+.refresh-arc {
+  display: block;
+}
+
+.arc-track {
+  stroke: rgba(255, 255, 255, 0.1);
+}
+
+.arc-fill {
+  stroke: currentColor;
+  transition: stroke-dashoffset 0.9s linear;
+}
+
+.refresh-arc--spinning .arc-fill {
+  animation: arc-spin 1s linear infinite;
+  stroke-dashoffset: 11;
+}
+
+@keyframes arc-spin {
+  from { transform: rotate(-90deg); transform-origin: 9px 9px; }
+  to { transform: rotate(270deg); transform-origin: 9px 9px; }
 }
 
 </style>
