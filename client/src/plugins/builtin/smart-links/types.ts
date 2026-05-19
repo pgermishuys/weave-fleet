@@ -67,6 +67,21 @@ export interface CiStatus {
   checkRuns: CheckRun[]
 }
 
+/**
+ * A CI failure detected by the backend watcher, stored in smart link metadata.
+ * Used to surface a "Diagnose" button in the UI for user-initiated analysis.
+ */
+export interface CiFailure {
+  sha: string
+  checkRunName: string
+  checkRunId: number
+  conclusion: string
+  htmlUrl: string
+  /** Extracted log content (up to 200 lines), or null if unavailable. */
+  logContent: string | null
+  detectedAt: string
+}
+
 /** A single review comment within a thread. */
 export interface ReviewComment {
   id: string
