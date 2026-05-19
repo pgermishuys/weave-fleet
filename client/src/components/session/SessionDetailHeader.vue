@@ -33,6 +33,10 @@ const sessionStatusIndicator = computed(() => {
     return "disconnected";
   }
 
+  if (effectiveLifecycleStatus.value === "resuming") {
+    return "resuming";
+  }
+
   return effectiveActivityStatus.value === "busy" || effectiveActivityStatus.value === "delegating" ? "working" : "idle";
 });
 const isArchived = computed(() => props.retentionStatus === "archived");
@@ -46,6 +50,7 @@ const showStoppedBanner = computed(() => {
       return false;
   }
 });
+const showResumingBanner = computed(() => effectiveLifecycleStatus.value === "resuming");
 
 function syncComposerDisabledState(): void {
   if (typeof document === "undefined") {
@@ -113,7 +118,9 @@ onUnmounted(() => {
               ? "Working"
               : sessionStatusIndicator === "disconnected"
                 ? "Disconnected"
-                : "Idle" }}
+                : sessionStatusIndicator === "resuming"
+                  ? "Resuming…"
+                  : "Idle" }}
           </span>
           <Badge
             v-if="isArchived"
@@ -133,6 +140,16 @@ onUnmounted(() => {
         <SessionOriginBadge :origin="props.origin" />
       </div>
     </header>
+
+    <div
+      v-if="showResumingBanner"
+      data-testid="session-resuming-banner"
+      class="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3"
+    >
+      <p class="text-sm text-foreground">
+        Resuming session…
+      </p>
+    </div>
 
     <div
       v-if="showStoppedBanner"

@@ -204,7 +204,7 @@ export interface SessionListItem {
   workspaceDirectory: string;
   workspaceDisplayName: string | null;
   isolationStrategy: string;
-  sessionStatus: "active" | "idle" | "stopped" | "completed" | "disconnected" | "error" | "waiting_input";
+  sessionStatus: "active" | "idle" | "stopped" | "completed" | "disconnected" | "error" | "waiting_input" | "resuming";
   session: FleetSession;
   instanceStatus: "running" | "dead";
   /** Fleet DB session ID of the parent (conductor) session, if this is a child */
