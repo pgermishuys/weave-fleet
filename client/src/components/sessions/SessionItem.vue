@@ -6,11 +6,10 @@ import {
   Copy,
   FolderOpen,
   GitFork,
-  OctagonX,
   Pencil,
   Play,
-  Square,
-  StopCircle,
+  Check,
+  Pause,
   Trash2,
 } from "lucide-vue-next";
 import {
@@ -24,7 +23,6 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
-  useAbortSession,
   useArchiveSession,
   useDeleteSession,
   useForkSession,
@@ -40,6 +38,7 @@ import { sessionCache } from "@/lib/session-cache";
 import { dispatchSessionRemoved } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
 import OpenToolContextSubmenu from "@/components/sessions/OpenToolContextSubmenu.vue";
+import ConfirmCompleteSessionDialog from "./ConfirmCompleteSessionDialog.vue";
 import ConfirmDeleteSessionDialog from "./ConfirmDeleteSessionDialog.vue";
 
 interface Props {
@@ -61,6 +60,7 @@ const router = useRouter();
 const isInlineEditing = shallowRef(false);
 const isContextMenuOpen = shallowRef(false);
 const isDeleteDialogOpen = shallowRef(false);
+const isCompleteDialogOpen = shallowRef(false);
 const renameDraft = shallowRef("");
 const initialRenameTitle = shallowRef("");
 const hasHandledInlineRename = shallowRef(false);
@@ -70,10 +70,6 @@ const {
   renameSession,
   isLoading: isRenaming,
 } = useRenameSession();
-const {
-  abortSession,
-  isAborting,
-} = useAbortSession();
 const {
   terminateSession,
   isTerminating,
@@ -116,9 +112,7 @@ const instanceId = computed(() => props.session.instanceId);
 const rawTitle = computed(() => props.session.session.title ?? "");
 const displayTitle = computed(() => props.session.session.title?.trim() || "Untitled session");
 const isRunningSession = computed(() => props.session.lifecycleStatus === "running");
-const isBusySession = computed(() => isActiveActivityStatus(props.session.activityStatus));
 const isArchivedSession = computed(() => props.session.retentionStatus === "archived");
-const canInterrupt = computed(() => isRunningSession.value && isBusySession.value);
 const canStop = computed(() => isRunningSession.value);
 const canResume = computed(() => {
   switch (props.session.lifecycleStatus) {
@@ -130,13 +124,13 @@ const canResume = computed(() => {
       return false;
   }
 });
-const canArchive = computed(() => !isArchivedSession.value && !isRunningSession.value);
+const canArchive = computed(() => !isArchivedSession.value);
 const canUnarchive = computed(() => isArchivedSession.value);
+const hasWorktree = computed(() => props.session.isolationStrategy === "worktree");
 const isForkingCurrentSession = computed(() => isForking.value && forkingSessionId.value === sessionId.value);
 const isResumingCurrentSession = computed(() => isResuming.value && resumingSessionId.value === sessionId.value);
 const isAnyActionPending = computed(() =>
-  isAborting.value
-  || isArchiving.value
+  isArchiving.value
   || isDeleting.value
   || isForkingCurrentSession.value
   || isMoving.value
@@ -278,15 +272,6 @@ async function handleRename(nextTitle: string): Promise<void> {
   }
 }
 
-async function handleInterrupt(): Promise<void> {
-  try {
-    await abortSession(sessionId.value, instanceId.value);
-    syncSessionStore({ activityStatus: "idle", sessionStatus: "idle" });
-  } catch {
-    // Errors are handled by the mutation composable state.
-  }
-}
-
 async function handleStop(): Promise<void> {
   try {
     await terminateSession(sessionId.value, instanceId.value);
@@ -305,10 +290,18 @@ async function handleResume(): Promise<void> {
   }
 }
 
-async function handleArchive(): Promise<void> {
+function openCompleteDialog(): void {
+  isContextMenuOpen.value = false;
+  isCompleteDialogOpen.value = true;
+}
+
+async function handleArchive(deleteWorktree: boolean): Promise<void> {
   try {
     await archiveSession(sessionId.value);
     syncSessionStore({ retentionStatus: "archived" });
+    isCompleteDialogOpen.value = false;
+    // TODO: if deleteWorktree, call backend to remove the worktree
+    void deleteWorktree;
   } catch {
     // Errors are handled by the mutation composable state.
   }
@@ -379,10 +372,6 @@ function syncSessionStore(
   }>,
 ): void {
   sessionsStore.patchSession(sessionId.value, patch);
-}
-
-function isActiveActivityStatus(value: string | null | undefined): value is "busy" | "delegating" {
-  return value === "busy" || value === "delegating";
 }
 
 function removeSessionFromStore(): void {
@@ -458,21 +447,12 @@ function removeSessionFromStore(): void {
       </ContextMenuItem>
 
       <ContextMenuItem
-        v-if="canInterrupt"
-        :disabled="isAnyActionPending"
-        @select="handleInterrupt"
-      >
-        <OctagonX class="size-3.5" />
-        Interrupt
-      </ContextMenuItem>
-
-      <ContextMenuItem
         v-if="canStop"
         :disabled="isAnyActionPending"
         @select="handleStop"
       >
-        <StopCircle class="size-3.5" />
-        Stop
+        <Pause class="size-3.5" />
+        Pause
       </ContextMenuItem>
 
       <ContextMenuItem
@@ -487,10 +467,10 @@ function removeSessionFromStore(): void {
       <ContextMenuItem
         v-if="canArchive"
         :disabled="isAnyActionPending"
-        @select="handleArchive"
+        @select="openCompleteDialog"
       >
-        <Square class="size-3.5" />
-        Archive
+        <Check class="size-3.5" />
+        Completed
       </ContextMenuItem>
 
       <ContextMenuItem
@@ -563,6 +543,14 @@ function removeSessionFromStore(): void {
     :is-deleting="isDeleting"
     :session-title="displayTitle"
     @confirm="handleDelete"
+  />
+
+  <ConfirmCompleteSessionDialog
+    v-model:open="isCompleteDialogOpen"
+    :is-archiving="isArchiving"
+    :session-title="displayTitle"
+    :has-worktree="hasWorktree"
+    @confirm="handleArchive"
   />
 </template>
 

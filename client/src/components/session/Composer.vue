@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, ref, useTemplateRef, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { Send, Paperclip, X } from "lucide-vue-next";
+import { Send, Paperclip, X, Hand } from "lucide-vue-next";
 import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
 import AgentSelector from "@/components/session/AgentSelector.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
 import { useAgents } from "@/composables/use-agents";
+import { useAbortSession } from "@/composables/use-session-actions";
 import { useAutocomplete } from "@/composables/use-autocomplete";
 import { useDraftState } from "@/composables/use-draft-state";
 import { useInputHistory } from "@/composables/use-input-history";
@@ -36,6 +37,7 @@ const emit = defineEmits<{
 }>();
 
 const { agents, defaultAgentId } = useAgents();
+const { abortSession, isAborting } = useAbortSession();
 const { models, defaultModelKey } = useModels(props.sessionId);
 const { draft, setText, setAgentId, setModelId } = useDraftState(props.sessionId, {
   agentId: "",
@@ -199,6 +201,18 @@ const sessionStatus = computed<"idle" | "busy" | "waiting_input">(() => {
   if (activity === "waiting_input") return "waiting_input";
   return "idle";
 });
+
+const canInterrupt = computed(() => sessionStatus.value === "busy" && !isAborting.value);
+
+async function handleInterrupt(): Promise<void> {
+  if (!canInterrupt.value || !props.instanceId) return;
+  try {
+    await abortSession(props.sessionId, props.instanceId);
+    sessionsStore.patchSession(props.sessionId, { activityStatus: "idle", sessionStatus: "idle" });
+  } catch {
+    // Errors are handled by the mutation composable state.
+  }
+}
 
 watch(
   effectiveActivityStatus,
@@ -709,6 +723,15 @@ function handleKeydown(event: KeyboardEvent): void {
           v-model="selectedModelId"
           :models="models"
         />
+        <button
+          type="button"
+          class="interrupt-btn"
+          title="Interrupt"
+          :disabled="!canInterrupt"
+          @click="handleInterrupt"
+        >
+          <Hand class="interrupt-btn__icon" />
+        </button>
 
         <div
           v-show="statusIndicatorVisible"
@@ -1061,6 +1084,35 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .attach-btn__icon {
+  width: 15px;
+  height: 15px;
+}
+
+.interrupt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.interrupt-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--destructive, #ef4444);
+}
+
+.interrupt-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.interrupt-btn__icon {
   width: 15px;
   height: 15px;
 }

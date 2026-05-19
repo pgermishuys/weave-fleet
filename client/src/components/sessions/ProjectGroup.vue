@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { ArrowDown, ArrowUp, ChevronDown, Folder, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-vue-next";
+import { ArrowDown, ArrowUp, ChevronDown, Folder, Pencil, Plus, Trash2 } from "lucide-vue-next";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -294,14 +294,6 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
             <span class="project-copy">
               <span class="project-title">{{ project.name }} {{ sessionCountLabel }}</span>
             </span>
-
-            <span class="project-spacer" />
-            <span
-              class="project-actions"
-              aria-hidden="true"
-            >
-              <MoreHorizontal class="project-actions__icon" />
-            </span>
           </button>
         </div>
       </ContextMenuTrigger>
@@ -520,22 +512,6 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 
 .project-spacer {
   flex: 1;
-}
-
-.project-actions {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  color: var(--muted);
-  pointer-events: none;
-}
-
-.project-actions__icon {
-  width: 14px;
-  height: 14px;
 }
 
 .project-content {
