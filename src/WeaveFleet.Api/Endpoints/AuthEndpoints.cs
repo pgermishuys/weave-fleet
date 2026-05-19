@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -26,12 +27,31 @@ public static class AuthEndpoints
         .AllowAnonymous()
         .WithName("GetAuthStatus");
 
-        app.MapGet("/auth/login", (HttpContext httpContext, string? returnUrl) =>
+        app.MapGet("/auth/login", async Task<IResult> (HttpContext httpContext, string? returnUrl) =>
         {
             var redirectUri = NormalizeReturnUrl(httpContext, returnUrl);
 
             if (!fleetOptions.Auth.Enabled)
+            {
+                // Auto-sign-in for localhost requests — no token challenge needed
+                if (IsLocalhostRequest(httpContext) && httpContext.User.Identity?.IsAuthenticated != true)
+                {
+                    var claims = new[]
+                    {
+                        new Claim(ClaimTypes.Name, "local"),
+                        new Claim(ClaimTypes.NameIdentifier, "local"),
+                        new Claim("sub", "local")
+                    };
+
+                    var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+                    var principal = new ClaimsPrincipal(identity);
+
+                    await httpContext.SignInAsync(
+                        CookieAuthenticationDefaults.AuthenticationScheme, principal);
+                }
+
                 return Results.LocalRedirect(redirectUri);
+            }
 
             return Results.Challenge(
                 new AuthenticationProperties { RedirectUri = redirectUri },
@@ -114,6 +134,12 @@ public static class AuthEndpoints
             return true;
 
         return false;
+    }
+
+    private static bool IsLocalhostRequest(HttpContext context)
+    {
+        var remoteIp = context.Connection.RemoteIpAddress;
+        return remoteIp is not null && IPAddress.IsLoopback(remoteIp);
     }
 
 }
