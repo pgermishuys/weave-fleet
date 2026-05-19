@@ -655,7 +655,8 @@ public sealed partial class SessionOrchestrator(
                 text,
                 DateTimeOffset.UtcNow,
                 options?.Agent,
-                userMessageId);
+                userMessageId,
+                options?.Attachments);
             var persisted = MessagePersistenceService.ToPersistedMessage(id, userMsg);
             await messageRepository.UpsertAsync(persisted);
             await BroadcastPersistedUserMessageAsync(id, persisted, ct).ConfigureAwait(false);
