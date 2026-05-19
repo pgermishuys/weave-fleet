@@ -188,7 +188,7 @@ const optimisticMessages = computed<ActivityMessage[]>(() => {
     role: "user",
     timestamp: prompt.timestamp,
     body: prompt.body,
-    images: [],
+    images: prompt.images,
     tools: [],
     questionParts: [],
     delegationLinks: [],

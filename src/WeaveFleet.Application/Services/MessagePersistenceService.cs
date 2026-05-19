@@ -60,13 +60,26 @@ public sealed class MessagePersistenceService
         string prompt,
         DateTimeOffset timestamp,
         string? agentName,
-        string? userMessageId)
+        string? userMessageId,
+        IReadOnlyList<HarnessAttachment>? attachments = null)
     {
+        var parts = new List<MessagePart> { new TextPart(prompt) };
+
+        if (attachments is { Count: > 0 })
+        {
+            foreach (var attachment in attachments)
+            {
+                var url = $"data:{attachment.Mime};base64,{attachment.Data}";
+                var partId = $"file-{Guid.NewGuid():N}";
+                parts.Add(new FilePart(partId, attachment.Mime, url, attachment.Filename));
+            }
+        }
+
         return new HarnessMessage
         {
             Id = string.IsNullOrWhiteSpace(userMessageId) ? $"user-{Guid.NewGuid():N}" : userMessageId,
             Role = "user",
-            Parts = [new TextPart(prompt)],
+            Parts = parts,
             Timestamp = timestamp,
             Agent = agentName,
         };
