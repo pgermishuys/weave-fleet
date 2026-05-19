@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Component } from "vue";
-import { computed, onMounted, shallowRef } from "vue";
+import { computed, onMounted } from "vue";
 import {
   AlertTriangle,
   Cable,
@@ -246,100 +246,100 @@ function statusIcon(status: HarnessStatus): Component {
           defaultHarnessId === harness.id ? 'border-accent/45' : '',
         ]"
       >
-          <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div class="flex min-w-0 items-start gap-4">
-              <div class="rounded-2xl border border-border bg-main-bg p-3 text-text shadow-sm">
-                <component
-                  :is="harness.icon"
-                  :size="20"
-                  aria-hidden="true"
-                />
-              </div>
-
-              <div class="min-w-0 space-y-2">
-                <div class="flex flex-wrap items-center gap-2">
-                  <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
-                    {{ harness.eyebrow }}
-                  </p>
-                  <span
-                    class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium"
-                    :class="statusClasses(harness.status)"
-                  >
-                    <component
-                      :is="statusIcon(harness.status)"
-                      :size="11"
-                      aria-hidden="true"
-                    />
-                    {{ statusLabel(harness.status) }}
-                  </span>
-                  <span
-                    v-if="defaultHarnessId === harness.id"
-                    class="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent"
-                  >
-                    <Star
-                      :size="11"
-                      aria-hidden="true"
-                    />
-                    Default
-                  </span>
-                </div>
-
-                <div>
-                  <h3 class="text-base font-semibold text-text">
-                    {{ harness.name }}
-                  </h3>
-                  <p class="mt-1 text-sm text-muted">
-                    {{ harness.description }}
-                  </p>
-                </div>
-
-                <p class="text-xs text-muted">
-                  {{ harness.summary }}
-                </p>
-              </div>
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div class="flex min-w-0 items-start gap-4">
+            <div class="rounded-2xl border border-border bg-main-bg p-3 text-text shadow-sm">
+              <component
+                :is="harness.icon"
+                :size="20"
+                aria-hidden="true"
+              />
             </div>
 
-            <div class="flex shrink-0 flex-col gap-3 sm:items-end">
-              <button
-                type="button"
-                role="switch"
-                :aria-checked="harness.enabled"
-                :disabled="!harness.canToggle"
-                class="inline-flex items-center gap-2 text-xs font-medium text-muted disabled:cursor-not-allowed disabled:opacity-50"
-                @click="toggleHarness(harness)"
-              >
-                <span>{{ harness.enabled ? "Enabled" : "Disabled" }}</span>
+            <div class="min-w-0 space-y-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+                  {{ harness.eyebrow }}
+                </p>
                 <span
-                  class="relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors"
-                  :class="harness.enabled ? 'bg-accent' : 'bg-border'"
+                  class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium"
+                  :class="statusClasses(harness.status)"
                 >
-                  <span
-                    class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transition-transform"
-                    :class="harness.enabled ? 'translate-x-5' : 'translate-x-0'"
-                  />
-                </span>
-              </button>
-
-              <div class="flex flex-wrap items-center gap-2 sm:justify-end">
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-1 rounded-btn border border-border bg-main-bg px-2.5 py-1.5 text-xs font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-50"
-                  :disabled="!harness.canDefault || !harness.enabled || defaultHarnessId === harness.id"
-                  @click="makeDefaultHarness(harness)"
-                >
-                  <Star
-                    :size="12"
+                  <component
+                    :is="statusIcon(harness.status)"
+                    :size="11"
                     aria-hidden="true"
                   />
-                  {{ defaultHarnessId === harness.id ? "Default" : "Set default" }}
-                </button>
-
-                <span class="inline-flex items-center rounded-btn px-2.5 py-1.5 text-xs font-medium text-muted">
-                  No settings yet
+                  {{ statusLabel(harness.status) }}
+                </span>
+                <span
+                  v-if="defaultHarnessId === harness.id"
+                  class="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent"
+                >
+                  <Star
+                    :size="11"
+                    aria-hidden="true"
+                  />
+                  Default
                 </span>
               </div>
+
+              <div>
+                <h3 class="text-base font-semibold text-text">
+                  {{ harness.name }}
+                </h3>
+                <p class="mt-1 text-sm text-muted">
+                  {{ harness.description }}
+                </p>
+              </div>
+
+              <p class="text-xs text-muted">
+                {{ harness.summary }}
+              </p>
             </div>
           </div>
+
+          <div class="flex shrink-0 flex-col gap-3 sm:items-end">
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="harness.enabled"
+              :disabled="!harness.canToggle"
+              class="inline-flex items-center gap-2 text-xs font-medium text-muted disabled:cursor-not-allowed disabled:opacity-50"
+              @click="toggleHarness(harness)"
+            >
+              <span>{{ harness.enabled ? "Enabled" : "Disabled" }}</span>
+              <span
+                class="relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors"
+                :class="harness.enabled ? 'bg-accent' : 'bg-border'"
+              >
+                <span
+                  class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transition-transform"
+                  :class="harness.enabled ? 'translate-x-5' : 'translate-x-0'"
+                />
+              </span>
+            </button>
+
+            <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 rounded-btn border border-border bg-main-bg px-2.5 py-1.5 text-xs font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="!harness.canDefault || !harness.enabled || defaultHarnessId === harness.id"
+                @click="makeDefaultHarness(harness)"
+              >
+                <Star
+                  :size="12"
+                  aria-hidden="true"
+                />
+                {{ defaultHarnessId === harness.id ? "Default" : "Set default" }}
+              </button>
+
+              <span class="inline-flex items-center rounded-btn px-2.5 py-1.5 text-xs font-medium text-muted">
+                No settings yet
+              </span>
+            </div>
+          </div>
+        </div>
       </article>
     </section>
   </div>
