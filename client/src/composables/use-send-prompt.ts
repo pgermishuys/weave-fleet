@@ -8,6 +8,11 @@ import type { AccumulatedMessage, ImageAttachment } from "@/lib/api-types";
 import { diagLog } from "@/lib/message-diagnostics";
 import { useSessionsStore } from "@/stores/sessions";
 
+export interface SentPromptImage {
+  url: string;
+  filename: string;
+}
+
 export interface SentPromptMessage {
   id: string;
   body: string;
@@ -17,6 +22,7 @@ export interface SentPromptMessage {
   modelId: string;
   modelName: string;
   effort: EffortLevel;
+  images: SentPromptImage[];
 }
 
 const sentPromptRegistry = reactive<Record<string, SentPromptMessage[]>>({});
@@ -321,6 +327,12 @@ export function useSendPrompt(sessionId: string) {
       modelId: resolvedModelId,
       modelName: model?.name ?? "Unknown model",
       effort: draft.effort,
+      images: attachments
+        ? attachments.map((a) => ({
+            url: `data:${a.mime};base64,${a.data}`,
+            filename: a.filename ?? "image.png",
+          }))
+        : [],
     });
     incrementPendingPrompts(sessionId);
 
