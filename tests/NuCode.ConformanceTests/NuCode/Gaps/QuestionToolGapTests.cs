@@ -3,13 +3,12 @@ using NuCode.ConformanceTests.NuCode;
 namespace NuCode.ConformanceTests.NuCode.Gaps;
 
 /// <summary>
-/// GAP: NuCode does not support the question tool.
-/// <see cref="IHarnessSession.AnswerQuestionAsync"/> and <see cref="IHarnessSession.RejectQuestionAsync"/>
-/// throw <see cref="NotSupportedException"/> instead of completing normally.
-/// These tests document the gap and are expected to FAIL until the feature is implemented.
+/// Tests that <see cref="IHarnessSession.AnswerQuestionAsync"/> and
+/// <see cref="IHarnessSession.RejectQuestionAsync"/> complete without throwing.
+/// Previously a gap — NuCode threw <see cref="NotSupportedException"/>.
+/// Now bridges to <see cref="global::NuCode.Tools.IQuestionService.ReplyToQuestion"/>.
 /// </summary>
-[Trait("Gap", "question-tool")]
-public sealed class QuestionToolGapTests : IAsyncLifetime
+public sealed class QuestionToolTests : IAsyncLifetime
 {
     private NuCodeFixture _fixture = null!;
     private IHarnessSession _session = null!;
@@ -35,7 +34,6 @@ public sealed class QuestionToolGapTests : IAsyncLifetime
     [Fact]
     public async Task AnswerQuestionAsync_DoesNotThrow()
     {
-        // GAP: NuCode throws NotSupportedException — this test is expected to FAIL.
         var exception = await Record.ExceptionAsync(() =>
             _session.AnswerQuestionAsync("fake-request-id", [["Yes"]], CancellationToken.None));
 
@@ -45,7 +43,6 @@ public sealed class QuestionToolGapTests : IAsyncLifetime
     [Fact]
     public async Task RejectQuestionAsync_DoesNotThrow()
     {
-        // GAP: NuCode throws NotSupportedException — this test is expected to FAIL.
         var exception = await Record.ExceptionAsync(() =>
             _session.RejectQuestionAsync("fake-request-id", CancellationToken.None));
 

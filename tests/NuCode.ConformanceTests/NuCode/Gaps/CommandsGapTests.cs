@@ -1,16 +1,13 @@
-using FakeLlmServer;
 using NuCode.ConformanceTests.NuCode;
 
 namespace NuCode.ConformanceTests.NuCode.Gaps;
 
 /// <summary>
-/// GAP: NuCode does not support slash commands.
-/// <see cref="IHarnessSession.GetCommandsAsync"/> always returns an empty list and
-/// <see cref="IHarnessSession.SendCommandAsync"/> is a no-op.
-/// These tests document the gap and are expected to FAIL until the feature is implemented.
+/// Tests that NuCode supports slash commands via <see cref="IHarnessSession.GetCommandsAsync"/>
+/// and <see cref="IHarnessSession.SendCommandAsync"/>. Previously a gap — NuCode returned
+/// an empty command list and SendCommandAsync was a no-op.
 /// </summary>
-[Trait("Gap", "commands")]
-public sealed class CommandsGapTests : IAsyncLifetime
+public sealed class CommandsTests : IAsyncLifetime
 {
     private NuCodeFixture _fixture = null!;
     private IHarnessSession _session = null!;
@@ -37,25 +34,17 @@ public sealed class CommandsGapTests : IAsyncLifetime
     public async Task GetCommandsAsync_ReturnsAvailableCommands()
     {
         var commands = await _session.GetCommandsAsync(CancellationToken.None);
-
-        // GAP: NuCode always returns an empty list — this test is expected to FAIL.
         commands.ShouldNotBeEmpty();
     }
 
     [Fact]
     public async Task SendCommandAsync_ExecutesCommand()
     {
-        // Arrange: enqueue a response for the command to consume
-        _fixture.EnqueueResponse(new ScriptedLlmResponse { Text = "Command executed." });
-
         var options = new CommandOptions { Command = "/help" };
 
         await _session.SendCommandAsync(options, CancellationToken.None);
 
-        // Assert: the command should have produced a message
         var page = await _session.GetMessagesAsync(null, CancellationToken.None);
-
-        // GAP: NuCode SendCommandAsync is a no-op and produces no messages — this test is expected to FAIL.
         page.Messages.ShouldNotBeEmpty();
     }
 }
