@@ -18,6 +18,7 @@ function normalizeRetentionStatus(value: string | null | undefined): "active" | 
 interface SessionDetailResponse {
   id?: string | null;
   instanceId?: string | null;
+  parentSessionId?: string | null;
   workspaceId?: string | null;
   workspaceDirectory?: string | null;
   workspaceDisplayName?: string | null;
@@ -64,6 +65,7 @@ function normalizeSessionDetailResponse(payload: unknown): SessionDetailResponse
   return {
     id: getStringField(value, "id", "Id"),
     instanceId: getStringField(value, "instanceId", "InstanceId"),
+    parentSessionId: getStringField(value, "parentSessionId", "ParentSessionId"),
     workspaceId: getStringField(value, "workspaceId", "WorkspaceId"),
     workspaceDirectory: getStringField(value, "workspaceDirectory", "WorkspaceDirectory"),
     workspaceDisplayName: getStringField(value, "workspaceDisplayName", "WorkspaceDisplayName"),
@@ -175,7 +177,7 @@ const SessionDetailPage = defineComponent({
               time: selectedSession.value?.session.time ?? { created: 0, updated: 0 },
             },
             instanceStatus: selectedSession.value?.instanceStatus ?? "running",
-            parentSessionId: selectedSession.value?.parentSessionId ?? null,
+            parentSessionId: nextRemoteSession.parentSessionId ?? selectedSession.value?.parentSessionId ?? null,
             sourceDirectory: nextRemoteSession.sourceDirectory ?? selectedSession.value?.sourceDirectory ?? null,
             branch: nextRemoteSession.branch ?? selectedSession.value?.branch ?? null,
             activityStatus: normalizedActivityStatus,
