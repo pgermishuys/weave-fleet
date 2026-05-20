@@ -299,7 +299,7 @@ function getPreferredHarnessType(): string {
     return defaultHarnessType.value;
   }
 
-  return enabledHarnesses.value[0]?.type ?? "opencode";
+  return enabledHarnesses.value[0]?.type ?? defaultHarnessType.value;
 }
 
 function resetForm(): void {

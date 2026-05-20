@@ -13,13 +13,19 @@ import {
   TerminalSquare,
 } from "lucide-vue-next";
 import { useHarnesses } from "@/composables/use-harnesses";
+import type { HarnessInfo } from "@/lib/api-types";
 import { usePreferencesStore } from "@/stores/preferences";
 
-type HarnessId = "nucode" | "opencode" | "claude-code" | "pi";
-type HarnessStatus = "ready" | "missing-credentials" | "not-configured" | "disabled" | "coming-soon";
+type HarnessStatus = "ready" | "missing-credentials" | "not-configured" | "disabled";
+
+interface HarnessDisplayMetadata {
+  eyebrow: string;
+  description: string;
+  icon: Component;
+}
 
 interface HarnessCard {
-  id: HarnessId;
+  id: string;
   name: string;
   eyebrow: string;
   description: string;
@@ -27,10 +33,40 @@ interface HarnessCard {
   icon: Component;
   status: HarnessStatus;
   enabled: boolean;
-  configurable: boolean;
   canToggle: boolean;
   canDefault: boolean;
 }
+
+const DEFAULT_HARNESS_TYPE = "opencode";
+
+const harnessDisplayMetadata: Record<string, HarnessDisplayMetadata> = {
+  nucode: {
+    eyebrow: "Local harness",
+    description: "In-process AI coding harness for sessions that run inside Weave.",
+    icon: Cpu,
+  },
+  opencode: {
+    eyebrow: "CLI harness",
+    description: "Harness for sessions backed by the OpenCode command-line runtime.",
+    icon: TerminalSquare,
+  },
+  "claude-code": {
+    eyebrow: "CLI harness",
+    description: "Harness for Anthropic Claude Code sessions and project-aware coding workflows.",
+    icon: Hexagon,
+  },
+  pi: {
+    eyebrow: "CLI harness",
+    description: "Harness for sessions backed by the Pi command-line runtime from pi.dev.",
+    icon: Infinity,
+  },
+};
+
+const fallbackHarnessMetadata: HarnessDisplayMetadata = {
+  eyebrow: "Harness",
+  description: "Harness runtime registered by the backend.",
+  icon: Cable,
+};
 
 const prefsStore = usePreferencesStore();
 const { harnesses: registeredHarnesses } = useHarnesses();
@@ -39,103 +75,20 @@ onMounted(async () => {
   await prefsStore.refresh();
 });
 
-const nucodeEnabled = computed(() => prefsStore.get("nucode.enabled", "false") === "true");
 const nucodeProvider = computed(() => prefsStore.get("nucode.provider", "copilot"));
 const nucodeModel = computed(() => prefsStore.get("nucode.modelId", ""));
 const nucodeBaseUrl = computed(() => prefsStore.get("nucode.baseUrl", ""));
-const opencodeEnabled = computed(() => prefsStore.get("opencode.enabled", "true") === "true");
-const opencodeInfo = computed(() => registeredHarnesses.value.find((harness) => harness.type === "opencode"));
-const defaultHarnessId = computed<HarnessId>(() => {
-  const stored = prefsStore.get("defaultHarnessType", "opencode");
-  return stored === "opencode" || stored === "claude-code" || stored === "pi"
-    ? stored
-    : "nucode";
-});
+const defaultHarnessId = computed(() => prefsStore.get("defaultHarnessType", DEFAULT_HARNESS_TYPE));
 
-const nucodeStatus = computed<HarnessStatus>(() => {
-  if (!nucodeEnabled.value) return "disabled";
-  if (!nucodeModel.value) return "not-configured";
-  if (nucodeProvider.value === "custom" && !nucodeBaseUrl.value) return "not-configured";
-  return "ready";
+const harnesses = computed<readonly HarnessCard[]>(() => {
+  return registeredHarnesses.value.map(toHarnessCard);
 });
-
-const opencodeStatus = computed<HarnessStatus>(() => {
-  if (!opencodeEnabled.value) return "disabled";
-  return opencodeInfo.value?.available === false ? "not-configured" : "ready";
-});
-
-const harnesses = computed<readonly HarnessCard[]>(() => [
-  {
-    id: "nucode",
-    name: "NuCode",
-    eyebrow: "Local harness",
-    description: "In-process AI coding harness for sessions that run inside Weave.",
-    summary: nucodeEnabled.value
-      ? `${formatProvider(nucodeProvider.value)}${nucodeModel.value ? ` · ${nucodeModel.value}` : " · model not selected"}`
-      : "Disabled until enabled by the user.",
-    icon: Cpu,
-    status: nucodeStatus.value,
-    enabled: nucodeEnabled.value,
-    configurable: false,
-    canToggle: true,
-    canDefault: true,
-  },
-  {
-    id: "opencode",
-    name: "OpenCode",
-    eyebrow: "CLI harness",
-    description: "Harness for sessions backed by the OpenCode command-line runtime.",
-    summary: opencodeInfo.value?.available === false
-      ? opencodeInfo.value.reason ?? "OpenCode is registered but not currently available."
-      : "Available now. Uses the OpenCode CLI runtime registered by the backend.",
-    icon: TerminalSquare,
-    status: opencodeStatus.value,
-    enabled: opencodeEnabled.value,
-    configurable: false,
-    canToggle: true,
-    canDefault: true,
-  },
-  {
-    id: "claude-code",
-    name: "Claude Code",
-    eyebrow: "CLI harness",
-    description: "Harness for Anthropic Claude Code sessions and project-aware coding workflows.",
-    summary: "Future settings could include executable discovery, account status, permissions, and working-directory policy.",
-    icon: Hexagon,
-    status: "coming-soon",
-    enabled: false,
-    configurable: false,
-    canToggle: false,
-    canDefault: false,
-  },
-  {
-    id: "pi",
-    name: "Pi",
-    eyebrow: "CLI harness",
-    description: "Harness for sessions backed by the Pi command-line runtime from pi.dev.",
-    summary: "Future settings could include executable discovery, account status, permissions, and launch options.",
-    icon: Infinity,
-    status: "coming-soon",
-    enabled: false,
-    configurable: false,
-    canToggle: false,
-    canDefault: false,
-  },
-]);
 
 const defaultHarness = computed(() => harnesses.value.find((harness) => harness.id === defaultHarnessId.value));
 
 async function toggleHarness(harness: HarnessCard): Promise<void> {
   if (!harness.canToggle) return;
-
-  if (harness.id === "nucode") {
-    await prefsStore.set("nucode.enabled", harness.enabled ? "false" : "true");
-    return;
-  }
-
-  if (harness.id === "opencode") {
-    await prefsStore.set("opencode.enabled", harness.enabled ? "false" : "true");
-  }
+  await prefsStore.set(`${harness.id}.enabled`, harness.enabled ? "false" : "true");
 }
 
 async function makeDefaultHarness(harness: HarnessCard): Promise<void> {
@@ -157,6 +110,45 @@ function formatProvider(value: string): string {
   }
 }
 
+function toHarnessCard(harness: HarnessInfo): HarnessCard {
+  const metadata = harnessDisplayMetadata[harness.type] ?? fallbackHarnessMetadata;
+  const enabled = prefsStore.get(`${harness.type}.enabled`, harness.type === DEFAULT_HARNESS_TYPE ? "true" : "false") === "true";
+
+  return {
+    id: harness.type,
+    name: harness.displayName,
+    eyebrow: metadata.eyebrow,
+    description: metadata.description,
+    summary: summaryForHarness(harness, enabled),
+    icon: metadata.icon,
+    status: statusForHarness(harness, enabled),
+    enabled,
+    canToggle: true,
+    canDefault: true,
+  };
+}
+
+function summaryForHarness(harness: HarnessInfo, enabled: boolean): string {
+  if (!enabled) return "Disabled until enabled by the user.";
+  if (!harness.available) return harness.reason ?? `${harness.displayName} is registered but not currently available.`;
+
+  if (harness.type === "nucode") {
+    return `${formatProvider(nucodeProvider.value)}${nucodeModel.value ? ` · ${nucodeModel.value}` : " · model not selected"}`;
+  }
+
+  return `Available now. Uses the ${harness.displayName} runtime registered by the backend.`;
+}
+
+function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus {
+  if (!enabled) return "disabled";
+  if (!harness.available) return "not-configured";
+  if (harness.type === "nucode" && (!nucodeModel.value || (nucodeProvider.value === "custom" && !nucodeBaseUrl.value))) {
+    return "not-configured";
+  }
+
+  return "ready";
+}
+
 function statusLabel(status: HarnessStatus): string {
   switch (status) {
     case "ready":
@@ -167,8 +159,6 @@ function statusLabel(status: HarnessStatus): string {
       return "Not configured";
     case "disabled":
       return "Disabled";
-    case "coming-soon":
-      return "Coming soon";
   }
 }
 
@@ -182,8 +172,6 @@ function statusClasses(status: HarnessStatus): string {
       return "border-border bg-main-bg text-muted";
     case "disabled":
       return "border-border bg-main-bg text-muted";
-    case "coming-soon":
-      return "border-accent/25 bg-accent/10 text-accent";
   }
 }
 
@@ -195,7 +183,6 @@ function statusIcon(status: HarnessStatus): Component {
       return AlertTriangle;
     case "not-configured":
     case "disabled":
-    case "coming-soon":
       return CircleDashed;
   }
 }
@@ -242,7 +229,7 @@ function statusIcon(status: HarnessStatus): Component {
         :key="harness.id"
         class="group rounded-card border border-border bg-card-bg p-5 shadow-sm transition-colors"
         :class="[
-          harness.configurable ? 'hover:border-accent/50 hover:bg-panel-bg' : 'opacity-80',
+          harness.enabled ? 'hover:border-accent/50 hover:bg-panel-bg' : 'opacity-80',
           defaultHarnessId === harness.id ? 'border-accent/45' : '',
         ]"
       >

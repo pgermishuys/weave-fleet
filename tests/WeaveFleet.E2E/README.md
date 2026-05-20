@@ -196,7 +196,7 @@ pwsh tests/WeaveFleet.E2E/bin/Release/net10.0/playwright.ps1 show-trace <trace.z
 
 Harness smoke tests exercise the full Fleet UI against real harness runtimes
 instead of the in-process `TestHarness`. They are data-driven theory rows in
-`HarnessSmokeTests`; OpenCode is the first row. They are intended as a manual
+`HarnessSmokeTests`; OpenCode and Pi are the first rows. They are intended as a manual
 confidence check that Fleet can create a real harness-backed session, send a
 prompt (`Say hello`), and observe both user and assistant messages through the
 browser.
@@ -221,6 +221,12 @@ Before running harness smoke tests, ensure:
    opencode --version
    ```
 
+   For the Pi row, `pi` is installed and available on `PATH`:
+
+   ```bash
+   pi --version
+   ```
+
 3. Each harness under test is configured for the provider/model you want to use.
    This includes any API keys, credentials, config files, auth state, or provider
    environment variables the harness requires. Fleet does not supply fake
@@ -234,10 +240,12 @@ alternatives, and sets the row harness as the default harness. It also creates a
 per-run temporary working directory under the system temp folder, registers it as
 a Fleet workspace root, passes it through the New Session dialog, and removes it
 on disposal. The OpenCode row starts the OpenCode process with its current
-working directory set to the temporary working directory:
+working directory set to the temporary working directory; the Pi row starts
+`pi --mode rpc` in that same working directory:
 
 ```text
 opencode serve
+pi --mode rpc --provider <provider> --model <model>
 ```
 
 ### Run commands
@@ -271,14 +279,14 @@ FLEET_HARNESS_SMOKE=1 ALWAYS_SAVE_TRACE=1 dotnet test tests/WeaveFleet.E2E/ --fi
 
 When setup is correct, each theory row opens Fleet, creates a new session using
 the temporary directory, verifies the session is backed by that row's harness
-type (for the first row, `opencode`), sends `Say hello`, waits up to several
+type (for example, `opencode` or `pi`), sends `Say hello`, waits up to several
 minutes for the real provider response, and asserts structurally that at least
 one user message and one assistant message are visible and the session returns to
 `idle`.
 
-Failures usually indicate a real setup/runtime issue: `opencode` not found on
-`PATH`, missing/invalid provider credentials, provider/network failures, a model
-that cannot respond, or a Fleet/OpenCode integration regression.
+Failures usually indicate a real setup/runtime issue: `opencode` or `pi` not
+found on `PATH`, missing/invalid provider credentials, provider/network failures,
+a model that cannot respond, or a Fleet/harness integration regression.
 
 ## CI
 

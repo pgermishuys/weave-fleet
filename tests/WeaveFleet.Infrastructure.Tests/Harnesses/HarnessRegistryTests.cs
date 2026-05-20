@@ -1,6 +1,10 @@
+using Microsoft.Extensions.DependencyInjection;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Harnesses;
+using WeaveFleet.Infrastructure.Harnesses.Pi;
 using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses;
@@ -100,5 +104,19 @@ public sealed class HarnessRegistryTests
         results.Count.ShouldBe(1);
         results[0].Available.ShouldBeFalse();
         results[0].Reason.ShouldBe("No runtime registered.");
+    }
+
+    [Fact]
+    public void add_fleet_infrastructure_registers_pi_harness_and_runtime()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddFleetInfrastructure(new FleetOptions { AnalyticsEnabled = false });
+
+        using var serviceProvider = services.BuildServiceProvider();
+        var registry = serviceProvider.GetRequiredService<IHarnessRegistry>();
+
+        registry.GetByType("pi").ShouldBeOfType<PiHarness>();
+        registry.GetRuntimeByType("pi").ShouldBeOfType<PiHarnessRuntime>();
     }
 }

@@ -18,6 +18,7 @@ using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 using WeaveFleet.Infrastructure.Harnesses.NuCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
+using WeaveFleet.Infrastructure.Harnesses.Pi;
 using WeaveFleet.Infrastructure.Plugins;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 using WeaveFleet.Infrastructure.Services;
@@ -225,6 +226,12 @@ public static class DependencyInjection
         services.AddSingleton<NuCodeHarnessRuntime>();
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<NuCodeHarnessRuntime>());
         services.AddScoped<INuCodeConnectionTester, NuCodeConnectionTester>();
+
+        // Register PiHarness (descriptor) and PiHarnessRuntime (provisioning) as separate singletons.
+        services.AddSingleton<PiHarness>();
+        services.AddSingleton<IHarness>(sp => sp.GetRequiredService<PiHarness>());
+        services.AddSingleton<PiHarnessRuntime>();
+        services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<PiHarnessRuntime>());
 
         return services;
     }
