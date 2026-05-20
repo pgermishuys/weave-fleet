@@ -1072,7 +1072,7 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task UnarchiveSessionAsync_WhenArchived_UnarchivesAndBroadcasts()
+    public async Task UnarchiveSessionAsync_WhenArchived_ReturnsError()
     {
         _builder.SessionRepository.Seed(new Session
         {
@@ -1087,9 +1087,8 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
 
         var result = await _sut.UnarchiveSessionAsync("s-unarchive");
 
-        result.IsSuccess.ShouldBeTrue();
-        _builder.SessionRepository.UnarchiveCalls.ShouldContain("s-unarchive");
-        _builder.EventBroadcaster.Broadcasts.ShouldContain(b => b.Topic == "sessions" && b.Type == "session_unarchived");
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe("Session.RetentionStatus");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
