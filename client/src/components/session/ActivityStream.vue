@@ -127,15 +127,30 @@ watch(
         .filter((m) => m.role === "user")
         .every((m) => m.parts.some((p) => p.type === "text" && p.text.trim().length > 0));
 
-      if (allUserMessagesHaveText) {
-        diagLog("stream.clearPrompts", `new assistant content detected – all user messages have text, clearing optimistic prompts`, {
+      // Also check that optimistic prompts with images have their file parts
+      // delivered.  The image file part arrives via a separate
+      // `message.part.updated` SSE event that can lag behind the text part.
+      // Clearing the optimistic prompt before the file part arrives causes the
+      // image to disappear until a page refresh.
+      const allImagesDelivered = sentPrompts.value.every((prompt) => {
+        if (prompt.images.length === 0) return true;
+        const delivered = nextMessages.find((m) => m.messageId === prompt.id);
+        if (!delivered) return true; // not yet delivered at all — text guard handles this
+        const deliveredImageCount = delivered.parts.filter(
+          (p) => p.type === "file" && p.mime.startsWith("image/"),
+        ).length;
+        return deliveredImageCount >= prompt.images.length;
+      });
+
+      if (allUserMessagesHaveText && allImagesDelivered) {
+        diagLog("stream.clearPrompts", `new assistant content detected – all user messages have text and images, clearing optimistic prompts`, {
           sessionId: props.sessionId,
           sentPromptsCount: sentPrompts.value.length,
         });
         clearSentPrompts(props.sessionId);
         forceIdle();
       } else {
-        diagLog("stream.clearPrompts", `new assistant content detected but some user messages lack text – deferring to reconciliation`, {
+        diagLog("stream.clearPrompts", `new assistant content detected but some user messages lack text or images – deferring to reconciliation`, {
           sessionId: props.sessionId,
           sentPromptsCount: sentPrompts.value.length,
         });
