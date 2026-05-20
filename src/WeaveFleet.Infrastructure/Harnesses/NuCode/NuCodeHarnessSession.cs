@@ -124,10 +124,15 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
             {
                 _nuCodeSession = await sessionService.CreateSessionAsync(
                     _workingDirectory, text.Length > 50 ? text[..50] : text, linkedToken);
+
+                EmitSessionCreatedEvent();
+                EmitSessionUpdatedEvent(text.Length > 50 ? text[..50] : text);
             }
 
             // Create user message
             var agentName = options?.Agent ?? "build";
+            var effectiveProvider = options?.ProviderId ?? _provider;
+            var effectiveModelId = options?.ModelId ?? _modelId;
             var userMsg = new UserMessage(MessageId.New(), _nuCodeSession.Id, DateTimeOffset.UtcNow, agentName);
             await sessionService.UpsertMessageAsync(userMsg, linkedToken);
 
@@ -158,7 +163,7 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
             // Create assistant message placeholder
             var assistantMsg = new AssistantMessage(
                 MessageId.New(), _nuCodeSession.Id, DateTimeOffset.UtcNow,
-                userMsg.Id, agentName, _provider, _modelId);
+                userMsg.Id, agentName, effectiveProvider, effectiveModelId);
 
             // Process the agent loop
             var result = await processor.ProcessAsync(agent, assistantMsg, chatMessages, agentSession, linkedToken);
@@ -170,7 +175,7 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
                 chatMessages = NuCodeMapper.ToChatMessages(messages);
                 assistantMsg = new AssistantMessage(
                     MessageId.New(), _nuCodeSession.Id, DateTimeOffset.UtcNow,
-                    userMsg.Id, agentName, _provider, _modelId);
+                    userMsg.Id, agentName, effectiveProvider, effectiveModelId);
                 result = await processor.ProcessAsync(agent, assistantMsg, chatMessages, agentSession, linkedToken);
             }
         }
@@ -191,10 +196,57 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc />
-    public Task SendCommandAsync(CommandOptions options, CancellationToken ct)
+    public async Task SendCommandAsync(CommandOptions options, CancellationToken ct)
     {
-        // NuCode doesn't support slash commands
-        return Task.CompletedTask;
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _cts.Token);
+        var linkedToken = linked.Token;
+
+        using var scope = _nuCodeProvider.CreateScope();
+        var sessionService = scope.ServiceProvider.GetRequiredService<ISessionService>();
+
+        switch (options.Command.TrimStart('/').ToLowerInvariant())
+        {
+            case "clear":
+                if (_nuCodeSession is not null)
+                {
+                    await sessionService.DeleteSessionAsync(_nuCodeSession.Id, linkedToken);
+                    _nuCodeSession = null;
+                }
+                break;
+
+            case "help":
+                await EnsureSessionAsync(sessionService, linkedToken);
+                var profileRegistry = scope.ServiceProvider.GetRequiredService<IAgentProfileRegistry>();
+                var agents = profileRegistry.GetVisible().Select(p => p.Name);
+                var helpText = $"Available agents: {string.Join(", ", agents)}\n"
+                    + $"Available commands: /clear, /help";
+
+                var helpMsg = new AssistantMessage(
+                    MessageId.New(), _nuCodeSession!.Id, DateTimeOffset.UtcNow,
+                    MessageId.New(), "system", _provider, _modelId);
+                await sessionService.UpsertMessageAsync(helpMsg, linkedToken);
+
+                var helpPart = new global::NuCode.Sessions.TextPart(
+                    PartId.New(), _nuCodeSession.Id, helpMsg.Id, helpText);
+                await sessionService.UpsertPartAsync(helpPart, linkedToken);
+                break;
+
+            default:
+                // Unknown command — ignore
+                break;
+        }
+    }
+
+    /// <summary>Ensures a NuCode session exists, creating one if needed.</summary>
+    private async Task EnsureSessionAsync(ISessionService sessionService, CancellationToken ct)
+    {
+        if (_nuCodeSession is null)
+        {
+            _nuCodeSession = await sessionService.CreateSessionAsync(
+                _workingDirectory, "Command session", ct);
+            EmitSessionCreatedEvent();
+            EmitSessionUpdatedEvent("Command session");
+        }
     }
 
     /// <inheritdoc />
@@ -246,11 +298,29 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
 
     /// <inheritdoc />
     public Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
-        => throw new NotSupportedException("The NuCode harness does not support the question tool.");
+    {
+        using var scope = _nuCodeProvider.CreateScope();
+        var questionService = scope.ServiceProvider.GetRequiredService<global::NuCode.Tools.IQuestionService>();
+
+        // Flatten the nested answer structure into a single string.
+        // The IQuestionService.ReplyToQuestion API accepts a single string answer.
+        var flatAnswer = string.Join("; ", answers.SelectMany(a => a));
+        questionService.ReplyToQuestion(requestId, flatAnswer);
+
+        return Task.CompletedTask;
+    }
 
     /// <inheritdoc />
     public Task RejectQuestionAsync(string requestId, CancellationToken ct)
-        => throw new NotSupportedException("The NuCode harness does not support the question tool.");
+    {
+        using var scope = _nuCodeProvider.CreateScope();
+        var questionService = scope.ServiceProvider.GetRequiredService<global::NuCode.Tools.IQuestionService>();
+
+        // Reply with a rejection — the question tool will treat this as a dismissal.
+        questionService.ReplyToQuestion(requestId, string.Empty);
+
+        return Task.CompletedTask;
+    }
 
     /// <inheritdoc />
     public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
@@ -272,7 +342,12 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct)
     {
-        return Task.FromResult<IReadOnlyList<CommandInfo>>([]);
+        IReadOnlyList<CommandInfo> commands =
+        [
+            new CommandInfo { Name = "clear", Description = "Clear conversation history" },
+            new CommandInfo { Name = "help", Description = "Show available agents and commands" },
+        ];
+        return Task.FromResult(commands);
     }
 
     /// <inheritdoc />
@@ -332,6 +407,33 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
             Timestamp = DateTimeOffset.UtcNow,
         };
         _eventChannel.Writer.TryWrite(evt);
+    }
+
+    private void EmitSessionCreatedEvent()
+    {
+        _eventChannel.Writer.TryWrite(new HarnessEvent
+        {
+            Type = EventTypes.SessionCreated,
+            SessionId = FleetSessionId,
+            FleetSessionId = FleetSessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+        });
+    }
+
+    private void EmitSessionUpdatedEvent(string title)
+    {
+        var payload = JsonSerializer.SerializeToElement(
+            new NuCodeSessionUpdatedPayload { Title = title },
+            NuCodeJsonContext.Default.NuCodeSessionUpdatedPayload);
+
+        _eventChannel.Writer.TryWrite(new HarnessEvent
+        {
+            Type = EventTypes.SessionUpdated,
+            SessionId = FleetSessionId,
+            FleetSessionId = FleetSessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = payload,
+        });
     }
 
     private void EmitMessageEvent(UserMessage msg, string text)

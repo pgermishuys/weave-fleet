@@ -100,6 +100,15 @@ internal static class OpenCodeMapper
                     TokensReasoning: 0,
                     CompletedAt: null);
 
+            case OpenCodeAgentPart agentPart:
+                return new AgentPart(agentPart.Agent, agentPart.Input, agentPart.Output);
+
+            case OpenCodeSubtaskPart subtaskPart:
+                return new SubtaskPart(subtaskPart.Prompt, subtaskPart.Description, subtaskPart.Agent, subtaskPart.Metadata);
+
+            case OpenCodePatchPart patchPart:
+                return new PatchPart(patchPart.Patch);
+
             default:
                 return null;
         }

@@ -50,6 +50,9 @@ public enum MessagePartKind
     Reasoning = 3,
     File = 4,
     StepFinish = 5,
+    Agent = 6,
+    Subtask = 7,
+    Patch = 8,
 }
 
 /// <summary>One logical piece of an agent message.</summary>
@@ -60,6 +63,9 @@ public enum MessagePartKind
 [JsonDerivedType(typeof(ReasoningPart), "reasoning")]
 [JsonDerivedType(typeof(FilePart), "file")]
 [JsonDerivedType(typeof(StepFinishPart), "step-finish")]
+[JsonDerivedType(typeof(AgentPart), "agent")]
+[JsonDerivedType(typeof(SubtaskPart), "subtask")]
+[JsonDerivedType(typeof(PatchPart), "patch")]
 public abstract record MessagePart(MessagePartKind Kind);
 
 /// <summary>Plain text content.</summary>
@@ -96,6 +102,22 @@ public sealed record ToolResultPart(
 
 /// <summary>Lifecycle state of a tool invocation.</summary>
 public enum ToolUseState { Pending, Running, Completed, Error }
+
+/// <summary>Sub-agent delegation part indicating which agent handled a delegated task.</summary>
+public sealed record AgentPart(
+    string? Agent,
+    string? Input,
+    string? Output) : MessagePart(MessagePartKind.Agent);
+
+/// <summary>Subtask part linking parent and child session activity.</summary>
+public sealed record SubtaskPart(
+    string? Prompt,
+    string? Description,
+    string? Agent,
+    JsonElement? Metadata) : MessagePart(MessagePartKind.Subtask);
+
+/// <summary>Git patch/diff part showing file changes made by the agent.</summary>
+public sealed record PatchPart(string? Patch) : MessagePart(MessagePartKind.Patch);
 
 /// <summary>Normalized message from an agent conversation.</summary>
 public sealed record HarnessMessage
