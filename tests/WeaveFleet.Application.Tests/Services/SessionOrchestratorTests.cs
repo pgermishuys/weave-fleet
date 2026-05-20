@@ -1088,7 +1088,7 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         var result = await _sut.UnarchiveSessionAsync("s-unarchive");
 
         result.IsFailure.ShouldBeTrue();
-        result.Error.Code.ShouldBe("Session.RetentionStatus");
+        result.Error.Code.ShouldBe("Validation.Session.RetentionStatus");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
