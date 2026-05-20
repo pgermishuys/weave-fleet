@@ -4,6 +4,8 @@
 > **Summary**: Refactor `OpenCodeSmokeTests` into a data-driven `[Theory]` so additional harness types (claude-code, nucode, future) can be added as rows without duplicating test logic.
 > **Estimated Effort**: Medium
 
+PR: https://github.com/pgermishuys/weave-fleet/pull/133
+
 ## Context
 ### Original Request
 Convert the existing OpenCode-specific smoke test into a theory-based harness smoke contract where each harness is a data row.
