@@ -555,19 +555,18 @@ async function diagnoseThread(thread: ReviewThread): Promise<void> {
       <div v-if="diagnoseThreadError" class="diagnose-error-row">
         <span class="diagnose-error-text">{{ diagnoseThreadError }}</span>
       </div>
+      <button
+        type="button"
+        class="smart-link-dismiss"
+        :aria-label="`Dismiss ${link.title || link.url}`"
+        @click.stop="emit('dismiss', link.id)"
+      >
+        <X
+          :size="12"
+          aria-hidden="true"
+        />
+      </button>
     </div>
-
-    <button
-      type="button"
-      class="smart-link-dismiss"
-      :aria-label="`Dismiss ${link.title || link.url}`"
-      @click.stop="emit('dismiss', link.id)"
-    >
-      <X
-        :size="12"
-        aria-hidden="true"
-      />
-    </button>
   </article>
 </template>
 
@@ -602,6 +601,7 @@ async function diagnoseThread(thread: ReviewThread): Promise<void> {
 }
 
 .smart-link-body {
+  position: relative;
   flex: 1;
   min-width: 0;
 }
@@ -626,7 +626,7 @@ async function diagnoseThread(thread: ReviewThread): Promise<void> {
 }
 
 .smart-link-title:hover {
-  text-decoration: underline;
+  text-decoration: none;
 }
 
 /* CI badge */
@@ -953,16 +953,18 @@ async function diagnoseThread(thread: ReviewThread): Promise<void> {
 
 /* Dismiss button */
 .smart-link-dismiss {
-  flex-shrink: 0;
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 20px;
   height: 20px;
-  margin-top: 1px;
   border: 0;
   border-radius: 4px;
-  background: transparent;
+  background: rgba(0, 0, 0, 0.6);
   color: var(--muted);
   cursor: pointer;
   opacity: 0;
@@ -974,8 +976,8 @@ async function diagnoseThread(thread: ReviewThread): Promise<void> {
 
 .smart-link-dismiss:hover,
 .smart-link-dismiss:focus-visible {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
+  background: #ef4444;
+  color: #fff;
   opacity: 1;
   outline: none;
 }
