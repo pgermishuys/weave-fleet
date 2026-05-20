@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Component } from "vue";
-import { computed, onMounted } from "vue";
+import { computed, onMounted, shallowRef } from "vue";
 import {
   AlertTriangle,
   Cable,
@@ -9,12 +9,14 @@ import {
   Cpu,
   Hexagon,
   Infinity,
+  Settings2,
   Star,
   TerminalSquare,
 } from "lucide-vue-next";
 import { useHarnesses } from "@/composables/use-harnesses";
-import type { HarnessInfo } from "@/lib/api-types";
 import { usePreferencesStore } from "@/stores/preferences";
+import type { HarnessInfo } from "@/lib/api-types";
+import NuCodeSettingsPanel from "@/components/settings/NuCodeSettingsPanel.vue";
 
 type HarnessStatus = "ready" | "missing-credentials" | "not-configured" | "disabled";
 
@@ -33,6 +35,7 @@ interface HarnessCard {
   icon: Component;
   status: HarnessStatus;
   enabled: boolean;
+  configurable: boolean;
   canToggle: boolean;
   canDefault: boolean;
 }
@@ -70,6 +73,8 @@ const fallbackHarnessMetadata: HarnessDisplayMetadata = {
 
 const prefsStore = usePreferencesStore();
 const { harnesses: registeredHarnesses } = useHarnesses();
+
+const expandedSettingsId = shallowRef<string | null>(null);
 
 onMounted(async () => {
   await prefsStore.refresh();
@@ -123,6 +128,7 @@ function toHarnessCard(harness: HarnessInfo): HarnessCard {
     icon: metadata.icon,
     status: statusForHarness(harness, enabled),
     enabled,
+    configurable: harness.type === "nucode" && enabled,
     canToggle: true,
     canDefault: true,
   };
@@ -321,11 +327,34 @@ function statusIcon(status: HarnessStatus): Component {
                 {{ defaultHarnessId === harness.id ? "Default" : "Set default" }}
               </button>
 
-              <span class="inline-flex items-center rounded-btn px-2.5 py-1.5 text-xs font-medium text-muted">
+              <button
+                v-if="harness.configurable"
+                type="button"
+                class="inline-flex items-center gap-1 rounded-btn border border-border bg-main-bg px-2.5 py-1.5 text-xs font-medium text-text transition-colors hover:border-accent/50"
+                @click="expandedSettingsId = expandedSettingsId === harness.id ? null : harness.id"
+              >
+                <Settings2
+                  :size="12"
+                  aria-hidden="true"
+                />
+                Settings
+              </button>
+              <span
+                v-else
+                class="inline-flex items-center rounded-btn px-2.5 py-1.5 text-xs font-medium text-muted"
+              >
                 No settings yet
               </span>
             </div>
           </div>
+        </div>
+
+        <!-- Inline settings panel (NuCode only) -->
+        <div
+          v-if="expandedSettingsId === harness.id && harness.id === 'nucode'"
+          class="mt-4 border-t border-border pt-4"
+        >
+          <NuCodeSettingsPanel />
         </div>
       </article>
     </section>
