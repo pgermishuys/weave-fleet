@@ -103,6 +103,18 @@ describe('extractUrls', () => {
     expect(extractUrls(text)).toEqual(['https://github.com/owner/repo/pull/58'])
   })
 
+  it('strips URL fragments to dedup PR comment links against base PR URL', () => {
+    const text =
+      'https://github.com/owner/repo/pull/532 and https://github.com/owner/repo/pull/532#discussion_r3267801666'
+    expect(extractUrls(text)).toEqual(['https://github.com/owner/repo/pull/532'])
+  })
+
+  it('strips fragment from a standalone PR comment URL', () => {
+    expect(
+      extractUrls('https://github.com/owner/repo/pull/532#discussion_r3267801666'),
+    ).toEqual(['https://github.com/owner/repo/pull/532'])
+  })
+
   it('handles shorthand with dots and hyphens in names', () => {
     const text = 'Check my-org/my.repo#99'
     expect(extractUrls(text)).toEqual([
