@@ -805,8 +805,8 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px;
-  margin-bottom: 12px;
+  padding: 8px;
+  margin-bottom: 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   background: var(--card-bg);
@@ -843,6 +843,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
+  margin-bottom: 8px;
 }
 
 .session-action-toolbar__btn {
