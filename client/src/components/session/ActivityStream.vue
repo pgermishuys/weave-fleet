@@ -835,7 +835,8 @@ function getStringValue(value: unknown): string | undefined {
 }
 
 .activity-message--user {
-  align-items: flex-end;
+  align-items: flex-start;
+  padding-left: 32px;
 }
 
 .activity-message--first,

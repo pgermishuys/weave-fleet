@@ -287,14 +287,12 @@ const displayModelId = computed(() => {
   align-items: center;
   gap: 8px;
   margin-bottom: 4px;
+  width: 100%;
 }
 
 .message--user .msg-header {
-  justify-content: flex-end;
-  float: right;
-  margin-bottom: 0;
-  margin-left: 16px;
-  padding-top: 1px;
+  justify-content: flex-start;
+  margin-bottom: 4px;
 }
 
 .msg-author {
@@ -313,6 +311,7 @@ const displayModelId = computed(() => {
 .msg-timestamp {
   color: var(--muted);
   font-size: 10px;
+  margin-left: auto;
 }
 
 .msg-body {
