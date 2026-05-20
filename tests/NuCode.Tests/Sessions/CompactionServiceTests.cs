@@ -1,5 +1,6 @@
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using NuCode.Configuration;
 using NuCode.Events;
 using NuCode.Plugins;
@@ -13,6 +14,7 @@ public sealed class CompactionServiceTests : IDisposable
     private readonly NuCodeEventBus _eventBus;
     private readonly SessionService _sessionService;
     private readonly PluginRegistry _pluginRegistry;
+    private readonly FakeTimeProvider _timeProvider;
 
     public CompactionServiceTests()
     {
@@ -20,6 +22,7 @@ public sealed class CompactionServiceTests : IDisposable
         _eventBus = new NuCodeEventBus();
         _sessionService = new SessionService(_store, _eventBus);
         _pluginRegistry = new PluginRegistry(new MinimalServiceProvider(), null);
+        _timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
     }
 
     public void Dispose() => _store.Dispose();
@@ -35,6 +38,7 @@ public sealed class CompactionServiceTests : IDisposable
             _pluginRegistry,
             chatClient ?? new SummarizingChatClient("This is a summary of the conversation."),
             config,
+            _timeProvider,
             NullLogger<CompactionService>.Instance);
     }
 
@@ -44,11 +48,14 @@ public sealed class CompactionServiceTests : IDisposable
 
         for (var i = 0; i < messageCount; i++)
         {
+            var timestamp = _timeProvider.GetUtcNow();
+            _timeProvider.Advance(TimeSpan.FromSeconds(1));
+
             var isUser = i % 2 == 0;
             NuCodeMessage msg = isUser
-                ? new UserMessage(MessageId.New(), session.Id, DateTimeOffset.UtcNow, "build")
+                ? new UserMessage(MessageId.New(), session.Id, timestamp, "build")
                 : new AssistantMessage(
-                    MessageId.New(), session.Id, DateTimeOffset.UtcNow,
+                    MessageId.New(), session.Id, timestamp,
                     ParentId: MessageId.New(), Agent: "build",
                     ProviderId: "test", ModelId: "test-model");
             await _sessionService.UpsertMessageAsync(msg, CancellationToken.None);
