@@ -186,6 +186,7 @@ jobs:
           tests/WeaveFleet.E2E/obj/
           src/*/bin/Release/
           src/*/obj/
+          src/WeaveFleet.Api/wwwroot/
           client/dist/
 
       - name: Upload build artifacts
