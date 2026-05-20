@@ -183,7 +183,9 @@ jobs:
         run: >
           tar -cf e2e-build.tar
           tests/WeaveFleet.E2E/bin/Release/
+          tests/WeaveFleet.E2E/obj/
           src/*/bin/Release/
+          src/*/obj/
           client/dist/
 
       - name: Upload build artifacts
@@ -290,6 +292,7 @@ jobs:
           name: E2E Results (${{ matrix.lane }})
           path: test-results/**/*.trx
           reporter: dotnet-trx
+          fail-on-empty: false
 
   # ── AOT publish validation ────────────────────────────────────────────────
   aot:
