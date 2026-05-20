@@ -4,6 +4,8 @@
 > **Summary**: Add opt-in E2E smoke tests that exercise the Fleet UI against a real OpenCode harness, gated by `FLEET_HARNESS_SMOKE=1`.
 > **Estimated Effort**: Medium
 
+PR: https://github.com/pgermishuys/weave-fleet/pull/132
+
 ## Context
 ### Original Request
 Fleet needs UI-level smoke tests that verify real harnesses work end-to-end through the browser, not just via unit/contract tests. OpenCode is the first target. Tests must be manual/opt-in and must not disturb existing deterministic E2E tests.
