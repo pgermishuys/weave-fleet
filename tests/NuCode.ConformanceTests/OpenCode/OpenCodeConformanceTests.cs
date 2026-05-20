@@ -6,6 +6,7 @@ namespace NuCode.ConformanceTests.OpenCode;
 /// Runs all shared <see cref="HarnessConformanceBase"/> tests against <see cref="OpenCodeFixture"/>.
 /// Skipped automatically when the <c>opencode</c> binary is not on PATH.
 /// </summary>
+[Trait("Harness", "opencode")]
 public sealed class OpenCodeConformanceTests : HarnessConformanceBase
 {
     public override async ValueTask InitializeAsync()

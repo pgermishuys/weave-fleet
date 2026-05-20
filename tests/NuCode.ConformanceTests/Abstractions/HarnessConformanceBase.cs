@@ -103,6 +103,9 @@ public abstract class HarnessConformanceBase : IAsyncLifetime
             }
         }, cts.Token);
 
+        // Allow the background subscription to start iterating before sending the prompt.
+        await Task.Delay(200);
+
         await SendPromptAndWaitAsync("Hello");
         cts.Cancel();
 
