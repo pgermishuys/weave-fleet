@@ -12,19 +12,19 @@ using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Data;
-using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
 namespace WeaveFleet.E2E.Infrastructure;
 
 /// <summary>
 /// Boots Fleet with the real production harness registrations for opt-in harness smoke tests.
 /// Uses isolated SQLite databases, an ephemeral Kestrel port, and a per-run temporary working
-/// directory that smoke tests should pass when creating OpenCode-backed sessions.
+/// directory that smoke tests should pass when creating real harness-backed sessions.
 /// </summary>
 public sealed class SmokeFleetWebApplicationFactory : WebApplicationFactory<Program>, IAsyncDisposable
 {
     private const string SmokeEnvironmentVariable = "FLEET_HARNESS_SMOKE";
 
+    private readonly HarnessSmokeSpec _spec;
     private readonly string _dbPath;
     private readonly string _analyticsDbPath;
     private readonly string _workingDirectory;
@@ -32,12 +32,13 @@ public sealed class SmokeFleetWebApplicationFactory : WebApplicationFactory<Prog
     private IHost? _host;
     private bool _smokeDataConfigured;
 
-    public SmokeFleetWebApplicationFactory()
+    public SmokeFleetWebApplicationFactory(HarnessSmokeSpec spec)
     {
+        _spec = spec;
         var guid = Guid.NewGuid().ToString("N");
         _dbPath = Path.Combine(Path.GetTempPath(), $"fleet-smoke-{guid}.db");
         _analyticsDbPath = Path.Combine(Path.GetTempPath(), $"fleet-smoke-analytics-{guid}.db");
-        _workingDirectory = Path.Combine(Path.GetTempPath(), $"fleet-opencode-smoke-{guid}");
+        _workingDirectory = Path.Combine(Path.GetTempPath(), $"fleet-{SanitizePathSegment(spec.HarnessType)}-smoke-{guid}");
         Directory.CreateDirectory(_workingDirectory);
     }
 
@@ -45,7 +46,7 @@ public sealed class SmokeFleetWebApplicationFactory : WebApplicationFactory<Prog
     public string ServerUrl => _kestrelUrl
         ?? throw new InvalidOperationException("Server not started. Call EnsureStartedAsync() first.");
 
-    /// <summary>The per-run temporary directory smoke tests should use as the OpenCode session directory.</summary>
+    /// <summary>The per-run temporary directory smoke tests should use as the real harness session directory.</summary>
     public string WorkingDirectory => _workingDirectory;
 
     /// <summary>Returns the DI service provider from the running Kestrel host.</summary>
@@ -198,23 +199,24 @@ public sealed class SmokeFleetWebApplicationFactory : WebApplicationFactory<Prog
 
         await using var scope = services.CreateAsyncScope();
         var registry = scope.ServiceProvider.GetRequiredService<IHarnessRegistry>();
-        if (registry.GetByType("opencode") is not OpenCodeHarness)
+        if (registry.GetByType(_spec.HarnessType) is null)
         {
             throw new InvalidOperationException(
-                "Smoke factory expected the real OpenCodeHarness to remain registered in DI.");
+                $"Smoke factory expected a real harness registration for '{_spec.HarnessType}' to remain registered in DI.");
         }
 
-        if (registry.GetRuntimeByType("opencode") is not OpenCodeHarnessRuntime)
+        if (registry.GetRuntimeByType(_spec.HarnessType) is null)
         {
             throw new InvalidOperationException(
-                "Smoke factory expected the real OpenCodeHarnessRuntime to remain registered in DI.");
+                $"Smoke factory expected a real harness runtime registration for '{_spec.HarnessType}' to remain registered in DI.");
         }
 
         var preferences = scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>();
-        await preferences.SetAsync("opencode.enabled", "true");
-        await preferences.SetAsync("claude-code.enabled", "false");
-        await preferences.SetAsync("nucode.enabled", "false");
-        await preferences.SetAsync("defaultHarnessType", "opencode");
+        await preferences.SetAsync(_spec.EnabledPreferenceKey, "true");
+        foreach (var disabledHarnessPreferenceKey in _spec.DisabledHarnessPreferenceKeys)
+            await preferences.SetAsync(disabledHarnessPreferenceKey, "false");
+
+        await preferences.SetAsync("defaultHarnessType", _spec.HarnessType);
 
         var workspaceRootService = scope.ServiceProvider.GetRequiredService<WorkspaceRootService>();
         var addRootResult = await workspaceRootService.AddRootAsync(_workingDirectory);
@@ -238,5 +240,11 @@ public sealed class SmokeFleetWebApplicationFactory : WebApplicationFactory<Prog
     {
         try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); }
         catch { /* best effort */ }
+    }
+
+    private static string SanitizePathSegment(string value)
+    {
+        var invalidChars = Path.GetInvalidFileNameChars();
+        return string.Concat(value.Select(character => invalidChars.Contains(character) ? '-' : character));
     }
 }

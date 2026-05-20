@@ -7,25 +7,33 @@ using WeaveFleet.E2E.Pages;
 namespace WeaveFleet.E2E.Tests;
 
 /// <summary>
-/// Opt-in smoke tests that exercise Fleet against the real OpenCode harness runtime.
+/// Opt-in smoke tests that exercise Fleet against real harness runtimes.
 /// </summary>
 [Trait("Category", "HarnessSmoke")]
 [Trait("Lane", "Smoke")]
-public sealed class OpenCodeSmokeTests : HarnessSmokeTestBase,
-    IClassFixture<SmokeFleetWebApplicationFactory>,
-    IClassFixture<PlaywrightFixture>
+public sealed class HarnessSmokeTests : HarnessSmokeTestBase, IClassFixture<PlaywrightFixture>
 {
     private const string Prompt = "Say hello";
     private const int SessionCreateTimeoutMs = 120_000;
     private const int LlmResponseTimeoutMs = 180_000;
 
-    public OpenCodeSmokeTests(SmokeFleetWebApplicationFactory factory, PlaywrightFixture playwright)
-        : base(factory, playwright) { }
+    public HarnessSmokeTests(PlaywrightFixture playwright)
+        : base(playwright) { }
 
-    [HarnessSmokeFact]
-    public async Task should_create_opencode_session_and_receive_assistant_response()
+    public static TheoryData<HarnessSmokeSpec> Harnesses => new()
     {
-        await WithFailureCapture(async () =>
+        new HarnessSmokeSpec(
+            "opencode",
+            "opencode.enabled",
+            "OpenCode",
+            ["claude-code.enabled", "nucode.enabled"])
+    };
+
+    [HarnessSmokeTheory]
+    [MemberData(nameof(Harnesses))]
+    public async Task should_create_session_and_receive_assistant_response(HarnessSmokeSpec spec)
+    {
+        await RunWithHarnessSmokeFactoryAsync(spec, async () =>
         {
             var dashboard = new FleetDashboardPage(Page);
             await dashboard.GotoAsync();
@@ -33,13 +41,13 @@ public sealed class OpenCodeSmokeTests : HarnessSmokeTestBase,
             var dialog = await dashboard.ClickNewSessionAsync();
             await dialog.SetDirectoryAsync(WorkingDirectory);
 
-            // Do not select a harness here: SmokeFleetWebApplicationFactory enables OpenCode,
-            // disables the other harnesses, and makes OpenCode the default.
+            // Do not select a harness here: the smoke factory enables the row harness,
+            // disables the configured alternatives, and makes the row harness the default.
             var detail = await dialog.SubmitAsync(SessionCreateTimeoutMs);
             await detail.WaitForLoadedAsync();
 
             var sessionId = GetCurrentSessionId(Page.Url);
-            await AssertCreatedWithOpenCodeHarnessAsync(sessionId);
+            await AssertCreatedWithHarnessAsync(sessionId, spec.HarnessType);
 
             await AssertNoErrorSurfaceAsync();
 
@@ -66,13 +74,13 @@ public sealed class OpenCodeSmokeTests : HarnessSmokeTestBase,
         });
     }
 
-    private async Task AssertCreatedWithOpenCodeHarnessAsync(string sessionId)
+    private async Task AssertCreatedWithHarnessAsync(string sessionId, string harnessType)
     {
         using var httpClient = new HttpClient { BaseAddress = new Uri(ServerUrl) };
         var session = await httpClient.GetFromJsonAsync<SessionDetailResponse>($"/api/sessions/{Uri.EscapeDataString(sessionId)}");
 
         session.ShouldNotBeNull();
-        session.HarnessType.ShouldBe("opencode");
+        session.HarnessType.ShouldBe(harnessType);
     }
 
     private async Task AssertNoErrorSurfaceAsync()
@@ -94,16 +102,4 @@ public sealed class OpenCodeSmokeTests : HarnessSmokeTestBase,
     }
 
     private sealed record SessionDetailResponse([property: JsonPropertyName("harnessType")] string? HarnessType);
-}
-
-[AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-internal sealed class HarnessSmokeFactAttribute : FactAttribute
-{
-    private const string SmokeEnvironmentVariable = "FLEET_HARNESS_SMOKE";
-
-    public HarnessSmokeFactAttribute()
-    {
-        if (!string.Equals(Environment.GetEnvironmentVariable(SmokeEnvironmentVariable), "1", StringComparison.Ordinal))
-            Skip = $"Harness smoke tests are opt-in. Set {SmokeEnvironmentVariable}=1 to run them.";
-    }
 }
