@@ -268,6 +268,7 @@ jobs:
           --logger "trx;LogFileName=e2e-${{ matrix.lane }}-results.trx"
           --results-directory test-results/
           --no-build
+          -p:SkipFrontendBuild=true
         env:
           ASPNETCORE_ENVIRONMENT: Test
 
