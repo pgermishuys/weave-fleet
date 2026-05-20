@@ -750,7 +750,7 @@ function getStringValue(value: unknown): string | undefined {
 }
 
 .activity-stream {
-  --activity-bubble-width: min(96%, 80rem);
+  --activity-bubble-width: 100%;
   flex: 1;
   display: flex;
   flex-direction: column;
