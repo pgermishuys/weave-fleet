@@ -16,7 +16,7 @@ export interface SentPromptImage {
 export interface SentPromptMessage {
   id: string;
   body: string;
-  timestamp: string;
+  createdAt: number;
   agentId: string;
   agentName: string;
   modelId: string;
@@ -215,13 +215,6 @@ export function useSentPrompts(sessionId: string) {
   };
 }
 
-function formatTimestamp(date: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-}
-
 interface BackendSendPromptRequest {
   text: string;
   agent?: string;
@@ -321,7 +314,7 @@ export function useSendPrompt(sessionId: string) {
     ensureSentPrompts(sessionId).push({
       id: promptId,
       body,
-      timestamp: formatTimestamp(now),
+      createdAt: now.getTime(),
       agentId: resolvedAgentId,
       agentName: agent?.name ?? "Unknown agent",
       modelId: resolvedModelId,

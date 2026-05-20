@@ -10,7 +10,6 @@ import { useSmartLinks } from "@/plugins/builtin/smart-links"
 import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { CommandEventName } from "@/lib/command-events";
-import { formatTimestamp } from "@/lib/format-utils";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart } from "@/lib/api-types";
 import { isQuestionPart } from "@/lib/question-types";
 import { diagLog } from "@/lib/message-diagnostics";
@@ -28,7 +27,7 @@ interface ActivityMessage {
   modelId?: string;
   senderKey: string;
   role: AccumulatedMessage["role"];
-  timestamp: string;
+  createdAt?: number;
   body: string;
   images: ImageAttachmentDisplay[];
   tools?: ToolCardItem[];
@@ -156,7 +155,7 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
         modelId: message.modelID,
         senderKey: getSenderKey(message.role, message.agent),
         role: message.role,
-        timestamp: formatTimestamp(message.createdAt),
+        createdAt: message.createdAt,
         body: renderMessageBody(message.parts),
         images: message.parts
           .filter((part): part is AccumulatedFilePart => part.type === "file" && part.mime.startsWith("image/"))
@@ -181,7 +180,7 @@ const optimisticMessages = computed<ActivityMessage[]>(() => {
     modelId: undefined,
     senderKey: "user",
     role: "user",
-    timestamp: prompt.timestamp,
+    createdAt: prompt.createdAt,
     body: prompt.body,
     images: prompt.images,
     tools: [],
@@ -671,7 +670,7 @@ function getStringValue(value: unknown): string | undefined {
           :author="message.author"
           :model-id="message.modelId"
           :role="message.role"
-          :timestamp="message.timestamp"
+          :created-at="message.createdAt"
           :body="message.body"
           :images="message.images"
           :tools="message.tools"
