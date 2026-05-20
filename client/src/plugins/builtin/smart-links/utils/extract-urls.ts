@@ -48,5 +48,12 @@ export function extractUrls(text: string): string[] {
  */
 function normalizeUrl(raw: string): string {
   // Remove trailing punctuation: . , ; : ! ? ) ] > *
-  return raw.replace(/[.,;:!?)\]>*]+$/, '')
+  let url = raw.replace(/[.,;:!?)\]>*]+$/, '')
+  // Strip URL fragments — e.g. #discussion_r123 on GitHub PR URLs —
+  // so that comment-level links dedup against the base PR/issue URL.
+  const hashIndex = url.indexOf('#')
+  if (hashIndex !== -1) {
+    url = url.substring(0, hashIndex)
+  }
+  return url
 }
