@@ -7,55 +7,42 @@ namespace WeaveFleet.E2E.Infrastructure;
 /// </summary>
 public sealed record class HarnessSmokeSpec : IXunitSerializable
 {
-    private string[] _disabledHarnessPreferenceKeys = [];
+    private static readonly string[] KnownHarnessTypes =
+    [
+        "opencode",
+        "claude-code",
+        "nucode"
+    ];
 
     public HarnessSmokeSpec() { }
 
-    public HarnessSmokeSpec(
-        string harnessType,
-        string enabledPreferenceKey,
-        string displayName,
-        IReadOnlyCollection<string> disabledHarnessPreferenceKeys)
+    public HarnessSmokeSpec(string harnessType)
     {
         HarnessType = RequireValue(harnessType, nameof(harnessType));
-        EnabledPreferenceKey = RequireValue(enabledPreferenceKey, nameof(enabledPreferenceKey));
-        DisplayName = RequireValue(displayName, nameof(displayName));
-        _disabledHarnessPreferenceKeys = disabledHarnessPreferenceKeys
-            .Where(key => !string.IsNullOrWhiteSpace(key))
-            .Select(key => key.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
     }
 
     public string HarnessType { get; private set; } = string.Empty;
 
-    public string EnabledPreferenceKey { get; private set; } = string.Empty;
+    public string EnabledPreferenceKey => ToPreferenceKey(HarnessType);
 
-    public string DisplayName { get; private set; } = string.Empty;
-
-    public IReadOnlyList<string> DisabledHarnessPreferenceKeys => _disabledHarnessPreferenceKeys;
+    public IReadOnlyList<string> DisabledHarnessPreferenceKeys => KnownHarnessTypes
+        .Where(type => !string.Equals(type, HarnessType, StringComparison.OrdinalIgnoreCase))
+        .Select(ToPreferenceKey)
+        .ToArray();
 
     public void Deserialize(IXunitSerializationInfo info)
     {
         HarnessType = info.GetValue<string>(nameof(HarnessType));
-        EnabledPreferenceKey = info.GetValue<string>(nameof(EnabledPreferenceKey));
-        DisplayName = info.GetValue<string>(nameof(DisplayName));
-
-        var disabledKeys = info.GetValue<string>(nameof(DisabledHarnessPreferenceKeys));
-        _disabledHarnessPreferenceKeys = string.IsNullOrWhiteSpace(disabledKeys)
-            ? []
-            : disabledKeys.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
     public void Serialize(IXunitSerializationInfo info)
     {
         info.AddValue(nameof(HarnessType), HarnessType);
-        info.AddValue(nameof(EnabledPreferenceKey), EnabledPreferenceKey);
-        info.AddValue(nameof(DisplayName), DisplayName);
-        info.AddValue(nameof(DisabledHarnessPreferenceKeys), string.Join('\n', _disabledHarnessPreferenceKeys));
     }
 
-    public override string ToString() => DisplayName;
+    public override string ToString() => HarnessType;
+
+    private static string ToPreferenceKey(string harnessType) => $"{harnessType}.enabled";
 
     private static string RequireValue(string value, string parameterName)
     {

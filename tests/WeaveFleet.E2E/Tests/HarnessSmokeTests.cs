@@ -22,11 +22,7 @@ public sealed class HarnessSmokeTests : HarnessSmokeTestBase, IClassFixture<Play
 
     public static TheoryData<HarnessSmokeSpec> Harnesses => new()
     {
-        new HarnessSmokeSpec(
-            "opencode",
-            "opencode.enabled",
-            "OpenCode",
-            ["claude-code.enabled", "nucode.enabled"])
+        new HarnessSmokeSpec("opencode")
     };
 
     [HarnessSmokeTheory]
