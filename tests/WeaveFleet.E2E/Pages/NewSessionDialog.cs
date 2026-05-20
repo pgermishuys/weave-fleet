@@ -53,12 +53,16 @@ public sealed class NewSessionDialog(IPage page)
         => await TitleInput.FillAsync(title);
 
     /// <summary>Submit the dialog and wait for navigation to the session detail page.</summary>
-    public async Task<SessionDetailPage> SubmitAsync()
+    public Task<SessionDetailPage> SubmitAsync()
+        => SubmitAsync(5_000);
+
+    /// <summary>Submit the dialog and wait for navigation to the session detail page.</summary>
+    public async Task<SessionDetailPage> SubmitAsync(int timeoutMs)
     {
         await SubmitButton.ClickAsync();
 
         // Wait for navigation to the session detail page
-        await _page.WaitForURLAsync(url => url.Contains("/sessions/"), new PageWaitForURLOptions { Timeout = 5_000 });
+        await _page.WaitForURLAsync(url => url.Contains("/sessions/"), new PageWaitForURLOptions { Timeout = timeoutMs });
 
         var detail = new SessionDetailPage(_page);
         await detail.WaitForLoadedAsync();
