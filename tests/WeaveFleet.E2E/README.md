@@ -192,6 +192,90 @@ pwsh tests/WeaveFleet.E2E/bin/Release/net10.0/playwright.ps1 show-trace <trace.z
 
 `test-results/` directories are excluded from git (see `.gitignore`).
 
+## Harness Smoke Tests
+
+Harness smoke tests exercise the full Fleet UI against the real OpenCode harness
+runtime instead of the in-process `TestHarness`. They are intended as a manual
+confidence check that Fleet can create an OpenCode-backed session, send a prompt
+(`Say hello`), and observe both user and assistant messages through the browser.
+
+These tests are **manual and opt-in**:
+
+- They are skipped unless `FLEET_HARNESS_SMOKE=1` is set.
+- They require a real OpenCode/provider setup and may contact external provider
+  APIs.
+- They should not be part of normal CI or default local test runs.
+- Normal CI/default runs should not require provider credentials.
+
+### Required setup
+
+Before running harness smoke tests, ensure:
+
+1. The frontend SPA has been built and Playwright browsers are installed (see
+   Quick Start above).
+2. `opencode` is installed and available on `PATH`:
+
+   ```bash
+   opencode --version
+   ```
+
+3. OpenCode itself is configured for the provider/model you want to use. This
+   includes any API keys, credentials, config files, auth state, or provider
+   environment variables OpenCode requires. Fleet does not supply fake
+   credentials for these tests.
+4. Do **not** set `FLEET_HARNESS=test`; that mode replaces production harnesses
+   and is rejected by the smoke test factory.
+
+The smoke test factory starts Fleet on an ephemeral local port with auth disabled,
+enables OpenCode, disables the other harnesses, and sets OpenCode as the default
+harness. It also creates a per-run temporary working directory under the system
+temp folder, registers it as a Fleet workspace root, passes it through the New
+Session dialog, and removes it on disposal. The OpenCode process is started with
+its current working directory set to the temporary working directory:
+
+```text
+opencode serve
+```
+
+### Run commands
+
+Run only the OpenCode smoke test class:
+
+```bash
+FLEET_HARNESS_SMOKE=1 dotnet test tests/WeaveFleet.E2E/ \
+  --filter "Category=HarnessSmoke&FullyQualifiedName~OpenCodeSmokeTests"
+```
+
+Run all harness smoke tests:
+
+```bash
+FLEET_HARNESS_SMOKE=1 dotnet test tests/WeaveFleet.E2E/ --filter "Category=HarnessSmoke"
+```
+
+For a visible browser window while debugging:
+
+```bash
+FLEET_HARNESS_SMOKE=1 HEADED=1 dotnet test tests/WeaveFleet.E2E/ --filter "Category=HarnessSmoke"
+```
+
+To save a Playwright trace even on success:
+
+```bash
+FLEET_HARNESS_SMOKE=1 ALWAYS_SAVE_TRACE=1 dotnet test tests/WeaveFleet.E2E/ --filter "Category=HarnessSmoke"
+```
+
+### Expected behavior
+
+When setup is correct, the smoke test opens Fleet, creates a new session using
+the temporary directory, verifies the session is backed by `opencode`, sends
+`Say hello`, waits up to several minutes for the real provider response, and
+asserts structurally that at least one user message and one assistant message are
+visible and the session returns to `idle`.
+
+Failures usually indicate a real setup/runtime issue: `opencode` not found on
+`PATH`, missing/invalid provider credentials, provider/network failures, a model
+that cannot respond, or a Fleet/OpenCode integration regression.
+
 ## CI
 
 E2E tests run on every PR and push to `main` via `.github/workflows/e2e-tests.yml`. The workflow:

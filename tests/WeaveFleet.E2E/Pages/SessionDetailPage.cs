@@ -164,9 +164,15 @@ public sealed class SessionDetailPage(IPage page)
     // ── Prompt / Send ─────────────────────────────────────────────────────────
 
     /// <summary>Type text into the prompt input and send it.</summary>
-    public async Task SendPromptAsync(string text)
+    public Task SendPromptAsync(string text)
+        => SendPromptAsync(text, 5_000);
+
+    /// <summary>Type text into the prompt input and send it.</summary>
+    public async Task SendPromptAsync(string text, int timeoutMs)
     {
         await PromptInput.FillAsync(text);
+        await Assertions.Expect(SendButton).ToBeEnabledAsync(
+            new LocatorAssertionsToBeEnabledOptions { Timeout = timeoutMs });
         await SendButton.ClickAsync();
     }
 
