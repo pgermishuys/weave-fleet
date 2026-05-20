@@ -225,47 +225,9 @@ public sealed class SessionLifecycleTests : E2ETestBase,
             (await detail.IsArchivedBadgeVisibleAsync()).ShouldBeTrue();
             var archivedBannerText = await detail.GetArchivedBannerTextAsync();
             archivedBannerText.ShouldNotBeNull();
-            archivedBannerText.ShouldContain("Unarchive before resuming or sending prompts");
+            archivedBannerText.ShouldContain("archived and read-only");
 
-            await detail.ClickUnarchiveAsync();
-            await Microsoft.Playwright.Assertions.Expect(Page.GetByTestId("session-archived-banner")).ToHaveCountAsync(0);
-            await detail.WaitForStoppedBannerAsync();
             await detail.WaitForPromptDisabledAsync();
-        });
-    }
-
-    [Fact]
-    public async Task StoppedSession_CanBeArchivedUnarchivedAndResumed()
-    {
-        await WithFailureCapture(async () =>
-        {
-            ConfigureScenario(b =>
-                b.WithSimpleTextResponse("_placeholder_", "msg-resume-1", "Resume test"));
-
-            var dashboard = new FleetDashboardPage(Page);
-            await dashboard.GotoAsync();
-
-            var dialog = await dashboard.ClickNewSessionAsync();
-            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
-            await dialog.SetTitleAsync("Resume After Unarchive");
-
-            var detail = await dialog.SubmitAsync();
-            await detail.WaitForLoadedAsync();
-
-            await detail.ClickStopAsync();
-            await detail.ConfirmStopAsync();
-            await detail.WaitForStoppedBannerAsync();
-
-            await detail.ClickArchiveAsync();
-            await detail.WaitForArchivedBannerAsync();
-
-            await detail.ClickUnarchiveAsync();
-            await Microsoft.Playwright.Assertions.Expect(Page.GetByTestId("session-archived-banner")).ToHaveCountAsync(0);
-            await detail.WaitForStoppedBannerAsync();
-
-            await detail.ClickResumeAsync();
-            await detail.WaitForLoadedAsync();
-            await detail.WaitForIdleAsync();
         });
     }
 
@@ -445,27 +407,6 @@ public sealed class SessionLifecycleTests : E2ETestBase,
             await sidebar.ExpectSessionHiddenAsync(sessionId);
 
             await dashboard.SetRetentionFilterAsync("Archived");
-            await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToBeVisibleAsync();
-            await sidebar.ExpectSessionVisibleAsync(sessionId);
-        });
-    }
-
-    [Fact]
-    public async Task Sidebar_Unarchive_RestoresSessionToActiveView()
-    {
-        await WithFailureCapture(async () =>
-        {
-            var dashboard = new FleetDashboardPage(Page);
-            var sidebar = new FleetSidebarPage(Page);
-            var sessionId = await CreateStoppedSessionAsync("Sidebar Unarchive Session", "msg-sidebar-unarchive-1", "Sidebar unarchive flow");
-
-            await ArchiveSessionFromSidebarAsync(dashboard, sidebar, sessionId);
-            await dashboard.SetRetentionFilterAsync("Archived");
-            await sidebar.ClickSessionMenuItemAsync(sessionId, "Unarchive");
-
-            await sidebar.ExpectSessionHiddenAsync(sessionId);
-
-            await dashboard.SetRetentionFilterAsync("Active");
             await Microsoft.Playwright.Assertions.Expect(dashboard.GetSessionCard(sessionId)).ToBeVisibleAsync();
             await sidebar.ExpectSessionVisibleAsync(sessionId);
         });
