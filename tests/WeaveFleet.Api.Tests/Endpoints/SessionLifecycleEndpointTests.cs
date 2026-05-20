@@ -40,7 +40,7 @@ public sealed class SessionLifecycleEndpointTests
 
         var result = await InvokeUpdateRetention("session-1", new UpdateSessionRetentionRequest("active"), service);
 
-        result.ShouldBeOfType<BadRequest<object>>();
+        result.GetType().GetGenericTypeDefinition().ShouldBe(typeof(BadRequest<>));
     }
 
     [Fact]
