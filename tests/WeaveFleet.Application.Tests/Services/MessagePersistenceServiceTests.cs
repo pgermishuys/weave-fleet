@@ -197,6 +197,30 @@ public sealed class MessagePersistenceServiceTests
     }
 
     [Fact]
+    public void BuildCommittedMessagePayload_IncludesFileParts()
+    {
+        var persisted = new PersistedMessage
+        {
+            Id = "msg-img",
+            SessionId = "session-1",
+            Role = "user",
+            PartsJson = """[{"type":"text","text":"Check this image"},{"type":"file","partId":"file-abc","mime":"image/png","url":"data:image/png;base64,abc","filename":"screenshot.png"}]""",
+            Timestamp = new DateTimeOffset(2026, 4, 15, 6, 0, 0, TimeSpan.Zero).ToString("O"),
+            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+        };
+
+        var payload = MessagePersistenceService.BuildCommittedMessagePayload(persisted);
+
+        var parts = payload.GetProperty("parts");
+        parts.GetArrayLength().ShouldBe(2);
+        parts[0].GetProperty("type").GetString().ShouldBe("text");
+        parts[1].GetProperty("type").GetString().ShouldBe("file");
+        parts[1].GetProperty("mime").GetString().ShouldBe("image/png");
+        parts[1].GetProperty("url").GetString().ShouldBe("data:image/png;base64,abc");
+        parts[1].GetProperty("filename").GetString().ShouldBe("screenshot.png");
+    }
+
+    [Fact]
     public void SanitizeDurableEventPayload_DropsReasoningPartUpdates()
     {
         var payload = JsonSerializer.SerializeToElement(new

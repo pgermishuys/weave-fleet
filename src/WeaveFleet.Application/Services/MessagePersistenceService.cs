@@ -334,6 +334,16 @@ public sealed class MessagePersistenceService
                     "text",
                     textPart.Text),
                 ApplicationJsonContext.Default.CommittedTextPart),
+            FilePart filePart => JsonSerializer.SerializeToElement(
+                new CommittedFilePart(
+                    filePart.PartId ?? $"{messageId}-file-{index}",
+                    messageId,
+                    sessionId,
+                    "file",
+                    filePart.Mime,
+                    filePart.Url,
+                    filePart.Filename),
+                ApplicationJsonContext.Default.CommittedFilePart),
             _ => null,
         };
     }
