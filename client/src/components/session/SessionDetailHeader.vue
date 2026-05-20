@@ -169,7 +169,7 @@ onUnmounted(() => {
       class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3"
     >
       <p class="text-sm text-foreground">
-        This session is archived. Unarchive before resuming or sending prompts from Session actions in the right panel.
+        This session is archived and read-only.
       </p>
     </div>
   </div>
