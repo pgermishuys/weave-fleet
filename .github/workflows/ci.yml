@@ -179,14 +179,18 @@ jobs:
       - name: Build solution
         run: dotnet build WeaveFleet.slnx --configuration Release
 
+      - name: Archive build artifacts
+        run: >
+          tar -cf e2e-build.tar
+          tests/WeaveFleet.E2E/bin/Release/
+          src/*/bin/Release/
+          client/dist/
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: e2e-build-${{ github.run_id }}
-          path: |
-            tests/WeaveFleet.E2E/bin/Release/
-            src/**/bin/Release/
-            client/dist/
+          path: e2e-build.tar
           retention-days: 1
 
   # ── Playwright E2E – per-lane test jobs ────────────────────────────────
@@ -223,6 +227,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: e2e-build-${{ github.run_id }}
+
+      - name: Extract build artifacts
+        run: tar -xf e2e-build.tar
 
       - name: Get installed Playwright version
         shell: pwsh
