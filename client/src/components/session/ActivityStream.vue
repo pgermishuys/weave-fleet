@@ -13,6 +13,7 @@ import type { CommandEventName } from "@/lib/command-events";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart } from "@/lib/api-types";
 import { isQuestionPart } from "@/lib/question-types";
 import { diagLog } from "@/lib/message-diagnostics";
+import { sortAccumulatedMessagesChronologically } from "@/lib/pagination-utils";
 import { useSessionsStore } from "@/stores/sessions";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 
@@ -160,7 +161,7 @@ watch(
 );
 
 const deliveredMessages = computed<ActivityMessage[]>(() => {
-  return sessionMessages.value
+  return sortAccumulatedMessagesChronologically(sessionMessages.value)
     .map((message) => {
       const author = getDisplayAuthor(message);
 
