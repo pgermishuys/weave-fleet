@@ -22,7 +22,8 @@ public sealed class HarnessSmokeTests : HarnessSmokeTestBase, IClassFixture<Play
 
     public static TheoryData<HarnessSmokeSpec> Harnesses => new()
     {
-        new HarnessSmokeSpec("opencode")
+        new HarnessSmokeSpec("opencode"),
+        new HarnessSmokeSpec("pi")
     };
 
     [HarnessSmokeTheory]
