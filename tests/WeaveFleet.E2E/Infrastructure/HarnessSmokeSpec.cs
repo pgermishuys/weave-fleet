@@ -11,7 +11,8 @@ public sealed record class HarnessSmokeSpec : IXunitSerializable
     [
         "opencode",
         "claude-code",
-        "nucode"
+        "nucode",
+        "pi"
     ];
 
     public HarnessSmokeSpec() { }
