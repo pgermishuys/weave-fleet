@@ -58,6 +58,7 @@ public sealed record HarnessInfo(
     string Type,
     string DisplayName,
     bool Available,
+    bool UserEnabled,
     string? Reason,
     HarnessCapabilities Capabilities);
 

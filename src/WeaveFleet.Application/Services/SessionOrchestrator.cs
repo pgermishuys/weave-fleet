@@ -36,6 +36,7 @@ public sealed partial class SessionOrchestrator(
     IHarnessEventLogRepository harnessEventLogRepository,
     DelegationService delegationService,
     ICredentialStore credentialStore,
+    IUserPreferenceRepository userPreferenceRepository,
     IUserContext userContext,
     FleetOptions options,
     ISmartLinkRepository smartLinkRepository,
@@ -53,6 +54,63 @@ public sealed partial class SessionOrchestrator(
 
         public Task<IReadOnlyList<HarnessEventLogEntry>> GetBySessionAfterAsync(string sessionId, long afterSequenceNumber, int limit)
             => Task.FromResult<IReadOnlyList<HarnessEventLogEntry>>([]);
+    }
+
+    private sealed class NoOpUserPreferenceRepository : IUserPreferenceRepository
+    {
+        public Task<string?> GetAsync(string key) => Task.FromResult<string?>(null);
+
+        public Task<IReadOnlyDictionary<string, string>> GetAllAsync()
+            => Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>());
+
+        public Task SetAsync(string key, string value) => Task.CompletedTask;
+    }
+
+    public SessionOrchestrator(
+        WorkspaceService workspaceService,
+        InstanceService instanceService,
+        SessionSourceResolutionService sessionSourceResolutionService,
+        IHarnessRegistry harnessRegistry,
+        InstanceTracker instanceTracker,
+        ISessionRepository sessionRepository,
+        ISessionSourceUsageRepository sessionSourceUsageRepository,
+        ISessionCallbackRepository sessionCallbackRepository,
+        IDelegationRepository delegationRepository,
+        IProjectRepository projectRepository,
+        IEventBroadcaster eventBroadcaster,
+        IAnalyticsCollector analyticsCollector,
+        IMessageRepository messageRepository,
+        DelegationService delegationService,
+        ICredentialStore credentialStore,
+        IUserPreferenceRepository userPreferenceRepository,
+        IUserContext userContext,
+        FleetOptions options,
+        ISmartLinkRepository smartLinkRepository,
+        ILogger<SessionOrchestrator> logger)
+        : this(
+            workspaceService,
+            instanceService,
+            sessionSourceResolutionService,
+            harnessRegistry,
+            instanceTracker,
+            sessionRepository,
+            sessionSourceUsageRepository,
+            sessionCallbackRepository,
+            delegationRepository,
+            projectRepository,
+            eventBroadcaster,
+            analyticsCollector,
+            messageRepository,
+            new NoOpHarnessEventLogRepository(),
+            delegationService,
+            credentialStore,
+            userPreferenceRepository,
+            userContext,
+            options,
+            smartLinkRepository,
+            logger,
+            sessionActivityWriteService: null)
+    {
     }
 
     public SessionOrchestrator(
@@ -92,6 +150,7 @@ public sealed partial class SessionOrchestrator(
             new NoOpHarnessEventLogRepository(),
             delegationService,
             credentialStore,
+            new NoOpUserPreferenceRepository(),
             userContext,
             options,
             smartLinkRepository,
@@ -100,7 +159,8 @@ public sealed partial class SessionOrchestrator(
     {
     }
 
-    private const string _defaultHarnessType = "opencode";
+    private const string _defaultHarnessTypePreferenceKey = "defaultHarnessType";
+    private const string _fallbackDefaultHarnessType = "opencode";
     private const string _scratchProjectName = "Scratch";
 
     // ── Create ─────────────────────────────────────────────────────────────────
@@ -140,7 +200,7 @@ public sealed partial class SessionOrchestrator(
             sourceResolutionResult.Value.Input.ContextEnvelope);
 
         // Resolve harness
-        var harnessType = request.HarnessType ?? _defaultHarnessType;
+        var harnessType = await ResolveHarnessTypeAsync(request);
         var harness = harnessRegistry.GetByType(harnessType);
         if (harness is null)
             return FleetError.NotFoundFor("Harness", harnessType);
@@ -980,6 +1040,19 @@ public sealed partial class SessionOrchestrator(
         }
 
         return $"{sourcePrompt}\n\n{normalizedInitialPrompt}";
+    }
+
+    private async Task<string> ResolveHarnessTypeAsync(CreateSessionRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.HarnessType))
+        {
+            return request.HarnessType;
+        }
+
+        var preferredHarnessType = await userPreferenceRepository.GetAsync(_defaultHarnessTypePreferenceKey).ConfigureAwait(false);
+        return string.IsNullOrWhiteSpace(preferredHarnessType)
+            ? _fallbackDefaultHarnessType
+            : preferredHarnessType;
     }
 
     // ── Delete ─────────────────────────────────────────────────────────────────

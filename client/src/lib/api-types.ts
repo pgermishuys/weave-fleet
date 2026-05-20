@@ -477,6 +477,8 @@ export interface HarnessInfo {
   displayName: string;
   /** Whether the harness is currently available (binary found, auth configured, etc.) */
   available: boolean;
+  /** Whether the harness is enabled by user preferences */
+  userEnabled: boolean;
   /** Human-readable reason if unavailable */
   reason?: string;
   /** Capabilities this harness supports */
