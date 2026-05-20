@@ -11,7 +11,6 @@ import {
   useRenameSession,
   useResumeSession,
   useTerminateSession,
-  useUnarchiveSession,
 } from "@/composables/use-session-actions";
 import { provideSessionDetailContext } from "@/composables/use-session-detail-context";
 import { useSessionTodos } from "@/composables/use-session-todos";
@@ -35,8 +34,6 @@ const del = useDeleteSession();
 const rename = useRenameSession();
 const resume = useResumeSession();
 const terminate = useTerminateSession();
-const unarchive = useUnarchiveSession();
-
 provideSessionDetailContext({
   apiBasePath: "/api/sessions",
   sessionRoutePath: "/sessions/$id",
@@ -50,7 +47,6 @@ provideSessionDetailContext({
   rename,
   resume,
   terminate,
-  unarchive,
 });
 
 // --- Collapsed rail: todos ---

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { Archive, ArchiveRestore, GitFork, Loader2, OctagonX, Pencil, RotateCcw, Square, Trash2 } from "lucide-vue-next";
+import { Archive, GitFork, Loader2, OctagonX, Pencil, RotateCcw, Square, Trash2 } from "lucide-vue-next";
 import ConfirmDeleteSessionDialog from "@/components/sessions/ConfirmDeleteSessionDialog.vue";
 import FilesChanged from "@/components/session/FilesChanged.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
@@ -72,7 +72,6 @@ const {
   error: resumeError,
 } = ctx.resume;
 const { terminateSession, isTerminating, error: terminateError } = ctx.terminate;
-const { unarchiveSession, isUnarchiving, error: unarchiveError } = ctx.unarchive;
 
 // Circular arc countdown for smart links refresh
 const ARC_RADIUS = 7;
@@ -140,15 +139,13 @@ const canResume = computed(() => {
 });
 const canStop = computed(() => isRunningSession.value);
 const canArchive = computed(() => effectiveRetentionStatus.value !== "archived" && !isRunningSession.value);
-const canUnarchive = computed(() => effectiveRetentionStatus.value === "archived");
 const isResumingCurrentSession = computed(() => isResuming.value && resumingSessionId.value === sessionId.value);
 const isAnyActionPending = computed(() => isAborting.value
   || isArchiving.value
   || isDeleting.value
   || isRenaming.value
   || isResumingCurrentSession.value
-  || isTerminating.value
-  || isUnarchiving.value);
+  || isTerminating.value);
 const actionErrors = computed(() => [
   abortError.value,
   archiveError.value,
@@ -156,7 +153,6 @@ const actionErrors = computed(() => [
   renameError.value,
   resumeError.value,
   terminateError.value,
-  unarchiveError.value,
 ].filter((message): message is string => Boolean(message)));
 
 const tokenMetrics = computed<readonly TokenMetric[]>(() => [
@@ -389,22 +385,6 @@ async function handleArchive(): Promise<void> {
     await archiveSession(sessionId.value);
     ctx.patchSession(sessionId.value, {
       retentionStatus: "archived",
-    });
-    refreshPanelData();
-  } catch {
-    // Error is exposed inline by the composable.
-  }
-}
-
-async function handleUnarchive(): Promise<void> {
-  if (!sessionId.value || !canUnarchive.value) {
-    return;
-  }
-
-  try {
-    await unarchiveSession(sessionId.value);
-    ctx.patchSession(sessionId.value, {
-      retentionStatus: "active",
     });
     refreshPanelData();
   } catch {
@@ -674,28 +654,6 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
           aria-hidden="true"
         />
         <Archive
-          v-else
-          :size="14"
-          aria-hidden="true"
-        />
-      </button>
-
-      <button
-        v-if="canUnarchive && ctx.supportsArchive"
-        type="button"
-        data-testid="session-unarchive-button"
-        class="session-action-toolbar__btn"
-        :disabled="isAnyActionPending || !sessionId"
-        title="Unarchive"
-        @click="handleUnarchive"
-      >
-        <Loader2
-          v-if="isUnarchiving"
-          :size="14"
-          class="session-action-toolbar__spinner"
-          aria-hidden="true"
-        />
-        <ArchiveRestore
           v-else
           :size="14"
           aria-hidden="true"

@@ -431,7 +431,7 @@ public sealed partial class SessionOrchestrator(
             return FleetError.NotFoundFor(nameof(Session), id);
 
         if (string.Equals(session.RetentionStatus, "archived", StringComparison.Ordinal))
-            return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions must be unarchived before they can be resumed.");
+            return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions cannot be resumed.");
 
         var workspaceResult = await workspaceService.GetWorkspaceDirectoryAsync(session.WorkspaceId);
         if (workspaceResult.IsFailure)
@@ -701,7 +701,7 @@ public sealed partial class SessionOrchestrator(
             return sessionResult.Error;
 
         if (string.Equals(sessionResult.Value.RetentionStatus, "archived", StringComparison.Ordinal))
-            return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only. Unarchive before sending prompts.");
+            return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only.");
 
         var instanceResult = await GetLiveInstanceAsync(id);
         if (instanceResult.IsFailure)
@@ -761,7 +761,7 @@ public sealed partial class SessionOrchestrator(
         {
             return FleetError.ValidationError(
                 "Session.RetentionStatus",
-                "Archived sessions are read-only. Unarchive before adding source context.");
+                "Archived sessions are read-only.");
         }
 
         var resolutionResult = await sessionSourceResolutionService.ResolveForSessionActionAsync(
@@ -805,7 +805,7 @@ public sealed partial class SessionOrchestrator(
         {
             return FleetError.ValidationError(
                 "Session.RetentionStatus",
-                "Archived sessions are read-only. Unarchive before adding source context.");
+                "Archived sessions are read-only.");
         }
 
         var resolutionResult = await sessionSourceResolutionService.ResolveForSessionActionAsync(
@@ -855,7 +855,7 @@ public sealed partial class SessionOrchestrator(
             return sessionResult.Error;
 
         if (string.Equals(sessionResult.Value.RetentionStatus, "archived", StringComparison.Ordinal))
-            return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only. Unarchive before aborting.");
+            return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only.");
 
         var instanceResult = await GetLiveInstanceAsync(id);
         if (instanceResult.IsFailure)
@@ -921,7 +921,7 @@ public sealed partial class SessionOrchestrator(
             return sessionResult.Error;
 
         if (string.Equals(sessionResult.Value.RetentionStatus, "archived", StringComparison.Ordinal))
-            return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only. Unarchive before sending commands.");
+            return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only.");
 
         var instanceResult = await GetLiveInstanceAsync(id);
         if (instanceResult.IsFailure)
@@ -1146,44 +1146,13 @@ public sealed partial class SessionOrchestrator(
         return Unit.Value;
     }
 
-    public async Task<Result<Unit>> UnarchiveSessionAsync(string id, CancellationToken ct = default)
+#pragma warning disable CA1822 // Interface method cannot be static
+    public Task<Result<Unit>> UnarchiveSessionAsync(string id, CancellationToken ct = default)
     {
-        using var _ = BeginSessionScope(id);
-        var session = await sessionRepository.GetByIdAsync(id);
-        if (session is null)
-            return FleetError.NotFoundFor(nameof(Session), id);
-
-        if (!string.Equals(session.RetentionStatus, "archived", StringComparison.Ordinal))
-            return Unit.Value;
-
-        var changedAt = DateTime.UtcNow.ToString("O");
-        if (sessionActivityWriteService is null)
-        {
-            await sessionRepository.UnarchiveAsync(id);
-            await eventBroadcaster.BroadcastAsync("sessions", "session_unarchived",
-                JsonSerializer.SerializeToElement(new SessionUnarchivedOutboxPayload(id), ApplicationJsonContext.Default.SessionUnarchivedOutboxPayload),
-                session.UserId, ct);
-        }
-        else
-        {
-            await sessionActivityWriteService.WriteAsync(
-                new SessionActivityWriteRequest
-                {
-                    SessionUnarchives = [id],
-                    OutboxMessages =
-                    [
-                        CreateSessionLifecycleOutboxMessage(
-                            "session_unarchived",
-                            JsonSerializer.Serialize(new SessionUnarchivedOutboxPayload(id), ApplicationJsonContext.Default.SessionUnarchivedOutboxPayload),
-                            changedAt,
-                            session.UserId)
-                    ]
-                },
-                ct);
-        }
-
-        return Unit.Value;
+        return Task.FromResult<Result<Unit>>(
+            FleetError.ValidationError("Session.RetentionStatus", "Archived sessions cannot be unarchived."));
     }
+#pragma warning restore CA1822
 
     public async Task<Result<Unit>> DeleteSessionAsync(string id, CancellationToken ct = default)
     {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { Archive, RotateCcw, Square, Trash2 } from "lucide-vue-next";
+import { Archive, Square, Trash2 } from "lucide-vue-next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,7 +8,6 @@ import {
   useArchiveSession,
   useDeleteSession,
   useTerminateSession,
-  useUnarchiveSession,
 } from "@/composables/use-session-actions";
 import type { SessionListItem } from "@/lib/api-types";
 import { sessionCache } from "@/lib/session-cache";
@@ -30,7 +29,6 @@ const emit = defineEmits<Emits>();
 const sessionsStore = useSessionsStore();
 
 const { archiveSession, isArchiving } = useArchiveSession();
-const { unarchiveSession, isUnarchiving } = useUnarchiveSession();
 const { terminateSession, isTerminating } = useTerminateSession();
 const { deleteSession, isDeleting } = useDeleteSession();
 const isDeleteDialogOpen = shallowRef(false);
@@ -41,10 +39,9 @@ const displayTitle = computed(() => props.session.session.title?.trim() || "Unti
 const isArchived = computed(() => props.session.retentionStatus === "archived");
 const isRunning = computed(() => props.session.lifecycleStatus === "running");
 const canArchive = computed(() => !isArchived.value && !isRunning.value);
-const canUnarchive = computed(() => isArchived.value);
 const canTerminate = computed(() => isRunning.value);
 const isPending = computed(() => {
-  return isArchiving.value || isDeleting.value || isTerminating.value || isUnarchiving.value;
+  return isArchiving.value || isDeleting.value || isTerminating.value;
 });
 
 
@@ -81,16 +78,6 @@ async function handleArchive(): Promise<void> {
   try {
     await archiveSession(sessionId.value);
     sessionsStore.patchSession(sessionId.value, { retentionStatus: "archived" });
-    emit("changed");
-  } catch {
-    // Mutation state is owned by the composable.
-  }
-}
-
-async function handleUnarchive(): Promise<void> {
-  try {
-    await unarchiveSession(sessionId.value);
-    sessionsStore.patchSession(sessionId.value, { retentionStatus: "active" });
     emit("changed");
   } catch {
     // Mutation state is owned by the composable.
@@ -194,18 +181,6 @@ function openDeleteDialog(): void {
             @click.stop="void handleArchive()"
           >
             <Archive class="h-4 w-4" />
-          </Button>
-
-          <Button
-            v-if="canUnarchive"
-            data-testid="session-unarchive-button"
-            variant="outline"
-            size="icon-sm"
-            :disabled="isPending"
-            aria-label="Unarchive session"
-            @click.stop="void handleUnarchive()"
-          >
-            <RotateCcw class="h-4 w-4" />
           </Button>
 
           <Button

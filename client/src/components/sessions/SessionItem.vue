@@ -30,7 +30,6 @@ import {
   useRenameSession,
   useResumeSession,
   useTerminateSession,
-  useUnarchiveSession,
 } from "@/composables/use-session-actions";
 import { useProjects } from "@/composables/use-projects";
 import type { SessionListItem } from "@/lib/api-types";
@@ -84,10 +83,6 @@ const {
   isArchiving,
 } = useArchiveSession();
 const {
-  unarchiveSession,
-  isUnarchiving,
-} = useUnarchiveSession();
-const {
   forkSession,
   isForking,
   forkingSessionId,
@@ -125,7 +120,6 @@ const canResume = computed(() => {
   }
 });
 const canArchive = computed(() => !isArchivedSession.value);
-const canUnarchive = computed(() => isArchivedSession.value);
 const hasWorktree = computed(() => props.session.isolationStrategy === "worktree");
 const isForkingCurrentSession = computed(() => isForking.value && forkingSessionId.value === sessionId.value);
 const isResumingCurrentSession = computed(() => isResuming.value && resumingSessionId.value === sessionId.value);
@@ -136,8 +130,7 @@ const isAnyActionPending = computed(() =>
   || isMoving.value
   || isRenaming.value
   || isResumingCurrentSession.value
-  || isTerminating.value
-  || isUnarchiving.value,
+   || isTerminating.value
 );
 
 const isDraggable = computed(() => !isInlineEditing.value && !isAnyActionPending.value);
@@ -309,15 +302,6 @@ async function handleArchive(deleteWorktree: boolean): Promise<void> {
   }
 }
 
-async function handleUnarchive(): Promise<void> {
-  try {
-    await unarchiveSession(sessionId.value);
-    syncSessionStore({ retentionStatus: "active" });
-  } catch {
-    // Errors are handled by the mutation composable state.
-  }
-}
-
 async function handleFork(): Promise<void> {
   try {
     const response = await forkSession(sessionId.value);
@@ -473,15 +457,6 @@ function removeSessionFromStore(): void {
       >
         <Check class="size-3.5" />
         Complete
-      </ContextMenuItem>
-
-      <ContextMenuItem
-        v-if="canUnarchive"
-        :disabled="isAnyActionPending"
-        @select="handleUnarchive"
-      >
-        <Play class="size-3.5" />
-        Unarchive
       </ContextMenuItem>
 
       <ContextMenuItem

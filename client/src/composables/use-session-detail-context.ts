@@ -45,12 +45,6 @@ export interface SessionTerminateActions {
   error: Readonly<ShallowRef<string | undefined>>;
 }
 
-export interface SessionUnarchiveActions {
-  unarchiveSession: (sessionId: string) => Promise<void>;
-  isUnarchiving: Readonly<ShallowRef<boolean>>;
-  error: Readonly<ShallowRef<string | undefined>>;
-}
-
 // ---------------------------------------------------------------------------
 // Context shape
 // ---------------------------------------------------------------------------
@@ -72,7 +66,7 @@ export interface SessionDetailContext {
   supportsFork: boolean;
 
   /**
-   * Whether the Archive/Unarchive actions are available.
+   * Whether the Archive action is available.
    */
   supportsArchive: boolean;
 
@@ -93,7 +87,6 @@ export interface SessionDetailContext {
   rename: SessionRenameActions;
   resume: SessionResumeActions;
   terminate: SessionTerminateActions;
-  unarchive: SessionUnarchiveActions;
 }
 
 // ---------------------------------------------------------------------------
