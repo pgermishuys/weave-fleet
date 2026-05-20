@@ -2,7 +2,10 @@
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
-    <IsTestProject>true</IsTestProject>
+    <IsTestProject>false</IsTestProject>
+    <!-- Prevent MTP targets from erroring during 'dotnet test' on .NET 10+.
+         This project uses xunit.v3 MTP and is run via 'dotnet exec' in CI. -->
+    <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
     <OutputType>Exe</OutputType>
     <RootNamespace>NuCode.ConformanceTests</RootNamespace>
     <NoWarn>$(NoWarn);CA1305;CA1310;CA1826;CA1861;CA1859;CA2201</NoWarn>
@@ -13,7 +16,6 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="xunit.v3.core.mtp-v2" />
     <PackageReference Include="Shouldly" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
   </ItemGroup>
 
   <ItemGroup>
