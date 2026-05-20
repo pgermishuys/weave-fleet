@@ -33,6 +33,15 @@ const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
   hour12: true,
 });
 
+const absoluteDateTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+
 /**
  * Format a unix-ms timestamp for message display.
  * - Same calendar day as now → "2:34 PM" (time only)
@@ -51,6 +60,16 @@ export function formatTimestamp(timestamp: number | undefined | null): string {
     date.getDate() === now.getDate();
 
   return sameDay ? timeOnlyFormatter.format(date) : dateTimeFormatter.format(date);
+}
+
+/**
+ * Format a unix-ms timestamp as a full absolute date+time string, always including the date.
+ * e.g. "May 19, 2025, 11:16 PM"
+ * - Falsy / NaN → "" (graceful fallback)
+ */
+export function formatAbsoluteTimestamp(timestamp: number | undefined | null): string {
+  if (!timestamp || isNaN(timestamp)) return "";
+  return absoluteDateTimeFormatter.format(new Date(timestamp));
 }
 
 /**

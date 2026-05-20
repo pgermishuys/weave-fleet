@@ -7,6 +7,9 @@ import ToolCard from "@/components/session/ToolCard.vue";
 import QuestionCard from "@/components/session/QuestionCard.vue";
 import type { AccumulatedToolPart } from "@/lib/api-types";
 import { useQuestionAnswer } from "@/composables/use-question-answer";
+import { useRelativeTime } from "@/composables/use-relative-time";
+import { formatRelativeTime, formatAbsoluteTimestamp } from "@/lib/format-utils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ToolCardDiffLine {
   type: "add" | "remove" | "context";
@@ -35,7 +38,7 @@ const props = defineProps<{
   author: string;
   modelId?: string;
   role: "user" | "assistant";
-  timestamp: string;
+  createdAt?: number;
   body: string;
   images?: ImageAttachmentDisplay[];
   tools?: ToolCardItem[];
@@ -46,6 +49,10 @@ const props = defineProps<{
 }>();
 
 const lightboxUrl = ref<string | null>(null);
+
+const now = useRelativeTime();
+const relativeTime = computed(() => props.createdAt ? formatRelativeTime(props.createdAt, now.value) : "");
+const absoluteTime = computed(() => formatAbsoluteTimestamp(props.createdAt));
 
 // ── Question answer handler (only created when there are question parts) ──
 const questionAnswer = props.sessionId ? useQuestionAnswer(props.sessionId) : null;
@@ -116,7 +123,7 @@ const displayModelId = computed(() => {
     :data-role="role"
   >
     <div
-      v-if="showIdentity || timestamp"
+      v-if="showIdentity || createdAt"
       class="msg-header"
     >
       <span
@@ -133,12 +140,16 @@ const displayModelId = computed(() => {
       >
         · {{ displayModelId }}
       </span>
-      <span
-        v-if="timestamp"
-        class="msg-timestamp"
-      >
-        {{ timestamp }}
-      </span>
+      <TooltipProvider v-if="createdAt">
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <span class="msg-timestamp">{{ relativeTime }}</span>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            {{ absoluteTime }}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
 
     <div class="msg-body">
