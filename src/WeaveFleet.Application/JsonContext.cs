@@ -26,6 +26,15 @@ internal sealed record CommittedTextPart(
     string Type,
     string Text);
 
+internal sealed record CommittedFilePart(
+    string Id,
+    string MessageID,
+    string SessionID,
+    string Type,
+    string Mime,
+    string Url,
+    string? Filename);
+
 // ── Session lifecycle outbox payload types (replaces anonymous types in SessionOrchestrator) ─────
 
 internal sealed record SessionCreatedOutboxPayload
@@ -74,6 +83,7 @@ internal sealed record DirectorySourceInput
 [JsonSerializable(typeof(DelegationEventDto))]
 [JsonSerializable(typeof(CommittedMessage))]
 [JsonSerializable(typeof(CommittedTextPart))]
+[JsonSerializable(typeof(CommittedFilePart))]
 [JsonSerializable(typeof(SessionCreatedOutboxPayload))]
 [JsonSerializable(typeof(SessionStoppedOutboxPayload))]
 [JsonSerializable(typeof(SessionArchivedOutboxPayload))]
