@@ -5,22 +5,21 @@ namespace WeaveFleet.E2E.Infrastructure;
 
 /// <summary>
 /// Abstract base class for opt-in Playwright smoke tests that exercise the real harness runtime.
-/// Provides a fresh browser context, page, Fleet server URL, and per-run OpenCode working directory.
+/// Provides a fresh browser context, page, Fleet server URL, and per-run harness working directory.
 /// Captures Playwright traces and screenshots on test failure.
 /// </summary>
 [Trait("Category", "HarnessSmoke")]
-public abstract class HarnessSmokeTestBase : IAsyncLifetime
+public abstract class HarnessSmokeTestBase
 {
     private const string AlwaysSaveTraceEnvironmentVariable = "ALWAYS_SAVE_TRACE";
     private const string SmokeEnvironmentVariable = "FLEET_HARNESS_SMOKE";
-    private readonly SmokeFleetWebApplicationFactory _factory;
     private readonly PlaywrightFixture _playwright;
+    private SmokeFleetWebApplicationFactory? _factory;
     private IBrowserContext? _context;
     private bool _testFailed;
 
-    protected HarnessSmokeTestBase(SmokeFleetWebApplicationFactory factory, PlaywrightFixture playwright)
+    protected HarnessSmokeTestBase(PlaywrightFixture playwright)
     {
-        _factory = factory;
         _playwright = playwright;
     }
 
@@ -28,22 +27,38 @@ public abstract class HarnessSmokeTestBase : IAsyncLifetime
     protected IPage Page { get; private set; } = null!;
 
     /// <summary>The server base URL for this test (e.g. <c>http://127.0.0.1:54321</c>).</summary>
-    protected string ServerUrl => _factory.ServerUrl;
+    protected string ServerUrl => CurrentFactory.ServerUrl;
 
     /// <summary>The per-run temporary directory smoke tests should use for real harness sessions.</summary>
-    protected string WorkingDirectory => _factory.WorkingDirectory;
+    protected string WorkingDirectory => CurrentFactory.WorkingDirectory;
 
     /// <summary>Returns the DI service provider from the running Kestrel host.</summary>
-    protected IServiceProvider KestrelServices => _factory.KestrelServices;
+    protected IServiceProvider KestrelServices => CurrentFactory.KestrelServices;
 
-    // ── IAsyncLifetime ───────────────────────────────────────────────────────
-
-    public virtual async Task InitializeAsync()
+    protected async Task RunWithHarnessSmokeFactoryAsync(HarnessSmokeSpec spec, Func<Task> action)
     {
         SkipUnlessHarnessSmokeEnabled();
 
-        // Ensure the Kestrel server is started (idempotent) with real harness registrations preserved.
-        await _factory.EnsureStartedAsync();
+        await using var factory = new SmokeFleetWebApplicationFactory(spec);
+        _factory = factory;
+
+        try
+        {
+            // Ensure the Kestrel server is started with real harness registrations preserved.
+            await factory.EnsureStartedAsync();
+            await InitializeBrowserContextAsync();
+            await WithFailureCapture(action);
+        }
+        finally
+        {
+            await DisposeBrowserContextAsync();
+            _factory = null;
+        }
+    }
+
+    private async Task InitializeBrowserContextAsync()
+    {
+        _testFailed = false;
 
         // Create a fresh isolated browser context per test. Smoke tests use longer timeouts because
         // real harness startup and event responses are slower than TestHarness-backed E2E tests.
@@ -67,7 +82,7 @@ public abstract class HarnessSmokeTestBase : IAsyncLifetime
         Page.SetDefaultNavigationTimeout(30_000);
     }
 
-    public virtual async Task DisposeAsync()
+    private async Task DisposeBrowserContextAsync()
     {
         if (_context is null)
             return;
@@ -102,6 +117,7 @@ public abstract class HarnessSmokeTestBase : IAsyncLifetime
         }
 
         await _context.DisposeAsync();
+        _context = null;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -128,6 +144,9 @@ public abstract class HarnessSmokeTestBase : IAsyncLifetime
             throw;
         }
     }
+
+    private SmokeFleetWebApplicationFactory CurrentFactory => _factory
+        ?? throw new InvalidOperationException("Harness smoke factory has not been started for this test invocation.");
 
     private static void SkipUnlessHarnessSmokeEnabled()
     {
