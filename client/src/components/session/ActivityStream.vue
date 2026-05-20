@@ -750,7 +750,7 @@ function getStringValue(value: unknown): string | undefined {
 }
 
 .activity-stream {
-  --activity-bubble-width: min(96%, 80rem);
+  --activity-bubble-width: 100%;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -835,7 +835,8 @@ function getStringValue(value: unknown): string | undefined {
 }
 
 .activity-message--user {
-  align-items: flex-end;
+  align-items: flex-start;
+  padding-left: 32px;
 }
 
 .activity-message--first,
