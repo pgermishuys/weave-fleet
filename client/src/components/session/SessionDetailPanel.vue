@@ -805,7 +805,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 8px;
+  padding: 4px;
   margin-bottom: 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-card);

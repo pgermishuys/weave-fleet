@@ -574,8 +574,8 @@ async function diagnoseThread(thread: ReviewThread): Promise<void> {
 .smart-link-item {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 6px;
+  padding: 6px 4px;
 }
 
 .smart-link-icon {
