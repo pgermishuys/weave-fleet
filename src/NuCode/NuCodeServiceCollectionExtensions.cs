@@ -104,6 +104,7 @@ public static class NuCodeServiceCollectionExtensions
                 sp.GetRequiredService<IPluginRegistry>(),
                 sp.GetRequiredService<IChatClient>(),
                 configMonitor.CurrentValue.Compaction,
+                sp.GetService<TimeProvider>() ?? TimeProvider.System,
                 sp.GetRequiredService<ILoggerFactory>()
                     .CreateLogger<CompactionService>());
         });

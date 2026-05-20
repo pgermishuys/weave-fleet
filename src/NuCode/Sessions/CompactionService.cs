@@ -26,6 +26,7 @@ internal sealed class CompactionService : ICompactionService
     private readonly IPluginRegistry _pluginRegistry;
     private readonly IChatClient _chatClient;
     private readonly CompactionConfig _config;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<CompactionService> _logger;
 
     public CompactionService(
@@ -33,12 +34,14 @@ internal sealed class CompactionService : ICompactionService
         IPluginRegistry pluginRegistry,
         IChatClient chatClient,
         CompactionConfig? config,
+        TimeProvider timeProvider,
         ILogger<CompactionService> logger)
     {
         _sessionService = sessionService;
         _pluginRegistry = pluginRegistry;
         _chatClient = chatClient;
         _config = config ?? new CompactionConfig();
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -151,7 +154,7 @@ internal sealed class CompactionService : ICompactionService
             var summaryText = await GenerateSummaryAsync(transcript, ct);
 
             // Delete or mark old messages
-            var compactedAt = DateTimeOffset.UtcNow;
+            var compactedAt = _timeProvider.GetUtcNow();
             if (_config.Prune == true)
             {
                 foreach (var idx in indicesToCompact)
@@ -182,7 +185,7 @@ internal sealed class CompactionService : ICompactionService
             var summaryMessage = new UserMessage(
                 summaryMessageId,
                 sessionId,
-                DateTimeOffset.UtcNow,
+                _timeProvider.GetUtcNow(),
                 Agent: "compaction",
                 SystemPrompt: null);
             await _sessionService.UpsertMessageAsync(summaryMessage, ct);
