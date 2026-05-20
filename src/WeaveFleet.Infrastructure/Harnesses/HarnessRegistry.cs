@@ -44,6 +44,7 @@ public sealed class HarnessRegistry : IHarnessRegistry
                     harness.Type,
                     harness.DisplayName,
                     availability.Available,
+                    UserEnabled: false,
                     availability.Reason,
                     harness.Capabilities);
             }
@@ -53,6 +54,7 @@ public sealed class HarnessRegistry : IHarnessRegistry
                     harness.Type,
                     harness.DisplayName,
                     Available: false,
+                    UserEnabled: false,
                     Reason: "No runtime registered.",
                     harness.Capabilities);
             }

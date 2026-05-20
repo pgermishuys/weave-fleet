@@ -244,6 +244,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(Microsoft.AspNetCore.Mvc.ProblemDetails))]
 // Harnesses
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Harnesses.HarnessInfo>))]
+[JsonSerializable(typeof(List<WeaveFleet.Application.Harnesses.HarnessInfo>))]
 // Plugins
 [JsonSerializable(typeof(PluginListResponse))]
 [JsonSerializable(typeof(PluginDescriptorItem))]

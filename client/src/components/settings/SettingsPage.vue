@@ -8,7 +8,7 @@ import FeaturesSection from "@/components/settings/FeaturesSection.vue";
 import SystemSection from "@/components/settings/SystemSection.vue";
 import CredentialsSection from "@/components/settings/CredentialsSection.vue";
 import SkillsSection from "@/components/settings/SkillsSection.vue";
-import NuCodeSection from "@/components/settings/NuCodeSection.vue";
+import HarnessesSection from "@/components/settings/HarnessesSection.vue";
 import WorkspaceSection from "@/components/settings/WorkspaceSection.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { usePluginRuntime } from "@/plugins/composable";
@@ -48,7 +48,7 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
             Settings
           </h1>
           <p class="text-sm text-muted">
-            Manage credentials, workspace preferences, appearance, skills, system details, and plugin-provided settings.
+            Manage credentials, workspace preferences, appearance, skills, harnesses, system details, and plugin-provided settings.
           </p>
         </div>
       </div>
@@ -68,7 +68,7 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
 
     <FeaturesSection v-else-if="activeSection === 'features'" />
 
-    <NuCodeSection v-else-if="activeSection === 'nucode'" />
+    <HarnessesSection v-else-if="activeSection === 'harnesses' || activeSection === 'nucode'" />
 
     <section
       v-else-if="activeSection === 'plugins'"

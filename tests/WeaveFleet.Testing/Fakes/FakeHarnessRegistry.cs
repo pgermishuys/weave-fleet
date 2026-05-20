@@ -37,12 +37,12 @@ public sealed class FakeHarnessRegistry : IHarnessRegistry
             var runtime = GetRuntimeByType(harness.Type);
             if (runtime is null)
             {
-                results.Add(new HarnessInfo(harness.Type, harness.DisplayName, false, "No runtime registered.", harness.Capabilities));
+                results.Add(new HarnessInfo(harness.Type, harness.DisplayName, false, false, "No runtime registered.", harness.Capabilities));
                 continue;
             }
 
             var availability = await runtime.CheckAvailabilityAsync(ct);
-            results.Add(new HarnessInfo(harness.Type, harness.DisplayName, availability.Available, availability.Reason, harness.Capabilities));
+            results.Add(new HarnessInfo(harness.Type, harness.DisplayName, availability.Available, false, availability.Reason, harness.Capabilities));
         }
         return results;
     }
