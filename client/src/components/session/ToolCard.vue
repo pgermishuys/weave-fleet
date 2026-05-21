@@ -2,6 +2,7 @@
 import { computed, shallowRef, watch } from "vue";
 import { ChevronDown } from "lucide-vue-next";
 import DiffView from "@/components/session/DiffView.vue";
+import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
 interface DiffLine {
@@ -60,6 +61,24 @@ const cardClassName = computed(() => ({
   collapsed: isCollapsed.value,
 }));
 
+const TOOL_STATUS_TO_GLYPH: Record<string, string> = {
+  Pending: "idle",
+  Running: "resuming",
+  Completed: "completed",
+  Error: "error",
+};
+
+const glyphStatus = computed(() => TOOL_STATUS_TO_GLYPH[props.status] ?? "idle");
+
+const STATUS_COLOR: Record<string, string> = {
+  Pending: "var(--muted)",
+  Running: "var(--running)",
+  Completed: "var(--complete)",
+  Error: "var(--error)",
+};
+
+const statusColor = computed(() => STATUS_COLOR[props.status] ?? "var(--muted)");
+
 function toggleCollapsed(): void {
   isCollapsed.value = !isCollapsed.value;
 }
@@ -88,7 +107,9 @@ function toggleCollapsed(): void {
         <span class="tool-header__kind">{{ kind }}</span>
         <span class="tool-header__title">{{ title }}</span>
       </div>
-      <span class="tool-header__status">{{ status }}</span>
+      <span class="tool-header__status" :style="{ color: statusColor }">
+        <StatusGlyph :status="glyphStatus" />
+      </span>
     </button>
 
     <Transition name="collapse">
@@ -200,7 +221,8 @@ function toggleCollapsed(): void {
 }
 
 .tool-header__status {
-  color: var(--muted);
+  display: flex;
+  align-items: center;
   font-size: 10px;
 }
 
