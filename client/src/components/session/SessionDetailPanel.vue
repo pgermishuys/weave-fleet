@@ -7,7 +7,6 @@ import FilesChanged from "@/components/session/FilesChanged.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
 import SmartLinkItem from "@/plugins/builtin/smart-links/SmartLinkItem.vue";
 import TodoListView from "@/components/session/TodoListView.vue";
-import TokenGrid from "@/components/session/TokenGrid.vue";
 import { useSessionTodos } from "@/composables/use-session-todos";
 import { useSessionDetailContext } from "@/composables/use-session-detail-context";
 import { useDiffs } from "@/composables/use-diffs";
@@ -16,13 +15,6 @@ import { trackAction } from "@/lib/track-action";
 import type { SessionListItem } from "@/lib/api-types";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { secondsUntilRefresh, isRefreshing, refreshNow, POLL_INTERVAL_SECONDS } from "@/plugins/builtin/smart-links/composables/use-smart-links";
-
-interface TokenMetric {
-  id: string;
-  label: string;
-  value: string;
-  helper: string;
-}
 
 interface ChangedFile {
   path: string;
@@ -100,10 +92,6 @@ const smartLinkIssues = computed(() => activeSmartLinks.value.filter(l => l.reso
 const resolvedInstanceId = computed(() => normalizeString(props.session?.instanceId) ?? normalizeString(remoteSessionDetail.value?.instanceId));
 const todoSessionId = computed(() => sessionId.value ?? "");
 const todoInstanceId = computed(() => resolvedInstanceId.value ?? "");
-const totalTokens = computed(() => props.session?.totalTokens ?? remoteSessionDetail.value?.totalTokens ?? null);
-const totalCostUsd = computed(() => props.session?.totalCost ?? remoteSessionDetail.value?.totalCost ?? null);
-const effectiveIsolationStrategy = computed(() => props.session?.isolationStrategy ?? remoteSessionDetail.value?.isolationStrategy);
-const isolationLabel = computed(() => formatIsolationStrategy(effectiveIsolationStrategy.value));
 const sessionTitle = computed(() => normalizeString(props.session?.session.title) ?? normalizeString(remoteSessionDetail.value?.title) ?? "Untitled session");
 const effectiveSessionStatus = computed(() => props.session?.sessionStatus
   ?? remoteSessionDetail.value?.lifecycleStatus
@@ -154,33 +142,6 @@ const actionErrors = computed(() => [
   resumeError.value,
   terminateError.value,
 ].filter((message): message is string => Boolean(message)));
-
-const tokenMetrics = computed<readonly TokenMetric[]>(() => [
-  {
-    id: "tokens",
-    label: "Total tokens",
-    value: formatNumber(totalTokens.value),
-    helper: "Across all session messages",
-  },
-  {
-    id: "cost",
-    label: "Total cost",
-    value: formatCurrency(totalCostUsd.value),
-    helper: "Estimated session spend",
-  },
-  {
-    id: "files",
-    label: "Files changed",
-    value: isLoadingFilesChanged.value ? "…" : filesChanged.value.length.toLocaleString(),
-    helper: filesChangedError.value ? "Diff summary unavailable" : "Tracked via session diffs",
-  },
-  {
-    id: "isolation",
-    label: "Isolation",
-    value: isolationLabel.value,
-    helper: "Workspace strategy",
-  },
-]);
 
 watch(
   [sessionId, refreshVersion],
@@ -454,40 +415,6 @@ function normalizeRetentionStatus(value: string | null | undefined): "active" | 
   return value === "archived" ? "archived" : "active";
 }
 
-function formatIsolationStrategy(strategy: string | null | undefined): string {
-  switch (strategy) {
-    case "existing":
-      return "Existing";
-    case "worktree":
-      return "Worktree";
-    case "clone":
-      return "Clone";
-    default:
-      return "Unknown";
-  }
-}
-
-function formatNumber(value: number | null): string {
-  if (value === null) {
-    return "—";
-  }
-
-  return value.toLocaleString();
-}
-
-function formatCurrency(amount: number | null): string {
-  if (amount === null) {
-    return "—";
-  }
-
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
-
 async function handleDismissSmartLink(linkId: string): Promise<void> {
   const sid = sessionId.value;
   if (!sid) return;
@@ -684,8 +611,6 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       />
     </article>
 
-    <TokenGrid :metrics="tokenMetrics" />
-
     <article class="session-section-card">
       <p
         v-if="filesChangedError && !isLoadingFilesChanged"
@@ -799,16 +724,16 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
 .session-detail-panel {
   display: flex;
   flex-direction: column;
+  gap: 8px;
 }
 
 .session-section-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 4px;
-  margin-bottom: 8px;
+  gap: 8px;
+  padding: 7px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  border-radius: 10px;
   background: var(--card-bg);
 }
 
@@ -816,19 +741,23 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
 .session-section-card__title {
   margin: 0;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  text-transform: uppercase;
   color: var(--text);
 }
 
 .session-section-card__note {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
+  line-height: 1.35;
   color: var(--muted);
 }
 
@@ -841,23 +770,28 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
 .session-action-toolbar {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .session-action-toolbar__btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
+  border-radius: 6px;
   background: transparent;
   color: var(--text);
   cursor: pointer;
+}
+
+.session-action-toolbar__btn :deep(svg) {
+  width: 12px;
+  height: 12px;
 }
 
 .session-action-toolbar__btn:hover:not(:disabled) {
@@ -881,7 +815,8 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
 
 .session-action-toolbar__divider {
   width: 1px;
-  height: 18px;
+  height: 16px;
+  margin-inline: 2px;
   background: var(--border);
 }
 
@@ -891,8 +826,8 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
 
 .session-action-toolbar__error {
   width: 100%;
-  margin: 4px 0 0;
-  font-size: 11px;
+  margin: 2px 0 0;
+  font-size: 10px;
   color: var(--error);
 }
 
@@ -907,8 +842,8 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 0;
   border-radius: 4px;

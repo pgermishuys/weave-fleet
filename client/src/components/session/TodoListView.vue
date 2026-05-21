@@ -123,26 +123,26 @@ function getStatusIndicatorClass(status: TodoEntry["status"]): string {
 .todo-list-view {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 7px;
 }
 
 .todo-list-view__summary-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
 }
 
 .todo-list-view__summary,
 .todo-list-view__count,
 .todo-list-view__empty {
   margin: 0;
-  font-size: 10px;
+  font-size: 9px;
   color: var(--muted);
 }
 
 .todo-list-view__progress {
-  height: 6px;
+  height: 4px;
 }
 
 .todo-list-view__list {
@@ -151,15 +151,15 @@ function getStatusIndicatorClass(status: TodoEntry["status"]): string {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .todo-list-view__item {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  font-size: 11px;
-  line-height: 1.4;
+  gap: 6px;
+  font-size: 10.5px;
+  line-height: 1.35;
 }
 
 .todo-list-view__status-indicator {
@@ -167,8 +167,8 @@ function getStatusIndicatorClass(status: TodoEntry["status"]): string {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   flex-shrink: 0;
   margin-top: 1px;
   border-radius: 999px;
@@ -177,8 +177,8 @@ function getStatusIndicatorClass(status: TodoEntry["status"]): string {
 }
 
 .todo-list-view__status-indicator-core {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--muted) 72%, transparent);
 }
@@ -189,8 +189,8 @@ function getStatusIndicatorClass(status: TodoEntry["status"]): string {
 }
 
 .todo-list-view__status-indicator--pending .todo-list-view__status-indicator-core {
-  width: 4px;
-  height: 4px;
+  width: 3px;
+  height: 3px;
   background: color-mix(in srgb, var(--muted) 78%, transparent);
 }
 
@@ -235,9 +235,9 @@ function getStatusIndicatorClass(status: TodoEntry["status"]): string {
 
 .todo-priority-badge {
   margin-top: 1px;
-  padding: 0 4px;
-  font-size: 10px;
-  line-height: 1.4;
+  padding: 0 3px;
+  font-size: 9px;
+  line-height: 1.3;
 }
 
 .todo-priority-badge--high {

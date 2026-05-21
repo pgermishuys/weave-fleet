@@ -38,41 +38,49 @@ defineProps<{
 .token-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
 .token-card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-btn);
-  padding: 10px;
+  padding: 7px 8px;
 }
 
 .token-card__label {
   margin: 0;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.045em;
+  line-height: 1.2;
   text-transform: uppercase;
   color: var(--muted);
 }
 
 .token-card__value {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.2;
   color: var(--text);
 }
 
 .token-card__helper {
   margin: 0;
-  font-size: 10px;
-  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  line-height: 1.25;
   color: var(--muted);
 }
 </style>
