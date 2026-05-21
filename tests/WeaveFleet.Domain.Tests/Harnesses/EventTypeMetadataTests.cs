@@ -23,6 +23,7 @@ public sealed class EventTypeMetadataTests
         var classification = EventTypeMetadata.Classify(eventType);
         classification.IsDurable.ShouldBeTrue();
         classification.IsEphemeralRelay.ShouldBeFalse();
+        classification.IsAdvisory.ShouldBeFalse();
     }
 
     // -----------------------------------------------------------------------
@@ -41,6 +42,18 @@ public sealed class EventTypeMetadataTests
         var classification = EventTypeMetadata.Classify(eventType);
         classification.IsEphemeralRelay.ShouldBeTrue();
         classification.IsDurable.ShouldBeFalse();
+        classification.IsAdvisory.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void session_created_is_classified_as_advisory_ephemeral_relay()
+    {
+        var classification = EventTypeMetadata.Classify(EventTypes.SessionCreated);
+
+        classification.IsKnown.ShouldBeTrue();
+        classification.IsEphemeralRelay.ShouldBeTrue();
+        classification.IsDurable.ShouldBeFalse();
+        classification.IsAdvisory.ShouldBeTrue();
     }
 
     // -----------------------------------------------------------------------
@@ -105,6 +118,7 @@ public sealed class EventTypeMetadataTests
         classification.IsKnown.ShouldBeFalse();
         classification.IsDurable.ShouldBeFalse();
         classification.IsEphemeralRelay.ShouldBeFalse();
+        classification.IsAdvisory.ShouldBeFalse();
         classification.RequiresReasoningFilter.ShouldBeFalse();
         classification.IsActivitySignal.ShouldBeFalse();
     }
@@ -123,6 +137,7 @@ public sealed class EventTypeMetadataTests
         classification.IsKnown.ShouldBeTrue();
         classification.IsDurable.ShouldBeFalse();
         classification.IsEphemeralRelay.ShouldBeFalse();
+        classification.IsAdvisory.ShouldBeFalse();
     }
 
     // -----------------------------------------------------------------------

@@ -13,5 +13,10 @@ public interface IEventPublisher
     /// receipt; for ephemeral events, completes when the publish has been handed to the client
     /// library. Caller-side ordering is preserved when called serially.
     /// </summary>
-    Task PublishAsync(HarnessEvent evt, EventPublishContext context, CancellationToken ct);
+    Task<PublishResult> PublishAsync(HarnessEvent evt, EventPublishContext context, CancellationToken ct);
 }
+
+/// <summary>
+/// Result from appending/publishing an event.
+/// </summary>
+public readonly record struct PublishResult(long? EventId, bool IsDuplicate);

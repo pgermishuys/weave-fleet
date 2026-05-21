@@ -32,14 +32,18 @@ public sealed class MessagePersistenceProjection : IProjection<HarnessEvent>
     {
         if (ctx.UserId is null) return;
 
+        if (evt.Type == EventTypes.UserPromptCommitted)
+            return;
+
         if (IsUserMessageEcho(evt))
             return;
 
         await _persister.HandleAsync(ctx.FleetSessionId, ctx.UserId, evt, ct).ConfigureAwait(false);
 
         // Log every durable event regardless of whether the persister wrote a row.
-        // Idempotent on (session_id, sequence_number) so JetStream redelivery is safe.
-        if (ctx.PublishSequence > 0)
+        // event_id is the public replay cursor; sequence_number remains a compatibility alias
+        // for event_id and must not use the relay pump's internal dedup key.
+        if (ctx.StreamSequence > 0)
         {
             var payloadJson = evt.Payload.HasValue
                 ? evt.Payload.Value.GetRawText()
@@ -48,7 +52,8 @@ public sealed class MessagePersistenceProjection : IProjection<HarnessEvent>
             await _logRepository.AppendAsync(new HarnessEventLogEntry
             {
                 SessionId = ctx.FleetSessionId,
-                SequenceNumber = ctx.PublishSequence,
+                EventId = ctx.StreamSequence,
+                SequenceNumber = ctx.StreamSequence,
                 Type = evt.Type,
                 Payload = payloadJson,
                 UserId = ctx.UserId,

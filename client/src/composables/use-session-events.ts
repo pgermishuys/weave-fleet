@@ -23,7 +23,7 @@ import { convertFleetMessageToAccumulated, prependMessages, type FleetMessage } 
 import { sessionCache } from "@/lib/session-cache"
 import { addSessionSyncListener } from "@/lib/session-sync"
 import { useMessagePagination } from "@/composables/use-message-pagination"
-import { clearPendingPrompts, clearSentPrompts } from "@/composables/use-send-prompt"
+import { clearPendingPrompts, clearSentPrompts, confirmSentPrompt } from "@/composables/use-send-prompt"
 import { isWeaveSocketConnected, onDisconnect, onReconnect, useWeaveSocket } from "@/composables/use-weave-socket"
 import { diagLog } from "@/lib/message-diagnostics"
 import { useSessionsStore } from "@/stores/sessions"
@@ -66,7 +66,7 @@ interface SessionEventState {
   explicitStatus: ShallowRef<SessionStreamExplicitStatus>
   error: ShallowRef<string | undefined>
   onAgentSwitch: ShallowRef<((agent: string) => void) | undefined>
-  lastSequenceNumber: ShallowRef<number | null>
+  lastEventId: ShallowRef<number | null>
   scheduleIdleFallback?: () => void
   clearIdleFallback?: () => void
   maybeResolveIdleFallback?: () => void
@@ -103,7 +103,7 @@ export function useSessionEvents(
   const initialScrollPosition = shallowRef<{ scrollTop: number; scrollHeight: number } | null>(null)
   const scrollPositionRef = shallowRef<{ scrollTop: number; scrollHeight: number } | null>(null)
   const reconnectAttempt = shallowRef(0)
-  const lastSequenceNumber = shallowRef<number | null>(null)
+  const lastEventId = shallowRef<number | null>(null)
   const onAgentSwitchRef = shallowRef<((agent: string) => void) | undefined>(toValue(onAgentSwitch))
   let idleFallbackTimer: ReturnType<typeof setTimeout> | null = null
   let idleFallbackPending = false
@@ -115,7 +115,7 @@ export function useSessionEvents(
   const pagination = useMessagePagination()
   const { subscribe } = useWeaveSocket()
 
-  const loadCommittedEventsSinceRef = shallowRef<((afterSequenceNumber: number | null, signal?: AbortSignal) => Promise<void>) | null>(null)
+  const loadCommittedEventsSinceRef = shallowRef<((afterEventId: number | null, signal?: AbortSignal) => Promise<void>) | null>(null)
   const loadDelegationsRef = shallowRef<((signal?: AbortSignal) => Promise<void>) | null>(null)
 
   watch(
@@ -170,12 +170,12 @@ export function useSessionEvents(
         }
       }
 
-        function applyCommittedEvents(events: CommittedSessionEvent[]): void {
+      function applyCommittedEvents(events: CommittedSessionEvent[]): void {
         if (events.length === 0) {
           return
         }
 
-        const orderedEvents = [...events].sort((left, right) => left.sequenceNumber - right.sequenceNumber)
+        const orderedEvents = [...events].sort(compareByEventCursor)
         const state: SessionEventState = {
           messages,
           delegations,
@@ -184,7 +184,7 @@ export function useSessionEvents(
           explicitStatus,
           error,
           onAgentSwitch: onAgentSwitchRef,
-          lastSequenceNumber,
+          lastEventId,
           scheduleIdleFallback,
           clearIdleFallback,
           maybeResolveIdleFallback,
@@ -194,10 +194,11 @@ export function useSessionEvents(
         }
 
         for (const committedEvent of orderedEvents) {
+          const eventId = getEventIdWithCompatibilityFallback(committedEvent)
           handleEvent(
             {
               type: committedEvent.type,
-              sequenceNumber: committedEvent.sequenceNumber,
+              eventId,
               properties: committedEvent.payload,
             },
             activeSessionId,
@@ -209,21 +210,21 @@ export function useSessionEvents(
       // Flag-off mode still relies on the committed-events REST gap-fill because the
       // legacy v1 socket protocol cannot replay missed events after reconnect.
       async function loadCommittedEventsSince(
-        afterSequenceNumber: number | null,
+        afterEventId: number | null,
         loadSignal?: AbortSignal,
       ): Promise<void> {
         if (!activeSessionId || !activeInstanceId) {
           return
         }
 
-        if (afterSequenceNumber == null) {
+        if (afterEventId == null) {
           await loadAllMessages(loadSignal)
           return
         }
 
         try {
           const params = new URLSearchParams({
-            afterSequenceNumber: String(afterSequenceNumber),
+            afterEventId: String(afterEventId),
           })
 
           const response = await apiFetch(
@@ -315,7 +316,7 @@ export function useSessionEvents(
       sessionStatus.value = "idle"
       status.value = "connecting"
       error.value = undefined
-      lastSequenceNumber.value = null
+      lastEventId.value = null
 
       if (suppressAutoScrollRef) {
         suppressAutoScrollRef.value = false
@@ -357,7 +358,7 @@ export function useSessionEvents(
         delegations.value = cached.delegations
         explicitStatus.value = toExplicitStatus(cached.sessionStatus)
         syncDerivedSessionStatus(activeSessionId, sessionStatus, explicitStatus, delegations)
-        lastSequenceNumber.value = cached.lastSequenceNumber
+        lastEventId.value = cached.lastEventId
         pagination.hydratePagination(cached.pagination)
         cacheHit.value = true
         initialScrollPosition.value = {
@@ -366,7 +367,7 @@ export function useSessionEvents(
         }
 
         void Promise.all([
-          loadCommittedEventsSince(cached.lastSequenceNumber, signal),
+          loadCommittedEventsSince(cached.lastEventId, signal),
           loadDelegations(signal),
         ]).finally(() => {
           if (!signal.aborted && isActive()) {
@@ -402,7 +403,7 @@ export function useSessionEvents(
           explicitStatus,
           error,
           onAgentSwitch: onAgentSwitchRef,
-          lastSequenceNumber,
+          lastEventId,
           scheduleIdleFallback,
           clearIdleFallback,
           maybeResolveIdleFallback,
@@ -424,7 +425,7 @@ export function useSessionEvents(
 
           messages.value = []
           delegations.value = []
-          lastSequenceNumber.value = null
+          lastEventId.value = null
           return
         }
 
@@ -465,7 +466,7 @@ export function useSessionEvents(
         }
 
         void Promise.all([
-          loadCommittedEventsSince(lastSequenceNumber.value),
+          loadCommittedEventsSince(lastEventId.value),
           loadDelegations(),
         ]).finally(() => {
           if (isActive()) {
@@ -508,7 +509,7 @@ export function useSessionEvents(
             scrollPosition: scrollPositionRef.value?.scrollTop ?? 0,
             scrollHeight: scrollPositionRef.value?.scrollHeight ?? 0,
             sessionStatus: sessionStatus.value,
-            lastSequenceNumber: lastSequenceNumber.value,
+            lastEventId: lastEventId.value,
             pagination: pagination.snapshotPagination(),
             timestamp: Date.now(),
           })
@@ -633,7 +634,7 @@ export function useSessionEvents(
     status.value = "recovering"
 
     void Promise.all([
-      loadCommittedEventsSinceRef.value?.(lastSequenceNumber.value),
+      loadCommittedEventsSinceRef.value?.(lastEventId.value),
       loadDelegationsRef.value?.(),
     ]).then(() => {
       if (currentSessionId.value && currentInstanceId.value) {
@@ -675,8 +676,9 @@ export function handleEvent(
 ): void {
   const { type, properties } = event
 
-  if (typeof event.sequenceNumber === "number") {
-    state.lastSequenceNumber.value = Math.max(state.lastSequenceNumber.value ?? 0, event.sequenceNumber)
+  const cursorId = getEventCursorId(event)
+  if (Number.isFinite(cursorId)) {
+    state.lastEventId.value = Math.max(state.lastEventId.value ?? 0, cursorId)
   }
 
   const delegationId = properties?.delegationId
@@ -769,6 +771,26 @@ export function handleEvent(
     return
   }
 
+  if (type === "user.prompt.committed") {
+    const info = properties?.info
+    if (!info?.id) {
+      return
+    }
+
+    confirmSentPrompt(sessionId, {
+      correlationId: typeof properties?.correlationId === "string" ? properties.correlationId : undefined,
+      eventId: Number.isFinite(cursorId) ? cursorId : undefined,
+      serverMessageId: info.id,
+    })
+
+    const nextMessages = mergeMessageUpdate(
+      ensureMessage(state.messages.value, info),
+      { ...info, parts: properties?.parts },
+    )
+    state.messages.value = nextMessages.length > MAX_MESSAGES ? nextMessages.slice(-MAX_MESSAGES) : nextMessages
+    return
+  }
+
   if (type === "delegation.created") {
     if (!delegationId) {
       return
@@ -842,6 +864,36 @@ export function handleEvent(
 
     state.messages.value = applyTextDelta(state.messages.value, messageID, partID, sessionId, delta ?? "")
   }
+}
+
+function compareByEventCursor(
+  left: Pick<WebSocketEvent, "eventId" | "sequenceNumber">,
+  right: Pick<WebSocketEvent, "eventId" | "sequenceNumber">,
+): number {
+  const leftCursorId = getEventCursorId(left)
+  const rightCursorId = getEventCursorId(right)
+
+  if (!Number.isFinite(leftCursorId) || !Number.isFinite(rightCursorId)) {
+    return 0
+  }
+
+  return leftCursorId - rightCursorId
+}
+
+function getEventCursorId(event: Pick<WebSocketEvent, "eventId" | "sequenceNumber">): number {
+  return getEventIdWithCompatibilityFallback(event)
+}
+
+function getEventIdWithCompatibilityFallback(event: Pick<WebSocketEvent, "eventId" | "sequenceNumber">): number {
+  if (typeof event.eventId === "number") {
+    return event.eventId
+  }
+
+  if (typeof event.sequenceNumber === "number") {
+    return event.sequenceNumber
+  }
+
+  return Number.NaN
 }
 
 function scheduleIdleFallbackForState(state: SessionEventState): void {

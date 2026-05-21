@@ -120,7 +120,7 @@ internal static class WebSocketV2Protocol
             return;
 
         var json = JsonSerializer.Serialize(
-            new WsEventV2Payload(EventV2MessageType, broadcastEvent.Topic, domainEvent),
+            new WsEventV2Payload(EventV2MessageType, broadcastEvent.Topic, broadcastEvent.EventId, domainEvent),
             ApiJsonContext.Default.WsEventV2Payload);
 
         await SendTextAsync(webSocket, sendLock, json, ct).ConfigureAwait(false);
@@ -262,7 +262,7 @@ internal static class WebSocketV2Protocol
                 ActivityStatus = activityStatus,
                 Messages = [],
                 Delegations = delegations.Select(ToSnapshotDelegation).ToArray(),
-                LastSequenceNumber = null,
+                LastEventId = null,
                 HasMore = false,
                 Cursor = null
             };
@@ -884,7 +884,7 @@ internal sealed class WebSocketV2SubscriptionState
     /// <summary>
     /// Drains buffered events that are newer than the supplied snapshot watermark.
     /// </summary>
-    public IReadOnlyList<BroadcastEvent> DrainBuffered(long? snapshotWatermark)
+    public IReadOnlyList<BroadcastEvent> DrainBuffered(long? snapshotEventIdWatermark)
     {
         lock (_gate)
         {
@@ -894,9 +894,9 @@ internal sealed class WebSocketV2SubscriptionState
             var pending = new List<BroadcastEvent>(_buffer.Count);
             foreach (var bufferedEvent in _buffer)
             {
-                if (!bufferedEvent.SequenceNumber.HasValue
-                    || !snapshotWatermark.HasValue
-                    || bufferedEvent.SequenceNumber.Value > snapshotWatermark.Value)
+                if (!bufferedEvent.EventId.HasValue
+                    || !snapshotEventIdWatermark.HasValue
+                    || bufferedEvent.EventId.Value > snapshotEventIdWatermark.Value)
                 {
                     pending.Add(bufferedEvent);
                 }

@@ -38,7 +38,7 @@ function createEmptyState(): SessionStreamState {
     delegations: [],
     explicitStatus: "idle",
     sessionStatus: "idle",
-    lastSequenceNumber: null,
+    lastEventId: null,
   }
 }
 
@@ -103,6 +103,14 @@ export function useSessionStream(
     isLoadingOlder.value = false
   }
 
+  function applyLiveDomainEvent(state: SessionStreamState, event: DomainEvent): SessionStreamState {
+    const nextState = applyDomainEvent(state, event)
+    return {
+      ...nextState,
+      lastEventId: getDomainEventCursor(event) ?? nextState.lastEventId,
+    }
+  }
+
   function loadOlder(): void {
     const activeSessionId = currentSessionId.value
     if (!isEnabled.value || !activeSessionId || !hasMore.value || isLoadingOlder.value || cursor.value === null) {
@@ -145,7 +153,7 @@ export function useSessionStream(
           let nextState = createSessionStreamState(snapshot)
 
           for (const event of pendingEvents.splice(0, pendingEvents.length)) {
-            nextState = applyDomainEvent(nextState, event)
+            nextState = applyLiveDomainEvent(nextState, event)
           }
 
           streamState.value = nextState
@@ -159,7 +167,7 @@ export function useSessionStream(
             return
           }
 
-          streamState.value = applyDomainEvent(streamState.value, event)
+          streamState.value = applyLiveDomainEvent(streamState.value, event)
         },
         (page) => {
           applyHistoryPage(page)
@@ -190,4 +198,8 @@ export function useSessionStream(
     isLoadingOlder: readonly(isLoadingOlder),
     loadOlder,
   }
+}
+
+function getDomainEventCursor(event: DomainEvent): number | null {
+  return typeof event.eventId === "number" ? event.eventId : null
 }

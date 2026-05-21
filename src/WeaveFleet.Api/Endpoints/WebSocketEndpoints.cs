@@ -171,7 +171,7 @@ public static class WebSocketEndpoints
                                 ApiJsonContext.Default.WsActivityStatusProperties);
                             var initialEvent = JsonSerializer.Serialize(
                                 new WsEventPayload("event", "activity",
-                                    new WsEventDataPayload("activity_status", null, props)),
+                                    new WsEventDataPayload("activity_status", null, null, props)),
                                 ApiJsonContext.Default.WsEventPayload);
                             await WebSocketV2Protocol.SendTextAsync(webSocket, sendLock, initialEvent, cts.Token);
                         }
@@ -201,7 +201,7 @@ public static class WebSocketEndpoints
 
                         while (true)
                         {
-                            var pendingEvents = subscriptionState.DrainBuffered(snapshot.LastSequenceNumber);
+                            var pendingEvents = subscriptionState.DrainBuffered(snapshot.LastEventId);
                             foreach (var pendingEvent in pendingEvents)
                             {
                                 await WebSocketV2Protocol.SendEventAsync(webSocket, sendLock, pendingEvent, subscriptionState, cts.Token);
@@ -314,7 +314,7 @@ public static class WebSocketEndpoints
 
                 var json = JsonSerializer.Serialize(
                     new WsEventPayload("event", evt.Topic,
-                        new WsEventDataPayload(evt.Type, evt.SequenceNumber, sanitizedPayload.Value)),
+                        new WsEventDataPayload(evt.Type, evt.EventId, evt.EventId, sanitizedPayload.Value)),
                     ApiJsonContext.Default.WsEventPayload);
                 try
                 {

@@ -1,3 +1,7 @@
+export interface EventCursorMetadata {
+  eventId?: number | null;
+}
+
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
 
 export type JsonPrimitive = string | number | boolean | null;
@@ -175,6 +179,10 @@ export interface MessageLifecyclePayload {
   parts: MessageEventPart[];
 }
 
+export interface UserPromptCommittedPayload extends MessageLifecyclePayload {
+  correlationId?: string | null;
+}
+
 export interface MessagePartUpdatedPayload {
   sessionID: string;
   part: MessageEventPart;
@@ -219,72 +227,77 @@ export interface DelegationCompletedPayload {
   completedAt: string;
 }
 
-export interface SessionStarted {
+export interface SessionStarted extends EventCursorMetadata {
   type: "session.started";
   payload: SessionStartedPayload;
 }
 
-export interface SessionIdled {
+export interface SessionIdled extends EventCursorMetadata {
   type: "session.idled";
   payload: SessionIdledPayload;
 }
 
-export interface SessionStopped {
+export interface SessionStopped extends EventCursorMetadata {
   type: "session.stopped";
   payload: SessionStoppedPayload;
 }
 
-export interface SessionDeleted {
+export interface SessionDeleted extends EventCursorMetadata {
   type: "session.deleted";
   payload: SessionDeletedPayload;
 }
 
-export interface SessionArchived {
+export interface SessionArchived extends EventCursorMetadata {
   type: "session.archived";
   payload: SessionArchivedPayload;
 }
 
-export interface TurnStarted {
+export interface TurnStarted extends EventCursorMetadata {
   type: "turn.started";
   payload: TurnStartedPayload;
 }
 
-export interface TurnEnded {
+export interface TurnEnded extends EventCursorMetadata {
   type: "turn.ended";
   payload: TurnEndedPayload;
 }
 
-export interface MessageCreated {
+export interface MessageCreated extends EventCursorMetadata {
   type: "message.created";
   payload: MessageLifecyclePayload;
 }
 
-export interface MessageUpdated {
+export interface MessageUpdated extends EventCursorMetadata {
   type: "message.updated";
   payload: MessageLifecyclePayload;
 }
 
-export interface MessagePartUpdated {
+export interface UserPromptCommitted extends EventCursorMetadata {
+  type: "user.prompt.committed";
+  payload: UserPromptCommittedPayload;
+}
+
+export interface MessagePartUpdated extends EventCursorMetadata {
   type: "message.part.updated";
   payload: MessagePartUpdatedPayload;
 }
 
-export interface MessagePartDeltaStreamed {
+export interface MessagePartDeltaStreamed extends EventCursorMetadata {
   type: "message.part.delta.streamed";
   payload: MessagePartDeltaStreamedPayload;
 }
 
-export interface DelegationCreated {
+export interface DelegationCreated extends EventCursorMetadata {
   type: "delegation.created";
   payload: DelegationCreatedPayload;
 }
 
-export interface DelegationUpdated {
+export interface DelegationUpdated extends EventCursorMetadata {
   type: "delegation.updated";
   payload: DelegationUpdatedPayload;
 }
 
-export interface DelegationCompleted {
+export interface DelegationCompleted extends EventCursorMetadata {
   type: "delegation.completed";
   payload: DelegationCompletedPayload;
 }
@@ -299,6 +312,7 @@ export type DomainEvent =
   | TurnEnded
   | MessageCreated
   | MessageUpdated
+  | UserPromptCommitted
   | MessagePartUpdated
   | MessagePartDeltaStreamed
   | DelegationCreated

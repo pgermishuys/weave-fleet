@@ -26,11 +26,26 @@ public sealed record SessionSnapshot
     /// </summary>
     public required string ActivityStatus { get; init; }
 
+    private readonly long? _lastEventId;
+
     /// <summary>
-    /// Gets the highest committed sequence number included in the snapshot.
+    /// Gets the highest committed durable event id included in the snapshot.
     /// Live events should resume after this watermark.
     /// </summary>
-    public long? LastSequenceNumber { get; init; }
+    public long? LastEventId
+    {
+        get => _lastEventId;
+        init => _lastEventId = value;
+    }
+
+    /// <summary>
+    /// Deprecated compatibility alias for <see cref="LastEventId"/>.
+    /// </summary>
+    public long? LastSequenceNumber
+    {
+        get => _lastEventId;
+        init => _lastEventId = value;
+    }
 
     /// <summary>
     /// Gets a value indicating whether older messages exist before the current page.

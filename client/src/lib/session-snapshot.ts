@@ -21,7 +21,9 @@ export interface SessionSnapshot {
   messages: MessageLifecyclePayload[];
   delegations: SessionSnapshotDelegation[];
   activityStatus: string;
-  lastSequenceNumber: number | null;
+  lastEventId: number | null;
+  /** Deprecated compatibility alias for lastEventId during the migration. */
+  lastSequenceNumber?: number | null;
   hasMore: boolean;
   cursor: string | null;
 }

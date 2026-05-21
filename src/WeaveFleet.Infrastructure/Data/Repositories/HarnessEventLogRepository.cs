@@ -21,13 +21,14 @@ public sealed class HarnessEventLogRepository(
     {
         var inserted = connection.ExecuteScalarAsync<long?>(
             """
-            INSERT INTO harness_events (session_id, sequence_number, type, payload, user_id, created_at)
-            VALUES (@SessionId, @SequenceNumber, @Type, @Payload, @UserId, @CreatedAt)
-            ON CONFLICT(session_id, sequence_number) DO NOTHING
+            INSERT INTO harness_events (event_id, session_id, sequence_number, type, payload, user_id, created_at)
+            VALUES (@EventId, @SessionId, @SequenceNumber, @Type, @Payload, @UserId, @CreatedAt)
+            ON CONFLICT(event_id) DO NOTHING
             RETURNING id
             """,
             cmd =>
             {
+                cmd.AddParameter("EventId", entry.EventId > 0 ? entry.EventId : entry.SequenceNumber);
                 cmd.AddParameter("SessionId", entry.SessionId);
                 cmd.AddParameter("SequenceNumber", entry.SequenceNumber);
                 cmd.AddParameter("Type", entry.Type);
@@ -40,11 +41,10 @@ public sealed class HarnessEventLogRepository(
         if (await inserted is { } id) return id;
 
         return connection.ExecuteScalarAsync<long>(
-            "SELECT id FROM harness_events WHERE session_id = @SessionId AND sequence_number = @SequenceNumber",
+            "SELECT id FROM harness_events WHERE event_id = @EventId",
             cmd =>
             {
-                cmd.AddParameter("SessionId", entry.SessionId);
-                cmd.AddParameter("SequenceNumber", entry.SequenceNumber);
+                cmd.AddParameter("EventId", entry.EventId > 0 ? entry.EventId : entry.SequenceNumber);
             },
             transaction).ConfigureAwait(false).GetAwaiter().GetResult();
     }
@@ -57,7 +57,7 @@ public sealed class HarnessEventLogRepository(
         using var connection = connectionFactory.CreateConnection();
         return await connection.QueryAsync(
             """
-            SELECT id, session_id, sequence_number, type, payload, user_id, created_at
+            SELECT id, event_id, session_id, sequence_number, type, payload, user_id, created_at
             FROM harness_events
             WHERE session_id = @SessionId
               AND sequence_number > @AfterSequenceNumber
@@ -75,9 +75,36 @@ public sealed class HarnessEventLogRepository(
             ReadHarnessEventLogEntry).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<HarnessEventLogEntry>> GetBySessionAfterEventIdAsync(
+        string sessionId,
+        long afterEventId,
+        int limit)
+    {
+        using var connection = connectionFactory.CreateConnection();
+        return await connection.QueryAsync(
+            """
+            SELECT id, event_id, session_id, sequence_number, type, payload, user_id, created_at
+            FROM harness_events
+            WHERE session_id = @SessionId
+              AND event_id > @AfterEventId
+              AND (user_id = @UserId OR user_id IS NULL)
+            ORDER BY event_id ASC
+            LIMIT @Limit
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("AfterEventId", afterEventId);
+                cmd.AddParameter("UserId", userContext.UserId);
+                cmd.AddParameter("Limit", limit);
+            },
+            ReadHarnessEventLogEntry).ConfigureAwait(false);
+    }
+
     private static HarnessEventLogEntry ReadHarnessEventLogEntry(DbDataReader r) => new()
     {
         Id = r.GetInt64(r.GetOrdinal("id")),
+        EventId = r.GetInt64(r.GetOrdinal("event_id")),
         SessionId = r.GetString(r.GetOrdinal("session_id")),
         SequenceNumber = r.GetInt64(r.GetOrdinal("sequence_number")),
         Type = r.GetString(r.GetOrdinal("type")),

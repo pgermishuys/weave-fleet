@@ -193,8 +193,8 @@ public static class SessionEndpoints
             var options = req.Agent is not null || req.Model is not null || attachments is { Count: > 0 }
                 ? new PromptOptions { Agent = req.Agent, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId, Attachments = attachments }
                 : null;
-            var result = await orchestrator.PromptSessionAsync(id, req.Text, options, req.UserMessageId, ct);
-            return result.Match(_ => Results.Ok(), err => err.ToSessionApiResult());
+            var result = await orchestrator.PromptSessionWithReceiptAsync(id, req.Text, options, req.UserMessageId, req.CorrelationId, ct);
+            return result.Match(r => Results.Ok(new SendPromptApiResponse(r.EventId, r.CorrelationId)), err => err.ToSessionApiResult());
         })
         .WithName("PromptSession");
 
@@ -286,17 +286,20 @@ public static class SessionEndpoints
         })
         .WithName("GetSessionMessages");
 
-        // GET /api/sessions/{id}/committed-events?afterSequenceNumber=N&limit=M
+        // GET /api/sessions/{id}/committed-events?afterEventId=N&limit=M
         group.MapGet("/{id}/committed-events", async (
             string id,
-            long afterSequenceNumber,
+            long? afterEventId,
+            long? afterSequenceNumber,
             int? limit,
             SessionOrchestrator orchestrator) =>
         {
-            var result = await orchestrator.GetCommittedEventsAsync(id, afterSequenceNumber, limit);
+            var cursor = afterEventId ?? afterSequenceNumber ?? 0;
+            var result = await orchestrator.GetCommittedEventsAsync(id, cursor, limit);
             return result.Match(
                 events => Results.Ok(new GetCommittedEventsResponse(
                     events.Select(evt => new CommittedEventItem(
+                        evt.EventId,
                         evt.SequenceNumber,
                         evt.Topic,
                         evt.Type,
@@ -618,7 +621,10 @@ internal sealed record SendPromptApiRequest(
     string? Agent,
     ModelRef? Model,
     ImageAttachmentDto[]? Attachments,
-    string? UserMessageId);
+    string? UserMessageId,
+    string? CorrelationId);
+
+internal sealed record SendPromptApiResponse(long? EventId, string CorrelationId);
 
 internal sealed record ImageAttachmentDto(string Mime, string? Filename, string Data);
 

@@ -125,9 +125,9 @@ public sealed class SessionSnapshotBuilder(
             ReadDelegationRow,
             transaction).ConfigureAwait(false);
 
-        var lastSequenceNumber = await connection.ExecuteScalarAsync<long?>(
+        var lastEventId = await connection.ExecuteScalarAsync<long?>(
             """
-            SELECT MAX(sequence_number)
+            SELECT MAX(event_id)
             FROM harness_events
             WHERE session_id = @SessionId
               AND (user_id = @UserId OR user_id IS NULL)
@@ -160,7 +160,7 @@ public sealed class SessionSnapshotBuilder(
                 CreatedAt = row.CreatedAt,
             }).ToArray(),
             ActivityStatus = NormalizeActivityStatus(activityTracker.GetEffectiveActivityStatus(sessionId)),
-            LastSequenceNumber = lastSequenceNumber,
+            LastEventId = lastEventId,
             HasMore = hasMore,
             Cursor = hasMore && messageRows.Count > 0 ? EncodeCursor(messageRows[0].Id) : null,
         };

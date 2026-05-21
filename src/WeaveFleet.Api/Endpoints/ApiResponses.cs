@@ -201,6 +201,7 @@ public sealed record GetCommittedEventsResponse(
     IReadOnlyList<CommittedEventItem> Events);
 
 public sealed record CommittedEventItem(
+    long EventId,
     long SequenceNumber,
     string Topic,
     string Type,

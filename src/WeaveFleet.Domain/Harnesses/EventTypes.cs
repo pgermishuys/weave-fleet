@@ -9,6 +9,7 @@ public static class EventTypes
     public const string MessagePartDelta = "message.part.delta";
     public const string MessageRemoved = "message.removed";
     public const string MessagePartRemoved = "message.part.removed";
+    public const string UserPromptCommitted = "user.prompt.committed";
 
     public const string SessionCreated = "session.created";
     public const string SessionUpdated = "session.updated";

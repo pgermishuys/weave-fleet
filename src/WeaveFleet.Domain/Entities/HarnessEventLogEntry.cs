@@ -8,6 +8,7 @@ namespace WeaveFleet.Domain.Entities;
 public sealed class HarnessEventLogEntry
 {
     public long Id { get; set; }
+    public long EventId { get; set; }
     public string SessionId { get; set; } = string.Empty;
     public long SequenceNumber { get; set; }
     public string Type { get; set; } = string.Empty;

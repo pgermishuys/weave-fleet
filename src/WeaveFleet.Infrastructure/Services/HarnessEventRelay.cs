@@ -18,7 +18,7 @@ namespace WeaveFleet.Infrastructure.Services;
 ///   <item>Applies the reasoning-content filter before publish for event types whose
 ///     classification requires it, so unsanitized reasoning never reaches event bus subscribers.</item>
 ///   <item>Publishes every <see cref="HarnessEvent"/> via <see cref="IEventPublisher"/>
-///     with a per-pump monotonic sequence for dedup.</item>
+///     with an internal per-pump monotonic dedup key.</item>
 ///   <item>On disconnect: flushes any buffered text deltas through the persister and emits a
 ///     final idle broadcast on the global <c>sessions</c> topic.</item>
 /// </list>
@@ -52,6 +52,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly ILogger<HarnessEventRelay> _logger;
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _subscriptions = new();
     private readonly ConcurrentDictionary<string, Task> _pumpTasks = new();
+    private readonly ConcurrentDictionary<string, long> _internalPumpDedupKeys = new();
     private CancellationToken _stoppingToken;
 
     public HarnessEventRelay(
@@ -181,7 +182,6 @@ public sealed class HarnessEventRelay : BackgroundService
             return;
         }
 
-        long publishSequence = 0;
         var suppressedUserMessageIds = new HashSet<string>(StringComparer.Ordinal);
         using var translationScope = _scopeFactory.CreateScope();
         var translator = translationScope.ServiceProvider.GetRequiredService<DomainEventTranslator>();
@@ -214,15 +214,15 @@ public sealed class HarnessEventRelay : BackgroundService
 
                 try
                 {
-                    var seq = Interlocked.Increment(ref publishSequence);
-                    await _publisher.PublishAsync(
+                    var pumpDedupKey = NextInternalPumpDedupKey(instanceId);
+                    _ = await _publisher.PublishAsync(
                         eventToPublish,
                         new EventPublishContext(
                             targetFleetSessionId,
                             sessionProjectId,
                             sessionUserId,
                             sessionHarnessType,
-                            seq)
+                            pumpDedupKey)
                         {
                             DomainEvent = domainEvent
                         },
@@ -279,6 +279,9 @@ public sealed class HarnessEventRelay : BackgroundService
                 CancellationToken.None).ConfigureAwait(false);
         }
     }
+
+    private long NextInternalPumpDedupKey(string instanceId)
+        => _internalPumpDedupKeys.AddOrUpdate(instanceId, 1, (_, current) => current + 1);
 
     private static bool ShouldSuppressUserEcho(HarnessEvent evt, HashSet<string> suppressedUserMessageIds)
     {

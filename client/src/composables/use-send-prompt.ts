@@ -15,6 +15,10 @@ export interface SentPromptImage {
 
 export interface SentPromptMessage {
   id: string;
+  correlationId: string;
+  eventId?: number;
+  serverMessageId?: string;
+  status: "pending" | "confirmed" | "needs_retry";
   body: string;
   createdAt: number;
   agentId: string;
@@ -27,6 +31,12 @@ export interface SentPromptMessage {
 
 const sentPromptRegistry = reactive<Record<string, SentPromptMessage[]>>({});
 const pendingPromptRegistry = reactive<Record<string, number>>({});
+const promptConfirmationTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const PROMPT_CONFIRMATION_TIMEOUT_MS = 15_000;
+
+function buildPromptTimerKey(sessionId: string, correlationId: string): string {
+  return `${sessionId}:${correlationId}`;
+}
 
 function ensureSentPrompts(sessionId: string): SentPromptMessage[] {
   const existingPrompts = sentPromptRegistry[sessionId];
@@ -49,15 +59,54 @@ function ensurePendingPromptCount(sessionId: string): number {
   return 0;
 }
 
-function removeSentPrompt(sessionId: string, promptId: string): void {
+function removeSentPromptByCorrelationId(sessionId: string, correlationId: string): void {
   const prompts = sentPromptRegistry[sessionId];
   if (!prompts) {
     return;
   }
 
-  const promptIndex = prompts.findIndex((prompt) => prompt.id === promptId);
+  const promptIndex = prompts.findIndex((prompt) => prompt.correlationId === correlationId);
   if (promptIndex >= 0) {
+    clearPromptConfirmationTimeout(sessionId, correlationId);
     prompts.splice(promptIndex, 1);
+  }
+}
+
+function clearPromptConfirmationTimeout(sessionId: string, correlationId: string): void {
+  const timerKey = buildPromptTimerKey(sessionId, correlationId);
+  const timer = promptConfirmationTimers.get(timerKey);
+  if (!timer) {
+    return;
+  }
+
+  clearTimeout(timer);
+  promptConfirmationTimers.delete(timerKey);
+}
+
+function schedulePromptConfirmationTimeout(sessionId: string, correlationId: string): void {
+  clearPromptConfirmationTimeout(sessionId, correlationId);
+
+  const timerKey = buildPromptTimerKey(sessionId, correlationId);
+  promptConfirmationTimers.set(timerKey, setTimeout(() => {
+    promptConfirmationTimers.delete(timerKey);
+
+    const prompts = sentPromptRegistry[sessionId];
+    const prompt = prompts?.find((item) => item.correlationId === correlationId);
+    if (!prompt || prompt.status === "confirmed") {
+      return;
+    }
+
+    if (prompt.status === "pending") {
+      decrementPendingPrompts(sessionId);
+    }
+
+    prompt.status = "needs_retry";
+  }, PROMPT_CONFIRMATION_TIMEOUT_MS));
+}
+
+function clearPromptConfirmationTimeouts(sessionId: string): void {
+  for (const prompt of sentPromptRegistry[sessionId] ?? []) {
+    clearPromptConfirmationTimeout(sessionId, prompt.correlationId);
   }
 }
 
@@ -69,6 +118,7 @@ export function clearSentPrompts(sessionId: string): void {
       prompts: existing.map((p) => ({ id: p.id, bodySnippet: p.body.slice(0, 60) })),
     });
   }
+  clearPromptConfirmationTimeouts(sessionId);
   delete sentPromptRegistry[sessionId];
 }
 
@@ -128,6 +178,10 @@ export function reconcileSentPrompts(sessionId: string, messages: readonly Accum
 
   const remainingAfterIdMatch = prompts.filter((prompt) => !deliveredPromptIds.has(prompt.id));
   if (remainingAfterIdMatch.length !== prompts.length) {
+    for (const prompt of prompts.filter((prompt) => deliveredPromptIds.has(prompt.id))) {
+      clearPromptConfirmationTimeout(sessionId, prompt.correlationId);
+    }
+
     diagLog("prompt.reconcile", `removed ${prompts.length - remainingAfterIdMatch.length} optimistic prompt(s) by id`, {
       sessionId,
       removedPromptIds: prompts
@@ -182,6 +236,10 @@ export function reconcileSentPrompts(sessionId: string, messages: readonly Accum
   });
 
   if (remainingPrompts.length < prompts.length) {
+    for (const prompt of prompts.filter((prompt) => !remainingPrompts.includes(prompt))) {
+      clearPromptConfirmationTimeout(sessionId, prompt.correlationId);
+    }
+
     diagLog("prompt.reconcile", `removed ${prompts.length - remainingPrompts.length} of ${prompts.length} optimistic prompt(s)`, {
       sessionId,
       totalUserMessages: messages.filter((m) => m.role === "user").length,
@@ -200,6 +258,52 @@ export function reconcileSentPrompts(sessionId: string, messages: readonly Accum
   }
 
   sentPromptRegistry[sessionId] = remainingPrompts;
+}
+
+export interface ConfirmSentPromptOptions {
+  correlationId?: string;
+  eventId?: number | null;
+  serverMessageId?: string;
+}
+
+export function confirmSentPrompt(sessionId: string, options: ConfirmSentPromptOptions): void {
+  const prompts = sentPromptRegistry[sessionId];
+  if (!prompts || prompts.length === 0) {
+    return;
+  }
+
+  const prompt = prompts.find((candidate) => {
+    if (options.correlationId && candidate.correlationId === options.correlationId) {
+      return true;
+    }
+
+    return Boolean(options.serverMessageId && candidate.id === options.serverMessageId);
+  });
+
+  if (!prompt) {
+    return;
+  }
+
+  if (prompt.status !== "confirmed") {
+    decrementPendingPrompts(sessionId);
+  }
+
+  if (options.correlationId && prompt.correlationId !== options.correlationId) {
+    clearPromptConfirmationTimeout(sessionId, prompt.correlationId);
+    prompt.correlationId = options.correlationId;
+  }
+
+  clearPromptConfirmationTimeout(sessionId, prompt.correlationId);
+  prompt.status = "confirmed";
+
+  if (typeof options.eventId === "number") {
+    prompt.eventId = options.eventId;
+  }
+
+  if (options.serverMessageId) {
+    prompt.serverMessageId = options.serverMessageId;
+    prompt.id = options.serverMessageId;
+  }
 }
 
 export function useSentPrompts(sessionId: string) {
@@ -221,6 +325,12 @@ interface BackendSendPromptRequest {
   model?: { providerID: string; modelID: string };
   attachments?: ImageAttachment[];
   userMessageId?: string;
+  correlationId: string;
+}
+
+interface BackendSendPromptResponse {
+  eventId?: number | null;
+  correlationId?: string;
 }
 
 async function readPromptErrorMessage(response: Response): Promise<string> {
@@ -284,9 +394,15 @@ export function useSendPrompt(sessionId: string) {
         throw new Error(await readPromptErrorMessage(response));
       }
 
+      const receipt = await response.json().catch((): BackendSendPromptResponse => ({})) as BackendSendPromptResponse;
+      confirmSentPrompt(sessionId, {
+        correlationId: receipt.correlationId ?? request.correlationId,
+        eventId: receipt.eventId,
+      });
+
       sendError.value = undefined;
     } catch (caughtError) {
-      removeSentPrompt(sessionId, promptId);
+      removeSentPromptByCorrelationId(sessionId, request.correlationId);
       decrementPendingPrompts(sessionId);
       const message = caughtError instanceof Error ? caughtError.message : "Failed to send prompt";
       sendError.value = message;
@@ -306,6 +422,7 @@ export function useSendPrompt(sessionId: string) {
     const model = modelsByKey.value[draft.modelId] ?? modelsByKey.value[defaultModelKey.value];
     const now = new Date();
     const promptId = `user-${crypto.randomUUID().replaceAll("-", "")}`;
+    const correlationId = `prompt-${crypto.randomUUID().replaceAll("-", "")}`;
     const resolvedAgentId = agent?.id ?? draft.agentId ?? defaultAgentId.value;
     const resolvedModelId = model?.id ?? "";
     const usesDefaultAgent = !draft.agentId;
@@ -313,6 +430,8 @@ export function useSendPrompt(sessionId: string) {
 
     ensureSentPrompts(sessionId).push({
       id: promptId,
+      correlationId,
+      status: "pending",
       body,
       createdAt: now.getTime(),
       agentId: resolvedAgentId,
@@ -328,6 +447,7 @@ export function useSendPrompt(sessionId: string) {
         : [],
     });
     incrementPendingPrompts(sessionId);
+    schedulePromptConfirmationTimeout(sessionId, correlationId);
 
     if (selectedSession.value) {
       selectedSession.value.activityStatus = "busy";
@@ -339,6 +459,7 @@ export function useSendPrompt(sessionId: string) {
     const request: BackendSendPromptRequest = {
       text: body,
       userMessageId: promptId,
+      correlationId,
     };
 
     if (resolvedAgentId && !usesDefaultAgent) {

@@ -361,6 +361,44 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task PromptSessionAsync_WithCorrelationId_DeduplicatesPrompt()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active",
+            Directory = "/tmp", CreatedAt = "2026-01-01", RetentionStatus = "active"
+        });
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        var first = await sut.PromptSessionWithReceiptAsync(
+            "s1",
+            "hello",
+            options: null,
+            userMessageId: null,
+            correlationId: "corr-1",
+            CancellationToken.None);
+        var second = await sut.PromptSessionWithReceiptAsync(
+            "s1",
+            "hello",
+            options: null,
+            userMessageId: null,
+            correlationId: "corr-1",
+            CancellationToken.None);
+
+        first.IsSuccess.ShouldBeTrue();
+        second.IsSuccess.ShouldBeTrue();
+        second.Value.EventId.ShouldBe(first.Value.EventId);
+        _defaultSession.SendPromptCalls.Count.ShouldBe(1);
+        var messages = await _builder.MessageRepository.GetBySessionAsync("s1", 10, null);
+        messages.Count.ShouldBe(1);
+        _builder.HarnessEventLogRepository.All.Count.ShouldBe(1);
+        _builder.HarnessEventLogRepository.All[0].EventId.ShouldBe(first.Value.EventId.GetValueOrDefault());
+        using var payload = JsonDocument.Parse(_builder.HarnessEventLogRepository.All[0].Payload);
+        payload.RootElement.GetProperty("correlationId").GetString().ShouldBe("corr-1");
+    }
+
+    [Fact]
     public async Task CommandSessionAsync_HappyPath_PersistsUserCommandMessage()
     {
         _builder.SessionRepository.Seed(new Session
@@ -661,6 +699,7 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         await _builder.HarnessEventLogRepository.AppendAsync(new HarnessEventLogEntry
         {
             SessionId = "s-committed",
+            EventId = 42,
             SequenceNumber = 6,
             Type = "message.updated",
             Payload = "{\"info\":{\"id\":\"msg-1\"}}",
@@ -668,11 +707,12 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
             UserId = "user-1"
         });
 
-        var result = await _sut.GetCommittedEventsAsync("s-committed", 5, 20);
+        var result = await _sut.GetCommittedEventsAsync("s-committed", 41, 20);
 
         result.IsSuccess.ShouldBeTrue();
         result.Value.Count.ShouldBe(1);
-        result.Value[0].SequenceNumber.ShouldBe(6);
+        result.Value[0].EventId.ShouldBe(42);
+        result.Value[0].SequenceNumber.ShouldBe(42);
         result.Value[0].Topic.ShouldBe("session:s-committed");
         result.Value[0].Type.ShouldBe("message.updated");
     }
@@ -1143,6 +1183,7 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
             _builder.DelegationRepository,
             _builder.ProjectRepository,
             _builder.EventBroadcaster,
+            new FakeEventPublisher(),
             _builder.AnalyticsCollector,
             _builder.MessageRepository,
             _builder.HarnessEventLogRepository,

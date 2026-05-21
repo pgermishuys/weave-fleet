@@ -4,6 +4,14 @@ namespace WeaveFleet.TestHarness.Tests;
 
 public sealed class TestScenarioBuilderTests
 {
+    public static TheoryData<string, int> BetaScenarioFixtureCases => new()
+    {
+        { "slow-streaming", 8 },
+        { "out-of-order-part-lifecycle", 4 },
+        { "user-echo", 7 },
+        { "snapshot-race-durable-burst", 9 },
+    };
+
     [Fact]
     public void Default_build_produces_empty_scenario()
     {
@@ -220,5 +228,28 @@ public sealed class TestScenarioBuilderTests
     {
         var harness = new TestHarness();
         harness.Type.ShouldBe("opencode");
+    }
+
+    [Theory]
+    [MemberData(nameof(BetaScenarioFixtureCases))]
+    public void beta_harness_reliability_scenarios_define_replayable_message_event_sequences(string scenarioId, int expectedEventCount)
+    {
+        var scenarioDirectory = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "beta-harness",
+            ".runtime",
+            "scenarios"));
+
+        var scenario = LiveScenarioHarness.Load(scenarioId, scenarioDirectory);
+
+        scenario.PromptResponses.Count.ShouldBe(1);
+        var events = scenario.PromptResponses.Dequeue();
+        events.Count.ShouldBe(expectedEventCount);
+        events.ShouldAllBe(e => !string.IsNullOrWhiteSpace(e.Event.Type));
+        events.Any(e => e.Event.Type == "message.updated" || e.Event.Type == "message.part.updated").ShouldBeTrue();
     }
 }

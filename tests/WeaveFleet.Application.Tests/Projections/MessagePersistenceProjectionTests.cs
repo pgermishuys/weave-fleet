@@ -30,7 +30,7 @@ public sealed class MessagePersistenceProjectionTests
             UserId: "user-1",
             HarnessType: "opencode",
             StreamSequence: 42,
-            PublishSequence: 7);
+            InternalPumpDedupKey: 7);
 
         await sut.HandleAsync(evt, ctx, CancellationToken.None);
 

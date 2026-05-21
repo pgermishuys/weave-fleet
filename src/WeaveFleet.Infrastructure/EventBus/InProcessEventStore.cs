@@ -50,7 +50,7 @@ internal sealed partial class InProcessEventStore
                  payload, user_id, harness_type, sequence)
             VALUES
                 (@MessageId, @SessionId, @ProjectId, @Tenant, @EventType,
-                 @Payload, @UserId, @HarnessType, @Sequence)
+                 @Payload, @UserId, @HarnessType, @InternalPumpDedupKey)
             """;
 
         using var conn = _db.CreateConnection();
@@ -66,7 +66,7 @@ internal sealed partial class InProcessEventStore
             cmd.AddParameter("Payload", serializedPayload);
             cmd.AddParameter("UserId", envelope.UserId);
             cmd.AddParameter("HarnessType", envelope.HarnessType);
-            cmd.AddParameter("Sequence", envelope.Sequence);
+            cmd.AddParameter("InternalPumpDedupKey", envelope.InternalPumpDedupKey);
         });
 
         if (rowsAffected == 0)
@@ -74,6 +74,26 @@ internal sealed partial class InProcessEventStore
 
         var id = conn.ExecuteScalar<long>("SELECT last_insert_rowid()", _ => { });
         return id;
+    }
+
+    /// <summary>
+    /// Appends a durable event and returns the existing store id when the idempotency key
+    /// already exists.
+    /// </summary>
+    public (long EventId, bool IsDuplicate) AppendIdempotent(InProcessEnvelope envelope)
+    {
+        var eventId = Append(envelope);
+        if (eventId > 0)
+            return (eventId, IsDuplicate: false);
+
+        return (GetEventIdByMessageId(envelope.MessageId), IsDuplicate: true);
+    }
+
+    private long GetEventIdByMessageId(string messageId)
+    {
+        const string sql = "SELECT id FROM inproc_events WHERE message_id = @MessageId";
+        using var conn = _db.CreateConnection();
+        return conn.ExecuteScalar<long>(sql, cmd => cmd.AddParameter("MessageId", messageId));
     }
 
     /// <summary>
@@ -120,16 +140,16 @@ internal sealed partial class InProcessEventStore
             var harnessTypeOrdinal = reader.GetOrdinal("harness_type");
 
             var env = new InProcessEnvelope(
-                Event:       evt,
-                MessageId:   reader.GetString(reader.GetOrdinal("message_id")),
-                Tenant:      reader.GetString(reader.GetOrdinal("tenant")),
-                ProjectId:   reader.GetString(reader.GetOrdinal("project_id")),
-                SessionId:   reader.GetString(reader.GetOrdinal("session_id")),
-                EventType:   reader.GetString(reader.GetOrdinal("event_type")),
-                UserId:      reader.IsDBNull(userIdOrdinal) ? null : reader.GetString(userIdOrdinal),
-                HarnessType: reader.IsDBNull(harnessTypeOrdinal) ? null : reader.GetString(harnessTypeOrdinal),
-                Sequence:    reader.GetInt64(reader.GetOrdinal("sequence")),
-                IsDurable:   true);
+                @event:               evt,
+                messageId:            reader.GetString(reader.GetOrdinal("message_id")),
+                tenant:               reader.GetString(reader.GetOrdinal("tenant")),
+                projectId:            reader.GetString(reader.GetOrdinal("project_id")),
+                sessionId:            reader.GetString(reader.GetOrdinal("session_id")),
+                eventType:            reader.GetString(reader.GetOrdinal("event_type")),
+                userId:               reader.IsDBNull(userIdOrdinal) ? null : reader.GetString(userIdOrdinal),
+                harnessType:          reader.IsDBNull(harnessTypeOrdinal) ? null : reader.GetString(harnessTypeOrdinal),
+                internalPumpDedupKey: reader.GetInt64(reader.GetOrdinal("sequence")),
+                isDurable:            true);
             results.Add((id, env));
         }
         return results;

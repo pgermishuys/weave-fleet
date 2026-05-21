@@ -19,6 +19,11 @@ internal sealed record CommittedMessageInfo(
 
 internal sealed record CommittedMessage(CommittedMessageInfo Info, List<JsonElement> Parts);
 
+internal sealed record CommittedUserPromptMessage(
+    CommittedMessageInfo Info,
+    List<JsonElement> Parts,
+    string CorrelationId);
+
 internal sealed record CommittedTextPart(
     string Id,
     string MessageID,
@@ -82,6 +87,7 @@ internal sealed record DirectorySourceInput
 [JsonSerializable(typeof(List<MessagePart>))]
 [JsonSerializable(typeof(DelegationEventDto))]
 [JsonSerializable(typeof(CommittedMessage))]
+[JsonSerializable(typeof(CommittedUserPromptMessage))]
 [JsonSerializable(typeof(CommittedTextPart))]
 [JsonSerializable(typeof(CommittedFilePart))]
 [JsonSerializable(typeof(SessionCreatedOutboxPayload))]

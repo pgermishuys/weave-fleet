@@ -9,7 +9,7 @@ public sealed record BroadcastEvent(
     string Type,
     JsonElement Payload,
     DateTimeOffset Timestamp,
-    long? SequenceNumber = null,
+    long? EventId = null,
     /// <summary>
     /// The user ID that owns this event. Subscribers receive only events whose
     /// <see cref="UserId"/> matches their own, or events with a null UserId (system-level).
@@ -17,6 +17,11 @@ public sealed record BroadcastEvent(
      /// </summary>
     string? UserId = null)
 {
+    /// <summary>
+    /// Deprecated compatibility alias for <see cref="EventId"/>.
+    /// </summary>
+    public long? SequenceNumber => EventId;
+
     /// <summary>
     /// Gets the translated domain event carried alongside the raw event payload when available.
     /// </summary>

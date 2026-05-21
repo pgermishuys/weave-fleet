@@ -28,7 +28,7 @@ public sealed class SessionSnapshotBuilderTests
         snapshot.Messages.ShouldBeEmpty();
         snapshot.Delegations.ShouldBeEmpty();
         snapshot.ActivityStatus.ShouldBe("busy");
-        snapshot.LastSequenceNumber.ShouldBeNull();
+        snapshot.LastEventId.ShouldBeNull();
         snapshot.HasMore.ShouldBeFalse();
         snapshot.Cursor.ShouldBeNull();
     }
@@ -42,7 +42,7 @@ public sealed class SessionSnapshotBuilderTests
         var sessionId = await SeedSessionAsync(factory);
         await SeedMessagesAsync(factory, sessionId, 50);
         await SeedDelegationsAsync(factory, sessionId);
-        await SeedHarnessEventsAsync(factory, sessionId, 7, 12);
+        await SeedHarnessEventsAsync(factory, sessionId, 107, 112);
         tracker.Update(sessionId, "busy", TestUserContext.DefaultUserId);
 
         var snapshot = await builder.BuildAsync(sessionId);
@@ -65,7 +65,8 @@ public sealed class SessionSnapshotBuilderTests
         snapshot.Delegations[0].DelegationId.ShouldBe("delegation-1");
         snapshot.Delegations[1].DelegationId.ShouldBe("delegation-2");
         snapshot.ActivityStatus.ShouldBe("busy");
-        snapshot.LastSequenceNumber.ShouldBe(12);
+        snapshot.LastEventId.ShouldBe(112);
+        snapshot.LastSequenceNumber.ShouldBe(snapshot.LastEventId);
         snapshot.HasMore.ShouldBeFalse();
         snapshot.Cursor.ShouldBeNull();
     }
@@ -87,7 +88,7 @@ public sealed class SessionSnapshotBuilderTests
         snapshot.Messages[^1].Info.Id.ShouldBe("msg-09999");
         snapshot.HasMore.ShouldBeTrue();
         snapshot.Cursor.ShouldNotBeNull();
-        snapshot.LastSequenceNumber.ShouldBe(100);
+        snapshot.LastEventId.ShouldBe(100);
     }
 
     [Fact]
@@ -161,20 +162,23 @@ public sealed class SessionSnapshotBuilderTests
         });
     }
 
-    private static async Task SeedHarnessEventsAsync(IDbConnectionFactory factory, string sessionId, params long[] sequenceNumbers)
+    private static async Task SeedHarnessEventsAsync(IDbConnectionFactory factory, string sessionId, params long[] eventIds)
     {
         var repository = new HarnessEventLogRepository(factory, new TestUserContext());
-        foreach (var sequenceNumber in sequenceNumbers)
+        var sequenceNumber = 1;
+        foreach (var eventId in eventIds)
         {
             await repository.AppendAsync(new HarnessEventLogEntry
             {
                 SessionId = sessionId,
+                EventId = eventId,
                 SequenceNumber = sequenceNumber,
                 Type = "message.updated",
                 Payload = "{}",
                 UserId = TestUserContext.DefaultUserId,
                 CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
             });
+            sequenceNumber++;
         }
     }
 

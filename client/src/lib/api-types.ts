@@ -299,13 +299,17 @@ export interface ReorderProjectRequest {
  */
 export interface WebSocketEvent {
   type: string;
+  eventId?: number | null;
+  /** Deprecated compatibility alias for eventId during the migration. */
   sequenceNumber?: number | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   properties: Record<string, any>;
 }
 
 export interface CommittedSessionEvent {
-  sequenceNumber: number;
+  eventId?: number | null;
+  /** Deprecated compatibility alias for eventId during the migration. */
+  sequenceNumber?: number | null;
   topic: string;
   type: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

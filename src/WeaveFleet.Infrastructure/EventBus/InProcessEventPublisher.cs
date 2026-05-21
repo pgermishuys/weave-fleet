@@ -38,45 +38,46 @@ internal sealed class InProcessEventPublisher : IEventPublisher
         _logger = logger;
     }
 
-    public Task PublishAsync(HarnessEvent evt, EventPublishContext context, CancellationToken ct)
+    public Task<PublishResult> PublishAsync(HarnessEvent evt, EventPublishContext context, CancellationToken ct)
     {
         var classification = EventTypeMetadata.Classify(evt.Type);
 
         if (classification.IsDurable)
         {
-            PublishDurable(evt, context);
-            return Task.CompletedTask;
+            return Task.FromResult(PublishDurable(evt, context));
         }
 
         if (classification.IsEphemeralRelay)
         {
             PublishEphemeral(evt, context);
-            return Task.CompletedTask;
+            return Task.FromResult(new PublishResult(EventId: null, IsDuplicate: false));
         }
 
         if (!classification.IsKnown)
             LogUnknownEventType(_logger, evt.Type, null);
         _metrics.RecordPublish(routing: "dropped", eventType: evt.Type, result: "ok");
-        return Task.CompletedTask;
+        return Task.FromResult(new PublishResult(EventId: null, IsDuplicate: false));
     }
 
-    private void PublishDurable(HarnessEvent evt, EventPublishContext context)
+    private PublishResult PublishDurable(HarnessEvent evt, EventPublishContext context)
     {
         var projectId = context.ProjectId ?? "scratch";
         var tenant    = "tenant.default";
-        var messageId = $"{context.FleetSessionId}:{context.Sequence}";
+        var messageId = string.IsNullOrWhiteSpace(context.CorrelationId)
+            ? $"{context.FleetSessionId}:{context.InternalPumpDedupKey}"
+            : $"{context.FleetSessionId}:correlation:{context.CorrelationId}";
 
         var envelope = new InProcessEnvelope(
-            Event:       evt,
-            MessageId:   messageId,
-            Tenant:      tenant,
-            ProjectId:   projectId,
-            SessionId:   context.FleetSessionId,
-            EventType:   evt.Type,
-            UserId:      context.UserId,
-            HarnessType: context.HarnessType,
-            Sequence:    context.Sequence,
-            IsDurable:   true)
+            @event:               evt,
+            messageId:            messageId,
+            tenant:               tenant,
+            projectId:            projectId,
+            sessionId:            context.FleetSessionId,
+            eventType:            evt.Type,
+            userId:               context.UserId,
+            harnessType:          context.HarnessType,
+            internalPumpDedupKey: context.InternalPumpDedupKey,
+            isDurable:            true)
         {
             DomainEvent = context.DomainEvent
         };
@@ -85,19 +86,22 @@ internal sealed class InProcessEventPublisher : IEventPublisher
         string result = "ok";
         try
         {
-            var storeId = _store.Append(envelope);
-            if (storeId == 0)
+            var appendResult = _store.AppendIdempotent(envelope);
+            if (appendResult.IsDuplicate)
             {
                 result = "duplicate";
                 _metrics.RecordPublish(routing: "durable", eventType: evt.Type, result: result);
-                return;
+                return new PublishResult(appendResult.EventId, IsDuplicate: true);
             }
+
+            envelope.EventId = appendResult.EventId;
 
             // Wake up the projection host to process this event.
             _channels.ProjectionWakeUp.Writer.TryWrite(null!);
 
             // Forward to the fan-out channel so WebSocket clients receive it immediately.
             _channels.FanOut.Writer.TryWrite(envelope);
+            return new PublishResult(appendResult.EventId, IsDuplicate: false);
         }
         catch
         {
@@ -118,16 +122,16 @@ internal sealed class InProcessEventPublisher : IEventPublisher
         var tenant    = "tenant.default";
 
         var envelope = new InProcessEnvelope(
-            Event:       evt,
-            MessageId:   $"{context.FleetSessionId}:{context.Sequence}",
-            Tenant:      tenant,
-            ProjectId:   projectId,
-            SessionId:   context.FleetSessionId,
-            EventType:   evt.Type,
-            UserId:      context.UserId,
-            HarnessType: context.HarnessType,
-            Sequence:    context.Sequence,
-            IsDurable:   false)
+            @event:               evt,
+            messageId:            $"{context.FleetSessionId}:{context.InternalPumpDedupKey}",
+            tenant:               tenant,
+            projectId:            projectId,
+            sessionId:            context.FleetSessionId,
+            eventType:            evt.Type,
+            userId:               context.UserId,
+            harnessType:          context.HarnessType,
+            internalPumpDedupKey: context.InternalPumpDedupKey,
+            isDurable:            false)
         {
             DomainEvent = context.DomainEvent
         };

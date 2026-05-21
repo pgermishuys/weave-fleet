@@ -1,4 +1,5 @@
 using System.Text.Json;
+using WeaveFleet.Api;
 using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
@@ -13,17 +14,12 @@ public sealed class WebSocketMessageFormatTests
     private static string SerializeEnvelope(BroadcastEvent evt)
     {
         // Mirror the serialization in WebSocketEndpoints.PumpEventsAsync
-        return JsonSerializer.Serialize(new
-        {
-            type = "event",
-            topic = evt.Topic,
-            data = new
-            {
-                type = evt.Type,
-                sequenceNumber = evt.SequenceNumber,
-                properties = evt.Payload
-            }
-        });
+        return JsonSerializer.Serialize(
+            new WsEventPayload(
+                "event",
+                evt.Topic,
+                new WsEventDataPayload(evt.Type, evt.EventId, evt.EventId, evt.Payload)),
+            ApiJsonContext.Default.WsEventPayload);
     }
 
     [Fact]
@@ -66,6 +62,22 @@ public sealed class WebSocketMessageFormatTests
         doc.RootElement
             .GetProperty("data")
             .GetProperty("sequenceNumber")
+            .GetInt64()
+            .ShouldBe(42);
+    }
+
+    [Fact]
+    public void Envelope_includes_event_id_when_present()
+    {
+        var payload = JsonSerializer.SerializeToElement(new { text = "hello" });
+        var evt = new BroadcastEvent("session:abc", "message.updated", payload, DateTimeOffset.UtcNow, 42);
+
+        var json = SerializeEnvelope(evt);
+        using var doc = JsonDocument.Parse(json);
+
+        doc.RootElement
+            .GetProperty("data")
+            .GetProperty("eventId")
             .GetInt64()
             .ShouldBe(42);
     }

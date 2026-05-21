@@ -14,6 +14,8 @@ internal sealed record SseSessionEventPayload(
     string SessionId,
     string Type,
     JsonElement Payload,
+    long? EventId,
+    /// <summary>Deprecated compatibility alias for EventId.</summary>
     long? SequenceNumber,
     long Timestamp);
 
@@ -21,12 +23,19 @@ internal sealed record SseActivityEventPayload(
     string Topic,
     string Type,
     JsonElement Payload,
+    long? EventId,
+    /// <summary>Deprecated compatibility alias for EventId.</summary>
     long? SequenceNumber,
     long Timestamp);
 
 internal sealed record SseSessionStoppedPayload(string SessionId, string Status);
 
-internal sealed record WsEventDataPayload(string Type, long? SequenceNumber, JsonElement Properties);
+internal sealed record WsEventDataPayload(
+    string Type,
+    long? EventId,
+    /// <summary>Deprecated compatibility alias for EventId.</summary>
+    long? SequenceNumber,
+    JsonElement Properties);
 
 internal sealed record WsEventPayload(string Type, string Topic, WsEventDataPayload Data);
 
@@ -36,7 +45,7 @@ internal sealed record WsActivityStatusProperties(string SessionId, string Activ
 
 internal sealed record WsSnapshotPayload(string Type, string Topic, SessionSnapshot Data);
 
-internal sealed record WsEventV2Payload(string Type, string Topic, DomainEvent Data);
+internal sealed record WsEventV2Payload(string Type, string Topic, long? EventId, DomainEvent Data);
 
 internal sealed record WsHistoryPagePayload(IReadOnlyList<MessageLifecyclePayload> Messages, string? Cursor, bool HasMore);
 
