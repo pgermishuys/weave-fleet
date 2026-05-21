@@ -1,9 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 using WeaveFleet.Application.Projections;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.EventBus;
+using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.Tests.Data;
 
 namespace WeaveFleet.Infrastructure.Tests.EventBus;
@@ -53,6 +56,7 @@ public sealed class InProcessEventStoreTests
             rows[0].Id.ShouldBe(id);
             rows[0].Envelope.MessageId.ShouldBe("msg-read");
             rows[0].Envelope.EventType.ShouldBe(EventTypes.MessageCreated);
+            rows[0].Envelope.EventId.ShouldBeNull();
         }
     }
 
@@ -88,22 +92,60 @@ public sealed class InProcessEventStoreTests
         }
     }
 
+    [Fact]
+    public async Task read_pending_tolerates_event_id_gaps()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        await using (keeper)
+        {
+            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
+            var id1 = store.Append(MakeEnvelope("msg-gap-a"));
+            var id2 = store.Append(MakeEnvelope("msg-gap-b"));
+            var id3 = store.Append(MakeEnvelope("msg-gap-c"));
+            store.MarkDispatched(id2);
+
+            var rows = store.ReadPending(id1);
+
+            rows.Count.ShouldBe(1);
+            rows[0].Id.ShouldBe(id3);
+        }
+    }
+
+    [Fact]
+    public async Task read_pending_after_event_id_returns_only_later_events()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        await using (keeper)
+        {
+            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
+            _ = store.Append(MakeEnvelope("msg-before-cursor"));
+            var cursor = store.Append(MakeEnvelope("msg-at-cursor"));
+            var afterCursor = store.Append(MakeEnvelope("msg-after-cursor"));
+
+            var rows = store.ReadPending(cursor);
+
+            rows.Count.ShouldBe(1);
+            rows[0].Id.ShouldBe(afterCursor);
+            rows.ShouldAllBe(row => row.Id > cursor);
+        }
+    }
+
     private static InProcessEnvelope MakeEnvelope(string messageId) => new(
-        Event: new HarnessEvent
+        @event: new HarnessEvent
         {
             Type      = EventTypes.MessageCreated,
             SessionId = "sess-1",
             Timestamp = DateTimeOffset.UtcNow,
         },
-        MessageId:   messageId,
-        Tenant:      "tenant.default",
-        ProjectId:   "proj-1",
-        SessionId:   "sess-1",
-        EventType:   EventTypes.MessageCreated,
-        UserId:      "user-1",
-        HarnessType: "opencode",
-        Sequence:    1,
-        IsDurable:   true);
+        messageId:            messageId,
+        tenant:               "tenant.default",
+        projectId:            "proj-1",
+        sessionId:            "sess-1",
+        eventType:            EventTypes.MessageCreated,
+        userId:               "user-1",
+        harnessType:          "opencode",
+        internalPumpDedupKey: 1,
+        isDurable:            true);
 }
 
 public sealed class InProcessEventPublisherTests
@@ -127,9 +169,9 @@ public sealed class InProcessEventPublisherTests
                 SessionId = "sess-pub",
                 Timestamp = DateTimeOffset.UtcNow,
             };
-            await publisher.PublishAsync(
+            _ = await publisher.PublishAsync(
                 evt,
-                new WeaveFleet.Application.Events.EventPublishContext("sess-pub", "proj-1", "user-1", "opencode", Sequence: 42),
+                new WeaveFleet.Application.Events.EventPublishContext("sess-pub", "proj-1", "user-1", "opencode", InternalPumpDedupKey: 42),
                 CancellationToken.None);
 
             // Store should have the event.
@@ -143,6 +185,7 @@ public sealed class InProcessEventPublisherTests
             // Fan-out channel should have the envelope.
             channels.FanOut.Reader.TryRead(out var fanOutEnv).ShouldBeTrue();
             fanOutEnv!.EventType.ShouldBe(EventTypes.MessageCreated);
+            fanOutEnv.EventId.ShouldBe(rows[0].Id);
         }
     }
 
@@ -165,9 +208,9 @@ public sealed class InProcessEventPublisherTests
                 SessionId = "sess-eph",
                 Timestamp = DateTimeOffset.UtcNow,
             };
-            await publisher.PublishAsync(
+            _ = await publisher.PublishAsync(
                 evt,
-                new WeaveFleet.Application.Events.EventPublishContext("sess-eph", "proj-1", "user-1", null, Sequence: 1),
+                new WeaveFleet.Application.Events.EventPublishContext("sess-eph", "proj-1", "user-1", null, InternalPumpDedupKey: 1),
                 CancellationToken.None);
 
             // Store must be empty for ephemeral events.
@@ -179,6 +222,7 @@ public sealed class InProcessEventPublisherTests
             // Fan-out must have the event.
             channels.FanOut.Reader.TryRead(out var env).ShouldBeTrue();
             env!.EventType.ShouldBe(EventTypes.SessionStatus);
+            env.EventId.ShouldBeNull();
         }
     }
 
@@ -212,9 +256,9 @@ public sealed class InProcessEventPublisherTests
                 }
             };
 
-            await publisher.PublishAsync(
+            _ = await publisher.PublishAsync(
                 evt,
-                new WeaveFleet.Application.Events.EventPublishContext("sess-domain", "proj-1", "user-1", null, Sequence: 3)
+                new WeaveFleet.Application.Events.EventPublishContext("sess-domain", "proj-1", "user-1", null, InternalPumpDedupKey: 3)
                 {
                     DomainEvent = domainEvent
                 },
@@ -238,13 +282,52 @@ public sealed class InProcessEventPublisherTests
                 store, channels, metrics,
                 NullLogger<InProcessEventPublisher>.Instance);
 
-            var ctx = new WeaveFleet.Application.Events.EventPublishContext("sess-dd", "proj-1", null, null, Sequence: 7);
+            var ctx = new WeaveFleet.Application.Events.EventPublishContext("sess-dd", "proj-1", null, null, InternalPumpDedupKey: 7);
             var evt = new HarnessEvent { Type = EventTypes.MessageCreated, SessionId = "sess-dd", Timestamp = DateTimeOffset.UtcNow };
 
-            await publisher.PublishAsync(evt, ctx, CancellationToken.None);
-            await publisher.PublishAsync(evt, ctx, CancellationToken.None); // duplicate
+            _ = await publisher.PublishAsync(evt, ctx, CancellationToken.None);
+            _ = await publisher.PublishAsync(evt, ctx, CancellationToken.None); // duplicate
 
             store.ReadPending(0).Count.ShouldBe(1); // only one row
+        }
+    }
+
+    [Fact]
+    public async Task duplicate_correlation_id_is_idempotent()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        await using (keeper)
+        {
+            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
+            var channels = new InProcessChannels();
+            var metrics = new InProcessMetrics();
+            var publisher = new InProcessEventPublisher(
+                store, channels, metrics,
+                NullLogger<InProcessEventPublisher>.Instance);
+
+            var evt = new HarnessEvent { Type = EventTypes.UserPromptCommitted, SessionId = "sess-corr", Timestamp = DateTimeOffset.UtcNow };
+            var first = await publisher.PublishAsync(
+                evt,
+                new WeaveFleet.Application.Events.EventPublishContext("sess-corr", "proj-1", "user-1", "opencode", InternalPumpDedupKey: 0)
+                {
+                    CorrelationId = "corr-duplicate"
+                },
+                CancellationToken.None);
+            var second = await publisher.PublishAsync(
+                evt,
+                new WeaveFleet.Application.Events.EventPublishContext("sess-corr", "proj-1", "user-1", "opencode", InternalPumpDedupKey: 0)
+                {
+                    CorrelationId = "corr-duplicate"
+                },
+                CancellationToken.None);
+
+            first.IsDuplicate.ShouldBeFalse();
+            second.IsDuplicate.ShouldBeTrue();
+            second.EventId.ShouldBe(first.EventId);
+            store.ReadPending(0).Count.ShouldBe(1);
+            channels.FanOut.Reader.TryRead(out var firstEnvelope).ShouldBeTrue();
+            firstEnvelope!.EventId.ShouldBe(first.EventId);
+            channels.FanOut.Reader.TryRead(out _).ShouldBeFalse();
         }
     }
 }
@@ -261,21 +344,21 @@ public sealed class InProcessProjectionHostTests
             var channels = new InProcessChannels();
 
             var env = new InProcessEnvelope(
-                Event: new HarnessEvent
+                @event: new HarnessEvent
                 {
                     Type = EventTypes.MessageCreated,
                     SessionId = "sess-ph",
                     Timestamp = DateTimeOffset.UtcNow,
                 },
-                MessageId:   "sess-ph:1",
-                Tenant:      "tenant.default",
-                ProjectId:   "proj-1",
-                SessionId:   "sess-ph",
-                EventType:   EventTypes.MessageCreated,
-                UserId:      "user-1",
-                HarnessType: "opencode",
-                Sequence:    1,
-                IsDurable:   true);
+                messageId:            "sess-ph:1",
+                tenant:               "tenant.default",
+                projectId:            "proj-1",
+                sessionId:            "sess-ph",
+                eventType:            EventTypes.MessageCreated,
+                userId:               "user-1",
+                harnessType:          "opencode",
+                internalPumpDedupKey: 1,
+                isDurable:            true);
             store.Append(env);
 
             var projection = new RecordingProjection();
@@ -321,6 +404,93 @@ public sealed class InProcessProjectionHostTests
             Received.Add((evt, ctx));
             ReceivedOne.Release();
             return Task.CompletedTask;
+        }
+    }
+}
+
+public sealed class InProcessFanOutServiceTests
+{
+    [Fact]
+    public async Task advisory_events_are_broadcast_without_event_id()
+    {
+        var channels = new InProcessChannels();
+        using var broadcaster = new InMemoryEventBroadcaster();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        BroadcastEvent? received = null;
+        var subscribeTask = Task.Run(async () =>
+        {
+            await foreach (var evt in broadcaster.SubscribeAsync(["session:sess-advisory"], subscriberUserId: null, cts.Token))
+            {
+                received = evt;
+                break;
+            }
+        }, cts.Token);
+
+        while (broadcaster.SubscriberCount < 1)
+            await Task.Delay(10, cts.Token);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IHarnessEventPersister, NoOpHarnessEventPersister>();
+
+        await using var serviceProvider = services.BuildServiceProvider();
+        var service = new InProcessFanOutService(
+            channels,
+            broadcaster,
+            new SessionActivityTracker(),
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<InProcessFanOutService>.Instance);
+
+        await service.StartAsync(cts.Token);
+        try
+        {
+            var env = new InProcessEnvelope(
+                @event: new HarnessEvent
+                {
+                    Type = EventTypes.MessagePartDelta,
+                    SessionId = "sess-advisory",
+                    Timestamp = DateTimeOffset.UtcNow,
+                    Payload = JsonSerializer.SerializeToElement(new { text = "partial" })
+                },
+                messageId:            "sess-advisory:1",
+                tenant:               "tenant.default",
+                projectId:            "proj-1",
+                sessionId:            "sess-advisory",
+                eventType:            EventTypes.MessagePartDelta,
+                userId:               null,
+                harnessType:          "opencode",
+                internalPumpDedupKey: 1,
+                isDurable:            false)
+            {
+                EventId = 123
+            };
+
+            channels.FanOut.Writer.TryWrite(env).ShouldBeTrue();
+
+            await subscribeTask.WaitAsync(cts.Token);
+
+            received.ShouldNotBeNull();
+            received!.Type.ShouldBe(EventTypes.MessagePartDelta);
+            received.EventId.ShouldBeNull();
+            received.SequenceNumber.ShouldBeNull();
+        }
+        finally
+        {
+            await cts.CancelAsync();
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private sealed class NoOpHarnessEventPersister : IHarnessEventPersister
+    {
+        public Task HandleAsync(string fleetSessionId, string ownerUserId, HarnessEvent evt, CancellationToken ct)
+            => Task.CompletedTask;
+
+        public Task FlushBufferedDeltasAsync(string fleetSessionId, string ownerUserId, CancellationToken ct)
+            => Task.CompletedTask;
+
+        public void BufferTextDelta(string fleetSessionId, HarnessEvent delta)
+        {
         }
     }
 }

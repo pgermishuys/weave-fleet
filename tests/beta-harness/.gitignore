@@ -1,5 +1,9 @@
-# Per-run runtime artefacts: isolated data dir, fleet log, materialised scenarios
-.runtime/
+# Per-run runtime artefacts: isolated data dir and fleet log.
+# Curated deterministic scenario fixtures under .runtime/scenarios are checked in
+# because the live test harness loads from this path by default.
+.runtime/*
+!.runtime/scenarios/
+!.runtime/scenarios/*.json
 
 # Node deps
 node_modules/

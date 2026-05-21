@@ -14,6 +14,13 @@ public readonly struct EventClassification
     /// <summary>Whether the event is ephemeral and should be relayed directly to clients without persistence.</summary>
     public bool IsEphemeralRelay { get; init; }
 
+    /// <summary>
+    /// Whether the event is advisory only. Advisory events are not part of committed session state:
+    /// they carry no durable <c>eventId</c>, may be dropped during reconnect/replay, and must not
+    /// be used by clients or projections to advance committed state.
+    /// </summary>
+    public bool IsAdvisory { get; init; }
+
     /// <summary>Whether the event payload may contain reasoning content that must be filtered before delivery or storage.</summary>
     public bool RequiresReasoningFilter { get; init; }
 
@@ -41,6 +48,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
+            IsAdvisory = false,
             RequiresReasoningFilter = true,
             IsActivitySignal = false,
         },
@@ -49,6 +57,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
+            IsAdvisory = false,
             RequiresReasoningFilter = true,
             IsActivitySignal = false,
         },
@@ -57,6 +66,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
+            IsAdvisory = false,
             RequiresReasoningFilter = true,
             IsActivitySignal = false,
         },
@@ -65,6 +75,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
+            IsAdvisory = false,
             RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
@@ -73,6 +84,16 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
+            IsAdvisory = false,
+            RequiresReasoningFilter = false,
+            IsActivitySignal = false,
+        },
+        EventTypes.UserPromptCommitted => new EventClassification
+        {
+            IsKnown = true,
+            IsDurable = true,
+            IsEphemeralRelay = false,
+            IsAdvisory = false,
             RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
@@ -81,6 +102,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = false,
             IsEphemeralRelay = true,
+            IsAdvisory = true,
             RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
@@ -89,6 +111,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
+            IsAdvisory = false,
             RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
@@ -97,6 +120,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
+            IsAdvisory = false,
             RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
@@ -105,6 +129,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
+            IsAdvisory = false,
             RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
@@ -113,6 +138,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = true,
             IsEphemeralRelay = false,
+            IsAdvisory = false,
             RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
@@ -121,6 +147,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = false,
             IsEphemeralRelay = true,
+            IsAdvisory = true,
             RequiresReasoningFilter = false,
             IsActivitySignal = true,
         },
@@ -129,6 +156,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = false,
             IsEphemeralRelay = true,
+            IsAdvisory = true,
             RequiresReasoningFilter = false,
             IsActivitySignal = true,
         },
@@ -137,6 +165,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = false,
             IsEphemeralRelay = true,
+            IsAdvisory = true,
             RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
@@ -145,6 +174,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = false,
             IsEphemeralRelay = true,
+            IsAdvisory = true,
             RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
@@ -153,6 +183,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = false,
             IsEphemeralRelay = false,
+            IsAdvisory = false,
             RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
@@ -161,6 +192,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = false,
             IsEphemeralRelay = false,
+            IsAdvisory = false,
             RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
@@ -169,6 +201,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = false,
             IsEphemeralRelay = false,
+            IsAdvisory = false,
             RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
@@ -177,6 +210,7 @@ public static class EventTypeMetadata
             IsKnown = true,
             IsDurable = false,
             IsEphemeralRelay = true,
+            IsAdvisory = true,
             RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },

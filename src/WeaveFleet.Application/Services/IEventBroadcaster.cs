@@ -11,7 +11,7 @@ public interface IEventBroadcaster
 {
     Task BroadcastAsync(string topic, string type, JsonElement payload, string? userId, CancellationToken ct);
 
-    Task BroadcastAsync(string topic, string type, JsonElement payload, long? sequenceNumber, string? userId, CancellationToken ct);
+    Task BroadcastAsync(string topic, string type, JsonElement payload, long? eventId, string? userId, CancellationToken ct);
 
     /// <summary>
     /// Broadcasts a raw event together with an optional translated domain event.
@@ -19,9 +19,9 @@ public interface IEventBroadcaster
     Task BroadcastAsync(string topic, string type, JsonElement payload, DomainEvent? domainEvent, string? userId, CancellationToken ct);
 
     /// <summary>
-    /// Broadcasts a raw event together with an optional translated domain event and sequence number.
+    /// Broadcasts a raw event together with an optional translated domain event and durable event ID.
     /// </summary>
-    Task BroadcastAsync(string topic, string type, JsonElement payload, long? sequenceNumber, DomainEvent? domainEvent, string? userId, CancellationToken ct);
+    Task BroadcastAsync(string topic, string type, JsonElement payload, long? eventId, DomainEvent? domainEvent, string? userId, CancellationToken ct);
 
     /// <summary>
     /// Subscribe to one or more <paramref name="topics"/>.

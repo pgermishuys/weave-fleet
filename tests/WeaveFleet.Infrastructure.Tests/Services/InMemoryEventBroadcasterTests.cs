@@ -158,7 +158,7 @@ public sealed class InMemoryEventBroadcasterTests
             "sessions",
             "session_created",
             JsonSerializer.SerializeToElement(new { id = "s1" }),
-            sequenceNumber: 99,
+            eventId: 99,
             userId: null,
             CancellationToken.None);
 
@@ -256,7 +256,7 @@ public sealed class InMemoryEventBroadcasterTests
             "session:sess-1",
             "session.status",
             JsonSerializer.SerializeToElement(new { status = new { type = "busy" } }),
-            sequenceNumber: 7,
+            eventId: 7,
             domainEvent,
             userId: null,
             CancellationToken.None);

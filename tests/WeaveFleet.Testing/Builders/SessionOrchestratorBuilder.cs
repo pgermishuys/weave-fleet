@@ -95,6 +95,7 @@ public sealed class SessionOrchestratorBuilder
             DelegationRepository,
             ProjectRepository,
             EventBroadcaster,
+            new FakeEventPublisher(),
             AnalyticsCollector,
             MessageRepository,
             HarnessEventLogRepository,

@@ -1,0 +1,91 @@
+{
+  "$schemaComment": "Test-only beta-harness fixture. Loaded only by WeaveFleet.TestHarness.LiveScenarioHarness when a test session passes scenarioId=user-echo; production runtimes do not read this file.",
+  "description": "Echoes user message.created/message.updated/message.part.updated before the assistant response to exercise duplicate prompt suppression.",
+  "promptResponses": [
+    {
+      "events": [
+        {
+          "type": "session.status",
+          "delayMs": 0,
+          "payload": {
+            "sessionId": "_placeholder_",
+            "status": { "type": "busy" }
+          }
+        },
+        {
+          "type": "message.created",
+          "delayMs": 0,
+          "payload": {
+            "info": {
+              "id": "user-echo-1",
+              "sessionID": "_placeholder_",
+              "role": "user",
+              "time": { "created": 1810000020000 }
+            }
+          }
+        },
+        {
+          "type": "message.updated",
+          "delayMs": 0,
+          "payload": {
+            "info": {
+              "id": "user-echo-1",
+              "sessionID": "_placeholder_",
+              "role": "user",
+              "time": { "created": 1810000020000 }
+            }
+          }
+        },
+        {
+          "type": "message.part.updated",
+          "delayMs": 0,
+          "payload": {
+            "sessionID": "_placeholder_",
+            "part": {
+              "id": "user-echo-1-text",
+              "sessionID": "_placeholder_",
+              "messageID": "user-echo-1",
+              "type": "text",
+              "text": "_user_prompt_"
+            }
+          }
+        },
+        {
+          "type": "message.updated",
+          "delayMs": 75,
+          "payload": {
+            "info": {
+              "id": "user-echo-assistant-1",
+              "sessionID": "_placeholder_",
+              "role": "assistant",
+              "time": { "created": 1810000021000 },
+              "agent": "loom"
+            }
+          }
+        },
+        {
+          "type": "message.part.updated",
+          "delayMs": 25,
+          "payload": {
+            "sessionID": "_placeholder_",
+            "part": {
+              "id": "user-echo-assistant-1-text",
+              "sessionID": "_placeholder_",
+              "messageID": "user-echo-assistant-1",
+              "type": "text",
+              "text": "Assistant response after user echo."
+            }
+          }
+        },
+        {
+          "type": "session.idle",
+          "delayMs": 25,
+          "payload": {
+            "sessionId": "_placeholder_",
+            "status": { "type": "idle" }
+          }
+        }
+      ]
+    }
+  ]
+}

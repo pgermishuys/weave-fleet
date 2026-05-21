@@ -375,16 +375,16 @@ public sealed class MessagePersistenceTests : E2ETestBase,
                 "msg-gapfill-1",
                 "Recovered after reconnect via sequence gap fill");
 
-            var afterSequenceNumberResponse = Page.WaitForResponseAsync(response =>
+            var afterEventIdResponse = Page.WaitForResponseAsync(response =>
                 response.Url.Contains($"/api/sessions/{sessionId}/committed-events", StringComparison.Ordinal)
-                && response.Url.Contains("afterSequenceNumber=", StringComparison.Ordinal)
+                && response.Url.Contains("afterEventId=", StringComparison.Ordinal)
                 && response.Ok,
                 new PageWaitForResponseOptions { Timeout = 10_000 });
 
             detail = await dashboard.ClickSessionCardAsync(sessionId);
 
-            var gapFillResponse = await afterSequenceNumberResponse;
-            gapFillResponse.Url.ShouldContain("afterSequenceNumber=");
+            var gapFillResponse = await afterEventIdResponse;
+            gapFillResponse.Url.ShouldContain("afterEventId=");
             await detail.WaitForMessageTextAsync("Recovered after reconnect via sequence gap fill", 10_000);
         });
     }

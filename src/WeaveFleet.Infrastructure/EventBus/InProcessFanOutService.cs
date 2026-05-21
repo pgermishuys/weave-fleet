@@ -64,6 +64,7 @@ internal sealed partial class InProcessFanOutService : BackgroundService
         var userId    = envelope.UserId;
         var evt       = envelope.Event;
         var domainEvent = envelope.DomainEvent;
+        var classification = EventTypeMetadata.Classify(eventType);
 
         if (IsUserMessageEcho(evt))
             return;
@@ -82,7 +83,7 @@ internal sealed partial class InProcessFanOutService : BackgroundService
             : InfrastructureJsonContext.EmptyObject;
 
         await _broadcaster.BroadcastAsync(
-            $"session:{sessionId}", eventType, payload, envelope.Sequence, domainEvent, userId, ct)
+            $"session:{sessionId}", eventType, payload, classification.IsAdvisory ? null : envelope.EventId, domainEvent, userId, ct)
             .ConfigureAwait(false);
 
         // Activity-status side-channel for the global "sessions" topic.

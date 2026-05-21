@@ -37,8 +37,8 @@ export interface CacheEntry {
   sessionStatus: SessionStreamStatus;
   /** Last known delegations for this session. */
   delegations: DelegationDto[];
-  /** The last committed sequence number processed for this session. */
-  lastSequenceNumber: number | null;
+  /** The last committed durable event id processed for this session. */
+  lastEventId: number | null;
   /** Unix timestamp (ms) when this entry was saved — used for TTL checks. */
   timestamp: number;
   /** Pagination state snapshot — restored to avoid incorrect "scroll up for older" state. */

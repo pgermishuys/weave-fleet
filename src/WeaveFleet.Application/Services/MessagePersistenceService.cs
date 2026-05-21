@@ -170,6 +170,32 @@ public sealed class MessagePersistenceService
     /// </summary>
     public static JsonElement BuildCommittedMessagePayload(PersistedMessage persisted)
     {
+        var (messageInfo, parts) = BuildCommittedMessagePayloadParts(persisted);
+
+        return JsonSerializer.SerializeToElement(new CommittedMessage(
+            messageInfo,
+            parts),
+            ApplicationJsonContext.Default.CommittedMessage);
+    }
+
+    /// <summary>
+    /// Builds a committed user prompt payload that includes the caller-supplied correlation key
+    /// for optimistic client reconciliation.
+    /// </summary>
+    public static JsonElement BuildCommittedMessagePayload(PersistedMessage persisted, string correlationId)
+    {
+        var (messageInfo, parts) = BuildCommittedMessagePayloadParts(persisted);
+
+        return JsonSerializer.SerializeToElement(new CommittedUserPromptMessage(
+            messageInfo,
+            parts,
+            correlationId),
+            ApplicationJsonContext.Default.CommittedUserPromptMessage);
+    }
+
+    private static (CommittedMessageInfo MessageInfo, List<JsonElement> Parts) BuildCommittedMessagePayloadParts(
+        PersistedMessage persisted)
+    {
         var message = ToHarnessMessage(persisted);
         var parts = new List<JsonElement>(message.Parts.Count);
 
@@ -180,20 +206,18 @@ public sealed class MessagePersistenceService
                 parts.Add(partPayload.Value);
         }
 
-        return JsonSerializer.SerializeToElement(new CommittedMessage(
-            new CommittedMessageInfo(
-                message.Id,
-                message.Role,
-                persisted.SessionId,
-                message.Agent,
-                message.ModelId,
-                new CommittedMessageTime(
-                    DateTimeOffset.Parse(
-                        persisted.CreatedAt,
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        System.Globalization.DateTimeStyles.RoundtripKind).ToUnixTimeMilliseconds())),
-            parts),
-            ApplicationJsonContext.Default.CommittedMessage);
+        return (new CommittedMessageInfo(
+            message.Id,
+            message.Role,
+            persisted.SessionId,
+            message.Agent,
+            message.ModelId,
+            new CommittedMessageTime(
+                DateTimeOffset.Parse(
+                    persisted.CreatedAt,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind).ToUnixTimeMilliseconds())),
+            parts);
     }
 
     /// <summary>

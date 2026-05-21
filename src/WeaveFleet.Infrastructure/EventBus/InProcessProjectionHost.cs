@@ -123,7 +123,7 @@ internal sealed partial class InProcessProjectionHost : BackgroundService
             UserId:          envelope.UserId,
             HarnessType:     envelope.HarnessType,
             StreamSequence:  storeId,
-            PublishSequence: envelope.Sequence);
+            InternalPumpDedupKey: envelope.InternalPumpDedupKey);
 
         await projection.HandleAsync(envelope.Event, ctx, ct).ConfigureAwait(false);
     }

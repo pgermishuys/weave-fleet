@@ -28,16 +28,16 @@ public sealed class FakeEventBroadcaster : IEventBroadcaster
         return Task.CompletedTask;
     }
 
-    public Task BroadcastAsync(string topic, string type, JsonElement payload, long? sequenceNumber, string? userId, CancellationToken ct)
+    public Task BroadcastAsync(string topic, string type, JsonElement payload, long? eventId, string? userId, CancellationToken ct)
     {
-        Broadcasts.Add(new(topic, type, payload, sequenceNumber, userId, null));
+        Broadcasts.Add(new(topic, type, payload, eventId, userId, null));
         OnBroadcast?.Invoke(topic, type, payload, userId, ct);
         return Task.CompletedTask;
     }
 
-    public Task BroadcastAsync(string topic, string type, JsonElement payload, long? sequenceNumber, DomainEvent? domainEvent, string? userId, CancellationToken ct)
+    public Task BroadcastAsync(string topic, string type, JsonElement payload, long? eventId, DomainEvent? domainEvent, string? userId, CancellationToken ct)
     {
-        Broadcasts.Add(new(topic, type, payload, sequenceNumber, userId, domainEvent));
+        Broadcasts.Add(new(topic, type, payload, eventId, userId, domainEvent));
         OnBroadcast?.Invoke(topic, type, payload, userId, ct);
         return Task.CompletedTask;
     }
@@ -45,5 +45,9 @@ public sealed class FakeEventBroadcaster : IEventBroadcaster
     public IAsyncEnumerable<BroadcastEvent> SubscribeAsync(IReadOnlyList<string> topics, string? subscriberUserId, CancellationToken ct)
         => AsyncEnumerable.Empty<BroadcastEvent>();
 
-    public sealed record BroadcastRecord(string Topic, string Type, JsonElement Payload, long? SequenceNumber, string? UserId, DomainEvent? DomainEvent);
+    public sealed record BroadcastRecord(string Topic, string Type, JsonElement Payload, long? EventId, string? UserId, DomainEvent? DomainEvent)
+    {
+        /// <summary>Deprecated compatibility alias for <see cref="EventId"/>.</summary>
+        public long? SequenceNumber => EventId;
+    }
 }

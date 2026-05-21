@@ -34,6 +34,7 @@ interface ActivityMessage {
   tools?: ToolCardItem[];
   questionParts?: AccumulatedToolPart[];
   delegationLinks: DelegationLink[];
+  optimisticStatus?: "pending" | "confirmed" | "needs_retry";
   clusterPosition: "single" | "first" | "middle" | "last";
   showIdentity: boolean;
 }
@@ -202,6 +203,7 @@ const optimisticMessages = computed<ActivityMessage[]>(() => {
     tools: [],
     questionParts: [],
     delegationLinks: [],
+    optimisticStatus: prompt.status,
     clusterPosition: "single",
     showIdentity: true,
   }));
@@ -696,6 +698,13 @@ function getStringValue(value: unknown): string | undefined {
           :cluster-position="message.clusterPosition"
         />
         <div
+          v-if="message.optimisticStatus === 'needs_retry'"
+          class="optimistic-retry"
+          :class="`optimistic-retry--${message.role}`"
+        >
+          Not confirmed yet. Retry from the composer if this did not send.
+        </div>
+        <div
           v-if="message.delegationLinks.length > 0"
           class="delegation-links"
           :class="`delegation-links--${message.role}`"
@@ -815,6 +824,22 @@ function getStringValue(value: unknown): string | undefined {
   border-top-color: rgba(129, 140, 248, 0.8);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
+}
+
+.optimistic-retry {
+  width: var(--activity-bubble-width);
+  margin: 4px 0 8px;
+  color: #fbbf24;
+  font-size: 0.75rem;
+}
+
+.optimistic-retry--user {
+  align-self: flex-end;
+  text-align: right;
+}
+
+.optimistic-retry--assistant {
+  align-self: flex-start;
 }
 
 @keyframes spin {

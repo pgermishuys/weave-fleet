@@ -38,6 +38,39 @@ tests/beta-harness/
 └── .runtime/                  # gitignored: fleet.log, data/, scenarios/*.json
 ```
 
+## Scenario fixture schema
+
+The live test harness reads deterministic JSON fixtures from
+`.runtime/scenarios/<scenarioId>.json` only when Fleet is running with the test harness and a
+session is created with that `scenarioId`. These files are test-only inputs for
+`WeaveFleet.TestHarness.LiveScenarioHarness`; production harness runtimes never read them.
+
+The supported fixture shape is intentionally small and mirrors the existing in-code
+`TestScenarioBuilder` event queue:
+
+```json
+{
+  "promptResponses": [
+    {
+      "events": [
+        { "type": "session.status", "delayMs": 0, "payload": { } },
+        { "type": "message.updated", "delayMs": 100, "payload": { } }
+      ]
+    }
+  ]
+}
+```
+
+Each `promptResponses` entry is dequeued for the next prompt. `delayMs` is optional and
+clamped to zero when negative. `payload` is forwarded verbatim; use `_placeholder_` for the
+session id and `_user_prompt_` for user echo part text when the harness should substitute the
+actual prompt. Extra documentation fields such as `$schemaComment` and `description` are ignored
+by the loader.
+
+Curated fixtures currently cover slow streaming, out-of-order part/lifecycle events, user echo
+suppression, and snapshot-race-friendly durable bursts. `materialise-scenarios` may also write
+playbook-derived JSON into this same directory during ad-hoc beta runs.
+
 ## Findings
 
 Every run records a finding under `findings/`. Stable repros graduate to C# E2E tests in `tests/WeaveFleet.E2E/Tests/`.

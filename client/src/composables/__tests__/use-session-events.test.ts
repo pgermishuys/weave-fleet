@@ -212,7 +212,7 @@ describe("useSessionEvents", () => {
       scrollPosition: 0,
       scrollHeight: 0,
       sessionStatus: "busy",
-      lastSequenceNumber: 7,
+      lastEventId: 7,
       pagination: { hasMore: false, oldestMessageId: null, totalCount: null },
       timestamp: Date.now(),
     })
@@ -233,13 +233,13 @@ describe("useSessionEvents", () => {
     await flushAll()
 
     expect(apiFetchMock.mock.calls.map(([url]) => url)).toEqual([
-      "/api/sessions/session-1/committed-events?afterSequenceNumber=7",
+      "/api/sessions/session-1/committed-events?afterEventId=7",
       "/api/sessions/session-1/delegations",
-      "/api/sessions/session-1/committed-events?afterSequenceNumber=7",
+      "/api/sessions/session-1/committed-events?afterEventId=7",
       "/api/sessions/session-1/delegations",
-      "/api/sessions/session-1/committed-events?afterSequenceNumber=7",
+      "/api/sessions/session-1/committed-events?afterEventId=7",
       "/api/sessions/session-1/delegations",
-      "/api/sessions/session-1/committed-events?afterSequenceNumber=7",
+      "/api/sessions/session-1/committed-events?afterEventId=7",
       "/api/sessions/session-1/delegations",
     ])
     expect(apiFetchMock.mock.calls.map(([url]) => url)).not.toContain("/api/sessions/session-1/status?instanceId=instance-1")
@@ -578,6 +578,179 @@ describe("useSessionEvents", () => {
 
     expect(result.messages.value.map((message) => message.messageId)).toEqual(["msg-old", "msg-new"])
     expect(result.messages.value.map((message) => message.parts[0]?.type === "text" ? message.parts[0].text : "")).toEqual(["older", "newer"])
+  })
+
+  it("gap-fills committed events after the cached event id only", async () => {
+    sessionCache.set("session-1", "instance-1", {
+      messages: [],
+      delegations: [],
+      scrollPosition: 0,
+      scrollHeight: 0,
+      sessionStatus: "idle",
+      lastEventId: 10,
+      pagination: { hasMore: false, oldestMessageId: null, totalCount: null },
+      timestamp: Date.now(),
+    })
+    apiFetchMock.mockImplementation((url: string) => {
+      if (url.includes("/delegations")) {
+        return Promise.resolve(createJsonResponse([]))
+      }
+
+      if (url.includes("/committed-events")) {
+        return Promise.resolve(createJsonResponse({
+          events: [
+            {
+              eventId: 11,
+              topic: "session:session-1",
+              type: "message.updated",
+              payload: {
+                info: {
+                  id: "msg-gap-fill",
+                  role: "assistant",
+                  sessionID: "session-1",
+                  time: { created: 1_000 },
+                },
+                parts: [{ id: "part-gap-fill", type: "text", text: "gap filled" }],
+              },
+              timestamp: 1_000,
+            },
+          ],
+        }))
+      }
+
+      throw new Error(`Unexpected apiFetch call: ${url}`)
+    })
+
+    const { useSessionEvents } = await import("@/composables/use-session-events")
+    const { result } = await mountComposable(() => useSessionEvents("session-1", "instance-1"))
+
+    await flushAll()
+
+    expect(apiFetchMock).toHaveBeenCalledWith(
+      "/api/sessions/session-1/committed-events?afterEventId=10",
+      { signal: expect.any(AbortSignal) },
+    )
+    expect(result.messages.value.map((message) => message.messageId)).toEqual(["msg-gap-fill"])
+    expect(loadInitialMessagesMock).not.toHaveBeenCalled()
+  })
+
+  it("tolerates event id gaps and advances the reconnect cursor monotonically", async () => {
+    sessionCache.set("session-1", "instance-1", {
+      messages: [],
+      delegations: [],
+      scrollPosition: 0,
+      scrollHeight: 0,
+      sessionStatus: "idle",
+      lastEventId: 10,
+      pagination: { hasMore: false, oldestMessageId: null, totalCount: null },
+      timestamp: Date.now(),
+    })
+
+    const { useSessionEvents } = await import("@/composables/use-session-events")
+    const { result } = await mountComposable(() => useSessionEvents("session-1", "instance-1"))
+    await flushAll()
+
+    socketCallback?.("session:session-1", {
+      eventId: 12,
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "msg-12",
+          role: "assistant",
+          sessionID: "session-1",
+          time: { created: 1_200 },
+        },
+      },
+    })
+    socketCallback?.("session:session-1", {
+      eventId: 15,
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "msg-15",
+          role: "assistant",
+          sessionID: "session-1",
+          time: { created: 1_500 },
+        },
+      },
+    })
+    socketCallback?.("session:session-1", {
+      eventId: 14,
+      type: "message.updated",
+      properties: {
+        info: {
+          id: "msg-14",
+          role: "assistant",
+          sessionID: "session-1",
+          time: { created: 1_400 },
+        },
+      },
+    })
+
+    await nextTick()
+    sessionCache.set("different-session", "different-instance", {
+      messages: [],
+      delegations: [],
+      scrollPosition: 0,
+      scrollHeight: 0,
+      sessionStatus: "idle",
+      lastEventId: null,
+      pagination: { hasMore: false, oldestMessageId: null, totalCount: null },
+      timestamp: Date.now(),
+    })
+
+    result.reconnect()
+    await flushAll()
+
+    expect(apiFetchMock.mock.calls.map(([url]) => url)).toContain(
+      "/api/sessions/session-1/committed-events?afterEventId=15",
+    )
+    expect(result.messages.value.map((message) => message.messageId)).toEqual(["msg-12", "msg-14", "msg-15"])
+  })
+
+  it("advisory delta events without event id do not affect the reconnect cursor", async () => {
+    sessionCache.set("session-1", "instance-1", {
+      messages: [],
+      delegations: [],
+      scrollPosition: 0,
+      scrollHeight: 0,
+      sessionStatus: "idle",
+      lastEventId: 20,
+      pagination: { hasMore: false, oldestMessageId: null, totalCount: null },
+      timestamp: Date.now(),
+    })
+
+    const { useSessionEvents } = await import("@/composables/use-session-events")
+    const { result } = await mountComposable(() => useSessionEvents("session-1", "instance-1"))
+    await flushAll()
+
+    socketCallback?.("session:session-1", {
+      type: "message.part.delta",
+      properties: {
+        messageID: "assistant-1",
+        partID: "assistant-1-text",
+        field: "text",
+        delta: "partial ",
+      },
+    })
+    socketCallback?.("session:session-1", {
+      type: "message.part.delta",
+      properties: {
+        messageID: "assistant-1",
+        partID: "assistant-1-text",
+        field: "text",
+        delta: "reply",
+      },
+    })
+    await nextTick()
+
+    result.reconnect()
+    await flushAll()
+
+    expect(result.messages.value[0]?.parts).toEqual([{ partId: "assistant-1-text", type: "text", text: "partial reply" }])
+    expect(apiFetchMock.mock.calls.map(([url]) => url)).toContain(
+      "/api/sessions/session-1/committed-events?afterEventId=20",
+    )
   })
 
   it("sorts loaded history pages by authoritative message timestamp", () => {

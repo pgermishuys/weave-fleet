@@ -1,0 +1,114 @@
+{
+  "$schemaComment": "Test-only beta-harness fixture. Loaded only by WeaveFleet.TestHarness.LiveScenarioHarness when a test session passes scenarioId=snapshot-race-durable-burst; production runtimes do not read this file.",
+  "description": "Emits a tight burst of durable assistant lifecycle and part updates so subscribers can race snapshot hydration against event drain.",
+  "promptResponses": [
+    {
+      "events": [
+        {
+          "type": "session.status",
+          "delayMs": 0,
+          "payload": {
+            "sessionId": "_placeholder_",
+            "status": { "type": "busy" }
+          }
+        },
+        {
+          "type": "message.updated",
+          "delayMs": 0,
+          "payload": {
+            "info": {
+              "id": "burst-assistant-1",
+              "sessionID": "_placeholder_",
+              "role": "assistant",
+              "time": { "created": 1810000030000 },
+              "agent": "loom"
+            }
+          }
+        },
+        {
+          "type": "message.part.updated",
+          "delayMs": 0,
+          "payload": {
+            "sessionID": "_placeholder_",
+            "part": {
+              "id": "burst-assistant-1-text",
+              "sessionID": "_placeholder_",
+              "messageID": "burst-assistant-1",
+              "type": "text",
+              "text": "Burst part one."
+            }
+          }
+        },
+        {
+          "type": "message.updated",
+          "delayMs": 1,
+          "payload": {
+            "info": {
+              "id": "burst-assistant-2",
+              "sessionID": "_placeholder_",
+              "role": "assistant",
+              "time": { "created": 1810000030001 },
+              "agent": "loom"
+            }
+          }
+        },
+        {
+          "type": "message.part.updated",
+          "delayMs": 0,
+          "payload": {
+            "sessionID": "_placeholder_",
+            "part": {
+              "id": "burst-assistant-2-text",
+              "sessionID": "_placeholder_",
+              "messageID": "burst-assistant-2",
+              "type": "text",
+              "text": "Burst part two."
+            }
+          }
+        },
+        {
+          "type": "message.updated",
+          "delayMs": 1,
+          "payload": {
+            "info": {
+              "id": "burst-assistant-3",
+              "sessionID": "_placeholder_",
+              "role": "assistant",
+              "time": { "created": 1810000030002 },
+              "agent": "loom"
+            }
+          }
+        },
+        {
+          "type": "message.part.updated",
+          "delayMs": 0,
+          "payload": {
+            "sessionID": "_placeholder_",
+            "part": {
+              "id": "burst-assistant-3-text",
+              "sessionID": "_placeholder_",
+              "messageID": "burst-assistant-3",
+              "type": "text",
+              "text": "Burst part three."
+            }
+          }
+        },
+        {
+          "type": "session.status",
+          "delayMs": 1,
+          "payload": {
+            "sessionId": "_placeholder_",
+            "status": { "type": "idle" }
+          }
+        },
+        {
+          "type": "session.idle",
+          "delayMs": 0,
+          "payload": {
+            "sessionId": "_placeholder_"
+          }
+        }
+      ]
+    }
+  ]
+}

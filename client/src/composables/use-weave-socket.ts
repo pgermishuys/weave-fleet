@@ -188,7 +188,11 @@ function connect(): void {
       }
 
       if (message.type === "event_v2" && typeof message.topic === "string") {
-        dispatchEventV2(message.topic, message.data as DomainEvent)
+        const domainEvent = message.data as DomainEvent
+        const eventId = typeof (message as { eventId?: unknown }).eventId === "number"
+          ? (message as { eventId: number }).eventId
+          : null
+        dispatchEventV2(message.topic, eventId === null ? domainEvent : { ...domainEvent, eventId })
         return
       }
 

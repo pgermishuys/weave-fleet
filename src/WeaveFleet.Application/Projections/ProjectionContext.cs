@@ -11,4 +11,4 @@ public readonly record struct ProjectionContext(
     string? UserId,
     string? HarnessType,
     long StreamSequence,
-    long PublishSequence);
+    long InternalPumpDedupKey);

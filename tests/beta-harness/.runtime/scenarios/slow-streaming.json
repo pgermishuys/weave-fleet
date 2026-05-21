@@ -1,0 +1,104 @@
+{
+  "$schemaComment": "Test-only beta-harness fixture. Loaded only by WeaveFleet.TestHarness.LiveScenarioHarness when a test session passes scenarioId=slow-streaming; production runtimes do not read this file.",
+  "description": "Streams assistant text in delayed deltas, then emits a final durable message.updated snapshot with the complete text.",
+  "promptResponses": [
+    {
+      "events": [
+        {
+          "type": "session.status",
+          "delayMs": 0,
+          "payload": {
+            "sessionId": "_placeholder_",
+            "status": { "type": "busy" }
+          }
+        },
+        {
+          "type": "message.updated",
+          "delayMs": 25,
+          "payload": {
+            "info": {
+              "id": "slow-stream-assistant-1",
+              "sessionID": "_placeholder_",
+              "role": "assistant",
+              "time": { "created": 1810000000000 },
+              "agent": "loom"
+            }
+          }
+        },
+        {
+          "type": "message.part.delta",
+          "delayMs": 250,
+          "payload": {
+            "sessionID": "_placeholder_",
+            "messageID": "slow-stream-assistant-1",
+            "partID": "slow-stream-assistant-1-text",
+            "field": "text",
+            "delta": "Slow"
+          }
+        },
+        {
+          "type": "message.part.delta",
+          "delayMs": 350,
+          "payload": {
+            "sessionID": "_placeholder_",
+            "messageID": "slow-stream-assistant-1",
+            "partID": "slow-stream-assistant-1-text",
+            "field": "text",
+            "delta": " streaming"
+          }
+        },
+        {
+          "type": "message.part.delta",
+          "delayMs": 350,
+          "payload": {
+            "sessionID": "_placeholder_",
+            "messageID": "slow-stream-assistant-1",
+            "partID": "slow-stream-assistant-1-text",
+            "field": "text",
+            "delta": " response."
+          }
+        },
+        {
+          "type": "message.updated",
+          "delayMs": 100,
+          "payload": {
+            "info": {
+              "id": "slow-stream-assistant-1",
+              "sessionID": "_placeholder_",
+              "role": "assistant",
+              "time": {
+                "created": 1810000000000,
+                "completed": 1810000001000
+              },
+              "agent": "loom"
+            },
+            "parts": [
+              {
+                "id": "slow-stream-assistant-1-text",
+                "sessionID": "_placeholder_",
+                "messageID": "slow-stream-assistant-1",
+                "type": "text",
+                "text": "Slow streaming response."
+              }
+            ]
+          }
+        },
+        {
+          "type": "session.status",
+          "delayMs": 25,
+          "payload": {
+            "sessionId": "_placeholder_",
+            "status": { "type": "idle" }
+          }
+        },
+        {
+          "type": "session.idle",
+          "delayMs": 0,
+          "payload": {
+            "sessionId": "_placeholder_"
+          }
+        }
+      ]
+    }
+  ]
+}

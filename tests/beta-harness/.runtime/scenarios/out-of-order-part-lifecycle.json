@@ -1,0 +1,62 @@
+{
+  "$schemaComment": "Test-only beta-harness fixture. Loaded only by WeaveFleet.TestHarness.LiveScenarioHarness when a test session passes scenarioId=out-of-order-part-lifecycle; production runtimes do not read this file.",
+  "description": "Emits an assistant part before the assistant lifecycle update, then sends the durable final message snapshot.",
+  "promptResponses": [
+    {
+      "events": [
+        {
+          "type": "session.status",
+          "delayMs": 0,
+          "payload": {
+            "sessionId": "_placeholder_",
+            "status": { "type": "busy" }
+          }
+        },
+        {
+          "type": "message.part.updated",
+          "delayMs": 0,
+          "payload": {
+            "sessionID": "_placeholder_",
+            "part": {
+              "id": "out-of-order-assistant-1-text",
+              "sessionID": "_placeholder_",
+              "messageID": "out-of-order-assistant-1",
+              "type": "text",
+              "text": "Part arrived before lifecycle."
+            }
+          }
+        },
+        {
+          "type": "message.updated",
+          "delayMs": 150,
+          "payload": {
+            "info": {
+              "id": "out-of-order-assistant-1",
+              "sessionID": "_placeholder_",
+              "role": "assistant",
+              "time": { "created": 1810000010000 },
+              "agent": "loom"
+            },
+            "parts": [
+              {
+                "id": "out-of-order-assistant-1-text",
+                "sessionID": "_placeholder_",
+                "messageID": "out-of-order-assistant-1",
+                "type": "text",
+                "text": "Part arrived before lifecycle."
+              }
+            ]
+          }
+        },
+        {
+          "type": "session.idle",
+          "delayMs": 25,
+          "payload": {
+            "sessionId": "_placeholder_",
+            "status": { "type": "idle" }
+          }
+        }
+      ]
+    }
+  ]
+}

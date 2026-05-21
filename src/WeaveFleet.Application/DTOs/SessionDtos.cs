@@ -58,3 +58,6 @@ public sealed record UpdateSessionTitleRequest(string Title);
 
 /// <summary>Request DTO for changing a session's retention state.</summary>
 public sealed record UpdateSessionRetentionRequest(string RetentionStatus);
+
+/// <summary>Response DTO for accepted prompt submissions.</summary>
+public sealed record PromptSessionResult(long? EventId, string CorrelationId);

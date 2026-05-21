@@ -1,4 +1,5 @@
 import type { AccumulatedMessage, DelegationDto } from "@/lib/api-types"
+import { confirmSentPrompt } from "@/composables/use-send-prompt"
 import { applyDelegationCreated, applyDelegationUpdated } from "@/lib/delegation-state"
 import type { DelegationCompleted, DelegationCreated, DelegationUpdated, DomainEvent, MessageLifecyclePayload } from "@/lib/domain-events"
 import { applyPartUpdate, applyTextDelta, ensureMessage, mergeMessageUpdate } from "@/lib/event-state"
@@ -18,7 +19,7 @@ export interface SessionStreamState {
    * busy/active until those consumers become delegation-aware.
    */
   sessionStatus: SessionStreamStatus
-  lastSequenceNumber: number | null
+  lastEventId: number | null
 }
 
 const IDLE_ACTIVITY_STATUSES = new Set(["idle"])
@@ -34,7 +35,7 @@ export function createSessionStreamState(snapshot: SessionSnapshot): SessionStre
     delegations,
     explicitStatus,
     sessionStatus: deriveSnapshotSessionStatus(explicitStatus, delegations),
-    lastSequenceNumber: snapshot.lastSequenceNumber,
+    lastEventId: snapshot.lastEventId ?? snapshot.lastSequenceNumber ?? null,
   }
 
   return snapshot.messages.reduce<SessionStreamState>(
@@ -52,6 +53,18 @@ export function applyDomainEvent(state: SessionStreamState, event: DomainEvent):
       }
 
     case "message.updated":
+      return {
+        ...state,
+        messages: applyMessageLifecycle(state.messages, event.payload),
+      }
+
+    case "user.prompt.committed":
+      confirmSentPrompt(event.payload.info.sessionID, {
+        correlationId: event.payload.correlationId ?? undefined,
+        eventId: event.eventId,
+        serverMessageId: event.payload.info.id,
+      })
+
       return {
         ...state,
         messages: applyMessageLifecycle(state.messages, event.payload),

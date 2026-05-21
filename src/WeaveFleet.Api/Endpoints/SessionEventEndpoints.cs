@@ -49,7 +49,7 @@ public static class SessionEventEndpoints
                     continue;
 
                 var data = JsonSerializer.Serialize(
-                    new SseSessionEventPayload(id, evt.Type, sanitizedPayload.Value, evt.SequenceNumber, evt.Timestamp.ToUnixTimeMilliseconds()),
+                    new SseSessionEventPayload(id, evt.Type, sanitizedPayload.Value, evt.EventId, evt.EventId, evt.Timestamp.ToUnixTimeMilliseconds()),
                     ApiJsonContext.Default.SseSessionEventPayload);
                 await WriteSseEventAsync(context.Response, evt.Type, data, ct);
             }
@@ -78,7 +78,7 @@ public static class SessionEventEndpoints
                     continue;
 
                 var data = JsonSerializer.Serialize(
-                    new SseActivityEventPayload(evt.Topic, evt.Type, sanitizedPayload.Value, evt.SequenceNumber, evt.Timestamp.ToUnixTimeMilliseconds()),
+                    new SseActivityEventPayload(evt.Topic, evt.Type, sanitizedPayload.Value, evt.EventId, evt.EventId, evt.Timestamp.ToUnixTimeMilliseconds()),
                     ApiJsonContext.Default.SseActivityEventPayload);
                 await WriteSseEventAsync(context.Response, evt.Type, data, ct);
             }
