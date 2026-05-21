@@ -29,7 +29,32 @@ let composerDisabledSyncTimer: ReturnType<typeof setInterval> | null = null;
 
 const sessionTitle = computed(() => props.title?.trim() || "Untitled session");
 const projectLabel = computed(() => props.projectName?.trim() || "Ungrouped");
+const effectiveActivityStatus = computed(() => props.activityStatus);
 const effectiveLifecycleStatus = computed(() => props.lifecycleStatus);
+const sessionStatusIndicator = computed(() => {
+  switch (effectiveLifecycleStatus.value) {
+    case "disconnected":
+      return "disconnected";
+    case "resuming":
+      return "resuming";
+    default:
+      return effectiveActivityStatus.value === "busy" || effectiveActivityStatus.value === "delegating"
+        ? "working"
+        : "idle";
+  }
+});
+const sessionStatusLabel = computed(() => {
+  switch (sessionStatusIndicator.value) {
+    case "working":
+      return "Working";
+    case "disconnected":
+      return "Disconnected";
+    case "resuming":
+      return "Resuming…";
+    default:
+      return "Idle";
+  }
+});
 const isArchived = computed(() => props.retentionStatus === "archived");
 const showStoppedBanner = computed(() => {
   switch (effectiveLifecycleStatus.value) {
@@ -100,6 +125,13 @@ onUnmounted(() => {
           <h2 class="session-detail-header__title">
             {{ sessionTitle }}
           </h2>
+          <span
+            :data-status="sessionStatusIndicator"
+            data-testid="session-status-indicator"
+            class="session-detail-header__status"
+          >
+            {{ sessionStatusLabel }}
+          </span>
           <Badge
             v-if="isArchived"
             data-testid="session-archived-badge"
@@ -235,6 +267,19 @@ onUnmounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.78rem;
+  color: var(--muted-foreground, var(--muted));
+}
+
+.session-detail-header__status {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.25;
   color: var(--muted-foreground, var(--muted));
 }
 
