@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, shallowRef, watch } from "vue";
-import MarkdownIt from "markdown-it";
-import hljs from "highlight.js";
 import {
   CheckCircle2,
   CircleDot,
@@ -19,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api-client";
 import { formatRelativeTime } from "@/lib/format-utils";
 import { createGitHubSessionSourcePreset } from "@/lib/github-session-source";
+import { createMarkdownRenderer } from "@/lib/markdown-renderer";
 import type { GitHubIssue, GitHubPullRequest } from "@/plugins/builtin/github/composables/github-types";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
@@ -53,30 +52,7 @@ const commentsError = shallowRef<string | null>(null);
 const isLoading = shallowRef(true);
 const isRefreshing = shallowRef(false);
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-const markdownRenderer = new MarkdownIt({
-  html: false,
-  linkify: true,
-  breaks: true,
-  highlight(code, language) {
-    if (language && hljs.getLanguage(language)) {
-      return `<pre class="hljs"><code>${hljs.highlight(code, {
-        language,
-        ignoreIllegals: true,
-      }).value}</code></pre>`;
-    }
-
-    return `<pre class="hljs"><code>${escapeHtml(code)}</code></pre>`;
-  },
-});
+const markdownRenderer = createMarkdownRenderer();
 
 const isPullRequest = computed(() => props.kind === "pull");
 const parsedNumber = computed(() => Number.parseInt(props.number, 10));

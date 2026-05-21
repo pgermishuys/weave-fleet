@@ -50,20 +50,20 @@ defineProps<{
 .files-changed {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 7px;
 }
 
 .files-changed__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
 .files-changed__title,
 .files-changed__count {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .files-changed__title {
@@ -78,7 +78,7 @@ defineProps<{
 .files-changed__list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -88,9 +88,9 @@ defineProps<{
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
-  padding: 10px;
+  padding: 7px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-btn);
   background: rgba(255, 255, 255, 0.02);
@@ -106,19 +106,19 @@ defineProps<{
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--text);
 }
 
 .files-changed__stats {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
 }
 
 .files-changed__stat {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
 }
 

@@ -39,7 +39,7 @@ provideSessionDetailContext({
   sessionRoutePath: "/sessions/$id",
   supportsFork: true,
   supportsArchive: true,
-  actionsLayout: "toolbar",
+  actionsLayout: "card",
   patchSession: (id, patch) => sessionsStore.patchSession(id, patch),
   abort,
   archive,
@@ -190,7 +190,7 @@ function handleExpand(): void {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px 14px 20px;
+  padding: 10px 10px 16px;
 }
 
 .right-content__panel {
@@ -202,13 +202,13 @@ function handleExpand(): void {
 .right-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 6px;
+  margin-bottom: 12px;
 }
 
 .right-section__eyebrow {
   margin: 0;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -217,15 +217,15 @@ function handleExpand(): void {
 
 .right-section__title {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--text);
 }
 
 .right-section__description {
   margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.4;
   color: var(--muted);
 }
 </style>

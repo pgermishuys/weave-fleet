@@ -2,9 +2,20 @@ import { createFileRoute } from "@tanstack/vue-router";
 import { computed, defineComponent, nextTick, shallowRef, watch, type ComponentPublicInstance } from "vue";
 import { ArrowLeft, Bot } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
+import ConfirmDeleteSessionDialog from "@/components/sessions/ConfirmDeleteSessionDialog.vue";
 import ActivityStream from "@/components/session/ActivityStream.vue";
 import Composer from "@/components/session/Composer.vue";
+import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
+import SessionActionToolbar from "@/components/session/SessionActionToolbar.vue";
 import SessionDetailHeader from "@/components/session/SessionDetailHeader.vue";
+import {
+  useAbortSession,
+  useArchiveSession,
+  useDeleteSession,
+  useRenameSession,
+  useResumeSession,
+  useTerminateSession,
+} from "@/composables/use-session-actions";
 import { incrementPendingPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { apiFetch } from "@/lib/api-client";
 import type { SessionListItem, SessionOrigin } from "@/lib/api-types";
@@ -31,6 +42,8 @@ interface SessionDetailResponse {
   activityStatus?: string | null;
   lifecycleStatus?: string | null;
   retentionStatus?: string | null;
+  totalTokens?: number | null;
+  totalCost?: number | null;
   origin?: SessionOrigin | null;
 }
 
@@ -45,6 +58,15 @@ function getStringField(
 ): string | null | undefined {
   const candidate = value[camelKey] ?? value[pascalKey];
   return typeof candidate === "string" ? candidate : candidate == null ? null : undefined;
+}
+
+function getNumberField(
+  value: Record<string, unknown>,
+  camelKey: string,
+  pascalKey: string,
+): number | null | undefined {
+  const candidate = value[camelKey] ?? value[pascalKey];
+  return typeof candidate === "number" ? candidate : candidate == null ? null : undefined;
 }
 
 function normalizeSessionDetailResponse(payload: unknown): SessionDetailResponse {
@@ -82,6 +104,8 @@ function normalizeSessionDetailResponse(payload: unknown): SessionDetailResponse
     activityStatus: getStringField(value, "activityStatus", "ActivityStatus"),
     lifecycleStatus: getStringField(value, "lifecycleStatus", "LifecycleStatus"),
     retentionStatus: getStringField(value, "retentionStatus", "RetentionStatus"),
+    totalTokens: getNumberField(value, "totalTokens", "TotalTokens"),
+    totalCost: getNumberField(value, "totalCost", "TotalCost"),
     origin,
   };
 }
@@ -139,12 +163,26 @@ const SessionDetailPage = defineComponent({
     const remoteSession = shallowRef<SessionDetailResponse | null>(null);
     const composerRef = shallowRef<ComposerInstance | null>(null);
     const optimisticWorking = shallowRef(false);
+    const isDeleteDialogOpen = shallowRef(false);
+    const isForkDialogOpen = shallowRef(false);
     const optimisticSessionState = shallowRef<{
       activityStatus?: string | null;
       lifecycleStatus?: string | null;
       retentionStatus?: string | null;
       sessionStatus?: string | null;
     } | null>(null);
+
+    const { abortSession, isAborting, error: abortError } = useAbortSession();
+    const { archiveSession, isArchiving, error: archiveError } = useArchiveSession();
+    const { deleteSession, isDeleting, error: deleteError } = useDeleteSession();
+    const { renameSession, isLoading: isRenaming, error: renameError } = useRenameSession();
+    const {
+      resumeSession,
+      isResuming,
+      resumingSessionId,
+      error: resumeError,
+    } = useResumeSession();
+    const { terminateSession, isTerminating, error: terminateError } = useTerminateSession();
 
     const selectedSession = computed(() => {
       return sessions.value.find((session) => session.session.id === params.value.id) ?? null;
@@ -309,6 +347,35 @@ const SessionDetailPage = defineComponent({
       return isArchived.value || effectiveLifecycleStatus.value !== "running";
     });
 
+    const canAbort = computed(() => effectiveLifecycleStatus.value === "running" && isActiveActivityStatus(effectiveActivityStatus.value));
+    const canResume = computed(() => {
+      switch (effectiveLifecycleStatus.value) {
+        case "stopped":
+        case "completed":
+        case "disconnected":
+          return true;
+        default:
+          return false;
+      }
+    });
+    const canStop = computed(() => effectiveLifecycleStatus.value === "running");
+    const canArchive = computed(() => !isArchived.value && effectiveLifecycleStatus.value !== "running");
+    const isResumingCurrentSession = computed(() => isResuming.value && resumingSessionId.value === params.value.id);
+    const isAnyActionPending = computed(() => isAborting.value
+      || isArchiving.value
+      || isDeleting.value
+      || isRenaming.value
+      || isResumingCurrentSession.value
+      || isTerminating.value);
+    const actionErrors = computed(() => [
+      abortError.value,
+      archiveError.value,
+      deleteError.value,
+      renameError.value,
+      resumeError.value,
+      terminateError.value,
+    ].filter((message): message is string => Boolean(message)));
+
     const { hasPendingPrompts, sentPrompts } = useSentPrompts(params.value.id);
 
     const effectiveLifecycleStatus = computed(() => {
@@ -378,6 +445,157 @@ const SessionDetailPage = defineComponent({
       };
     }
 
+    function refreshRemoteSession(): void {
+      // Reuse the existing optimistic/store state for immediate UI updates. The
+      // websocket/session-list refresh will reconcile detailed values.
+    }
+
+    async function handleAbort(): Promise<void> {
+      if (!params.value.id || !instanceId.value || !canAbort.value) {
+        return;
+      }
+
+      try {
+        await abortSession(params.value.id, instanceId.value);
+        refreshRemoteSession();
+      } catch {
+        // Error is exposed inline by the action toolbar.
+      }
+    }
+
+    async function handleResume(): Promise<void> {
+      if (!params.value.id || !canResume.value) {
+        return;
+      }
+
+      try {
+        handleSessionStateChanged({
+          activityStatus: "idle",
+          lifecycleStatus: "resuming",
+          sessionStatus: "resuming",
+        });
+        sessionsStore.patchSession(params.value.id, {
+          activityStatus: "idle",
+          lifecycleStatus: "resuming",
+          sessionStatus: "resuming",
+        });
+
+        const response = await resumeSession(params.value.id);
+        await navigate({
+          to: "/sessions/$id",
+          params: { id: response.session.id },
+          search: {
+            instanceId: response.instanceId,
+            parentSessionId: undefined,
+          },
+        });
+      } catch {
+        handleSessionStateChanged({
+          activityStatus: "idle",
+          lifecycleStatus: "stopped",
+          sessionStatus: "stopped",
+        });
+        sessionsStore.patchSession(params.value.id, {
+          activityStatus: "idle",
+          lifecycleStatus: "stopped",
+          sessionStatus: "stopped",
+        });
+      }
+    }
+
+    async function handleStop(): Promise<void> {
+      if (!params.value.id || !instanceId.value || !canStop.value) {
+        return;
+      }
+
+      try {
+        await terminateSession(params.value.id, instanceId.value);
+        handleSessionStateChanged({
+          activityStatus: "idle",
+          lifecycleStatus: "stopped",
+          sessionStatus: "stopped",
+        });
+        sessionsStore.patchSession(params.value.id, {
+          activityStatus: "idle",
+          lifecycleStatus: "stopped",
+          sessionStatus: "stopped",
+        });
+      } catch {
+        // Error is exposed inline by the action toolbar.
+      }
+    }
+
+    function handleFork(): void {
+      if (!params.value.id) {
+        return;
+      }
+
+      isForkDialogOpen.value = true;
+    }
+
+    function handleDelete(): void {
+      if (!params.value.id || !instanceId.value) {
+        return;
+      }
+
+      isDeleteDialogOpen.value = true;
+    }
+
+    async function handleDeleteConfirmed(): Promise<void> {
+      if (!params.value.id || !instanceId.value) {
+        return;
+      }
+
+      try {
+        await deleteSession(params.value.id, instanceId.value);
+        isDeleteDialogOpen.value = false;
+        await navigate({ to: "/" });
+      } catch {
+        // Error is exposed inline by the action toolbar.
+      }
+    }
+
+    async function handleRename(): Promise<void> {
+      if (!params.value.id) {
+        return;
+      }
+
+      const currentTitle = selectedSession.value?.session.title ?? remoteSession.value?.title ?? "Untitled session";
+      const proposedTitle = window.prompt("Rename session", currentTitle)?.trim();
+      if (!proposedTitle || proposedTitle === currentTitle) {
+        return;
+      }
+
+      try {
+        await renameSession(params.value.id, proposedTitle, () => {
+          if (remoteSession.value) {
+            remoteSession.value = {
+              ...remoteSession.value,
+              title: proposedTitle,
+            };
+          }
+        });
+      } catch {
+        // Error is exposed inline by the action toolbar.
+      }
+    }
+
+    async function handleArchive(): Promise<void> {
+      if (!params.value.id || !canArchive.value) {
+        return;
+      }
+
+      try {
+        await archiveSession(params.value.id);
+        handleSessionStateChanged({ retentionStatus: "archived" });
+        sessionsStore.patchSession(params.value.id, {
+          retentionStatus: "archived",
+        });
+      } catch {
+        // Error is exposed inline by the action toolbar.
+      }
+    }
+
     return () => (
       <div
         style={{
@@ -391,10 +609,9 @@ const SessionDetailPage = defineComponent({
         <div
           style={{
             flexShrink: 0,
-            padding: "0.75rem 1rem",
+            padding: "0",
             display: "flex",
             flexDirection: "column",
-            gap: "0.75rem",
           }}
         >
           <SessionDetailHeader
@@ -406,8 +623,39 @@ const SessionDetailPage = defineComponent({
             activityStatus={effectiveActivityStatus.value}
             lifecycleStatus={effectiveLifecycleStatus.value}
             retentionStatus={optimisticSessionState.value?.retentionStatus ?? sessionStateOverride.value?.retentionStatus ?? selectedSession.value?.retentionStatus ?? remoteSession.value?.retentionStatus}
+            totalTokens={selectedSession.value?.totalTokens ?? remoteSession.value?.totalTokens ?? null}
+            totalCost={selectedSession.value?.totalCost ?? remoteSession.value?.totalCost ?? null}
             sessionStateChanged={handleSessionStateChanged}
-          />
+          >
+            {{
+              actions: () => (
+                <SessionActionToolbar
+                  canAbort={canAbort.value}
+                  canResume={canResume.value}
+                  canStop={canStop.value}
+                  canArchive={canArchive.value}
+                  supportsFork={true}
+                  isPending={isAnyActionPending.value}
+                  isAborting={isAborting.value}
+                  isResuming={isResumingCurrentSession.value}
+                  isTerminating={isTerminating.value}
+                  isRenaming={isRenaming.value}
+                  isDeleting={isDeleting.value}
+                  isArchiving={isArchiving.value}
+                  hasSession={Boolean(params.value.id)}
+                  hasInstance={Boolean(instanceId.value)}
+                  errors={actionErrors.value}
+                  onAbort={() => void handleAbort()}
+                  onResume={() => void handleResume()}
+                  onStop={() => void handleStop()}
+                  onFork={handleFork}
+                  onRename={() => void handleRename()}
+                  onDelete={handleDelete}
+                  onArchive={() => void handleArchive()}
+                />
+              ),
+            }}
+          </SessionDetailHeader>
           {isDelegatedSession.value ? (
             <div
               style={{
@@ -417,7 +665,10 @@ const SessionDetailPage = defineComponent({
                 justifyContent: "space-between",
                 gap: "0.75rem",
                 border: "1px solid color-mix(in srgb, var(--border) 82%, transparent)",
-                borderRadius: "0.875rem",
+                borderTop: 0,
+                borderLeft: 0,
+                borderRight: 0,
+                borderRadius: 0,
                 background: "color-mix(in srgb, var(--muted) 32%, transparent)",
                 padding: "0.75rem 0.875rem",
               }}
@@ -515,6 +766,20 @@ const SessionDetailPage = defineComponent({
           instanceId={instanceId.value}
           disabled={isComposerDisabled.value}
           onPromptSent={handlePromptSent}
+        />
+        <ConfirmDeleteSessionDialog
+          v-model:open={isDeleteDialogOpen.value}
+          isDeleting={isDeleting.value}
+          sessionTitle={selectedSession.value?.session.title ?? remoteSession.value?.title ?? "Untitled session"}
+          onConfirm={() => void handleDeleteConfirmed()}
+        />
+        <ForkSessionDialog
+          open={isForkDialogOpen.value}
+          sessionId={params.value.id ?? ""}
+          sourceTitle={selectedSession.value?.session.title ?? remoteSession.value?.title ?? "Untitled session"}
+          onUpdate:open={(value: boolean) => {
+            isForkDialogOpen.value = value;
+          }}
         />
         </div>
     );

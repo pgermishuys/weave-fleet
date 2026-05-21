@@ -73,8 +73,8 @@ function handleCollapse(): void {
 .right-tab {
   flex: 1;
   text-align: center;
-  padding: 10px 0;
-  font-size: 11px;
+  padding: 8px 0;
+  font-size: 10px;
   font-weight: 500;
   color: var(--muted);
   cursor: pointer;
@@ -94,7 +94,7 @@ function handleCollapse(): void {
 }
 
 .right-tabs__collapse {
-  width: 38px;
+  width: 34px;
   border: 0;
   border-left: 1px solid var(--border);
   background: transparent;

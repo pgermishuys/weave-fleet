@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { X } from "lucide-vue-next";
-import MarkdownIt from "markdown-it";
-import hljs from "highlight.js";
 import ToolCard from "@/components/session/ToolCard.vue";
 import QuestionCard from "@/components/session/QuestionCard.vue";
 import type { AccumulatedToolPart } from "@/lib/api-types";
 import { useQuestionAnswer } from "@/composables/use-question-answer";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { formatRelativeTime, formatAbsoluteTimestamp } from "@/lib/format-utils";
+import { createMarkdownRenderer } from "@/lib/markdown-renderer";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ToolCardDiffLine {
@@ -71,30 +70,7 @@ function makeDismissHandler(callId: string) {
   };
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-const markdownRenderer = new MarkdownIt({
-  html: false,
-  linkify: true,
-  breaks: true,
-  highlight(code, language) {
-    if (language && hljs.getLanguage(language)) {
-      return `<pre class="hljs"><code>${hljs.highlight(code, {
-        language,
-        ignoreIllegals: true,
-      }).value}</code></pre>`;
-    }
-
-    return `<pre class="hljs"><code>${escapeHtml(code)}</code></pre>`;
-  },
-});
+const markdownRenderer = createMarkdownRenderer();
 
 const bodyHtml = computed(() => markdownRenderer.render(props.body));
 const displayAuthor = computed(() => {
