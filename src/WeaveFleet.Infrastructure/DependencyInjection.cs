@@ -40,6 +40,15 @@ public static class DependencyInjection
     }
 
     /// <summary>
+    /// Adds the startup service that imports legacy local sessions when the host enables it.
+    /// </summary>
+    public static IServiceCollection AddLegacySessionImportStartupService(this IServiceCollection services)
+    {
+        services.AddHostedService<LegacySessionImportStartupService>();
+        return services;
+    }
+
+    /// <summary>
     /// Adds all infrastructure services (database, repositories, external clients) to the service collection.
     /// </summary>
     public static IServiceCollection AddFleetInfrastructure(
@@ -90,6 +99,7 @@ public static class DependencyInjection
         services.AddScoped<DelegationService>();
         services.AddScoped<SmartLinkService>();
         services.AddScoped<SessionActivityWriteService>();
+        services.AddScoped<ILegacySessionImporter, LegacySessionImporter>();
         services.AddScoped<UserService>();
         services.AddScoped<IBoardSyncService, BoardSyncService>();
         services.AddScoped<ISessionSourceProvider, LocalDirectorySessionSourceProvider>();

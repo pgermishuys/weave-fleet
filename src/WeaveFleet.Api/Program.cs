@@ -71,6 +71,8 @@ var fleetOptions = builder.Configuration
 // Configure services
 builder.Services.Configure<FleetOptions>(
     builder.Configuration.GetSection(FleetOptions.SectionName));
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.Services.AddLegacySessionImportStartupService();
 builder.Services.AddFleetInfrastructure(fleetOptions);
 
 // ── Harness mode override ─────────────────────────────────────────────────────

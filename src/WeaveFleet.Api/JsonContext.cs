@@ -79,6 +79,7 @@ internal sealed record ErrorResponse(string Error);
 // Fleet
 [JsonSerializable(typeof(VersionResponse))]
 [JsonSerializable(typeof(ProfileResponse))]
+[JsonSerializable(typeof(LegacySessionImportApiResponse))]
 [JsonSerializable(typeof(UpdateStatusResponse))]
 [JsonSerializable(typeof(RepositoriesListResponse))]
 [JsonSerializable(typeof(RepositoryListItem))]
