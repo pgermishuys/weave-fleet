@@ -9,7 +9,7 @@
     <NoWarn>$(NoWarn);DAP005</NoWarn>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
-    <Version>0.13.8</Version>
+    <Version>0.14.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
