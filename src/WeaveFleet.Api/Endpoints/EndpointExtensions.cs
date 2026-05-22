@@ -68,6 +68,7 @@ public static class EndpointExtensions
         apiScope.MapBackendPluginEndpoints();
         apiScope.MapSmartLinkEndpoints();
         apiScope.MapTelemetryEndpoints();
+        apiScope.MapAdminEndpoints();
 
         return app;
     }

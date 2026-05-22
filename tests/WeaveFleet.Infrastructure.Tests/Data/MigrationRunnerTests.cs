@@ -40,8 +40,42 @@ public sealed class MigrationRunnerTests
         tables.ShouldContain("session_callbacks");
         tables.ShouldContain("session_source_usages");
         tables.ShouldContain("workspace_roots");
+        tables.ShouldContain("legacy_imports");
         tables.ShouldContain(MigrationRunner.MainJournalTable);
         tables.ShouldNotContain("_migrations");
+    }
+
+    [Fact]
+    public async Task ApplyMigrationsAsync_CreatesLegacyImportsTable()
+    {
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+        var runner = CreateRunner(factory);
+
+        await runner.ApplyMigrationsAsync(conn);
+
+        var columns = (await conn.QueryAsync<(string Name, string Type, int NotNull, int PrimaryKey)>(
+            """
+            SELECT name AS Name, type AS Type, "notnull" AS "NotNull", pk AS PrimaryKey
+            FROM pragma_table_info('legacy_imports')
+            ORDER BY cid
+            """)).ToList();
+
+        columns.Select(column => column.Name).ShouldBe([
+            "id",
+            "source_path",
+            "imported_at",
+            "session_count",
+            "status"
+        ]);
+
+        columns.Single(column => column.Name == "id").ShouldSatisfyAllConditions(
+            column => column.Type.ShouldBe("TEXT"),
+            column => column.PrimaryKey.ShouldBe(1));
+        columns.Single(column => column.Name == "source_path").Type.ShouldBe("TEXT");
+        columns.Single(column => column.Name == "imported_at").Type.ShouldBe("TEXT");
+        columns.Single(column => column.Name == "session_count").Type.ShouldBe("INTEGER");
+        columns.Single(column => column.Name == "status").Type.ShouldBe("TEXT");
     }
 
     [Fact]
