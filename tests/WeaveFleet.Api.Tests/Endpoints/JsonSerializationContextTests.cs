@@ -1,12 +1,30 @@
+using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.Extensions.DependencyInjection;
+using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Api.Tests.Infrastructure;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
 public sealed class JsonSerializationContextTests
 {
+    [Fact]
+    public void GetSessionDiffsResponse_serializes_file_diff_summaries_with_content_as_client_shape()
+    {
+        var response = new GetSessionDiffsResponse(
+            [new FileDiffSummary("src/app.cs", "modified", 3, 1, "before", "after", IsBinary: false, IsTruncated: false)],
+            Available: true);
+
+        var json = JsonSerializer.Serialize(response, ApiJsonContext.Default.GetSessionDiffsResponse);
+
+        Assert.Equal(
+            "{\"diffs\":[{\"file\":\"src/app.cs\",\"status\":\"modified\",\"additions\":3,\"deletions\":1,\"before\":\"before\",\"after\":\"after\",\"isBinary\":false,\"isTruncated\":false}],\"available\":true}",
+            json);
+        Assert.DoesNotContain("patch", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("content", json, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task ApiJsonContext_resolves_all_endpoint_request_body_types()
     {

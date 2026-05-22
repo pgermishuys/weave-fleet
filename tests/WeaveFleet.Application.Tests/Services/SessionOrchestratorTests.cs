@@ -94,6 +94,99 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task create_session_async_when_git_baseline_is_captured_persists_ref_and_repo_root()
+    {
+        var runner = new RecordingGitRunner(
+            new GitCommandResult(0, "/repo/root\n", string.Empty),
+            new GitCommandResult(0, "abc123\n", string.Empty),
+            new GitCommandResult(0, string.Empty, string.Empty));
+        var builder = CreateBuilderWithGitDiffService(new GitDiffService(runner));
+        var runtime = builder.RegisterHarness("opencode", "OpenCode");
+        await using var session = new FakeHarnessSession("inst-git");
+        runtime.DefaultSession = session;
+        builder.ProjectRepository.Seed(new Project
+        {
+            Id = "scratch-1", Name = "Scratch", Type = "scratch", Position = 0,
+            CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01"
+        });
+        using var tempDirectory = new TempDirectory();
+
+        var result = await builder.Build().CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            Title = "Git Session"
+        });
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Session.GitBaselineRef.ShouldBe($"refs/fleet/baselines/{result.Value.Session.Id}");
+        result.Value.Session.GitRepoRoot.ShouldBe("/repo/root");
+        builder.SessionRepository.InsertedSessions.Single().GitBaselineRef.ShouldBe(result.Value.Session.GitBaselineRef);
+        builder.SessionRepository.InsertedSessions.Single().GitRepoRoot.ShouldBe("/repo/root");
+        runner.Calls[1].Arguments.ShouldBe(["stash", "create", $"fleet baseline {result.Value.Session.Id}"]);
+    }
+
+    [Fact]
+    public async Task create_session_async_when_directory_is_not_git_repo_persists_null_git_baseline()
+    {
+        var runner = new RecordingGitRunner(new GitCommandResult(128, string.Empty, "not a git repository"));
+        var builder = CreateBuilderWithGitDiffService(new GitDiffService(runner));
+        var runtime = builder.RegisterHarness("opencode", "OpenCode");
+        await using var session = new FakeHarnessSession("inst-non-git");
+        runtime.DefaultSession = session;
+        builder.ProjectRepository.Seed(new Project
+        {
+            Id = "scratch-1", Name = "Scratch", Type = "scratch", Position = 0,
+            CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01"
+        });
+        using var tempDirectory = new TempDirectory();
+
+        var result = await builder.Build().CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            Title = "Non Git Session"
+        });
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Session.GitBaselineRef.ShouldBeNull();
+        result.Value.Session.GitRepoRoot.ShouldBeNull();
+        builder.SessionRepository.InsertedSessions.Single().GitBaselineRef.ShouldBeNull();
+        builder.SessionRepository.InsertedSessions.Single().GitRepoRoot.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task create_session_async_in_real_non_git_directory_persists_null_git_baseline()
+    {
+        var builder = new SessionOrchestratorBuilder();
+        var runtime = builder.RegisterHarness("opencode", "OpenCode");
+        await using var session = new FakeHarnessSession("inst-real-non-git");
+        runtime.DefaultSession = session;
+        builder.ProjectRepository.Seed(new Project
+        {
+            Id = "scratch-1", Name = "Scratch", Type = "scratch", Position = 0,
+            CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01"
+        });
+        using var tempDirectory = new TempDirectory();
+        builder.WorkspaceRootRepository.Seed(new WorkspaceRoot
+        {
+            Id = "root-real-non-git",
+            Path = tempDirectory.Path,
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+
+        var result = await builder.Build().CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            Title = "Real Non Git Session"
+        });
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        result.Value.Session.GitBaselineRef.ShouldBeNull();
+        result.Value.Session.GitRepoRoot.ShouldBeNull();
+        builder.SessionRepository.InsertedSessions.Single().GitBaselineRef.ShouldBeNull();
+        builder.SessionRepository.InsertedSessions.Single().GitRepoRoot.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task CreateSessionAsync_WithHybridSource_IncludesContextInInitialPrompt()
     {
         ConfigureHarnessAndScratchProject();
@@ -1197,6 +1290,18 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
             sessionActivityWriteService: null);
     }
 
+    private static SessionOrchestratorBuilder CreateBuilderWithGitDiffService(GitDiffService gitDiffService)
+    {
+        var builder = new SessionOrchestratorBuilder()
+            .WithUserContext(new TestUserContext("user-1"))
+            .WithGitDiffService(gitDiffService);
+
+        builder.WorkspaceRootRepository.Seed(
+            new WorkspaceRoot { Id = "root-1", Path = Path.GetTempPath(), CreatedAt = DateTime.UtcNow.ToString("O") });
+
+        return builder;
+    }
+
     private sealed class StubSessionSourceProvider(SessionSourceDescriptor descriptor, ResolvedSessionSource resolved) : ISessionSourceProvider
     {
         public string ProviderId => descriptor.Key.ProviderId;
@@ -1225,4 +1330,23 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
                 Directory.Delete(Path, recursive: true);
         }
     }
+
+    private sealed class RecordingGitRunner(params GitCommandResult[] results) : IGitDiffCommandRunner
+    {
+        private readonly Queue<GitCommandResult> _results = new(results);
+
+        public List<GitCall> Calls { get; } = [];
+
+        public Task<GitCommandResult> RunAsync(string workingDirectory, IReadOnlyList<string> arguments, CancellationToken ct)
+        {
+            Calls.Add(new GitCall(workingDirectory, [.. arguments]));
+            var result = _results.Count == 0
+                ? new GitCommandResult(0, string.Empty, string.Empty)
+                : _results.Dequeue();
+
+            return Task.FromResult(result);
+        }
+    }
+
+    private sealed record GitCall(string WorkingDirectory, IReadOnlyList<string> Arguments);
 }

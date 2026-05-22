@@ -372,6 +372,15 @@ public sealed class DomainEventTranslatorTests
 
         _ = translator.Translate(new HarnessEvent
         {
+            Type = EventTypes.SessionStatus,
+            SessionId = "harness-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { status = new { type = "busy" } })
+        });
+
+        _ = translator.Translate(new HarnessEvent
+        {
             Type = EventTypes.MessageUpdated,
             SessionId = "harness-1",
             FleetSessionId = "fleet-1",
@@ -414,6 +423,15 @@ public sealed class DomainEventTranslatorTests
     {
         var translator = CreateTranslator();
 
+        _ = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.SessionStatus,
+            SessionId = "harness-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { status = new { type = "busy" } })
+        });
+
         var result = translator.Translate(new HarnessEvent
         {
             Type = EventTypes.SessionStatus,
@@ -442,6 +460,72 @@ public sealed class DomainEventTranslatorTests
         ended.Payload.Cost.ShouldBe(1.2);
         ended.Payload.Tokens.ShouldNotBeNull();
         ended.Payload.Tokens.Input.ShouldBe(5);
+    }
+
+    [Fact]
+    public void should_emit_exactly_one_turn_ended_for_no_tool_turn_when_both_idle_signals_arrive()
+    {
+        var translator = CreateTranslator();
+
+        var started = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.SessionStatus,
+            SessionId = "harness-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                status = new
+                {
+                    type = "busy",
+                    messageID = "msg-no-tool",
+                    index = 4
+                }
+            })
+        });
+
+        var statusIdle = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.SessionStatus,
+            SessionId = "harness-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { status = new { type = "idle" } })
+        });
+
+        var sessionIdle = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.SessionIdle,
+            SessionId = "harness-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow
+        });
+
+        started.ShouldBeOfType<TurnStarted>();
+        var endedEvents = new[] { statusIdle, sessionIdle }
+            .OfType<TurnEnded>()
+            .ToArray();
+
+        endedEvents.Length.ShouldBe(1);
+        endedEvents[0].Payload.SessionId.ShouldBe("fleet-1");
+        endedEvents[0].Payload.MessageId.ShouldBe("msg-no-tool");
+        endedEvents[0].Payload.Index.ShouldBe(4);
+    }
+
+    [Fact]
+    public void should_not_emit_turn_ended_for_idle_signal_without_active_turn()
+    {
+        var translator = CreateTranslator();
+
+        var result = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.SessionIdle,
+            SessionId = "harness-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow
+        });
+
+        result.ShouldBeNull();
     }
 
     private static DomainEventTranslator CreateTranslator()

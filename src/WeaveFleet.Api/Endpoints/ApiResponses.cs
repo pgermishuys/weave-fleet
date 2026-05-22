@@ -208,7 +208,23 @@ public sealed record CommittedEventItem(
     JsonElement Payload,
     long Timestamp);
 
-public sealed record GetSessionDiffsResponse(IReadOnlyList<JsonElement> Diffs);
+public sealed record GetSessionDiffsResponse(IReadOnlyList<FileDiffSummary> Diffs, bool Available);
+
+public sealed record FileDiffSummary(
+    string File,
+    string Status,
+    int Additions,
+    int Deletions,
+    string? Before,
+    string? After,
+    bool IsBinary,
+    bool IsTruncated)
+{
+    public FileDiffSummary(string file, string status, int additions, int deletions)
+        : this(file, status, additions, deletions, Before: null, After: null, IsBinary: false, IsTruncated: false)
+    {
+    }
+}
 
 public sealed record GetSessionStatusResponse(
     string? Status,

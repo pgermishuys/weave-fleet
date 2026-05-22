@@ -439,6 +439,9 @@ internal static class WebSocketV2Protocol
 
             if (string.Equals(signal.Status, IdleStatus, StringComparison.OrdinalIgnoreCase))
             {
+                if (string.Equals(_activityStatus, IdleStatus, StringComparison.OrdinalIgnoreCase))
+                    return null;
+
                 _activityStatus = IdleStatus;
                 return new TurnEnded { Payload = CreateTurnEndedPayload(broadcastEvent, signal) };
             }
@@ -470,8 +473,11 @@ internal static class WebSocketV2Protocol
             return null;
         }
 
-        private TurnEnded TranslateSessionIdle(BroadcastEvent broadcastEvent)
+        private TurnEnded? TranslateSessionIdle(BroadcastEvent broadcastEvent)
         {
+            if (string.Equals(_activityStatus, IdleStatus, StringComparison.OrdinalIgnoreCase))
+                return null;
+
             _activityStatus = IdleStatus;
             return new TurnEnded { Payload = CreateTurnEndedPayload(broadcastEvent, ReadTurnSignal(broadcastEvent.Payload)) };
         }
