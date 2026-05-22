@@ -43,9 +43,11 @@ public sealed partial class SessionOrchestrator(
     FleetOptions options,
     ISmartLinkRepository smartLinkRepository,
     ILogger<SessionOrchestrator> logger,
-    SessionActivityWriteService? sessionActivityWriteService = null)
+    SessionActivityWriteService? sessionActivityWriteService = null,
+    GitDiffService? gitDiffService = null)
 {
     private readonly DelegationService _delegationService = delegationService;
+    private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
 
     private sealed class NoOpHarnessEventLogRepository : IHarnessEventLogRepository
     {
@@ -273,9 +275,10 @@ public sealed partial class SessionOrchestrator(
 
         var workspace = workspaceResult.Value;
         var canonicalWorkspaceDirectory = WorkspaceRootService.CanonicalizePath(workspace.Directory);
+        var sessionId = Guid.NewGuid().ToString();
+        var gitBaseline = await _gitDiffService.CaptureBaselineAsync(canonicalWorkspaceDirectory, sessionId, ct);
 
         // 2. Spawn harness instance
-        var sessionId = Guid.NewGuid().ToString();
         using var _ = BeginSessionScope(sessionId);
         IHarnessSession harnessInstance;
         try
@@ -328,6 +331,8 @@ public sealed partial class SessionOrchestrator(
             Directory = canonicalWorkspaceDirectory,
             CreatedAt = DateTime.UtcNow.ToString("O"),
             HarnessType = harnessType,
+            GitBaselineRef = gitBaseline?.RefName,
+            GitRepoRoot = gitBaseline?.RepoRoot,
             UserId = userContext.UserId,
         };
 

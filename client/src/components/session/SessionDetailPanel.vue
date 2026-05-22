@@ -7,19 +7,31 @@ import FilesChanged from "@/components/session/FilesChanged.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
 import SmartLinkItem from "@/plugins/builtin/smart-links/SmartLinkItem.vue";
 import TodoListView from "@/components/session/TodoListView.vue";
+import TokenGrid from "@/components/session/TokenGrid.vue";
 import { useSessionTodos } from "@/composables/use-session-todos";
 import { useSessionDetailContext } from "@/composables/use-session-detail-context";
-import { useDiffs } from "@/composables/use-diffs";
+import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { apiFetch } from "@/lib/api-client";
 import { trackAction } from "@/lib/track-action";
 import type { SessionListItem } from "@/lib/api-types";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { secondsUntilRefresh, isRefreshing, refreshNow, POLL_INTERVAL_SECONDS } from "@/plugins/builtin/smart-links/composables/use-smart-links";
 
+interface TokenMetric {
+  id: string;
+  label: string;
+  value: string;
+  helper: string;
+}
+
 interface ChangedFile {
   path: string;
   additions: number;
   deletions: number;
+}
+
+interface FilesChangedBadgeClickPayload {
+  open: boolean;
 }
 
 interface SessionApiDetail {
@@ -47,11 +59,14 @@ interface SessionApiDetail {
 
 const props = defineProps<{
   session: SessionListItem | null;
+  setViewMode?: (viewMode: "chat" | "files-changed") => void | Promise<void>;
+  openDiffsTray?: () => void;
 }>();
 
 const router = useRouter();
 const ctx = useSessionDetailContext();
 const smartLinksStore = useSmartLinksStore();
+const sessionDiffsContext = useSessionDiffsContext();
 
 const { abortSession, isAborting, error: abortError } = ctx.abort;
 const { archiveSession, isArchiving, error: archiveError } = ctx.archive;
@@ -77,13 +92,9 @@ async function handleSmartLinksRefreshNow(): Promise<void> {
 }
 
 const remoteSessionDetail = ref<SessionApiDetail | null>(null);
-const filesChanged = ref<ChangedFile[]>([]);
 const refreshVersion = shallowRef(0);
 const isDeleteDialogOpen = shallowRef(false);
 const isForkDialogOpen = shallowRef(false);
-
-const isLoadingFilesChanged = shallowRef(false);
-const filesChangedError = shallowRef<string | null>(null);
 
 const sessionId = computed(() => props.session?.session.id ?? null);
 const activeSmartLinks = computed(() => sessionId.value ? smartLinksStore.getActiveLinks(sessionId.value) : []);
@@ -92,12 +103,39 @@ const smartLinkIssues = computed(() => activeSmartLinks.value.filter(l => l.reso
 const resolvedInstanceId = computed(() => normalizeString(props.session?.instanceId) ?? normalizeString(remoteSessionDetail.value?.instanceId));
 const todoSessionId = computed(() => sessionId.value ?? "");
 const todoInstanceId = computed(() => resolvedInstanceId.value ?? "");
+const totalTokens = computed(() => props.session?.totalTokens ?? remoteSessionDetail.value?.totalTokens ?? null);
+const totalCostUsd = computed(() => props.session?.totalCost ?? remoteSessionDetail.value?.totalCost ?? null);
+const effectiveIsolationStrategy = computed(() => props.session?.isolationStrategy ?? remoteSessionDetail.value?.isolationStrategy);
+const isolationLabel = computed(() => formatIsolationStrategy(effectiveIsolationStrategy.value));
 const sessionTitle = computed(() => normalizeString(props.session?.session.title) ?? normalizeString(remoteSessionDetail.value?.title) ?? "Untitled session");
 const effectiveSessionStatus = computed(() => props.session?.sessionStatus
   ?? remoteSessionDetail.value?.lifecycleStatus
   ?? remoteSessionDetail.value?.status
   ?? null);
 const { todos } = useSessionTodos(todoSessionId, todoInstanceId);
+const diffState = computed(() => sessionDiffsContext.value?.diffState ?? null);
+const fileDiffs = computed(() => diffState.value?.diffs.value ?? []);
+const filesChanged = computed<ChangedFile[]>(() => fileDiffs.value.map((diff) => ({
+  path: diff.file,
+  additions: diff.additions,
+  deletions: diff.deletions,
+})));
+const isLoadingFilesChanged = computed(() => diffState.value?.isLoading.value ?? false);
+const filesChangedError = computed(() => diffState.value?.error.value ?? null);
+const areFilesChangedAvailable = computed(() => diffState.value?.available.value ?? false);
+const areFilesChangedUnavailable = computed(() => !isLoadingFilesChanged.value && !filesChangedError.value && !areFilesChangedAvailable.value);
+const shouldShowFilesChangedSection = computed(() => isLoadingFilesChanged.value || Boolean(filesChangedError.value) || areFilesChangedAvailable.value);
+const filesChangedUnavailableMessage = computed(() => {
+  if (!sessionId.value || !resolvedInstanceId.value) {
+    return null;
+  }
+
+  if (filesChangedError.value) {
+    return "File diff data is unavailable right now.";
+  }
+
+  return areFilesChangedAvailable.value ? null : "File diff data is unavailable for this session.";
+});
 const effectiveLifecycleStatus = computed(() => normalizeLifecycleStatus(
   props.session?.lifecycleStatus
     ?? remoteSessionDetail.value?.lifecycleStatus
@@ -143,6 +181,33 @@ const actionErrors = computed(() => [
   terminateError.value,
 ].filter((message): message is string => Boolean(message)));
 
+const tokenMetrics = computed<readonly TokenMetric[]>(() => [
+  {
+    id: "tokens",
+    label: "Total tokens",
+    value: formatNumber(totalTokens.value),
+    helper: "Across all session messages",
+  },
+  {
+    id: "cost",
+    label: "Total cost",
+    value: formatCurrency(totalCostUsd.value),
+    helper: "Estimated session spend",
+  },
+  {
+    id: "files",
+    label: "Files changed",
+    value: isLoadingFilesChanged.value ? "…" : filesChanged.value.length.toLocaleString(),
+    helper: filesChangedUnavailableMessage.value ? "Diff summary unavailable" : "Tracked via session diffs",
+  },
+  {
+    id: "isolation",
+    label: "Isolation",
+    value: isolationLabel.value,
+    helper: "Workspace strategy",
+  },
+]);
+
 watch(
   [sessionId, refreshVersion],
   async ([nextSessionId], _previous, onCleanup) => {
@@ -184,35 +249,6 @@ watch(
       if (error instanceof DOMException && error.name === "AbortError") {
         return;
       }
-    }
-  },
-  { immediate: true },
-);
-
-watch(
-  [sessionId, resolvedInstanceId, refreshVersion],
-  async ([nextSessionId, instanceId]) => {
-    filesChanged.value = [];
-    filesChangedError.value = null;
-
-    if (!nextSessionId || !instanceId) {
-      return;
-    }
-
-    isLoadingFilesChanged.value = true;
-
-    try {
-      const diffState = useDiffs(nextSessionId, instanceId);
-      await diffState.fetchDiffs();
-
-      filesChanged.value = diffState.diffs.value.map((diff) => ({
-        path: diff.file,
-        additions: diff.additions,
-        deletions: diff.deletions,
-      }));
-      filesChangedError.value = diffState.error.value ?? null;
-    } finally {
-      isLoadingFilesChanged.value = false;
     }
   },
   { immediate: true },
@@ -357,6 +393,16 @@ function refreshPanelData(): void {
   refreshVersion.value += 1;
 }
 
+function handleFilesChangedBadgeClick(payload: FilesChangedBadgeClickPayload): void {
+  if (areFilesChangedUnavailable.value || isLoadingFilesChanged.value) {
+    return;
+  }
+
+  if (payload.open) {
+    props.openDiffsTray?.();
+  }
+}
+
 function normalizeString(value: string | null | undefined): string | null {
   if (!value) {
     return null;
@@ -413,6 +459,40 @@ function isActiveActivityStatus(value: string | null | undefined): value is "bus
 
 function normalizeRetentionStatus(value: string | null | undefined): "active" | "archived" {
   return value === "archived" ? "archived" : "active";
+}
+
+function formatIsolationStrategy(strategy: string | null | undefined): string {
+  switch (strategy) {
+    case "existing":
+      return "Existing";
+    case "worktree":
+      return "Worktree";
+    case "clone":
+      return "Clone";
+    default:
+      return "Unknown";
+  }
+}
+
+function formatNumber(value: number | null): string {
+  if (value === null) {
+    return "—";
+  }
+
+  return value.toLocaleString();
+}
+
+function formatCurrency(amount: number | null): string {
+  if (amount === null) {
+    return "—";
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
 }
 
 async function handleDismissSmartLink(linkId: string): Promise<void> {
@@ -611,15 +691,20 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       />
     </article>
 
-    <article class="session-section-card">
-      <p
-        v-if="filesChangedError && !isLoadingFilesChanged"
-        class="session-section-card__note"
-      >
-        File diff data is unavailable right now.
-      </p>
+    <TokenGrid :metrics="tokenMetrics" />
 
-      <FilesChanged :files="filesChanged" />
+    <article
+      v-if="shouldShowFilesChangedSection"
+      class="session-section-card"
+    >
+      <FilesChanged
+        :files="filesChanged"
+        :is-loading="isLoadingFilesChanged"
+        :error="filesChangedError"
+        :unavailable="areFilesChangedUnavailable"
+        :disabled="!openDiffsTray"
+        @click="handleFilesChangedBadgeClick"
+      />
     </article>
 
     <article

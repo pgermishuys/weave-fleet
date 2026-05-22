@@ -309,9 +309,51 @@ public static class SessionEndpoints
         })
         .WithName("GetCommittedSessionEvents");
 
-        // GET /api/sessions/{id}/diffs — stub (harness diff API not yet defined)
-        group.MapGet("/{id}/diffs", (string id) =>
-            Results.Ok(new GetSessionDiffsResponse(Array.Empty<JsonElement>())))
+        // GET /api/sessions/{id}/diffs
+        group.MapGet("/{id}/diffs", async (
+            string id,
+            SessionService sessionService,
+            GitDiffService gitDiffService,
+            CancellationToken ct) =>
+        {
+            var result = await sessionService.GetSessionAsync(id);
+            return await result.Match<Task<IResult>>(
+                async session =>
+                {
+                    if (string.IsNullOrWhiteSpace(session.GitRepoRoot)
+                        || string.IsNullOrWhiteSpace(session.GitBaselineRef))
+                    {
+                        return Results.Ok(new GetSessionDiffsResponse([], Available: false));
+                    }
+
+                    var workspacePrefix = TryComputeWorkspacePrefix(session.GitRepoRoot, session.Directory);
+                    if (workspacePrefix is null)
+                        return Results.Ok(new GetSessionDiffsResponse([], Available: false));
+
+                    var diffAvailability = await gitDiffService.ComputeDiffsWithAvailabilityAsync(
+                        session.GitRepoRoot,
+                        session.GitBaselineRef,
+                        workspacePrefix,
+                        ct);
+                    if (!diffAvailability.Available || diffAvailability.Diffs.Count == 0)
+                    {
+                        return Results.Ok(new GetSessionDiffsResponse(
+                            [],
+                            diffAvailability.Available));
+                    }
+
+                    var diffs = await gitDiffService.ComputeDiffsWithContentAsync(
+                        session.GitRepoRoot,
+                        session.GitBaselineRef,
+                        workspacePrefix,
+                        ct);
+
+                    return Results.Ok(new GetSessionDiffsResponse(
+                        diffs.Select(ToFileDiffSummary).ToList(),
+                        diffAvailability.Available));
+                },
+                error => Task.FromResult(error.ToSessionApiResult()));
+        })
         .WithName("GetSessionDiffs");
 
         // GET /api/sessions/{id}/status
@@ -502,6 +544,74 @@ public static class SessionEndpoints
             ? "active"
             : DeriveSessionStatus(session);
     }
+
+    private static FileDiffSummary ToFileDiffSummary(WeaveFleet.Application.Services.FileDiffContent diff) =>
+        new(
+            File: diff.Path,
+            Status: diff.Status,
+            Additions: diff.Additions,
+            Deletions: diff.Deletions,
+            Before: diff.Before,
+            After: diff.After,
+            IsBinary: diff.IsBinary,
+            IsTruncated: diff.IsTruncated);
+
+    private static string? TryComputeWorkspacePrefix(string repoRoot, string sessionDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot))
+            return null;
+
+        if (string.IsNullOrWhiteSpace(sessionDirectory))
+            return string.Empty;
+
+        try
+        {
+            var repoRootFullPath = Path.GetFullPath(repoRoot);
+            var sessionDirectoryFullPath = Path.GetFullPath(sessionDirectory);
+
+            if (!IsSameOrChildPath(sessionDirectoryFullPath, repoRootFullPath))
+                return null;
+
+            if (PathsEqual(sessionDirectoryFullPath, repoRootFullPath))
+                return string.Empty;
+
+            return Path.GetRelativePath(repoRootFullPath, sessionDirectoryFullPath)
+                .Replace(Path.DirectorySeparatorChar, '/')
+                .Replace(Path.AltDirectorySeparatorChar, '/')
+                .Trim('/');
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static bool IsSameOrChildPath(string candidatePath, string rootPath)
+    {
+        var root = TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
+        var candidate = TrimEndingDirectorySeparator(Path.GetFullPath(candidatePath));
+        if (PathsEqual(candidate, root))
+            return true;
+
+        return candidate.StartsWith(EnsureEndingDirectorySeparator(root), PathStringComparison);
+    }
+
+    private static bool PathsEqual(string left, string right) =>
+        string.Equals(
+            TrimEndingDirectorySeparator(left),
+            TrimEndingDirectorySeparator(right),
+            PathStringComparison);
+
+    private static string EnsureEndingDirectorySeparator(string path) =>
+        Path.EndsInDirectorySeparator(path) ? path : path + Path.DirectorySeparatorChar;
+
+    private static string TrimEndingDirectorySeparator(string path) =>
+        Path.GetPathRoot(path) == path
+            ? path
+            : path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+    private static StringComparison PathStringComparison =>
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     private static long TryParseUnixMs(string? iso)
     {

@@ -45,7 +45,7 @@ public sealed class SessionRepositoryTests
     }
 
     [Fact]
-    public async Task InsertAndGetById_ReturnsSession()
+    public async Task insert_and_get_by_id_returns_session()
     {
         var (conn, repo, factory) = await CreateAsync();
         using var _ = conn;
@@ -63,7 +63,9 @@ public sealed class SessionRepositoryTests
             CreatedAt = DateTime.UtcNow.ToString("O"),
             TotalTokens = 0,
             UserId = TestUserContext.DefaultUserId,
-            TotalCost = 0
+            TotalCost = 0,
+            GitBaselineRef = "main",
+            GitRepoRoot = "/tmp/ws"
         };
 
         await repo.InsertAsync(session);
@@ -74,6 +76,36 @@ public sealed class SessionRepositoryTests
         retrieved.Status.ShouldBe("active");
         retrieved.RetentionStatus.ShouldBe("active");
         retrieved.ArchivedAt.ShouldBeNull();
+        retrieved.GitBaselineRef.ShouldBe("main");
+        retrieved.GitRepoRoot.ShouldBe("/tmp/ws");
+    }
+
+    [Fact]
+    public async Task insert_and_get_by_id_returns_null_git_baseline_metadata_when_not_set()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var (ws, inst) = await InsertDependenciesAsync(factory);
+        var session = new Session
+        {
+            Id = Guid.NewGuid().ToString(),
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-null-git-baseline",
+            Title = "Null Git Baseline Session",
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
+        };
+
+        await repo.InsertAsync(session);
+        var retrieved = await repo.GetByIdAsync(session.Id);
+
+        retrieved.ShouldNotBeNull();
+        retrieved.GitBaselineRef.ShouldBeNull();
+        retrieved.GitRepoRoot.ShouldBeNull();
     }
 
     [Fact]

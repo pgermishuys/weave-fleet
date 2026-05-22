@@ -173,6 +173,9 @@ internal sealed class DomainEventTranslator
 
         if (string.Equals(signal.Status, IdleStatus, StringComparison.OrdinalIgnoreCase))
         {
+            if (string.Equals(_activityStatus, IdleStatus, StringComparison.OrdinalIgnoreCase))
+                return null;
+
             _activityStatus = IdleStatus;
             return new TurnEnded { Payload = CreateTurnEndedPayload(evt, signal) };
         }
@@ -204,8 +207,11 @@ internal sealed class DomainEventTranslator
         return null;
     }
 
-    private TurnEnded TranslateSessionIdle(HarnessEvent evt)
+    private TurnEnded? TranslateSessionIdle(HarnessEvent evt)
     {
+        if (string.Equals(_activityStatus, IdleStatus, StringComparison.OrdinalIgnoreCase))
+            return null;
+
         _activityStatus = IdleStatus;
         return new TurnEnded { Payload = CreateTurnEndedPayload(evt, ReadTurnSignal(evt)) };
     }

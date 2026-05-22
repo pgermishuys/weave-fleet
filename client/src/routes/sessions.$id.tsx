@@ -5,9 +5,12 @@ import { storeToRefs } from "pinia";
 import ConfirmDeleteSessionDialog from "@/components/sessions/ConfirmDeleteSessionDialog.vue";
 import ActivityStream from "@/components/session/ActivityStream.vue";
 import Composer from "@/components/session/Composer.vue";
+import DiffsTray from "@/components/session/DiffsTray.vue";
+import FilesChangedView from "@/components/session/FilesChangedView.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
 import SessionActionToolbar from "@/components/session/SessionActionToolbar.vue";
 import SessionDetailHeader from "@/components/session/SessionDetailHeader.vue";
+import { useDiffs } from "@/composables/use-diffs";
 import {
   useAbortSession,
   useArchiveSession,
@@ -17,6 +20,7 @@ import {
   useTerminateSession,
 } from "@/composables/use-session-actions";
 import { incrementPendingPrompts, useSentPrompts } from "@/composables/use-send-prompt";
+import { provideSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { apiFetch } from "@/lib/api-client";
 import type { SessionListItem, SessionOrigin } from "@/lib/api-types";
 import type { SessionActivityStatus } from "@/lib/types";
@@ -50,6 +54,8 @@ interface SessionDetailResponse {
 type ComposerInstance = ComponentPublicInstance & {
   focusPrompt: () => void;
 };
+
+type SessionViewMode = "chat" | "files-changed";
 
 function getStringField(
   value: Record<string, unknown>,
@@ -152,9 +158,16 @@ function isActiveActivityStatus(value: string | null | undefined): value is "bus
   return value === "busy" || value === "delegating";
 }
 
+function isDiffStalingStatus(
+  activityStatus: SessionActivityStatus | null | undefined,
+  lifecycleStatus: string | null | undefined,
+): boolean {
+  return isActiveActivityStatus(activityStatus) || lifecycleStatus === "running" && activityStatus === "waiting_input";
+}
+
 const SessionDetailPage = defineComponent({
   name: "SessionDetailPage",
-  setup() {
+  setup(_props, { expose }) {
     const params = Route.useParams();
     const search = Route.useSearch();
     const navigate = Route.useNavigate();
@@ -162,9 +175,12 @@ const SessionDetailPage = defineComponent({
     const { sessions, sessionStateOverrides } = storeToRefs(sessionsStore);
     const remoteSession = shallowRef<SessionDetailResponse | null>(null);
     const composerRef = shallowRef<ComposerInstance | null>(null);
+    const viewMode = shallowRef<SessionViewMode>(search.value.view === "files" ? "files-changed" : "chat");
+    const selectedChangedFile = shallowRef<{ file: string } | null>(null);
     const optimisticWorking = shallowRef(false);
     const isDeleteDialogOpen = shallowRef(false);
     const isForkDialogOpen = shallowRef(false);
+    const isDiffsTrayOpen = shallowRef(false);
     const optimisticSessionState = shallowRef<{
       activityStatus?: string | null;
       lifecycleStatus?: string | null;
@@ -275,12 +291,88 @@ const SessionDetailPage = defineComponent({
       { immediate: true },
     );
 
+    watch(
+      () => search.value.view,
+      (nextView) => {
+        viewMode.value = nextView === "files" ? "files-changed" : "chat";
+      },
+      { immediate: true },
+    );
+
+    async function setViewMode(nextViewMode: SessionViewMode): Promise<void> {
+      viewMode.value = nextViewMode;
+
+      await navigate({
+        to: "/sessions/$id",
+        params: { id: params.value.id },
+        search: {
+          instanceId: search.value.instanceId,
+          parentSessionId: search.value.parentSessionId,
+          view: nextViewMode === "files-changed" ? "files" : undefined,
+        },
+        replace: true,
+      });
+    }
+
+    expose({ setViewMode });
+
     const instanceId = computed<string | undefined>(() => {
       return search.value.instanceId
         ?? selectedSession.value?.instanceId
         ?? remoteSession.value?.instanceId
         ?? undefined;
     });
+
+    const diffState = useDiffs(
+      () => params.value.id,
+      () => instanceId.value,
+    );
+    function openDiffsTray(): void {
+      if (viewMode.value !== "chat") {
+        void setViewMode("chat");
+      }
+
+      isDiffsTrayOpen.value = true;
+
+      if (!diffState.isLoading.value && (diffState.isStale.value || diffState.diffs.value.length === 0) && params.value.id && instanceId.value) {
+        void diffState.fetchDiffs();
+      }
+    }
+
+    provideSessionDiffsContext(diffState, {
+      isDiffsTrayOpen,
+      openDiffsTray,
+    });
+
+    const fileDiffs = computed(() => diffState.diffs.value);
+    const selectedFilesChangedViewFile = computed(() => {
+      const selectedFilePath = selectedChangedFile.value?.file;
+      if (selectedFilePath) {
+        const currentSelection = fileDiffs.value.find((diff) => diff.file === selectedFilePath);
+        if (currentSelection) {
+          return currentSelection;
+        }
+      }
+
+      return fileDiffs.value[0] ?? null;
+    });
+
+    watch(
+      [() => params.value.id, instanceId],
+      async ([sessionId, activeInstanceId]) => {
+        if (sessionId && activeInstanceId) {
+          await diffState.fetchDiffs();
+        }
+      },
+      { immediate: true },
+    );
+
+    watch(
+      () => params.value.id,
+      () => {
+        selectedChangedFile.value = null;
+      },
+    );
 
     const parentSession = computed(() => {
       const parentSessionId = search.value.parentSessionId ?? selectedSession.value?.parentSessionId ?? null;
@@ -410,6 +502,23 @@ const SessionDetailPage = defineComponent({
           ?? remoteSession.value?.activityStatus,
       ) ?? "idle";
     });
+
+    watch(
+      [effectiveActivityStatus, effectiveLifecycleStatus],
+      ([nextActivityStatus, nextLifecycleStatus], [previousActivityStatus, previousLifecycleStatus]) => {
+        const wasActive = isDiffStalingStatus(previousActivityStatus, previousLifecycleStatus);
+        const isActive = isDiffStalingStatus(nextActivityStatus, nextLifecycleStatus);
+
+        if (isActive) {
+          diffState.markStale();
+          return;
+        }
+
+        if (wasActive && diffState.isStale.value && params.value.id && instanceId.value && !diffState.isLoading.value) {
+          void diffState.fetchDiffs();
+        }
+      },
+    );
 
     watch(
       () => [selectedSession.value?.activityStatus, hasPendingPrompts.value, sentPrompts.value.length] as const,
@@ -596,6 +705,14 @@ const SessionDetailPage = defineComponent({
       }
     }
 
+    function handleFilesChangedFileSelected(file: { file: string }): void {
+      selectedChangedFile.value = file;
+    }
+
+    function retryFilesChanged(): void {
+      void diffState.fetchDiffs();
+    }
+
     return () => (
       <div
         style={{
@@ -759,19 +876,43 @@ const SessionDetailPage = defineComponent({
             </div>
           ) : null}
         </div>
-        <ActivityStream key={`${params.value.id}-${instanceId.value}`} sessionId={params.value.id} instanceId={instanceId.value} />
-        <Composer
-          ref={composerRef}
-          sessionId={params.value.id}
-          instanceId={instanceId.value}
-          disabled={isComposerDisabled.value}
-          onPromptSent={handlePromptSent}
-        />
+        {viewMode.value === "chat" ? (
+          <>
+            <ActivityStream key={`${params.value.id}-${instanceId.value}`} sessionId={params.value.id} instanceId={instanceId.value} />
+            <Composer
+              ref={composerRef}
+              sessionId={params.value.id}
+              instanceId={instanceId.value}
+              disabled={isComposerDisabled.value}
+              onPromptSent={handlePromptSent}
+            />
+          </>
+        ) : (
+          <FilesChangedView
+            selectedFile={selectedFilesChangedViewFile.value}
+            onClose={() => void setViewMode("chat")}
+            onSelect={handleFilesChangedFileSelected}
+            onRetry={retryFilesChanged}
+            style={{
+              flex: 1,
+              minHeight: 0,
+            }}
+          />
+        )}
         <ConfirmDeleteSessionDialog
           v-model:open={isDeleteDialogOpen.value}
           isDeleting={isDeleting.value}
           sessionTitle={selectedSession.value?.session.title ?? remoteSession.value?.title ?? "Untitled session"}
           onConfirm={() => void handleDeleteConfirmed()}
+        />
+        <DiffsTray
+          open={isDiffsTrayOpen.value}
+          selectedFile={selectedFilesChangedViewFile.value}
+          onUpdate:open={(value: boolean) => {
+            isDiffsTrayOpen.value = value;
+          }}
+          onSelect={handleFilesChangedFileSelected}
+          onRetry={retryFilesChanged}
         />
         <ForkSessionDialog
           open={isForkDialogOpen.value}
@@ -790,6 +931,7 @@ export const Route = createFileRoute("/sessions/$id")({
   validateSearch: (search: Record<string, unknown>) => ({
     instanceId: typeof search.instanceId === "string" ? search.instanceId : undefined,
     parentSessionId: typeof search.parentSessionId === "string" ? search.parentSessionId : undefined,
+    ...(search.view === "files" ? { view: "files" as const } : {}),
   }),
   component: SessionDetailPage,
 });

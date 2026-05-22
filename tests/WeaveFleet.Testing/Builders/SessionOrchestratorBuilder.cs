@@ -40,6 +40,7 @@ public sealed class SessionOrchestratorBuilder
 
     private IUserContext _userContext = new TestUserContext("test-user");
     private FleetOptions _options = new();
+    private GitDiffService? _gitDiffService;
 
     public SessionOrchestratorBuilder WithUserContext(IUserContext userContext)
     {
@@ -50,6 +51,12 @@ public sealed class SessionOrchestratorBuilder
     public SessionOrchestratorBuilder WithOptions(FleetOptions options)
     {
         _options = options;
+        return this;
+    }
+
+    public SessionOrchestratorBuilder WithGitDiffService(GitDiffService gitDiffService)
+    {
+        _gitDiffService = gitDiffService;
         return this;
     }
 
@@ -106,6 +113,7 @@ public sealed class SessionOrchestratorBuilder
             _options,
             SmartLinkRepository,
             NullLogger<SessionOrchestrator>.Instance,
-            sessionActivityWriteService: null);
+            sessionActivityWriteService: null,
+            gitDiffService: _gitDiffService);
     }
 }

@@ -85,6 +85,7 @@ public static class DependencyInjection
         services.AddScoped<WorkspaceRootService>();
         services.AddScoped<InstanceService>();
         services.AddScoped<SessionSourceResolutionService>();
+        services.AddScoped<GitDiffService>();
         services.AddScoped<SessionOrchestrator>();
         services.AddScoped<SessionCallbackService>();
         services.AddScoped<DelegationService>();

@@ -74,6 +74,37 @@ public sealed class MigrationRunnerTests
     }
 
     [Fact]
+    public async Task apply_migrations_async_adds_nullable_session_git_baseline_columns()
+    {
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+        var runner = CreateRunner(factory);
+
+        await runner.ApplyMigrationsAsync(conn);
+
+        var columns = new Dictionary<string, (string Type, int NotNull, string? DefaultValue)>(StringComparer.OrdinalIgnoreCase);
+        using var command = conn.CreateCommand();
+        command.CommandText = "PRAGMA table_info(sessions);";
+        using var reader = await command.ExecuteReaderAsync();
+
+        while (await reader.ReadAsync())
+        {
+            columns[reader.GetString(reader.GetOrdinal("name"))] =
+                (reader.GetString(reader.GetOrdinal("type")), reader.GetInt32(reader.GetOrdinal("notnull")), reader.IsDBNull(reader.GetOrdinal("dflt_value")) ? null : reader.GetString(reader.GetOrdinal("dflt_value")));
+        }
+
+        columns.ShouldContainKey("git_baseline_ref");
+        columns["git_baseline_ref"].Type.ShouldBe("TEXT");
+        columns["git_baseline_ref"].NotNull.ShouldBe(0);
+        columns["git_baseline_ref"].DefaultValue.ShouldBeNull();
+
+        columns.ShouldContainKey("git_repo_root");
+        columns["git_repo_root"].Type.ShouldBe("TEXT");
+        columns["git_repo_root"].NotNull.ShouldBe(0);
+        columns["git_repo_root"].DefaultValue.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task ApplyMigrationsAsync_AddsWorkspaceSourceMetadataAndUsageTable()
     {
         using var conn = CreateInMemoryConnection();

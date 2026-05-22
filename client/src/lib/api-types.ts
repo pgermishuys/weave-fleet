@@ -456,6 +456,19 @@ export interface FileDiffItem {
   additions: number;
   deletions: number;
   status: "added" | "deleted" | "modified";
+  /** True when the API detected binary content and omitted textual diff content. */
+  isBinary?: boolean;
+  /** True when the API truncated or omitted oversized textual diff content. */
+  isTruncated?: boolean;
+  /** Backward-compatible alias for isBinary. */
+  binary?: boolean;
+  /** Backward-compatible alias for isTruncated. */
+  truncated?: boolean;
+}
+
+export interface SessionDiffsResponse {
+  diffs: FileDiffItem[];
+  available: boolean;
 }
 
 // ─── Harness Types ─────────────────────────────────────────────────────────
