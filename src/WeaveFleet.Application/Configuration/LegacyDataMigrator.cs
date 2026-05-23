@@ -46,10 +46,51 @@ public static class LegacyDataMigrator
         LogScanComplete(logger, migrated, null);
     }
 
+    public static void BackupLegacyAgentDb(string fleetDatabasePath, ILogger logger) =>
+        BackupLegacyAgentDb(fleetDatabasePath, GetLegacyAgentDatabasePath(), logger);
+
+    internal static void BackupLegacyAgentDb(string fleetDatabasePath, string legacyDatabasePath, ILogger logger)
+    {
+        legacyDatabasePath = Path.GetFullPath(legacyDatabasePath);
+        var backupDatabasePath = legacyDatabasePath + ".legacy-backup";
+
+        if (PathsEqual(fleetDatabasePath, legacyDatabasePath))
+        {
+            LogLegacyAgentBackupSkippedSamePath(logger, legacyDatabasePath, fleetDatabasePath, null);
+            return;
+        }
+
+        if (!File.Exists(legacyDatabasePath))
+        {
+            LogLegacyAgentBackupSourceNotFound(logger, legacyDatabasePath, null);
+            return;
+        }
+
+        if (File.Exists(backupDatabasePath))
+        {
+            LogLegacyAgentBackupTargetExists(logger, legacyDatabasePath, backupDatabasePath, null);
+            return;
+        }
+
+        File.Copy(legacyDatabasePath, backupDatabasePath);
+        TryCopyJournal(legacyDatabasePath, backupDatabasePath, "-wal");
+        TryCopyJournal(legacyDatabasePath, backupDatabasePath, "-shm");
+        File.Delete(legacyDatabasePath);
+        TryDelete(legacyDatabasePath + "-wal");
+        TryDelete(legacyDatabasePath + "-shm");
+        LogLegacyAgentBackupCreated(logger, legacyDatabasePath, backupDatabasePath, null);
+    }
+
     private static int SafeMigrate(Func<bool> migrate, string source, ILogger logger)
     {
         try { return migrate() ? 1 : 0; }
         catch (Exception ex) { LogMigrationFailed(logger, source, ex); return 0; }
+    }
+
+    private static string GetLegacyAgentDatabasePath()
+    {
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return Path.GetFullPath(Path.Combine(userProfile, ".weave", "fleet.db"));
     }
 
     private static bool PathsEqual(string a, string b) =>
@@ -119,4 +160,20 @@ public static class LegacyDataMigrator
     private static readonly Action<ILogger, string, Exception?> LogMigrationFailed =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(8, "LegacyMigrationFailed"),
             "Legacy data migration: failed to migrate {Source}; leaving in place.");
+
+    private static readonly Action<ILogger, string, Exception?> LogLegacyAgentBackupSourceNotFound =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(9, "LegacyAgentBackupSourceNotFound"),
+            "Legacy agent DB backup: source {Source} not present, nothing to back up.");
+
+    private static readonly Action<ILogger, string, string, Exception?> LogLegacyAgentBackupSkippedSamePath =
+        LoggerMessage.Define<string, string>(LogLevel.Information, new EventId(10, "LegacyAgentBackupSkippedSamePath"),
+            "Legacy agent DB backup: legacy path {LegacyDatabasePath} matches fleet database path {FleetDatabasePath}; skipping backup.");
+
+    private static readonly Action<ILogger, string, string, Exception?> LogLegacyAgentBackupTargetExists =
+        LoggerMessage.Define<string, string>(LogLevel.Warning, new EventId(11, "LegacyAgentBackupTargetExists"),
+            "Legacy agent DB backup: source {Source} was found but backup target {Target} already exists. Skipping to avoid overwriting the existing backup.");
+
+    private static readonly Action<ILogger, string, string, Exception?> LogLegacyAgentBackupCreated =
+        LoggerMessage.Define<string, string>(LogLevel.Information, new EventId(12, "LegacyAgentBackupCreated"),
+            "Legacy agent DB backup: moved {Source} -> {Target} using copy and delete.");
 }

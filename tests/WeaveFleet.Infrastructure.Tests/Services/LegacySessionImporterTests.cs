@@ -38,7 +38,7 @@ public sealed class LegacySessionImporterTests
 
         var marker = await destination.Keeper.QuerySingleAsync<(string SourcePath, int SessionCount, string Status)>(
             "SELECT source_path AS SourcePath, session_count AS SessionCount, status AS Status FROM legacy_imports");
-        marker.SourcePath.ShouldBe(SourcePath);
+        marker.SourcePath.ShouldBe(Path.GetFullPath(SourcePath));
         marker.SessionCount.ShouldBe(2);
         marker.Status.ShouldBe("completed");
     }

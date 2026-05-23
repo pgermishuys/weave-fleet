@@ -12,7 +12,7 @@ namespace WeaveFleet.Infrastructure.Services;
 /// </summary>
 public sealed partial class LegacySessionImportStartupService : IHostedService
 {
-    private const string LegacyDatabaseDisplayPath = "~/.weave/fleet.db";
+    private const string LegacyDatabaseDisplayPath = "~/.weave/fleet.db.legacy-backup";
     private const string StartupImportUserId = "local-user";
 
     private readonly IServiceScopeFactory _scopeFactory;
@@ -56,7 +56,7 @@ public sealed partial class LegacySessionImportStartupService : IHostedService
 
         using var userScope = BackgroundUserContext.BeginScope(StartupImportUserId);
         var importer = scope.ServiceProvider.GetRequiredService<ILegacySessionImporter>();
-        var result = await importer.ImportAsync(cancellationToken).ConfigureAwait(false);
+        var result = await importer.ImportAsync(_legacyDatabasePath, cancellationToken).ConfigureAwait(false);
         LogLegacySessionsImported(_logger, result.SessionCount, result.Status);
     }
 
@@ -75,7 +75,7 @@ public sealed partial class LegacySessionImportStartupService : IHostedService
     }
 
     private static string GetDefaultLegacyDatabasePath()
-        => Path.Combine(GetUserProfileDirectory(), ".weave", "fleet.db");
+        => Path.Combine(GetUserProfileDirectory(), ".weave", "fleet.db.legacy-backup");
 
     private static string GetUserProfileDirectory()
     {
@@ -84,7 +84,7 @@ public sealed partial class LegacySessionImportStartupService : IHostedService
     }
 
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "Legacy sessions detected at ~/.weave/fleet.db. Use `import-legacy-sessions` to import explicitly.")]
+        Message = "Legacy sessions detected at " + LegacyDatabaseDisplayPath + ". Use `import-legacy-sessions` to import explicitly.")]
     private static partial void LogLegacySessionsDetected(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Information,

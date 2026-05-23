@@ -43,6 +43,9 @@ using WeaveFleet.Infrastructure.Services;
 // can run:  fleet --host 0.0.0.0 --port 5001
 var cliOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 string? harnessMode = Environment.GetEnvironmentVariable("FLEET_HARNESS");
+var importLegacySessions = false;
+string? legacyImportSourcePath = null;
+string? cliArgumentError = null;
 for (var i = 0; i < args.Length; i++)
 {
     if (args[i] is "--host" && i + 1 < args.Length)
@@ -55,6 +58,21 @@ for (var i = 0; i < args.Length; i++)
         harnessMode = args[i]["--harness=".Length..];
     else if (args[i] is "--transport" && i + 1 < args.Length)
         cliOverrides[$"{FleetOptions.SectionName}:EventBus:Transport"] = args[++i];
+    else if (args[i] is "--import-legacy-sessions")
+        importLegacySessions = true;
+    else if (args[i] is "--source")
+    {
+        if (i + 1 < args.Length)
+            legacyImportSourcePath = args[++i];
+        else
+            cliArgumentError = "Missing value for --source.";
+    }
+}
+
+if (cliArgumentError is not null)
+{
+    Console.Error.WriteLine(cliArgumentError);
+    Environment.Exit(1);
 }
 
 var builder = WebApplication.CreateBuilder(args);
@@ -378,6 +396,9 @@ if (fleetOptions.Auth.Enabled)
 var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
 LegacyDataMigrator.MigrateIfNeeded(fleetOptions, startupLogger);
 
+// Back up the legacy Weave Agent Fleet DB before migrations can alter it.
+LegacyDataMigrator.BackupLegacyAgentDb(fleetOptions.DatabasePath, startupLogger);
+
 // Run database migrations at startup
 var migrationRunner = app.Services.GetRequiredService<MigrationRunner>();
 await migrationRunner.ApplyMigrationsAsync();
@@ -386,6 +407,9 @@ await migrationRunner.ApplyMigrationsAsync();
 var analyticsMigrationRunner = app.Services.GetService<AnalyticsMigrationRunner>();
 if (analyticsMigrationRunner is not null)
     await analyticsMigrationRunner.ApplyMigrationsAsync();
+
+if (importLegacySessions)
+    await RunLegacySessionImportAsync(app, legacyImportSourcePath, app.Lifetime.ApplicationStopping);
 
 // Ensure scratch project exists in local mode only.
 // In auth/cloud mode, scratch projects are user-scoped and created on demand.
@@ -546,6 +570,57 @@ static bool HasBearerAuthorizationHeader(HttpRequest request)
 
     var authorizationHeader = authorizationHeaderValues.ToString();
     return authorizationHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase);
+}
+
+static async Task RunLegacySessionImportAsync(
+    WebApplication app,
+    string? sourcePathOverride,
+    CancellationToken cancellationToken)
+{
+    var resolvedSourcePath = ResolveLegacyImportSourcePath(sourcePathOverride);
+
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var importer = scope.ServiceProvider.GetRequiredService<ILegacySessionImporter>();
+        var result = await importer.ImportAsync(resolvedSourcePath, cancellationToken);
+
+        Console.WriteLine($"Legacy session import status: {result.Status}");
+        Console.WriteLine($"Legacy session import count: {result.SessionCount}");
+        Console.WriteLine($"Legacy session import source: {result.SourcePath}");
+
+        Environment.Exit(string.Equals(result.Status, "not_found", StringComparison.Ordinal) ? 1 : 0);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Legacy session import failed: {ex.Message}");
+        Console.Error.WriteLine("Legacy session import status: failed");
+        Console.Error.WriteLine("Legacy session import count: 0");
+        Console.Error.WriteLine($"Legacy session import source: {resolvedSourcePath}");
+
+        Environment.Exit(1);
+    }
+}
+
+static string ResolveLegacyImportSourcePath(string? sourcePathOverride)
+{
+    var sourcePath = string.IsNullOrWhiteSpace(sourcePathOverride)
+        ? "~/.weave/fleet.db.legacy-backup"
+        : sourcePathOverride;
+
+    return ExpandUserHomePath(sourcePath);
+}
+
+static string ExpandUserHomePath(string path)
+{
+    if (!path.StartsWith("~/", StringComparison.Ordinal))
+        return path;
+
+    var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    if (string.IsNullOrWhiteSpace(home))
+        return path;
+
+    return Path.Combine(home, path[2..].Replace('/', Path.DirectorySeparatorChar));
 }
 
 /// <summary>Logger message definitions for startup diagnostics.</summary>
