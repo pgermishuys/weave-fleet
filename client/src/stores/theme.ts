@@ -17,6 +17,22 @@ export type ThemeSelection = ThemeId | "system";
 
 export type FontFamily = "inter" | "dm-sans";
 
+export type FontSize = "s" | "m" | "l" | "xl";
+
+export interface FontSizeDefinition {
+  id: FontSize;
+  label: string;
+  /** Root font-size in pixels */
+  px: number;
+}
+
+export const fontSizes: readonly FontSizeDefinition[] = [
+  { id: "s", label: "S", px: 13 },
+  { id: "m", label: "M", px: 14 },
+  { id: "l", label: "L", px: 15 },
+  { id: "xl", label: "XL", px: 16 },
+] as const;
+
 export interface ThemeDefinition {
   id: ThemeId;
   label: string;
@@ -40,6 +56,7 @@ export const themes: readonly ThemeDefinition[] = [
 
 const themeStorageKey = "weave:theme";
 const fontFamilyStorageKey = "weave:font-family";
+const fontSizeStorageKey = "weave:font-size";
 
 const fontStacks: Record<FontFamily, string> = {
   inter: '"Inter Variable", "Inter", system-ui, -apple-system, sans-serif',
@@ -52,6 +69,10 @@ function isValidThemeId(value: string): value is ThemeId {
 
 function isValidFontFamily(value: string): value is FontFamily {
   return value === "inter" || value === "dm-sans";
+}
+
+function isValidFontSize(value: string): value is FontSize {
+  return fontSizes.some((s) => s.id === value);
 }
 
 function readStoredTheme(): ThemeSelection {
@@ -88,6 +109,19 @@ function readStoredFontFamily(): FontFamily {
   }
 }
 
+function readStoredFontSize(): FontSize {
+  if (typeof window === "undefined") {
+    return "m";
+  }
+
+  try {
+    const raw = window.localStorage.getItem(fontSizeStorageKey);
+    return raw && isValidFontSize(raw) ? raw : "m";
+  } catch {
+    return "m";
+  }
+}
+
 function getSystemThemeId(): ThemeId {
   if (typeof window === "undefined") {
     return "dark";
@@ -120,9 +154,22 @@ function persistFontFamily(fontFamily: FontFamily): void {
   }
 }
 
+function persistFontSize(fontSize: FontSize): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(fontSizeStorageKey, fontSize);
+  } catch {
+    // localStorage unavailable
+  }
+}
+
 export const useThemeStore = defineStore("theme", () => {
   const currentTheme = shallowRef<ThemeSelection>(readStoredTheme());
   const fontFamily = shallowRef<FontFamily>(readStoredFontFamily());
+  const fontSize = shallowRef<FontSize>(readStoredFontSize());
 
   const resolvedThemeId = computed<ThemeId>(() => {
     return currentTheme.value === "system" ? getSystemThemeId() : currentTheme.value;
@@ -150,9 +197,19 @@ export const useThemeStore = defineStore("theme", () => {
     document.documentElement.style.setProperty("--font-sans-stack", fontStacks[fontFamily.value]);
   }
 
+  function applyFontSize(): void {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const size = fontSizes.find((s) => s.id === fontSize.value) ?? fontSizes[1];
+    document.documentElement.style.fontSize = `${size.px}px`;
+  }
+
   function initializeTheme(): void {
     applyTheme();
     applyFontFamily();
+    applyFontSize();
 
     if (typeof window === "undefined") {
       return;
@@ -181,6 +238,12 @@ export const useThemeStore = defineStore("theme", () => {
     applyFontFamily();
   }
 
+  function setFontSize(size: FontSize): void {
+    fontSize.value = size;
+    persistFontSize(size);
+    applyFontSize();
+  }
+
   function toggleTheme(): void {
     const nextColorScheme = resolvedTheme.value.colorScheme === "dark" ? "light" : "dark";
     setTheme(nextColorScheme);
@@ -189,10 +252,12 @@ export const useThemeStore = defineStore("theme", () => {
   return {
     currentTheme,
     fontFamily,
+    fontSize,
     resolvedThemeId,
     resolvedTheme,
     initializeTheme,
     setFontFamily,
+    setFontSize,
     setTheme,
     toggleTheme,
   };
