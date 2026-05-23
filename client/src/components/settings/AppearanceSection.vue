@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Check, Monitor } from "lucide-vue-next";
-import { useThemeStore, themes, type FontFamily, type ThemeSelection } from "@/stores/theme";
+import { useThemeStore, themes, fontSizes, type FontFamily, type FontSize, type ThemeSelection } from "@/stores/theme";
 
 const themeStore = useThemeStore();
 
 const activeTheme = computed(() => themeStore.currentTheme);
 const activeFontFamily = computed(() => themeStore.fontFamily);
+const activeFontSize = computed(() => themeStore.fontSize);
 
 const fontOptions: ReadonlyArray<{ id: FontFamily; label: string; fontFamily: string }> = [
   {
@@ -27,6 +28,10 @@ function selectTheme(theme: ThemeSelection): void {
 
 function selectFontFamily(fontFamily: FontFamily): void {
   themeStore.setFontFamily(fontFamily);
+}
+
+function selectFontSize(size: FontSize): void {
+  themeStore.setFontSize(size);
 }
 </script>
 
@@ -137,6 +142,37 @@ function selectFontFamily(fontFamily: FontFamily): void {
             :size="14"
             class="shrink-0 text-accent"
           />
+        </button>
+      </div>
+    </div>
+
+    <div class="mt-6 flex flex-col gap-3">
+      <div class="flex flex-col gap-1">
+        <h3 class="text-sm font-medium text-text">
+          Font Size
+        </h3>
+        <p class="text-xs text-muted">
+          Adjust the base font size for the interface.
+        </p>
+      </div>
+
+      <div class="inline-flex gap-0 rounded-card border border-border">
+        <button
+          v-for="(size, index) in fontSizes"
+          :key="size.id"
+          type="button"
+          class="flex items-center justify-center px-4 py-2 text-sm font-medium transition-colors"
+          :class="[
+            activeFontSize === size.id
+              ? 'bg-accent text-white'
+              : 'text-muted hover:text-text hover:bg-card-bg',
+            index === 0 ? 'rounded-l-card' : '',
+            index === fontSizes.length - 1 ? 'rounded-r-card' : '',
+            index > 0 ? 'border-l border-border' : '',
+          ]"
+          @click="selectFontSize(size.id)"
+        >
+          {{ size.label }}
         </button>
       </div>
     </div>
