@@ -126,6 +126,7 @@ echo   version      Print the installed version
 echo   update       Update to the latest version
 echo   uninstall    Remove Fleet
 echo   help         Show this help message
+echo   import-legacy-sessions  Import sessions from a legacy database
 echo.
 echo Options when starting the server:
 echo   --port ^<port^>       Override the server port
@@ -158,6 +159,7 @@ if /i "%~1"=="uninstall" goto :do_uninstall_with_validation
 if /i "%~1"=="help" goto :show_help_with_validation
 if /i "%~1"=="--help" goto :show_help_with_validation
 if /i "%~1"=="-h" goto :show_help_with_validation
+if /i "%~1"=="import-legacy-sessions" goto :do_import_legacy
 
 if /i "%~1"=="--port" (
     if "%~2"=="" (
@@ -260,6 +262,28 @@ if not "%~2"=="" (
 )
 goto :show_help
 
+:do_import_legacy
+set "IMPORT_ARGS=--import-legacy-sessions"
+shift
+:import_legacy_args_loop
+if "%~1"=="" goto :start_server_with_import
+if /i "%~1"=="--source" (
+    if "%~2"=="" (
+        echo Error: --source requires a value. >&2
+        exit /b 1
+    )
+    set "IMPORT_ARGS=!IMPORT_ARGS! --source %~2"
+    shift
+    shift
+    goto :import_legacy_args_loop
+)
+echo Unknown option for import-legacy-sessions: %~1 >&2
+exit /b 1
+
+:start_server_with_import
+set "EXTRA_ARGS=!IMPORT_ARGS!"
+goto :start_server
+
 :start_server
 if defined PORT_OVERRIDE (
     echo(%PORT_OVERRIDE%| findstr /r "^[0-9][0-9]*$" >nul || (
@@ -313,5 +337,9 @@ if not defined Fleet__AnalyticsDatabasePath set "Fleet__AnalyticsDatabasePath=%A
 if not defined Fleet__DataProtection__KeyPath set "Fleet__DataProtection__KeyPath=%KEY_DIR_DEFAULT%"
 
 echo Fleet v!VERSION! starting on %LISTEN_URL%
-"%APP_BIN%" --urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%"
+if defined EXTRA_ARGS (
+    "%APP_BIN%" --urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%" !EXTRA_ARGS!
+) else (
+    "%APP_BIN%" --urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%"
+)
 exit /b %ERRORLEVEL%

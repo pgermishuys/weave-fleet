@@ -165,6 +165,7 @@ show_help() {
   echo "  update       Update to the latest version"
   echo "  uninstall    Remove Fleet"
   echo "  help         Show this help message"
+  echo "  import-legacy-sessions  Import sessions from a legacy database"
   echo ""
 echo "Options when starting the server:"
 echo "  --port <port>       Override the server port"
@@ -185,6 +186,7 @@ PORT_OVERRIDE=""
 HOST_OVERRIDE=""
 DATA_DIR_OVERRIDE=""
 PROFILE_NAME=""
+EXTRA_ARGS=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -232,6 +234,27 @@ while [ "$#" -gt 0 ]; do
       fi
       show_help
       exit 0
+      ;;
+    import-legacy-sessions)
+      shift
+      EXTRA_ARGS="--import-legacy-sessions"
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --source)
+            if [ "$#" -lt 2 ]; then
+              echo "Error: --source requires a value." >&2
+              exit 1
+            fi
+            EXTRA_ARGS="$EXTRA_ARGS --source $2"
+            shift 2
+            ;;
+          *)
+            echo "Unknown option for import-legacy-sessions: $1" >&2
+            exit 1
+            ;;
+        esac
+      done
+      break
       ;;
     --port)
       if [ "$#" -lt 2 ]; then
@@ -335,4 +358,4 @@ export Fleet__AnalyticsDatabasePath="${Fleet__AnalyticsDatabasePath:-$ANALYTICS_
 export Fleet__DataProtection__KeyPath="${Fleet__DataProtection__KeyPath:-$KEY_DIR_DEFAULT}"
 
 echo "Fleet v${VERSION} starting on ${LISTEN_URL}"
-exec "$APP_BIN" --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT"
+exec "$APP_BIN" --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT" $EXTRA_ARGS
