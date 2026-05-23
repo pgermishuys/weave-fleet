@@ -1,4 +1,5 @@
 using Dapper;
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Services;
@@ -10,7 +11,7 @@ namespace WeaveFleet.Infrastructure.Tests.Services;
 public sealed class LegacySessionImportStartupServiceTests
 {
     [Fact]
-    public async Task imports_legacy_sessions_when_destination_sessions_are_empty_and_legacy_db_exists()
+    public async Task Imports_legacy_sessions_when_destination_sessions_are_empty_and_legacy_db_exists()
     {
         var destination = await TestDbHelper.CreateSharedDbAsync();
         using var keeper = destination.Keeper;
@@ -21,16 +22,16 @@ public sealed class LegacySessionImportStartupServiceTests
             provider.GetRequiredService<IServiceScopeFactory>(),
             logger,
             _ => true,
-            "/tmp/legacy/fleet.db");
+            "/tmp/legacy/fleet.db.legacy-backup");
 
         await service.StartAsync(CancellationToken.None);
 
         importer.CallCount.ShouldBe(1);
-        importer.UsedDefaultPath.ShouldBeTrue();
+        importer.LastSourcePath.ShouldBe("/tmp/legacy/fleet.db.legacy-backup");
     }
 
     [Fact]
-    public async Task logs_notification_only_when_destination_sessions_exist_and_legacy_db_exists()
+    public async Task Logs_notification_only_when_destination_sessions_exist_and_legacy_db_exists()
     {
         var destination = await TestDbHelper.CreateSharedDbAsync();
         using var keeper = destination.Keeper;
@@ -42,13 +43,30 @@ public sealed class LegacySessionImportStartupServiceTests
             provider.GetRequiredService<IServiceScopeFactory>(),
             logger,
             _ => true,
-            "/tmp/legacy/fleet.db");
+            "/tmp/legacy/fleet.db.legacy-backup");
 
         await service.StartAsync(CancellationToken.None);
 
         importer.CallCount.ShouldBe(0);
         logger.Messages.ShouldContain(
-            "Legacy sessions detected at ~/.weave/fleet.db. Use `import-legacy-sessions` to import explicitly.");
+            "Legacy sessions detected at ~/.weave/fleet.db.legacy-backup. Use `import-legacy-sessions` to import explicitly.");
+    }
+
+    [Fact]
+    public void Returns_backup_path_for_default_legacy_database_path()
+    {
+        var method = typeof(LegacySessionImportStartupService)
+            .GetMethod("GetDefaultLegacyDatabasePath", BindingFlags.NonPublic | BindingFlags.Static);
+
+        method.ShouldNotBeNull();
+
+        var defaultPath = method.Invoke(null, null);
+        var expectedPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".weave",
+            "fleet.db.legacy-backup");
+
+        defaultPath.ShouldBe(expectedPath);
     }
 
     private static ServiceProvider CreateServiceProvider(
@@ -87,33 +105,33 @@ public sealed class LegacySessionImportStartupServiceTests
     private sealed class CapturingLegacySessionImporter : ILegacySessionImporter
     {
         public int CallCount { get; private set; }
-        public bool UsedDefaultPath { get; private set; }
+        public string? LastSourcePath { get; private set; }
 
         public Task<LegacySessionImportResult> ImportAsync()
         {
             CallCount++;
-            UsedDefaultPath = true;
-            return Task.FromResult(new LegacySessionImportResult(true, false, "/tmp/legacy/fleet.db", 2, "completed"));
+            LastSourcePath = null;
+            return Task.FromResult(new LegacySessionImportResult(true, false, "/tmp/legacy/fleet.db.legacy-backup", 2, "completed"));
         }
 
         public Task<LegacySessionImportResult> ImportAsync(CancellationToken cancellationToken)
         {
             CallCount++;
-            UsedDefaultPath = true;
-            return Task.FromResult(new LegacySessionImportResult(true, false, "/tmp/legacy/fleet.db", 2, "completed"));
+            LastSourcePath = null;
+            return Task.FromResult(new LegacySessionImportResult(true, false, "/tmp/legacy/fleet.db.legacy-backup", 2, "completed"));
         }
 
         public Task<LegacySessionImportResult> ImportAsync(string sourcePath)
         {
             CallCount++;
-            UsedDefaultPath = false;
+            LastSourcePath = sourcePath;
             return Task.FromResult(new LegacySessionImportResult(true, false, sourcePath, 2, "completed"));
         }
 
         public Task<LegacySessionImportResult> ImportAsync(string sourcePath, CancellationToken cancellationToken)
         {
             CallCount++;
-            UsedDefaultPath = false;
+            LastSourcePath = sourcePath;
             return Task.FromResult(new LegacySessionImportResult(true, false, sourcePath, 2, "completed"));
         }
     }
