@@ -1,4 +1,4 @@
-import { computed, readonly, ref, shallowRef, watch, type ComputedRef, type Ref, type ShallowRef } from "vue";
+import { computed, readonly, ref, shallowRef, toValue, watch, type ComputedRef, type MaybeRefOrGetter, type Ref, type ShallowRef } from "vue";
 import { useFindFiles } from "@/composables/use-find-files";
 import { apiFetch } from "@/lib/api-client";
 import type { AutocompleteAgent, AutocompleteCommand } from "@/lib/api-types";
@@ -15,7 +15,7 @@ export interface AutocompleteItem {
 export interface UseAutocompleteParams {
   value: Ref<string>;
   setValue: (value: string) => void;
-  instanceId: string;
+  instanceId: MaybeRefOrGetter<string | null | undefined>;
   inputRef: Ref<HTMLTextAreaElement | null>;
   cursorPosition: Ref<number>;
 }
@@ -43,14 +43,15 @@ interface UseStaticInstanceDataResult<T> {
   error: Readonly<ShallowRef<string | undefined>>;
 }
 
-function useInstanceCommands(instanceId: string): UseStaticInstanceDataResult<AutocompleteCommand> {
+function useInstanceCommands(instanceId: MaybeRefOrGetter<string | null | undefined>): UseStaticInstanceDataResult<AutocompleteCommand> {
   const data = ref<AutocompleteCommand[]>([]);
-  const isLoading = shallowRef(Boolean(instanceId));
+  const currentInstanceId = computed(() => toValue(instanceId)?.trim() ?? "");
+  const isLoading = shallowRef(Boolean(currentInstanceId.value));
   const error = shallowRef<string | undefined>(undefined);
 
   watch(
-    () => instanceId,
-    async (nextInstanceId) => {
+    currentInstanceId,
+    async (nextInstanceId, _previousInstanceId, onCleanup) => {
       if (!nextInstanceId) {
         data.value = [];
         isLoading.value = false;
@@ -59,6 +60,9 @@ function useInstanceCommands(instanceId: string): UseStaticInstanceDataResult<Au
       }
 
       const controller = new AbortController();
+      onCleanup(() => {
+        controller.abort();
+      });
       isLoading.value = true;
       error.value = undefined;
 
@@ -83,10 +87,6 @@ function useInstanceCommands(instanceId: string): UseStaticInstanceDataResult<Au
       } finally {
         isLoading.value = false;
       }
-
-      return () => {
-        controller.abort();
-      };
     },
     { immediate: true },
   );
@@ -94,14 +94,15 @@ function useInstanceCommands(instanceId: string): UseStaticInstanceDataResult<Au
   return { data: readonly(data), isLoading: readonly(isLoading), error: readonly(error) };
 }
 
-function useInstanceAgents(instanceId: string): UseStaticInstanceDataResult<AutocompleteAgent> {
+function useInstanceAgents(instanceId: MaybeRefOrGetter<string | null | undefined>): UseStaticInstanceDataResult<AutocompleteAgent> {
   const data = ref<AutocompleteAgent[]>([]);
-  const isLoading = shallowRef(Boolean(instanceId));
+  const currentInstanceId = computed(() => toValue(instanceId)?.trim() ?? "");
+  const isLoading = shallowRef(Boolean(currentInstanceId.value));
   const error = shallowRef<string | undefined>(undefined);
 
   watch(
-    () => instanceId,
-    async (nextInstanceId) => {
+    currentInstanceId,
+    async (nextInstanceId, _previousInstanceId, onCleanup) => {
       if (!nextInstanceId) {
         data.value = [];
         isLoading.value = false;
@@ -110,6 +111,9 @@ function useInstanceAgents(instanceId: string): UseStaticInstanceDataResult<Auto
       }
 
       const controller = new AbortController();
+      onCleanup(() => {
+        controller.abort();
+      });
       isLoading.value = true;
       error.value = undefined;
 
@@ -134,10 +138,6 @@ function useInstanceAgents(instanceId: string): UseStaticInstanceDataResult<Auto
       } finally {
         isLoading.value = false;
       }
-
-      return () => {
-        controller.abort();
-      };
     },
     { immediate: true },
   );

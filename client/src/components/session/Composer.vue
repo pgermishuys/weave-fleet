@@ -327,8 +327,8 @@ defineExpose({
 });
 
 const cursorPosition = shallowRef(0);
-const normalizedInstanceId = props.instanceId?.trim() ?? "";
-const autocompleteEnabled = computed(() => normalizedInstanceId.length > 0);
+const normalizedInstanceId = computed(() => props.instanceId?.trim() ?? "");
+const autocompleteEnabled = computed(() => normalizedInstanceId.value.length > 0);
 const autocomplete = useAutocomplete({
   value: computed(() => draft.text),
   setValue: setText,
