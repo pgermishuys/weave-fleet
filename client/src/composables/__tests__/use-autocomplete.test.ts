@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { shallowRef } from "vue";
+import { shallowRef, type Ref } from "vue";
 import { useAutocomplete } from "@/composables/use-autocomplete";
 import { flushAll, mountComposable } from "./test-utils";
 
@@ -56,7 +56,7 @@ function configureApiFetch(): void {
   });
 }
 
-async function mountAutocomplete(initialValue: string, cursor: number) {
+async function mountAutocomplete(initialValue: string, cursor: number, instanceId: Ref<string> | string = "instance-1") {
   const value = shallowRef(initialValue);
   const cursorPosition = shallowRef(cursor);
   const input = document.createElement("textarea");
@@ -69,7 +69,7 @@ async function mountAutocomplete(initialValue: string, cursor: number) {
       value.value = nextValue;
       input.value = nextValue;
     },
-    instanceId: "instance-1",
+    instanceId,
     inputRef,
     cursorPosition,
   }));
@@ -183,5 +183,20 @@ describe("useAutocomplete", () => {
 
     expect(tabEvent.defaultPrevented).toBe(true);
     expect(value.value).toBe("/help ");
+  });
+
+  it("reloads instance-scoped suggestions when the instance id changes", async () => {
+    const instanceId = shallowRef("instance-1");
+
+    await mountAutocomplete("/", 1, instanceId);
+    await flushAll();
+
+    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/api/instances/instance-1/commands"))).toBe(true);
+
+    instanceId.value = "instance-2";
+    await flushAll();
+
+    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/api/instances/instance-2/commands"))).toBe(true);
+    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/api/instances/instance-2/agents"))).toBe(true);
   });
 });
