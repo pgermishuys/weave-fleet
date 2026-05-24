@@ -10,6 +10,7 @@ using NuCode.Events;
 using NuCode.Lsp;
 using NuCode.Mcp;
 using NuCode.Plugins;
+using NuCode.Providers;
 using NuCode.Sessions;
 using NuCode.Tools;
 
@@ -47,6 +48,10 @@ public static class NuCodeServiceCollectionExtensions
 
     private static IServiceCollection AddNuCodeCore(IServiceCollection services)
     {
+        // Provider registry: seeded with all built-in providers
+        services.TryAddSingleton<IProviderRegistry>(_ =>
+            new ProviderRegistry(BuiltInProviders.All()));
+
         // Configuration: multi-layer loader, options factory, file change watching
         services.TryAddSingleton<IConfigLoader>(sp =>
         {

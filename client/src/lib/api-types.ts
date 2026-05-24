@@ -774,3 +774,66 @@ export interface PollResponse {
   /** Human-readable message for terminal/error states */
   message?: string;
 }
+
+// ─── NuCode Provider Types ──────────────────────────────────────────────────
+
+/** A single credential field required by a provider */
+export interface NuCodeCredentialField {
+  /** Field key, e.g. "apiKey", "config:baseUrl", "config:resourceName" */
+  key: string;
+  /** Human-readable label */
+  displayName: string;
+  /** Whether this field is required */
+  required: boolean;
+  /** Whether this field holds a secret value */
+  isSecret: boolean;
+  /** Optional help text */
+  helpText?: string | null;
+}
+
+/** A NuCode provider returned by GET /api/nucode/providers */
+export interface NuCodeProvider {
+  id: string;
+  displayName: string;
+  description?: string | null;
+  /** Auth mechanism as string, e.g. "ApiKey", "OAuthDevice", "None" */
+  authMechanism: string;
+  isConnected: boolean;
+  credentialOptional: boolean;
+  supportsCustomBaseUrl: boolean;
+  credentialFields: readonly NuCodeCredentialField[];
+}
+
+/** Request body for PUT /api/nucode/providers/{id}/credentials */
+export interface NuCodeStoreCredentialsRequest {
+  fields: Record<string, string>;
+}
+
+/** Response from POST /api/nucode/providers/{id}/test */
+export interface NuCodeTestConnectionResponse {
+  success: boolean;
+  error?: string;
+  latencyMs: number;
+}
+
+/** Response from POST /api/nucode/providers/{id}/auth/initiate */
+export interface NuCodeDeviceFlowInitiatedResponse {
+  /** Human-readable instructions containing the user code and verification URL */
+  instructions: string;
+}
+
+/** Response from POST /api/nucode/providers/{id}/auth/device-code */
+export interface NuCodeDeviceCodeResponse {
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  expiresIn: number;
+  interval: number;
+}
+
+/** Response from POST /api/nucode/providers/{id}/auth/poll */
+export interface NuCodeDevicePollResponse {
+  status: "pending" | "complete" | "expired" | "denied" | "error";
+  interval?: number | null;
+  message?: string | null;
+}

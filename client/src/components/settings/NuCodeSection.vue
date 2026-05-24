@@ -11,13 +11,10 @@ const prefsStore = usePreferencesStore();
 // ── Computed ───────────────────────────────────────────────────────────────
 
 const enabled = computed(() => prefsStore.get("nucode.enabled", "false") === "true");
-const provider = computed(() => prefsStore.get("nucode.provider", "copilot"));
 const modelId = computed(() => prefsStore.get("nucode.modelId", ""));
-const baseUrl = computed(() => prefsStore.get("nucode.baseUrl", ""));
 
-const readinessStatus = computed<"ready" | "missing-credentials" | "not-configured">(() => {
+const readinessStatus = computed<"ready" | "not-configured">(() => {
   if (!modelId.value) return "not-configured";
-  if (provider.value === "custom" && !baseUrl.value) return "not-configured";
   return "ready";
 });
 
@@ -56,12 +53,6 @@ async function toggleEnabled(): Promise<void> {
               class="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-300"
             >
               Ready
-            </span>
-            <span
-              v-else-if="enabled && readinessStatus === 'missing-credentials'"
-              class="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-medium text-yellow-300"
-            >
-              Missing credentials
             </span>
             <span
               v-else-if="enabled && readinessStatus === 'not-configured'"

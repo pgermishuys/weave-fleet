@@ -2,12 +2,14 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using global::NuCode.Sessions;
 using Microsoft.Extensions.AI;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using HarnessMessagePart = WeaveFleet.Domain.Harnesses.MessagePart;
 using NuCodeFilePart = global::NuCode.Sessions.FilePart;
 using NuCodeMessagePart = global::NuCode.Sessions.MessagePart;
 using NuCodeReasoningPart = global::NuCode.Sessions.ReasoningPart;
 using NuCodeStepFinishPart = global::NuCode.Sessions.StepFinishPart;
+using NuCodeStepStartPart = global::NuCode.Sessions.StepStartPart;
 using NuCodeTextPart = global::NuCode.Sessions.TextPart;
 
 namespace WeaveFleet.Infrastructure.Harnesses.NuCode;
@@ -191,5 +193,168 @@ internal static class NuCodeMapper
             NuCodeJsonContext.Default.DictionaryStringObject);
 
         return new Domain.Harnesses.ToolUsePart(toolPart.CallId, toolPart.ToolName, args, state);
+    }
+
+    // ── Domain event payload mapping ──
+
+    /// <summary>
+    /// Builds a <see cref="MessageLifecyclePayload"/> from a NuCode message with parts,
+    /// suitable for <c>message.created</c> and <c>message.updated</c> events.
+    /// </summary>
+    public static MessageLifecyclePayload ToMessageLifecyclePayload(
+        MessageWithParts mwp, string fleetSessionId)
+    {
+        string? agent = null;
+        string? modelId = null;
+
+        if (mwp.Message is AssistantMessage am)
+        {
+            agent = am.Agent;
+            modelId = am.ModelId;
+        }
+        else if (mwp.Message is UserMessage um)
+        {
+            agent = um.Agent;
+        }
+
+        var info = new MessageEventInfo
+        {
+            Id = mwp.Message.Id.Value,
+            Role = mwp.Message.Role == MessageRole.User ? "user" : "assistant",
+            SessionId = fleetSessionId,
+            Agent = agent,
+            ModelId = modelId,
+            Time = new MessageEventTime
+            {
+                Created = mwp.Message.CreatedAt.ToUnixTimeMilliseconds(),
+            },
+        };
+
+        var parts = mwp.Parts
+            .Select(p => ToMessageEventPart(p, fleetSessionId))
+            .Where(p => p is not null)
+            .Cast<MessageEventPart>()
+            .ToList();
+
+        return new MessageLifecyclePayload
+        {
+            Info = info,
+            Parts = parts,
+        };
+    }
+
+    /// <summary>
+    /// Builds a <see cref="MessagePartUpdatedPayload"/> from a NuCode message part.
+    /// </summary>
+    public static MessagePartUpdatedPayload ToMessagePartUpdatedPayload(
+        NuCodeMessagePart part, string fleetSessionId)
+    {
+        var eventPart = ToMessageEventPart(part, fleetSessionId)
+            ?? throw new InvalidOperationException($"Cannot map NuCode part type '{part.Type}' to MessageEventPart.");
+
+        return new MessagePartUpdatedPayload
+        {
+            SessionId = fleetSessionId,
+            Part = eventPart,
+        };
+    }
+
+    /// <summary>
+    /// Maps a single NuCode message part to a <see cref="MessageEventPart"/>.
+    /// </summary>
+    public static MessageEventPart? ToMessageEventPart(NuCodeMessagePart part, string fleetSessionId)
+    {
+        return part switch
+        {
+            NuCodeTextPart tp when !tp.Ignored => new TextMessageEventPart
+            {
+                Id = tp.Id.Value,
+                SessionId = fleetSessionId,
+                MessageId = tp.MessageId.Value,
+                Text = tp.Text,
+            },
+            NuCodeReasoningPart rp => new ReasoningMessageEventPart
+            {
+                Id = rp.Id.Value,
+                SessionId = fleetSessionId,
+                MessageId = rp.MessageId.Value,
+                Text = rp.Text,
+            },
+            ToolPart toolPart => new ToolMessageEventPart
+            {
+                Id = toolPart.Id.Value,
+                SessionId = fleetSessionId,
+                MessageId = toolPart.MessageId.Value,
+                ToolName = toolPart.ToolName,
+                CallId = toolPart.CallId,
+                State = MapToolInvocationState(toolPart.State),
+            },
+            NuCodeFilePart fp => new FileMessageEventPart
+            {
+                Id = fp.Id.Value,
+                SessionId = fleetSessionId,
+                MessageId = fp.MessageId.Value,
+                Mime = fp.Mime,
+                Url = fp.Url,
+                Filename = fp.Filename,
+            },
+            NuCodeStepStartPart ssp => new StepStartedMessageEventPart
+            {
+                Id = ssp.Id.Value,
+                SessionId = fleetSessionId,
+                MessageId = ssp.MessageId.Value,
+                Index = 0,
+            },
+            NuCodeStepFinishPart sfp => new StepFinishedMessageEventPart
+            {
+                Id = sfp.Id.Value,
+                SessionId = fleetSessionId,
+                MessageId = sfp.MessageId.Value,
+                Index = 0,
+                Reason = sfp.Reason,
+                Cost = (double)sfp.Cost,
+                Tokens = new MessageTokenUsage
+                {
+                    Input = sfp.Tokens.Input,
+                    Output = sfp.Tokens.Output,
+                    Reasoning = sfp.Tokens.Reasoning,
+                },
+            },
+            _ => null,
+        };
+    }
+
+    private static ToolInvocationState MapToolInvocationState(ToolCallState state)
+    {
+        return state switch
+        {
+            PendingToolCallState p => new ToolPendingState
+            {
+                Input = SerializeToolInput(p.Input),
+            },
+            RunningToolCallState r => new ToolRunningState
+            {
+                Input = SerializeToolInput(r.Input),
+            },
+            CompletedToolCallState c => new ToolCompletedState
+            {
+                Input = SerializeToolInput(c.Input),
+                Output = JsonSerializer.SerializeToElement(c.Output),
+            },
+            ErrorToolCallState e => new ToolErrorState
+            {
+                Input = SerializeToolInput(e.Input),
+                Output = JsonSerializer.SerializeToElement(e.Error),
+            },
+            _ => new ToolPendingState(),
+        };
+    }
+
+    private static JsonElement? SerializeToolInput(ImmutableDictionary<string, object?> input)
+    {
+        if (input.IsEmpty) return null;
+        return JsonSerializer.SerializeToElement(
+            input.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
+            NuCodeJsonContext.Default.DictionaryStringObject);
     }
 }

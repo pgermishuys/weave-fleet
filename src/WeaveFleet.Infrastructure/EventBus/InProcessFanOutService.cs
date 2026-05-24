@@ -1,3 +1,4 @@
+#pragma warning disable CA1848, CA1873 // Temporary diagnostic logging
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -66,8 +67,14 @@ internal sealed partial class InProcessFanOutService : BackgroundService
         var domainEvent = envelope.DomainEvent;
         var classification = EventTypeMetadata.Classify(eventType);
 
+        _logger.LogDebug("[FanOut] type={Type} session={Session} user={User} isDurable={IsDurable}",
+            eventType, sessionId, userId, envelope.IsDurable);
+
         if (IsUserMessageEcho(evt))
+        {
+            _logger.LogDebug("[FanOut] Skipped user message echo type={Type}", eventType);
             return;
+        }
 
         // Buffer message.part.delta text for the durable merge on next message.updated.
         if (evt.Type == EventTypes.MessagePartDelta && userId is not null)
@@ -85,6 +92,9 @@ internal sealed partial class InProcessFanOutService : BackgroundService
         await _broadcaster.BroadcastAsync(
             $"session:{sessionId}", eventType, payload, classification.IsAdvisory ? null : envelope.EventId, domainEvent, userId, ct)
             .ConfigureAwait(false);
+
+        _logger.LogDebug("[FanOut] Broadcast topic=session:{Session} type={Type} advisory={Advisory}",
+            sessionId, eventType, classification.IsAdvisory);
 
         // Activity-status side-channel for the global "sessions" topic.
         var activityStatus = ParseActivityStatus(evt.Type, evt.Payload);

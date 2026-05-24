@@ -1,3 +1,4 @@
+#pragma warning disable CA1848, CA1873 // Temporary diagnostic logging
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -12,6 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Services;
@@ -284,10 +286,13 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public async IAsyncEnumerable<HarnessEvent> SubscribeAsync([EnumeratorCancellation] CancellationToken ct)
     {
+        _logger.LogDebug("[NuCode:Subscribe] Starting event subscription for instance={InstanceId}", InstanceId);
         await foreach (var evt in _eventChannel.Reader.ReadAllAsync(ct))
         {
+            _logger.LogDebug("[NuCode:Subscribe] Yielding event type={Type} session={Session}", evt.Type, evt.SessionId);
             yield return evt;
         }
+        _logger.LogDebug("[NuCode:Subscribe] Event subscription ended for instance={InstanceId}", InstanceId);
     }
 
     /// <inheritdoc />
@@ -399,14 +404,21 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
 
     private void EmitStatusEvent()
     {
+        var activityStatus = _status == HarnessSessionStatus.Running ? "busy" : "idle";
+        var payload = JsonSerializer.SerializeToElement(
+            new NuCodeStatusPayload { ActivityStatus = activityStatus },
+            NuCodeJsonContext.Default.NuCodeStatusPayload);
+
         var evt = new HarnessEvent
         {
-            Type = _status == HarnessSessionStatus.Running ? "session.busy" : "session.idle",
+            Type = "session.status",
             SessionId = FleetSessionId,
             FleetSessionId = FleetSessionId,
             Timestamp = DateTimeOffset.UtcNow,
+            Payload = payload,
         };
-        _eventChannel.Writer.TryWrite(evt);
+        var written = _eventChannel.Writer.TryWrite(evt);
+        _logger.LogDebug("[NuCode:EmitStatus] type={Type} session={Session} written={Written}", evt.Type, FleetSessionId, written);
     }
 
     private void EmitSessionCreatedEvent()
@@ -462,31 +474,41 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
 
         eventBus.Subscribe(MessageEvents.Updated, e =>
         {
+            _logger.LogDebug("[NuCode:EventBus] Received MessageEvents.Updated session={Session} message={Message}",
+                e.Properties.SessionId.Value, e.Properties.MessageId.Value);
             var nuCodeSessionId = e.Properties.SessionId.Value;
-            var payload = JsonSerializer.SerializeToElement(
-                new NuCodeMessageUpdatedPayload { MessageId = e.Properties.MessageId.Value },
-                NuCodeJsonContext.Default.NuCodeMessageUpdatedPayload);
+            var messageId = e.Properties.MessageId;
 
-            _ = EmitRoutedEventAsync("message.updated", nuCodeSessionId, payload);
+            _ = EmitMessageUpdatedAsync(nuCodeSessionId, messageId);
         });
 
         eventBus.Subscribe(MessageEvents.PartUpdated, e =>
         {
+            _logger.LogDebug("[NuCode:EventBus] Received MessageEvents.PartUpdated session={Session} message={Message} part={Part}",
+                e.Properties.SessionId.Value, e.Properties.MessageId.Value, e.Properties.PartId.Value);
             var nuCodeSessionId = e.Properties.SessionId.Value;
-            var payload = JsonSerializer.SerializeToElement(
-                new NuCodePartUpdatedPayload { MessageId = e.Properties.MessageId.Value, PartId = e.Properties.PartId.Value },
-                NuCodeJsonContext.Default.NuCodePartUpdatedPayload);
+            var messageId = e.Properties.MessageId;
+            var partId = e.Properties.PartId;
 
-            _ = EmitRoutedEventAsync("message.part.updated", nuCodeSessionId, payload);
+            _ = EmitPartUpdatedAsync(nuCodeSessionId, messageId, partId);
         });
 
         eventBus.Subscribe(MessageEvents.PartDeltaReceived, e =>
         {
+            _logger.LogDebug("[NuCode:EventBus] Received MessageEvents.PartDeltaReceived session={Session} field={Field}",
+                e.Properties.SessionId.Value, e.Properties.Field);
             var nuCodeSessionId = e.Properties.SessionId.Value;
             var p = e.Properties;
             var payload = JsonSerializer.SerializeToElement(
-                new NuCodePartDeltaPayload { MessageId = p.MessageId.Value, PartId = p.PartId.Value, Field = p.Field, Delta = p.Delta },
-                NuCodeJsonContext.Default.NuCodePartDeltaPayload);
+                new MessagePartDeltaStreamedPayload
+                {
+                    SessionId = FleetSessionId,
+                    MessageId = p.MessageId.Value,
+                    PartId = p.PartId.Value,
+                    Field = p.Field,
+                    Delta = p.Delta,
+                },
+                InfrastructureJsonContext.Default.MessagePartDeltaStreamedPayload);
 
             _ = EmitRoutedEventAsync("message.part.delta", nuCodeSessionId, payload);
         });
@@ -556,15 +578,77 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
     private async Task EmitRoutedEventAsync(string type, string nuCodeSessionId, JsonElement? payload = null)
     {
         var fleetSessionId = await ResolveFleetSessionIdAsync(nuCodeSessionId).ConfigureAwait(false);
+        var targetSessionId = fleetSessionId ?? FleetSessionId;
 
-        _eventChannel.Writer.TryWrite(new HarnessEvent
+        _logger.LogDebug("[NuCode:EmitRouted] type={Type} nuCodeSession={NuCodeSession} fleetSession={FleetSession}",
+            type, nuCodeSessionId, targetSessionId);
+
+        var written = _eventChannel.Writer.TryWrite(new HarnessEvent
         {
             Type = type,
-            SessionId = fleetSessionId ?? FleetSessionId,
+            SessionId = targetSessionId,
             FleetSessionId = fleetSessionId,
             Timestamp = DateTimeOffset.UtcNow,
             Payload = payload,
         });
+
+        if (!written)
+            _logger.LogWarning("[NuCode:EmitRouted] FAILED to write event type={Type} to channel (channel completed?)", type);
+    }
+
+    private async Task EmitMessageUpdatedAsync(string nuCodeSessionId, global::NuCode.MessageId messageId)
+    {
+        try
+        {
+            var sessionService = _nuCodeProvider.GetRequiredService<ISessionService>();
+            var messages = await sessionService.GetMessagesAsync(
+                _nuCodeSession!.Id, CancellationToken.None).ConfigureAwait(false);
+
+            var mwp = messages.FirstOrDefault(m => m.Message.Id == messageId);
+            if (mwp is null)
+            {
+                _logger.LogWarning("[NuCode:EmitMessageUpdated] Message {MessageId} not found in store", messageId.Value);
+                return;
+            }
+
+            var lifecyclePayload = NuCodeMapper.ToMessageLifecyclePayload(mwp, FleetSessionId);
+            var payload = JsonSerializer.SerializeToElement(
+                lifecyclePayload, InfrastructureJsonContext.Default.MessageLifecyclePayload);
+
+            await EmitRoutedEventAsync("message.updated", nuCodeSessionId, payload).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[NuCode:EmitMessageUpdated] Failed for message {MessageId}", messageId.Value);
+        }
+    }
+
+    private async Task EmitPartUpdatedAsync(string nuCodeSessionId, global::NuCode.MessageId messageId, global::NuCode.PartId partId)
+    {
+        try
+        {
+            var sessionService = _nuCodeProvider.GetRequiredService<ISessionService>();
+            var messages = await sessionService.GetMessagesAsync(
+                _nuCodeSession!.Id, CancellationToken.None).ConfigureAwait(false);
+
+            var mwp = messages.FirstOrDefault(m => m.Message.Id == messageId);
+            var part = mwp?.Parts.FirstOrDefault(p => p.Id == partId);
+            if (part is null)
+            {
+                _logger.LogWarning("[NuCode:EmitPartUpdated] Part {PartId} not found for message {MessageId}", partId.Value, messageId.Value);
+                return;
+            }
+
+            var partPayload = NuCodeMapper.ToMessagePartUpdatedPayload(part, FleetSessionId);
+            var payload = JsonSerializer.SerializeToElement(
+                partPayload, InfrastructureJsonContext.Default.MessagePartUpdatedPayload);
+
+            await EmitRoutedEventAsync("message.part.updated", nuCodeSessionId, payload).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[NuCode:EmitPartUpdated] Failed for part {PartId}", partId.Value);
+        }
     }
 
     /// <summary>

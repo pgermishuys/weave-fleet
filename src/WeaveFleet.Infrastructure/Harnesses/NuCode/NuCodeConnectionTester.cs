@@ -1,4 +1,5 @@
 using Microsoft.Extensions.AI;
+using NuCode.Providers;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Repositories;
 
@@ -10,61 +11,78 @@ namespace WeaveFleet.Infrastructure.Harnesses.NuCode;
 internal sealed class NuCodeConnectionTester : INuCodeConnectionTester
 {
     private readonly IUserPreferenceRepository _prefs;
-    private readonly IUserCredentialRepository _credentials;
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly INuCodeCredentialStore _credentialStore;
+    private readonly IProviderRegistry _registry;
+    private readonly IChatClientFactory _chatClientFactory;
 
     public NuCodeConnectionTester(
         IUserPreferenceRepository prefs,
-        IUserCredentialRepository credentials,
-        IHttpClientFactory httpClientFactory)
+        INuCodeCredentialStore credentialStore,
+        IProviderRegistry registry,
+        IChatClientFactory chatClientFactory)
     {
         _prefs = prefs;
-        _credentials = credentials;
-        _httpClientFactory = httpClientFactory;
+        _credentialStore = credentialStore;
+        _registry = registry;
+        _chatClientFactory = chatClientFactory;
     }
 
     public async Task<NuCodeConnectionTestResult> TestAsync(CancellationToken ct)
     {
-        var provider = await _prefs.GetAsync(NuCodePreferenceKeys.Provider).ConfigureAwait(false) ?? "copilot";
-        var modelId = await _prefs.GetAsync(NuCodePreferenceKeys.ModelId).ConfigureAwait(false) ?? "claude-sonnet-4-20250514";
+        var providerId = await _prefs.GetAsync(NuCodePreferenceKeys.Provider).ConfigureAwait(false) ?? "copilot";
+        return await TestCoreAsync(providerId, ct).ConfigureAwait(false);
+    }
+
+    public async Task<NuCodeConnectionTestResult> TestAsync(string providerId, CancellationToken ct)
+    {
+        return await TestCoreAsync(providerId, ct).ConfigureAwait(false);
+    }
+
+    private async Task<NuCodeConnectionTestResult> TestCoreAsync(string providerId, CancellationToken ct)
+    {
+        var modelId = await _prefs.GetAsync(NuCodePreferenceKeys.ModelId).ConfigureAwait(false) ?? "gpt-4o";
         var baseUrl = await _prefs.GetAsync(NuCodePreferenceKeys.BaseUrl).ConfigureAwait(false);
 
-        var (credNamespace, credKind) = ResolveCredentialLookup(provider);
-
-        string apiKeyOrToken;
-        var creds = await _credentials.ListByUserNamespaceAndKindAsync(credNamespace, credKind).ConfigureAwait(false);
-
-        if (creds.Count == 0 && !IsApiKeyOptional(provider))
+        var provider = _registry.GetById(providerId);
+        if (provider is null)
         {
             return new NuCodeConnectionTestResult(
                 Success: false,
-                Error: $"No credentials found for provider '{provider}'. Add them in Settings → Credentials.",
+                Error: $"Unknown provider '{providerId}'.",
                 LatencyMs: 0);
         }
 
-        apiKeyOrToken = creds.Count > 0 ? creds[0].EncryptedValue : string.Empty;
-
-        if (string.Equals(provider, "copilot", StringComparison.OrdinalIgnoreCase))
+        // Load credentials from NuCode's own store
+        var storedCreds = await _credentialStore.GetAllForProviderAsync(provider.Id, ct).ConfigureAwait(false);
+        var credentials = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var cred in storedCreds)
         {
-            try
-            {
-                var copilotToken = await CopilotTokenService.ExchangeAsync(
-                    _httpClientFactory, apiKeyOrToken, ct).ConfigureAwait(false);
-                apiKeyOrToken = copilotToken.Token;
-            }
-            catch (Exception ex)
+            credentials[cred.FieldKey] = cred.Value;
+        }
+
+        // Check required credentials
+        foreach (var field in provider.CredentialFields)
+        {
+            if (field.Required && field.IsSecret && !provider.CredentialOptional
+                && !credentials.ContainsKey(field.Key))
             {
                 return new NuCodeConnectionTestResult(
                     Success: false,
-                    Error: $"Failed to exchange GitHub token: {ex.Message}",
+                    Error: $"No credentials found for provider '{provider.DisplayName}'. Add them in Settings → Providers.",
                     LatencyMs: 0);
             }
         }
 
+        // Build provider options
+        var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(baseUrl))
+            options["baseUrl"] = baseUrl;
+
         IChatClient? chatClient = null;
         try
         {
-            chatClient = ChatClientFactory.Create(provider, modelId, apiKeyOrToken, baseUrl);
+            chatClient = _chatClientFactory.Create(
+                provider, modelId, credentials, options.Count > 0 ? options : null);
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
             await chatClient.GetResponseAsync(
@@ -83,17 +101,4 @@ internal sealed class NuCodeConnectionTester : INuCodeConnectionTester
             chatClient?.Dispose();
         }
     }
-
-    private static bool IsApiKeyOptional(string provider) =>
-        string.Equals(provider, "custom", StringComparison.OrdinalIgnoreCase);
-
-    private static (string Namespace, string Kind) ResolveCredentialLookup(string provider) =>
-        provider.ToLowerInvariant() switch
-        {
-            "copilot" => ("github", "oauth-access-token"),
-            "anthropic" => ("anthropic", "api-key"),
-            "openai" => ("openai", "api-key"),
-            "custom" => ("custom", "api-key"),
-            _ => ("github", "oauth-access-token"),
-        };
 }

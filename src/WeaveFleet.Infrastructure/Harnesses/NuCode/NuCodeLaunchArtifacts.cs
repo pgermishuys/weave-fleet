@@ -4,16 +4,16 @@ namespace WeaveFleet.Infrastructure.Harnesses.NuCode;
 
 /// <summary>
 /// Opaque launch artifacts for the NuCode harness.
-/// Carries the resolved API key and provider/model info from PrepareRuntimeAsync to SpawnAsync.
+/// Carries the resolved provider, model, and credentials from PrepareRuntimeAsync to SpawnAsync.
+/// Credentials are stored as a generic dictionary (fieldKey → decrypted value) so that
+/// new providers can be added without changing this type.
 /// </summary>
-/// <param name="Provider">Provider identifier (e.g. "anthropic", "openai", "copilot").</param>
+/// <param name="ProviderId">Provider identifier (e.g. "anthropic", "openai", "copilot").</param>
 /// <param name="ModelId">The model identifier.</param>
-/// <param name="ApiKey">The API key (for anthropic/openai) or empty for copilot.</param>
-/// <param name="GitHubToken">GitHub OAuth token for Copilot token exchange (null for non-copilot providers).</param>
-/// <param name="BaseUrl">Optional custom base URL for OpenAI-compatible endpoints (proxies, self-hosted, etc.).</param>
+/// <param name="Credentials">Resolved credentials for the provider (fieldKey → decrypted value).</param>
+/// <param name="ProviderOptions">Optional provider-level config (e.g. "baseUrl", "resourceName").</param>
 public sealed record NuCodeLaunchArtifacts(
-    string Provider,
+    string ProviderId,
     string ModelId,
-    string ApiKey,
-    string? GitHubToken = null,
-    string? BaseUrl = null) : RuntimeLaunchArtifacts;
+    IReadOnlyDictionary<string, string> Credentials,
+    IReadOnlyDictionary<string, string>? ProviderOptions = null) : RuntimeLaunchArtifacts;

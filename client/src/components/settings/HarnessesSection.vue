@@ -81,7 +81,7 @@ onMounted(async () => {
 });
 
 const nucodeProvider = computed(() => prefsStore.get("nucode.provider", "copilot"));
-const nucodeModel = computed(() => prefsStore.get("nucode.modelId", ""));
+
 const nucodeBaseUrl = computed(() => prefsStore.get("nucode.baseUrl", ""));
 const defaultHarnessId = computed(() => prefsStore.get("defaultHarnessType", DEFAULT_HARNESS_TYPE));
 
@@ -139,7 +139,7 @@ function summaryForHarness(harness: HarnessInfo, enabled: boolean): string {
   if (!harness.available) return harness.reason ?? `${harness.displayName} is registered but not currently available.`;
 
   if (harness.type === "nucode") {
-    return `${formatProvider(nucodeProvider.value)}${nucodeModel.value ? ` · ${nucodeModel.value}` : " · model not selected"}`;
+    return `${formatProvider(nucodeProvider.value)}`;
   }
 
   return `Available now. Uses the ${harness.displayName} runtime registered by the backend.`;
@@ -148,7 +148,7 @@ function summaryForHarness(harness: HarnessInfo, enabled: boolean): string {
 function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus {
   if (!enabled) return "disabled";
   if (!harness.available) return "not-configured";
-  if (harness.type === "nucode" && (!nucodeModel.value || (nucodeProvider.value === "custom" && !nucodeBaseUrl.value))) {
+  if (harness.type === "nucode" && (nucodeProvider.value === "custom" && !nucodeBaseUrl.value)) {
     return "not-configured";
   }
 

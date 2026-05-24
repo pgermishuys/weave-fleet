@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
@@ -17,6 +18,8 @@ using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 using WeaveFleet.Infrastructure.Harnesses.NuCode;
+using NuCode.Providers;
+using NuCode.Providers.Auth;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.Pi;
 using WeaveFleet.Infrastructure.Plugins;
@@ -226,6 +229,11 @@ public static class DependencyInjection
         services.AddSingleton<NuCodeHarnessRuntime>();
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<NuCodeHarnessRuntime>());
         services.AddScoped<INuCodeConnectionTester, NuCodeConnectionTester>();
+        services.AddScoped<INuCodeCredentialStore, FleetNuCodeCredentialStore>();
+        services.TryAddSingleton<IProviderRegistry>(_ => new ProviderRegistry(BuiltInProviders.All()));
+        services.AddSingleton<IChatClientFactory, NuCodeChatClientFactory>();
+        services.AddScoped<INuCodeHttpClient>(sp =>
+            new HttpClientAdapter(sp.GetRequiredService<IHttpClientFactory>()));
 
         // Register PiHarness (descriptor) and PiHarnessRuntime (provisioning) as separate singletons.
         services.AddSingleton<PiHarness>();
