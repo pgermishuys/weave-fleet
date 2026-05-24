@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using NuCode.Providers;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.NuCode;
 using WeaveFleet.Testing.Fakes;
@@ -12,16 +12,25 @@ namespace WeaveFleet.Infrastructure.Tests.Harnesses.NuCode;
 public sealed class NuCodeHarnessRuntimeTests
 {
     private static NuCodeHarnessRuntime CreateRuntime(
-        IUserPreferenceRepository prefs)
+        IUserPreferenceRepository prefs,
+        INuCodeCredentialStore? credentialStore = null)
     {
+        var registry = new ProviderRegistry(BuiltInProviders.All());
+        var store = credentialStore ?? new InMemoryNuCodeCredentialStore();
+
         var scopeFactory = TestServiceScopeFactory.Create(services =>
-            services.AddScoped<IUserPreferenceRepository>(_ => prefs));
+        {
+            services.AddScoped<IUserPreferenceRepository>(_ => prefs);
+            services.AddScoped<INuCodeCredentialStore>(_ => store);
+            services.AddSingleton<IProviderRegistry>(_ => registry);
+            services.AddSingleton<IChatClientFactory, NuCodeChatClientFactory>();
+        });
 
         return new NuCodeHarnessRuntime(
             scopeFactory: scopeFactory,
-            httpClientFactory: null!,
             loggerFactory: NullLoggerFactory.Instance,
-            logger: NullLogger<NuCodeHarnessRuntime>.Instance);
+            logger: NullLogger<NuCodeHarnessRuntime>.Instance,
+            modelDiscovery: new NoOpModelDiscoveryService());
     }
 
     // ── CheckAvailabilityAsync ────────────────────────────────────────────────
@@ -85,32 +94,25 @@ public sealed class NuCodeHarnessRuntimeTests
         prefs.Seed("nucode.provider", "anthropic");
         prefs.Seed("nucode.modelId", "claude-opus-4-20250514");
 
-        var credential = new UserCredential
-        {
-            Id = "cred-1",
-            UserId = "user-1",
-            Namespace = "anthropic",
-            Kind = "api-key",
-            Label = "Anthropic Key",
-            EncryptedValue = "sk-test-key",
-        };
+        var store = new InMemoryNuCodeCredentialStore();
+        await store.SetAsync("anthropic", "apiKey", "sk-test-key");
 
-        var runtime = CreateRuntime(prefs);
+        var runtime = CreateRuntime(prefs, store);
 
         var context = new RuntimePreparationContext
         {
             UserId = "user-1",
             WorkingDirectory = "/tmp",
-            UserCredentials = [credential],
+            UserCredentials = [],
         };
 
         var result = await runtime.PrepareRuntimeAsync(context, CancellationToken.None);
 
         var ready = result.ShouldBeOfType<RuntimePreparation.Ready>();
         var artifacts = ready.Artifacts.ShouldBeOfType<NuCodeLaunchArtifacts>();
-        artifacts.Provider.ShouldBe("anthropic");
+        artifacts.ProviderId.ShouldBe("anthropic");
         artifacts.ModelId.ShouldBe("claude-opus-4-20250514");
-        artifacts.ApiKey.ShouldBe("sk-test-key");
+        artifacts.Credentials["apiKey"].ShouldBe("sk-test-key");
     }
 
     [Fact]
@@ -122,30 +124,24 @@ public sealed class NuCodeHarnessRuntimeTests
         prefs.Seed("nucode.modelId", "gpt-4o");
         prefs.Seed("nucode.baseUrl", "http://localhost:11434/v1");
 
-        var credential = new UserCredential
-        {
-            Id = "cred-2",
-            UserId = "user-1",
-            Namespace = "openai",
-            Kind = "api-key",
-            Label = "OpenAI Key",
-            EncryptedValue = "sk-openai",
-        };
+        var store = new InMemoryNuCodeCredentialStore();
+        await store.SetAsync("openai", "apiKey", "sk-openai");
 
-        var runtime = CreateRuntime(prefs);
+        var runtime = CreateRuntime(prefs, store);
 
         var context = new RuntimePreparationContext
         {
             UserId = "user-1",
             WorkingDirectory = "/tmp",
-            UserCredentials = [credential],
+            UserCredentials = [],
         };
 
         var result = await runtime.PrepareRuntimeAsync(context, CancellationToken.None);
 
         var ready = result.ShouldBeOfType<RuntimePreparation.Ready>();
         var artifacts = ready.Artifacts.ShouldBeOfType<NuCodeLaunchArtifacts>();
-        artifacts.BaseUrl.ShouldBe("http://localhost:11434/v1");
+        artifacts.ProviderOptions.ShouldNotBeNull();
+        artifacts.ProviderOptions["baseUrl"].ShouldBe("http://localhost:11434/v1");
     }
 
     [Fact]
@@ -177,7 +173,7 @@ public sealed class NuCodeHarnessRuntimeTests
         prefs.Seed("nucode.provider", "anthropic");
         prefs.Seed("nucode.modelId", "claude-sonnet-4-20250514");
 
-        var runtime = CreateRuntime(prefs);
+        var runtime = CreateRuntime(prefs); // no credentials stored
 
         var context = new RuntimePreparationContext
         {
@@ -189,5 +185,15 @@ public sealed class NuCodeHarnessRuntimeTests
         var result = await runtime.PrepareRuntimeAsync(context, CancellationToken.None);
 
         result.ShouldBeOfType<RuntimePreparation.NotReady>();
+    }
+
+    private sealed class NoOpModelDiscoveryService : IModelDiscoveryService
+    {
+        public Task<IReadOnlyList<DiscoveredModel>> DiscoverModelsAsync(
+            ProviderDefinition provider,
+            IReadOnlyDictionary<string, string> credentials,
+            IReadOnlyDictionary<string, string>? options = null,
+            CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<DiscoveredModel>>([]);
     }
 }

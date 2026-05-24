@@ -92,8 +92,12 @@ internal sealed class SessionProcessor : ISessionProcessor
             // so that TextPart and ToolPart foreign key constraints are satisfied.
             await _sessionService.UpsertMessageAsync(assistantMessage, ct);
 
+            var updateCount = 0;
             await foreach (var update in updates.WithCancellation(ct))
             {
+                updateCount++;
+                _logger.LogInformation("NuCode stream update #{Count}: FinishReason={FinishReason}, Contents={ContentCount}",
+                    updateCount, update.FinishReason?.Value, update.Contents.Count);
                 ct.ThrowIfCancellationRequested();
 
                 if (needsCompaction)
@@ -132,6 +136,9 @@ internal sealed class SessionProcessor : ISessionProcessor
                     }
                 }
             }
+
+            _logger.LogInformation("NuCode stream completed: {UpdateCount} updates, finishReason={FinishReason}, textLength={TextLength}",
+                updateCount, finishReason, textBuilder.Length);
 
             // Finalize text part if one is in progress
             if (currentTextPartId is not null)

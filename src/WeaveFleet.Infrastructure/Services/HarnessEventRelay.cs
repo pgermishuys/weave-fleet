@@ -1,3 +1,4 @@
+#pragma warning disable CA1848, CA1873 // Temporary diagnostic logging
 using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -146,6 +147,7 @@ public sealed class HarnessEventRelay : BackgroundService
 
     private async Task PumpAsync(string instanceId, IHarnessSession instance, CancellationToken ct)
     {
+        _logger.LogDebug("[Relay:Pump] Starting pump for instance={InstanceId} type={Type}", instanceId, instance.GetType().Name);
         // Resolve fleet session metadata with retry to handle the race where
         // InstanceTracker.Register() fires before ISessionRepository.InsertAsync() completes.
         string? fleetSessionId = null;
@@ -163,6 +165,7 @@ public sealed class HarnessEventRelay : BackgroundService
                 sessionUserId = session.UserId;
                 sessionProjectId = session.ProjectId;
                 sessionHarnessType = session.HarnessType;
+                _logger.LogDebug("[Relay:Pump] Resolved session for instance={InstanceId}: fleetSession={FleetSession} harness={HarnessType}", instanceId, fleetSessionId, sessionHarnessType);
                 break;
             }
 
@@ -178,6 +181,7 @@ public sealed class HarnessEventRelay : BackgroundService
 
         if (fleetSessionId is null)
         {
+            _logger.LogWarning("[Relay:Pump] Session not found for instance={InstanceId} after 10 retries — aborting pump", instanceId);
             _logSessionNotFound(_logger, instanceId, null);
             return;
         }
@@ -190,6 +194,7 @@ public sealed class HarnessEventRelay : BackgroundService
         {
             await foreach (var evt in instance.SubscribeAsync(ct).ConfigureAwait(false))
             {
+                _logger.LogDebug("[Relay:Pump] Received event type={Type} session={Session} instance={Instance}", evt.Type, evt.SessionId, instanceId);
                 var targetFleetSessionId = evt.FleetSessionId ?? fleetSessionId;
 
                 // Apply the reasoning-content filter BEFORE publishing — the unified fan-out
@@ -207,10 +212,15 @@ public sealed class HarnessEventRelay : BackgroundService
                 }
 
                 if (ShouldSuppressUserEcho(eventToPublish, suppressedUserMessageIds))
+                {
+                    _logger.LogDebug("[Relay:Pump] Suppressed user echo type={Type}", eventToPublish.Type);
                     continue;
+                }
 
                 var eventToTranslate = eventToPublish with { FleetSessionId = targetFleetSessionId };
                 var domainEvent = translator.Translate(eventToTranslate);
+                _logger.LogDebug("[Relay:Pump] Translated type={Type} domainEvent={DomainEvent} targetSession={TargetSession}",
+                    evt.Type, domainEvent?.GetType().Name ?? "null", targetFleetSessionId);
 
                 try
                 {

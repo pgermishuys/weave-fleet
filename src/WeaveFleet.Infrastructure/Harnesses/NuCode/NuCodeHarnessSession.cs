@@ -1,3 +1,4 @@
+#pragma warning disable CA1848, CA1873 // Temporary diagnostic logging
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -5,6 +6,7 @@ using System.Threading.Channels;
 using global::NuCode;
 using global::NuCode.Agents;
 using global::NuCode.Events;
+using global::NuCode.Providers;
 using global::NuCode.Sessions;
 using global::NuCode.Tools;
 using Microsoft.Extensions.AI;
@@ -12,6 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Services;
@@ -30,6 +33,7 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
     private readonly string _workingDirectory;
     private readonly string _provider;
     private readonly string _modelId;
+    private readonly IReadOnlyList<DiscoveredModel> _discoveredModels;
     private readonly string? _projectId;
     private readonly string? _projectName;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -51,6 +55,7 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
         string workingDirectory,
         string provider,
         string modelId,
+        IReadOnlyList<DiscoveredModel> discoveredModels,
         string? projectId,
         string? projectName,
         string ownerUserId,
@@ -65,6 +70,7 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
         _workingDirectory = workingDirectory;
         _provider = provider;
         _modelId = modelId;
+        _discoveredModels = discoveredModels;
         _projectId = projectId;
         _projectName = projectName;
         _ownerUserId = ownerUserId;
@@ -126,7 +132,9 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
                     _workingDirectory, text.Length > 50 ? text[..50] : text, linkedToken);
 
                 EmitSessionCreatedEvent();
-                EmitSessionUpdatedEvent(text.Length > 50 ? text[..50] : text);
+                // Note: we do NOT emit session.updated with the prompt text here because the
+                // Fleet session already has a user-chosen title set at creation time. Emitting
+                // session.updated would overwrite it via the persistence projection.
             }
 
             // Create user message
@@ -284,10 +292,13 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public async IAsyncEnumerable<HarnessEvent> SubscribeAsync([EnumeratorCancellation] CancellationToken ct)
     {
+        _logger.LogDebug("[NuCode:Subscribe] Starting event subscription for instance={InstanceId}", InstanceId);
         await foreach (var evt in _eventChannel.Reader.ReadAllAsync(ct))
         {
+            _logger.LogDebug("[NuCode:Subscribe] Yielding event type={Type} session={Session}", evt.Type, evt.SessionId);
             yield return evt;
         }
+        _logger.LogDebug("[NuCode:Subscribe] Event subscription ended for instance={InstanceId}", InstanceId);
     }
 
     /// <inheritdoc />
@@ -353,13 +364,23 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
     {
+        // Build model list from discovered models; ensure the active model is always included
+        var models = _discoveredModels
+            .Select(m => new ModelInfo { Id = m.Id, Name = m.Name ?? m.Id })
+            .ToList();
+
+        if (!models.Exists(m => string.Equals(m.Id, _modelId, StringComparison.OrdinalIgnoreCase)))
+        {
+            models.Insert(0, new ModelInfo { Id = _modelId, Name = _modelId });
+        }
+
         IReadOnlyList<ProviderInfo> providers =
         [
             new ProviderInfo
             {
                 Id = _provider,
                 Name = ToDisplayName(_provider),
-                Models = [new ModelInfo { Id = _modelId, Name = _modelId }],
+                Models = models,
             },
         ];
 
@@ -399,14 +420,22 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
 
     private void EmitStatusEvent()
     {
+        var eventType = _status == HarnessSessionStatus.Running ? "session.busy" : "session.idle";
+        var activityStatus = _status == HarnessSessionStatus.Running ? "busy" : "idle";
+        var payload = JsonSerializer.SerializeToElement(
+            new NuCodeStatusPayload { ActivityStatus = activityStatus },
+            NuCodeJsonContext.Default.NuCodeStatusPayload);
+
         var evt = new HarnessEvent
         {
-            Type = _status == HarnessSessionStatus.Running ? "session.busy" : "session.idle",
+            Type = eventType,
             SessionId = FleetSessionId,
             FleetSessionId = FleetSessionId,
             Timestamp = DateTimeOffset.UtcNow,
+            Payload = payload,
         };
-        _eventChannel.Writer.TryWrite(evt);
+        var written = _eventChannel.Writer.TryWrite(evt);
+        _logger.LogDebug("[NuCode:EmitStatus] type={Type} session={Session} written={Written}", evt.Type, FleetSessionId, written);
     }
 
     private void EmitSessionCreatedEvent()
@@ -462,31 +491,41 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
 
         eventBus.Subscribe(MessageEvents.Updated, e =>
         {
+            _logger.LogDebug("[NuCode:EventBus] Received MessageEvents.Updated session={Session} message={Message}",
+                e.Properties.SessionId.Value, e.Properties.MessageId.Value);
             var nuCodeSessionId = e.Properties.SessionId.Value;
-            var payload = JsonSerializer.SerializeToElement(
-                new NuCodeMessageUpdatedPayload { MessageId = e.Properties.MessageId.Value },
-                NuCodeJsonContext.Default.NuCodeMessageUpdatedPayload);
+            var messageId = e.Properties.MessageId;
 
-            _ = EmitRoutedEventAsync("message.updated", nuCodeSessionId, payload);
+            _ = EmitMessageUpdatedAsync(nuCodeSessionId, messageId);
         });
 
         eventBus.Subscribe(MessageEvents.PartUpdated, e =>
         {
+            _logger.LogDebug("[NuCode:EventBus] Received MessageEvents.PartUpdated session={Session} message={Message} part={Part}",
+                e.Properties.SessionId.Value, e.Properties.MessageId.Value, e.Properties.PartId.Value);
             var nuCodeSessionId = e.Properties.SessionId.Value;
-            var payload = JsonSerializer.SerializeToElement(
-                new NuCodePartUpdatedPayload { MessageId = e.Properties.MessageId.Value, PartId = e.Properties.PartId.Value },
-                NuCodeJsonContext.Default.NuCodePartUpdatedPayload);
+            var messageId = e.Properties.MessageId;
+            var partId = e.Properties.PartId;
 
-            _ = EmitRoutedEventAsync("message.part.updated", nuCodeSessionId, payload);
+            _ = EmitPartUpdatedAsync(nuCodeSessionId, messageId, partId);
         });
 
         eventBus.Subscribe(MessageEvents.PartDeltaReceived, e =>
         {
+            _logger.LogDebug("[NuCode:EventBus] Received MessageEvents.PartDeltaReceived session={Session} field={Field}",
+                e.Properties.SessionId.Value, e.Properties.Field);
             var nuCodeSessionId = e.Properties.SessionId.Value;
             var p = e.Properties;
             var payload = JsonSerializer.SerializeToElement(
-                new NuCodePartDeltaPayload { MessageId = p.MessageId.Value, PartId = p.PartId.Value, Field = p.Field, Delta = p.Delta },
-                NuCodeJsonContext.Default.NuCodePartDeltaPayload);
+                new MessagePartDeltaStreamedPayload
+                {
+                    SessionId = FleetSessionId,
+                    MessageId = p.MessageId.Value,
+                    PartId = p.PartId.Value,
+                    Field = p.Field,
+                    Delta = p.Delta,
+                },
+                InfrastructureJsonContext.Default.MessagePartDeltaStreamedPayload);
 
             _ = EmitRoutedEventAsync("message.part.delta", nuCodeSessionId, payload);
         });
@@ -556,15 +595,77 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
     private async Task EmitRoutedEventAsync(string type, string nuCodeSessionId, JsonElement? payload = null)
     {
         var fleetSessionId = await ResolveFleetSessionIdAsync(nuCodeSessionId).ConfigureAwait(false);
+        var targetSessionId = fleetSessionId ?? FleetSessionId;
 
-        _eventChannel.Writer.TryWrite(new HarnessEvent
+        _logger.LogDebug("[NuCode:EmitRouted] type={Type} nuCodeSession={NuCodeSession} fleetSession={FleetSession}",
+            type, nuCodeSessionId, targetSessionId);
+
+        var written = _eventChannel.Writer.TryWrite(new HarnessEvent
         {
             Type = type,
-            SessionId = fleetSessionId ?? FleetSessionId,
+            SessionId = targetSessionId,
             FleetSessionId = fleetSessionId,
             Timestamp = DateTimeOffset.UtcNow,
             Payload = payload,
         });
+
+        if (!written)
+            _logger.LogWarning("[NuCode:EmitRouted] FAILED to write event type={Type} to channel (channel completed?)", type);
+    }
+
+    private async Task EmitMessageUpdatedAsync(string nuCodeSessionId, global::NuCode.MessageId messageId)
+    {
+        try
+        {
+            var sessionService = _nuCodeProvider.GetRequiredService<ISessionService>();
+            var messages = await sessionService.GetMessagesAsync(
+                _nuCodeSession!.Id, CancellationToken.None).ConfigureAwait(false);
+
+            var mwp = messages.FirstOrDefault(m => m.Message.Id == messageId);
+            if (mwp is null)
+            {
+                _logger.LogWarning("[NuCode:EmitMessageUpdated] Message {MessageId} not found in store", messageId.Value);
+                return;
+            }
+
+            var lifecyclePayload = NuCodeMapper.ToMessageLifecyclePayload(mwp, FleetSessionId);
+            var payload = JsonSerializer.SerializeToElement(
+                lifecyclePayload, InfrastructureJsonContext.Default.MessageLifecyclePayload);
+
+            await EmitRoutedEventAsync("message.updated", nuCodeSessionId, payload).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[NuCode:EmitMessageUpdated] Failed for message {MessageId}", messageId.Value);
+        }
+    }
+
+    private async Task EmitPartUpdatedAsync(string nuCodeSessionId, global::NuCode.MessageId messageId, global::NuCode.PartId partId)
+    {
+        try
+        {
+            var sessionService = _nuCodeProvider.GetRequiredService<ISessionService>();
+            var messages = await sessionService.GetMessagesAsync(
+                _nuCodeSession!.Id, CancellationToken.None).ConfigureAwait(false);
+
+            var mwp = messages.FirstOrDefault(m => m.Message.Id == messageId);
+            var part = mwp?.Parts.FirstOrDefault(p => p.Id == partId);
+            if (part is null)
+            {
+                _logger.LogWarning("[NuCode:EmitPartUpdated] Part {PartId} not found for message {MessageId}", partId.Value, messageId.Value);
+                return;
+            }
+
+            var partPayload = NuCodeMapper.ToMessagePartUpdatedPayload(part, FleetSessionId);
+            var payload = JsonSerializer.SerializeToElement(
+                partPayload, InfrastructureJsonContext.Default.MessagePartUpdatedPayload);
+
+            await EmitRoutedEventAsync("message.part.updated", nuCodeSessionId, payload).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[NuCode:EmitPartUpdated] Failed for part {PartId}", partId.Value);
+        }
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+#pragma warning disable CA1848, CA1873 // Temporary diagnostic logging
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using Microsoft.Extensions.Logging;
@@ -47,7 +48,9 @@ internal sealed class DomainEventTranslator
     {
         ArgumentNullException.ThrowIfNull(evt);
 
-        return evt.Type switch
+        _logger.LogDebug("[Translator] Translating type={Type} session={Session}", evt.Type, evt.SessionId);
+
+        var result = evt.Type switch
         {
             EventTypes.MessageCreated => TranslateMessageCreated(evt),
             EventTypes.MessageUpdated => TranslateMessageUpdated(evt),
@@ -75,6 +78,9 @@ internal sealed class DomainEventTranslator
 
             _ => DropUnknown(evt.Type),
         };
+
+        _logger.LogDebug("[Translator] Result type={Type} => {Result}", evt.Type, result?.GetType().Name ?? "null");
+        return result;
     }
 
     private MessageCreated? TranslateMessageCreated(HarnessEvent evt)

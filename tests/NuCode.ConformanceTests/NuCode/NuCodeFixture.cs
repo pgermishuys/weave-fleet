@@ -55,6 +55,7 @@ public sealed class NuCodeFixture : IHarnessSessionFixture
             workingDirectory: workingDirectory,
             provider: "fake",
             modelId: "fake-model",
+            discoveredModels: [],
             projectId: null,
             projectName: null,
             ownerUserId: "test-user",

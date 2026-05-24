@@ -1,4 +1,5 @@
 using global::NuCode;
+using global::NuCode.Providers;
 using global::NuCode.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -16,22 +17,22 @@ namespace WeaveFleet.Infrastructure.Harnesses.NuCode;
 public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<NuCodeHarnessRuntime> _logger;
+    private readonly IModelDiscoveryService _modelDiscovery;
     private readonly IAnalyticsCollector? _analyticsCollector;
 
     public NuCodeHarnessRuntime(
         IServiceScopeFactory scopeFactory,
-        IHttpClientFactory httpClientFactory,
         ILoggerFactory loggerFactory,
         ILogger<NuCodeHarnessRuntime> logger,
+        IModelDiscoveryService modelDiscovery,
         IAnalyticsCollector? analyticsCollector = null)
     {
         _scopeFactory = scopeFactory;
-        _httpClientFactory = httpClientFactory;
         _loggerFactory = loggerFactory;
         _logger = logger;
+        _modelDiscovery = modelDiscovery;
         _analyticsCollector = analyticsCollector;
     }
 
@@ -57,9 +58,10 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
     /// <inheritdoc />
     public async Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
     {
-        // Read provider/model from preferences; fall back to inference from modelId
         using var scope = _scopeFactory.CreateScope();
         var prefs = scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>();
+        var credentialStore = scope.ServiceProvider.GetRequiredService<INuCodeCredentialStore>();
+        var registry = scope.ServiceProvider.GetRequiredService<IProviderRegistry>();
 
         // Guard: NuCode must be explicitly enabled
         var enabled = await prefs.GetAsync(NuCodePreferenceKeys.Enabled).ConfigureAwait(false);
@@ -79,55 +81,65 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
         var prefBaseUrl = await prefs.GetAsync(NuCodePreferenceKeys.BaseUrl).ConfigureAwait(false);
 
         // Resolve provider: preference wins, then context modelId inference, then default
-        var effectiveProvider = !string.IsNullOrWhiteSpace(prefProvider)
+        var effectiveProviderId = !string.IsNullOrWhiteSpace(prefProvider)
             ? prefProvider
-            : (!string.IsNullOrEmpty(context.ModelId) ? InferProvider(context.ModelId) : "copilot");
+            : (!string.IsNullOrEmpty(context.ModelId)
+                ? registry.InferFromModelId(context.ModelId)
+                : "copilot");
 
         // Resolve modelId: preference wins, then context modelId
         var effectiveModelId = !string.IsNullOrWhiteSpace(prefModelId)
             ? prefModelId
-            : (context.ModelId ?? "claude-sonnet-4-20250514");
+            : (context.ModelId ?? "gpt-4o");
 
-        var requirements = ResolveRequirements(effectiveProvider);
-
-        var errors = new List<RuntimePreparationError>();
-        string? resolvedApiKey = null;
-        string? resolvedGitHubToken = null;
-
-        foreach (var requirement in requirements)
+        var provider = registry.GetById(effectiveProviderId);
+        if (provider is null)
         {
-            var match = context.UserCredentials
-                .FirstOrDefault(c =>
-                    string.Equals(c.Namespace, requirement.Namespace, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(c.Kind, requirement.Kind, StringComparison.OrdinalIgnoreCase));
+            return new RuntimePreparation.NotReady(
+            [
+                new RuntimePreparationError(
+                    Code: "UnknownProvider",
+                    Message: $"Provider '{effectiveProviderId}' is not recognised.",
+                    Guidance: "Select a supported provider in Settings → NuCode.")
+            ]);
+        }
 
-            if (match is null)
+        // Resolve credentials from NuCode's own credential store
+        var errors = new List<RuntimePreparationError>();
+        var resolvedCredentials = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var field in provider.CredentialFields)
+        {
+            if (!field.IsSecret)
+                continue; // Non-secret fields come from provider options, not credential store
+
+            var stored = await credentialStore.GetAsync(provider.Id, field.Key, ct).ConfigureAwait(false);
+            if (stored is null && field.Required && !provider.CredentialOptional)
             {
                 errors.Add(new RuntimePreparationError(
                     Code: "MissingCredential",
-                    Message: requirement.UserFacingMessage,
-                    Guidance: requirement.Guidance));
+                    Message: $"A credential is required for provider '{provider.DisplayName}' (field: {field.DisplayName}).",
+                    Guidance: $"Add credentials in Settings → Providers → {provider.DisplayName}."));
             }
-            else
+            else if (stored is not null)
             {
-                if (requirement.IsCopilot)
-                    resolvedGitHubToken = match.EncryptedValue;
-                else
-                    resolvedApiKey = match.EncryptedValue;
+                resolvedCredentials[field.Key] = stored.Value;
             }
         }
 
         if (errors.Count > 0)
-        {
             return new RuntimePreparation.NotReady(errors);
-        }
+
+        // Build provider options (baseUrl override, etc.)
+        var providerOptions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(prefBaseUrl))
+            providerOptions["baseUrl"] = prefBaseUrl;
 
         var artifacts = new NuCodeLaunchArtifacts(
-            Provider: effectiveProvider,
+            ProviderId: effectiveProviderId,
             ModelId: effectiveModelId,
-            ApiKey: resolvedApiKey ?? "",
-            GitHubToken: resolvedGitHubToken,
-            BaseUrl: string.IsNullOrWhiteSpace(prefBaseUrl) ? null : prefBaseUrl);
+            Credentials: resolvedCredentials,
+            ProviderOptions: providerOptions.Count > 0 ? providerOptions : null);
 
         return new RuntimePreparation.Ready(artifacts);
     }
@@ -138,21 +150,22 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
         HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
 
         var artifacts = options.LaunchArtifacts as NuCodeLaunchArtifacts
-            ?? new NuCodeLaunchArtifacts("anthropic", "claude-sonnet-4-20250514", "");
+            ?? new NuCodeLaunchArtifacts(
+                "copilot",
+                "gpt-4o",
+                new Dictionary<string, string>());
 
-        // For Copilot, exchange GitHub token for a short-lived Copilot API token
-        var apiKeyOrToken = artifacts.ApiKey;
-        if (string.Equals(artifacts.Provider, "copilot", StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrEmpty(artifacts.GitHubToken))
-        {
-            var copilotToken = await CopilotTokenService.ExchangeAsync(
-                _httpClientFactory, artifacts.GitHubToken, ct).ConfigureAwait(false);
-            apiKeyOrToken = copilotToken.Token;
-            LogCopilotTokenExchanged(artifacts.ModelId);
-        }
+        using var scope = _scopeFactory.CreateScope();
+        var registry = scope.ServiceProvider.GetRequiredService<IProviderRegistry>();
+        var chatClientFactory = scope.ServiceProvider.GetRequiredService<IChatClientFactory>();
+
+        var provider = registry.GetById(artifacts.ProviderId)
+            ?? throw new InvalidOperationException($"Unknown provider '{artifacts.ProviderId}'.");
 
         // Build NuCode services
         var nuCodeServices = new ServiceCollection();
+        nuCodeServices.AddSingleton(_loggerFactory);
+        nuCodeServices.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
         nuCodeServices.AddNuCode(nuCodeOptions =>
         {
             nuCodeOptions.WorkingDirectory = options.WorkingDirectory;
@@ -162,11 +175,15 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
         nuCodeServices.AddSingleton<IQuestionService, DenyAllQuestionService>();
 
         // Build the IChatClient from credentials
-        var chatClient = ChatClientFactory.Create(
-            artifacts.Provider, artifacts.ModelId, apiKeyOrToken, artifacts.BaseUrl);
+        var chatClient = chatClientFactory.Create(
+            provider, artifacts.ModelId, artifacts.Credentials, artifacts.ProviderOptions);
         nuCodeServices.AddSingleton(chatClient);
 
         var nuCodeProvider = nuCodeServices.BuildServiceProvider();
+
+        // Discover available models from the provider API (best-effort, non-blocking)
+        var discoveredModels = await _modelDiscovery.DiscoverModelsAsync(
+            provider, artifacts.Credentials, artifacts.ProviderOptions, ct).ConfigureAwait(false);
 
         var instanceId = $"nucode-{Guid.NewGuid():N}";
 
@@ -174,8 +191,9 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
             instanceId: instanceId,
             fleetSessionId: options.SessionId,
             workingDirectory: options.WorkingDirectory,
-            provider: artifacts.Provider,
+            provider: artifacts.ProviderId,
             modelId: artifacts.ModelId,
+            discoveredModels: discoveredModels,
             projectId: options.ProjectId,
             projectName: options.ProjectName,
             ownerUserId: options.OwnerUserId,
@@ -188,7 +206,10 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
         if (options.InitialPrompt is not null)
         {
             // Fire-and-forget the initial prompt processing
-            _ = session.SendPromptAsync(options.InitialPrompt, null, ct);
+            _ = session.SendPromptAsync(options.InitialPrompt, null, ct)
+                .ContinueWith(
+                    t => LogInitialPromptFailed(t.Exception!),
+                    TaskContinuationOptions.OnlyOnFaulted);
         }
 
         return session;
@@ -210,75 +231,6 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
         return SpawnAsync(spawnOptions, ct);
     }
 
-    private static IReadOnlyList<CredentialRequirement> ResolveRequirements(string provider)
-    {
-        return provider.ToLowerInvariant() switch
-        {
-            "copilot" => [new CredentialRequirement(
-                ProviderName: "copilot",
-                Namespace: "github",
-                Kind: "oauth-access-token",
-                IsCopilot: true,
-                UserFacingMessage: "A GitHub connection is required to use NuCode with Copilot.",
-                Guidance: "Connect GitHub in Settings → Integrations → GitHub")],
-            "anthropic" => [new CredentialRequirement(
-                ProviderName: "anthropic",
-                Namespace: "anthropic",
-                Kind: "api-key",
-                IsCopilot: false,
-                UserFacingMessage: "An Anthropic API key is required to use this model.",
-                Guidance: "Add an API key in Settings → Credentials")],
-            "openai" => [new CredentialRequirement(
-                ProviderName: "openai",
-                Namespace: "openai",
-                Kind: "api-key",
-                IsCopilot: false,
-                UserFacingMessage: "An OpenAI API key is required to use this model.",
-                Guidance: "Add an API key in Settings → Credentials")],
-            "custom" => [new CredentialRequirement(
-                ProviderName: "custom",
-                Namespace: "custom",
-                Kind: "api-key",
-                IsCopilot: false,
-                UserFacingMessage: "An API key is required for the custom endpoint (leave empty for local models).",
-                Guidance: "Add an API key in Settings → Credentials, or leave empty for local models like Ollama")],
-            _ => [new CredentialRequirement(
-                ProviderName: "copilot",
-                Namespace: "github",
-                Kind: "oauth-access-token",
-                IsCopilot: true,
-                UserFacingMessage: "A GitHub connection is required to use NuCode with Copilot.",
-                Guidance: "Connect GitHub in Settings → Integrations → GitHub")]
-        };
-    }
-
-    internal static string InferProvider(string modelId)
-    {
-        // Explicit prefix: "copilot/claude-sonnet-4-20250514"
-        if (modelId.Contains('/'))
-        {
-            return modelId[..modelId.IndexOf('/', StringComparison.Ordinal)];
-        }
-
-        // Infer from model name
-        if (modelId.StartsWith("claude", StringComparison.OrdinalIgnoreCase))
-            return "anthropic";
-        if (modelId.StartsWith("gpt", StringComparison.OrdinalIgnoreCase) ||
-            modelId.StartsWith("o1", StringComparison.OrdinalIgnoreCase) ||
-            modelId.StartsWith("o3", StringComparison.OrdinalIgnoreCase) ||
-            modelId.StartsWith("o4", StringComparison.OrdinalIgnoreCase))
-            return "openai";
-        return "copilot";
-    }
-
-    private sealed record CredentialRequirement(
-        string ProviderName,
-        string Namespace,
-        string Kind,
-        bool IsCopilot,
-        string UserFacingMessage,
-        string Guidance);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Exchanged GitHub token for Copilot API token (model: {ModelId})")]
-    private partial void LogCopilotTokenExchanged(string modelId);
+    [LoggerMessage(Level = LogLevel.Error, Message = "Initial prompt processing failed")]
+    private partial void LogInitialPromptFailed(Exception exception);
 }

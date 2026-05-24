@@ -1,3 +1,4 @@
+#pragma warning disable CA1848, CA1873 // Temporary diagnostic logging
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Events;
@@ -41,6 +42,9 @@ internal sealed class InProcessEventPublisher : IEventPublisher
     public Task<PublishResult> PublishAsync(HarnessEvent evt, EventPublishContext context, CancellationToken ct)
     {
         var classification = EventTypeMetadata.Classify(evt.Type);
+
+        _logger.LogDebug("[Publisher] type={Type} session={Session} isDurable={IsDurable} isEphemeral={IsEphemeral} isKnown={IsKnown}",
+            evt.Type, context.FleetSessionId, classification.IsDurable, classification.IsEphemeralRelay, classification.IsKnown);
 
         if (classification.IsDurable)
         {

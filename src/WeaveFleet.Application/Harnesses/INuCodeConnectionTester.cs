@@ -10,6 +10,15 @@ public interface INuCodeConnectionTester
     /// </summary>
     /// <returns>A result indicating success or failure with latency information.</returns>
     Task<NuCodeConnectionTestResult> TestAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Attempts a minimal completion request for a specific provider.
+    /// Uses the provider's stored credentials and the user's model preference.
+    /// </summary>
+    /// <param name="providerId">The provider to test.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A result indicating success or failure with latency information.</returns>
+    Task<NuCodeConnectionTestResult> TestAsync(string providerId, CancellationToken ct);
 }
 
 /// <summary>Result of a NuCode connection test.</summary>
