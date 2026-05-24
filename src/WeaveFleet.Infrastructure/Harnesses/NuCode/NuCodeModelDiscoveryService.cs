@@ -144,51 +144,62 @@ internal sealed partial class NuCodeModelDiscoveryService : IModelDiscoveryServi
     /// <summary>
     /// Parses the GitHub REST API <c>/models</c> response.
     /// Returns an array of model objects with <c>id</c>, <c>name</c>, <c>summary</c>, etc.
-    /// Filters to models that support chat completions (have "chat" in capabilities or tags).
+    /// Deduplicates by display name, preferring shorter model IDs (without date suffixes).
     /// </summary>
     private static List<DiscoveredModel> ParseGitHubModelsResponse(JsonDocument doc)
     {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var models = new List<DiscoveredModel>();
-
         // Response is a bare array of model objects
         var array = doc.RootElement;
         if (array.ValueKind != JsonValueKind.Array)
             return [];
 
+        // First pass: collect all models keyed by display name, preferring shorter IDs
+        var byName = new Dictionary<string, DiscoveredModel>(StringComparer.OrdinalIgnoreCase);
+        var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var item in array.EnumerateArray())
         {
-            // The "id" field contains the full model identifier (e.g. "openai/gpt-4o")
-            // The "name" field is the display name (e.g. "OpenAI GPT-4o")
             if (!item.TryGetProperty("id", out var idProp) || idProp.ValueKind != JsonValueKind.String)
                 continue;
 
             var fullId = idProp.GetString()!;
 
             // Extract the model ID portion after the publisher prefix (e.g. "openai/gpt-4o" → "gpt-4o")
-            // Some models may not have a prefix
             var modelId = fullId.Contains('/')
                 ? fullId[(fullId.IndexOf('/') + 1)..]
                 : fullId;
 
-            if (!seen.Add(modelId))
+            if (!seenIds.Add(modelId))
                 continue;
 
             string? name = null;
             if (item.TryGetProperty("name", out var nameProp) && nameProp.ValueKind == JsonValueKind.String)
                 name = nameProp.GetString();
 
-            models.Add(new DiscoveredModel(modelId, name));
+            var displayKey = name ?? modelId;
+
+            // When multiple models share a display name (e.g. gpt-4o vs gpt-4o-2024-08-06),
+            // keep the one with the shorter ID (typically the alias without a date suffix).
+            if (byName.TryGetValue(displayKey, out var existing))
+            {
+                if (modelId.Length < existing.Id.Length)
+                    byName[displayKey] = new DiscoveredModel(modelId, name);
+            }
+            else
+            {
+                byName[displayKey] = new DiscoveredModel(modelId, name);
+            }
         }
 
-        models.Sort((a, b) => string.Compare(a.Id, b.Id, StringComparison.OrdinalIgnoreCase));
+        var models = byName.Values.ToList();
+        models.Sort((a, b) => string.Compare(a.Name ?? a.Id, b.Name ?? b.Id, StringComparison.OrdinalIgnoreCase));
         return models;
     }
 
     /// <summary>
     /// Parses the OpenAI-compatible <c>/models</c> response.
     /// Expects <c>{ "data": [{ "id": "...", ... }] }</c> or a bare array <c>[{ "id": "..." }]</c>.
-    /// Deduplicates by model ID (first occurrence wins).
+    /// Deduplicates by display name, preferring shorter model IDs.
     /// </summary>
     private static List<DiscoveredModel> ParseModelsResponse(JsonDocument doc, string providerId)
     {
@@ -210,29 +221,38 @@ internal sealed partial class NuCodeModelDiscoveryService : IModelDiscoveryServi
             return [];
         }
 
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var models = new List<DiscoveredModel>();
+        var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var byName = new Dictionary<string, DiscoveredModel>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var item in array.EnumerateArray())
         {
             if (item.TryGetProperty("id", out var idProp) && idProp.ValueKind == JsonValueKind.String)
             {
                 var id = idProp.GetString()!;
-                if (!seen.Add(id))
-                    continue; // skip duplicates
+                if (!seenIds.Add(id))
+                    continue;
 
                 string? name = null;
-
-                // Try "name" field, fall back to id
                 if (item.TryGetProperty("name", out var nameProp) && nameProp.ValueKind == JsonValueKind.String)
                     name = nameProp.GetString();
 
-                models.Add(new DiscoveredModel(id, name));
+                var displayKey = name ?? id;
+
+                // When multiple models share a display name, keep the shorter ID
+                if (byName.TryGetValue(displayKey, out var existing))
+                {
+                    if (id.Length < existing.Id.Length)
+                        byName[displayKey] = new DiscoveredModel(id, name);
+                }
+                else
+                {
+                    byName[displayKey] = new DiscoveredModel(id, name);
+                }
             }
         }
 
-        // Sort alphabetically by id for consistent display
-        models.Sort((a, b) => string.Compare(a.Id, b.Id, StringComparison.OrdinalIgnoreCase));
+        var models = byName.Values.ToList();
+        models.Sort((a, b) => string.Compare(a.Name ?? a.Id, b.Name ?? b.Id, StringComparison.OrdinalIgnoreCase));
         return models;
     }
 
