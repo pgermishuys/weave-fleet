@@ -320,7 +320,7 @@ public abstract class HarnessConformanceBase : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SubscribeAsync_EmitsSessionUpdated_OnFirstPrompt()
+    public async Task SubscribeAsync_EmitsSessionCreatedAndBusy_OnFirstPrompt()
     {
         _fixture.EnqueueResponse(new ScriptedLlmResponse { Text = "Hi!" });
 
@@ -332,6 +332,9 @@ public abstract class HarnessConformanceBase : IAsyncLifetime
         await _session.SendPromptAsync("Hello", null, CancellationToken.None);
         var events = await eventsTask;
 
-        events.ShouldContain(e => e.Type == "session.updated");
+        // session.updated is intentionally NOT emitted on first prompt to avoid
+        // overwriting the user-chosen Fleet session title via the persistence projection.
+        events.ShouldContain(e => e.Type == "session.created");
+        events.ShouldContain(e => e.Type == "session.busy");
     }
 }

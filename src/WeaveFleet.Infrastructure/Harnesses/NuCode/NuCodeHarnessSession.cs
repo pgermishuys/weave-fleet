@@ -420,6 +420,7 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
 
     private void EmitStatusEvent()
     {
+        var eventType = _status == HarnessSessionStatus.Running ? "session.busy" : "session.idle";
         var activityStatus = _status == HarnessSessionStatus.Running ? "busy" : "idle";
         var payload = JsonSerializer.SerializeToElement(
             new NuCodeStatusPayload { ActivityStatus = activityStatus },
@@ -427,7 +428,7 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
 
         var evt = new HarnessEvent
         {
-            Type = "session.status",
+            Type = eventType,
             SessionId = FleetSessionId,
             FleetSessionId = FleetSessionId,
             Timestamp = DateTimeOffset.UtcNow,
