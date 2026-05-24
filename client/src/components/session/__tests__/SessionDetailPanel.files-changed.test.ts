@@ -151,11 +151,11 @@ function createSessionDetailContext(): SessionDetailContext {
   };
 }
 
-function mountPanel(setViewMode = vi.fn()) {
+function mountPanel(openDiffsTray = vi.fn()) {
   return mount(SessionDetailPanel, {
     props: {
       session: createSession(),
-      setViewMode,
+      openDiffsTray,
     },
     global: {
       stubs: {
@@ -221,52 +221,14 @@ describe("SessionDetailPanel files changed integration", () => {
     });
   });
 
-  it("does_not_switch_to_files_changed_view_from_badge_without_tray_handler", async () => {
-    const setViewMode = vi.fn();
-    const wrapper = mountPanel(setViewMode);
-    await flushPromises();
-
-    expect(wrapper.get(".files-changed__badge").attributes("aria-expanded")).toBe("false");
-
-    await wrapper.get(".files-changed__badge").trigger("click");
-
-    expect(setViewMode).not.toHaveBeenCalled();
-    expect(wrapper.get(".files-changed__badge").attributes("aria-expanded")).toBe("false");
-  });
-
   it("opens_diffs_tray_from_badge_when_handler_is_available", async () => {
-    const setViewMode = vi.fn();
     const openDiffsTray = vi.fn();
-    const wrapper = mount(SessionDetailPanel, {
-      props: {
-        session: createSession(),
-        setViewMode,
-        openDiffsTray,
-      },
-      global: {
-        stubs: {
-          FilesChanged: FilesChangedStub,
-        },
-        provide: {
-          [SessionDetailContextKey as symbol]: createSessionDetailContext(),
-          [SessionDiffsContextKey as symbol]: {
-            diffState: {
-              diffs: readonly(diffState.diffs),
-              available: readonly(diffState.available),
-              isLoading: readonly(diffState.isLoading),
-              error: readonly(diffState.error),
-              fetchDiffs: diffState.fetchDiffs,
-            },
-          },
-        },
-      },
-    });
+    const wrapper = mountPanel(openDiffsTray);
     await flushPromises();
 
     await wrapper.get(".files-changed__badge").trigger("click");
 
     expect(openDiffsTray).toHaveBeenCalledTimes(1);
-    expect(setViewMode).not.toHaveBeenCalled();
   });
 
   it("right_panel_badge_click_opens_diffs_tray", async () => {

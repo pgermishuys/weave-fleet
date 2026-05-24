@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
-import { useRouter } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import CollapsedRightRail from "@/components/layout/CollapsedRightRail.vue";
 import RightPanelTabs from "@/components/layout/RightPanelTabs.vue";
@@ -14,14 +13,13 @@ import {
   useTerminateSession,
 } from "@/composables/use-session-actions";
 import { provideSessionDetailContext } from "@/composables/use-session-detail-context";
-import { useSessionTodos } from "@/composables/use-session-todos";
 import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
+import { useSessionTodos } from "@/composables/use-session-todos";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
 
 const sidebarStore = useSidebarStore();
 const sessionsStore = useSessionsStore();
-const router = useRouter();
 const sessionDiffsContext = useSessionDiffsContext();
 
 const { rightPanelCollapsed } = storeToRefs(sidebarStore);
@@ -142,22 +140,6 @@ function openDiffsTray(): void {
   context.openDiffsTray();
 }
 
-async function setViewMode(viewMode: "chat" | "files-changed"): Promise<void> {
-  if (!activeSessionId.value) {
-    return;
-  }
-
-  await router.navigate({
-    to: "/sessions/$id",
-    params: { id: activeSessionId.value },
-    search: (previous) => ({
-      instanceId: previous.instanceId,
-      parentSessionId: previous.parentSessionId,
-      view: viewMode === "files-changed" ? "files" : undefined,
-    }),
-    replace: true,
-  });
-}
 </script>
 
 <template>
@@ -198,7 +180,6 @@ async function setViewMode(viewMode: "chat" | "files-changed"): Promise<void> {
         <SessionDetailPanel
           v-else
           :session="selectedSession"
-          :set-view-mode="setViewMode"
           :open-diffs-tray="openDiffsTray"
         />
       </div>

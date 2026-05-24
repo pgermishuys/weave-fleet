@@ -7,7 +7,6 @@ import FilesChanged from "@/components/session/FilesChanged.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
 import SmartLinkItem from "@/plugins/builtin/smart-links/SmartLinkItem.vue";
 import TodoListView from "@/components/session/TodoListView.vue";
-import TokenGrid from "@/components/session/TokenGrid.vue";
 import { useSessionTodos } from "@/composables/use-session-todos";
 import { useSessionDetailContext } from "@/composables/use-session-detail-context";
 import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
@@ -16,13 +15,6 @@ import { trackAction } from "@/lib/track-action";
 import type { SessionListItem } from "@/lib/api-types";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { secondsUntilRefresh, isRefreshing, refreshNow, POLL_INTERVAL_SECONDS } from "@/plugins/builtin/smart-links/composables/use-smart-links";
-
-interface TokenMetric {
-  id: string;
-  label: string;
-  value: string;
-  helper: string;
-}
 
 interface ChangedFile {
   path: string;
@@ -50,8 +42,6 @@ interface SessionApiDetail {
   activityStatus?: string | null;
   lifecycleStatus?: string | null;
   retentionStatus?: string | null;
-  totalTokens?: number;
-  totalCost?: number;
   harnessType?: string;
   workspaceId?: string;
   projectId?: string | null;
@@ -59,7 +49,6 @@ interface SessionApiDetail {
 
 const props = defineProps<{
   session: SessionListItem | null;
-  setViewMode?: (viewMode: "chat" | "files-changed") => void | Promise<void>;
   openDiffsTray?: () => void;
 }>();
 
@@ -103,10 +92,6 @@ const smartLinkIssues = computed(() => activeSmartLinks.value.filter(l => l.reso
 const resolvedInstanceId = computed(() => normalizeString(props.session?.instanceId) ?? normalizeString(remoteSessionDetail.value?.instanceId));
 const todoSessionId = computed(() => sessionId.value ?? "");
 const todoInstanceId = computed(() => resolvedInstanceId.value ?? "");
-const totalTokens = computed(() => props.session?.totalTokens ?? remoteSessionDetail.value?.totalTokens ?? null);
-const totalCostUsd = computed(() => props.session?.totalCost ?? remoteSessionDetail.value?.totalCost ?? null);
-const effectiveIsolationStrategy = computed(() => props.session?.isolationStrategy ?? remoteSessionDetail.value?.isolationStrategy);
-const isolationLabel = computed(() => formatIsolationStrategy(effectiveIsolationStrategy.value));
 const sessionTitle = computed(() => normalizeString(props.session?.session.title) ?? normalizeString(remoteSessionDetail.value?.title) ?? "Untitled session");
 const effectiveSessionStatus = computed(() => props.session?.sessionStatus
   ?? remoteSessionDetail.value?.lifecycleStatus
@@ -125,17 +110,6 @@ const filesChangedError = computed(() => diffState.value?.error.value ?? null);
 const areFilesChangedAvailable = computed(() => diffState.value?.available.value ?? false);
 const areFilesChangedUnavailable = computed(() => !isLoadingFilesChanged.value && !filesChangedError.value && !areFilesChangedAvailable.value);
 const shouldShowFilesChangedSection = computed(() => isLoadingFilesChanged.value || Boolean(filesChangedError.value) || areFilesChangedAvailable.value);
-const filesChangedUnavailableMessage = computed(() => {
-  if (!sessionId.value || !resolvedInstanceId.value) {
-    return null;
-  }
-
-  if (filesChangedError.value) {
-    return "File diff data is unavailable right now.";
-  }
-
-  return areFilesChangedAvailable.value ? null : "File diff data is unavailable for this session.";
-});
 const effectiveLifecycleStatus = computed(() => normalizeLifecycleStatus(
   props.session?.lifecycleStatus
     ?? remoteSessionDetail.value?.lifecycleStatus
@@ -180,33 +154,6 @@ const actionErrors = computed(() => [
   resumeError.value,
   terminateError.value,
 ].filter((message): message is string => Boolean(message)));
-
-const tokenMetrics = computed<readonly TokenMetric[]>(() => [
-  {
-    id: "tokens",
-    label: "Total tokens",
-    value: formatNumber(totalTokens.value),
-    helper: "Across all session messages",
-  },
-  {
-    id: "cost",
-    label: "Total cost",
-    value: formatCurrency(totalCostUsd.value),
-    helper: "Estimated session spend",
-  },
-  {
-    id: "files",
-    label: "Files changed",
-    value: isLoadingFilesChanged.value ? "…" : filesChanged.value.length.toLocaleString(),
-    helper: filesChangedUnavailableMessage.value ? "Diff summary unavailable" : "Tracked via session diffs",
-  },
-  {
-    id: "isolation",
-    label: "Isolation",
-    value: isolationLabel.value,
-    helper: "Workspace strategy",
-  },
-]);
 
 watch(
   [sessionId, refreshVersion],
@@ -461,40 +408,6 @@ function normalizeRetentionStatus(value: string | null | undefined): "active" | 
   return value === "archived" ? "archived" : "active";
 }
 
-function formatIsolationStrategy(strategy: string | null | undefined): string {
-  switch (strategy) {
-    case "existing":
-      return "Existing";
-    case "worktree":
-      return "Worktree";
-    case "clone":
-      return "Clone";
-    default:
-      return "Unknown";
-  }
-}
-
-function formatNumber(value: number | null): string {
-  if (value === null) {
-    return "—";
-  }
-
-  return value.toLocaleString();
-}
-
-function formatCurrency(amount: number | null): string {
-  if (amount === null) {
-    return "—";
-  }
-
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
-
 async function handleDismissSmartLink(linkId: string): Promise<void> {
   const sid = sessionId.value;
   if (!sid) return;
@@ -690,8 +603,6 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
         :empty-message="sessionId ? 'No todos yet.' : 'Select a session to view todos.'"
       />
     </article>
-
-    <TokenGrid :metrics="tokenMetrics" />
 
     <article
       v-if="shouldShowFilesChangedSection"
