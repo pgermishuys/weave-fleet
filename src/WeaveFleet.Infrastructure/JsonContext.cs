@@ -180,6 +180,7 @@ internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(NuCodePartDeltaPayload))]
 [JsonSerializable(typeof(NuCodeStatusPayload))]
 [JsonSerializable(typeof(Dictionary<string, object?>))]
+[JsonSerializable(typeof(string))]
 internal sealed partial class NuCodeJsonContext : JsonSerializerContext
 {
 }

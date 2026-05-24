@@ -339,12 +339,12 @@ internal static class NuCodeMapper
             CompletedToolCallState c => new ToolCompletedState
             {
                 Input = SerializeToolInput(c.Input),
-                Output = JsonSerializer.SerializeToElement(c.Output),
+                Output = JsonSerializer.SerializeToElement(c.Output, NuCodeJsonContext.Default.String),
             },
             ErrorToolCallState e => new ToolErrorState
             {
                 Input = SerializeToolInput(e.Input),
-                Output = JsonSerializer.SerializeToElement(e.Error),
+                Output = JsonSerializer.SerializeToElement(e.Error, NuCodeJsonContext.Default.String),
             },
             _ => new ToolPendingState(),
         };

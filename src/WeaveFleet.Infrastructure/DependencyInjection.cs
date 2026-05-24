@@ -232,6 +232,7 @@ public static class DependencyInjection
         services.AddScoped<INuCodeCredentialStore, FleetNuCodeCredentialStore>();
         services.TryAddSingleton<IProviderRegistry>(_ => new ProviderRegistry(BuiltInProviders.All()));
         services.AddSingleton<IChatClientFactory, NuCodeChatClientFactory>();
+        services.AddSingleton<IModelDiscoveryService, NuCodeModelDiscoveryService>();
         services.AddScoped<INuCodeHttpClient>(sp =>
             new HttpClientAdapter(sp.GetRequiredService<IHttpClientFactory>()));
 

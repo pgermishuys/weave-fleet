@@ -6,6 +6,7 @@ using System.Threading.Channels;
 using global::NuCode;
 using global::NuCode.Agents;
 using global::NuCode.Events;
+using global::NuCode.Providers;
 using global::NuCode.Sessions;
 using global::NuCode.Tools;
 using Microsoft.Extensions.AI;
@@ -32,6 +33,7 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
     private readonly string _workingDirectory;
     private readonly string _provider;
     private readonly string _modelId;
+    private readonly IReadOnlyList<DiscoveredModel> _discoveredModels;
     private readonly string? _projectId;
     private readonly string? _projectName;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -53,6 +55,7 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
         string workingDirectory,
         string provider,
         string modelId,
+        IReadOnlyList<DiscoveredModel> discoveredModels,
         string? projectId,
         string? projectName,
         string ownerUserId,
@@ -67,6 +70,7 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
         _workingDirectory = workingDirectory;
         _provider = provider;
         _modelId = modelId;
+        _discoveredModels = discoveredModels;
         _projectId = projectId;
         _projectName = projectName;
         _ownerUserId = ownerUserId;
@@ -128,7 +132,9 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
                     _workingDirectory, text.Length > 50 ? text[..50] : text, linkedToken);
 
                 EmitSessionCreatedEvent();
-                EmitSessionUpdatedEvent(text.Length > 50 ? text[..50] : text);
+                // Note: we do NOT emit session.updated with the prompt text here because the
+                // Fleet session already has a user-chosen title set at creation time. Emitting
+                // session.updated would overwrite it via the persistence projection.
             }
 
             // Create user message
@@ -358,13 +364,23 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
     {
+        // Build model list from discovered models; ensure the active model is always included
+        var models = _discoveredModels
+            .Select(m => new ModelInfo { Id = m.Id, Name = m.Name ?? m.Id })
+            .ToList();
+
+        if (!models.Exists(m => string.Equals(m.Id, _modelId, StringComparison.OrdinalIgnoreCase)))
+        {
+            models.Insert(0, new ModelInfo { Id = _modelId, Name = _modelId });
+        }
+
         IReadOnlyList<ProviderInfo> providers =
         [
             new ProviderInfo
             {
                 Id = _provider,
                 Name = ToDisplayName(_provider),
-                Models = [new ModelInfo { Id = _modelId, Name = _modelId }],
+                Models = models,
             },
         ];
 

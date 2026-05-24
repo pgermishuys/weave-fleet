@@ -28,9 +28,9 @@ public sealed class NuCodeHarnessRuntimeTests
 
         return new NuCodeHarnessRuntime(
             scopeFactory: scopeFactory,
-            httpClientFactory: null!,
             loggerFactory: NullLoggerFactory.Instance,
-            logger: NullLogger<NuCodeHarnessRuntime>.Instance);
+            logger: NullLogger<NuCodeHarnessRuntime>.Instance,
+            modelDiscovery: new NoOpModelDiscoveryService());
     }
 
     // ── CheckAvailabilityAsync ────────────────────────────────────────────────
@@ -185,5 +185,15 @@ public sealed class NuCodeHarnessRuntimeTests
         var result = await runtime.PrepareRuntimeAsync(context, CancellationToken.None);
 
         result.ShouldBeOfType<RuntimePreparation.NotReady>();
+    }
+
+    private sealed class NoOpModelDiscoveryService : IModelDiscoveryService
+    {
+        public Task<IReadOnlyList<DiscoveredModel>> DiscoverModelsAsync(
+            ProviderDefinition provider,
+            IReadOnlyDictionary<string, string> credentials,
+            IReadOnlyDictionary<string, string>? options = null,
+            CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<DiscoveredModel>>([]);
     }
 }

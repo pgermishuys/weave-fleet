@@ -19,17 +19,20 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<NuCodeHarnessRuntime> _logger;
+    private readonly IModelDiscoveryService _modelDiscovery;
     private readonly IAnalyticsCollector? _analyticsCollector;
 
     public NuCodeHarnessRuntime(
         IServiceScopeFactory scopeFactory,
         ILoggerFactory loggerFactory,
         ILogger<NuCodeHarnessRuntime> logger,
+        IModelDiscoveryService modelDiscovery,
         IAnalyticsCollector? analyticsCollector = null)
     {
         _scopeFactory = scopeFactory;
         _loggerFactory = loggerFactory;
         _logger = logger;
+        _modelDiscovery = modelDiscovery;
         _analyticsCollector = analyticsCollector;
     }
 
@@ -178,6 +181,10 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
 
         var nuCodeProvider = nuCodeServices.BuildServiceProvider();
 
+        // Discover available models from the provider API (best-effort, non-blocking)
+        var discoveredModels = await _modelDiscovery.DiscoverModelsAsync(
+            provider, artifacts.Credentials, artifacts.ProviderOptions, ct).ConfigureAwait(false);
+
         var instanceId = $"nucode-{Guid.NewGuid():N}";
 
         var session = new NuCodeHarnessSession(
@@ -186,6 +193,7 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
             workingDirectory: options.WorkingDirectory,
             provider: artifacts.ProviderId,
             modelId: artifacts.ModelId,
+            discoveredModels: discoveredModels,
             projectId: options.ProjectId,
             projectName: options.ProjectName,
             ownerUserId: options.OwnerUserId,
