@@ -379,7 +379,8 @@ if (!fleetOptions.Auth.Enabled)
 {
     var localTokenAuthService = app.Services.GetRequiredService<ILocalTokenAuthService>();
     Console.WriteLine();
-    Console.WriteLine($"  Access Weave Fleet at http://localhost:{fleetOptions.Port}/login?token={localTokenAuthService.Token}");
+    var displayHost = fleetOptions.Host is "0.0.0.0" or "::" ? Environment.MachineName : "localhost";
+    Console.WriteLine($"  Access Weave Fleet at http://{displayHost}:{fleetOptions.Port}/login?token={localTokenAuthService.Token}");
     Console.WriteLine();
 }
 
