@@ -7,11 +7,79 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
 public sealed class AdminEndpointsTests
 {
+    [Fact]
+    public async Task opencode_pool_health_returns_pool_state_for_admin_request()
+    {
+        await using var factory = new ApiWebApplicationFactory(
+            authEnabled: true,
+            useTestAuthentication: true,
+            testUserIsAdmin: true,
+            configureTestServices: services =>
+            {
+                services.RemoveAll<IOpenCodePoolHealthCheck>();
+                services.AddSingleton<IOpenCodePoolHealthCheck>(new StubPoolHealthCheck(
+                    new OpenCodePoolHealthStatus(
+                        1,
+                        2,
+                        [new OpenCodePoolInstanceHealth("instance-1", 2, 1234, true, false, false)])));
+            });
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/admin/opencode/pool");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
+        body.GetProperty("instanceCount").GetInt32().ShouldBe(1);
+        body.GetProperty("sessionCount").GetInt32().ShouldBe(2);
+        var instance = body.GetProperty("instances")[0];
+        instance.GetProperty("instanceId").GetString().ShouldBe("instance-1");
+        instance.GetProperty("sessionCount").GetInt32().ShouldBe(2);
+        instance.GetProperty("processId").GetInt32().ShouldBe(1234);
+        instance.GetProperty("isAvailable").GetBoolean().ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task opencode_pool_health_returns_forbidden_for_non_admin_request()
+    {
+        await using var factory = new ApiWebApplicationFactory(
+            authEnabled: true,
+            useTestAuthentication: true,
+            configureTestServices: services =>
+            {
+                services.RemoveAll<IOpenCodePoolHealthCheck>();
+                services.AddSingleton<IOpenCodePoolHealthCheck>(new ThrowingPoolHealthCheck());
+            });
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/admin/opencode/pool");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task opencode_pool_health_allows_local_operator_when_auth_is_disabled()
+    {
+        await using var factory = new ApiWebApplicationFactory(
+            authEnabled: false,
+            configureTestServices: services =>
+            {
+                services.RemoveAll<IOpenCodePoolHealthCheck>();
+                services.AddSingleton<IOpenCodePoolHealthCheck>(new StubPoolHealthCheck(
+                    new OpenCodePoolHealthStatus(0, 0, [])));
+            });
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/admin/opencode/pool");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
     [Fact]
     public async Task import_legacy_sessions_invokes_importer_and_returns_result_when_database_is_populated()
     {
@@ -148,6 +216,16 @@ public sealed class AdminEndpointsTests
 
         public Task<LegacySessionImportResult> ImportAsync(string sourcePath, CancellationToken cancellationToken)
             => ImportAsync(cancellationToken);
+    }
+
+    private sealed class StubPoolHealthCheck(OpenCodePoolHealthStatus status) : IOpenCodePoolHealthCheck
+    {
+        public OpenCodePoolHealthStatus GetStatus() => status;
+    }
+
+    private sealed class ThrowingPoolHealthCheck : IOpenCodePoolHealthCheck
+    {
+        public OpenCodePoolHealthStatus GetStatus() => throw new InvalidOperationException("Should not be called.");
     }
 
     private static async Task PopulateDestinationDatabaseAsync(ApiWebApplicationFactory factory)

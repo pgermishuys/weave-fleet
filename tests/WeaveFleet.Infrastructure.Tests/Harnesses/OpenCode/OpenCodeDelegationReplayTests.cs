@@ -30,6 +30,15 @@ public sealed class OpenCodeDelegationReplayTests
     // Helpers
     // -----------------------------------------------------------------------
 
+    private static OwnedInstanceHandle CreateOwnedHandle(OpenCodeHttpClient httpClient, string workingDirectory) =>
+        new(
+            httpClient,
+            new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance),
+            new PortAllocator(10000, 10099),
+            0,
+            workingDirectory,
+            TimeSpan.FromSeconds(1));
+
     /// <summary>
     /// Builds an <see cref="OpenCodeHarnessSession"/> that streams the fixture SSE events,
     /// returning the instance and the delegation repo so tests can inspect delegation state.
@@ -83,12 +92,8 @@ public sealed class OpenCodeDelegationReplayTests
         var instance = new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: fleetSessionId,
-            httpClient: ocHttpClient,
-            processManager: new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance),
-            portAllocator: new PortAllocator(10000, 10099),
-            allocatedPort: 0,
+            instanceHandle: CreateOwnedHandle(ocHttpClient, "/tmp"),
             workingDirectory: "/tmp",
-            shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: "user-1");
@@ -460,12 +465,8 @@ public sealed class OpenCodeDelegationReplayTests
         var instance = new OpenCodeHarnessSession(
             instanceId: "test-race-instance",
             fleetSessionId: parentFleetSessionId,
-            httpClient: ocHttpClient,
-            processManager: new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance),
-            portAllocator: new PortAllocator(10000, 10099),
-            allocatedPort: 0,
+            instanceHandle: CreateOwnedHandle(ocHttpClient, Path.GetTempPath()),
             workingDirectory: Path.GetTempPath(),
-            shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: "user-1",

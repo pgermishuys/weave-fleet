@@ -21,6 +21,7 @@ using WeaveFleet.Infrastructure.Harnesses.NuCode;
 using NuCode.Providers;
 using NuCode.Providers.Auth;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 using WeaveFleet.Infrastructure.Harnesses.Pi;
 using WeaveFleet.Infrastructure.Plugins;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
@@ -227,6 +228,7 @@ public static class DependencyInjection
         services.AddSingleton<IHarness>(sp => sp.GetRequiredService<OpenCodeHarness>());
         services.AddSingleton<OpenCodeHarnessRuntime>();
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<OpenCodeHarnessRuntime>());
+        services.AddSingleton<IOpenCodePoolHealthCheck, PoolHealthCheck>();
 
         // Register ClaudeCodeHarness (descriptor) and ClaudeCodeHarnessRuntime (provisioning) as separate singletons.
         services.AddSingleton<ClaudeCodeHarness>();

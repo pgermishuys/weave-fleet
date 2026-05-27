@@ -8,4 +8,11 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 /// Opaque to the application layer — only the OpenCode harness reads its contents.
 /// </summary>
 internal sealed record OpenCodeLaunchArtifacts(
-    IReadOnlyDictionary<string, string> EnvironmentVariables) : RuntimeLaunchArtifacts;
+    IReadOnlyDictionary<string, string> EnvironmentVariables,
+    IReadOnlyList<string> ModelIds) : RuntimeLaunchArtifacts
+{
+    public OpenCodeLaunchArtifacts(IReadOnlyDictionary<string, string> environmentVariables)
+        : this(environmentVariables, [])
+    {
+    }
+}

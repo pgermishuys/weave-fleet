@@ -23,6 +23,7 @@ public static class ConfigEndpoints
             var config = await configService.GetMergedConfigAsync(directory, ct);
             config["authEnabled"] = fleetOptions.Auth.Enabled;
             config["tokenAuthEnabled"] = fleetOptions.Auth.TokenAuthEnabled;
+            config["pooledOpenCodeHarness"] = fleetOptions.Harness.PooledOpenCodeHarness;
             return Results.Ok(config);
         })
         .WithName("GetConfig");
@@ -30,19 +31,26 @@ public static class ConfigEndpoints
         // PUT /api/config — writes user-level config
         group.MapPut("/config", async (
             JsonObject? body,
+            FleetOptions fleetOptions,
             ConfigService configService,
             CancellationToken ct) =>
         {
             var config = body ?? [];
+            var settingsResult = ApplyRuntimeSettings(config, fleetOptions);
+            if (settingsResult is not null)
+            {
+                return settingsResult;
+            }
+
             await configService.UpdateUserConfigAsync(config, ct);
             return Results.NoContent();
         })
         .WithName("UpdateConfig");
 
         // GET /api/config/paths — returns file paths for debugging/display
-        group.MapGet("/config/paths", () =>
+        group.MapGet("/config/paths", (ConfigService configService) =>
         {
-            var paths = ConfigService.GetConfigPaths();
+            var paths = configService.GetConfigPaths();
             return Results.Ok(new
             {
                 configDirectory = paths.ConfigDirectory,
@@ -52,6 +60,25 @@ public static class ConfigEndpoints
         .WithName("GetConfigPaths");
 
         return app;
+    }
+
+    private static IResult? ApplyRuntimeSettings(JsonObject config, FleetOptions fleetOptions)
+    {
+        if (!config.TryGetPropertyValue("pooledOpenCodeHarness", out var pooledOpenCodeHarnessNode)
+            || pooledOpenCodeHarnessNode is null)
+        {
+            return null;
+        }
+
+        if (pooledOpenCodeHarnessNode is not JsonValue pooledOpenCodeHarnessValue
+            || !pooledOpenCodeHarnessValue.TryGetValue<bool>(out var pooledOpenCodeHarness))
+        {
+            return Results.BadRequest(new ApiErrorResponse(
+                "pooledOpenCodeHarness must be a boolean value."));
+        }
+
+        fleetOptions.Harness.PooledOpenCodeHarness = pooledOpenCodeHarness;
+        return null;
     }
 
     public static IEndpointRouteBuilder MapClientConfigEndpoints(this IEndpointRouteBuilder app, FleetOptions fleetOptions)

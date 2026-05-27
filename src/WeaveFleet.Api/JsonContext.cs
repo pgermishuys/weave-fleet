@@ -6,6 +6,7 @@ using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 
 namespace WeaveFleet.Api;
 
@@ -80,6 +81,8 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(VersionResponse))]
 [JsonSerializable(typeof(ProfileResponse))]
 [JsonSerializable(typeof(LegacySessionImportApiResponse))]
+[JsonSerializable(typeof(OpenCodePoolHealthStatus))]
+[JsonSerializable(typeof(OpenCodePoolInstanceHealth))]
 [JsonSerializable(typeof(UpdateStatusResponse))]
 [JsonSerializable(typeof(RepositoriesListResponse))]
 [JsonSerializable(typeof(RepositoryListItem))]
