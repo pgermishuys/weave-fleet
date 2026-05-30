@@ -260,6 +260,10 @@ export interface SessionListItem {
    */
   projectName?: string | null;
   origin?: SessionOrigin | null;
+  /**
+   * The harness type used for this session (e.g. "opencode", "claude-code").
+   */
+  harnessType?: string | null;
 }
 
 // ─── Projects ──────────────────────────────────────────────────────────────
