@@ -19,10 +19,13 @@ public static class AuthEndpoints
         {
             var authenticated = httpContext.User.Identity?.IsAuthenticated ?? false;
 
+            var isLocalhost = IsLocalhostRequest(httpContext);
+
             return Results.Ok(new AuthStatusResponse(
                 fleetOptions.Auth.Enabled,
                 fleetOptions.Auth.TokenAuthEnabled,
-                authenticated));
+                authenticated,
+                isLocalhost));
         })
         .AllowAnonymous()
         .WithName("GetAuthStatus");
@@ -147,7 +150,8 @@ public static class AuthEndpoints
 internal sealed record AuthStatusResponse(
     bool AuthEnabled,
     bool TokenAuthEnabled,
-    bool Authenticated);
+    bool Authenticated,
+    bool IsLocalhost);
 
 internal sealed record TokenLoginRequest(string Token);
 #pragma warning restore IL2026
