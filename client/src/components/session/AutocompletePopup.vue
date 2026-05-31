@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch, nextTick } from "vue";
 import { AlertCircle, Bot, FileText, Folder, LoaderCircle, Terminal } from "lucide-vue-next";
 import type { AutocompleteItem } from "@/composables/use-autocomplete";
 
@@ -23,6 +23,16 @@ interface ItemGroup {
 }
 
 const props = defineProps<AutocompletePopupProps>();
+
+const popupRef = ref<HTMLElement | null>(null);
+
+watch(() => props.selectedValue, (val) => {
+  if (!val || !popupRef.value) return;
+  nextTick(() => {
+    const el = popupRef.value?.querySelector(`[data-value="${CSS.escape(val)}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  });
+});
 
 const groupDefinitions: ReadonlyArray<{ key: AutocompleteItem["group"]; label: string }> = [
   { key: "command", label: "Commands" },
@@ -56,6 +66,7 @@ function handleSelect(value: string): void {
 <template>
   <div
     v-if="open"
+    ref="popupRef"
     class="autocomplete-popup"
     role="listbox"
     aria-label="Autocomplete suggestions"
@@ -103,6 +114,7 @@ function handleSelect(value: string): void {
         <button
           v-for="item in group.items"
           :key="item.id"
+          :data-value="item.value"
           type="button"
           class="autocomplete-popup__item"
           :class="{ 'autocomplete-popup__item--selected': isSelected(item) }"
