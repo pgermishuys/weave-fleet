@@ -52,6 +52,7 @@ public static class EndpointExtensions
         apiScope.MapConfigEndpoints();
         apiScope.MapDirectoryEndpoints();
         apiScope.MapOpenDirectoryEndpoints();
+        apiScope.MapKeyFileEndpoints();
         apiScope.MapSkillEndpoints();
         apiScope.MapInstanceEndpoints();
         apiScope.MapHarnessEndpoints();
