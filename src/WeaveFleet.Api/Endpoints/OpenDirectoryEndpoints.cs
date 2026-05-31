@@ -54,6 +54,37 @@ public static class OpenDirectoryEndpoints
         })
         .WithName("OpenDirectory");
 
+        // POST /api/open-file — open a specific file in an editor
+        group.MapPost("/open-file", async (OpenFileRequest req, WorkspaceRootService workspaceRootService) =>
+        {
+            var filePath = req.FilePath;
+
+            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+                return Results.BadRequest(new ErrorResponse("File does not exist."));
+
+            var normalised = Path.GetFullPath(filePath);
+            var allowedRoots = await workspaceRootService.GetAllowedRootsAsync();
+            if (!IsUnderAllowedRoot(normalised, allowedRoots))
+                return Results.BadRequest(new ErrorResponse("Path is outside allowed workspace roots."));
+
+            try
+            {
+                var psi = ToolRegistry.GetSpawnInfo(req.Tool, normalised);
+                if (psi is null)
+                    return Results.BadRequest(new ErrorResponse($"Tool '{req.Tool}' is not available on this platform."));
+
+                var proc = Process.Start(psi);
+                proc?.Dispose();
+
+                return Results.Ok(new { ok = true });
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem($"Failed to open file: {ex.Message}");
+            }
+        })
+        .WithName("OpenFile");
+
         return app;
     }
 
@@ -89,4 +120,5 @@ public static class OpenDirectoryEndpoints
 }
 
 internal sealed record OpenDirectoryRequest(string? Directory = null, string? Tool = null, string? Path = null);
+internal sealed record OpenFileRequest(string FilePath, string Tool);
 #pragma warning restore IL2026

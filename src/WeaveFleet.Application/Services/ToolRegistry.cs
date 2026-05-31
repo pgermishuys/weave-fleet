@@ -119,6 +119,26 @@ public static class ToolRegistry
                 linux: ("fleet", dir => [dir]),
                 detectWin: ["fleet"], detectLinux: ["fleet"]),
 
+            MakeEditor("visual-studio", "Visual Studio", "app-window",
+                win32: ("devenv", path => [path], shell: true),
+                detectWin: ["devenv"]),
+
+            MakeEditor("xcode", "Xcode", "app-window",
+                darwin: ("open", path => ["-a", "Xcode", path]),
+                detectDarwin: ["xcodebuild"]),
+
+            MakeEditor("clion", "CLion", "app-window",
+                win32: ("clion", dir => [dir], shell: true),
+                darwin: ("open", dir => ["-a", "CLion", dir]),
+                linux: ("clion", dir => [dir]),
+                detectWin: ["clion", "clion64"], detectLinux: ["clion"]),
+
+            MakeEditor("android-studio", "Android Studio", "app-window",
+                win32: ("studio", dir => [dir], shell: true),
+                darwin: ("open", dir => ["-a", "Android Studio", dir]),
+                linux: ("studio", dir => [dir]),
+                detectWin: ["studio"], detectLinux: ["studio"]),
+
             // ── Terminals ──
             new("terminal", "System Terminal", "terminal", "terminal",
                 new Dictionary<string, PlatformCommand>
@@ -170,7 +190,7 @@ public static class ToolRegistry
         (string cmd, Func<string, string[]> args, bool shell)? win32 = null,
         (string cmd, Func<string, string[]> args)? darwin = null,
         (string cmd, Func<string, string[]> args)? linux = null,
-        string[]? detectWin = null, string[]? detectLinux = null)
+        string[]? detectWin = null, string[]? detectDarwin = null, string[]? detectLinux = null)
     {
         var platforms = new Dictionary<string, PlatformCommand>();
         if (win32 is var (wCmd, wArgs, wShell))
@@ -181,10 +201,11 @@ public static class ToolRegistry
             platforms["linux"] = new PlatformCommand(lCmd, lArgs);
 
         Dictionary<string, string[]>? detect = null;
-        if (detectWin != null || detectLinux != null)
+        if (detectWin != null || detectDarwin != null || detectLinux != null)
         {
             detect = new Dictionary<string, string[]>();
             if (detectWin != null) detect["win32"] = detectWin;
+            if (detectDarwin != null) detect["darwin"] = detectDarwin;
             if (detectLinux != null) detect["linux"] = detectLinux;
         }
 

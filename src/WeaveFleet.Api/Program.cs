@@ -130,6 +130,8 @@ if (string.Equals(harnessMode, "test", StringComparison.OrdinalIgnoreCase))
 builder.AddFleetTelemetry();
 builder.AddFleetDiagnosticLogging();
 builder.Services.AddSingleton<WeaveFleet.Application.Services.ToolDetector>();
+builder.Services.AddSingleton(_ => WeaveFleet.Application.Services.KeyFileConfig.Load());
+builder.Services.AddSingleton<WeaveFleet.Application.Services.KeyFileScanner>();
 #pragma warning restore IL2026
 builder.Services.AddHealthChecks();
 

@@ -1,0 +1,54 @@
+{
+  "groups": [
+    {
+      "id": "dotnet-solution",
+      "priority": 1,
+      "extensions": [".sln", ".slnx"],
+      "compatibleTools": ["visual-studio", "rider"],
+      "trumps": ["dotnet-project", "vcxproj"]
+    },
+    {
+      "id": "dotnet-project",
+      "priority": 2,
+      "extensions": [".csproj", ".fsproj", ".vbproj"],
+      "compatibleTools": ["visual-studio", "rider"]
+    },
+    {
+      "id": "vcxproj",
+      "priority": 2,
+      "extensions": [".vcxproj"],
+      "compatibleTools": ["visual-studio"]
+    },
+    {
+      "id": "xcode-workspace",
+      "priority": 1,
+      "extensions": [".xcworkspace"],
+      "compatibleTools": ["xcode"],
+      "trumps": ["xcode-project"]
+    },
+    {
+      "id": "xcode-project",
+      "priority": 2,
+      "extensions": [".xcodeproj"],
+      "compatibleTools": ["xcode"]
+    },
+    {
+      "id": "maven",
+      "priority": 1,
+      "fileNames": ["pom.xml"],
+      "compatibleTools": ["intellij", "android-studio"]
+    },
+    {
+      "id": "gradle",
+      "priority": 1,
+      "fileNames": ["build.gradle", "build.gradle.kts"],
+      "compatibleTools": ["intellij", "android-studio"]
+    },
+    {
+      "id": "cmake",
+      "priority": 1,
+      "fileNames": ["CMakeLists.txt"],
+      "compatibleTools": ["clion"]
+    }
+  ]
+}
