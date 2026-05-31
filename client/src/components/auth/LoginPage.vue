@@ -7,6 +7,7 @@ interface AuthStatusResponse {
   authEnabled?: boolean;
   tokenAuthEnabled?: boolean;
   authenticated?: boolean;
+  isLocalhost?: boolean;
 }
 
 const returnUrl = shallowRef("/");
@@ -61,6 +62,12 @@ async function loadAuthMode(): Promise<void> {
 
     if (config.authEnabled) {
       authMode.value = "oidc";
+      return;
+    }
+
+    // Localhost requests bypass token auth — redirect to backend auto-sign-in
+    if (config.isLocalhost && !config.authEnabled) {
+      window.location.replace(apiUrl(`/auth/login?returnUrl=${encodeURIComponent(returnUrl.value)}`));
       return;
     }
 
