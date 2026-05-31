@@ -31,7 +31,7 @@ watch(() => props.selectedValue, (val) => {
   nextTick(() => {
     const escaped = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(val) : val.replace(/([^\w-])/g, "\\$1");
     const el = popupRef.value?.querySelector(`[data-value="${escaped}"]`);
-    el?.scrollIntoView({ block: "nearest" });
+    el?.scrollIntoView?.({ block: "nearest" });
   });
 });
 
