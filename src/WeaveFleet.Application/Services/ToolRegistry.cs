@@ -226,7 +226,16 @@ public static class ToolRegistry
         var safeDir = Path.GetFullPath(directory);
         var args = cmd.Args(safeDir);
 
-        var psi = new ProcessStartInfo(cmd.Command)
+        // Special case: resolve Visual Studio devenv via vswhere
+        var command = cmd.Command;
+        if (toolId == "visual-studio" && platform == "win32")
+        {
+            var resolvedDevenv = ResolveDevenvPath();
+            if (resolvedDevenv is not null)
+                command = resolvedDevenv;
+        }
+
+        var psi = new ProcessStartInfo(command)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -238,20 +247,74 @@ public static class ToolRegistry
         if (cmd.Shell && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             // On Windows, wrap in cmd /c for shell-based commands
-            psi = new ProcessStartInfo("cmd")
+            // But if we resolved an absolute path, no need for shell
+            if (toolId == "visual-studio" && Path.IsPathRooted(command))
             {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            psi.ArgumentList.Add("/c");
-            psi.ArgumentList.Add(cmd.Command);
-            foreach (var arg in args)
-                psi.ArgumentList.Add(arg);
+                // Use the resolved path directly
+                psi = new ProcessStartInfo(command)
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+                foreach (var arg in args)
+                    psi.ArgumentList.Add(arg);
+            }
+            else
+            {
+                psi = new ProcessStartInfo("cmd")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+                psi.ArgumentList.Add("/c");
+                psi.ArgumentList.Add(command);
+                foreach (var arg in args)
+                    psi.ArgumentList.Add(arg);
+            }
         }
 
         if (cmd.CwdIsDirectory)
             psi.WorkingDirectory = safeDir;
 
         return psi;
+    }
+
+    /// <summary>
+    /// Resolves the path to devenv.exe using vswhere.exe.
+    /// </summary>
+    private static string? ResolveDevenvPath()
+    {
+        try
+        {
+            var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+            var vswherePath = Path.Combine(programFiles, "Microsoft Visual Studio", "Installer", "vswhere.exe");
+
+            if (!File.Exists(vswherePath))
+                return null;
+
+            var psi = new ProcessStartInfo(vswherePath)
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            };
+            psi.ArgumentList.Add("-latest");
+            psi.ArgumentList.Add("-property");
+            psi.ArgumentList.Add("productPath");
+
+            using var proc = Process.Start(psi);
+            if (proc is null) return null;
+
+            var output = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit(2000);
+
+            var path = output.Trim();
+            return !string.IsNullOrWhiteSpace(path) && File.Exists(path) ? path : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

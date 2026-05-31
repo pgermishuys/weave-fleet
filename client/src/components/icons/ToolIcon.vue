@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  siAlacritty,
   siAndroidstudio,
   siClion,
   siCursor,
@@ -7,15 +8,17 @@ import {
   siIntellijidea,
   siPycharm,
   siRider,
+  siRustrover,
   siSublimetext,
+  siVisualstudio,
+  siVisualstudiocode,
   siWebstorm,
   siWindsurf,
+  siWindowsterminal,
   siXcode,
   siZedindustries,
 } from "simple-icons";
 import {
-  AppWindow,
-  Code2,
   FolderOpen,
   SquareTerminal,
   Terminal,
@@ -36,39 +39,46 @@ interface SimpleIconEntry {
 
 const simpleIconMap: Record<string, SimpleIconEntry> = {
   "android-studio": siAndroidstudio,
+  alacritty: siAlacritty,
   clion: siClion,
   cursor: siCursor,
   goland: siGoland,
   intellij: siIntellijidea,
   pycharm: siPycharm,
   rider: siRider,
+  rustrover: siRustrover,
   sublime: siSublimetext,
+  "visual-studio": siVisualstudio,
+  vscode: siVisualstudiocode,
+  "vscode-insiders": siVisualstudiocode,
   webstorm: siWebstorm,
   windsurf: siWindsurf,
+  wt: siWindowsterminal,
   xcode: siXcode,
   zed: siZedindustries,
 };
 
-const lucideIconMap: Record<string, typeof Code2> = {
-  vscode: Code2,
-  "vscode-insiders": Code2,
-  "visual-studio": AppWindow,
-  "fleet-jb": AppWindow,
-  rustrover: AppWindow,
+const lucideIconMap: Record<string, typeof Terminal> = {
   terminal: Terminal,
-  wt: SquareTerminal,
   iterm2: SquareTerminal,
-  alacritty: SquareTerminal,
   explorer: FolderOpen,
 };
 
 const simpleIcon = computed(() => simpleIconMap[props.toolId]);
-const LucideIcon = computed(() => lucideIconMap[props.toolId] ?? AppWindow);
+const LucideIcon = computed(() => lucideIconMap[props.toolId] ?? Terminal);
+
+// Simple icons are solid fills — render slightly smaller than Lucide's stroked icons
+// to achieve visual balance
+const innerSize = computed(() => Math.round(props.size * 0.85));
 
 const svgContent = computed(() => {
   const icon = simpleIcon.value;
   if (!icon) return null;
-  return icon.svg.replace("<svg", `<svg width="${props.size}" height="${props.size}"`);
+  const color = `#${icon.hex}`;
+  return icon.svg.replace(
+    "<svg",
+    `<svg width="${innerSize.value}" height="${innerSize.value}" fill="${color}"`,
+  );
 });
 </script>
 
