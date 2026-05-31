@@ -1,3 +1,4 @@
+using Shouldly;
 using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Application.Tests.Services;

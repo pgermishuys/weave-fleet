@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -7,8 +6,8 @@ namespace WeaveFleet.Application.Services;
 public sealed record KeyFileGroup(
     string Id,
     int Priority,
-    [property: JsonPropertyName("extensions")] string[]? Extensions,
-    [property: JsonPropertyName("fileNames")] string[]? FileNames,
+    string[]? Extensions,
+    string[]? FileNames,
     string[] CompatibleTools,
     string[]? Trumps);
 
@@ -36,5 +35,5 @@ public sealed record KeyFileConfig(KeyFileGroup[] Groups)
 
 [JsonSerializable(typeof(KeyFileConfig))]
 [JsonSerializable(typeof(KeyFileGroup))]
-[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 internal sealed partial class KeyFileConfigJsonContext : JsonSerializerContext;
