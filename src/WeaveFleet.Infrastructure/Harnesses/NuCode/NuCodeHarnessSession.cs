@@ -138,7 +138,7 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
             }
 
             // Create user message
-            var agentName = options?.Agent ?? "build";
+            var agentName = options?.Agent ?? "Loom (Main Orchestrator)";
             var effectiveProvider = options?.ProviderId ?? _provider;
             var effectiveModelId = options?.ModelId ?? _modelId;
             var userMsg = new UserMessage(MessageId.New(), _nuCodeSession.Id, DateTimeOffset.UtcNow, agentName);
