@@ -1,4 +1,5 @@
 using global::NuCode;
+using global::NuCode.Agents;
 using global::NuCode.Providers;
 using global::NuCode.Tools;
 using Microsoft.Extensions.DependencyInjection;
@@ -180,6 +181,10 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
         nuCodeServices.AddSingleton(chatClient);
 
         var nuCodeProvider = nuCodeServices.BuildServiceProvider();
+
+        // Register Weave orchestration agents (Loom, Tapestry, Pattern, etc.)
+        var agentRegistry = nuCodeProvider.GetRequiredService<IAgentProfileRegistry>();
+        WeaveAgents.Register(agentRegistry);
 
         // Discover available models from the provider API (best-effort, non-blocking)
         var discoveredModels = await _modelDiscovery.DiscoverModelsAsync(

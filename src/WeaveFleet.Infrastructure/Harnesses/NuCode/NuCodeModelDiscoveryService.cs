@@ -7,24 +7,30 @@ namespace WeaveFleet.Infrastructure.Harnesses.NuCode;
 
 /// <summary>
 /// Discovers available models by querying provider APIs.
-/// For OpenAI-compatible providers, calls <c>GET {endpoint}/models</c>.
+/// For the Copilot provider, uses the models.dev catalog.
+/// For other OpenAI-compatible providers, calls <c>GET {endpoint}/models</c>.
 /// Results are returned best-effort — failures produce an empty list rather than exceptions.
 /// </summary>
 internal sealed partial class NuCodeModelDiscoveryService : IModelDiscoveryService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<NuCodeModelDiscoveryService> _logger;
+    private readonly ModelsDevCatalogClient _catalogClient;
 
     private const string ApiKeyField = "apiKey";
     private const string GitHubTokenField = "githubToken";
     private const string BaseUrlOption = "baseUrl";
+    private const string CopilotProviderId = "copilot";
+    private const string ModelsCatalogProviderId = "github-copilot";
 
     public NuCodeModelDiscoveryService(
         IHttpClientFactory httpClientFactory,
-        ILogger<NuCodeModelDiscoveryService> logger)
+        ILogger<NuCodeModelDiscoveryService> logger,
+        ModelsDevCatalogClient catalogClient)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _catalogClient = catalogClient;
     }
 
     /// <inheritdoc />
@@ -39,8 +45,8 @@ internal sealed partial class NuCodeModelDiscoveryService : IModelDiscoveryServi
 
         try
         {
-            // Copilot uses the GitHub REST API models catalog for a comprehensive list
-            if (string.Equals(provider.Id, "copilot", StringComparison.OrdinalIgnoreCase))
+            // Copilot uses the models.dev catalog for a comprehensive list
+            if (string.Equals(provider.Id, CopilotProviderId, StringComparison.OrdinalIgnoreCase))
                 return await DiscoverCopilotModelsAsync(credentials, ct).ConfigureAwait(false);
 
             var endpoint = ResolveModelsEndpoint(provider, options);
@@ -79,37 +85,29 @@ internal sealed partial class NuCodeModelDiscoveryService : IModelDiscoveryServi
     }
 
     /// <summary>
-    /// Discovers models available through GitHub Copilot by querying the GitHub REST API
-    /// models catalog (<c>GET https://api.github.com/models</c>), which returns the full
-    /// set of models available to the authenticated user.
+    /// Discovers models available through GitHub Copilot using the models.dev catalog,
+    /// which contains the full set of Copilot-compatible models. Falls back to querying
+    /// <c>GET https://api.githubcopilot.com/models</c> if the catalog is unreachable.
     /// </summary>
     private async Task<IReadOnlyList<DiscoveredModel>> DiscoverCopilotModelsAsync(
         IReadOnlyDictionary<string, string> credentials,
         CancellationToken ct)
     {
+        var catalogModels = await _catalogClient
+            .GetModelsForProviderAsync(ModelsCatalogProviderId, ct)
+            .ConfigureAwait(false);
+
+        if (catalogModels.Count > 0)
+        {
+            LogModelDiscoverySuccess(CopilotProviderId, catalogModels.Count);
+            return catalogModels;
+        }
+
+        // Catalog unavailable — fall back to the Copilot OpenAI-compatible endpoint
         if (!credentials.TryGetValue(GitHubTokenField, out var githubToken) || string.IsNullOrEmpty(githubToken))
             return [];
 
-        using var client = _httpClientFactory.CreateClient("NuCodeModelDiscovery");
-        using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/models");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", githubToken);
-        request.Headers.TryAddWithoutValidation("Accept", "application/vnd.github+json");
-        request.Headers.TryAddWithoutValidation("X-GitHub-Api-Version", "2022-11-28");
-        request.Headers.UserAgent.ParseAdd("NuCode/1.0");
-
-        using var response = await client.SendAsync(request, ct).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-        {
-            LogModelDiscoveryFailed("copilot", (int)response.StatusCode);
-
-            // Fall back to the Copilot OpenAI-compatible endpoint
-            return await DiscoverCopilotModelsFallbackAsync(githubToken, ct).ConfigureAwait(false);
-        }
-
-        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
-
-        return ParseGitHubModelsResponse(doc);
+        return await DiscoverCopilotModelsFallbackAsync(githubToken, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -139,61 +137,6 @@ internal sealed partial class NuCodeModelDiscoveryService : IModelDiscoveryServi
         using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
 
         return ParseModelsResponse(doc, "copilot");
-    }
-
-    /// <summary>
-    /// Parses the GitHub REST API <c>/models</c> response.
-    /// Returns an array of model objects with <c>id</c>, <c>name</c>, <c>summary</c>, etc.
-    /// Deduplicates by display name, preferring shorter model IDs (without date suffixes).
-    /// </summary>
-    private static List<DiscoveredModel> ParseGitHubModelsResponse(JsonDocument doc)
-    {
-        // Response is a bare array of model objects
-        var array = doc.RootElement;
-        if (array.ValueKind != JsonValueKind.Array)
-            return [];
-
-        // First pass: collect all models keyed by display name, preferring shorter IDs
-        var byName = new Dictionary<string, DiscoveredModel>(StringComparer.OrdinalIgnoreCase);
-        var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var item in array.EnumerateArray())
-        {
-            if (!item.TryGetProperty("id", out var idProp) || idProp.ValueKind != JsonValueKind.String)
-                continue;
-
-            var fullId = idProp.GetString()!;
-
-            // Extract the model ID portion after the publisher prefix (e.g. "openai/gpt-4o" → "gpt-4o")
-            var modelId = fullId.Contains('/')
-                ? fullId[(fullId.IndexOf('/') + 1)..]
-                : fullId;
-
-            if (!seenIds.Add(modelId))
-                continue;
-
-            string? name = null;
-            if (item.TryGetProperty("name", out var nameProp) && nameProp.ValueKind == JsonValueKind.String)
-                name = nameProp.GetString();
-
-            var displayKey = name ?? modelId;
-
-            // When multiple models share a display name (e.g. gpt-4o vs gpt-4o-2024-08-06),
-            // keep the one with the shorter ID (typically the alias without a date suffix).
-            if (byName.TryGetValue(displayKey, out var existing))
-            {
-                if (modelId.Length < existing.Id.Length)
-                    byName[displayKey] = new DiscoveredModel(modelId, name);
-            }
-            else
-            {
-                byName[displayKey] = new DiscoveredModel(modelId, name);
-            }
-        }
-
-        var models = byName.Values.ToList();
-        models.Sort((a, b) => string.Compare(a.Name ?? a.Id, b.Name ?? b.Id, StringComparison.OrdinalIgnoreCase));
-        return models;
     }
 
     /// <summary>
@@ -285,7 +228,7 @@ internal sealed partial class NuCodeModelDiscoveryService : IModelDiscoveryServi
         ProviderDefinition provider,
         IReadOnlyDictionary<string, string> credentials)
     {
-        if (string.Equals(provider.Id, "copilot", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(provider.Id, CopilotProviderId, StringComparison.OrdinalIgnoreCase))
         {
             return credentials.TryGetValue(GitHubTokenField, out var githubToken)
                 ? githubToken
