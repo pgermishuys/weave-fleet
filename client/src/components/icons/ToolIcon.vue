@@ -8,17 +8,15 @@ import {
   siIntellijidea,
   siPycharm,
   siRider,
-  siRustrover,
   siSublimetext,
-  siVisualstudio,
-  siVisualstudiocode,
   siWebstorm,
   siWindsurf,
-  siWindowsterminal,
   siXcode,
   siZedindustries,
 } from "simple-icons";
 import {
+  AppWindow,
+  Code2,
   FolderOpen,
   SquareTerminal,
   Terminal,
@@ -38,34 +36,35 @@ interface SimpleIconEntry {
 }
 
 const simpleIconMap: Record<string, SimpleIconEntry> = {
-  "android-studio": siAndroidstudio,
   alacritty: siAlacritty,
+  "android-studio": siAndroidstudio,
   clion: siClion,
   cursor: siCursor,
   goland: siGoland,
   intellij: siIntellijidea,
   pycharm: siPycharm,
   rider: siRider,
-  rustrover: siRustrover,
   sublime: siSublimetext,
-  "visual-studio": siVisualstudio,
-  vscode: siVisualstudiocode,
-  "vscode-insiders": siVisualstudiocode,
   webstorm: siWebstorm,
   windsurf: siWindsurf,
-  wt: siWindowsterminal,
   xcode: siXcode,
   zed: siZedindustries,
 };
 
 const lucideIconMap: Record<string, typeof Terminal> = {
+  vscode: Code2,
+  "vscode-insiders": Code2,
+  "visual-studio": AppWindow,
+  "fleet-jb": AppWindow,
+  rustrover: AppWindow,
   terminal: Terminal,
+  wt: SquareTerminal,
   iterm2: SquareTerminal,
   explorer: FolderOpen,
 };
 
 const simpleIcon = computed(() => simpleIconMap[props.toolId]);
-const LucideIcon = computed(() => lucideIconMap[props.toolId] ?? Terminal);
+const LucideIcon = computed(() => lucideIconMap[props.toolId] ?? AppWindow);
 
 // Simple icons are solid fills — render slightly smaller than Lucide's stroked icons
 // to achieve visual balance
