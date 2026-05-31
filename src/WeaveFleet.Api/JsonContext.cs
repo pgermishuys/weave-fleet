@@ -197,6 +197,8 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(TokenLoginRequest))]
 // Open Directory
 [JsonSerializable(typeof(OpenDirectoryRequest))]
+[JsonSerializable(typeof(OpenFileRequest))]
+[JsonSerializable(typeof(KeyFilesResponse))]
 // Available Tools
 [JsonSerializable(typeof(AvailableToolsResponse))]
 [JsonSerializable(typeof(WeaveFleet.Application.Services.ResolvedTool))]
