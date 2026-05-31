@@ -185,9 +185,15 @@ export function useSmartLinks(options: UseSmartLinksOptions): void {
     async (sid) => {
       if (!sid) return
       activeSessionId = sid
-      secondsUntilRefresh.value = POLL_INTERVAL_SECONDS
       await initialize(sid)
       if (disposed) return
+      // Re-assign after await — a stale unmount from the previous session's
+      // component may have nulled activeSessionId while we were initializing.
+      activeSessionId = sid
+      // Immediately refresh non-terminal links so the user sees current status
+      await runRefresh(sid)
+      if (disposed) return
+      secondsUntilRefresh.value = POLL_INTERVAL_SECONDS
       startCountdown()
     },
     { immediate: true },
