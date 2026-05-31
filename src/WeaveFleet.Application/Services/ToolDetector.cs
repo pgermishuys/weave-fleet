@@ -102,8 +102,59 @@ public sealed partial class ToolDetector : IDisposable
             }
         }
 
+        // Special case: Visual Studio detection via vswhere on Windows
+        if (tool.Id == "visual-studio" && platform == "win32")
+        {
+            if (await DetectVisualStudioViaVsWhereAsync(ct))
+            {
+                LogToolDetectedViaBinary(_logger, tool.Id, "vswhere");
+                return tool;
+            }
+        }
+
         LogToolNotFound(_logger, tool.Id);
         return null;
+    }
+
+    private async Task<bool> DetectVisualStudioViaVsWhereAsync(CancellationToken ct)
+    {
+        try
+        {
+            var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+            var vswherePath = Path.Combine(programFiles, "Microsoft Visual Studio", "Installer", "vswhere.exe");
+
+            if (!File.Exists(vswherePath))
+                return false;
+
+            var psi = new ProcessStartInfo(vswherePath)
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            };
+            psi.ArgumentList.Add("-latest");
+            psi.ArgumentList.Add("-property");
+            psi.ArgumentList.Add("productPath");
+            psi.ArgumentList.Add("-requires");
+            psi.ArgumentList.Add("Microsoft.Component.MSBuild");
+
+            using var proc = Process.Start(psi);
+            if (proc is null) return false;
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(ProbeTimeout);
+
+            var output = await proc.StandardOutput.ReadToEndAsync(cts.Token);
+            await proc.WaitForExitAsync(cts.Token);
+
+            return proc.ExitCode == 0 && !string.IsNullOrWhiteSpace(output);
+        }
+        catch (Exception ex)
+        {
+            LogProbeFailed(_logger, "vswhere", ex);
+            return false;
+        }
     }
 
     private async Task<bool> IsBinaryOnPathAsync(string binary, string platform, CancellationToken ct)

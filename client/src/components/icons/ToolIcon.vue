@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  siAlacritty,
   siAndroidstudio,
   siClion,
   siCursor,
@@ -35,6 +36,7 @@ interface SimpleIconEntry {
 }
 
 const simpleIconMap: Record<string, SimpleIconEntry> = {
+  alacritty: siAlacritty,
   "android-studio": siAndroidstudio,
   clion: siClion,
   cursor: siCursor,
@@ -49,7 +51,7 @@ const simpleIconMap: Record<string, SimpleIconEntry> = {
   zed: siZedindustries,
 };
 
-const lucideIconMap: Record<string, typeof Code2> = {
+const lucideIconMap: Record<string, typeof Terminal> = {
   vscode: Code2,
   "vscode-insiders": Code2,
   "visual-studio": AppWindow,
@@ -58,17 +60,24 @@ const lucideIconMap: Record<string, typeof Code2> = {
   terminal: Terminal,
   wt: SquareTerminal,
   iterm2: SquareTerminal,
-  alacritty: SquareTerminal,
   explorer: FolderOpen,
 };
 
 const simpleIcon = computed(() => simpleIconMap[props.toolId]);
 const LucideIcon = computed(() => lucideIconMap[props.toolId] ?? AppWindow);
 
+// Simple icons are solid fills — render slightly smaller than Lucide's stroked icons
+// to achieve visual balance
+const innerSize = computed(() => Math.round(props.size * 0.85));
+
 const svgContent = computed(() => {
   const icon = simpleIcon.value;
   if (!icon) return null;
-  return icon.svg.replace("<svg", `<svg width="${props.size}" height="${props.size}"`);
+  const color = `#${icon.hex}`;
+  return icon.svg.replace(
+    "<svg",
+    `<svg width="${innerSize.value}" height="${innerSize.value}" fill="${color}"`,
+  );
 });
 </script>
 
