@@ -324,9 +324,14 @@ const displayModelId = computed(() => {
   margin-bottom: 0;
 }
 
-.msg-body__content :deep(ul),
+.msg-body__content :deep(ul) {
+  padding-left: 16px;
+  list-style-type: disc;
+}
+
 .msg-body__content :deep(ol) {
   padding-left: 16px;
+  list-style-type: decimal;
 }
 
 .msg-body__content :deep(li + li) {
