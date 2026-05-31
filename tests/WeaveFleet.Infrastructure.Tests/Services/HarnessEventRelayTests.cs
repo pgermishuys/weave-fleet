@@ -615,7 +615,7 @@ public sealed class HarnessEventRelayTests
         });
         instance.Complete();
 
-        for (int i = 0; i < 50 && publisher.Calls.IsEmpty; i++)
+        for (int i = 0; i < 50 && publisher.Calls.Count < 2; i++)
             await Task.Delay(50);
 
         publisher.Calls.Count.ShouldBe(2);
