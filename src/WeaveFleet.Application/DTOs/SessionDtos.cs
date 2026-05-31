@@ -24,7 +24,8 @@ public sealed record SessionListResponse(
     int? TotalTokens,
     double? TotalCost,
     string? ProjectId,
-    string? ProjectName)
+    string? ProjectName,
+    string? HarnessType)
 {
     public SessionOriginDto? Origin { get; init; }
 }

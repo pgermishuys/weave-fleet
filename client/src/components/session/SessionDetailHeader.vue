@@ -4,6 +4,7 @@ import SessionOriginBadge from "@/components/SessionOriginBadge.vue";
 import SessionAnalyticsPopover from "@/components/session/SessionAnalyticsPopover.vue";
 import { Badge } from "@/components/ui/badge";
 import type { SessionOrigin } from "@/lib/api-types";
+import { useHarnesses } from "@/composables/use-harnesses";
 
 interface Props {
   id: string;
@@ -11,6 +12,7 @@ interface Props {
   origin?: SessionOrigin | null;
   title?: string | null;
   projectName?: string | null;
+  harnessType?: string | null;
   activityStatus?: string | null;
   lifecycleStatus?: string | null;
   retentionStatus?: string | null;
@@ -25,6 +27,7 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+const { harnesses } = useHarnesses();
 let composerDisabledSyncTimer: ReturnType<typeof setInterval> | null = null;
 
 const sessionTitle = computed(() => props.title?.trim() || "Untitled session");
@@ -56,6 +59,12 @@ const sessionStatusLabel = computed(() => {
   }
 });
 const isArchived = computed(() => props.retentionStatus === "archived");
+const harnessLabel = computed(() => {
+  const type = props.harnessType;
+  if (!type) return null;
+  const match = harnesses.value.find((h) => h.type === type);
+  return match?.displayName ?? type;
+});
 const showStoppedBanner = computed(() => {
   switch (effectiveLifecycleStatus.value) {
     case "stopped":
@@ -147,6 +156,17 @@ onUnmounted(() => {
             class="session-detail-header__project"
           >
             {{ projectLabel }}
+          </span>
+          <span
+            v-if="props.projectName && harnessLabel"
+            class="session-detail-header__separator"
+          >·</span>
+          <span
+            v-if="harnessLabel"
+            data-testid="session-harness-label"
+            class="session-detail-header__harness"
+          >
+            {{ harnessLabel }}
           </span>
         </div>
       </div>
@@ -266,6 +286,21 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.78rem;
+  color: var(--muted-foreground, var(--muted));
+}
+
+.session-detail-header__harness {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  color: var(--muted-foreground, var(--muted));
+}
+
+.session-detail-header__separator {
+  flex-shrink: 0;
   font-size: 0.78rem;
   color: var(--muted-foreground, var(--muted));
 }

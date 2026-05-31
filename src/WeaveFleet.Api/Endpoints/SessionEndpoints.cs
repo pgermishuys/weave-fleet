@@ -495,7 +495,8 @@ public static class SessionEndpoints
             ProjectId: s.ProjectId,
             ProjectName: s.ProjectId is not null && projectNamesById.TryGetValue(s.ProjectId, out var projectName)
                 ? projectName
-                : null)
+                : null,
+            HarnessType: s.HarnessType)
         {
             Origin = origin
         };
@@ -662,7 +663,8 @@ public static class SessionEndpoints
             ProjectId: s.ProjectId,
             ProjectName: s.ProjectId is not null && projectNamesById.TryGetValue(s.ProjectId, out var projectName)
                 ? projectName
-                : null);
+                : null,
+            HarnessType: s.HarnessType);
     }
 
     private static async Task<ModelResolutionResult> ResolveSessionModelAsync(

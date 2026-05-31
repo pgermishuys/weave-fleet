@@ -49,6 +49,7 @@ interface SessionDetailResponse {
   totalTokens?: number | null;
   totalCost?: number | null;
   origin?: SessionOrigin | null;
+  harnessType?: string | null;
 }
 
 type ComposerInstance = ComponentPublicInstance & {
@@ -113,6 +114,7 @@ function normalizeSessionDetailResponse(payload: unknown): SessionDetailResponse
     totalTokens: getNumberField(value, "totalTokens", "TotalTokens"),
     totalCost: getNumberField(value, "totalCost", "TotalCost"),
     origin,
+    harnessType: getStringField(value, "harnessType", "HarnessType"),
   };
 }
 
@@ -278,6 +280,7 @@ const SessionDetailPage = defineComponent({
             projectId: selectedSession.value?.projectId ?? null,
             projectName: selectedSession.value?.projectName ?? null,
             origin: nextRemoteSession.origin ?? selectedSession.value?.origin ?? null,
+            harnessType: nextRemoteSession.harnessType ?? selectedSession.value?.harnessType ?? null,
           } satisfies SessionListItem;
 
           sessionsStore.upsertSession(nextSession);
@@ -737,6 +740,7 @@ const SessionDetailPage = defineComponent({
             origin={selectedSession.value?.origin ?? null}
             title={selectedSession.value?.session.title ?? remoteSession.value?.title}
             projectName={selectedSession.value?.projectName ?? null}
+            harnessType={selectedSession.value?.harnessType ?? remoteSession.value?.harnessType ?? null}
             activityStatus={effectiveActivityStatus.value}
             lifecycleStatus={effectiveLifecycleStatus.value}
             retentionStatus={optimisticSessionState.value?.retentionStatus ?? sessionStateOverride.value?.retentionStatus ?? selectedSession.value?.retentionStatus ?? remoteSession.value?.retentionStatus}
