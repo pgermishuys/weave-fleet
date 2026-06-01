@@ -533,6 +533,7 @@ internal sealed class SqliteSessionStore : ISessionStore, IDisposable
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = false,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            TypeInfoResolver = SessionStoreJsonContext.Default,
         };
         options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
         options.Converters.Add(new SessionIdJsonConverter());
