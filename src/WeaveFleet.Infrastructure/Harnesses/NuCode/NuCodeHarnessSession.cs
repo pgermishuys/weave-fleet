@@ -47,7 +47,7 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
 
     private NuCodeSession? _nuCodeSession;
     private HarnessSessionStatus _status = HarnessSessionStatus.Idle;
-    private volatile bool _subscribed;
+    private CompositeDisposable? _eventSubscriptions;
 
     public NuCodeHarnessSession(
         string instanceId,
@@ -414,6 +414,7 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
     public async ValueTask DisposeAsync()
     {
         await StopAsync(CancellationToken.None);
+        _eventSubscriptions?.Dispose();
         _cts.Dispose();
         await _nuCodeProvider.DisposeAsync();
     }
@@ -486,10 +487,13 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
 
     private void SubscribeToNuCodeEvents(INuCodeEventBus eventBus)
     {
-        if (_subscribed) return;
-        _subscribed = true;
+        // INuCodeEventBus is scoped, so each SendPromptAsync call gets a new instance.
+        // We must re-subscribe each time and dispose previous subscriptions.
+        _eventSubscriptions?.Dispose();
+        var subs = new CompositeDisposable();
+        _eventSubscriptions = subs;
 
-        eventBus.Subscribe(MessageEvents.Updated, e =>
+        subs.Add(eventBus.Subscribe(MessageEvents.Updated, e =>
         {
             _logger.LogDebug("[NuCode:EventBus] Received MessageEvents.Updated session={Session} message={Message}",
                 e.Properties.SessionId.Value, e.Properties.MessageId.Value);
@@ -497,9 +501,9 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
             var messageId = e.Properties.MessageId;
 
             _ = EmitMessageUpdatedAsync(nuCodeSessionId, messageId);
-        });
+        }));
 
-        eventBus.Subscribe(MessageEvents.PartUpdated, e =>
+        subs.Add(eventBus.Subscribe(MessageEvents.PartUpdated, e =>
         {
             _logger.LogDebug("[NuCode:EventBus] Received MessageEvents.PartUpdated session={Session} message={Message} part={Part}",
                 e.Properties.SessionId.Value, e.Properties.MessageId.Value, e.Properties.PartId.Value);
@@ -508,9 +512,9 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
             var partId = e.Properties.PartId;
 
             _ = EmitPartUpdatedAsync(nuCodeSessionId, messageId, partId);
-        });
+        }));
 
-        eventBus.Subscribe(MessageEvents.PartDeltaReceived, e =>
+        subs.Add(eventBus.Subscribe(MessageEvents.PartDeltaReceived, e =>
         {
             _logger.LogDebug("[NuCode:EventBus] Received MessageEvents.PartDeltaReceived session={Session} field={Field}",
                 e.Properties.SessionId.Value, e.Properties.Field);
@@ -528,10 +532,10 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
                 InfrastructureJsonContext.Default.MessagePartDeltaStreamedPayload);
 
             _ = EmitRoutedEventAsync("message.part.delta", nuCodeSessionId, payload);
-        });
+        }));
 
         // Delegation: detect task tool calls and child session creation
-        eventBus.Subscribe(ToolEvents.Started, e =>
+        subs.Add(eventBus.Subscribe(ToolEvents.Started, e =>
         {
             if (!string.Equals(e.Properties.ToolName, "task", StringComparison.OrdinalIgnoreCase))
                 return;
@@ -540,9 +544,9 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
             if (callId is null) return;
 
             _ = TryHandleDelegationStartedAsync(callId, e.Properties.ToolName);
-        });
+        }));
 
-        eventBus.Subscribe(ToolEvents.Completed, e =>
+        subs.Add(eventBus.Subscribe(ToolEvents.Completed, e =>
         {
             if (!string.Equals(e.Properties.ToolName, "task", StringComparison.OrdinalIgnoreCase))
                 return;
@@ -551,9 +555,9 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
             if (callId is null) return;
 
             _ = TryHandleDelegationFinishedAsync(callId, "completed");
-        });
+        }));
 
-        eventBus.Subscribe(ToolEvents.Failed, e =>
+        subs.Add(eventBus.Subscribe(ToolEvents.Failed, e =>
         {
             if (!string.Equals(e.Properties.ToolName, "task", StringComparison.OrdinalIgnoreCase))
                 return;
@@ -562,19 +566,19 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
             if (callId is null) return;
 
             _ = TryHandleDelegationFinishedAsync(callId, "error");
-        });
+        }));
 
-        eventBus.Subscribe(SessionEvents.Created, e =>
+        subs.Add(eventBus.Subscribe(SessionEvents.Created, e =>
         {
             // Only handle child sessions (NuCode sets ParentId when TaskTool creates child sessions)
             // We ensure the child fleet session exists before child events arrive.
             _ = TryEnsureChildSessionAsync(e.Properties.SessionId.Value, e.Properties.Title);
-        });
+        }));
 
         // Analytics: collect token/cost data from StepFinishPart events on the parent session
         if (_analyticsCollector is not null)
         {
-            eventBus.Subscribe(MessageEvents.PartUpdated, e =>
+            subs.Add(eventBus.Subscribe(MessageEvents.PartUpdated, e =>
             {
                 var nuCodeSessionId = e.Properties.SessionId.Value;
                 if (_nuCodeSession is null ||
@@ -584,7 +588,7 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
                 }
 
                 _ = TryCollectTokensAsync(e.Properties.PartId, e.Properties.SessionId);
-            });
+            }));
         }
     }
 
@@ -824,4 +828,24 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
     private partial void LogTokenCollectionFailed(Exception ex, string sessionId);
     [LoggerMessage(Level = LogLevel.Warning, Message = "NuCode delegation handling failed for session {SessionId}")]
     private partial void LogDelegationFailed(Exception ex, string sessionId);
+
+    /// <summary>
+    /// Aggregates multiple <see cref="IDisposable"/> instances and disposes them all at once.
+    /// </summary>
+    private sealed class CompositeDisposable : IDisposable
+    {
+        private readonly List<IDisposable> _disposables = [];
+
+        public void Add(IDisposable disposable) => _disposables.Add(disposable);
+
+        public void Dispose()
+        {
+            foreach (var d in _disposables)
+            {
+                d.Dispose();
+            }
+
+            _disposables.Clear();
+        }
+    }
 }
