@@ -73,10 +73,10 @@ const innerSize = computed(() => Math.round(props.size * 0.85));
 const svgContent = computed(() => {
   const icon = simpleIcon.value;
   if (!icon) return null;
-  const color = `#${icon.hex}`;
+  // Use currentColor so icons inherit the menu text color and remain visible on dark backgrounds
   return icon.svg.replace(
     "<svg",
-    `<svg width="${innerSize.value}" height="${innerSize.value}" fill="${color}"`,
+    `<svg width="${innerSize.value}" height="${innerSize.value}" fill="currentColor"`,
   );
 });
 </script>
@@ -88,11 +88,15 @@ const svgContent = computed(() => {
     :style="{ width: `${size}px`, height: `${size}px` }"
     v-html="svgContent"
   />
-  <component
-    :is="LucideIcon"
+  <span
     v-else
-    :width="size"
-    :height="size"
-    class="shrink-0"
-  />
+    class="inline-flex shrink-0 items-center justify-center"
+    :style="{ width: `${size}px`, height: `${size}px` }"
+  >
+    <component
+      :is="LucideIcon"
+      :width="innerSize"
+      :height="innerSize"
+    />
+  </span>
 </template>
