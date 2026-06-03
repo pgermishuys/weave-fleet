@@ -76,7 +76,7 @@ const svgContent = computed(() => {
   // Use currentColor so icons inherit the menu text color and remain visible on dark backgrounds
   return icon.svg.replace(
     "<svg",
-    `<svg class="size-auto" width="${innerSize.value}" height="${innerSize.value}" fill="currentColor"`,
+    `<svg class="shrink-0" width="${innerSize.value}" height="${innerSize.value}" fill="currentColor"`,
   );
 });
 </script>
@@ -97,7 +97,7 @@ const svgContent = computed(() => {
       :is="LucideIcon"
       :width="innerSize"
       :height="innerSize"
-      class="size-auto"
+      class="shrink-0"
     />
   </span>
 </template>
