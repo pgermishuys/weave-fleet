@@ -277,10 +277,6 @@ const projectGroups = computed<ProjectTreeGroup[]>(() => {
         return -1;
       }
 
-      if (left.sortPosition !== right.sortPosition) {
-        return left.sortPosition - right.sortPosition;
-      }
-
       return left.name.localeCompare(right.name);
     });
 
