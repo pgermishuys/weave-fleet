@@ -378,7 +378,22 @@ export function useSendPrompt(sessionId: string) {
   });
 
   const sentPrompts = computed(() => sentPromptRegistry[sessionId] ?? []);
-  const canSend = computed(() => draft.text.trim().length > 0);
+  const canSend = computed(() => {
+    const session = selectedSession.value;
+    if (!session) {
+      return true;
+    }
+
+    if (session.retentionStatus === "archived") {
+      return false;
+    }
+
+    if (session.capabilities) {
+      return session.capabilities.canPrompt;
+    }
+
+    return session.lifecycleStatus === "running";
+  });
 
   async function postPrompt(promptId: string, request: BackendSendPromptRequest): Promise<void> {
     try {
@@ -411,6 +426,10 @@ export function useSendPrompt(sessionId: string) {
   }
 
   function sendPrompt(attachments?: ImageAttachment[]): boolean {
+    if (!canSend.value) {
+      return false;
+    }
+
     const body = draft.text.trim();
     if (!body && (!attachments || attachments.length === 0)) {
       return false;

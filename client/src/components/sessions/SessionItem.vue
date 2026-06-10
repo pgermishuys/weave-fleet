@@ -108,8 +108,8 @@ const rawTitle = computed(() => props.session.session.title ?? "");
 const displayTitle = computed(() => props.session.session.title?.trim() || "Untitled session");
 const isRunningSession = computed(() => props.session.lifecycleStatus === "running");
 const isArchivedSession = computed(() => props.session.retentionStatus === "archived");
-const canStop = computed(() => isRunningSession.value);
-const canResume = computed(() => {
+const fallbackCanStop = computed(() => isRunningSession.value);
+const fallbackCanResume = computed(() => {
   switch (props.session.lifecycleStatus) {
     case "stopped":
     case "completed":
@@ -119,7 +119,12 @@ const canResume = computed(() => {
       return false;
   }
 });
-const canArchive = computed(() => !isArchivedSession.value);
+const fallbackCanArchive = computed(() => !isArchivedSession.value);
+const canStop = computed(() => props.session.capabilities?.canStop ?? fallbackCanStop.value);
+const canResume = computed(() => props.session.capabilities?.canResume ?? fallbackCanResume.value);
+const canArchive = computed(() => props.session.capabilities?.canArchive ?? fallbackCanArchive.value);
+const canFork = computed(() => props.session.capabilities?.canFork ?? true);
+const canDelete = computed(() => props.session.capabilities?.canDelete ?? true);
 const hasWorktree = computed(() => props.session.isolationStrategy === "worktree");
 const isForkingCurrentSession = computed(() => isForking.value && forkingSessionId.value === sessionId.value);
 const isResumingCurrentSession = computed(() => isResuming.value && resumingSessionId.value === sessionId.value);
@@ -303,6 +308,10 @@ async function handleArchive(deleteWorktree: boolean): Promise<void> {
 }
 
 async function handleFork(): Promise<void> {
+  if (!canFork.value) {
+    return;
+  }
+
   try {
     const response = await forkSession(sessionId.value);
     await router.navigate({
@@ -335,11 +344,19 @@ async function handleCopySessionId(): Promise<void> {
 }
 
 function openDeleteDialog(): void {
+  if (!canDelete.value) {
+    return;
+  }
+
   isContextMenuOpen.value = false;
   isDeleteDialogOpen.value = true;
 }
 
 async function handleDelete(): Promise<void> {
+  if (!canDelete.value) {
+    return;
+  }
+
   try {
     await deleteSession(sessionId.value, instanceId.value);
     isDeleteDialogOpen.value = false;
@@ -460,6 +477,7 @@ function removeSessionFromStore(): void {
       </ContextMenuItem>
 
       <ContextMenuItem
+        v-if="canFork"
         :disabled="isAnyActionPending"
         @select="handleFork"
       >
@@ -505,6 +523,7 @@ function removeSessionFromStore(): void {
       </ContextMenuItem>
 
       <ContextMenuItem
+        v-if="canDelete"
         variant="destructive"
         :disabled="isAnyActionPending"
         @select="openDeleteDialog"

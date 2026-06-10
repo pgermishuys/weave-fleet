@@ -53,6 +53,20 @@ public static class DependencyInjection
     }
 
     /// <summary>
+    /// Adds the best-effort startup warmup service for the pooled OpenCode harness.
+    /// In auth-enabled mode the service no-ops immediately; in local mode it pre-warms
+    /// one pooled process using the deterministic <c>"local-user"</c> owner identity.
+    /// Must be registered after startup recovery so the database is in a consistent state.
+    /// Post-login and post-preference warmup is covered by the runtime warmup API
+    /// (<c>POST /api/harnesses/opencode/warmup</c>).
+    /// </summary>
+    public static IServiceCollection AddOpenCodeWarmupStartupService(this IServiceCollection services)
+    {
+        services.AddHostedService<OpenCodeWarmupHostedService>();
+        return services;
+    }
+
+    /// <summary>
     /// Adds all infrastructure services (database, repositories, external clients) to the service collection.
     /// </summary>
     public static IServiceCollection AddFleetInfrastructure(
@@ -152,6 +166,7 @@ public static class DependencyInjection
         // SessionActivityTracker is singleton — tracks ephemeral busy/idle state per session
         // for initial-state snapshots on WebSocket subscribe (page refresh support).
         services.AddSingleton<SessionActivityTracker>();
+        services.AddSingleton<SessionCapabilitiesResolver>();
 
         // EventBroadcaster is singleton — pub/sub hub shared across all requests
         services.AddSingleton<IEventBroadcaster, InMemoryEventBroadcaster>();

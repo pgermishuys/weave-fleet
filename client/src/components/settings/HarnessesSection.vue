@@ -395,7 +395,7 @@ function statusIcon(status: HarnessStatus): Component {
                 Pooled OpenCode Mode
               </p>
               <p class="mt-1 text-xs text-muted">
-                Reuse eligible OpenCode processes for newly created sessions. Existing sessions continue in their current mode.
+                Off by default. When enabled, newly created OpenCode sessions use pooled automatic runtime mode and can prompt after Fleet restart without manual Resume. Existing sessions continue in their current mode.
               </p>
               <p
                 v-if="pooledOpenCodeModeError"

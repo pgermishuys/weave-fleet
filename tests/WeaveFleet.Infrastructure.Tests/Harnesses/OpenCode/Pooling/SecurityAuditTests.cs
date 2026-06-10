@@ -110,8 +110,11 @@ public sealed class SecurityAuditTests
     }
 
     [Fact]
-    public async Task credential_rotation_mid_session_lazy_acquire_uses_new_credentials_and_does_not_reuse_old_pool()
+    public async Task credential_rotation_after_spawn_does_not_affect_already_pooled_session()
     {
+        // With eager pool acquisition at spawn time, credentials are fixed to those present at spawn.
+        // Credential rotation after spawn does NOT change the pool partition for existing sessions.
+        // Both sessions were spawned with "old-key", so they share the same "old-key" pool.
         var preferences = new InMemoryUserPreferenceRepository();
         var handler = new PooledHttpMessageHandler();
         var factory = new PooledRuntimeInstanceFactory(handler);
@@ -121,7 +124,7 @@ public sealed class SecurityAuditTests
         var directory = Directory.GetCurrentDirectory();
         var oldArtifacts = CreateArtifacts("old-key");
 
-        var oldSession = await runtime.SpawnAsync(
+        var firstSession = await runtime.SpawnAsync(
             new HarnessSpawnOptions
             {
                 SessionId = "fleet-session-old-pool",
@@ -130,7 +133,7 @@ public sealed class SecurityAuditTests
                 LaunchArtifacts = oldArtifacts,
             },
             CancellationToken.None);
-        var lazySession = await runtime.SpawnAsync(
+        var secondSession = await runtime.SpawnAsync(
             new HarnessSpawnOptions
             {
                 SessionId = "fleet-session-rotated-pool",
@@ -142,28 +145,32 @@ public sealed class SecurityAuditTests
 
         try
         {
-            await oldSession.SendPromptAsync(
+            // Both sessions eagerly acquired the "old-key" pool: only 1 process created.
+            factory.SpawnCount.ShouldBe(1);
+
+            await firstSession.SendPromptAsync(
                 "use old credentials",
                 new PromptOptions { ProviderId = "anthropic", ModelId = "claude-sonnet-4" },
                 CancellationToken.None);
 
             await credentialStore.StoreCredentialAsync("anthropic", "anthropic", "api-key", "new-key");
 
-            await lazySession.SendPromptAsync(
+            await secondSession.SendPromptAsync(
                 "use rotated credentials",
                 new PromptOptions { ProviderId = "anthropic", ModelId = "claude-sonnet-4" },
                 CancellationToken.None);
 
-            factory.SpawnCount.ShouldBe(2);
-            lazySession.ProcessId.ShouldNotBe(oldSession.ProcessId);
-            factory.Environments.Count.ShouldBe(2);
+            // Both sessions share the same pool partition (same owner + old-key hash at spawn time).
+            // Credential rotation after spawn does not create a new pool process.
+            factory.SpawnCount.ShouldBe(1);
+            secondSession.ProcessId.ShouldBe(firstSession.ProcessId);
+            factory.Environments.Count.ShouldBe(1);
             factory.Environments[0]["ANTHROPIC_API_KEY"].ShouldBe("old-key");
-            factory.Environments[1]["ANTHROPIC_API_KEY"].ShouldBe("new-key");
         }
         finally
         {
-            await lazySession.DisposeAsync();
-            await oldSession.DisposeAsync();
+            await secondSession.DisposeAsync();
+            await firstSession.DisposeAsync();
         }
     }
 

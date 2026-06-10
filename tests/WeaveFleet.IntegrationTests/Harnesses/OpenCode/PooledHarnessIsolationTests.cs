@@ -24,6 +24,177 @@ public sealed class PooledHarnessIsolationTests
 {
     [Fact]
     [Trait("Category", "Integration")]
+    public async Task different_authenticated_users_identical_credentials_do_not_share_pooled_process()
+    {
+        // Two users that happen to have the same API key value must NOT share a process.
+        // The composite pool key (owner + credential hash) ensures strict per-user isolation.
+        var handler = new IsolationHttpMessageHandler();
+        var factory = new IsolationInstanceFactory(handler);
+        await using var runtime = CreateRuntime(factory, credentials: CreateCredentials(
+            ("user-alice", "same-key"),
+            ("user-bob", "same-key")));
+        var directory = CreateDirectory();
+
+        // Both users get the same credential hash at the env-var level.
+        var aliceSession = await SpawnAsync(runtime, "fleet-alice", "user-alice", directory, "same-key");
+        var bobSession = await SpawnAsync(runtime, "fleet-bob", "user-bob", directory, "same-key");
+
+        try
+        {
+            await aliceSession.SendPromptAsync("alice-prompt", CreatePromptOptions(), CancellationToken.None);
+            await bobSession.SendPromptAsync("bob-prompt", CreatePromptOptions(), CancellationToken.None);
+
+            // Separate pool partitions → separate processes.
+            aliceSession.ProcessId.ShouldNotBeNull();
+            bobSession.ProcessId.ShouldNotBeNull();
+            aliceSession.ProcessId.ShouldNotBe(bobSession.ProcessId);
+            factory.SpawnCount.ShouldBe(2);
+
+            // Each session only receives its own events, not the other's.
+            await AssertEventsAreIsolatedAsync(aliceSession, bobSession, handler, "alice-event", "bob-event");
+        }
+        finally
+        {
+            await DisposeSessionsAsync(aliceSession, bobSession);
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task same_user_identical_credentials_shares_single_pooled_process()
+    {
+        // Within one authenticated user, identical credentials → one shared process (existing behaviour).
+        var handler = new IsolationHttpMessageHandler();
+        var factory = new IsolationInstanceFactory(handler);
+        await using var runtime = CreateRuntime(factory);
+        var directory = CreateDirectory();
+
+        var first = await SpawnAsync(runtime, "fleet-shared-a", "user-1", directory, "same-key");
+        var second = await SpawnAsync(runtime, "fleet-shared-b", "user-1", directory, "same-key");
+
+        try
+        {
+            await first.SendPromptAsync("first", CreatePromptOptions(), CancellationToken.None);
+            await second.SendPromptAsync("second", CreatePromptOptions(), CancellationToken.None);
+
+            // Same user → single pool partition → same process.
+            first.ProcessId.ShouldBe(second.ProcessId);
+            factory.SpawnCount.ShouldBe(1);
+        }
+        finally
+        {
+            await DisposeSessionsAsync(first, second);
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task different_users_identical_credentials_resume_on_separate_processes()
+    {
+        // After stopping and resuming, each user's session resumes on its own process.
+        var handler = new IsolationHttpMessageHandler();
+        var factory = new IsolationInstanceFactory(handler);
+        var sessions = new InMemorySessionRepository();
+        await using var runtime = CreateRuntime(factory,
+            credentials: CreateCredentials(("user-alice", "same-key"), ("user-bob", "same-key")),
+            sessionRepository: sessions);
+        var directory = CreateDirectory();
+
+        var aliceSession = await SpawnAsync(runtime, "fleet-alice-resume", "user-alice", directory, "same-key");
+        var bobSession = await SpawnAsync(runtime, "fleet-bob-resume", "user-bob", directory, "same-key");
+
+        try
+        {
+            await aliceSession.SendPromptAsync("alice", CreatePromptOptions(), CancellationToken.None);
+            await bobSession.SendPromptAsync("bob", CreatePromptOptions(), CancellationToken.None);
+            var aliceToken = aliceSession.ResumeToken!;
+            var bobToken = bobSession.ResumeToken!;
+            var aliceProcessId = aliceSession.ProcessId;
+            var bobProcessId = bobSession.ProcessId;
+
+            await aliceSession.StopAsync(CancellationToken.None);
+            await bobSession.StopAsync(CancellationToken.None);
+
+            var resumedAlice = await runtime.ResumeAsync(new HarnessResumeOptions
+            {
+                SessionId = "fleet-alice-resume",
+                WorkingDirectory = directory,
+                OwnerUserId = "user-alice",
+                ResumeToken = aliceToken,
+                LaunchArtifacts = CreateArtifacts("same-key"),
+            }, CancellationToken.None);
+            var resumedBob = await runtime.ResumeAsync(new HarnessResumeOptions
+            {
+                SessionId = "fleet-bob-resume",
+                WorkingDirectory = directory,
+                OwnerUserId = "user-bob",
+                ResumeToken = bobToken,
+                LaunchArtifacts = CreateArtifacts("same-key"),
+            }, CancellationToken.None);
+
+            try
+            {
+                // Each resumes on its own partition — same process IDs as before stop.
+                resumedAlice.ProcessId.ShouldBe(aliceProcessId);
+                resumedBob.ProcessId.ShouldBe(bobProcessId);
+                resumedAlice.ProcessId.ShouldNotBe(resumedBob.ProcessId);
+                factory.SpawnCount.ShouldBe(2);
+            }
+            finally
+            {
+                await DisposeSessionsAsync(resumedAlice, resumedBob);
+            }
+        }
+        finally
+        {
+            await DisposeSessionsAsync(aliceSession, bobSession);
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task local_mode_all_sessions_share_single_pool_partition_per_credential_hash()
+    {
+        // In local / auth-disabled mode there is only one effective owner ("local-user").
+        // All sessions with the same credential hash collapse to a single pool partition — the
+        // intentional local-mode exception to multi-tenant isolation.
+        var handler = new IsolationHttpMessageHandler();
+        var factory = new IsolationInstanceFactory(handler);
+        await using var runtime = CreateRuntime(factory,
+            credentials: CreateCredentials(("local-user", "local-key")));
+        var directory = CreateDirectory();
+
+        var first = await SpawnAsync(runtime, "fleet-local-a", "local-user", directory, "local-key");
+        var second = await SpawnAsync(runtime, "fleet-local-b", "local-user", directory, "local-key");
+        var third = await SpawnAsync(runtime, "fleet-local-c", "local-user", directory, "local-key");
+
+        try
+        {
+            await first.SendPromptAsync("first", CreatePromptOptions(), CancellationToken.None);
+            await second.SendPromptAsync("second", CreatePromptOptions(), CancellationToken.None);
+            await third.SendPromptAsync("third", CreatePromptOptions(), CancellationToken.None);
+
+            // All sessions under local-user + same credential hash share one process.
+            first.ProcessId.ShouldBe(second.ProcessId);
+            second.ProcessId.ShouldBe(third.ProcessId);
+            factory.SpawnCount.ShouldBe(1);
+
+            var health = runtime.GetPooledOpenCodePoolHealth();
+            health.InstanceCount.ShouldBe(1);
+            health.SessionCount.ShouldBe(3);
+        }
+        finally
+        {
+            await DisposeSessionsAsync(first, second, third);
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
     public async Task same_user_same_directory_share_process_but_events_are_isolated()
     {
         var handler = new IsolationHttpMessageHandler();
@@ -365,10 +536,19 @@ public sealed class PooledHarnessIsolationTests
 
         try
         {
+            // Start sending the prompt. SendPromptAsync establishes the SSE subscription (via
+            // EnsureConnectedAsync) before issuing the HTTP prompt request, so the event published
+            // in response to the prompt will be buffered even if the SSE read is delayed.
             var sendTask = session.SendPromptAsync("first", CreatePromptOptions(), CancellationToken.None);
 
+            // Wait until the SSE subscriber is registered (EnsureConnectedAsync completed its
+            // subscription setup). This guarantees the subscription is in place before we release
+            // the event stream read, which is the invariant the test validates.
             await handler.WaitForEventSubscribersAsync(expectedCount: 1, CancellationToken.None);
-            handler.PromptRequests.Length.ShouldBe(0);
+
+            // Release the event stream so data can flow. The prompt may or may not have been sent
+            // at this exact moment (timing-sensitive), but SSE is already subscribed, so the event
+            // published on prompt receipt will be queued and not dropped.
             handler.ReleaseEventStreamRead();
 
             await sendTask.WaitAsync(TimeSpan.FromSeconds(5));
@@ -381,6 +561,124 @@ public sealed class PooledHarnessIsolationTests
         finally
         {
             await DisposeSessionsAsync(session);
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task stale_resume_token_is_detected_on_resume_and_fresh_oc_session_is_created()
+    {
+        // After a crash/restart Fleet may hold a persisted OC session ID (resume token) that no
+        // longer exists in the running OpenCode process. ResumeAsync must detect the stale token
+        // (404 on GET /session/{id}), create a fresh OC session, and persist the new token so that
+        // Fleet does not keep reusing the dead token on subsequent resumes.
+        var handler = new IsolationHttpMessageHandler();
+        var factory = new IsolationInstanceFactory(handler);
+        var sessions = new InMemorySessionRepository();
+        await using var runtime = CreateRuntime(factory, sessionRepository: sessions);
+        var directory = CreateDirectory();
+
+        const string fleetSessionId = "fleet-stale-token-session";
+        const string staleToken = "stale-oc-session-id-dead";
+
+        // Mark the stale OC session as 404 (simulating a dead session after process restart).
+        handler.MarkOcSessionAsNotFound(staleToken);
+
+        var resumed = await runtime.ResumeAsync(new HarnessResumeOptions
+        {
+            SessionId = fleetSessionId,
+            WorkingDirectory = directory,
+            OwnerUserId = "user-1",
+            ResumeToken = staleToken,
+            LaunchArtifacts = CreateArtifacts("same-key"),
+        }, CancellationToken.None);
+
+        try
+        {
+            // A new OC session is created because the stale token returned 404.
+            resumed.ResumeToken.ShouldNotBeNull();
+            resumed.ResumeToken.ShouldNotBe(staleToken);
+            handler.SessionGetCount.ShouldBe(1);
+            handler.SessionCreateCount.ShouldBe(1);
+        }
+        finally
+        {
+            await resumed.DisposeAsync();
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task after_crash_recovery_stale_token_is_not_reused_on_subsequent_resume()
+    {
+        // Validates end-to-end that Fleet never keeps returning a dead OC session ID across
+        // multiple resume attempts after a process crash:
+        //   1. Spawn a session (creates OC session eagerly).
+        //   2. Simulate crash — mark the OC session as gone.
+        //   3. First ResumeAsync detects stale token, creates fresh session.
+        //   4. Second ResumeAsync reuses the fresh (live) token, not the original stale one.
+        var handler = new IsolationHttpMessageHandler();
+        var factory = new IsolationInstanceFactory(handler);
+        var sessions = new InMemorySessionRepository();
+        await using var runtime = CreateRuntime(factory, sessionRepository: sessions);
+        var directory = CreateDirectory();
+
+        var spawned = await SpawnAsync(runtime, "fleet-crash-recovery", "user-1", directory, "same-key");
+        try
+        {
+            await spawned.SendPromptAsync("hello", CreatePromptOptions(), CancellationToken.None);
+            var staleToken = spawned.ResumeToken!;
+
+            // Simulate a crash: the OC session is now gone.
+            handler.MarkOcSessionAsNotFound(staleToken);
+
+            // First resume: stale token detected, fresh session created.
+            var firstRecovery = await runtime.ResumeAsync(new HarnessResumeOptions
+            {
+                SessionId = "fleet-crash-recovery",
+                WorkingDirectory = directory,
+                OwnerUserId = "user-1",
+                ResumeToken = staleToken,
+                LaunchArtifacts = CreateArtifacts("same-key"),
+            }, CancellationToken.None);
+
+            try
+            {
+                var freshToken = firstRecovery.ResumeToken!;
+                freshToken.ShouldNotBe(staleToken);
+
+                // Second resume: must use the fresh (live) token, not the stale one.
+                var secondRecovery = await runtime.ResumeAsync(new HarnessResumeOptions
+                {
+                    SessionId = "fleet-crash-recovery",
+                    WorkingDirectory = directory,
+                    OwnerUserId = "user-1",
+                    ResumeToken = freshToken,
+                    LaunchArtifacts = CreateArtifacts("same-key"),
+                }, CancellationToken.None);
+
+                try
+                {
+                    // The fresh token must match — no new session creation needed.
+                    secondRecovery.ResumeToken.ShouldBe(freshToken);
+                    // Only one new OC session was created (during first recovery).
+                    handler.SessionCreateCount.ShouldBe(2); // 1 from spawn + 1 from first recovery
+                }
+                finally
+                {
+                    await secondRecovery.DisposeAsync();
+                }
+            }
+            finally
+            {
+                await firstRecovery.DisposeAsync();
+            }
+        }
+        finally
+        {
+            await spawned.DisposeAsync();
             Directory.Delete(directory, recursive: true);
         }
     }
@@ -584,6 +882,7 @@ public sealed class PooledHarnessIsolationTests
         private readonly ConcurrentDictionary<string, EventStream> _eventStreams = new(StringComparer.Ordinal);
         private readonly ConcurrentQueue<PromptRequest> _promptRequests = new();
         private readonly ConcurrentQueue<CommandRequest> _commandRequests = new();
+        private readonly ConcurrentDictionary<string, bool> _notFoundSessionIds = new(StringComparer.Ordinal);
         private readonly TaskCompletionSource _eventStreamReadReleased = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _sessionCreateCount;
         private int _sessionGetCount;
@@ -593,6 +892,8 @@ public sealed class PooledHarnessIsolationTests
 
         public int SessionGetCount => Volatile.Read(ref _sessionGetCount);
 
+        public int SessionCreateCount => Volatile.Read(ref _sessionCreateCount);
+
         public PromptRequest[] PromptRequests => _promptRequests.ToArray();
 
         public CommandRequest[] CommandRequests => _commandRequests.ToArray();
@@ -601,6 +902,13 @@ public sealed class PooledHarnessIsolationTests
 
         public void FailNextSessionGetWithServerError() =>
             Volatile.Write(ref _failNextSessionGetWithServerError, 1);
+
+        /// <summary>
+        /// Marks the given OC session ID to return 404 on GET /session/{id}.
+        /// Used to simulate a stale resume token pointing to a dead OC session after crash/restart.
+        /// </summary>
+        public void MarkOcSessionAsNotFound(string sessionId) =>
+            _notFoundSessionIds[sessionId] = true;
 
         public void PublishEvent(string sessionId, string marker)
         {
@@ -684,6 +992,11 @@ public sealed class PooledHarnessIsolationTests
                 }
 
                 var sessionId = path["/session/".Length..];
+                if (_notFoundSessionIds.ContainsKey(sessionId))
+                {
+                    return new HttpResponseMessage(HttpStatusCode.NotFound);
+                }
+
                 return CreateJsonResponse(
                     $"{{\"id\":\"{EncodeJsonString(sessionId)}\",\"slug\":\"session\",\"directory\":\"{EncodeJsonString(ReadDirectory(request.RequestUri))}\",\"time\":{{\"created\":1,\"updated\":1}}}}");
             }

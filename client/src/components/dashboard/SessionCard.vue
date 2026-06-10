@@ -38,8 +38,11 @@ const instanceId = computed(() => props.session.instanceId);
 const displayTitle = computed(() => props.session.session.title?.trim() || "Untitled session");
 const isArchived = computed(() => props.session.retentionStatus === "archived");
 const isRunning = computed(() => props.session.lifecycleStatus === "running");
-const canArchive = computed(() => !isArchived.value && !isRunning.value);
-const canTerminate = computed(() => isRunning.value);
+const fallbackCanArchive = computed(() => !isArchived.value && !isRunning.value);
+const fallbackCanTerminate = computed(() => isRunning.value);
+const canArchive = computed(() => props.session.capabilities?.canArchive ?? fallbackCanArchive.value);
+const canTerminate = computed(() => props.session.capabilities?.canStop ?? fallbackCanTerminate.value);
+const canDelete = computed(() => props.session.capabilities?.canDelete ?? true);
 const isPending = computed(() => {
   return isArchiving.value || isDeleting.value || isTerminating.value;
 });
@@ -75,6 +78,10 @@ function handleSelect(): void {
 }
 
 async function handleArchive(): Promise<void> {
+  if (!canArchive.value) {
+    return;
+  }
+
   try {
     await archiveSession(sessionId.value);
     sessionsStore.patchSession(sessionId.value, { retentionStatus: "archived" });
@@ -85,6 +92,10 @@ async function handleArchive(): Promise<void> {
 }
 
 async function handleTerminate(): Promise<void> {
+  if (!canTerminate.value) {
+    return;
+  }
+
   try {
     await terminateSession(sessionId.value, instanceId.value);
     sessionsStore.patchSession(sessionId.value, {
@@ -99,6 +110,10 @@ async function handleTerminate(): Promise<void> {
 }
 
 async function handleDelete(): Promise<void> {
+  if (!canDelete.value) {
+    return;
+  }
+
   try {
     await deleteSession(sessionId.value, instanceId.value);
     isDeleteDialogOpen.value = false;
@@ -112,6 +127,10 @@ async function handleDelete(): Promise<void> {
 }
 
 function openDeleteDialog(): void {
+  if (!canDelete.value) {
+    return;
+  }
+
   isDeleteDialogOpen.value = true;
 }
 </script>
@@ -184,6 +203,7 @@ function openDeleteDialog(): void {
           </Button>
 
           <Button
+            v-if="canDelete"
             data-testid="session-delete-button"
             variant="outline"
             size="icon-sm"

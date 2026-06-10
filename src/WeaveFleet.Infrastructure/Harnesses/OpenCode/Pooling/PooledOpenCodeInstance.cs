@@ -5,7 +5,8 @@ using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 
 /// <summary>
-/// Shared OpenCode process state for all leases in one credential-hash bucket.
+/// Shared OpenCode process state for all leases in one composite pool partition
+/// (owner identity + credential environment hash).
 /// </summary>
 internal sealed class PooledOpenCodeInstance : IAsyncDisposable
 {

@@ -94,6 +94,109 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task create_session_async_persists_harness_resume_token_from_session_at_insert()
+    {
+        // Arrange: the harness returns a session with a non-null ResumeToken (simulating a
+        // pooled/automatic session where the OC session is created eagerly before Fleet DB insert).
+        ConfigureHarnessAndScratchProject();
+        _defaultSession.ResumeToken = "oc-session-eager-123";
+        using var tempDirectory = new TempDirectory();
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            Title = "Eager token session"
+        });
+
+        result.IsSuccess.ShouldBeTrue();
+        // HarnessResumeToken must be set on the session row at initial insert, not lazily.
+        _builder.SessionRepository.InsertedSessions
+            .ShouldContain(s => s.HarnessResumeToken == "oc-session-eager-123");
+        result.Value.Session.HarnessResumeToken.ShouldBe("oc-session-eager-123");
+    }
+
+    [Fact]
+    public async Task create_session_async_when_spawn_returns_null_resume_token_persists_null_harness_resume_token()
+    {
+        // Non-pooled sessions: the harness does not create an OC session at spawn time,
+        // so ResumeToken is null. HarnessResumeToken on the Fleet session row must also be null.
+        ConfigureHarnessAndScratchProject();
+        _defaultSession.ResumeToken = null;
+        using var tempDirectory = new TempDirectory();
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            Title = "Non-pooled session"
+        });
+
+        result.IsSuccess.ShouldBeTrue();
+        _builder.SessionRepository.InsertedSessions
+            .ShouldContain(s => s.HarnessResumeToken == null);
+    }
+
+    [Fact]
+    public async Task create_session_async_when_directory_outside_allowed_roots_rejects_before_spawn()
+    {
+        // Directory authorization must fail before any pool lease or OC session is created.
+        ConfigureHarnessAndScratchProject();
+        var spawnCalled = false;
+        var runtime = _builder.HarnessRegistry.GetRuntimeByType("opencode").ShouldBeOfType<FakeHarnessRuntime>();
+        runtime.SpawnBehavior = (_, _) =>
+        {
+            spawnCalled = true;
+            return Task.FromResult<IHarnessSession>(_defaultSession);
+        };
+
+        // Use a directory that exists but is outside the seeded workspace roots.
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = "/nonexistent-out-of-root-path/xyz"
+        });
+
+        result.IsFailure.ShouldBeTrue();
+        // Spawn must not have been called — directory rejection happens before lease/OC session creation.
+        spawnCalled.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task create_session_async_when_session_db_insert_fails_deletes_harness_session_and_does_not_persist_token()
+    {
+        // Verifies the rollback path: when the Fleet session row insert fails after the harness
+        // session (and OC session) have been created, the orchestrator must:
+        //   (a) call DeleteAsync on the harness session (best-effort OC session delete + lease release)
+        //   (b) deregister the in-memory handle from InstanceTracker
+        //   (c) not persist the resume token (exception is re-thrown, no DB row exists)
+        ConfigureHarnessAndScratchProject();
+        var deleteCalled = false;
+        await using var spawnedSession = new FakeHarnessSession("inst-db-fail") { ResumeToken = "oc-session-eager-rollback" };
+        spawnedSession.DeleteBehavior = _ =>
+        {
+            deleteCalled = true;
+            return Task.CompletedTask;
+        };
+        var runtime = _builder.HarnessRegistry.GetRuntimeByType("opencode").ShouldBeOfType<FakeHarnessRuntime>();
+        runtime.DefaultSession = spawnedSession;
+
+        // Configure the repository to throw on insert.
+        _builder.SessionRepository.InsertBehavior = _ => throw new InvalidOperationException("DB insert failed");
+
+        using var tempDirectory = new TempDirectory();
+        await Should.ThrowAsync<InvalidOperationException>(() => _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            Title = "Session that fails to persist"
+        }));
+
+        // (a) DeleteAsync must have been called on the harness session.
+        deleteCalled.ShouldBeTrue();
+        // (b) The instance must NOT be in the tracker after the rollback.
+        _builder.InstanceTracker.Get("inst-db-fail").ShouldBeNull();
+        // (c) No session row must have been persisted.
+        _builder.SessionRepository.InsertedSessions.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task create_session_async_when_git_baseline_is_captured_persists_ref_and_repo_root()
     {
         var runner = new RecordingGitRunner(
@@ -373,18 +476,175 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task PromptSessionAsync_WhenInstanceNotTracked_ReturnsFailure()
+    public async Task prompt_session_async_when_manual_instance_not_tracked_returns_failure()
     {
         _builder.SessionRepository.Seed(new Session
         {
-            Id = "s1", InstanceId = "inst-99", Title = "T", Status = "active",
-            Directory = "/tmp", CreatedAt = "2026-01-01"
+            Id = "s1", InstanceId = "inst-99", Title = "T", Status = "stopped",
+            Directory = "/tmp", CreatedAt = "2026-01-01", RuntimeMode = "manual"
         });
 
         var result = await _sut.PromptSessionAsync("s1", "hello");
 
         result.IsFailure.ShouldBeTrue();
         result.Error.Description.ShouldContain("Instance");
+    }
+
+    [Fact]
+    public async Task prompt_session_async_when_automatic_instance_not_tracked_resumes_and_sends_prompt()
+    {
+        var runtime = _builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = true });
+        await using var resumedSession = new FakeHarnessSession("inst-resumed");
+        runtime.DefaultSession = resumedSession;
+        _builder.WorkspaceRepository.Seed(new Workspace
+        {
+            Id = "workspace-1",
+            Directory = "/tmp/auto-session",
+            IsolationStrategy = "existing",
+            CreatedAt = "2026-01-01",
+            UserId = "user-1"
+        });
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s-auto",
+            WorkspaceId = "workspace-1",
+            InstanceId = "inst-stopped",
+            Title = "Automatic",
+            Status = "stopped",
+            Directory = "/tmp/auto-session",
+            CreatedAt = "2026-01-01",
+            RetentionStatus = "active",
+            HarnessType = "opencode",
+            RuntimeMode = "automatic",
+            HarnessResumeToken = "resume-token-1",
+            UserId = "user-1"
+        });
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.PromptSessionAsync("s-auto", "hello");
+
+        result.IsSuccess.ShouldBeTrue();
+        runtime.ResumeCalls.Count.ShouldBe(1);
+        runtime.ResumeCalls[0].SessionId.ShouldBe("s-auto");
+        runtime.ResumeCalls[0].ResumeToken.ShouldBe("resume-token-1");
+        resumedSession.SendPromptCalls.Count.ShouldBe(1);
+        resumedSession.SendPromptCalls[0].Text.ShouldBe("hello");
+        _tracker.Get("inst-resumed").ShouldBeSameAs(resumedSession);
+        var stored = await _builder.SessionRepository.GetByIdAsync("s-auto");
+        stored.ShouldNotBeNull();
+        stored.InstanceId.ShouldBe("inst-resumed");
+        stored.LifecycleStatus.ShouldBe("running");
+        _builder.EventBroadcaster.Broadcasts.ShouldContain(record =>
+            record.Topic == "session:s-auto"
+            && record.Type == "session.status"
+            && record.Payload.GetProperty("lifecycleStatus").GetString() == "running"
+            && record.Payload.GetProperty("capabilities").GetProperty("canPrompt").GetBoolean());
+        _builder.EventBroadcaster.Broadcasts.ShouldContain(record =>
+            record.Topic == "sessions"
+            && record.Type == "activity_status"
+            && record.Payload.GetProperty("sessionId").GetString() == "s-auto"
+            && record.Payload.GetProperty("capabilities").GetProperty("canPrompt").GetBoolean());
+    }
+
+    [Fact]
+    public async Task prompt_session_async_when_automatic_activation_is_concurrent_resumes_once_and_both_prompts_succeed()
+    {
+        var runtime = _builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = true });
+        await using var resumedSession = new FakeHarnessSession("inst-concurrent-resumed");
+        var firstResumeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirstResume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        runtime.ResumeBehavior = async (_, ct) =>
+        {
+            firstResumeStarted.SetResult();
+            await releaseFirstResume.Task.WaitAsync(ct);
+            return resumedSession;
+        };
+        _builder.WorkspaceRepository.Seed(new Workspace
+        {
+            Id = "workspace-concurrent",
+            Directory = "/tmp/auto-concurrent-session",
+            IsolationStrategy = "existing",
+            CreatedAt = "2026-01-01",
+            UserId = "user-1"
+        });
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s-auto-concurrent",
+            WorkspaceId = "workspace-concurrent",
+            InstanceId = "inst-concurrent-stopped",
+            Title = "Automatic Concurrent",
+            Status = "stopped",
+            Directory = "/tmp/auto-concurrent-session",
+            CreatedAt = "2026-01-01",
+            RetentionStatus = "active",
+            HarnessType = "opencode",
+            RuntimeMode = "automatic",
+            HarnessResumeToken = "resume-token-concurrent",
+            UserId = "user-1"
+        });
+        var sut = BuildSutWithTracker();
+
+        var firstPrompt = sut.PromptSessionAsync("s-auto-concurrent", "first");
+        await firstResumeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var secondPrompt = sut.PromptSessionAsync("s-auto-concurrent", "second");
+
+        releaseFirstResume.SetResult();
+        var results = await Task.WhenAll(firstPrompt, secondPrompt);
+
+        results.All(result => result.IsSuccess).ShouldBeTrue();
+        runtime.ResumeCalls.Count.ShouldBe(1);
+        resumedSession.SendPromptCalls.Count.ShouldBe(2);
+        resumedSession.SendPromptCalls.Select(call => call.Text).ShouldBe(["first", "second"], ignoreOrder: true);
+        _tracker.Get("inst-concurrent-resumed").ShouldBeSameAs(resumedSession);
+        var stored = await _builder.SessionRepository.GetByIdAsync("s-auto-concurrent");
+        stored.ShouldNotBeNull();
+        stored.InstanceId.ShouldBe("inst-concurrent-resumed");
+        stored.LifecycleStatus.ShouldBe("running");
+    }
+
+    [Fact]
+    public async Task prompt_session_async_when_automatic_activation_fails_sets_lifecycle_error_and_broadcasts_status()
+    {
+        var runtime = _builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = true });
+        runtime.ResumeBehavior = (_, _) => throw new InvalidOperationException("crash loop");
+        _builder.WorkspaceRepository.Seed(new Workspace
+        {
+            Id = "workspace-error",
+            Directory = "/tmp/auto-error-session",
+            IsolationStrategy = "existing",
+            CreatedAt = "2026-01-01",
+            UserId = "user-1"
+        });
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s-auto-error",
+            WorkspaceId = "workspace-error",
+            InstanceId = "inst-error-stopped",
+            Title = "Automatic Error",
+            Status = "stopped",
+            Directory = "/tmp/auto-error-session",
+            CreatedAt = "2026-01-01",
+            RetentionStatus = "active",
+            HarnessType = "opencode",
+            RuntimeMode = "automatic",
+            HarnessResumeToken = "resume-token-error",
+            UserId = "user-1"
+        });
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.PromptSessionAsync("s-auto-error", "hello");
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe("Session.ActivationFailed");
+        result.Error.Description.ShouldBe("Automatic session activation failed: crash loop");
+        var stored = await _builder.SessionRepository.GetByIdAsync("s-auto-error");
+        stored.ShouldNotBeNull();
+        stored.LifecycleStatus.ShouldBe("error");
+        _builder.EventBroadcaster.Broadcasts.ShouldContain(record =>
+            record.Topic == "session:s-auto-error"
+            && record.Type == "session.status"
+            && record.Payload.GetProperty("lifecycleStatus").GetString() == "error"
+            && !record.Payload.GetProperty("capabilities").GetProperty("canPrompt").GetBoolean());
     }
 
     [Fact]
@@ -511,6 +771,59 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         var messages = await _builder.MessageRepository.GetBySessionAsync("s1", 10, null);
         messages.Count.ShouldBe(1);
         messages[0].Role.ShouldBe("user");
+        messages[0].PartsJson.ShouldContain("start-work");
+    }
+
+    [Fact]
+    public async Task command_session_async_when_automatic_instance_not_tracked_resumes_and_sends_command()
+    {
+        var runtime = _builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = true });
+        await using var resumedSession = new FakeHarnessSession("inst-command-resumed");
+        runtime.DefaultSession = resumedSession;
+        _builder.WorkspaceRepository.Seed(new Workspace
+        {
+            Id = "workspace-command",
+            Directory = "/tmp/auto-command-session",
+            IsolationStrategy = "existing",
+            CreatedAt = "2026-01-01",
+            UserId = "user-1"
+        });
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s-auto-command",
+            WorkspaceId = "workspace-command",
+            InstanceId = "inst-command-stopped",
+            Title = "Automatic Command",
+            Status = "stopped",
+            Directory = "/tmp/auto-command-session",
+            CreatedAt = "2026-01-01",
+            RetentionStatus = "active",
+            HarnessType = "opencode",
+            RuntimeMode = "automatic",
+            HarnessResumeToken = "command-resume-token",
+            UserId = "user-1"
+        });
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.CommandSessionAsync("s-auto-command", new CommandOptions
+        {
+            Command = "start-work",
+            Arguments = "now"
+        });
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        runtime.ResumeCalls.Count.ShouldBe(1);
+        runtime.ResumeCalls[0].SessionId.ShouldBe("s-auto-command");
+        runtime.ResumeCalls[0].ResumeToken.ShouldBe("command-resume-token");
+        resumedSession.SendCommandCalls.Count.ShouldBe(1);
+        resumedSession.SendCommandCalls[0].Command.ShouldBe("start-work");
+        resumedSession.SendCommandCalls[0].Arguments.ShouldBe("now");
+        _tracker.Get("inst-command-resumed").ShouldBeSameAs(resumedSession);
+        var stored = await _builder.SessionRepository.GetByIdAsync("s-auto-command");
+        stored.ShouldNotBeNull();
+        stored.InstanceId.ShouldBe("inst-command-resumed");
+        var messages = await _builder.MessageRepository.GetBySessionAsync("s-auto-command", 10, null);
+        messages.Count.ShouldBe(1);
         messages[0].PartsJson.ShouldContain("start-work");
     }
 

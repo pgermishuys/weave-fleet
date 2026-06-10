@@ -25,6 +25,7 @@ public static class SessionEndpoints
             ISessionSourceUsageRepository sessionSourceUsageRepository,
             IProjectRepository projectRepository,
             SessionActivityTracker activityTracker,
+            SessionCapabilitiesResolver capabilitiesResolver,
             int limit = 100,
             int offset = 0,
             string? status = null,
@@ -47,7 +48,7 @@ public static class SessionEndpoints
                     var originsBySessionId = await sessionSourceUsageRepository.GetPrimaryBySessionIdsAsync(
                         sessions.Select(session => session.Id).ToArray());
 
-                    return Results.Ok(sessions.Select(session => ToListResponse(session, parentIdsWithBusyChildren, projectNamesById, originsBySessionId, activityTracker)).ToList());
+                    return Results.Ok(sessions.Select(session => ToListResponse(session, parentIdsWithBusyChildren, projectNamesById, originsBySessionId, activityTracker, capabilitiesResolver)).ToList());
                 },
                 error => Task.FromResult(Results.Problem(error.Description) as IResult));
         })
@@ -60,7 +61,8 @@ public static class SessionEndpoints
             SessionService sessionService,
             IWorkspaceRepository workspaceRepository,
             ISessionSourceUsageRepository sessionSourceUsageRepository,
-            SessionActivityTracker activityTracker) =>
+            SessionActivityTracker activityTracker,
+            SessionCapabilitiesResolver capabilitiesResolver) =>
         {
             var result = await sessionService.GetSessionAsync(id);
             return await result.Match<Task<IResult>>(
@@ -91,7 +93,8 @@ public static class SessionEndpoints
                         TotalCost: session.TotalCost > 0 ? session.TotalCost : null,
                         HarnessType: session.HarnessType,
                         ProjectId: session.ProjectId,
-                        Origin: primaryOrigin is not null ? ToOriginDto(primaryOrigin) : null));
+                        Origin: primaryOrigin is not null ? ToOriginDto(primaryOrigin) : null,
+                        Capabilities: capabilitiesResolver.Resolve(session)));
                 },
                 error => Task.FromResult(error.ToSessionApiResult()));
         })
@@ -230,8 +233,22 @@ public static class SessionEndpoints
         .WithName("RejectQuestion");
 
         // POST /api/sessions/{id}/resume
-        group.MapPost("/{id}/resume", async (string id, SessionOrchestrator orchestrator) =>
+        group.MapPost("/{id}/resume", async (
+            string id,
+            SessionOrchestrator orchestrator,
+            SessionService sessionService,
+            SessionCapabilitiesResolver capabilitiesResolver) =>
         {
+            var guardResult = await GuardSessionCapabilityAsync(
+                id,
+                sessionService,
+                capabilitiesResolver,
+                capabilities => capabilities.CanResume,
+                capabilities => capabilities.ResumeDisabledReason,
+                "Session cannot be resumed.");
+            if (guardResult is not null)
+                return guardResult;
+
             var result = await orchestrator.ResumeSessionAsync(id);
             return result.Match(
                 session => Results.Ok(new ResumeSessionApiResponse(
@@ -242,8 +259,21 @@ public static class SessionEndpoints
         .WithName("ResumeSession");
 
         // POST /api/sessions/{id}/stop
-        group.MapPost("/{id}/stop", async (string id, SessionService sessionService) =>
+        group.MapPost("/{id}/stop", async (
+            string id,
+            SessionService sessionService,
+            SessionCapabilitiesResolver capabilitiesResolver) =>
         {
+            var guardResult = await GuardSessionCapabilityAsync(
+                id,
+                sessionService,
+                capabilitiesResolver,
+                capabilities => capabilities.CanStop,
+                capabilities => capabilities.StopDisabledReason,
+                "Session cannot be stopped.");
+            if (guardResult is not null)
+                return guardResult;
+
             var result = await sessionService.StopSessionAsync(id);
             return result.ToNoContentResult();
         })
@@ -453,7 +483,8 @@ public static class SessionEndpoints
         HashSet<string> parentIdsWithBusyChildren,
         Dictionary<string, string> projectNamesById,
         IReadOnlyDictionary<string, SessionSourceUsage> originsBySessionId,
-        SessionActivityTracker activityTracker)
+        SessionActivityTracker activityTracker,
+        SessionCapabilitiesResolver capabilitiesResolver)
     {
         // Parse created_at to Unix ms for the frontend
         var createdMs = TryParseUnixMs(s.CreatedAt);
@@ -496,7 +527,8 @@ public static class SessionEndpoints
             ProjectName: s.ProjectId is not null && projectNamesById.TryGetValue(s.ProjectId, out var projectName)
                 ? projectName
                 : null,
-            HarnessType: s.HarnessType)
+            HarnessType: s.HarnessType,
+            Capabilities: capabilitiesResolver.Resolve(s))
         {
             Origin = origin
         };
@@ -520,6 +552,25 @@ public static class SessionEndpoints
             ActionId: usage.ActionId,
             Summary: usage.Summary,
             CreatedAt: usage.CreatedAt);
+
+    private static async Task<IResult?> GuardSessionCapabilityAsync(
+        string id,
+        SessionService sessionService,
+        SessionCapabilitiesResolver capabilitiesResolver,
+        Func<WeaveFleet.Domain.DTOs.SessionActionCapabilities, bool> isAllowed,
+        Func<WeaveFleet.Domain.DTOs.SessionActionCapabilities, string?> getDisabledReason,
+        string fallbackDisabledReason)
+    {
+        var sessionResult = await sessionService.GetSessionAsync(id);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error.ToSessionApiResult();
+
+        var capabilities = capabilitiesResolver.Resolve(sessionResult.Value);
+        if (isAllowed(capabilities))
+            return null;
+
+        return Results.Conflict(new ErrorResponse(getDisabledReason(capabilities) ?? fallbackDisabledReason));
+    }
 
     private static string DeriveSessionStatus(Session s) =>
         s.Status switch
@@ -629,7 +680,8 @@ public static class SessionEndpoints
         Session s,
         HashSet<string> parentIdsWithBusyChildren,
         Dictionary<string, string> projectNamesById,
-        SessionActivityTracker activityTracker)
+        SessionActivityTracker activityTracker,
+        SessionCapabilitiesResolver capabilitiesResolver)
     {
         var createdMs = TryParseUnixMs(s.CreatedAt);
         var updatedMs = createdMs;
@@ -664,7 +716,8 @@ public static class SessionEndpoints
             ProjectName: s.ProjectId is not null && projectNamesById.TryGetValue(s.ProjectId, out var projectName)
                 ? projectName
                 : null,
-            HarnessType: s.HarnessType);
+            HarnessType: s.HarnessType,
+            Capabilities: capabilitiesResolver.Resolve(s));
     }
 
     private static async Task<ModelResolutionResult> ResolveSessionModelAsync(

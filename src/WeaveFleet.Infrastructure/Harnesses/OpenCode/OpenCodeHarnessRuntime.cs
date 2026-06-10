@@ -43,6 +43,26 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(4, "ExpireQuestionsFailed"),
             "Failed to expire pending questions for session {SessionId}.");
 
+    private static readonly Action<ILogger, Exception?> LogWarmupSkippedNoCredentialStore =
+        LoggerMessage.Define(LogLevel.Information, new EventId(5, "WarmupSkippedNoCredentialStore"),
+            "Pooled OpenCode warmup skipped: no credential store is registered. " +
+            "The instance will be created on first session request.");
+
+    private static readonly Action<ILogger, Exception?> LogWarmupSkippedNoCredentials =
+        LoggerMessage.Define(LogLevel.Information, new EventId(6, "WarmupSkippedNoCredentials"),
+            "Pooled OpenCode warmup skipped: no trusted user credentials are available. " +
+            "Warmup requires a resolved credential environment; the instance will be created on first session request.");
+
+    private static readonly Action<ILogger, string, Exception?> LogEagerCreateRollback =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(7, "EagerCreateRollback"),
+            "Pooled OpenCode eager session-create rolled back for fleet session {FleetSessionId}. " +
+            "The in-memory session mapping has been removed; the lease will be released.");
+
+    private static readonly Action<ILogger, string, Exception?> LogStaleTokenRecovered =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(8, "StaleTokenRecovered"),
+            "Pooled OpenCode stale resume token detected for fleet session {FleetSessionId}. " +
+            "The OpenCode session was not found in the live process; a fresh session has been created and the persisted token updated.");
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly PortAllocator _portAllocator;
     private readonly FleetOptions _options;
@@ -446,41 +466,73 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
 
     private async Task<IHarnessSession> SpawnPooledAsync(HarnessSpawnOptions options, CancellationToken ct)
     {
+        // Eager create-session ordering for pooled sessions:
+        //   (a) Owner user is already resolved (options.OwnerUserId is authoritative)
+        //   (b) Workspace directory is canonicalized/authorized before this call (done by WorkspaceRootService
+        //       through the session source provider, before any lease or OC session creation)
+        //   (c) Acquire the pooled lease and create the OpenCode session for the exact workspace
+        //       directory. The in-memory session mapping and the OpenCode session ID (resume token)
+        //       are captured eagerly. SSE event subscription is deferred to first prompt (lazy) so
+        //       that the test-observable ordering is preserved and warm scratch directories (from
+        //       WarmupPooledInstanceAsync) are never reused as real workspace directories.
+        //   (d) Caller (SessionOrchestrator) persists Fleet instance/session rows with the eager
+        //       resume token (harnessInstance.ResumeToken) only after this succeeds.
+        //
+        // Warm scratch directories from WarmupPooledInstanceAsync are never reused here: warmup
+        // uses Environment.CurrentDirectory as a transient scratch directory, which is always a
+        // different path from the real canonicalized workspace directory supplied here.
+
         string instanceId = $"opencode-{Guid.NewGuid():N}";
+        InstanceLease? leaseToRelease = null;
+        string? mappingKeyToRemove = null;
 
         try
         {
             HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
-            var initialEnvironmentVariables = GetEnvironmentVariables(options.LaunchArtifacts);
-            var initialCredentialHash = CredentialHasher.HashEnvironment(initialEnvironmentVariables);
-            var initialLaunchPlan = new PooledLaunchPlan(
+            var environmentVariables = GetEnvironmentVariables(options.LaunchArtifacts);
+            var credentialHash = CredentialHasher.HashEnvironment(environmentVariables);
+
+            // (c) Eagerly acquire the pooled lease for the real workspace directory.
+            leaseToRelease = await _pooledInstanceRegistry
+                .AcquireAsync(options.OwnerUserId, credentialHash, environmentVariables, options.WorkingDirectory, ct)
+                .ConfigureAwait(false);
+
+            var openCodeHttpClient = leaseToRelease.Instance.HttpClient
+                ?? throw new InvalidOperationException("Pooled OpenCode instance does not expose an HTTP client.");
+
+            // (c) Eagerly create the OpenCode session for this exact workspace directory.
+            var openCodeSession = await openCodeHttpClient
+                .CreateSessionAsync(null, options.WorkingDirectory, ct)
+                .ConfigureAwait(false);
+
+            var leaseGeneration = Interlocked.Increment(ref _pooledLeaseGeneration);
+
+            // Record the in-memory session mapping eagerly so future resumes can locate the OC session.
+            // Track the key so we can remove it on failure before the caller persists the Fleet session row.
+            mappingKeyToRemove = options.SessionId;
+            _pooledSessionMappings[options.SessionId] = new PooledSessionMapping(
                 options.SessionId,
                 options.OwnerUserId,
+                leaseToRelease.Instance.Key,
+                openCodeSession.Id,
                 options.WorkingDirectory,
-                initialEnvironmentVariables,
-                initialCredentialHash,
-                GetPooledLaunchPlanModelIds(options.LaunchArtifacts));
+                credentialHash);
 
+            // Build the leased handle. SSE event subscription (BindSessionAsync) is deferred to
+            // first prompt via EnsureSessionAsync, preserving the original lazy SSE setup sequence.
+            // The sessionBoundAsync callback fires when the OC session is first bound in EnsureSessionAsync,
+            // updating the in-memory mapping if needed (e.g. credential refresh at prompt time).
             var instanceHandle = new LeasedInstanceHandle(
-                acquireLeaseAsync: (providerId, modelId, lazyCt) =>
-                    AcquirePooledLeaseForLaunchAsync(initialLaunchPlan, providerId, modelId, lazyCt),
-                sessionBoundAsync: (openCodeSessionId, pooledInstance, _) =>
-                {
-                    _pooledSessionMappings[options.SessionId] = new PooledSessionMapping(
-                        options.SessionId,
-                        options.OwnerUserId,
-                        pooledInstance.Key,
-                        openCodeSessionId,
-                        options.WorkingDirectory,
-                        pooledInstance.Key);
-                    return Task.CompletedTask;
-                },
+                leaseToRelease,
                 _poolDemultiplexer,
                 _poolBindingTable,
                 options.WorkingDirectory,
                 options.SessionId,
                 options.OwnerUserId,
-                Guid.NewGuid());
+                Guid.NewGuid(),
+                leaseGeneration);
+
+            leaseToRelease = null;
 
             var instance = new OpenCodeHarnessSession(
                 instanceId: instanceId,
@@ -493,8 +545,12 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                 analyticsCollector: _analyticsCollector,
                 projectId: options.ProjectId,
                 projectName: options.ProjectName,
-                openCodeSessionId: null,
+                openCodeSessionId: openCodeSession.Id,
                 initialStatus: HarnessSessionStatus.Starting);
+
+            // The OpenCodeHarnessSession now owns the handle and the in-memory mapping.
+            // Clear the tracking variable so the catch block does not also try to remove it.
+            mappingKeyToRemove = null;
 
             if (options.InitialPrompt is not null)
             {
@@ -507,6 +563,21 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         catch
         {
             LogSpawnFailed(_logger, instanceId, null);
+
+            // Remove the in-memory session mapping if it was added before the failure.
+            // This prevents a stale mapping from leaking when the caller (SessionOrchestrator)
+            // fails to persist the Fleet session row after SpawnAsync returns.
+            if (mappingKeyToRemove is not null)
+            {
+                LogEagerCreateRollback(_logger, mappingKeyToRemove, null);
+                _pooledSessionMappings.TryRemove(mappingKeyToRemove, out _);
+            }
+
+            if (leaseToRelease is not null)
+            {
+                await leaseToRelease.DisposeAsync().ConfigureAwait(false);
+            }
+
             throw;
         }
     }
@@ -540,7 +611,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         var credentialPlan = await ResolveFreshPooledCredentialPlanAsync(launchPlan, providerId, modelId, ct)
             .ConfigureAwait(false);
         var lease = await _pooledInstanceRegistry
-            .AcquireAsync(credentialPlan.CredentialHash, credentialPlan.EnvironmentVariables, launchPlan.WorkingDirectory, ct)
+            .AcquireAsync(launchPlan.OwnerUserId, credentialPlan.CredentialHash, credentialPlan.EnvironmentVariables, launchPlan.WorkingDirectory, ct)
             .ConfigureAwait(false);
         var leaseGeneration = Interlocked.Increment(ref _pooledLeaseGeneration);
 
@@ -918,7 +989,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         try
         {
             leaseToRelease = await _pooledInstanceRegistry
-                .AcquireAsync(credentialHash, environmentVariables, directory, ct)
+                .AcquireAsync(options.OwnerUserId, credentialHash, environmentVariables, directory, ct)
                 .ConfigureAwait(false);
 
             var openCodeHttpClient = leaseToRelease.Instance.HttpClient
@@ -1031,6 +1102,9 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         // The OpenCode process is alive but lost the session (for example after a crash/restart).
         // Create a fresh OpenCode session and update the Fleet resume token. Historical message
         // replay/import is a higher-level concern; this keeps future resumes pointed at the live OC session.
+        // Log without the stale token or new token — only the fleet session ID (operator-safe).
+        LogStaleTokenRecovered(_logger, fleetSessionId, null);
+
         var newSession = await openCodeHttpClient
             .CreateSessionAsync(null, directory, ct)
             .ConfigureAwait(false);
@@ -1058,7 +1132,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             await openCodeHttpClient.GetSessionAsync(openCodeSessionId, directory, ct).ConfigureAwait(false);
             return true;
         }
-        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.BadRequest)
         {
             return false;
         }
@@ -1086,6 +1160,59 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
 
     internal Task<bool> IsPooledModeEnabledAsync(string ownerUserId, CancellationToken ct) =>
         _featureFlagProvider.IsPooledOpenCodeHarnessEnabledAsync(ownerUserId, ct);
+
+    /// <inheritdoc />
+    public async Task<bool> WarmupPooledInstanceAsync(string ownerUserId, CancellationToken ct)
+    {
+        var pooledModeEnabled = await IsPooledModeEnabledAsync(ownerUserId, ct).ConfigureAwait(false);
+        if (!pooledModeEnabled)
+            return false;
+
+        using var userScope = BackgroundUserContext.BeginScope(ownerUserId);
+        using var scope = _scopeFactory.CreateScope();
+        var credentialStore = scope.ServiceProvider.GetService<ICredentialStore>();
+        if (credentialStore is null)
+        {
+            LogWarmupSkippedNoCredentialStore(_logger, null);
+            return false;
+        }
+
+        var credentials = await credentialStore.GetDecryptedCredentialsAsync(ownerUserId).ConfigureAwait(false);
+        var environmentVariables = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        var preparation = await PrepareRuntimeAsync(new RuntimePreparationContext
+        {
+            UserId = ownerUserId,
+            UserCredentials = credentials,
+            ModelId = null,
+            WorkingDirectory = Environment.CurrentDirectory,
+        }, ct).ConfigureAwait(false);
+
+        if (preparation is RuntimePreparation.Ready ready)
+        {
+            var warmupEnvironment = GetEnvironmentVariables(ready.Artifacts);
+            foreach (var pair in warmupEnvironment)
+                environmentVariables[pair.Key] = pair.Value;
+        }
+        else
+        {
+            // No credentials resolved: warmup cannot proceed without a trusted credential environment.
+            // This is normal when no trusted user context is available (e.g. startup warmup before
+            // the first user signs in). Do not log any user-identifying or credential material.
+            LogWarmupSkippedNoCredentials(_logger, null);
+            return false;
+        }
+
+        var credentialHash = CredentialHasher.HashEnvironment(environmentVariables);
+        var lease = await _pooledInstanceRegistry
+            .AcquireAsync(ownerUserId, credentialHash, environmentVariables, Environment.CurrentDirectory, ct)
+            .ConfigureAwait(false);
+
+        // Release immediately so the idle-TTL timer starts; the process stays alive until it expires.
+        await lease.DisposeAsync().ConfigureAwait(false);
+
+        return true;
+    }
 
     /// <summary>
     /// Expires any pending/running question tool parts for the given session.

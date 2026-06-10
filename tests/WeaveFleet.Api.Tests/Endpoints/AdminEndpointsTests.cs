@@ -27,7 +27,9 @@ public sealed class AdminEndpointsTests
                     new OpenCodePoolHealthStatus(
                         1,
                         2,
-                        [new OpenCodePoolInstanceHealth("instance-1", 2, 1234, true, false, false)])));
+                        WarmCount: 0,
+                        ActiveCount: 1,
+                        [new OpenCodePoolInstanceHealth("instance-1", 2, 1234, true, false, false, "abc123def456", IsWarm: false)])));
             });
         using var client = factory.CreateClient();
 
@@ -37,11 +39,15 @@ public sealed class AdminEndpointsTests
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
         body.GetProperty("instanceCount").GetInt32().ShouldBe(1);
         body.GetProperty("sessionCount").GetInt32().ShouldBe(2);
+        body.GetProperty("warmCount").GetInt32().ShouldBe(0);
+        body.GetProperty("activeCount").GetInt32().ShouldBe(1);
         var instance = body.GetProperty("instances")[0];
         instance.GetProperty("instanceId").GetString().ShouldBe("instance-1");
         instance.GetProperty("sessionCount").GetInt32().ShouldBe(2);
         instance.GetProperty("processId").GetInt32().ShouldBe(1234);
         instance.GetProperty("isAvailable").GetBoolean().ShouldBeTrue();
+        instance.GetProperty("partitionFingerprint").GetString().ShouldBe("abc123def456");
+        instance.GetProperty("isWarm").GetBoolean().ShouldBeFalse();
     }
 
     [Fact]
@@ -71,13 +77,62 @@ public sealed class AdminEndpointsTests
             {
                 services.RemoveAll<IOpenCodePoolHealthCheck>();
                 services.AddSingleton<IOpenCodePoolHealthCheck>(new StubPoolHealthCheck(
-                    new OpenCodePoolHealthStatus(0, 0, [])));
+                    new OpenCodePoolHealthStatus(0, 0, WarmCount: 0, ActiveCount: 0, [])));
             });
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/api/admin/opencode/pool");
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task opencode_pool_health_does_not_expose_raw_owner_ids_or_credential_hashes()
+    {
+        const string rawCredentialHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        const string rawOwnerId = "user-alice-sub-claim-value";
+
+        await using var factory = new ApiWebApplicationFactory(
+            authEnabled: true,
+            useTestAuthentication: true,
+            testUserIsAdmin: true,
+            configureTestServices: services =>
+            {
+                services.RemoveAll<IOpenCodePoolHealthCheck>();
+                services.AddSingleton<IOpenCodePoolHealthCheck>(new StubPoolHealthCheck(
+                    new OpenCodePoolHealthStatus(
+                        1,
+                        1,
+                        WarmCount: 1,
+                        ActiveCount: 0,
+                        [new OpenCodePoolInstanceHealth(
+                            "instance-safe-id",
+                            0,
+                            999,
+                            true,
+                            false,
+                            false,
+                            "safe0fingerprint",
+                            IsWarm: true)])));
+            });
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/admin/opencode/pool");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadAsStringAsync();
+
+        // The raw owner ID and raw credential hash must never appear in the response body.
+        body.ShouldNotContain(rawCredentialHash);
+        body.ShouldNotContain(rawOwnerId);
+
+        // The response must expose the safe partition fingerprint and warm status.
+        var json = JsonDocument.Parse(body).RootElement;
+        var instance = json.GetProperty("instances")[0];
+        instance.GetProperty("partitionFingerprint").GetString().ShouldBe("safe0fingerprint");
+        instance.GetProperty("isWarm").GetBoolean().ShouldBeTrue();
+        json.GetProperty("warmCount").GetInt32().ShouldBe(1);
+        json.GetProperty("activeCount").GetInt32().ShouldBe(0);
     }
 
     [Fact]

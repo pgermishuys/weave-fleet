@@ -13,6 +13,7 @@ import type {
   AccumulatedMessage,
   CommittedSessionEvent,
   DelegationDto,
+  SessionListItem,
   WebSocketEvent,
 } from "@/lib/api-types"
 import type { SessionStreamStatus } from "@/lib/domain-event-reducer"
@@ -73,11 +74,11 @@ interface SessionEventState {
   syncSessionStore?: (patch: SessionStorePatch) => void
 }
 
-type SessionStorePatch = Partial<{
-  activityStatus: "busy" | "delegating" | "idle"
-  lifecycleStatus: "running" | "stopped" | "completed" | "disconnected" | "error"
-  sessionStatus: "active" | "idle" | "stopped" | "completed" | "disconnected" | "error" | "waiting_input"
-}>
+type SessionStorePatch = Partial<Pick<
+  SessionListItem,
+  "activityStatus" | "capabilities" | "lifecycleStatus" | "sessionStatus"
+>>
+type SessionActionCapabilities = NonNullable<SessionListItem["capabilities"]>
 
 const MAX_MESSAGES = 500
 // Flag-off mode still uses the legacy v1 stream, which does not emit turn.ended.
@@ -539,12 +540,7 @@ export function useSessionEvents(
       return
     }
 
-    const session = sessionsStore.sessions.find((item) => item.session.id === targetSessionId)
-    if (!session) {
-      return
-    }
-
-    Object.assign(session, patch)
+    sessionsStore.patchSession(targetSessionId, patch)
   }
 
   function stateSyncDisconnected(targetSessionId: string | undefined): void {
@@ -700,6 +696,8 @@ export function handleEvent(
   }
 
   if (type === "activity_status") {
+    syncCapabilitiesForState(properties, state)
+
     const rawActivityStatus = properties?.activityStatus
 
     if (rawActivityStatus === "idle") {
@@ -719,7 +717,9 @@ export function handleEvent(
     return
   }
 
-  if (type === "session.status") {
+  if (type === "session.status" || type === "session-status-changed") {
+    syncCapabilitiesForState(properties, state)
+
     const rawStatus = properties?.status
     const statusType = typeof rawStatus === "string"
       ? rawStatus
@@ -864,6 +864,68 @@ export function handleEvent(
 
     state.messages.value = applyTextDelta(state.messages.value, messageID, partID, sessionId, delta ?? "")
   }
+}
+
+const BOOLEAN_CAPABILITY_KEYS = [
+  "canPrompt",
+  "canStop",
+  "canResume",
+  "canRestart",
+  "canAbort",
+  "canArchive",
+  "canUnarchive",
+  "canFork",
+  "canDelete",
+] as const satisfies readonly (keyof SessionActionCapabilities)[]
+
+const DISABLED_REASON_KEYS = [
+  "promptDisabledReason",
+  "stopDisabledReason",
+  "resumeDisabledReason",
+  "restartDisabledReason",
+  "abortDisabledReason",
+  "archiveDisabledReason",
+  "unarchiveDisabledReason",
+  "forkDisabledReason",
+  "deleteDisabledReason",
+] as const satisfies readonly (keyof SessionActionCapabilities)[]
+
+function syncCapabilitiesForState(
+  properties: WebSocketEvent["properties"] | undefined,
+  state: SessionEventState,
+): void {
+  const capabilities = readSessionActionCapabilities(properties)
+  if (!capabilities) {
+    return
+  }
+
+  state.syncSessionStore?.({ capabilities })
+}
+
+function readSessionActionCapabilities(
+  properties: WebSocketEvent["properties"] | undefined,
+): SessionActionCapabilities | undefined {
+  const capabilities = properties?.capabilities
+  if (!isSessionActionCapabilities(capabilities)) {
+    return undefined
+  }
+
+  return capabilities
+}
+
+function isSessionActionCapabilities(value: unknown): value is SessionActionCapabilities {
+  if (!value || typeof value !== "object") {
+    return false
+  }
+
+  const candidate = value as Record<keyof SessionActionCapabilities, unknown>
+  const hasBooleanCapabilities = BOOLEAN_CAPABILITY_KEYS.every((key) => typeof candidate[key] === "boolean")
+  const hasDisabledReasons = DISABLED_REASON_KEYS.every((key) => {
+    const disabledReason = candidate[key]
+    return disabledReason === null || typeof disabledReason === "string"
+  })
+
+  return hasBooleanCapabilities && hasDisabledReasons
 }
 
 function compareByEventCursor(

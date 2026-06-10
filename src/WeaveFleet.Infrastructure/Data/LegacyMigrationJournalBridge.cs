@@ -16,12 +16,6 @@ internal static partial class LegacyMigrationJournalBridge
         string folderSegment,
         ILogger logger)
     {
-        if (await TableExistsAsync(connection, journalTable)
-            && (await connection.ExecuteScalarAsync<long>($"SELECT COUNT(*) FROM {journalTable}", static cmd => { })) > 0)
-        {
-            return;
-        }
-
         if (!await TableExistsAsync(connection, LegacyJournalTable))
             return;
 
@@ -31,6 +25,12 @@ internal static partial class LegacyMigrationJournalBridge
 
         if (folderSegment == "Migrations")
             await RepairKnownMainDatabaseStatesAsync(connection, appliedLegacyNames, logger);
+
+        if (await TableExistsAsync(connection, journalTable)
+            && (await connection.ExecuteScalarAsync<long>($"SELECT COUNT(*) FROM {journalTable}", static cmd => { })) > 0)
+        {
+            return;
+        }
 
         if (appliedLegacyNames.Count == 0)
             return;

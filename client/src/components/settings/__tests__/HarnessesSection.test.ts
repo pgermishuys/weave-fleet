@@ -80,6 +80,7 @@ describe("HarnessesSection", () => {
     const wrapper = await mountHarnessesSection();
 
     expect(wrapper.text()).toContain("Pooled OpenCode Mode");
+    expect(wrapper.text()).toContain("Off by default");
     expect(wrapper.get("button[aria-label='Enable Pooled OpenCode Mode']").attributes("aria-checked")).toBe("false");
   });
 

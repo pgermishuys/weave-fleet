@@ -41,6 +41,8 @@ client/coverage/
 
 # Local databases
 *.db
+*.db-shm
+*.db-wal
 
 # Claude Code agent runtime artefacts
 .claude/

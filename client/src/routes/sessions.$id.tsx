@@ -22,7 +22,7 @@ import {
 import { incrementPendingPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { provideSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { apiFetch } from "@/lib/api-client";
-import type { SessionListItem, SessionOrigin } from "@/lib/api-types";
+import type { SessionActionCapabilities, SessionListItem, SessionOrigin } from "@/lib/api-types";
 import type { SessionActivityStatus } from "@/lib/types";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
@@ -48,6 +48,7 @@ interface SessionDetailResponse {
   retentionStatus?: string | null;
   totalTokens?: number | null;
   totalCost?: number | null;
+  capabilities?: SessionActionCapabilities;
   origin?: SessionOrigin | null;
   harnessType?: string | null;
 }
@@ -113,6 +114,7 @@ function normalizeSessionDetailResponse(payload: unknown): SessionDetailResponse
     retentionStatus: getStringField(value, "retentionStatus", "RetentionStatus"),
     totalTokens: getNumberField(value, "totalTokens", "TotalTokens"),
     totalCost: getNumberField(value, "totalCost", "TotalCost"),
+    capabilities: (value.capabilities ?? value.Capabilities) as SessionActionCapabilities | undefined,
     origin,
     harnessType: getStringField(value, "harnessType", "HarnessType"),
   };
@@ -279,6 +281,7 @@ const SessionDetailPage = defineComponent({
             totalCost: selectedSession.value?.totalCost,
             projectId: selectedSession.value?.projectId ?? null,
             projectName: selectedSession.value?.projectName ?? null,
+            capabilities: nextRemoteSession.capabilities ?? selectedSession.value?.capabilities,
             origin: nextRemoteSession.origin ?? selectedSession.value?.origin ?? null,
             harnessType: nextRemoteSession.harnessType ?? selectedSession.value?.harnessType ?? null,
           } satisfies SessionListItem;
@@ -438,12 +441,18 @@ const SessionDetailPage = defineComponent({
       ) === "archived";
     });
 
+    const effectiveActionCapabilities = computed(() => selectedSession.value?.capabilities ?? remoteSession.value?.capabilities);
     const isComposerDisabled = computed(() => {
-      return isArchived.value || effectiveLifecycleStatus.value !== "running";
+      const capabilities = effectiveActionCapabilities.value;
+      if (isArchived.value) {
+        return true;
+      }
+
+      return capabilities ? !capabilities.canPrompt : effectiveLifecycleStatus.value !== "running";
     });
 
-    const canAbort = computed(() => effectiveLifecycleStatus.value === "running" && isActiveActivityStatus(effectiveActivityStatus.value));
-    const canResume = computed(() => {
+    const fallbackCanAbort = computed(() => effectiveLifecycleStatus.value === "running" && isActiveActivityStatus(effectiveActivityStatus.value));
+    const fallbackCanResume = computed(() => {
       switch (effectiveLifecycleStatus.value) {
         case "stopped":
         case "completed":
@@ -453,8 +462,14 @@ const SessionDetailPage = defineComponent({
           return false;
       }
     });
-    const canStop = computed(() => effectiveLifecycleStatus.value === "running");
-    const canArchive = computed(() => !isArchived.value && effectiveLifecycleStatus.value !== "running");
+    const fallbackCanStop = computed(() => effectiveLifecycleStatus.value === "running");
+    const fallbackCanArchive = computed(() => !isArchived.value && effectiveLifecycleStatus.value !== "running");
+    const canAbort = computed(() => effectiveActionCapabilities.value?.canAbort ?? fallbackCanAbort.value);
+    const canResume = computed(() => effectiveActionCapabilities.value?.canResume ?? fallbackCanResume.value);
+    const canStop = computed(() => effectiveActionCapabilities.value?.canStop ?? fallbackCanStop.value);
+    const canArchive = computed(() => effectiveActionCapabilities.value?.canArchive ?? fallbackCanArchive.value);
+    const canFork = computed(() => effectiveActionCapabilities.value?.canFork ?? true);
+    const canDelete = computed(() => effectiveActionCapabilities.value?.canDelete ?? true);
     const isResumingCurrentSession = computed(() => isResuming.value && resumingSessionId.value === params.value.id);
     const isAnyActionPending = computed(() => isAborting.value
       || isArchiving.value
@@ -638,7 +653,7 @@ const SessionDetailPage = defineComponent({
     }
 
     function handleFork(): void {
-      if (!params.value.id) {
+      if (!params.value.id || !canFork.value) {
         return;
       }
 
@@ -646,7 +661,7 @@ const SessionDetailPage = defineComponent({
     }
 
     function handleDelete(): void {
-      if (!params.value.id || !instanceId.value) {
+      if (!params.value.id || !instanceId.value || !canDelete.value) {
         return;
       }
 
@@ -654,7 +669,7 @@ const SessionDetailPage = defineComponent({
     }
 
     async function handleDeleteConfirmed(): Promise<void> {
-      if (!params.value.id || !instanceId.value) {
+      if (!params.value.id || !instanceId.value || !canDelete.value) {
         return;
       }
 
@@ -755,7 +770,8 @@ const SessionDetailPage = defineComponent({
                   canResume={canResume.value}
                   canStop={canStop.value}
                   canArchive={canArchive.value}
-                  supportsFork={true}
+                  canFork={canFork.value}
+                  canDelete={canDelete.value}
                   isPending={isAnyActionPending.value}
                   isAborting={isAborting.value}
                   isResuming={isResumingCurrentSession.value}
@@ -918,14 +934,16 @@ const SessionDetailPage = defineComponent({
           onSelect={handleFilesChangedFileSelected}
           onRetry={retryFilesChanged}
         />
-        <ForkSessionDialog
-          open={isForkDialogOpen.value}
-          sessionId={params.value.id ?? ""}
-          sourceTitle={selectedSession.value?.session.title ?? remoteSession.value?.title ?? "Untitled session"}
-          onUpdate:open={(value: boolean) => {
-            isForkDialogOpen.value = value;
-          }}
-        />
+        {canFork.value ? (
+          <ForkSessionDialog
+            open={isForkDialogOpen.value}
+            sessionId={params.value.id ?? ""}
+            sourceTitle={selectedSession.value?.session.title ?? remoteSession.value?.title ?? "Untitled session"}
+            onUpdate:open={(value: boolean) => {
+              isForkDialogOpen.value = value;
+            }}
+          />
+        ) : null}
         </div>
     );
   },

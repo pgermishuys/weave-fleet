@@ -8,11 +8,53 @@ using WeaveFleet.Application.Diagnostics;
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 
 /// <summary>
-/// Thread-safe registry for shared OpenCode process instances keyed by the SHA256 hash of the
-/// complete resolved runtime environment dictionary.
+/// Thread-safe registry for shared OpenCode process instances.
 /// </summary>
+/// <remarks>
+/// <para>
+/// The authoritative pool key is a <em>composite</em> of two parts:
+/// <list type="bullet">
+///   <item>
+///     <term>Owner identity</term>
+///     <description>
+///       The authenticated user or tenant identifier (the IdP "sub" claim in cloud mode).
+///       Two different authenticated users with identical resolved credential environments
+///       receive separate pool partitions, separate process instances, and separate lease
+///       buckets. No in-memory token, session mapping, or process state is ever shared
+///       across owner boundaries.
+///     </description>
+///   </item>
+///   <item>
+///     <term>Credential environment hash</term>
+///     <description>
+///       The SHA-256 hash of the full resolved runtime environment dictionary (see
+///       <see cref="CredentialHasher.HashEnvironment"/>). Within one owner's partition,
+///       the credential hash further subdivides the pool: a process is only reused when
+///       both owner identity and credential hash match.
+///     </description>
+///   </item>
+/// </list>
+/// </para>
+/// <para>
+/// <strong>Local / auth-disabled exception.</strong> When authentication is disabled the
+/// effective owner is the deterministic sentinel <c>"local-user"</c>. Because there is
+/// only ever one logical owner in that mode, local deployments still produce exactly one
+/// pool partition per unique credential environment hash — the same behaviour as before
+/// multi-tenant partitioning was introduced.
+/// </para>
+/// <para>
+/// The overloads that accept only a <c>credentialHashKey</c> without an explicit owner
+/// implicitly use <c>"local-user"</c> as the owner. They are retained for backward
+/// compatibility with tests and callers that run in single-owner (local-mode) contexts.
+/// </para>
+/// </remarks>
 internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
 {
+    /// <summary>
+    /// Sentinel owner identity used by callers that do not supply an explicit owner.
+    /// Matches the value emitted by <c>LocalUserContext</c> when auth is disabled.
+    /// </summary>
+    internal const string LocalOwnerIdentity = "local-user";
     private const int MaxRestartAttempts = 3;
     private static readonly TimeSpan RestartWindow = TimeSpan.FromSeconds(60);
     private const string SpawnReasonInitialAcquire = "initial_acquire";
@@ -158,6 +200,10 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
         MetricRegistries[_metricRegistryId] = this;
     }
 
+    // -------------------------------------------------------------------------
+    // Local-owner overloads (backward-compatible; implicit owner = local-user)
+    // -------------------------------------------------------------------------
+
     public async Task<InstanceLease> AcquireAsync(string credentialHashKey, CancellationToken ct)
     {
         return await AcquireAsync(credentialHashKey, Environment.CurrentDirectory, ct).ConfigureAwait(false);
@@ -166,6 +212,7 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
     public async Task<InstanceLease> AcquireAsync(string credentialHashKey, string directory, CancellationToken ct)
     {
         return await AcquireAsync(
+            LocalOwnerIdentity,
             credentialHashKey,
             new Dictionary<string, string>(),
             directory,
@@ -181,7 +228,8 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(authoritativeEnvironment);
 
         var credentialHashKey = CredentialHasher.HashEnvironment(authoritativeEnvironment);
-        return await AcquireAsync(credentialHashKey, authoritativeEnvironment, directory, ct).ConfigureAwait(false);
+        return await AcquireAsync(LocalOwnerIdentity, credentialHashKey, authoritativeEnvironment, directory, ct)
+            .ConfigureAwait(false);
     }
 
     public async Task<InstanceLease> AcquireAsync(
@@ -191,6 +239,33 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
         CancellationToken ct)
     {
         return await AcquireAsync(
+            LocalOwnerIdentity,
+            credentialHashKey,
+            authoritativeEnvironment,
+            directory,
+            ct).ConfigureAwait(false);
+    }
+
+    // -------------------------------------------------------------------------
+    // Owner-aware overloads (primary API for multi-tenant callers)
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Acquires a lease for the composite pool partition identified by
+    /// <paramref name="ownerIdentity"/> and <paramref name="credentialHashKey"/>.
+    /// The caller is responsible for ensuring <paramref name="credentialHashKey"/> was produced
+    /// by <see cref="CredentialHasher.HashEnvironment"/> over
+    /// <paramref name="authoritativeEnvironment"/>; the registry re-validates this invariant.
+    /// </summary>
+    public async Task<InstanceLease> AcquireAsync(
+        string ownerIdentity,
+        string credentialHashKey,
+        IReadOnlyDictionary<string, string> authoritativeEnvironment,
+        string directory,
+        CancellationToken ct)
+    {
+        return await AcquireAsync(
+            ownerIdentity,
             credentialHashKey,
             authoritativeEnvironment,
             directory,
@@ -198,18 +273,26 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
             ct).ConfigureAwait(false);
     }
 
+    // -------------------------------------------------------------------------
+    // Core implementation
+    // -------------------------------------------------------------------------
+
     private async Task<InstanceLease> AcquireAsync(
+        string ownerIdentity,
         string credentialHashKey,
         IReadOnlyDictionary<string, string> authoritativeEnvironment,
         string directory,
         bool validateCredentialHash,
         CancellationToken ct)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ownerIdentity);
         ArgumentException.ThrowIfNullOrWhiteSpace(credentialHashKey);
         ArgumentNullException.ThrowIfNull(authoritativeEnvironment);
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-        var keyFingerprint = CreateTelemetryKeyFingerprint(credentialHashKey);
+
+        var compositeKey = BuildCompositeKey(ownerIdentity, credentialHashKey);
+        var keyFingerprint = CreateTelemetryKeyFingerprint(compositeKey);
         LogAcquireRequested(_logger, keyFingerprint, null);
 
         if (validateCredentialHash)
@@ -226,13 +309,13 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
 
         while (true)
         {
-            var entry = _entries.GetOrAdd(credentialHashKey, static key => new RegistryEntry(key));
+            var entry = _entries.GetOrAdd(compositeKey, static key => new RegistryEntry(key));
 
             await entry.Gate.WaitAsync(ct).ConfigureAwait(false);
             try
             {
                 ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-                if (!_entries.TryGetValue(credentialHashKey, out var currentEntry) || !ReferenceEquals(currentEntry, entry))
+                if (!_entries.TryGetValue(compositeKey, out var currentEntry) || !ReferenceEquals(currentEntry, entry))
                 {
                     continue;
                 }
@@ -242,7 +325,7 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
                 if (entry.Instance is null || !entry.Instance.IsAvailable)
                 {
                     entry.StartupDirectory = directory;
-                    if (HasAvailableInstanceForDifferentCredentialBoundary(credentialHashKey))
+                    if (HasAvailableInstanceForDifferentCompositeKey(compositeKey))
                     {
                         LogCredentialMismatchSpawn(_logger, keyFingerprint, null);
                         LogCredentialBoundaryDecision(_logger, keyFingerprint, "isolated_boundary_spawn", null);
@@ -333,13 +416,17 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
                     entry.Instance.ProcessId,
                     entry.Instance.IsAvailable,
                     entry.Instance.IsFaulted,
-                    entry.Instance.IsDisposed))
+                    entry.Instance.IsDisposed,
+                    CreateTelemetryKeyFingerprint(entry.Key),
+                    entry.RefCount == 0 && entry.Instance.IsAvailable))
             .OfType<OpenCodePoolInstanceHealth>()
             .ToArray();
 
         return new OpenCodePoolHealthStatus(
             instances.Length,
             instances.Sum(instance => instance.SessionCount),
+            instances.Count(instance => instance.IsWarm),
+            instances.Count(instance => !instance.IsWarm && instance.IsAvailable),
             instances);
     }
 
@@ -596,11 +683,24 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
         return Convert.ToHexString(hash)[..12].ToLowerInvariant();
     }
 
-    private bool HasAvailableInstanceForDifferentCredentialBoundary(string credentialHashKey)
+    /// <summary>
+    /// Builds the authoritative composite pool-key from an owner identity and a credential hash.
+    /// </summary>
+    /// <remarks>
+    /// The format is <c>{owner}\n{credentialHash}</c> where the newline is chosen as a separator
+    /// because neither owner identifiers (IdP sub claims) nor hex credential hashes will ever
+    /// contain a newline, so the separator is unambiguous and no length-prefix encoding is needed.
+    /// </remarks>
+    private static string BuildCompositeKey(string ownerIdentity, string credentialHashKey)
+    {
+        return $"{ownerIdentity}\n{credentialHashKey}";
+    }
+
+    private bool HasAvailableInstanceForDifferentCompositeKey(string compositeKey)
     {
         foreach (var entry in _entries.Values)
         {
-            if (string.Equals(entry.Key, credentialHashKey, StringComparison.Ordinal))
+            if (string.Equals(entry.Key, compositeKey, StringComparison.Ordinal))
             {
                 continue;
             }

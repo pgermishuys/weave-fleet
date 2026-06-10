@@ -3,11 +3,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
 using WeaveFleet.Application.Projections;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.EventBus;
 using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.Tests.Data;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.EventBus;
 
@@ -411,6 +413,148 @@ public sealed class InProcessProjectionHostTests
 public sealed class InProcessFanOutServiceTests
 {
     [Fact]
+    public async Task session_status_broadcasts_include_capabilities_on_status_change()
+    {
+        var channels = new InProcessChannels();
+        var broadcaster = new FakeEventBroadcaster();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var sessionRepository = new InMemorySessionRepository();
+        sessionRepository.Seed(new Session
+        {
+            Id = "sess-status-capabilities",
+            InstanceId = "inst-status-capabilities",
+            LifecycleStatus = "running",
+            RetentionStatus = "active",
+            RuntimeMode = "manual",
+            ActivityStatus = "idle",
+            UserId = "user-1"
+        });
+        var instanceTracker = new InstanceTracker();
+        await using var liveSession = new FakeHarnessSession("inst-status-capabilities");
+        instanceTracker.Register("inst-status-capabilities", liveSession);
+        var services = new ServiceCollection();
+        services.AddSingleton<IHarnessEventPersister, NoOpHarnessEventPersister>();
+        services.AddSingleton(sessionRepository);
+        services.AddSingleton<WeaveFleet.Domain.Repositories.ISessionRepository>(sessionRepository);
+        services.AddSingleton(new SessionCapabilitiesResolver(instanceTracker));
+
+        await using var serviceProvider = services.BuildServiceProvider();
+        var service = new InProcessFanOutService(
+            channels,
+            broadcaster,
+            new SessionActivityTracker(),
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<InProcessFanOutService>.Instance);
+
+        await service.StartAsync(cts.Token);
+        try
+        {
+            channels.FanOut.Writer.TryWrite(new InProcessEnvelope(
+                @event: new HarnessEvent
+                {
+                    Type = EventTypes.SessionStatus,
+                    SessionId = "oc-status-capabilities",
+                    Timestamp = DateTimeOffset.UtcNow,
+                    Payload = JsonSerializer.SerializeToElement(new { status = new { type = "busy" } })
+                },
+                messageId: "sess-status-capabilities:1",
+                tenant: "tenant.default",
+                projectId: "proj-1",
+                sessionId: "sess-status-capabilities",
+                eventType: EventTypes.SessionStatus,
+                userId: "user-1",
+                harnessType: "opencode",
+                internalPumpDedupKey: 1,
+                isDurable: false)).ShouldBeTrue();
+
+            await WaitForBroadcastsAsync(broadcaster, expectedCount: 2, cts.Token);
+
+            var statusBroadcast = broadcaster.Broadcasts.Single(record =>
+                record.Topic == "session:sess-status-capabilities"
+                && record.Type == EventTypes.SessionStatus);
+            statusBroadcast.Payload.GetProperty("capabilities").GetProperty("canAbort").GetBoolean().ShouldBeTrue();
+            statusBroadcast.Payload.GetProperty("capabilities").GetProperty("canPrompt").GetBoolean().ShouldBeTrue();
+        }
+        finally
+        {
+            await cts.CancelAsync();
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task activity_status_broadcasts_include_capabilities_on_status_change()
+    {
+        var channels = new InProcessChannels();
+        var broadcaster = new FakeEventBroadcaster();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var sessionRepository = new InMemorySessionRepository();
+        sessionRepository.Seed(new Session
+        {
+            Id = "sess-activity-capabilities",
+            InstanceId = "inst-activity-capabilities",
+            LifecycleStatus = "running",
+            RetentionStatus = "active",
+            RuntimeMode = "manual",
+            ActivityStatus = "idle",
+            UserId = "user-1"
+        });
+        var instanceTracker = new InstanceTracker();
+        await using var liveSession = new FakeHarnessSession("inst-activity-capabilities");
+        instanceTracker.Register("inst-activity-capabilities", liveSession);
+        var services = new ServiceCollection();
+        services.AddSingleton<IHarnessEventPersister, NoOpHarnessEventPersister>();
+        services.AddSingleton(sessionRepository);
+        services.AddSingleton<WeaveFleet.Domain.Repositories.ISessionRepository>(sessionRepository);
+        services.AddSingleton(new SessionCapabilitiesResolver(instanceTracker));
+
+        await using var serviceProvider = services.BuildServiceProvider();
+        var service = new InProcessFanOutService(
+            channels,
+            broadcaster,
+            new SessionActivityTracker(),
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<InProcessFanOutService>.Instance);
+
+        await service.StartAsync(cts.Token);
+        try
+        {
+            channels.FanOut.Writer.TryWrite(new InProcessEnvelope(
+                @event: new HarnessEvent
+                {
+                    Type = EventTypes.SessionStatus,
+                    SessionId = "oc-activity-capabilities",
+                    Timestamp = DateTimeOffset.UtcNow,
+                    Payload = JsonSerializer.SerializeToElement(new { status = new { type = "busy" } })
+                },
+                messageId: "sess-activity-capabilities:1",
+                tenant: "tenant.default",
+                projectId: "proj-1",
+                sessionId: "sess-activity-capabilities",
+                eventType: EventTypes.SessionStatus,
+                userId: "user-1",
+                harnessType: "opencode",
+                internalPumpDedupKey: 1,
+                isDurable: false)).ShouldBeTrue();
+
+            await WaitForBroadcastsAsync(broadcaster, expectedCount: 2, cts.Token);
+
+            var activityBroadcast = broadcaster.Broadcasts.Single(record =>
+                record.Topic == "sessions"
+                && record.Type == "activity_status");
+            activityBroadcast.Payload.GetProperty("sessionId").GetString().ShouldBe("sess-activity-capabilities");
+            activityBroadcast.Payload.GetProperty("activityStatus").GetString().ShouldBe("busy");
+            activityBroadcast.Payload.GetProperty("capabilities").GetProperty("canAbort").GetBoolean().ShouldBeTrue();
+            activityBroadcast.Payload.GetProperty("capabilities").GetProperty("canPrompt").GetBoolean().ShouldBeTrue();
+        }
+        finally
+        {
+            await cts.CancelAsync();
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task advisory_events_are_broadcast_without_event_id()
     {
         var channels = new InProcessChannels();
@@ -481,6 +625,17 @@ public sealed class InProcessFanOutServiceTests
         }
     }
 
+    private static async Task WaitForBroadcastsAsync(
+        FakeEventBroadcaster broadcaster,
+        int expectedCount,
+        CancellationToken ct)
+    {
+        while (broadcaster.Broadcasts.Count < expectedCount)
+        {
+            await Task.Delay(10, ct);
+        }
+    }
+
     private sealed class NoOpHarnessEventPersister : IHarnessEventPersister
     {
         public Task HandleAsync(string fleetSessionId, string ownerUserId, HarnessEvent evt, CancellationToken ct)
@@ -493,4 +648,5 @@ public sealed class InProcessFanOutServiceTests
         {
         }
     }
+
 }

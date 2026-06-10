@@ -93,7 +93,8 @@ internal sealed class OpenCodeHttpClient
         CancellationToken ct)
     {
         var url = BuildUrl("/session", directory);
-        return await PostAsync(url, request, OpenCodeJsonContext.Default.OpenCodeCreateSessionRequest, OpenCodeJsonContext.Default.OpenCodeSessionInfo, ct).ConfigureAwait(false);
+        var identity = await PostAsync(url, request, OpenCodeJsonContext.Default.OpenCodeCreateSessionRequest, OpenCodeJsonContext.Default.OpenCodeSessionIdentity, ct).ConfigureAwait(false);
+        return new OpenCodeSessionInfo { Id = identity.Id };
     }
 
     /// <summary>GET /session/{sessionId}?directory={directory}</summary>
@@ -103,7 +104,8 @@ internal sealed class OpenCodeHttpClient
         CancellationToken ct)
     {
         var url = BuildUrl($"/session/{Uri.EscapeDataString(sessionId)}", directory);
-        return await GetAsync(url, OpenCodeJsonContext.Default.OpenCodeSessionInfo, ct).ConfigureAwait(false);
+        var identity = await GetAsync(url, OpenCodeJsonContext.Default.OpenCodeSessionIdentity, ct).ConfigureAwait(false);
+        return new OpenCodeSessionInfo { Id = identity.Id };
     }
 
     /// <summary>GET /session?directory={directory}</summary>

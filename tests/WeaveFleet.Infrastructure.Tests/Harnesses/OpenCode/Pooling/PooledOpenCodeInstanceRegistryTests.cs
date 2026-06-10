@@ -765,6 +765,8 @@ public sealed class PooledOpenCodeInstanceRegistryTests
 
         status.InstanceCount.ShouldBe(1);
         status.SessionCount.ShouldBe(2);
+        status.ActiveCount.ShouldBe(1);
+        status.WarmCount.ShouldBe(0);
         status.Instances.Count.ShouldBe(1);
         status.Instances[0].InstanceId.ShouldBe(firstLease.Instance.InstanceId);
         status.Instances[0].SessionCount.ShouldBe(2);
@@ -772,9 +774,101 @@ public sealed class PooledOpenCodeInstanceRegistryTests
         status.Instances[0].IsAvailable.ShouldBeTrue();
         status.Instances[0].IsFaulted.ShouldBeFalse();
         status.Instances[0].IsDisposed.ShouldBeFalse();
+        status.Instances[0].IsWarm.ShouldBeFalse();
 
         await firstLease.DisposeAsync();
         await secondLease.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task pool_health_status_partition_fingerprint_is_safe_and_not_raw_key_material()
+    {
+        var factory = new TestInstanceFactory();
+        await using var registry = new PooledOpenCodeInstanceRegistry(
+            factory.CreateWithContextAsync,
+            TimeSpan.FromMinutes(1),
+            NullLogger<PooledOpenCodeInstanceRegistry>.Instance);
+        var environment = CreateEnvironment("secret-api-key", "enabled");
+        var hash = CredentialHasher.HashEnvironment(environment);
+        const string ownerIdentity = "user-alice-sub-claim";
+
+        var lease = await registry.AcquireAsync(ownerIdentity, hash, environment, Directory.GetCurrentDirectory(), CancellationToken.None);
+
+        var status = registry.GetHealthStatus();
+
+        status.Instances.Count.ShouldBe(1);
+        var fingerprint = status.Instances[0].PartitionFingerprint;
+
+        // Fingerprint must be present and non-trivially short (SHA-256 prefix, 12 hex chars).
+        fingerprint.ShouldNotBeNullOrWhiteSpace();
+        fingerprint.Length.ShouldBe(12);
+
+        // Must not expose raw credential hash, raw owner identity, or "secret-api-key".
+        fingerprint.ShouldNotBe(hash);
+        fingerprint.ShouldNotContain(ownerIdentity);
+        fingerprint.ShouldNotContain("secret-api-key");
+        fingerprint.ShouldNotContain("secret");
+
+        await lease.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task pool_health_status_distinguishes_warm_held_from_actively_leased_instances()
+    {
+        var factory = new TestInstanceFactory();
+        // Use a large idle-TTL so the warm instance is not shut down during the test.
+        await using var registry = CreateRegistry(factory, TimeSpan.FromMinutes(5));
+
+        // Acquire and immediately release a lease so the instance becomes warm (idle, ref-count = 0).
+        var warmLease = await registry.AcquireAsync("warm-key", CancellationToken.None);
+        await warmLease.DisposeAsync();
+
+        // Acquire a second distinct key that keeps its lease active.
+        var activeLease = await registry.AcquireAsync("active-key", CancellationToken.None);
+
+        var status = registry.GetHealthStatus();
+
+        status.WarmCount.ShouldBe(1);
+        status.ActiveCount.ShouldBe(1);
+        status.InstanceCount.ShouldBe(2);
+
+        var warmInstance = status.Instances.Single(i => i.IsWarm);
+        warmInstance.SessionCount.ShouldBe(0);
+        warmInstance.IsAvailable.ShouldBeTrue();
+
+        var activeInstance = status.Instances.Single(i => !i.IsWarm);
+        activeInstance.SessionCount.ShouldBe(1);
+        activeInstance.IsAvailable.ShouldBeTrue();
+
+        await activeLease.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task pool_operation_logs_do_not_include_raw_owner_identity()
+    {
+        var factory = new TestInstanceFactory();
+        var logger = new CapturingLogger<PooledOpenCodeInstanceRegistry>();
+        await using var registry = new PooledOpenCodeInstanceRegistry(
+            factory.CreateWithContextAsync,
+            TimeSpan.FromMilliseconds(20),
+            logger);
+        const string ownerIdentity = "plaintext-owner-sub-claim";
+        var environment = CreateEnvironment("any-key", "enabled");
+        var hash = CredentialHasher.HashEnvironment(environment);
+
+        var lease = await registry.AcquireAsync(ownerIdentity, hash, environment, Directory.GetCurrentDirectory(), CancellationToken.None);
+        await lease.DisposeAsync();
+
+        await factory.WaitForShutdownAsync(lease.Instance.InstanceId, TimeSpan.FromSeconds(5));
+
+        foreach (var entry in logger.Entries)
+        {
+            entry.Message.ShouldNotContain(ownerIdentity);
+            foreach (var value in entry.StateValues.Values.Select(value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)))
+            {
+                value.ShouldNotBe(ownerIdentity);
+            }
+        }
     }
 
     [Fact]
@@ -869,6 +963,230 @@ public sealed class PooledOpenCodeInstanceRegistryTests
         instance.IsDisposed.ShouldBeTrue();
     }
 
+    // -------------------------------------------------------------------------
+    // Composite-key (owner + credential hash) partitioning tests
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task different_authenticated_users_with_identical_env_hash_use_separate_pool_partitions()
+    {
+        var factory = new TestInstanceFactory();
+        await using var registry = new PooledOpenCodeInstanceRegistry(
+            factory.CreateWithContextAsync,
+            TimeSpan.FromMinutes(1),
+            NullLogger<PooledOpenCodeInstanceRegistry>.Instance);
+        var sharedEnvironment = CreateEnvironment("shared-api-key", "enabled");
+        var sharedHash = CredentialHasher.HashEnvironment(sharedEnvironment);
+
+        var user1Lease = await registry.AcquireAsync(
+            "user-alice",
+            sharedHash,
+            sharedEnvironment,
+            Directory.GetCurrentDirectory(),
+            CancellationToken.None);
+
+        var user2Lease = await registry.AcquireAsync(
+            "user-bob",
+            sharedHash,
+            sharedEnvironment,
+            Directory.GetCurrentDirectory(),
+            CancellationToken.None);
+
+        try
+        {
+            // Separate processes: different instances despite identical credential env hashes.
+            user1Lease.Instance.ShouldNotBeSameAs(user2Lease.Instance);
+            user1Lease.Instance.InstanceId.ShouldNotBe(user2Lease.Instance.InstanceId);
+            factory.SpawnCount.ShouldBe(2);
+        }
+        finally
+        {
+            await user1Lease.DisposeAsync();
+            await user2Lease.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task different_owners_have_different_lease_buckets_and_ref_counts_are_independent()
+    {
+        var factory = new TestInstanceFactory();
+        await using var registry = new PooledOpenCodeInstanceRegistry(
+            factory.CreateWithContextAsync,
+            TimeSpan.FromMinutes(1),
+            NullLogger<PooledOpenCodeInstanceRegistry>.Instance);
+        var environment = CreateEnvironment("same-key", "enabled");
+        var hash = CredentialHasher.HashEnvironment(environment);
+
+        var user1LeaseA = await registry.AcquireAsync("tenant-a", hash, environment, Directory.GetCurrentDirectory(), CancellationToken.None);
+        var user1LeaseB = await registry.AcquireAsync("tenant-a", hash, environment, Directory.GetCurrentDirectory(), CancellationToken.None);
+        var user2LeaseA = await registry.AcquireAsync("tenant-b", hash, environment, Directory.GetCurrentDirectory(), CancellationToken.None);
+
+        try
+        {
+            // Same tenant reuses one process; different tenants get different processes.
+            user1LeaseA.Instance.ShouldBeSameAs(user1LeaseB.Instance);
+            user2LeaseA.Instance.ShouldNotBeSameAs(user1LeaseA.Instance);
+            factory.SpawnCount.ShouldBe(2);
+
+            // Releasing tenant-a leases does not affect tenant-b's bucket.
+            await user1LeaseA.DisposeAsync();
+            await user1LeaseB.DisposeAsync();
+            user2LeaseA.Instance.IsAvailable.ShouldBeTrue();
+        }
+        finally
+        {
+            await user2LeaseA.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task two_users_with_identical_env_hash_crash_independently()
+    {
+        var factory = new TestInstanceFactory();
+        await using var registry = new PooledOpenCodeInstanceRegistry(
+            factory.CreateWithContextAsync,
+            TimeSpan.FromMinutes(1),
+            NullLogger<PooledOpenCodeInstanceRegistry>.Instance);
+        var environment = CreateEnvironment("same-key", "enabled");
+        var hash = CredentialHasher.HashEnvironment(environment);
+
+        var aliceLease = await registry.AcquireAsync("alice", hash, environment, Directory.GetCurrentDirectory(), CancellationToken.None);
+        var bobLease = await registry.AcquireAsync("bob", hash, environment, Directory.GetCurrentDirectory(), CancellationToken.None);
+
+        try
+        {
+            // Crash alice's process; bob's lease should not be affected.
+            var aliceInstance = aliceLease.Instance;
+            await aliceInstance.ReportCrashAsync(new InvalidOperationException("alice crashed"));
+
+            // Alice gets a fault notification.
+            var aliceFault = await aliceLease.Faulted.WaitAsync(TimeSpan.FromSeconds(5));
+            aliceFault.ShouldNotBeNull();
+
+            // Bob's process is still available — it is a completely separate instance.
+            bobLease.Instance.IsAvailable.ShouldBeTrue();
+            bobLease.Instance.ShouldNotBeSameAs(aliceInstance);
+
+            // Alice gets a replacement (crash restart).
+            factory.SpawnCount.ShouldBeGreaterThan(2);
+            var aliceReplacement = await aliceLease.Replacement.WaitAsync(TimeSpan.FromSeconds(5));
+            aliceReplacement.Instance.ShouldNotBeSameAs(aliceInstance);
+            aliceReplacement.Instance.ShouldNotBeSameAs(bobLease.Instance);
+            aliceReplacement.Instance.IsAvailable.ShouldBeTrue();
+
+            await aliceReplacement.DisposeAsync();
+        }
+        finally
+        {
+            await bobLease.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task local_mode_same_owner_same_env_hash_shares_single_pool_partition()
+    {
+        // In local / auth-disabled mode the effective owner is "local-user" for all callers.
+        // Two sessions from the same local owner with the same credential hash must share one process.
+        var factory = new TestInstanceFactory();
+        await using var registry = new PooledOpenCodeInstanceRegistry(
+            factory.CreateWithContextAsync,
+            TimeSpan.FromMinutes(1),
+            NullLogger<PooledOpenCodeInstanceRegistry>.Instance);
+        var environment = CreateEnvironment("local-api-key", "enabled");
+        var hash = CredentialHasher.HashEnvironment(environment);
+
+        var firstLease = await registry.AcquireAsync(
+            PooledOpenCodeInstanceRegistry.LocalOwnerIdentity,
+            hash,
+            environment,
+            Directory.GetCurrentDirectory(),
+            CancellationToken.None);
+
+        var secondLease = await registry.AcquireAsync(
+            PooledOpenCodeInstanceRegistry.LocalOwnerIdentity,
+            hash,
+            environment,
+            Directory.GetCurrentDirectory(),
+            CancellationToken.None);
+
+        try
+        {
+            secondLease.Instance.ShouldBeSameAs(firstLease.Instance);
+            factory.SpawnCount.ShouldBe(1);
+        }
+        finally
+        {
+            await firstLease.DisposeAsync();
+            await secondLease.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task local_mode_backward_compatible_acquire_uses_local_user_owner()
+    {
+        // The backward-compatible overloads (no ownerIdentity param) implicitly use "local-user"
+        // as the owner. This proves local-mode produces exactly one pool partition per credential hash.
+        var factory = new TestInstanceFactory();
+        await using var registry = new PooledOpenCodeInstanceRegistry(
+            factory.CreateWithContextAsync,
+            TimeSpan.FromMinutes(1),
+            NullLogger<PooledOpenCodeInstanceRegistry>.Instance);
+        var environment = CreateEnvironment("local-key", "enabled");
+
+        // Acquire via the IReadOnlyDictionary backward-compat overload.
+        var legacyLease = await registry.AcquireAsync(environment, Directory.GetCurrentDirectory(), CancellationToken.None);
+
+        // Acquire via the owner-aware overload with the explicit local-user sentinel.
+        var hash = CredentialHasher.HashEnvironment(environment);
+        var explicitLocalLease = await registry.AcquireAsync(
+            PooledOpenCodeInstanceRegistry.LocalOwnerIdentity,
+            hash,
+            environment,
+            Directory.GetCurrentDirectory(),
+            CancellationToken.None);
+
+        try
+        {
+            // Both resolve to the same pool partition — they are the same local owner.
+            explicitLocalLease.Instance.ShouldBeSameAs(legacyLease.Instance);
+            factory.SpawnCount.ShouldBe(1);
+        }
+        finally
+        {
+            await legacyLease.DisposeAsync();
+            await explicitLocalLease.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task owner_aware_acquire_same_owner_different_env_hashes_still_isolates()
+    {
+        // Sanity: isolation within one owner by credential hash still works.
+        var factory = new TestInstanceFactory();
+        await using var registry = new PooledOpenCodeInstanceRegistry(
+            factory.CreateWithContextAsync,
+            TimeSpan.FromMinutes(1),
+            NullLogger<PooledOpenCodeInstanceRegistry>.Instance);
+        var firstEnv = CreateEnvironment("key-one", "enabled");
+        var secondEnv = CreateEnvironment("key-two", "enabled");
+        var firstHash = CredentialHasher.HashEnvironment(firstEnv);
+        var secondHash = CredentialHasher.HashEnvironment(secondEnv);
+
+        var firstLease = await registry.AcquireAsync("user-x", firstHash, firstEnv, Directory.GetCurrentDirectory(), CancellationToken.None);
+        var secondLease = await registry.AcquireAsync("user-x", secondHash, secondEnv, Directory.GetCurrentDirectory(), CancellationToken.None);
+
+        try
+        {
+            firstLease.Instance.ShouldNotBeSameAs(secondLease.Instance);
+            factory.SpawnCount.ShouldBe(2);
+        }
+        finally
+        {
+            await firstLease.DisposeAsync();
+            await secondLease.DisposeAsync();
+        }
+    }
+
     private static PooledOpenCodeInstanceRegistry CreateRegistry(TestInstanceFactory factory, TimeSpan idleTtl)
     {
         return new PooledOpenCodeInstanceRegistry(
@@ -888,16 +1206,19 @@ public sealed class PooledOpenCodeInstanceRegistryTests
 
     private static void SetRegistryEntryStartupDirectory(
         PooledOpenCodeInstanceRegistry registry,
-        string key,
+        string credentialHashKey,
         string? directory)
     {
+        // The registry keys entries by the composite key (owner\ncredentialHash).
+        // The backward-compatible overloads use LocalOwnerIdentity as the implicit owner.
+        var compositeKey = $"{PooledOpenCodeInstanceRegistry.LocalOwnerIdentity}\n{credentialHashKey}";
         var entriesField = typeof(PooledOpenCodeInstanceRegistry).GetField("_entries", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Field _entries was not found.");
         var entries = entriesField.GetValue(registry)
             ?? throw new InvalidOperationException("Registry entries were not available.");
         var indexer = entries.GetType().GetProperty("Item")
             ?? throw new InvalidOperationException("Registry entries indexer was not found.");
-        var entry = indexer.GetValue(entries, [key])
+        var entry = indexer.GetValue(entries, [compositeKey])
             ?? throw new InvalidOperationException("Registry entry was not found.");
         var startupDirectoryProperty = entry.GetType().GetProperty("StartupDirectory")
             ?? throw new InvalidOperationException("StartupDirectory property was not found.");

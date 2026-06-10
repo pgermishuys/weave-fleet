@@ -221,7 +221,7 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
 
     private sealed class EmptyOpenCodePoolHealthCheck : IOpenCodePoolHealthCheck
     {
-        public OpenCodePoolHealthStatus GetStatus() => new(0, 0, []);
+        public OpenCodePoolHealthStatus GetStatus() => new(0, 0, WarmCount: 0, ActiveCount: 0, []);
     }
 
     /// <summary>

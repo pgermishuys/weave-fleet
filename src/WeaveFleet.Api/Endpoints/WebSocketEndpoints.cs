@@ -150,6 +150,8 @@ public static class WebSocketEndpoints
                     if (newTopics.Contains("activity"))
                     {
                         var activityTracker = context.RequestServices.GetRequiredService<SessionActivityTracker>();
+                        var sessionService = context.RequestServices.GetRequiredService<SessionService>();
+                        var capabilitiesResolver = context.RequestServices.GetRequiredService<SessionCapabilitiesResolver>();
                         foreach (var snapshot in activityTracker.GetAll().Values)
                         {
                             // Respect user scoping — only send snapshots owned by this subscriber
@@ -165,9 +167,14 @@ public static class WebSocketEndpoints
                             var effectiveActivityStatus =
                                 activityTracker.GetEffectiveActivityStatus(snapshot.FleetSessionId)
                                 ?? snapshot.ActivityStatus;
+                            var capabilities = await ResolveCapabilitiesAsync(
+                                sessionService,
+                                capabilitiesResolver,
+                                snapshot.FleetSessionId,
+                                effectiveActivityStatus).ConfigureAwait(false);
 
                             var props = JsonSerializer.SerializeToElement(
-                                new WsActivityStatusProperties(snapshot.FleetSessionId, effectiveActivityStatus),
+                                new WsActivityStatusProperties(snapshot.FleetSessionId, effectiveActivityStatus, capabilities),
                                 ApiJsonContext.Default.WsActivityStatusProperties);
                             var initialEvent = JsonSerializer.Serialize(
                                 new WsEventPayload("event", "activity",
@@ -177,6 +184,7 @@ public static class WebSocketEndpoints
                         }
                     }
                 }
+
                 else if (messageType == WebSocketV2Protocol.SubscribeMessageType)
                 {
                     var topics = WebSocketV2Protocol.ParseTopics(doc.RootElement);
@@ -263,6 +271,23 @@ public static class WebSocketEndpoints
 
         if (logger.IsEnabled(LogLevel.Debug))
             LogDisconnected(logger, null);
+    }
+
+    private static async Task<WeaveFleet.Domain.DTOs.SessionActionCapabilities> ResolveCapabilitiesAsync(
+        SessionService sessionService,
+        SessionCapabilitiesResolver capabilitiesResolver,
+        string sessionId,
+        string activityStatus)
+    {
+        var result = await sessionService.GetSessionAsync(sessionId).ConfigureAwait(false);
+        if (result.IsSuccess)
+        {
+            var session = result.Value;
+            session.ActivityStatus = activityStatus;
+            return capabilitiesResolver.Resolve(session);
+        }
+
+        return SessionCapabilitiesResolver.Resolve(null, null, null, activityStatus, isLive: false);
     }
 
     private static async Task PumpEventsAsync(

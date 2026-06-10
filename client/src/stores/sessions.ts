@@ -26,12 +26,13 @@ export const useSessionsStore = defineStore("sessions", () => {
     sessionId: string,
     patch: Partial<SessionListItem>,
   ): void {
-    const session = sessions.value.find((item) => item.session.id === sessionId);
-    if (!session) {
+    if (!sessions.value.some((item) => item.session.id === sessionId)) {
       return;
     }
 
-    Object.assign(session, patch);
+    sessions.value = sessions.value.map((item) => item.session.id === sessionId
+      ? { ...item, ...patch }
+      : item);
   }
 
   function upsertSession(nextSession: SessionListItem): void {
