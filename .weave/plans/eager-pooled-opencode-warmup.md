@@ -3,6 +3,7 @@
 ## TL;DR
 > **Summary**: Tighten the eager pooled OpenCode warmup plan so pool isolation is explicitly keyed by user/tenant plus credential environment hash, runtime warmup is server-authenticated and trust-derived, and eager create follows a strict create/rollback sequence that never leaks or persists stale tokens.
 > **Estimated Effort**: Large
+> **Pull Request**: https://github.com/pgermishuys/weave-fleet/pull/174
 
 ## Context
 ### Original Request
