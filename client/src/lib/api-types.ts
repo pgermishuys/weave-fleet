@@ -5,6 +5,7 @@
 
 import type {
   SessionActivityStatus,
+  SessionActionCapabilities,
   SessionLifecycleStatus,
   SessionRetentionStatus,
   InstanceStatus,
@@ -15,7 +16,7 @@ import type {
 } from "@/plugins/types";
 
 // Re-export status types for consumer convenience
-export type { SessionActivityStatus, SessionLifecycleStatus, SessionRetentionStatus, InstanceStatus };
+export type { SessionActivityStatus, SessionActionCapabilities, SessionLifecycleStatus, SessionRetentionStatus, InstanceStatus };
 
 /**
  * Fleet-owned session shape — contains only the fields the frontend needs.
@@ -259,6 +260,8 @@ export interface SessionListItem {
    * The display name of the project (populated when available).
    */
   projectName?: string | null;
+  /** Action affordances and disabled reasons returned by the backend when available. */
+  capabilities?: SessionActionCapabilities;
   origin?: SessionOrigin | null;
   /**
    * The harness type used for this session (e.g. "opencode", "claude-code").

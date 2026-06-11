@@ -11,7 +11,9 @@ public sealed class DelegationService(
     IEventBroadcaster eventBroadcaster,
     IUserContext userContext,
     SessionActivityWriteService? sessionActivityWriteService,
-    SessionActivityTracker? activityTracker)
+    SessionActivityTracker? activityTracker,
+    ISessionRepository? sessionRepository,
+    SessionCapabilitiesResolver? capabilitiesResolver)
 {
     private static readonly HashSet<string> TerminalStatuses = new(StringComparer.Ordinal)
     {
@@ -24,7 +26,31 @@ public sealed class DelegationService(
         IDelegationRepository delegationRepository,
         IEventBroadcaster eventBroadcaster,
         IUserContext userContext)
-        : this(delegationRepository, eventBroadcaster, userContext, sessionActivityWriteService: null, activityTracker: null)
+        : this(
+            delegationRepository,
+            eventBroadcaster,
+            userContext,
+            sessionActivityWriteService: null,
+            activityTracker: null,
+            sessionRepository: null,
+            capabilitiesResolver: null)
+    {
+    }
+
+    public DelegationService(
+        IDelegationRepository delegationRepository,
+        IEventBroadcaster eventBroadcaster,
+        IUserContext userContext,
+        SessionActivityWriteService? sessionActivityWriteService,
+        SessionActivityTracker? activityTracker)
+        : this(
+            delegationRepository,
+            eventBroadcaster,
+            userContext,
+            sessionActivityWriteService,
+            activityTracker,
+            sessionRepository: null,
+            capabilitiesResolver: null)
     {
     }
 
@@ -195,9 +221,9 @@ public sealed class DelegationService(
             activityTracker.UnregisterChild(delegation.ChildSessionId);
 
             var parentActivityStatus = activityTracker.GetEffectiveActivityStatus(delegation.ParentSessionId) ?? "idle";
-            var activityPayload = JsonSerializer.SerializeToElement(
-                new ActivityStatusBroadcastPayload(delegation.ParentSessionId, parentActivityStatus),
-                ApplicationJsonContext.Default.ActivityStatusBroadcastPayload);
+            var activityPayload = await BuildActivityStatusPayloadAsync(
+                delegation.ParentSessionId,
+                parentActivityStatus).ConfigureAwait(false);
 
             await eventBroadcaster.BroadcastAsync(
                 $"session:{delegation.ParentSessionId}",
@@ -215,6 +241,25 @@ public sealed class DelegationService(
         }
 
         return ToDto(delegation);
+    }
+
+    private async Task<JsonElement> BuildActivityStatusPayloadAsync(string sessionId, string activityStatus)
+    {
+        var session = sessionRepository is not null
+            ? await sessionRepository.GetByIdAsync(sessionId).ConfigureAwait(false)
+            : null;
+        if (session is not null)
+        {
+            session.ActivityStatus = activityStatus;
+        }
+
+        var capabilities = session is not null && capabilitiesResolver is not null
+            ? capabilitiesResolver.Resolve(session)
+            : SessionCapabilitiesResolver.Resolve(null, null, null, activityStatus, isLive: false);
+
+        return JsonSerializer.SerializeToElement(
+            new ActivityStatusBroadcastPayload(sessionId, activityStatus, capabilities),
+            ApplicationJsonContext.Default.ActivityStatusBroadcastPayload);
     }
 
     public async Task<IReadOnlyList<DelegationDto>> GetDelegationsAsync(string parentSessionId)

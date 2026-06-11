@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using WeaveFleet.Domain.Harnesses;
@@ -23,8 +24,16 @@ public sealed class FakeHarnessSession : IHarnessSession
 
     // ── Call-tracking for assertions ─────────────────────────────────────────
 
-    public List<(string Text, PromptOptions? Options)> SendPromptCalls { get; } = [];
-    public List<CommandOptions> SendCommandCalls { get; } = [];
+    // ConcurrentBag allows concurrent adds from multiple prompt tasks in concurrent activation tests.
+    private readonly ConcurrentBag<(string Text, PromptOptions? Options)> _sendPromptCalls = [];
+    private readonly ConcurrentBag<CommandOptions> _sendCommandCalls = [];
+
+    /// <summary>Records each <see cref="SendPromptAsync"/> call for test assertions.</summary>
+    public IReadOnlyList<(string Text, PromptOptions? Options)> SendPromptCalls => [.. _sendPromptCalls];
+
+    /// <summary>Records each <see cref="SendCommandAsync"/> call for test assertions.</summary>
+    public IReadOnlyList<CommandOptions> SendCommandCalls => [.. _sendCommandCalls];
+
     public bool StopCalled { get; private set; }
     public bool DeleteCalled { get; private set; }
     public bool AbortCalled { get; private set; }
@@ -32,6 +41,12 @@ public sealed class FakeHarnessSession : IHarnessSession
     // ── Configurable behaviors ───────────────────────────────────────────────
 
     public Func<MessageQuery?, CancellationToken, Task<MessagePage>>? GetMessagesBehavior { get; set; }
+
+    /// <summary>
+    /// Optional override for <see cref="IHarnessSession.DeleteAsync"/>. Allows tests to assert that
+    /// best-effort delete is called during rollback scenarios.
+    /// </summary>
+    public Func<CancellationToken, Task>? DeleteBehavior { get; set; }
 
     // ── Event emission (for streaming tests) ─────────────────────────────────
 
@@ -42,13 +57,13 @@ public sealed class FakeHarnessSession : IHarnessSession
 
     public Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct)
     {
-        SendPromptCalls.Add((text, options));
+        _sendPromptCalls.Add((text, options));
         return Task.CompletedTask;
     }
 
     public Task SendCommandAsync(CommandOptions options, CancellationToken ct)
     {
-        SendCommandCalls.Add(options);
+        _sendCommandCalls.Add(options);
         return Task.CompletedTask;
     }
 
@@ -61,7 +76,7 @@ public sealed class FakeHarnessSession : IHarnessSession
     public Task DeleteAsync(CancellationToken ct)
     {
         DeleteCalled = true;
-        return Task.CompletedTask;
+        return DeleteBehavior?.Invoke(ct) ?? Task.CompletedTask;
     }
 
     public Task AbortAsync(CancellationToken ct)

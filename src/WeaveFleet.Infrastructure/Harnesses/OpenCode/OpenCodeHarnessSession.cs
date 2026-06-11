@@ -6,6 +6,7 @@ using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
@@ -53,12 +54,8 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(8, "DelegationFailed"),
             "Failed to process delegation event for session {SessionId}");
 
-    private readonly OpenCodeHttpClient _httpClient;
-    private readonly OpenCodeProcessManager _processManager;
-    private readonly PortAllocator _portAllocator;
-    private readonly int _allocatedPort;
+    private readonly IOpenCodeInstanceHandle _instanceHandle;
     private readonly string _workingDirectory;
-    private readonly TimeSpan _shutdownTimeout;
     private readonly ILogger<OpenCodeHarnessSession> _logger;
     private readonly SemaphoreSlim _sessionLock = new(1, 1);
     private readonly IAnalyticsCollector? _analyticsCollector;
@@ -67,9 +64,11 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly string _fleetSessionId;
     private readonly string _ownerUserId;
-
+    private readonly object _sessionIdSync = new();
+    private TaskCompletionSource<string> _sessionBound = CreateSessionBoundSource();
     private string? _openCodeSessionId;
     private HarnessSessionStatus _status = HarnessSessionStatus.Starting;
+    private int _waitForSubscriptionBeforeNextOperation;
     private bool _disposed;
     private Dictionary<string, OpenCodeAgentModelInfo>? _agentModelCache;
 
@@ -86,12 +85,8 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     public OpenCodeHarnessSession(
         string instanceId,
         string fleetSessionId,
-        OpenCodeHttpClient httpClient,
-        OpenCodeProcessManager processManager,
-        PortAllocator portAllocator,
-        int allocatedPort,
+        IOpenCodeInstanceHandle instanceHandle,
         string workingDirectory,
-        TimeSpan shutdownTimeout,
         IServiceScopeFactory scopeFactory,
         ILogger<OpenCodeHarnessSession> logger,
         string ownerUserId,
@@ -99,34 +94,62 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         string? projectId = null,
         string? projectName = null,
         string? openCodeSessionId = null)
+        : this(
+            instanceId,
+            fleetSessionId,
+            instanceHandle,
+            workingDirectory,
+            scopeFactory,
+            logger,
+            ownerUserId,
+            analyticsCollector,
+            projectId,
+            projectName,
+            openCodeSessionId,
+            initialStatus: null)
+    {
+    }
+
+    public OpenCodeHarnessSession(
+        string instanceId,
+        string fleetSessionId,
+        IOpenCodeInstanceHandle instanceHandle,
+        string workingDirectory,
+        IServiceScopeFactory scopeFactory,
+        ILogger<OpenCodeHarnessSession> logger,
+        string ownerUserId,
+        IAnalyticsCollector? analyticsCollector,
+        string? projectId,
+        string? projectName,
+        string? openCodeSessionId,
+        HarnessSessionStatus? initialStatus)
     {
         InstanceId = instanceId;
         _fleetSessionId = fleetSessionId;
-        _httpClient = httpClient;
-        _processManager = processManager;
-        _portAllocator = portAllocator;
-        _allocatedPort = allocatedPort;
+        _instanceHandle = instanceHandle;
         _workingDirectory = workingDirectory;
-        _shutdownTimeout = shutdownTimeout;
         _scopeFactory = scopeFactory;
         _logger = logger;
         _ownerUserId = ownerUserId;
         _analyticsCollector = analyticsCollector;
         _projectId = projectId;
         _projectName = projectName;
-        _openCodeSessionId = openCodeSessionId;
+        if (!string.IsNullOrWhiteSpace(openCodeSessionId))
+        {
+            SetOpenCodeSessionId(openCodeSessionId);
+        }
 
-        _status = HarnessSessionStatus.Idle;
+        _status = initialStatus ?? HarnessSessionStatus.Idle;
 
         // Subscribe to unexpected process exit
-        _processManager.ProcessExited += OnProcessExited;
+        _instanceHandle.ProcessExited += OnProcessExited;
     }
 
     /// <inheritdoc />
     public string InstanceId { get; }
 
     /// <inheritdoc />
-    public int? ProcessId => _processManager.ProcessId;
+    public int? ProcessId => _instanceHandle.ProcessId;
 
     /// <inheritdoc />
     public string HarnessType => "opencode";
@@ -144,7 +167,11 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public async Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct)
     {
+        var requestedModel = ResolveRequestedModel(options?.ProviderId, options?.ModelId);
+
+        await EnsureConnectedAsync(requestedModel.ProviderId, requestedModel.ModelId, ct).ConfigureAwait(false);
         await EnsureSessionAsync(ct).ConfigureAwait(false);
+        await WaitForPostRecoveryEventSubscriptionAsync(_openCodeSessionId!, ct).ConfigureAwait(false);
 
         var parts = new List<OpenCodePromptPart>
         {
@@ -163,8 +190,6 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 });
             }
         }
-
-        var requestedModel = ResolveRequestedModel(options?.ProviderId, options?.ModelId);
 
         OpenCodeModelRefRequest? modelRef = null;
         if (!string.IsNullOrWhiteSpace(requestedModel.ProviderId)
@@ -186,7 +211,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
         LogSendPrompt(_logger, InstanceId, null);
 
-        await _httpClient.SendPromptAsyncFireAndForget(
+        await _instanceHandle.HttpClient.SendPromptAsyncFireAndForget(
             _openCodeSessionId!,
             request,
             _workingDirectory,
@@ -198,12 +223,15 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public async Task SendCommandAsync(CommandOptions options, CancellationToken ct)
     {
-        await EnsureSessionAsync(ct).ConfigureAwait(false);
-
         // OpenCode's CommandInput expects "model" as a plain string (e.g. "provider/model"),
         // unlike the prompt endpoint which accepts { providerID, modelID }.
         // It also requires "arguments" as a non-optional string.
         var requestedModel = ResolveRequestedModel(options.ProviderId, options.ModelId);
+
+        await EnsureConnectedAsync(requestedModel.ProviderId, requestedModel.ModelId, ct).ConfigureAwait(false);
+        await EnsureSessionAsync(ct).ConfigureAwait(false);
+        await WaitForPostRecoveryEventSubscriptionAsync(_openCodeSessionId!, ct).ConfigureAwait(false);
+
         var commandModel = ToCombinedModelId(requestedModel.ProviderId, requestedModel.ModelId);
 
         var request = new OpenCodeCommandRequest
@@ -216,10 +244,9 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
         LogSendCommand(_logger, InstanceId, null);
 
-        await _httpClient.SendCommandAsync(
+        await _instanceHandle.SendCommandAsync(
             _openCodeSessionId!,
             request,
-            _workingDirectory,
             ct).ConfigureAwait(false);
 
         _status = HarnessSessionStatus.Running;
@@ -233,7 +260,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             return new MessagePage([], false);
         }
 
-        var raw = await _httpClient.GetMessagesAsync(
+        var raw = await _instanceHandle.HttpClient.GetMessagesAsync(
             _openCodeSessionId,
             _workingDirectory,
             query?.Limit,
@@ -252,14 +279,24 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     public async IAsyncEnumerable<HarnessEvent> SubscribeAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
-        await foreach (var sseEvt in _httpClient
-            .SubscribeToEventsAsync(_workingDirectory, ct)
+        var openCodeSessionId = _instanceHandle is LeasedInstanceHandle
+            ? await WaitForOpenCodeSessionIdAsync(ct).ConfigureAwait(false)
+            : _openCodeSessionId;
+
+        if (!string.IsNullOrWhiteSpace(openCodeSessionId))
+        {
+            await EnsurePooledSessionBoundAsync(openCodeSessionId, ct).ConfigureAwait(false);
+        }
+
+        await foreach (var sseEvt in _instanceHandle
+            .SubscribeEvents(openCodeSessionId, ct)
             .ConfigureAwait(false))
         {
             var resolvedOpenCodeSessionId = OpenCodeMapper.TryResolveSessionId(sseEvt);
-            var isParentEvent = string.IsNullOrWhiteSpace(_openCodeSessionId)
+            var currentOpenCodeSessionId = _openCodeSessionId;
+            var isParentEvent = string.IsNullOrWhiteSpace(currentOpenCodeSessionId)
                 || string.IsNullOrWhiteSpace(resolvedOpenCodeSessionId)
-                || string.Equals(resolvedOpenCodeSessionId, _openCodeSessionId, StringComparison.Ordinal);
+                || string.Equals(resolvedOpenCodeSessionId, currentOpenCodeSessionId, StringComparison.Ordinal);
 
             string? routedFleetSessionId = null;
             if (!isParentEvent && !string.IsNullOrWhiteSpace(resolvedOpenCodeSessionId))
@@ -286,7 +323,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
             var harnessEvent = OpenCodeMapper.ToHarnessEvent(
                 sseEvt,
-                isParentEvent ? _openCodeSessionId : resolvedOpenCodeSessionId) with
+                isParentEvent ? currentOpenCodeSessionId : resolvedOpenCodeSessionId) with
             {
                 FleetSessionId = !isParentEvent ? routedFleetSessionId : null
             };
@@ -375,7 +412,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         {
             try
             {
-                var agents = await _httpClient.GetAgentsAsync(_workingDirectory, ct).ConfigureAwait(false);
+                var agents = await _instanceHandle.HttpClient.GetAgentsAsync(_workingDirectory, ct).ConfigureAwait(false);
                 _agentModelCache = new Dictionary<string, OpenCodeAgentModelInfo>(StringComparer.OrdinalIgnoreCase);
                 foreach (var agent in agents)
                 {
@@ -457,7 +494,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         if (_openCodeSessionId is null) return;
 
         LogAbort(_logger, InstanceId, null);
-        await _httpClient.AbortAsync(_openCodeSessionId, _workingDirectory, ct).ConfigureAwait(false);
+        await _instanceHandle.HttpClient.AbortAsync(_openCodeSessionId, _workingDirectory, ct).ConfigureAwait(false);
         _status = HarnessSessionStatus.Idle;
     }
 
@@ -465,14 +502,14 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     public async Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
     {
         var questionId = ResolveQuestionId(requestId);
-        await _httpClient.AnswerQuestionAsync(questionId, answers, _workingDirectory, ct).ConfigureAwait(false);
+        await _instanceHandle.HttpClient.AnswerQuestionAsync(questionId, answers, _workingDirectory, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task RejectQuestionAsync(string requestId, CancellationToken ct)
     {
         var questionId = ResolveQuestionId(requestId);
-        await _httpClient.RejectQuestionAsync(questionId, _workingDirectory, ct).ConfigureAwait(false);
+        await _instanceHandle.HttpClient.RejectQuestionAsync(questionId, _workingDirectory, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -519,14 +556,14 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public async Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct)
     {
-        if (!_processManager.IsRunning)
+        if (!_instanceHandle.IsRunning)
         {
             return new HealthCheckResult(false, "Process exited.");
         }
 
         try
         {
-            var health = await _httpClient.CheckHealthAsync(ct).ConfigureAwait(false);
+            var health = await _instanceHandle.HttpClient.CheckHealthAsync(ct).ConfigureAwait(false);
             return new HealthCheckResult(health.Healthy, health.Version is not null ? $"v{health.Version}" : null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -538,7 +575,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public async Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct)
     {
-        var commands = await _httpClient.GetCommandsAsync(_workingDirectory, ct).ConfigureAwait(false);
+        var commands = await _instanceHandle.HttpClient.GetCommandsAsync(_workingDirectory, ct).ConfigureAwait(false);
         return commands.Select(c => new CommandInfo
         {
             Name = c.Name,
@@ -549,7 +586,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public async Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
     {
-        var agents = await _httpClient.GetAgentsAsync(_workingDirectory, ct).ConfigureAwait(false);
+        var agents = await _instanceHandle.HttpClient.GetAgentsAsync(_workingDirectory, ct).ConfigureAwait(false);
         return agents.Select(a => new AgentInfo
         {
             Name = a.Name ?? string.Empty,
@@ -564,7 +601,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public async Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
     {
-        var response = await _httpClient.GetProvidersAsync(_workingDirectory, ct).ConfigureAwait(false);
+        var response = await _instanceHandle.HttpClient.GetProvidersAsync(_workingDirectory, ct).ConfigureAwait(false);
         // Only return connected providers (ones where credentials are configured).
         var connectedSet = response.Connected?.ToHashSet(StringComparer.Ordinal)
             ?? new HashSet<string>(StringComparer.Ordinal);
@@ -588,13 +625,8 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         _status = HarnessSessionStatus.Stopping;
         LogStop(_logger, InstanceId, null);
 
-        await _processManager.StopAsync(_shutdownTimeout).ConfigureAwait(false);
+        await ReleaseLeaseOrStopProcessAsync(ct).ConfigureAwait(false);
         _status = HarnessSessionStatus.Stopped;
-
-        if (_allocatedPort > 0)
-        {
-            _portAllocator.ReleasePort(_allocatedPort);
-        }
     }
 
     /// <inheritdoc />
@@ -607,7 +639,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         {
             try
             {
-                await _httpClient.DeleteSessionAsync(_openCodeSessionId, _workingDirectory, ct)
+                await _instanceHandle.HttpClient.DeleteSessionAsync(_openCodeSessionId, _workingDirectory, ct)
                     .ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -616,13 +648,21 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             }
         }
 
-        await _processManager.StopAsync(_shutdownTimeout).ConfigureAwait(false);
+        await ReleaseLeaseOrStopProcessAsync(ct).ConfigureAwait(false);
         _status = HarnessSessionStatus.Stopped;
+    }
 
-        if (_allocatedPort > 0)
+    private async Task ReleaseLeaseOrStopProcessAsync(CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        if (_instanceHandle is LeasedInstanceHandle)
         {
-            _portAllocator.ReleasePort(_allocatedPort);
+            await _instanceHandle.DisposeAsync().ConfigureAwait(false);
+            return;
         }
+
+        await _instanceHandle.StopAsync(ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -631,7 +671,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         if (_disposed) return;
         _disposed = true;
 
-        _processManager.ProcessExited -= OnProcessExited;
+        _instanceHandle.ProcessExited -= OnProcessExited;
 
         if (_status is not HarnessSessionStatus.Stopped and not HarnessSessionStatus.Error)
         {
@@ -645,7 +685,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             }
         }
 
-        await _processManager.DisposeAsync().ConfigureAwait(false);
+        await _instanceHandle.DisposeAsync().ConfigureAwait(false);
         _sessionLock.Dispose();
     }
 
@@ -655,16 +695,25 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
     private async Task EnsureSessionAsync(CancellationToken ct)
     {
-        if (_openCodeSessionId is not null) return;
+        if (_openCodeSessionId is not null)
+        {
+            await EnsurePooledSessionBoundAsync(ct).ConfigureAwait(false);
+            return;
+        }
 
         await _sessionLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             if (_openCodeSessionId is null)
             {
-                var session = await _httpClient.CreateSessionAsync(null, _workingDirectory, ct)
+                var session = await _instanceHandle.HttpClient.CreateSessionAsync(null, _workingDirectory, ct)
                     .ConfigureAwait(false);
-                _openCodeSessionId = session.Id;
+                SetOpenCodeSessionId(session.Id);
+                if (_instanceHandle is LeasedInstanceHandle leasedInstanceHandle)
+                {
+                    await leasedInstanceHandle.BindSessionAsync(session.Id, ct).ConfigureAwait(false);
+                }
+
                 LogSessionCreated(_logger, session.Id, null);
                 // Persist resume token for session recovery
                 _ = PersistResumeTokenAsync(session.Id);
@@ -676,11 +725,98 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         }
     }
 
+    private async Task EnsurePooledSessionBoundAsync(CancellationToken ct)
+    {
+        if (_openCodeSessionId is not null)
+        {
+            await EnsurePooledSessionBoundAsync(_openCodeSessionId, ct).ConfigureAwait(false);
+        }
+    }
+
+    private async Task EnsurePooledSessionBoundAsync(string openCodeSessionId, CancellationToken ct)
+    {
+        if (_instanceHandle is LeasedInstanceHandle leasedInstanceHandle)
+        {
+            await leasedInstanceHandle.BindSessionAsync(openCodeSessionId, ct).ConfigureAwait(false);
+        }
+    }
+
+    private Task<string> WaitForOpenCodeSessionIdAsync(CancellationToken ct)
+    {
+        Task<string> waitTask;
+        lock (_sessionIdSync)
+        {
+            if (!string.IsNullOrWhiteSpace(_openCodeSessionId))
+            {
+                return Task.FromResult(_openCodeSessionId);
+            }
+
+            Volatile.Write(ref _waitForSubscriptionBeforeNextOperation, 1);
+            waitTask = _sessionBound.Task;
+        }
+
+        return waitTask.WaitAsync(ct);
+    }
+
+    private void SetOpenCodeSessionId(string openCodeSessionId)
+    {
+        lock (_sessionIdSync)
+        {
+            _openCodeSessionId = openCodeSessionId;
+            _sessionBound.TrySetResult(openCodeSessionId);
+        }
+    }
+
+    private void ClearOpenCodeSessionId()
+    {
+        lock (_sessionIdSync)
+        {
+            _openCodeSessionId = null;
+            if (_sessionBound.Task.IsCompleted)
+            {
+                _sessionBound = CreateSessionBoundSource();
+            }
+        }
+    }
+
+    private static TaskCompletionSource<string> CreateSessionBoundSource() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private async Task EnsureConnectedAsync(CancellationToken ct)
+    {
+        await EnsureConnectedAsync(providerId: null, modelId: null, ct).ConfigureAwait(false);
+    }
+
+    private async Task EnsureConnectedAsync(string? providerId, string? modelId, CancellationToken ct)
+    {
+        if (_instanceHandle is LeasedInstanceHandle leasedInstanceHandle)
+            await leasedInstanceHandle.EnsureConnectedAsync(providerId, modelId, ct).ConfigureAwait(false);
+        else
+            await _instanceHandle.EnsureConnectedAsync(ct).ConfigureAwait(false);
+
+        if (_status == HarnessSessionStatus.Error)
+        {
+            ClearOpenCodeSessionId();
+            _agentModelCache = null;
+            _toolCallToQuestionId.Clear();
+            _status = HarnessSessionStatus.Idle;
+        }
+    }
+
+    private async Task WaitForPostRecoveryEventSubscriptionAsync(string openCodeSessionId, CancellationToken ct)
+    {
+        if (Interlocked.Exchange(ref _waitForSubscriptionBeforeNextOperation, 0) != 0)
+        {
+            await _instanceHandle.WaitForEventSubscriptionAsync(openCodeSessionId, ct).ConfigureAwait(false);
+        }
+    }
+
     private void OnProcessExited(object? sender, int exitCode)
     {
         if (_status is HarnessSessionStatus.Stopping or HarnessSessionStatus.Stopped) return;
 
         LogProcessExited(_logger, InstanceId, exitCode, null);
+        Volatile.Write(ref _waitForSubscriptionBeforeNextOperation, 1);
         _status = HarnessSessionStatus.Error;
     }
 

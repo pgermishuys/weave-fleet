@@ -9,6 +9,7 @@ import {
   Cpu,
   Hexagon,
   Infinity,
+  LoaderCircle,
   Settings2,
   Star,
   TerminalSquare,
@@ -41,6 +42,7 @@ interface HarnessCard {
 }
 
 const DEFAULT_HARNESS_TYPE = "opencode";
+const POOLED_OPEN_CODE_MODE_PREFERENCE_KEY = "PooledOpenCodeHarness";
 
 const harnessDisplayMetadata: Record<string, HarnessDisplayMetadata> = {
   nucode: {
@@ -75,6 +77,8 @@ const prefsStore = usePreferencesStore();
 const { harnesses: registeredHarnesses } = useHarnesses();
 
 const expandedSettingsId = shallowRef<string | null>(null);
+const isSavingPooledOpenCodeMode = shallowRef(false);
+const pooledOpenCodeModeError = shallowRef<string | null>(null);
 
 onMounted(async () => {
   await prefsStore.refresh();
@@ -84,6 +88,9 @@ const nucodeProvider = computed(() => prefsStore.get("nucode.provider", "copilot
 
 const nucodeBaseUrl = computed(() => prefsStore.get("nucode.baseUrl", ""));
 const defaultHarnessId = computed(() => prefsStore.get("defaultHarnessType", DEFAULT_HARNESS_TYPE));
+const isPooledOpenCodeModeEnabled = computed(
+  () => prefsStore.get(POOLED_OPEN_CODE_MODE_PREFERENCE_KEY, "false") === "true",
+);
 
 const harnesses = computed<readonly HarnessCard[]>(() => {
   return registeredHarnesses.value.map(toHarnessCard);
@@ -99,6 +106,26 @@ async function toggleHarness(harness: HarnessCard): Promise<void> {
 async function makeDefaultHarness(harness: HarnessCard): Promise<void> {
   if (!harness.canDefault || !harness.enabled) return;
   await prefsStore.set("defaultHarnessType", harness.id);
+}
+
+async function togglePooledOpenCodeMode(): Promise<void> {
+  if (isSavingPooledOpenCodeMode.value) return;
+
+  isSavingPooledOpenCodeMode.value = true;
+  pooledOpenCodeModeError.value = null;
+
+  try {
+    await prefsStore.set(
+      POOLED_OPEN_CODE_MODE_PREFERENCE_KEY,
+      isPooledOpenCodeModeEnabled.value ? "false" : "true",
+    );
+  } catch (error) {
+    pooledOpenCodeModeError.value = error instanceof Error
+      ? error.message
+      : "Failed to update pooled OpenCode mode.";
+  } finally {
+    isSavingPooledOpenCodeMode.value = false;
+  }
 }
 
 function formatProvider(value: string): string {
@@ -340,7 +367,7 @@ function statusIcon(status: HarnessStatus): Component {
                 Settings
               </button>
               <span
-                v-else
+                v-else-if="harness.id !== 'opencode'"
                 class="inline-flex items-center rounded-btn px-2.5 py-1.5 text-xs font-medium text-muted"
               >
                 No settings yet
@@ -355,6 +382,55 @@ function statusIcon(status: HarnessStatus): Component {
           class="mt-4 border-t border-border pt-4"
         >
           <NuCodeSettingsPanel />
+        </div>
+
+        <div
+          v-if="harness.id === 'opencode'"
+          class="mt-4 border-t border-border pt-4"
+          data-testid="pooled-opencode-mode-setting"
+        >
+          <div class="flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
+            <div>
+              <p class="text-sm font-medium text-text">
+                Pooled OpenCode Mode
+              </p>
+              <p class="mt-1 text-xs text-muted">
+                Off by default. When enabled, newly created OpenCode sessions use pooled automatic runtime mode and can prompt after Fleet restart without manual Resume. Existing sessions continue in their current mode.
+              </p>
+              <p
+                v-if="pooledOpenCodeModeError"
+                class="mt-2 text-xs text-red-300"
+                role="alert"
+              >
+                {{ pooledOpenCodeModeError }}
+              </p>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <LoaderCircle
+                v-if="isSavingPooledOpenCodeMode"
+                :size="16"
+                class="animate-spin text-muted"
+                aria-hidden="true"
+              />
+              <button
+                type="button"
+                role="switch"
+                :aria-checked="isPooledOpenCodeModeEnabled"
+                :disabled="prefsStore.isLoading || isSavingPooledOpenCodeMode"
+                aria-label="Enable Pooled OpenCode Mode"
+                class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
+                :class="isPooledOpenCodeModeEnabled ? 'bg-accent' : 'bg-border'"
+                data-testid="pooled-opencode-mode-toggle"
+                @click="togglePooledOpenCodeMode"
+              >
+                <span
+                  class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                  :class="isPooledOpenCodeModeEnabled ? 'translate-x-5' : 'translate-x-0'"
+                />
+              </button>
+            </div>
+          </div>
         </div>
       </article>
     </section>

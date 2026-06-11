@@ -412,6 +412,61 @@ public sealed class SessionRepositoryTests
     }
 
     [Fact]
+    public async Task MarkAllNonTerminalStoppedAsync_stops_manual_sessions_but_leaves_automatic_sessions_running()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var (ws, inst) = await InsertDependenciesAsync(factory);
+        var automaticSession = new Session
+        {
+            Id = Guid.NewGuid().ToString(),
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-auto-recovery",
+            Title = "Automatic Recovery",
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            LifecycleStatus = "running",
+            RuntimeMode = "automatic",
+            HarnessResumeToken = "resume-token",
+            UserId = TestUserContext.DefaultUserId
+        };
+        var manualSession = new Session
+        {
+            Id = Guid.NewGuid().ToString(),
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-manual-recovery",
+            Title = "Manual Recovery",
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            LifecycleStatus = "running",
+            RuntimeMode = "manual",
+            UserId = TestUserContext.DefaultUserId
+        };
+        await repo.InsertAsync(automaticSession);
+        await repo.InsertAsync(manualSession);
+
+        var stoppedAt = DateTime.UtcNow.ToString("O");
+        var updatedCount = await repo.MarkAllNonTerminalStoppedAsync(stoppedAt);
+
+        updatedCount.ShouldBe(1);
+        var reloadedAutomatic = await repo.GetByIdAsync(automaticSession.Id);
+        reloadedAutomatic.ShouldNotBeNull();
+        reloadedAutomatic.Status.ShouldBe("active");
+        reloadedAutomatic.LifecycleStatus.ShouldBe("running");
+        reloadedAutomatic.StoppedAt.ShouldBeNull();
+        var reloadedManual = await repo.GetByIdAsync(manualSession.Id);
+        reloadedManual.ShouldNotBeNull();
+        reloadedManual.Status.ShouldBe("stopped");
+        reloadedManual.LifecycleStatus.ShouldBe("stopped");
+        reloadedManual.StoppedAt.ShouldBe(stoppedAt);
+    }
+
+    [Fact]
     public async Task IncrementTokensAsync_AccumulatesTokens()
     {
         var (conn, repo, factory) = await CreateAsync();

@@ -12,7 +12,7 @@ import { useSessionDetailContext } from "@/composables/use-session-detail-contex
 import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { apiFetch } from "@/lib/api-client";
 import { trackAction } from "@/lib/track-action";
-import type { SessionListItem } from "@/lib/api-types";
+import type { SessionActionCapabilities, SessionListItem } from "@/lib/api-types";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { secondsUntilRefresh, isRefreshing, refreshNow, POLL_INTERVAL_SECONDS } from "@/plugins/builtin/smart-links/composables/use-smart-links";
 
@@ -45,6 +45,7 @@ interface SessionApiDetail {
   harnessType?: string;
   workspaceId?: string;
   projectId?: string | null;
+  capabilities?: SessionActionCapabilities;
 }
 
 const props = defineProps<{
@@ -126,8 +127,9 @@ const effectiveRetentionStatus = computed(() => normalizeRetentionStatus(
 ));
 const isRunningSession = computed(() => effectiveLifecycleStatus.value === "running");
 const isBusySession = computed(() => isActiveActivityStatus(effectiveActivityStatus.value));
-const canAbort = computed(() => isRunningSession.value && isBusySession.value);
-const canResume = computed(() => {
+const effectiveCapabilities = computed(() => props.session?.capabilities ?? remoteSessionDetail.value?.capabilities);
+const fallbackCanAbort = computed(() => isRunningSession.value && isBusySession.value);
+const fallbackCanResume = computed(() => {
   switch (effectiveLifecycleStatus.value) {
     case "stopped":
     case "completed":
@@ -137,8 +139,16 @@ const canResume = computed(() => {
       return false;
   }
 });
-const canStop = computed(() => isRunningSession.value);
-const canArchive = computed(() => effectiveRetentionStatus.value !== "archived" && !isRunningSession.value);
+const fallbackCanStop = computed(() => isRunningSession.value);
+const fallbackCanArchive = computed(() => effectiveRetentionStatus.value !== "archived" && !isRunningSession.value);
+const fallbackCanFork = computed(() => ctx.supportsFork);
+const fallbackCanDelete = computed(() => true);
+const canAbort = computed(() => effectiveCapabilities.value?.canAbort ?? fallbackCanAbort.value);
+const canResume = computed(() => effectiveCapabilities.value?.canResume ?? fallbackCanResume.value);
+const canStop = computed(() => effectiveCapabilities.value?.canStop ?? fallbackCanStop.value);
+const canArchive = computed(() => effectiveCapabilities.value?.canArchive ?? fallbackCanArchive.value);
+const canFork = computed(() => effectiveCapabilities.value?.canFork ?? fallbackCanFork.value);
+const canDelete = computed(() => effectiveCapabilities.value?.canDelete ?? fallbackCanDelete.value);
 const isResumingCurrentSession = computed(() => isResuming.value && resumingSessionId.value === sessionId.value);
 const isAnyActionPending = computed(() => isAborting.value
   || isArchiving.value
@@ -266,7 +276,7 @@ async function handleStop(): Promise<void> {
 }
 
 async function handleFork(): Promise<void> {
-  if (!sessionId.value) {
+  if (!sessionId.value || !canFork.value) {
     return;
   }
 
@@ -274,7 +284,7 @@ async function handleFork(): Promise<void> {
 }
 
 async function handleDelete(): Promise<void> {
-  if (!sessionId.value || !resolvedInstanceId.value) {
+  if (!sessionId.value || !resolvedInstanceId.value || !canDelete.value) {
     return;
   }
 
@@ -282,7 +292,7 @@ async function handleDelete(): Promise<void> {
 }
 
 async function handleDeleteConfirmed(): Promise<void> {
-  if (!sessionId.value || !resolvedInstanceId.value) {
+  if (!sessionId.value || !resolvedInstanceId.value || !canDelete.value) {
     return;
   }
 
@@ -503,7 +513,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       <span class="session-action-toolbar__divider" />
 
       <button
-        v-if="ctx.supportsFork"
+        v-if="canFork"
         type="button"
         data-testid="session-archived-fork-button"
         class="session-action-toolbar__btn"
@@ -518,6 +528,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       </button>
 
       <button
+        v-if="canDelete"
         type="button"
         class="session-action-toolbar__btn"
         :disabled="isAnyActionPending || !sessionId"
@@ -538,6 +549,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       </button>
 
       <button
+        v-if="canDelete"
         type="button"
         data-testid="session-delete-button"
         class="session-action-toolbar__btn session-action-toolbar__btn--danger"
@@ -707,7 +719,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
     />
 
     <ForkSessionDialog
-      v-if="ctx.supportsFork"
+      v-if="canFork"
       :open="isForkDialogOpen"
       :session-id="sessionId ?? ''"
       :source-title="sessionTitle"

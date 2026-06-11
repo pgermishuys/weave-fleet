@@ -35,6 +35,10 @@ internal sealed class OpenCodeHttpClient
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(7, "ResponseBody"),
             "OpenCode API error response body: {Body}");
 
+    private static readonly Action<ILogger, string, string?, Exception?> LogDirectoryScopeRejected =
+        LoggerMessage.Define<string, string?>(LogLevel.Warning, new EventId(8, "DirectoryScopeRejected"),
+            "Rejected OpenCode API request because directory scope does not match expected working directory. Expected directory: {ExpectedDirectory}; actual directory: {ActualDirectory}.");
+
     private static readonly Action<ILogger, string, Exception?> LogSseHeartbeat =
         LoggerMessage.Define<string>(LogLevel.Trace, new EventId(4, "SseHeartbeat"),
             "SSE heartbeat or control event: {Type}");
@@ -45,11 +49,27 @@ internal sealed class OpenCodeHttpClient
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<OpenCodeHttpClient> _logger;
+    private readonly string? _expectedDirectory;
 
     public OpenCodeHttpClient(HttpClient httpClient, ILogger<OpenCodeHttpClient> logger)
+        : this(httpClient, logger, expectedDirectory: null)
+    {
+    }
+
+    private OpenCodeHttpClient(
+        HttpClient httpClient,
+        ILogger<OpenCodeHttpClient> logger,
+        string? expectedDirectory)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _expectedDirectory = expectedDirectory;
+    }
+
+    internal OpenCodeHttpClient WithExpectedDirectory(string expectedDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedDirectory);
+        return new OpenCodeHttpClient(_httpClient, _logger, expectedDirectory);
     }
 
     // -----------------------------------------------------------------------
@@ -73,7 +93,8 @@ internal sealed class OpenCodeHttpClient
         CancellationToken ct)
     {
         var url = BuildUrl("/session", directory);
-        return await PostAsync(url, request, OpenCodeJsonContext.Default.OpenCodeCreateSessionRequest, OpenCodeJsonContext.Default.OpenCodeSessionInfo, ct).ConfigureAwait(false);
+        var identity = await PostAsync(url, request, OpenCodeJsonContext.Default.OpenCodeCreateSessionRequest, OpenCodeJsonContext.Default.OpenCodeSessionIdentity, ct).ConfigureAwait(false);
+        return new OpenCodeSessionInfo { Id = identity.Id };
     }
 
     /// <summary>GET /session/{sessionId}?directory={directory}</summary>
@@ -83,7 +104,8 @@ internal sealed class OpenCodeHttpClient
         CancellationToken ct)
     {
         var url = BuildUrl($"/session/{Uri.EscapeDataString(sessionId)}", directory);
-        return await GetAsync(url, OpenCodeJsonContext.Default.OpenCodeSessionInfo, ct).ConfigureAwait(false);
+        var identity = await GetAsync(url, OpenCodeJsonContext.Default.OpenCodeSessionIdentity, ct).ConfigureAwait(false);
+        return new OpenCodeSessionInfo { Id = identity.Id };
     }
 
     /// <summary>GET /session?directory={directory}</summary>
@@ -103,6 +125,7 @@ internal sealed class OpenCodeHttpClient
         CancellationToken ct)
     {
         var url = BuildUrl($"/session/{Uri.EscapeDataString(sessionId)}", directory);
+        ValidateDirectoryScope(url);
         using var response = await _httpClient.DeleteAsync(url, ct).ConfigureAwait(false);
         LogResponse(_logger, (int)response.StatusCode, url, null);
         return response.IsSuccessStatusCode;
@@ -127,6 +150,7 @@ internal sealed class OpenCodeHttpClient
         CancellationToken ct)
     {
         var url = BuildUrl($"/session/{Uri.EscapeDataString(sessionId)}/prompt_async", directory);
+        ValidateDirectoryScope(url);
         LogRequest(_logger, $"POST {url}", null);
 
         var content = new StringContent(
@@ -152,6 +176,7 @@ internal sealed class OpenCodeHttpClient
         CancellationToken ct)
     {
         var url = BuildUrl($"/session/{Uri.EscapeDataString(sessionId)}/command", directory);
+        ValidateDirectoryScope(url);
         var logUrl = RedactDirectory(url);
         LogRequest(_logger, $"POST {logUrl}", null);
 
@@ -194,6 +219,7 @@ internal sealed class OpenCodeHttpClient
         if (before is not null) sb.Append(System.Globalization.CultureInfo.InvariantCulture, $"&before={Uri.EscapeDataString(before)}");
 
         var url = sb.ToString();
+        ValidateDirectoryScope(url);
         LogRequest(_logger, $"GET {url}", null);
 
         using var response = await _httpClient.GetAsync(url, ct).ConfigureAwait(false);
@@ -284,6 +310,7 @@ internal sealed class OpenCodeHttpClient
     public async Task<bool> AbortAsync(string sessionId, string directory, CancellationToken ct)
     {
         var url = BuildUrl($"/session/{Uri.EscapeDataString(sessionId)}/abort", directory);
+        ValidateDirectoryScope(url);
         LogRequest(_logger, $"POST {url}", null);
 
         using var response = await _httpClient.PostAsync(url, null, ct).ConfigureAwait(false);
@@ -361,6 +388,23 @@ internal sealed class OpenCodeHttpClient
         string directory,
         [EnumeratorCancellation] CancellationToken ct)
     {
+        await foreach (var evt in SubscribeToEventsAsync(directory, static () => Task.CompletedTask, ct).ConfigureAwait(false))
+        {
+            yield return evt;
+        }
+    }
+
+    /// <summary>
+    /// GET /event?directory={directory} — SSE stream.
+    /// Reconnects on disconnect with exponential backoff until cancellation is requested.
+    /// </summary>
+    public async IAsyncEnumerable<OpenCodeSseEvent> SubscribeToEventsAsync(
+        string directory,
+        Func<Task> connectedAsync,
+        [EnumeratorCancellation] CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(connectedAsync);
+
         var channel = Channel.CreateBounded<OpenCodeSseEvent>(
             new BoundedChannelOptions(1000)
             {
@@ -380,6 +424,7 @@ internal sealed class OpenCodeHttpClient
                 try
                 {
                     var url = BuildUrl("/event", directory);
+                    ValidateDirectoryScope(url);
                     LogRequest(_logger, $"GET {url} (SSE)", null);
 
                     using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -389,6 +434,7 @@ internal sealed class OpenCodeHttpClient
 
                     response.EnsureSuccessStatusCode();
                     await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                    await connectedAsync().ConfigureAwait(false);
                     using var reader = new StreamReader(stream);
 
                     while (!ct.IsCancellationRequested)
@@ -461,6 +507,7 @@ internal sealed class OpenCodeHttpClient
 
     private async Task<T> GetAsync<T>(string url, JsonTypeInfo<T> typeInfo, CancellationToken ct)
     {
+        ValidateDirectoryScope(url);
         LogRequest(_logger, $"GET {url}", null);
         using var response = await _httpClient.GetAsync(url, ct).ConfigureAwait(false);
         LogResponse(_logger, (int)response.StatusCode, url, null);
@@ -480,6 +527,7 @@ internal sealed class OpenCodeHttpClient
 
     private async Task PostVoidAsync<TReq>(string url, TReq body, JsonTypeInfo<TReq> reqTypeInfo, CancellationToken ct)
     {
+        ValidateDirectoryScope(url);
         var requestBody = JsonSerializer.Serialize(body, reqTypeInfo);
         LogRequest(_logger, $"POST {url}", null);
         LogRequestBody(_logger, requestBody, null);
@@ -500,6 +548,7 @@ internal sealed class OpenCodeHttpClient
 
     private async Task<TResp> PostAsync<TReq, TResp>(string url, TReq? body, JsonTypeInfo<TReq> reqTypeInfo, JsonTypeInfo<TResp> respTypeInfo, CancellationToken ct)
     {
+        ValidateDirectoryScope(url);
         LogRequest(_logger, $"POST {url}", null);
 
         StringContent? content = null;
@@ -532,6 +581,53 @@ internal sealed class OpenCodeHttpClient
     {
         char separator = path.Contains('?') ? '&' : '?';
         return $"{path}{separator}directory={Uri.EscapeDataString(directory)}";
+    }
+
+    private void ValidateDirectoryScope(string url)
+    {
+        if (_expectedDirectory is null)
+        {
+            return;
+        }
+
+        var actualDirectory = GetDirectoryQueryValue(url);
+        if (string.Equals(actualDirectory, _expectedDirectory, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        LogDirectoryScopeRejected(_logger, _expectedDirectory, actualDirectory, null);
+        throw new InvalidOperationException(
+            "Cannot route OpenCode API request because the request directory does not match the leased session working directory.");
+    }
+
+    private static string? GetDirectoryQueryValue(string url)
+    {
+        var queryStart = url.IndexOf('?', StringComparison.Ordinal);
+        if (queryStart < 0 || queryStart == url.Length - 1)
+        {
+            return null;
+        }
+
+        var query = url.AsSpan(queryStart + 1);
+        while (!query.IsEmpty)
+        {
+            var separatorIndex = query.IndexOf('&');
+            var parameter = separatorIndex < 0 ? query : query[..separatorIndex];
+            if (parameter.StartsWith("directory=", StringComparison.Ordinal))
+            {
+                return Uri.UnescapeDataString(parameter["directory=".Length..].ToString());
+            }
+
+            if (separatorIndex < 0)
+            {
+                break;
+            }
+
+            query = query[(separatorIndex + 1)..];
+        }
+
+        return null;
     }
 
     /// <summary>Strips the <c>directory</c> query parameter value from a URL for safe logging.</summary>

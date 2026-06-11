@@ -2,10 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 
 namespace WeaveFleet.Api;
 
@@ -41,7 +43,7 @@ internal sealed record WsEventPayload(string Type, string Topic, WsEventDataPayl
 
 internal sealed record WsSubscribedPayload(string Type, IReadOnlyList<string> Topics);
 
-internal sealed record WsActivityStatusProperties(string SessionId, string ActivityStatus);
+internal sealed record WsActivityStatusProperties(string SessionId, string ActivityStatus, SessionActionCapabilities Capabilities);
 
 internal sealed record WsSnapshotPayload(string Type, string Topic, SessionSnapshot Data);
 
@@ -80,6 +82,8 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(VersionResponse))]
 [JsonSerializable(typeof(ProfileResponse))]
 [JsonSerializable(typeof(LegacySessionImportApiResponse))]
+[JsonSerializable(typeof(OpenCodePoolHealthStatus))]
+[JsonSerializable(typeof(OpenCodePoolInstanceHealth))]
 [JsonSerializable(typeof(UpdateStatusResponse))]
 [JsonSerializable(typeof(RepositoriesListResponse))]
 [JsonSerializable(typeof(RepositoryListItem))]
@@ -114,6 +118,7 @@ internal sealed record ErrorResponse(string Error);
 // Sessions
 [JsonSerializable(typeof(GetSessionResponse))]
 [JsonSerializable(typeof(SessionOriginDto))]
+[JsonSerializable(typeof(WeaveFleet.Domain.DTOs.SessionActionCapabilities))]
 [JsonSerializable(typeof(Session))]
 [JsonSerializable(typeof(CreateSessionApiResponse))]
 [JsonSerializable(typeof(PreviewSessionResponse))]

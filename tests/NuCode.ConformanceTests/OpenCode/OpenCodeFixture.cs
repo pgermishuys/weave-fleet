@@ -127,12 +127,14 @@ public sealed class OpenCodeFixture : IHarnessSessionFixture
         _session = new OpenCodeHarnessSession(
             instanceId: instanceId,
             fleetSessionId: fleetSessionId,
-            httpClient: openCodeHttpClient,
-            processManager: _processManager,
-            portAllocator: portAllocator,
-            allocatedPort: processInfo.Port,
+            instanceHandle: new OwnedInstanceHandle(
+                openCodeHttpClient,
+                _processManager,
+                portAllocator,
+                processInfo.Port,
+                workingDirectory,
+                TimeSpan.FromSeconds(10)),
             workingDirectory: workingDirectory,
-            shutdownTimeout: TimeSpan.FromSeconds(10),
             scopeFactory: new NoOpServiceScopeFactory(),
             logger: loggerFactory.CreateLogger<OpenCodeHarnessSession>(),
             ownerUserId: "test-user");

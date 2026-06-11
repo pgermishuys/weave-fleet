@@ -82,7 +82,7 @@ function syncComposerDisabledState(): void {
     return;
   }
 
-  const shouldDisable = isArchived.value || showStoppedBanner.value;
+  const shouldDisable = isArchived.value;
   const promptInput = document.querySelector('[data-testid="prompt-input"]') as HTMLTextAreaElement | null;
   const sendButton = document.querySelector('[data-testid="prompt-send-button"]') as HTMLButtonElement | null;
 

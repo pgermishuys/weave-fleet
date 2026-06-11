@@ -1,5 +1,6 @@
 #pragma warning disable CA1848, CA1873 // Temporary diagnostic logging
 using System.Collections.Concurrent;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -284,10 +285,28 @@ public sealed class HarnessEventRelay : BackgroundService
             await _broadcaster.BroadcastAsync(
                 "sessions",
                 "activity_status",
-                InfrastructureJsonContext.SerializeActivityStatus(fleetSessionId, "idle"),
+                await BuildActivityStatusPayloadAsync(fleetSessionId, "idle").ConfigureAwait(false),
                 sessionUserId,
                 CancellationToken.None).ConfigureAwait(false);
         }
+    }
+
+    private async Task<JsonElement> BuildActivityStatusPayloadAsync(string sessionId, string activityStatus)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var sessionRepository = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
+        var capabilitiesResolver = scope.ServiceProvider.GetRequiredService<SessionCapabilitiesResolver>();
+        var session = await sessionRepository.GetByIdAsync(sessionId).ConfigureAwait(false);
+        if (session is not null)
+        {
+            session.ActivityStatus = activityStatus;
+        }
+
+        var capabilities = session is not null
+            ? capabilitiesResolver.Resolve(session)
+            : SessionCapabilitiesResolver.Resolve(null, null, null, activityStatus, isLive: false);
+
+        return InfrastructureJsonContext.SerializeActivityStatus(sessionId, activityStatus, capabilities);
     }
 
     private long NextInternalPumpDedupKey(string instanceId)

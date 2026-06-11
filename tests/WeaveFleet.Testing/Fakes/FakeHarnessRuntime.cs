@@ -71,5 +71,18 @@ public sealed class FakeHarnessRuntime : IHarnessRuntime
                ?? Task.FromResult<IHarnessSession>(DefaultSession);
     }
 
+    public Task<bool> WarmupPooledInstanceAsync(string ownerUserId, CancellationToken ct)
+    {
+        WarmupCalls.Add(ownerUserId);
+        return Task.FromResult(WarmupResult);
+    }
+
+    // ── Call-tracking for assertions (additional) ────────────────────────────
+
+    public List<string> WarmupCalls { get; } = [];
+
+    /// <summary>Value returned by <see cref="WarmupPooledInstanceAsync"/>. Default: false.</summary>
+    public bool WarmupResult { get; set; }
+
     private sealed record FakeRuntimeLaunchArtifacts : RuntimeLaunchArtifacts;
 }

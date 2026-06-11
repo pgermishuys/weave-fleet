@@ -35,6 +35,7 @@ public sealed class SessionOrchestratorBuilder
     public FakeCredentialStore CredentialStore { get; } = new();
     public FakeHarnessRegistry HarnessRegistry { get; } = new();
     public InMemoryUserPreferenceRepository UserPreferenceRepository { get; } = new();
+    public InstanceTracker InstanceTracker { get; } = new();
 
     // ── Overridable dependencies ─────────────────────────────────────────────
 
@@ -95,7 +96,7 @@ public sealed class SessionOrchestratorBuilder
             instanceService,
             sessionSourceResolutionService,
             HarnessRegistry,
-            new InstanceTracker(),
+            InstanceTracker,
             SessionRepository,
             SessionSourceUsageRepository,
             SessionCallbackRepository,

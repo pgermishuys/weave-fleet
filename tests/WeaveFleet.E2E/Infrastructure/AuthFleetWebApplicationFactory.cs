@@ -13,6 +13,7 @@ using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Data;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 
 namespace WeaveFleet.E2E.Infrastructure;
 
@@ -113,9 +114,12 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        builder.UseEnvironment("Testing");
+
         builder.ConfigureServices(services =>
         {
             RemoveProductionHarnessRegistrations(services);
+            ReplaceOpenCodePoolHealthCheck(services);
 
             // ── Remove all production IHarness registrations ────────────────
             var harnessDescriptors = services
@@ -154,7 +158,7 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
                 services.Remove(existingOptions);
 
             var connFactoryDescriptors = services
-                .Where(d => d.ImplementationType?.Name == "SqliteConnectionFactory")
+                .Where(d => d.ServiceType == typeof(IDbConnectionFactory))
                 .ToList();
             foreach (var d in connFactoryDescriptors)
                 services.Remove(d);
@@ -207,6 +211,23 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
 
         foreach (var descriptor in concreteDescriptors)
             services.Remove(descriptor);
+    }
+
+    private static void ReplaceOpenCodePoolHealthCheck(IServiceCollection services)
+    {
+        var poolHealthDescriptors = services
+            .Where(d => d.ServiceType == typeof(IOpenCodePoolHealthCheck))
+            .ToList();
+
+        foreach (var descriptor in poolHealthDescriptors)
+            services.Remove(descriptor);
+
+        services.AddSingleton<IOpenCodePoolHealthCheck, EmptyOpenCodePoolHealthCheck>();
+    }
+
+    private sealed class EmptyOpenCodePoolHealthCheck : IOpenCodePoolHealthCheck
+    {
+        public OpenCodePoolHealthStatus GetStatus() => new(0, 0, WarmCount: 0, ActiveCount: 0, []);
     }
 
     protected override IHost CreateHost(IHostBuilder builder)

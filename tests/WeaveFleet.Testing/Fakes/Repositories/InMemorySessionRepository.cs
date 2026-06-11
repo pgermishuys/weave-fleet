@@ -45,10 +45,19 @@ public sealed class InMemorySessionRepository : ISessionRepository
     /// </summary>
     public Func<string, Task<Session?>>? GetByHarnessIdBehavior { get; set; }
 
+    /// <summary>
+    /// Optional override for <see cref="InsertAsync(Session)"/>. When set, called instead of the default
+    /// in-memory insert. Supports injecting insert failures for rollback tests.
+    /// </summary>
+    public Func<Session, Task>? InsertBehavior { get; set; }
+
     // ── ISessionRepository ───────────────────────────────────────────────────
 
     public Task InsertAsync(Session session)
     {
+        if (InsertBehavior is not null)
+            return InsertBehavior(session);
+
         _store[session.Id] = session;
         InsertedSessions.Add(session);
         return Task.CompletedTask;
@@ -147,6 +156,14 @@ public sealed class InMemorySessionRepository : ISessionRepository
         if (_store.TryGetValue(id, out var session))
         {
             session.Status = status;
+            session.LifecycleStatus = status switch
+            {
+                "stopped" => "stopped",
+                "completed" => "completed",
+                "error" => "error",
+                "disconnected" => "disconnected",
+                _ => "running"
+            };
             if (stoppedAt is not null)
                 session.StoppedAt = stoppedAt;
         }
@@ -214,7 +231,13 @@ public sealed class InMemorySessionRepository : ISessionRepository
     public Task UpdateForResumeAsync(string id, string instanceId)
     {
         if (_store.TryGetValue(id, out var session))
+        {
             session.InstanceId = instanceId;
+            session.Status = "active";
+            session.StoppedAt = null;
+            session.LifecycleStatus = "running";
+            session.ActivityStatus = null;
+        }
         return Task.CompletedTask;
     }
 
@@ -286,10 +309,12 @@ public sealed class InMemorySessionRepository : ISessionRepository
     {
         var terminal = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "stopped", "error" };
         var count = 0;
-        foreach (var session in _store.Values.Where(s => !terminal.Contains(s.Status)))
+        foreach (var session in _store.Values.Where(s => !terminal.Contains(s.Status)
+            && !string.Equals(s.RuntimeMode, "automatic", StringComparison.OrdinalIgnoreCase)))
         {
             session.Status = "stopped";
             session.StoppedAt = stoppedAt;
+            session.LifecycleStatus = "stopped";
             count++;
         }
         return Task.FromResult(count);

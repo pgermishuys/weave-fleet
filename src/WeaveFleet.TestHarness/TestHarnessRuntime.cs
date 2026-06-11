@@ -61,6 +61,10 @@ public sealed class TestHarnessRuntime : IHarnessRuntime
         return Task.FromResult(instance);
     }
 
+    /// <inheritdoc/>
+    public Task<bool> WarmupPooledInstanceAsync(string ownerUserId, CancellationToken ct)
+        => Task.FromResult(false);
+
     private TestScenario ResolveScenario(string? scenarioId)
     {
         // No id → use the in-memory scenario configured via Configure(...). This is the path

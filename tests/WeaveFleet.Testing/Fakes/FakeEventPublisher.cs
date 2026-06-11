@@ -7,11 +7,14 @@ namespace WeaveFleet.Testing.Fakes;
 /// <summary>
 /// Hand-crafted fake of <see cref="IEventPublisher"/> that records every call for assertion
 /// in tests and never contacts a real broker.
+/// Thread-safe: safe for concurrent use from multiple prompt tasks.
 /// </summary>
 public sealed class FakeEventPublisher : IEventPublisher
 {
     private long _nextEventId;
-    private readonly Dictionary<string, long> _correlationEventIds = new(StringComparer.Ordinal);
+
+    // ConcurrentDictionary provides thread-safe deduplication for concurrent prompt tests.
+    private readonly ConcurrentDictionary<string, long> _correlationEventIds = new(StringComparer.Ordinal);
 
     public ConcurrentQueue<Published> Calls { get; } = new();
 
@@ -25,17 +28,24 @@ public sealed class FakeEventPublisher : IEventPublisher
 
         if (ShouldFail) throw new InvalidOperationException("FakeEventPublisher configured to fail.");
 
-        if (!string.IsNullOrWhiteSpace(context.CorrelationId)
-            && _correlationEventIds.TryGetValue(context.CorrelationId, out var existingEventId))
+        if (string.IsNullOrWhiteSpace(context.CorrelationId))
         {
-            return Task.FromResult(new PublishResult(existingEventId, IsDuplicate: true));
+            var newEventId = Interlocked.Increment(ref _nextEventId);
+            return Task.FromResult(new PublishResult(newEventId, IsDuplicate: false));
         }
 
-        var eventId = Interlocked.Increment(ref _nextEventId);
-        if (!string.IsNullOrWhiteSpace(context.CorrelationId))
-            _correlationEventIds[context.CorrelationId] = eventId;
+        // Atomically assign an event ID for this correlation key.
+        // GetOrAdd: if key exists, returns existing value (duplicate); if not, inserts and returns new value.
+        var isNew = false;
+        var assignedId = _correlationEventIds.GetOrAdd(
+            context.CorrelationId,
+            _ =>
+            {
+                isNew = true;
+                return Interlocked.Increment(ref _nextEventId);
+            });
 
-        return Task.FromResult(new PublishResult(eventId, IsDuplicate: false));
+        return Task.FromResult(new PublishResult(assignedId, IsDuplicate: !isNew));
     }
 
     public sealed record Published(HarnessEvent Event, EventPublishContext Context);

@@ -330,6 +330,10 @@ public sealed class PiHarnessRuntime : IHarnessRuntime
         }
     }
 
+    /// <inheritdoc />
+    public Task<bool> WarmupPooledInstanceAsync(string ownerUserId, CancellationToken ct)
+        => Task.FromResult(false);
+
     private static UserCredential? FindCredential(IReadOnlyList<UserCredential> credentials, string provider)
     {
         return provider.ToLowerInvariant() switch
