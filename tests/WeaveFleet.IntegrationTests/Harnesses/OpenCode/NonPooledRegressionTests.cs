@@ -17,7 +17,7 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode;
 public sealed class NonPooledRegressionTests
 {
     [Fact]
-    [Trait("Category", "Integration")]
+    [Trait("Category", "HarnessSmoke")]
     public async Task feature_flag_off_keeps_per_session_process_isolation()
     {
         var pooledFactory = new RecordingPooledInstanceFactory();
@@ -45,7 +45,7 @@ public sealed class NonPooledRegressionTests
     }
 
     [Fact]
-    [Trait("Category", "Integration")]
+    [Trait("Category", "HarnessSmoke")]
     public async Task feature_flag_off_uses_five_processes_for_five_sessions_under_load()
     {
         var pooledFactory = new RecordingPooledInstanceFactory();
