@@ -8,6 +8,7 @@ var api = builder.AddProject<Projects.WeaveFleet_Api>("api")
     .WithHttpEndpoint(port: 5001, isProxied: false);
 
 builder.AddViteApp("client", "../../client")
+    .WithBun()
     .WithHttpEndpoint(port: 3002, env: "PORT", isProxied: false)
     .WithUrls(c =>
     {
