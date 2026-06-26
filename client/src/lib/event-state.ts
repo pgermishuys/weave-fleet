@@ -195,7 +195,7 @@ export function applyPartUpdate(
       role: "assistant",
       parts: [],
     };
-    msgs = [...prev, newMsg];
+    msgs = sortMessagesChronologically([...prev, newMsg]);
   }
 
   return msgs.map((msg) => {
@@ -320,7 +320,7 @@ export function applyTextDelta(
       role: "assistant",
       parts: [{ partId, type: "text", text: delta }],
     };
-    return [...prev, newMsg];
+    return sortMessagesChronologically([...prev, newMsg]);
   }
 
   const msg = prev[msgIndex];
