@@ -35,7 +35,7 @@ public sealed class MessagePersistenceService
             Role = message.Role,
             PartsJson = partsJson,
             Timestamp = message.Timestamp.ToString("O"),
-            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+            CreatedAt = message.Timestamp.ToString("O"),
             AgentName = message.Agent,
             ModelId = message.ModelId,
         };

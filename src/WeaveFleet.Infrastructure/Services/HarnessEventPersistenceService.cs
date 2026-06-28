@@ -351,8 +351,8 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
                     SessionId = fleetSessionId,
                     Role = role ?? "assistant",
                     PartsJson = partsJson,
-                    Timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                    CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+                    Timestamp = evt.Timestamp.ToString("O"),
+                    CreatedAt = evt.Timestamp.ToString("O"),
                     AgentName = agentName,
                 };
             }

@@ -39,7 +39,7 @@ public sealed class MessageRepository : IMessageRepository
                 parts_json = excluded.parts_json,
                 timestamp = excluded.timestamp,
                 -- created_at is intentionally immutable after the first insert so tail-history
-                -- pagination remains anchored to durable insertion order, not later rewrites.
+                -- pagination remains anchored to the message's logical timestamp, not later rewrites.
                 agent_name = COALESCE(excluded.agent_name, messages.agent_name),
                 model_id = COALESCE(excluded.model_id, messages.model_id)
             """,
