@@ -600,5 +600,43 @@ public sealed class MessagePersistenceServiceTests
 
         result.ModelId.ShouldBe("claude-sonnet-4");
     }
+
+    [Fact]
+    public void MergeMissingSnapshotParts_AddsTextToEmptyExistingRow()
+    {
+        // Simulates: reasoning-only message.part.updated created a stub row with
+        // empty parts, then message.updated arrives carrying TextPart + ReasoningPart.
+        // The TextPart must be merged in; the ReasoningPart must be ignored.
+        var existing = MakePersistedMessage("[]");
+
+        var merged = MessagePersistenceService.MergeMissingSnapshotParts(
+            existing,
+            [new TextPart("Hello"), new ReasoningPart("Hidden")],
+            "assistant",
+            null);
+
+        var restored = MessagePersistenceService.ToHarnessMessage(merged);
+        restored.Parts.Count.ShouldBe(1);
+        restored.Parts[0].ShouldBeOfType<TextPart>().Text.ShouldBe("Hello");
+    }
+
+    [Fact]
+    public void MergeMissingSnapshotParts_DoesNotOverwriteExistingText()
+    {
+        // Simulates: message.part.updated persisted "The actual answer", then
+        // message.updated arrives with stale snapshot text "Hello".
+        // The existing text must be preserved.
+        var existing = MakePersistedMessage("""[{"type":"text","text":"The actual answer"}]""");
+
+        var merged = MessagePersistenceService.MergeMissingSnapshotParts(
+            existing,
+            [new TextPart("Hello")],
+            "assistant",
+            null);
+
+        var restored = MessagePersistenceService.ToHarnessMessage(merged);
+        restored.Parts.Count.ShouldBe(1);
+        restored.Parts[0].ShouldBeOfType<TextPart>().Text.ShouldBe("The actual answer");
+    }
 }
 

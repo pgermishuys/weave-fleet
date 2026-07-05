@@ -265,14 +265,27 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
 
             if (evt.Type == EventTypes.MessageUpdated)
             {
-                var mergedBase = existing is null
-                    ? persisted
-                    : MessagePersistenceService.MergeTimestampAndMetadata(
+                PersistedMessage mergedBase;
+                if (existing is null)
+                {
+                    mergedBase = persisted;
+                }
+                else
+                {
+                    // Start with metadata merge, then add any parts from the
+                    // authoritative snapshot that the existing row is missing.
+                    // Parts already persisted via earlier message.part.updated
+                    // events are NOT overwritten — the incremental content is
+                    // considered more authoritative than the snapshot.
+                    mergedBase = MessagePersistenceService.MergeTimestampAndMetadata(
                         existing,
                         persisted.Timestamp,
                         persisted.Role,
                         persisted.AgentName,
                         persisted.ModelId);
+                    mergedBase = MessagePersistenceService.MergeMissingSnapshotParts(
+                        mergedBase, harnessMessage.Parts, persisted.Role, persisted.AgentName);
+                }
                 var merged = ApplyBufferedTextDeltaIfPresent(fleetSessionId, mergedBase, persisted.Id, persisted.Role, persisted.AgentName);
                 if (existing is null
                     || existing.Role != merged.Role

@@ -394,6 +394,80 @@ public sealed class MessagePersistenceService
     }
 
     /// <summary>
+    /// Adds parts from a <c>message.updated</c> snapshot that the existing row is missing.
+    /// Parts already present (matched by type/id) are NOT replaced — the incremental
+    /// <c>message.part.updated</c> content is considered more authoritative.
+    /// </summary>
+    public static PersistedMessage MergeMissingSnapshotParts(
+        PersistedMessage existing,
+        IReadOnlyList<MessagePart> snapshotParts,
+        string role,
+        string? agentName)
+    {
+        if (snapshotParts.Count == 0)
+            return MergeMetadata(existing, role, agentName);
+
+        var parts = JsonSerializer.Deserialize(existing.PartsJson, ApplicationJsonContext.Default.ListMessagePart) ?? [];
+        var changed = false;
+
+        foreach (var part in snapshotParts)
+        {
+            switch (part)
+            {
+                case ReasoningPart:
+                    continue;
+                case TextPart textPart:
+                    if (!parts.Any(p => p is TextPart))
+                    {
+                        parts.Add(textPart);
+                        changed = true;
+                    }
+                    break;
+                case ToolUsePart toolPart:
+                    if (!parts.Any(p => p is ToolUsePart t && t.ToolCallId == toolPart.ToolCallId))
+                    {
+                        parts.Add(toolPart);
+                        changed = true;
+                    }
+                    break;
+                case FilePart filePart:
+                    if (!parts.Any(p => p is FilePart f && f.PartId == filePart.PartId))
+                    {
+                        parts.Add(filePart);
+                        changed = true;
+                    }
+                    break;
+                case StepFinishPart stepFinishPart:
+                    if (!parts.Any(p => p is StepFinishPart s && s.Index == stepFinishPart.Index))
+                    {
+                        parts.Add(stepFinishPart);
+                        changed = true;
+                    }
+                    break;
+                default:
+                    parts.Add(part);
+                    changed = true;
+                    break;
+            }
+        }
+
+        if (!changed)
+            return MergeMetadata(existing, role, agentName);
+
+        return new PersistedMessage
+        {
+            Id = existing.Id,
+            SessionId = existing.SessionId,
+            Role = role,
+            PartsJson = JsonSerializer.Serialize(parts, ApplicationJsonContext.Default.ListMessagePart),
+            Timestamp = existing.Timestamp,
+            CreatedAt = existing.CreatedAt,
+            AgentName = agentName ?? existing.AgentName,
+            ModelId = existing.ModelId,
+        };
+    }
+
+    /// <summary>
     /// Preserves durable insertion time while updating authoritative harness timestamp and metadata.
     /// Used when a placeholder row was created before the full message snapshot arrived.
     /// </summary>
