@@ -8,7 +8,10 @@ const noPadding = computed(() => location.value.pathname.startsWith("/sessions/"
 
 <template>
   <main class="center">
-    <div class="center__body" :class="{ 'center__body--no-padding': noPadding }">
+    <div
+      class="center__body"
+      :class="{ 'center__body--no-padding': noPadding }"
+    >
       <slot />
     </div>
   </main>

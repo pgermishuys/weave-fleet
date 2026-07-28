@@ -7,10 +7,7 @@ export async function flushAll(): Promise<void> {
   await flushPromises();
 }
 
-export async function mountComposable<T>(useComposable: () => T): Promise<{
-  result: T;
-  wrapper: ReturnType<typeof mount>;
-}> {
+export async function mountComposable<T>(useComposable: () => T) {
   let result!: T;
 
   const wrapper = mount(

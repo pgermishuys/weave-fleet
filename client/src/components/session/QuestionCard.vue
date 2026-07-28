@@ -146,8 +146,12 @@ async function dismiss() {
       :key="qi"
       class="qcard__answered-detail"
     >
-      <p class="qcard__question-text qcard__question-text--answered">{{ q.question }}</p>
-      <p class="qcard__answer-value">→ {{ submittedAnswers[qi]?.join(", ") ?? "(unanswered)" }}</p>
+      <p class="qcard__question-text qcard__question-text--answered">
+        {{ q.question }}
+      </p>
+      <p class="qcard__answer-value">
+        → {{ submittedAnswers[qi]?.join(", ") ?? "(unanswered)" }}
+      </p>
     </div>
   </article>
 
@@ -179,7 +183,9 @@ async function dismiss() {
         <span class="qcard__title">{{ q.header }}</span>
       </header>
 
-      <p class="qcard__question-text">{{ q.question }}</p>
+      <p class="qcard__question-text">
+        {{ q.question }}
+      </p>
 
       <!-- Pill buttons variant (≤4 single-select without descriptions) -->
       <div
@@ -219,7 +225,7 @@ async function dismiss() {
               :disabled="loading"
               class="qcard__option-input"
               @change="toggleOption(qi, opt.label, q.multiple ?? false)"
-            />
+            >
             <span class="qcard__option-text">
               <span class="qcard__option-name">{{ opt.label }}</span>
               <span
@@ -242,7 +248,7 @@ async function dismiss() {
           class="qcard__custom-input"
           placeholder="Type a custom answer…"
           :disabled="loading"
-        />
+        >
       </div>
     </div>
 

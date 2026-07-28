@@ -57,7 +57,7 @@ function mockApiResponses(preferences: Record<string, string>): void {
   });
 }
 
-async function mountHarnessesSection(): Promise<ReturnType<typeof mount>> {
+async function mountHarnessesSection() {
   const wrapper = mount(HarnessesSection, {
     global: {
       plugins: [createPinia()],

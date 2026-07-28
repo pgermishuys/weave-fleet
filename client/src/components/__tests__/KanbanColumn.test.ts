@@ -33,7 +33,7 @@ function createCardFixture(overrides: Partial<BoardCard> = {}): BoardCard {
   };
 }
 
-function mountColumn(overrides: Partial<InstanceType<typeof KanbanColumn>["$props"]> = {}): VueWrapper {
+function mountColumn(overrides: Partial<InstanceType<typeof KanbanColumn>["$props"]> = {}) {
   return mount(KanbanColumn, {
     props: {
       lane: createLaneFixture(),

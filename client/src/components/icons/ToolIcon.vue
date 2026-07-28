@@ -82,12 +82,14 @@ const svgContent = computed(() => {
 </script>
 
 <template>
+  <!-- eslint-disable vue/no-v-html -->
   <span
     v-if="svgContent"
     class="inline-flex shrink-0 items-center justify-center"
     :style="{ width: `${size}px`, height: `${size}px` }"
     v-html="svgContent"
   />
+  <!-- eslint-enable vue/no-v-html -->
   <span
     v-else
     class="inline-flex shrink-0 items-center justify-center"
