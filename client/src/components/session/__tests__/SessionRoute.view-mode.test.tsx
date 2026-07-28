@@ -1,4 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
+import type { DefineComponent } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { clearPendingPrompts, clearSentPrompts } from "@/composables/use-send-prompt";
@@ -131,9 +132,9 @@ describe("session route files view close", () => {
   it("renders_chat_components_with_session_props_and_keeps_prompt_flow_wired", async () => {
     search.value = { instanceId: "instance-1" };
     const { Route } = await import("@/routes/sessions.$id");
-    const SessionDetailPage = (Route as any).config.component;
+    const SessionDetailPage = (Route as unknown as { config: { component: DefineComponent } }).config.component;
 
-    const wrapper = mount(SessionDetailPage as any, {
+    const wrapper = mount(SessionDetailPage, {
       attachTo: document.body,
     });
     await flushPromises();
@@ -157,9 +158,9 @@ describe("session route files view close", () => {
 
   it("restores_chat_mode_and_clears_files_view_search_when_files_view_closes", async () => {
     const { Route } = await import("@/routes/sessions.$id");
-    const SessionDetailPage = (Route as any).config.component;
+    const SessionDetailPage = (Route as unknown as { config: { component: DefineComponent } }).config.component;
 
-    const wrapper = mount(SessionDetailPage as any, {
+    const wrapper = mount(SessionDetailPage, {
       attachTo: document.body,
     });
     await flushPromises();
@@ -190,7 +191,7 @@ describe("session route files view close", () => {
     search.value = { instanceId: "instance-1" };
 
     const { Route } = await import("@/routes/sessions.$id");
-    const SessionDetailPage = (Route as any).config.component;
+    const SessionDetailPage = (Route as unknown as { config: { component: DefineComponent } }).config.component;
     const pinia = createPinia();
     setActivePinia(pinia);
     useSessionsStore(pinia).setSessions([{
@@ -227,7 +228,7 @@ describe("session route files view close", () => {
       after: "export const value = 2;\nexport const extra = true;\n",
     }];
 
-    const wrapper = mount(SessionDetailPage as any, {
+    const wrapper = mount(SessionDetailPage, {
       attachTo: document.body,
     });
     await flushPromises();
@@ -259,9 +260,9 @@ describe("session route files view close", () => {
     search.value = { instanceId: "instance-1" };
     const { useSessionDiffsContext } = await import("@/composables/use-session-diffs-context");
     const { Route } = await import("@/routes/sessions.$id");
-    const SessionDetailPage = (Route as any).config.component;
+    const SessionDetailPage = (Route as unknown as { config: { component: DefineComponent } }).config.component;
 
-    const wrapper = mount(SessionDetailPage as any, {
+    const wrapper = mount(SessionDetailPage, {
       attachTo: document.body,
     });
     await flushPromises();
@@ -280,9 +281,9 @@ describe("session route files view close", () => {
     diffState.isStale.value = true;
     const { Route } = await import("@/routes/sessions.$id");
     const { useSessionDiffsContext } = await import("@/composables/use-session-diffs-context");
-    const SessionDetailPage = (Route as any).config.component;
+    const SessionDetailPage = (Route as unknown as { config: { component: DefineComponent } }).config.component;
 
-    mount(SessionDetailPage as any, {
+    mount(SessionDetailPage, {
       attachTo: document.body,
     });
     await flushPromises();
