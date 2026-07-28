@@ -21,6 +21,7 @@ using WeaveFleet.Infrastructure.Harnesses.NuCode;
 using NuCode.Providers;
 using NuCode.Providers.Auth;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 using WeaveFleet.Infrastructure.Harnesses.Pi;
 using WeaveFleet.Infrastructure.Plugins;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
@@ -48,6 +49,20 @@ public static class DependencyInjection
     public static IServiceCollection AddLegacySessionImportStartupService(this IServiceCollection services)
     {
         services.AddHostedService<LegacySessionImportStartupService>();
+        return services;
+    }
+
+    /// <summary>
+    /// Adds the best-effort startup warmup service for the pooled OpenCode harness.
+    /// In auth-enabled mode the service no-ops immediately; in local mode it pre-warms
+    /// one pooled process using the deterministic <c>"local-user"</c> owner identity.
+    /// Must be registered after startup recovery so the database is in a consistent state.
+    /// Post-login and post-preference warmup is covered by the runtime warmup API
+    /// (<c>POST /api/harnesses/opencode/warmup</c>).
+    /// </summary>
+    public static IServiceCollection AddOpenCodeWarmupStartupService(this IServiceCollection services)
+    {
+        services.AddHostedService<OpenCodeWarmupHostedService>();
         return services;
     }
 
@@ -151,6 +166,7 @@ public static class DependencyInjection
         // SessionActivityTracker is singleton — tracks ephemeral busy/idle state per session
         // for initial-state snapshots on WebSocket subscribe (page refresh support).
         services.AddSingleton<SessionActivityTracker>();
+        services.AddSingleton<SessionCapabilitiesResolver>();
 
         // EventBroadcaster is singleton — pub/sub hub shared across all requests
         services.AddSingleton<IEventBroadcaster, InMemoryEventBroadcaster>();
@@ -227,6 +243,7 @@ public static class DependencyInjection
         services.AddSingleton<IHarness>(sp => sp.GetRequiredService<OpenCodeHarness>());
         services.AddSingleton<OpenCodeHarnessRuntime>();
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<OpenCodeHarnessRuntime>());
+        services.AddSingleton<IOpenCodePoolHealthCheck, PoolHealthCheck>();
 
         // Register ClaudeCodeHarness (descriptor) and ClaudeCodeHarnessRuntime (provisioning) as separate singletons.
         services.AddSingleton<ClaudeCodeHarness>();

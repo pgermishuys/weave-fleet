@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Application;
@@ -57,7 +58,18 @@ internal sealed record SessionStoppedOutboxPayload(string SessionId, string Stop
 internal sealed record SessionArchivedOutboxPayload(string SessionId, string ArchivedAt);
 internal sealed record SessionUnarchivedOutboxPayload(string SessionId);
 internal sealed record SessionDeletedOutboxPayload(string SessionId);
-internal sealed record ActivityStatusBroadcastPayload(string SessionId, string ActivityStatus);
+internal sealed record ActivityStatusBroadcastPayload(
+    string SessionId,
+    string ActivityStatus,
+    SessionActionCapabilities Capabilities);
+
+internal sealed record SessionStatusBroadcastPayload(
+    string SessionId,
+    SessionStatusBroadcastState Status,
+    string LifecycleStatus,
+    SessionActionCapabilities Capabilities);
+
+internal sealed record SessionStatusBroadcastState(string Type);
 
 // ── Session source input types (moved from private nested records so they can be source-generated) ──
 
@@ -96,6 +108,9 @@ internal sealed record DirectorySourceInput
 [JsonSerializable(typeof(SessionUnarchivedOutboxPayload))]
 [JsonSerializable(typeof(SessionDeletedOutboxPayload))]
 [JsonSerializable(typeof(ActivityStatusBroadcastPayload))]
+[JsonSerializable(typeof(SessionStatusBroadcastPayload))]
+[JsonSerializable(typeof(SessionStatusBroadcastState))]
+[JsonSerializable(typeof(SessionActionCapabilities))]
 [JsonSerializable(typeof(LegacyDirectoryInput))]
 [JsonSerializable(typeof(DirectorySourceInput))]
 internal sealed partial class ApplicationJsonContext : JsonSerializerContext

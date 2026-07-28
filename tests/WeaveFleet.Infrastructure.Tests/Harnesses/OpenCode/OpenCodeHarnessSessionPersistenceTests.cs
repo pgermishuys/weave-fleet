@@ -16,6 +16,7 @@ using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Testing.Builders;
 using WeaveFleet.Testing.Fakes;
@@ -35,6 +36,45 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
+
+    private static TestInstanceHandle CreateOwnedHandle(OpenCodeHttpClient httpClient, string workingDirectory) =>
+        new TestInstanceHandle(httpClient, workingDirectory);
+
+    private static TestInstanceHandle CreateStartedOwnedHandle(OpenCodeHttpClient httpClient, string workingDirectory) =>
+        new TestInstanceHandle(httpClient, workingDirectory);
+
+    private sealed class TestInstanceHandle(OpenCodeHttpClient httpClient, string workingDirectory) : IOpenCodeInstanceHandle
+    {
+        public event EventHandler<int>? ProcessExited;
+
+        public OpenCodeHttpClient HttpClient { get; } = httpClient;
+
+        public int? ProcessId => 123;
+
+        public bool IsRunning => true;
+
+        public Task EnsureConnectedAsync(CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public Task WaitForEventSubscriptionAsync(string openCodeSessionId, CancellationToken ct) => Task.CompletedTask;
+
+        public Task SendCommandAsync(string openCodeSessionId, OpenCodeCommandRequest request, CancellationToken ct) =>
+            HttpClient.SendCommandAsync(openCodeSessionId, request, workingDirectory, ct);
+
+        public IAsyncEnumerable<OpenCodeSseEvent> SubscribeEvents(string? openCodeSessionId, CancellationToken ct) =>
+            HttpClient.SubscribeToEventsAsync(workingDirectory, ct);
+
+        public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
+
+        public ValueTask DisposeAsync()
+        {
+            _ = ProcessExited;
+            return ValueTask.CompletedTask;
+        }
+    }
 
     /// <summary>
     /// Builds persistence dependencies backed by a real ServiceCollection so that
@@ -337,18 +377,11 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
         var ocHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
 
-        var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
-        const int allocatedPort = 0; // not used in these tests
-
         var instance = new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: fleetSessionId,
-            httpClient: ocHttpClient,
-            processManager: processManager,
-            portAllocator: new PortAllocator(10000, 10099),
-            allocatedPort: allocatedPort,
+            instanceHandle: CreateOwnedHandle(ocHttpClient, "/tmp"),
             workingDirectory: "/tmp",
-            shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: TestUserContext.DefaultUserId);
@@ -887,17 +920,12 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var handler = new FakeSseHttpMessageHandler(sseBody.ToString());
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
         var ocHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
-        var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
 
         await using var instance = new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: fleetSessionId,
-            httpClient: ocHttpClient,
-            processManager: processManager,
-            portAllocator: new PortAllocator(10000, 10099),
-            allocatedPort: 0,
+            instanceHandle: CreateOwnedHandle(ocHttpClient, "/tmp"),
             workingDirectory: "/tmp",
-            shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: TestUserContext.DefaultUserId);
@@ -952,17 +980,12 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var handler = new FakeSseHttpMessageHandler(sseBody.ToString());
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
         var ocHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
-        var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
 
         await using var instance = new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: fleetSessionId,
-            httpClient: ocHttpClient,
-            processManager: processManager,
-            portAllocator: new PortAllocator(10000, 10099),
-            allocatedPort: 0,
+            instanceHandle: CreateOwnedHandle(ocHttpClient, "/tmp"),
             workingDirectory: "/tmp",
-            shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: TestUserContext.DefaultUserId);
@@ -1169,17 +1192,12 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var handler = new FakeSseHttpMessageHandler(sseBody.ToString());
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
         var ocHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
-        var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
 
         var instance = new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: "fleet-delegation-1",
-            httpClient: ocHttpClient,
-            processManager: processManager,
-            portAllocator: new PortAllocator(10000, 10099),
-            allocatedPort: 0,
+            instanceHandle: CreateOwnedHandle(ocHttpClient, "/tmp"),
             workingDirectory: "/tmp",
-            shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: "user-1");
@@ -1380,17 +1398,12 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var handler = new FakeSseHttpMessageHandler(sseBody.ToString());
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
         var ocHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
-        var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
 
         var instance = new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: "fleet-delegation-1",
-            httpClient: ocHttpClient,
-            processManager: processManager,
-            portAllocator: new PortAllocator(10000, 10099),
-            allocatedPort: 0,
+            instanceHandle: CreateOwnedHandle(ocHttpClient, "/tmp"),
             workingDirectory: "/tmp",
-            shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: "user-1");
@@ -1542,17 +1555,12 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var handler = new FakeSseHttpMessageHandler(sseBody.ToString());
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
         var ocHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
-        var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
 
         var instance = new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: "fleet-delegation-1",
-            httpClient: ocHttpClient,
-            processManager: processManager,
-            portAllocator: new PortAllocator(10000, 10099),
-            allocatedPort: 0,
+            instanceHandle: CreateOwnedHandle(ocHttpClient, "/tmp"),
             workingDirectory: "/tmp",
-            shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: "user-1");
@@ -1623,17 +1631,12 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var handler = new FakeSseHttpMessageHandler(sseBody.ToString());
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
         var ocHttpClient = new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance);
-        var processManager = new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance);
 
         var instance = new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: fleetSessionId,
-            httpClient: ocHttpClient,
-            processManager: processManager,
-            portAllocator: new PortAllocator(10000, 10099),
-            allocatedPort: 0,
+            instanceHandle: CreateOwnedHandle(ocHttpClient, "/tmp"),
             workingDirectory: "/tmp",
-            shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: scopeFactory,
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: "user-1",
@@ -1997,12 +2000,8 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var instance = new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: "fleet-session",
-            httpClient: openCodeHttpClient,
-            processManager: new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance),
-            portAllocator: new PortAllocator(10000, 10099),
-            allocatedPort: 0,
+            instanceHandle: CreateStartedOwnedHandle(openCodeHttpClient, "/tmp"),
             workingDirectory: "/tmp",
-            shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: BuildPersistenceDependencies().ScopeFactory,
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: TestUserContext.DefaultUserId,
@@ -2025,12 +2024,8 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var instance = new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: "fleet-session",
-            httpClient: openCodeHttpClient,
-            processManager: new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance),
-            portAllocator: new PortAllocator(10000, 10099),
-            allocatedPort: 0,
+            instanceHandle: CreateStartedOwnedHandle(openCodeHttpClient, "/tmp"),
             workingDirectory: "/tmp",
-            shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: BuildPersistenceDependencies().ScopeFactory,
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: TestUserContext.DefaultUserId,
@@ -2056,12 +2051,8 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
         var instance = new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: "fleet-session",
-            httpClient: openCodeHttpClient,
-            processManager: new OpenCodeProcessManager(NullLogger<OpenCodeProcessManager>.Instance),
-            portAllocator: new PortAllocator(10000, 10099),
-            allocatedPort: 0,
+            instanceHandle: CreateOwnedHandle(openCodeHttpClient, "/tmp"),
             workingDirectory: "/tmp",
-            shutdownTimeout: TimeSpan.FromSeconds(1),
             scopeFactory: BuildPersistenceDependencies().ScopeFactory,
             logger: NullLogger<OpenCodeHarnessSession>.Instance,
             ownerUserId: TestUserContext.DefaultUserId,

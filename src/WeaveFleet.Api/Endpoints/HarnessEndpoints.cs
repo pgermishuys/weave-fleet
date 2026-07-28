@@ -1,4 +1,6 @@
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -27,6 +29,30 @@ public static class HarnessEndpoints
             return Results.Ok(response);
         })
         .WithName("GetHarnesses");
+
+        // POST /api/harnesses/opencode/warmup
+        // Server-trust warmup: owner identity is derived exclusively from the server-authenticated
+        // IUserContext / request principal. No caller-controlled owner ID, credential hash,
+        // resume token, or workspace directory is accepted. In auth-enabled mode, requests with
+        // no authenticated user context return 204 (no-op) instead of attempting warmup.
+        group.MapPost("/harnesses/opencode/warmup", async (
+            IHarnessRegistry registry,
+            IUserContext userContext,
+            FleetOptions fleetOptions,
+            CancellationToken ct) =>
+        {
+            if (fleetOptions.Auth.Enabled && !userContext.IsAuthenticated)
+                return Results.NoContent();
+
+            var runtime = registry.GetRuntimeByType("opencode");
+            if (runtime is null)
+                return Results.NoContent();
+
+            await runtime.WarmupPooledInstanceAsync(userContext.UserId, ct);
+            return Results.NoContent();
+        })
+        .Produces(StatusCodes.Status204NoContent)
+        .WithName("WarmupOpenCodeHarness");
 
         return app;
     }

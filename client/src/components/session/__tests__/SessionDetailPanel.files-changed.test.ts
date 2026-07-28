@@ -75,7 +75,31 @@ const FilesChangedStub = {
 import SessionDetailPanel from "@/components/session/SessionDetailPanel.vue";
 import SessionsV2RightPanel from "@/components/sessions/SessionsV2RightPanel.vue";
 
-function createSession(): SessionListItem {
+function createCapabilities(overrides: Partial<NonNullable<SessionListItem["capabilities"]>> = {}): NonNullable<SessionListItem["capabilities"]> {
+  return {
+    canPrompt: true,
+    canStop: true,
+    canResume: false,
+    canRestart: false,
+    canAbort: false,
+    canArchive: false,
+    canUnarchive: false,
+    canFork: false,
+    canDelete: true,
+    promptDisabledReason: null,
+    stopDisabledReason: null,
+    resumeDisabledReason: null,
+    restartDisabledReason: null,
+    abortDisabledReason: null,
+    archiveDisabledReason: null,
+    unarchiveDisabledReason: null,
+    forkDisabledReason: null,
+    deleteDisabledReason: null,
+    ...overrides,
+  };
+}
+
+function createSession(overrides: Partial<SessionListItem> = {}): SessionListItem {
   return {
     instanceId: "instance-1",
     workspaceId: "workspace-1",
@@ -100,10 +124,12 @@ function createSession(): SessionListItem {
     archivedAt: null,
     typedInstanceStatus: "running",
     isHidden: false,
+    capabilities: createCapabilities(),
+    ...overrides,
   };
 }
 
-function createSessionDetailContext(): SessionDetailContext {
+function createSessionDetailContext(overrides: Partial<Pick<SessionDetailContext, "supportsArchive" | "supportsFork">> = {}): SessionDetailContext {
   const falseRef = () => readonly(shallowRef(false));
   const emptyErrorRef = () => readonly(shallowRef<string | undefined>(undefined));
 
@@ -112,6 +138,7 @@ function createSessionDetailContext(): SessionDetailContext {
     sessionRoutePath: "/sessions/$id",
     supportsFork: false,
     supportsArchive: false,
+    ...overrides,
     actionsLayout: "toolbar",
     patchSession: vi.fn(),
     abort: {
@@ -151,18 +178,24 @@ function createSessionDetailContext(): SessionDetailContext {
   };
 }
 
-function mountPanel(openDiffsTray = vi.fn()) {
+interface MountPanelOptions {
+  openDiffsTray?: () => void;
+  session?: SessionListItem;
+  context?: Partial<Pick<SessionDetailContext, "supportsArchive" | "supportsFork">>;
+}
+
+function mountPanel(options: MountPanelOptions = {}) {
   return mount(SessionDetailPanel, {
     props: {
-      session: createSession(),
-      openDiffsTray,
+      session: options.session ?? createSession(),
+      openDiffsTray: options.openDiffsTray ?? vi.fn(),
     },
     global: {
       stubs: {
         FilesChanged: FilesChangedStub,
       },
       provide: {
-        [SessionDetailContextKey as symbol]: createSessionDetailContext(),
+        [SessionDetailContextKey as symbol]: createSessionDetailContext(options.context),
         [SessionDiffsContextKey as symbol]: {
           diffState: {
             diffs: readonly(diffState.diffs),
@@ -217,18 +250,88 @@ describe("SessionDetailPanel files changed integration", () => {
         lifecycleStatus: "running",
         activityStatus: "idle",
         retentionStatus: "active",
+        capabilities: createCapabilities(),
       });
     });
   });
 
   it("opens_diffs_tray_from_badge_when_handler_is_available", async () => {
     const openDiffsTray = vi.fn();
-    const wrapper = mountPanel(openDiffsTray);
+    const wrapper = mountPanel({ openDiffsTray });
     await flushPromises();
 
     await wrapper.get(".files-changed__badge").trigger("click");
 
     expect(openDiffsTray).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows_toolbar_actions_enabled_by_session_capabilities", async () => {
+    const wrapper = mountPanel({
+      context: { supportsArchive: true },
+      session: createSession({
+        capabilities: createCapabilities({
+          canAbort: true,
+          canResume: true,
+          canStop: true,
+          canArchive: true,
+          canFork: true,
+          canDelete: true,
+        }),
+      }),
+    });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='abort-button']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='session-resume-button']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='session-stop-button']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='session-archived-fork-button']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='session-archive-banner-button']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='session-delete-button']").exists()).toBe(true);
+  });
+
+  it("hides_toolbar_actions_disabled_by_session_capabilities", async () => {
+    const wrapper = mountPanel({
+      context: { supportsArchive: true },
+      session: createSession({
+        capabilities: createCapabilities({
+          canAbort: false,
+          canResume: false,
+          canStop: false,
+          canArchive: false,
+          canFork: false,
+          canDelete: false,
+        }),
+      }),
+    });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='abort-button']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='session-resume-button']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='session-stop-button']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='session-archived-fork-button']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='session-archive-banner-button']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='session-delete-button']").exists()).toBe(false);
+  });
+
+  it("hides_resume_and_stop_for_stopped_automatic_session_capabilities", async () => {
+    const wrapper = mountPanel({
+      session: createSession({
+        sessionStatus: "stopped",
+        instanceStatus: "dead",
+        activityStatus: "idle",
+        lifecycleStatus: "stopped",
+        typedInstanceStatus: "stopped",
+        capabilities: createCapabilities({
+          canPrompt: true,
+          canResume: false,
+          canStop: false,
+        }),
+      }),
+    });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='session-resume-button']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='session-stop-button']").exists()).toBe(false);
   });
 
   it("right_panel_badge_click_opens_diffs_tray", async () => {

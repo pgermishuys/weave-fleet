@@ -18,6 +18,7 @@
     <Project Path="tests/WeaveFleet.Api.Tests/WeaveFleet.Api.Tests.csproj" />
     <Project Path="tests/WeaveFleet.Application.Tests/WeaveFleet.Application.Tests.csproj" />
     <Project Path="tests/WeaveFleet.Domain.Tests/WeaveFleet.Domain.Tests.csproj" />
+    <Project Path="tests/WeaveFleet.IntegrationTests/WeaveFleet.IntegrationTests.csproj" />
     <Project Path="tests/WeaveFleet.Infrastructure.Tests/WeaveFleet.Infrastructure.Tests.csproj" />
     <Project Path="tests/WeaveFleet.TestHarness.Tests/WeaveFleet.TestHarness.Tests.csproj" />
     <Project Path="tests/WeaveFleet.E2E/WeaveFleet.E2E.csproj" />

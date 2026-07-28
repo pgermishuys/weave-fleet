@@ -105,9 +105,11 @@ public sealed class SessionEndpointOriginTests : IAsyncLifetime, IDisposable
         origin.GetProperty("resourceUrl").GetString().ShouldBe("https://github.com/acme/repo");
         origin.GetProperty("resourceId").GetString().ShouldBe("repo-1");
         origin.GetProperty("providerId").GetString().ShouldBe("github");
+        AssertCapabilitiesDto(sessionWithOrigin.GetProperty("capabilities"));
 
         var sessionWithoutOrigin = sessionsById["session-without-origin"];
         sessionWithoutOrigin.GetProperty("origin").ValueKind.ShouldBe(JsonValueKind.Null);
+        AssertCapabilitiesDto(sessionWithoutOrigin.GetProperty("capabilities"));
     }
 
     [Fact]
@@ -120,6 +122,30 @@ public sealed class SessionEndpointOriginTests : IAsyncLifetime, IDisposable
 
         session.GetProperty("id").GetString().ShouldBe("session-without-origin");
         session.GetProperty("origin").ValueKind.ShouldBe(JsonValueKind.Null);
+        AssertCapabilitiesDto(session.GetProperty("capabilities"));
+    }
+
+    private static void AssertCapabilitiesDto(JsonElement capabilities)
+    {
+        capabilities.ValueKind.ShouldBe(JsonValueKind.Object);
+        capabilities.TryGetProperty("canPrompt", out var canPrompt).ShouldBeTrue();
+        canPrompt.ValueKind.ShouldBeOneOf(JsonValueKind.True, JsonValueKind.False);
+        capabilities.TryGetProperty("canStop", out var canStop).ShouldBeTrue();
+        canStop.ValueKind.ShouldBeOneOf(JsonValueKind.True, JsonValueKind.False);
+        capabilities.TryGetProperty("canResume", out var canResume).ShouldBeTrue();
+        canResume.ValueKind.ShouldBeOneOf(JsonValueKind.True, JsonValueKind.False);
+        capabilities.TryGetProperty("canRestart", out var canRestart).ShouldBeTrue();
+        canRestart.ValueKind.ShouldBeOneOf(JsonValueKind.True, JsonValueKind.False);
+        capabilities.TryGetProperty("canAbort", out var canAbort).ShouldBeTrue();
+        canAbort.ValueKind.ShouldBeOneOf(JsonValueKind.True, JsonValueKind.False);
+        capabilities.TryGetProperty("canArchive", out var canArchive).ShouldBeTrue();
+        canArchive.ValueKind.ShouldBeOneOf(JsonValueKind.True, JsonValueKind.False);
+        capabilities.TryGetProperty("canUnarchive", out var canUnarchive).ShouldBeTrue();
+        canUnarchive.ValueKind.ShouldBeOneOf(JsonValueKind.True, JsonValueKind.False);
+        capabilities.TryGetProperty("canFork", out var canFork).ShouldBeTrue();
+        canFork.ValueKind.ShouldBeOneOf(JsonValueKind.True, JsonValueKind.False);
+        capabilities.TryGetProperty("canDelete", out var canDelete).ShouldBeTrue();
+        canDelete.ValueKind.ShouldBeOneOf(JsonValueKind.True, JsonValueKind.False);
     }
 
     private static Task<int> InsertWorkspaceAsync(IDbConnection connection, string id, string directory, string createdAt) =>

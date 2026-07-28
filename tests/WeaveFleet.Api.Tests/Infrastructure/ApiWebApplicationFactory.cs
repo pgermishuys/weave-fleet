@@ -15,6 +15,7 @@ public sealed class ApiWebApplicationFactory(
     bool authEnabled,
     bool tokenAuthEnabled = false,
     bool useTestAuthentication = false,
+    bool testUserIsAdmin = false,
     Action<IServiceCollection>? configureTestServices = null) : WebApplicationFactory<Program>
 {
     private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-{Guid.NewGuid():N}.db");
@@ -43,7 +44,10 @@ public sealed class ApiWebApplicationFactory(
             builder.ConfigureTestServices(services =>
             {
                 services.AddAuthentication("Test")
-                    .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", _ => { });
+                    .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", options =>
+                    {
+                        options.ClaimsIssuer = testUserIsAdmin ? "admin" : "user";
+                    });
             });
 
             builder.UseSetting("Authentication:DefaultScheme", "Test");
@@ -124,6 +128,10 @@ public sealed class ApiWebApplicationFactory(
                 new Claim("email", "test@example.com"),
                 new Claim("name", "Test User")
             };
+            if (string.Equals(Options.ClaimsIssuer, "admin", StringComparison.Ordinal))
+            {
+                claims = [.. claims, new Claim(ClaimTypes.Role, "admin")];
+            }
 
             var identity = new ClaimsIdentity(claims, Scheme.Name);
             var principal = new ClaimsPrincipal(identity);

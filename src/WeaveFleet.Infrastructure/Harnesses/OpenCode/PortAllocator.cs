@@ -1,4 +1,6 @@
+using System.Diagnostics.Metrics;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Diagnostics;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
@@ -7,6 +9,20 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 /// </summary>
 public sealed class PortAllocator
 {
+    private static readonly object MetricAllocatorsLock = new();
+    private static readonly List<WeakReference<PortAllocator>> MetricAllocators = [];
+
+    private static readonly ObservableGauge<double> UtilizationGauge = FleetInstrumentation.Meter.CreateObservableGauge(
+        "opencode_port_pool_utilization",
+        ObserveUtilization,
+        "ratio",
+        "Fraction of the configured non-pooled OpenCode port range currently allocated.");
+
+    static PortAllocator()
+    {
+        _ = UtilizationGauge;
+    }
+
     private static readonly Action<ILogger, int, int, int, Exception?> LogPortNotAllocated =
         LoggerMessage.Define<int, int, int>(
             LogLevel.Warning,
@@ -21,7 +37,13 @@ public sealed class PortAllocator
     private readonly object _lock = new();
 
     /// <summary>Initialises the allocator with the inclusive port range [<paramref name="rangeStart"/>, <paramref name="rangeEnd"/>].</summary>
-    public PortAllocator(int rangeStart, int rangeEnd, ILogger<PortAllocator>? logger = null)
+    public PortAllocator(int rangeStart, int rangeEnd)
+        : this(rangeStart, rangeEnd, logger: null)
+    {
+    }
+
+    /// <summary>Initialises the allocator with the inclusive port range [<paramref name="rangeStart"/>, <paramref name="rangeEnd"/>].</summary>
+    public PortAllocator(int rangeStart, int rangeEnd, ILogger<PortAllocator>? logger)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(rangeStart, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(rangeEnd, rangeStart);
@@ -31,7 +53,14 @@ public sealed class PortAllocator
         _next = rangeStart;
         _allocated = new HashSet<int>(rangeEnd - rangeStart + 1);
         _logger = logger;
+        lock (MetricAllocatorsLock)
+        {
+            MetricAllocators.Add(new WeakReference<PortAllocator>(this));
+        }
     }
+
+    /// <summary>Total number of ports managed by this allocator.</summary>
+    public int Capacity => _rangeEnd - _rangeStart + 1;
 
     /// <summary>Total number of ports currently allocated.</summary>
     public int AllocatedCount
@@ -42,7 +71,13 @@ public sealed class PortAllocator
     /// <summary>Total number of ports still available for allocation.</summary>
     public int AvailableCount
     {
-        get { lock (_lock) { return (_rangeEnd - _rangeStart + 1) - _allocated.Count; } }
+        get { lock (_lock) { return Capacity - _allocated.Count; } }
+    }
+
+    /// <summary>Current utilization of the configured port range as a ratio from 0.0 to 1.0.</summary>
+    public double UtilizationRatio
+    {
+        get { lock (_lock) { return (double)_allocated.Count / Capacity; } }
     }
 
     /// <summary>
@@ -84,5 +119,35 @@ public sealed class PortAllocator
                 }
             }
         }
+    }
+
+    private static IEnumerable<Measurement<double>> ObserveUtilization()
+    {
+        var measurements = new List<Measurement<double>>();
+        lock (MetricAllocatorsLock)
+        {
+            for (var index = MetricAllocators.Count - 1; index >= 0; index--)
+            {
+                if (MetricAllocators[index].TryGetTarget(out var allocator))
+                {
+                    measurements.Add(allocator.GetUtilizationMeasurement());
+                }
+                else
+                {
+                    MetricAllocators.RemoveAt(index);
+                }
+            }
+        }
+
+        return measurements;
+    }
+
+    private Measurement<double> GetUtilizationMeasurement()
+    {
+        return new Measurement<double>(
+            UtilizationRatio,
+            new KeyValuePair<string, object?>("port.range_start", _rangeStart),
+            new KeyValuePair<string, object?>("port.range_end", _rangeEnd),
+            new KeyValuePair<string, object?>("port.capacity", Capacity));
     }
 }

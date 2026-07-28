@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="WeaveFleet.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="WeaveFleet.IntegrationTests" />
     <InternalsVisibleTo Include="NuCode.ConformanceTests" />
   </ItemGroup>
 

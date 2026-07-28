@@ -235,6 +235,78 @@ public sealed class MigrationRunnerTests
     }
 
     [Fact]
+    public async Task apply_migrations_async_repairs_journaled_runtime_mode_migration_when_column_is_missing()
+    {
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+        var runner = CreateRunner(factory);
+
+        await ApplyLegacyMigrationsThroughAsync(conn, "023_add_legacy_imports_table.sql");
+        await conn.ExecuteAsync(
+            "INSERT INTO projects (id, name, type, position, created_at, updated_at) VALUES ('proj-1', 'Project', 'user', 0, '2026-01-01', '2026-01-01')");
+        await conn.ExecuteAsync(
+            "INSERT INTO workspaces (id, directory, isolation_strategy, created_at) VALUES ('ws-1', '/tmp/proj', 'existing', '2026-01-01')");
+        await conn.ExecuteAsync(
+            "INSERT INTO instances (id, port, directory, url, status, created_at) VALUES ('inst-1', 0, '/tmp/proj', 'http://127.0.0.1:0', 'running', '2026-01-01')");
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO sessions (
+                id, workspace_id, instance_id, project_id, opencode_session_id, title, status,
+                directory, created_at, activity_status, lifecycle_status, total_tokens, total_cost,
+                harness_type, harness_resume_token, is_hidden, retention_status, user_id)
+            VALUES (
+                'sess-1', 'ws-1', 'inst-1', 'proj-1', 'oc-1', 'Legacy session', 'active',
+                '/tmp/proj', '2026-01-01', 'idle', 'running', 0, 0,
+                'opencode', NULL, 0, 'active', 'local-user')
+            """);
+        await SeedDbUpJournalAsync(conn, MigrationRunner.LoadScripts("Migrations"));
+
+        await runner.ApplyMigrationsAsync(conn);
+
+        var columns = (await conn.QueryAsync<string>("SELECT name FROM pragma_table_info('sessions')")).ToList();
+        columns.ShouldContain("runtime_mode");
+
+        var runtimeMode = await conn.QuerySingleAsync<string>("SELECT runtime_mode FROM sessions WHERE id = 'sess-1'");
+        runtimeMode.ShouldBe("manual");
+
+        var journalCount = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM {MigrationRunner.MainJournalTable}");
+        journalCount.ShouldBe(MigrationRunner.LoadScripts("Migrations").Count);
+    }
+
+    [Fact]
+    public async Task apply_migrations_async_marks_runtime_mode_migration_when_column_already_exists()
+    {
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+        var runner = CreateRunner(factory);
+
+        await ApplyLegacyMigrationsThroughAsync(conn, "023_add_legacy_imports_table.sql");
+        await conn.ExecuteAsync("ALTER TABLE sessions ADD COLUMN runtime_mode TEXT NOT NULL DEFAULT 'manual'");
+
+        var scriptsThrough023 = MigrationRunner.LoadScripts("Migrations")
+            .Where(script => !string.Equals(
+                MigrationRunner.ExtractMigrationName(script.Name),
+                "024_add_session_runtime_mode.sql",
+                StringComparison.Ordinal))
+            .ToList();
+        await SeedDbUpJournalAsync(conn, scriptsThrough023);
+
+        await runner.ApplyMigrationsAsync(conn);
+
+        var runtimeModeScript = MigrationRunner.LoadScripts("Migrations").Single(script => string.Equals(
+            MigrationRunner.ExtractMigrationName(script.Name),
+            "024_add_session_runtime_mode.sql",
+            StringComparison.Ordinal));
+        var runtimeModeJournalCount = await conn.ExecuteScalarAsync<int>(
+            $"SELECT COUNT(*) FROM {MigrationRunner.MainJournalTable} WHERE ScriptName = @ScriptName",
+            new { ScriptName = runtimeModeScript.Name });
+        runtimeModeJournalCount.ShouldBe(1);
+
+        var journalCount = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM {MigrationRunner.MainJournalTable}");
+        journalCount.ShouldBe(MigrationRunner.LoadScripts("Migrations").Count);
+    }
+
+    [Fact]
     public async Task ApplyMigrationsAsync_SkipsAlreadyAppliedMigrations()
     {
         using var conn = CreateInMemoryConnection();
@@ -484,4 +556,22 @@ public sealed class MigrationRunnerTests
                 applied_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
             """);
+
+    private static async Task SeedDbUpJournalAsync(SqliteConnection conn, IReadOnlyList<DbUp.Engine.SqlScript> scripts)
+    {
+        await conn.ExecuteAsync($$"""
+            CREATE TABLE IF NOT EXISTS {{MigrationRunner.MainJournalTable}} (
+                SchemaVersionId INTEGER PRIMARY KEY AUTOINCREMENT,
+                ScriptName TEXT NOT NULL,
+                Applied TEXT NOT NULL
+            )
+            """);
+
+        foreach (var script in scripts)
+        {
+            await conn.ExecuteAsync(
+                $"INSERT INTO {MigrationRunner.MainJournalTable} (ScriptName, Applied) VALUES (@ScriptName, datetime('now'))",
+                new { ScriptName = script.Name });
+        }
+    }
 }

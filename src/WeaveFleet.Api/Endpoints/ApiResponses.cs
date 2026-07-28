@@ -1,5 +1,6 @@
 using System.Text.Json;
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 
@@ -168,7 +169,8 @@ public sealed record GetSessionResponse(
     double? TotalCost,
     string? HarnessType,
     string? ProjectId,
-    SessionOriginDto? Origin);
+    SessionOriginDto? Origin,
+    SessionActionCapabilities Capabilities);
 
 public sealed record CreateSessionApiResponse(string InstanceId, string WorkspaceId, Session Session);
 

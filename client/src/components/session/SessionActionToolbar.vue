@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { Archive, GitFork, Loader2, OctagonX, Pencil, RotateCcw, Square, Trash2 } from "lucide-vue-next";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   canAbort?: boolean;
   canResume?: boolean;
   canStop?: boolean;
   canArchive?: boolean;
-  supportsFork?: boolean;
+  canFork?: boolean;
+  canDelete?: boolean;
   isPending?: boolean;
   isAborting?: boolean;
   isResuming?: boolean;
@@ -17,7 +18,10 @@ const props = defineProps<{
   hasSession?: boolean;
   hasInstance?: boolean;
   errors?: readonly string[];
-}>();
+}>(), {
+  canFork: true,
+  canDelete: true,
+});
 
 const emit = defineEmits<{
   abort: [];
@@ -98,7 +102,7 @@ const emit = defineEmits<{
     <span class="session-action-toolbar__divider" />
 
     <button
-      v-if="props.supportsFork"
+      v-if="props.canFork"
       type="button"
       data-testid="session-archived-fork-button"
       class="session-action-toolbar__btn"
@@ -110,6 +114,7 @@ const emit = defineEmits<{
     </button>
 
     <button
+      v-if="props.canDelete"
       type="button"
       class="session-action-toolbar__btn"
       :disabled="props.isPending || !props.hasSession"
@@ -128,6 +133,7 @@ const emit = defineEmits<{
     </button>
 
     <button
+      v-if="props.canDelete"
       type="button"
       data-testid="session-delete-button"
       class="session-action-toolbar__btn session-action-toolbar__btn--danger"

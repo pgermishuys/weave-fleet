@@ -58,6 +58,9 @@ public sealed partial class MigrationRunner
 
         await LegacyMigrationJournalBridge.ApplyAsync(connection, scripts, _journalTable, _folderSegment, _logger);
 
+        if (_folderSegment == "Migrations")
+            await MainSchemaCompatibilityRepair.ApplyAsync(connection, scripts, _journalTable, _logger);
+
         var result = DeployChanges.To
             .SqliteDatabase(new SharedConnection(connection))
             .WithScripts(scripts)

@@ -24,6 +24,7 @@ public sealed class Session
     public int TotalTokens { get; set; }
     public double TotalCost { get; set; }
     public string HarnessType { get; set; } = "opencode";
+    public string RuntimeMode { get; set; } = "manual";
     public string? HarnessResumeToken { get; set; }
     public string? GitBaselineRef { get; set; }
     public string? GitRepoRoot { get; set; }

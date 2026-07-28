@@ -223,6 +223,10 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
     /// <inheritdoc />
     public Task<IHarnessSession> ResumeAsync(HarnessResumeOptions options, CancellationToken ct)
     {
+        // TODO: Keep NuCode sessions in manual runtime mode until NuCode session state is
+        // backed by a durable store and ResumeToken can be used to rehydrate the prior
+        // NuCodeSession. Spawning a fresh in-process runtime is safe for the manual Resume
+        // action, but it must not be treated as automatic lazy activation.
         var spawnOptions = new HarnessSpawnOptions
         {
             SessionId = options.SessionId,
@@ -235,6 +239,10 @@ public sealed partial class NuCodeHarnessRuntime : IHarnessRuntime
 
         return SpawnAsync(spawnOptions, ct);
     }
+
+    /// <inheritdoc />
+    public Task<bool> WarmupPooledInstanceAsync(string ownerUserId, CancellationToken ct)
+        => Task.FromResult(false);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Initial prompt processing failed")]
     private partial void LogInitialPromptFailed(Exception exception);

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application;
@@ -10,6 +11,7 @@ using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Common;
+using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -48,6 +50,7 @@ public sealed partial class SessionOrchestrator(
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _activationLocks = new();
 
     private sealed class NoOpHarnessEventLogRepository : IHarnessEventLogRepository
     {
@@ -185,7 +188,13 @@ public sealed partial class SessionOrchestrator(
 
     private const string _defaultHarnessTypePreferenceKey = "defaultHarnessType";
     private const string _fallbackDefaultHarnessType = "opencode";
+    private const string _pooledOpenCodeHarnessPreferenceKey = "PooledOpenCodeHarness";
+    private const string _runtimeModeAutomatic = "automatic";
+    private const string _runtimeModeManual = "manual";
     private const string _scratchProjectName = "Scratch";
+    private const string _lifecycleStatusRunning = "running";
+    private const string _lifecycleStatusError = "error";
+    private const string _activityStatusIdle = "idle";
 
     // ── Create ─────────────────────────────────────────────────────────────────
 
@@ -225,6 +234,7 @@ public sealed partial class SessionOrchestrator(
 
         // Resolve harness
         var harnessType = await ResolveHarnessTypeAsync(request);
+        var runtimeMode = await ResolveRuntimeModeAsync(harnessType).ConfigureAwait(false);
         var harness = harnessRegistry.GetByType(harnessType);
         if (harness is null)
             return FleetError.NotFoundFor("Harness", harnessType);
@@ -311,7 +321,10 @@ public sealed partial class SessionOrchestrator(
             url: string.Empty);
         if (instanceResult.IsFailure)
         {
-            await SafeStopAsync(harnessInstance, ct);
+            // Best-effort delete: removes any eagerly-created OC session (pooled mode) before
+            // giving up. DeleteAsync is preferred over StopAsync here because it also issues
+            // the OC-level DELETE request, cleaning up the in-process session record.
+            await SafeDeleteAsync(harnessInstance, ct);
             return instanceResult.Error;
         }
 
@@ -319,6 +332,10 @@ public sealed partial class SessionOrchestrator(
         instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
 
         // 4. Persist session
+        // For pooled/automatic sessions, HarnessResumeToken is set here from the eagerly-created
+        // OpenCode session ID (available because SpawnAsync returns after OC session creation).
+        // For non-pooled sessions, ResumeToken is null at spawn time and is updated later via
+        // UpdateResumeTokenAsync when the harness creates the OC session on first prompt.
         var session = new Session
         {
             Id = sessionId,
@@ -331,16 +348,30 @@ public sealed partial class SessionOrchestrator(
             Directory = canonicalWorkspaceDirectory,
             CreatedAt = DateTime.UtcNow.ToString("O"),
             HarnessType = harnessType,
+            RuntimeMode = runtimeMode,
             GitBaselineRef = gitBaseline?.RefName,
             GitRepoRoot = gitBaseline?.RepoRoot,
             UserId = userContext.UserId,
+            HarnessResumeToken = harnessInstance.ResumeToken,
         };
 
         var createdAt = DateTime.UtcNow.ToString("O");
         session.CreatedAt = createdAt;
         if (sessionActivityWriteService is null)
         {
-            await sessionRepository.InsertAsync(session);
+            try
+            {
+                await sessionRepository.InsertAsync(session);
+            }
+            catch
+            {
+                // Rollback: best-effort delete of the OC session (releases lease, removes binding
+                // table entry, and issues OC-level DELETE). The resume token must not be logged or
+                // persisted when this path is taken. Deregister the in-memory handle too.
+                instanceTracker.Remove(harnessInstance.InstanceId);
+                await SafeDeleteAsync(harnessInstance, ct);
+                throw;
+            }
             await eventBroadcaster.BroadcastAsync("sessions", "session_created",
                 JsonSerializer.SerializeToElement(new SessionCreatedOutboxPayload
                 {
@@ -354,27 +385,39 @@ public sealed partial class SessionOrchestrator(
         }
         else
         {
-            await sessionActivityWriteService.WriteAsync(
-                new SessionActivityWriteRequest
-                {
-                    SessionsToInsert = [session],
-                    OutboxMessages =
-                    [
-                        CreateSessionLifecycleOutboxMessage(
-                            "session_created",
-                            JsonSerializer.Serialize(new SessionCreatedOutboxPayload
-                            {
-                                SessionId = session.Id,
-                                InstanceId = harnessInstance.InstanceId,
-                                WorkspaceId = workspace.Id,
-                                Title = session.Title,
-                                ProjectId = session.ProjectId
-                            }, ApplicationJsonContext.Default.SessionCreatedOutboxPayload),
-                            createdAt,
-                            userContext.UserId)
-                    ]
-                },
-                ct);
+            try
+            {
+                await sessionActivityWriteService.WriteAsync(
+                    new SessionActivityWriteRequest
+                    {
+                        SessionsToInsert = [session],
+                        OutboxMessages =
+                        [
+                            CreateSessionLifecycleOutboxMessage(
+                                "session_created",
+                                JsonSerializer.Serialize(new SessionCreatedOutboxPayload
+                                {
+                                    SessionId = session.Id,
+                                    InstanceId = harnessInstance.InstanceId,
+                                    WorkspaceId = workspace.Id,
+                                    Title = session.Title,
+                                    ProjectId = session.ProjectId
+                                }, ApplicationJsonContext.Default.SessionCreatedOutboxPayload),
+                                createdAt,
+                                userContext.UserId)
+                        ]
+                    },
+                    ct);
+            }
+            catch
+            {
+                // Rollback: best-effort delete of the OC session (releases lease, removes binding
+                // table entry, and issues OC-level DELETE). The resume token must not be logged or
+                // persisted when this path is taken. Deregister the in-memory handle too.
+                instanceTracker.Remove(harnessInstance.InstanceId);
+                await SafeDeleteAsync(harnessInstance, ct);
+                throw;
+            }
         }
 
         await sessionSourceUsageRepository.InsertAsync(new SessionSourceUsage
@@ -632,6 +675,7 @@ public sealed partial class SessionOrchestrator(
             ParentSessionId = parent.Id,
             LifecycleStatus = "running",
             HarnessType = parent.HarnessType,
+            RuntimeMode = parent.RuntimeMode,
             HarnessResumeToken = childHarnessSessionId,
             IsHidden = true,
             UserId = userContext.UserId,
@@ -760,7 +804,7 @@ public sealed partial class SessionOrchestrator(
         if (string.Equals(sessionResult.Value.RetentionStatus, "archived", StringComparison.Ordinal))
             return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only.");
 
-        var instanceResult = await GetLiveInstanceAsync(id);
+        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 
@@ -928,7 +972,7 @@ public sealed partial class SessionOrchestrator(
         if (string.Equals(sessionResult.Value.RetentionStatus, "archived", StringComparison.Ordinal))
             return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only.");
 
-        var instanceResult = await GetLiveInstanceAsync(id);
+        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 
@@ -943,7 +987,11 @@ public sealed partial class SessionOrchestrator(
         CancellationToken ct = default)
     {
         using var _ = BeginSessionScope(id);
-        var instanceResult = await GetLiveInstanceAsync(id);
+        var sessionResult = await GetSessionAsync(id);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 
@@ -965,7 +1013,11 @@ public sealed partial class SessionOrchestrator(
         CancellationToken ct = default)
     {
         using var _ = BeginSessionScope(id);
-        var instanceResult = await GetLiveInstanceAsync(id);
+        var sessionResult = await GetSessionAsync(id);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 
@@ -994,7 +1046,7 @@ public sealed partial class SessionOrchestrator(
         if (string.Equals(sessionResult.Value.RetentionStatus, "archived", StringComparison.Ordinal))
             return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only.");
 
-        var instanceResult = await GetLiveInstanceAsync(id);
+        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 
@@ -1171,6 +1223,21 @@ public sealed partial class SessionOrchestrator(
         return string.IsNullOrWhiteSpace(preferredHarnessType)
             ? _fallbackDefaultHarnessType
             : preferredHarnessType;
+    }
+
+    private async Task<string> ResolveRuntimeModeAsync(string harnessType)
+    {
+        if (!string.Equals(harnessType, _fallbackDefaultHarnessType, StringComparison.Ordinal))
+        {
+            return _runtimeModeManual;
+        }
+
+        var pooledPreference = await userPreferenceRepository.GetAsync(_pooledOpenCodeHarnessPreferenceKey).ConfigureAwait(false);
+        var pooledModeEnabled = string.IsNullOrWhiteSpace(pooledPreference)
+            ? options.Harness.PooledOpenCodeHarness
+            : string.Equals(pooledPreference, "true", StringComparison.OrdinalIgnoreCase);
+
+        return pooledModeEnabled ? _runtimeModeAutomatic : _runtimeModeManual;
     }
 
     // ── Delete ─────────────────────────────────────────────────────────────────
@@ -1431,20 +1498,180 @@ public sealed partial class SessionOrchestrator(
 
     // ── Private helpers ────────────────────────────────────────────────────────
 
-    private async Task<Result<IHarnessSession>> GetLiveInstanceAsync(string sessionId)
+    private async Task<Result<IHarnessSession>> GetOrActivateInstanceAsync(Session session, CancellationToken ct)
     {
-        var sessionResult = await GetSessionAsync(sessionId);
-        if (sessionResult.IsFailure)
-            return sessionResult.Error;
-
-        var session = sessionResult.Value;
-
         var instance = instanceTracker.Get(session.InstanceId);
-        if (instance is null)
+        if (instance is not null)
+            return Result.Success<IHarnessSession>(instance);
+
+        if (!string.Equals(session.RuntimeMode, _runtimeModeAutomatic, StringComparison.Ordinal))
             return FleetError.NotFoundFor("Instance", session.InstanceId);
 
-        return Result.Success<IHarnessSession>(instance);
+        var activationLock = _activationLocks.GetOrAdd(session.Id, static _ => new SemaphoreSlim(1, 1));
+        await activationLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var currentSession = await sessionRepository.GetByIdAsync(session.Id).ConfigureAwait(false);
+            if (currentSession is null)
+                return FleetError.NotFoundFor(nameof(Session), session.Id);
+
+            if (!string.Equals(currentSession.RuntimeMode, _runtimeModeAutomatic, StringComparison.Ordinal))
+                return FleetError.NotFoundFor("Instance", currentSession.InstanceId);
+
+            instance = instanceTracker.Get(currentSession.InstanceId);
+            if (instance is not null)
+                return Result.Success<IHarnessSession>(instance);
+
+            var activatedResult = await ActivateAutomaticSessionAsync(currentSession, ct).ConfigureAwait(false);
+            return activatedResult;
+        }
+        finally
+        {
+            activationLock.Release();
+        }
     }
+
+    private async Task<Result<IHarnessSession>> ActivateAutomaticSessionAsync(Session session, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(session.HarnessResumeToken))
+            return FleetError.NotFoundFor("Instance", session.InstanceId);
+
+        var workspaceResult = await workspaceService.GetWorkspaceDirectoryAsync(session.WorkspaceId).ConfigureAwait(false);
+        if (workspaceResult.IsFailure)
+        {
+            await MarkAutomaticActivationErrorAsync(session, ct).ConfigureAwait(false);
+            return workspaceResult.Error;
+        }
+
+        var harnessRuntime = harnessRegistry.GetRuntimeByType(session.HarnessType);
+        if (harnessRuntime is null)
+        {
+            await MarkAutomaticActivationErrorAsync(session, ct).ConfigureAwait(false);
+            return FleetError.NotFoundFor("HarnessRuntime", session.HarnessType);
+        }
+
+        var ownerCredentials = await credentialStore.GetDecryptedCredentialsAsync(session.UserId).ConfigureAwait(false);
+        var preparation = await harnessRuntime.PrepareRuntimeAsync(new RuntimePreparationContext
+        {
+            UserId = session.UserId,
+            UserCredentials = ownerCredentials,
+            ModelId = null,
+            WorkingDirectory = workspaceResult.Value
+        }, ct).ConfigureAwait(false);
+
+        if (preparation is RuntimePreparation.NotReady notReady)
+        {
+            var message = string.Join(" ", notReady.Errors.Select(e => e.Message));
+            await MarkAutomaticActivationErrorAsync(session, ct).ConfigureAwait(false);
+            return FleetError.ValidationError("Session.NotReady", message);
+        }
+
+        var launchArtifacts = ((RuntimePreparation.Ready)preparation).Artifacts;
+        var projectName = await ResolveProjectNameAsync(session.ProjectId).ConfigureAwait(false);
+
+        IHarnessSession harnessInstance;
+        try
+        {
+            harnessInstance = await harnessRuntime.ResumeAsync(new HarnessResumeOptions
+            {
+                SessionId = session.Id,
+                WorkingDirectory = workspaceResult.Value,
+                OwnerUserId = session.UserId,
+                ResumeToken = session.HarnessResumeToken,
+                ProjectId = session.ProjectId,
+                ProjectName = projectName,
+                LaunchArtifacts = launchArtifacts
+            }, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            LogAutomaticActivationFailed(ex, session.Id, session.HarnessType);
+            await MarkAutomaticActivationErrorAsync(session, ct).ConfigureAwait(false);
+            return new FleetError("Session.ActivationFailed", CreateAutomaticActivationFailedMessage(ex));
+        }
+
+        var instanceResult = await instanceService.RegisterInstanceAsync(
+            id: harnessInstance.InstanceId,
+            port: 0,
+            pid: harnessInstance.ProcessId,
+            directory: workspaceResult.Value,
+            url: string.Empty).ConfigureAwait(false);
+        if (instanceResult.IsFailure)
+        {
+            await SafeStopAsync(harnessInstance, ct).ConfigureAwait(false);
+            await MarkAutomaticActivationErrorAsync(session, ct).ConfigureAwait(false);
+            return instanceResult.Error;
+        }
+
+        instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
+        await sessionRepository.UpdateForResumeAsync(session.Id, harnessInstance.InstanceId).ConfigureAwait(false);
+        session.InstanceId = harnessInstance.InstanceId;
+        session.Status = "active";
+        session.LifecycleStatus = _lifecycleStatusRunning;
+        session.ActivityStatus = _activityStatusIdle;
+        session.StoppedAt = null;
+        await BroadcastAutomaticActivationStatusAsync(session, _activityStatusIdle, _lifecycleStatusRunning, ct).ConfigureAwait(false);
+
+        return Result.Success<IHarnessSession>(harnessInstance);
+    }
+
+    private async Task MarkAutomaticActivationErrorAsync(Session session, CancellationToken ct)
+    {
+        await sessionRepository.UpdateStatusAsync(session.Id, _lifecycleStatusError).ConfigureAwait(false);
+        session.Status = _lifecycleStatusError;
+        session.LifecycleStatus = _lifecycleStatusError;
+        session.ActivityStatus = _activityStatusIdle;
+        await BroadcastAutomaticActivationStatusAsync(session, _lifecycleStatusError, _lifecycleStatusError, ct).ConfigureAwait(false);
+    }
+
+    private async Task BroadcastAutomaticActivationStatusAsync(
+        Session session,
+        string activityStatus,
+        string lifecycleStatus,
+        CancellationToken ct)
+    {
+        var capabilities = ResolveCurrentCapabilities(session, activityStatus, lifecycleStatus);
+        var sessionStatusPayload = JsonSerializer.SerializeToElement(
+            new SessionStatusBroadcastPayload(
+                session.Id,
+                new SessionStatusBroadcastState(activityStatus),
+                lifecycleStatus,
+                capabilities),
+            ApplicationJsonContext.Default.SessionStatusBroadcastPayload);
+
+        await eventBroadcaster.BroadcastAsync(
+            $"session:{session.Id}",
+            EventTypes.SessionStatus,
+            sessionStatusPayload,
+            session.UserId,
+            ct).ConfigureAwait(false);
+
+        var activityStatusPayload = JsonSerializer.SerializeToElement(
+            new ActivityStatusBroadcastPayload(session.Id, activityStatus, capabilities),
+            ApplicationJsonContext.Default.ActivityStatusBroadcastPayload);
+
+        await eventBroadcaster.BroadcastAsync(
+            "sessions",
+            "activity_status",
+            activityStatusPayload,
+            session.UserId,
+            ct).ConfigureAwait(false);
+    }
+
+    private SessionActionCapabilities ResolveCurrentCapabilities(
+        Session session,
+        string activityStatus,
+        string lifecycleStatus)
+        => SessionCapabilitiesResolver.Resolve(
+            session.RuntimeMode,
+            lifecycleStatus,
+            session.RetentionStatus,
+            activityStatus,
+            instanceTracker.Get(session.InstanceId) is not null);
 
     private async Task<Result<Session>> GetSessionAsync(string sessionId)
     {
@@ -1475,6 +1702,18 @@ public sealed partial class SessionOrchestrator(
         catch (Exception ex) { LogStopFailed(ex, instance.InstanceId); }
     }
 
+    private static string CreateAutomaticActivationFailedMessage(Exception exception)
+    {
+        var baseException = exception.GetBaseException();
+        var message = string.IsNullOrWhiteSpace(baseException.Message)
+            ? exception.Message
+            : baseException.Message;
+
+        return string.IsNullOrWhiteSpace(message)
+            ? "Automatic session activation failed."
+            : $"Automatic session activation failed: {message}";
+    }
+
     private static string GetDelegationTerminalStatus(string sessionStatus) => sessionStatus switch
     {
         "error" => "error",
@@ -1498,6 +1737,10 @@ public sealed partial class SessionOrchestrator(
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Failed to send prompt to session {SessionId}")]
     private partial void LogPromptFailed(Exception ex, string sessionId);
+
+    [LoggerMessage(Level = LogLevel.Error,
+        Message = "Failed to automatically activate session {SessionId} for harness {HarnessType}")]
+    private partial void LogAutomaticActivationFailed(Exception ex, string sessionId, string harnessType);
 
     [LoggerMessage(Level = LogLevel.Error,
         Message = "Unexpected failure sending prompt to session {SessionId}")]

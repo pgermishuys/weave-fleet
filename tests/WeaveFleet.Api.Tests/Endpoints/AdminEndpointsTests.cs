@@ -7,11 +7,134 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
 public sealed class AdminEndpointsTests
 {
+    [Fact]
+    public async Task opencode_pool_health_returns_pool_state_for_admin_request()
+    {
+        await using var factory = new ApiWebApplicationFactory(
+            authEnabled: true,
+            useTestAuthentication: true,
+            testUserIsAdmin: true,
+            configureTestServices: services =>
+            {
+                services.RemoveAll<IOpenCodePoolHealthCheck>();
+                services.AddSingleton<IOpenCodePoolHealthCheck>(new StubPoolHealthCheck(
+                    new OpenCodePoolHealthStatus(
+                        1,
+                        2,
+                        WarmCount: 0,
+                        ActiveCount: 1,
+                        [new OpenCodePoolInstanceHealth("instance-1", 2, 1234, true, false, false, "abc123def456", IsWarm: false)])));
+            });
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/admin/opencode/pool");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
+        body.GetProperty("instanceCount").GetInt32().ShouldBe(1);
+        body.GetProperty("sessionCount").GetInt32().ShouldBe(2);
+        body.GetProperty("warmCount").GetInt32().ShouldBe(0);
+        body.GetProperty("activeCount").GetInt32().ShouldBe(1);
+        var instance = body.GetProperty("instances")[0];
+        instance.GetProperty("instanceId").GetString().ShouldBe("instance-1");
+        instance.GetProperty("sessionCount").GetInt32().ShouldBe(2);
+        instance.GetProperty("processId").GetInt32().ShouldBe(1234);
+        instance.GetProperty("isAvailable").GetBoolean().ShouldBeTrue();
+        instance.GetProperty("partitionFingerprint").GetString().ShouldBe("abc123def456");
+        instance.GetProperty("isWarm").GetBoolean().ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task opencode_pool_health_returns_forbidden_for_non_admin_request()
+    {
+        await using var factory = new ApiWebApplicationFactory(
+            authEnabled: true,
+            useTestAuthentication: true,
+            configureTestServices: services =>
+            {
+                services.RemoveAll<IOpenCodePoolHealthCheck>();
+                services.AddSingleton<IOpenCodePoolHealthCheck>(new ThrowingPoolHealthCheck());
+            });
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/admin/opencode/pool");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task opencode_pool_health_allows_local_operator_when_auth_is_disabled()
+    {
+        await using var factory = new ApiWebApplicationFactory(
+            authEnabled: false,
+            configureTestServices: services =>
+            {
+                services.RemoveAll<IOpenCodePoolHealthCheck>();
+                services.AddSingleton<IOpenCodePoolHealthCheck>(new StubPoolHealthCheck(
+                    new OpenCodePoolHealthStatus(0, 0, WarmCount: 0, ActiveCount: 0, [])));
+            });
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/admin/opencode/pool");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task opencode_pool_health_does_not_expose_raw_owner_ids_or_credential_hashes()
+    {
+        const string rawCredentialHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        const string rawOwnerId = "user-alice-sub-claim-value";
+
+        await using var factory = new ApiWebApplicationFactory(
+            authEnabled: true,
+            useTestAuthentication: true,
+            testUserIsAdmin: true,
+            configureTestServices: services =>
+            {
+                services.RemoveAll<IOpenCodePoolHealthCheck>();
+                services.AddSingleton<IOpenCodePoolHealthCheck>(new StubPoolHealthCheck(
+                    new OpenCodePoolHealthStatus(
+                        1,
+                        1,
+                        WarmCount: 1,
+                        ActiveCount: 0,
+                        [new OpenCodePoolInstanceHealth(
+                            "instance-safe-id",
+                            0,
+                            999,
+                            true,
+                            false,
+                            false,
+                            "safe0fingerprint",
+                            IsWarm: true)])));
+            });
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/admin/opencode/pool");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadAsStringAsync();
+
+        // The raw owner ID and raw credential hash must never appear in the response body.
+        body.ShouldNotContain(rawCredentialHash);
+        body.ShouldNotContain(rawOwnerId);
+
+        // The response must expose the safe partition fingerprint and warm status.
+        var json = JsonDocument.Parse(body).RootElement;
+        var instance = json.GetProperty("instances")[0];
+        instance.GetProperty("partitionFingerprint").GetString().ShouldBe("safe0fingerprint");
+        instance.GetProperty("isWarm").GetBoolean().ShouldBeTrue();
+        json.GetProperty("warmCount").GetInt32().ShouldBe(1);
+        json.GetProperty("activeCount").GetInt32().ShouldBe(0);
+    }
+
     [Fact]
     public async Task import_legacy_sessions_invokes_importer_and_returns_result_when_database_is_populated()
     {
@@ -148,6 +271,16 @@ public sealed class AdminEndpointsTests
 
         public Task<LegacySessionImportResult> ImportAsync(string sourcePath, CancellationToken cancellationToken)
             => ImportAsync(cancellationToken);
+    }
+
+    private sealed class StubPoolHealthCheck(OpenCodePoolHealthStatus status) : IOpenCodePoolHealthCheck
+    {
+        public OpenCodePoolHealthStatus GetStatus() => status;
+    }
+
+    private sealed class ThrowingPoolHealthCheck : IOpenCodePoolHealthCheck
+    {
+        public OpenCodePoolHealthStatus GetStatus() => throw new InvalidOperationException("Should not be called.");
     }
 
     private static async Task PopulateDestinationDatabaseAsync(ApiWebApplicationFactory factory)

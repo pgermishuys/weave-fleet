@@ -7,13 +7,13 @@ namespace WeaveFleet.Application.Services;
 /// <summary>
 /// Reads and writes weave config files (weave-opencode.jsonc).
 /// </summary>
-public sealed partial class ConfigService(ILogger<ConfigService> logger)
+public sealed partial class ConfigService
 {
-    private static readonly string UserConfigDir =
+    private static readonly string DefaultUserConfigDir =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".weave");
 
-    private static readonly string UserConfigPath =
-        Path.Combine(UserConfigDir, "weave-opencode.jsonc");
+    private static readonly string DefaultUserConfigPath =
+        Path.Combine(DefaultUserConfigDir, "weave-opencode.jsonc");
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -22,26 +22,58 @@ public sealed partial class ConfigService(ILogger<ConfigService> logger)
         ReadCommentHandling = JsonCommentHandling.Skip
     };
 
-    /// <summary>Returns the path to the user config file (may not exist yet).</summary>
-    public static string UserConfigFilePath => UserConfigPath;
+    private readonly ConfigPaths _configPaths;
+    private readonly ILogger<ConfigService> _logger;
+
+    /// <summary>Initialises the service with the default user config path.</summary>
+    public ConfigService(ILogger<ConfigService> logger)
+        : this(logger, CreateDefaultConfigPaths())
+    {
+    }
+
+    /// <summary>Initialises the service with explicit config paths.</summary>
+    public ConfigService(ILogger<ConfigService> logger, ConfigPaths configPaths)
+    {
+        _logger = logger;
+        _configPaths = configPaths;
+    }
+
+    /// <summary>Returns the path to the default user config file (may not exist yet).</summary>
+    public static string UserConfigFilePath => DefaultUserConfigPath;
 
     /// <summary>Reads the user-level config. Returns empty object if file doesn't exist.</summary>
-    public async Task<JsonObject> GetUserConfigAsync(CancellationToken ct = default)
+    public Task<JsonObject> GetUserConfigAsync()
+        => GetUserConfigAsync(CancellationToken.None);
+
+    /// <summary>Reads the user-level config. Returns empty object if file doesn't exist.</summary>
+    public async Task<JsonObject> GetUserConfigAsync(CancellationToken ct)
     {
-        if (!File.Exists(UserConfigPath))
+        if (!File.Exists(_configPaths.UserConfigPath))
         {
-            LogConfigNotFound(UserConfigPath);
+            LogConfigNotFound(_configPaths.UserConfigPath);
             return [];
         }
 
-        var json = await File.ReadAllTextAsync(UserConfigPath, ct).ConfigureAwait(false);
+        var json = await File.ReadAllTextAsync(_configPaths.UserConfigPath, ct).ConfigureAwait(false);
         return ParseJsonc(json) ?? [];
     }
+
+    /// <summary>Returns a merged config: user-level config only.</summary>
+    public Task<JsonObject> GetMergedConfigAsync()
+        => GetMergedConfigAsync(null, CancellationToken.None);
+
+    /// <summary>Returns a merged config: project-level config overlaid on user config.</summary>
+    public Task<JsonObject> GetMergedConfigAsync(string directory)
+        => GetMergedConfigAsync(directory, CancellationToken.None);
+
+    /// <summary>Returns a merged config: user-level config only.</summary>
+    public Task<JsonObject> GetMergedConfigAsync(CancellationToken ct)
+        => GetMergedConfigAsync(null, ct);
 
     /// <summary>
     /// Returns a merged config: project-level config (if directory provided) overlaid on user config.
     /// </summary>
-    public async Task<JsonObject> GetMergedConfigAsync(string? directory = null, CancellationToken ct = default)
+    public async Task<JsonObject> GetMergedConfigAsync(string? directory, CancellationToken ct)
     {
         var userConfig = await GetUserConfigAsync(ct).ConfigureAwait(false);
 
@@ -61,16 +93,23 @@ public sealed partial class ConfigService(ILogger<ConfigService> logger)
     }
 
     /// <summary>Writes the user-level config file.</summary>
-    public async Task UpdateUserConfigAsync(JsonObject config, CancellationToken ct = default)
+    public Task UpdateUserConfigAsync(JsonObject config)
+        => UpdateUserConfigAsync(config, CancellationToken.None);
+
+    /// <summary>Writes the user-level config file.</summary>
+    public async Task UpdateUserConfigAsync(JsonObject config, CancellationToken ct)
     {
-        Directory.CreateDirectory(UserConfigDir);
+        Directory.CreateDirectory(_configPaths.ConfigDirectory);
         var json = config.ToJsonString(SerializerOptions);
-        await File.WriteAllTextAsync(UserConfigPath, json, ct).ConfigureAwait(false);
-        LogConfigWritten(UserConfigPath);
+        await File.WriteAllTextAsync(_configPaths.UserConfigPath, json, ct).ConfigureAwait(false);
+        LogConfigWritten(_configPaths.UserConfigPath);
     }
 
     /// <summary>Returns the paths relevant for display/debugging.</summary>
-    public static ConfigPaths GetConfigPaths() => new(UserConfigDir, UserConfigPath);
+    public ConfigPaths GetConfigPaths() => _configPaths;
+
+    /// <summary>Returns the default paths relevant for display/debugging.</summary>
+    public static ConfigPaths CreateDefaultConfigPaths() => new(DefaultUserConfigDir, DefaultUserConfigPath);
 
     // ── Private helpers ────────────────────────────────────────────────────────
 

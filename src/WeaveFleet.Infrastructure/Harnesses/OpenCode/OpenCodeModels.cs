@@ -40,10 +40,20 @@ internal sealed record OpenCodeSessionInfo
     [JsonPropertyName("time")] public OpenCodeSessionTime? Time { get; init; }
     [JsonPropertyName("parentId")] public string? ParentId { get; init; }
     [JsonPropertyName("workspaceId")] public string? WorkspaceId { get; init; }
-    [JsonPropertyName("summary")] public string? Summary { get; init; }
+    [JsonPropertyName("summary")] public JsonElement? Summary { get; init; }
     [JsonPropertyName("share")] public JsonElement? Share { get; init; }
     [JsonPropertyName("permission")] public JsonElement? Permission { get; init; }
     [JsonPropertyName("revert")] public JsonElement? Revert { get; init; }
+}
+
+/// <summary>
+/// Minimal session response used by create/get paths that only need the session id.
+/// OpenCode session payloads include several evolving fields; using this DTO keeps
+/// activation/resume independent of unrelated response-shape changes.
+/// </summary>
+internal sealed record OpenCodeSessionIdentity
+{
+    [JsonPropertyName("id")] public required string Id { get; init; }
 }
 
 /// <summary>Timestamps on a session.</summary>
@@ -210,7 +220,9 @@ internal sealed class OpenCodeModelRefJsonConverter : JsonConverter<OpenCodeMode
     {
         if (root.TryGetProperty(propertyName, out var property))
         {
-            value = property.ValueKind == JsonValueKind.Null ? null : property.GetString();
+            value = property.ValueKind == JsonValueKind.String
+                ? property.GetString()
+                : null;
             return true;
         }
 

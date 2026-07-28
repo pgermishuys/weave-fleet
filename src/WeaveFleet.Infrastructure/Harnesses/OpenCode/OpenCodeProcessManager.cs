@@ -208,7 +208,7 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
     /// </summary>
     public async Task StopAsync(TimeSpan timeout)
     {
-        if (_process is null || _process.HasExited)
+        if (_process is null || HasProcessExitedOrDetached(_process))
         {
             return;
         }
@@ -228,6 +228,19 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
         catch (Exception)
         {
             // Process may already be gone; ignore
+        }
+    }
+
+    private static bool HasProcessExitedOrDetached(Process process)
+    {
+        try
+        {
+            return process.HasExited;
+        }
+        catch (InvalidOperationException)
+        {
+            // Test fakes and failed starts can leave a Process object with no associated OS process.
+            return true;
         }
     }
 

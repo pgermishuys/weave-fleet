@@ -20,6 +20,30 @@ function createJsonResponse<T>(body: T, status = 200): Response {
   });
 }
 
+function createCapabilities(overrides: Partial<NonNullable<SessionListItem["capabilities"]>> = {}): NonNullable<SessionListItem["capabilities"]> {
+  return {
+    canPrompt: true,
+    canStop: true,
+    canResume: false,
+    canRestart: false,
+    canAbort: false,
+    canArchive: false,
+    canUnarchive: false,
+    canFork: true,
+    canDelete: true,
+    promptDisabledReason: null,
+    stopDisabledReason: null,
+    resumeDisabledReason: null,
+    restartDisabledReason: null,
+    abortDisabledReason: null,
+    archiveDisabledReason: null,
+    unarchiveDisabledReason: null,
+    forkDisabledReason: null,
+    deleteDisabledReason: null,
+    ...overrides,
+  };
+}
+
 function createSession(overrides: Partial<SessionListItem> = {}): SessionListItem {
   return {
     instanceId: "instance-1",
@@ -48,6 +72,7 @@ function createSession(overrides: Partial<SessionListItem> = {}): SessionListIte
     isHidden: false,
     projectId: "project-1",
     projectName: "Project",
+    capabilities: createCapabilities(),
     ...overrides,
   };
 }
@@ -105,16 +130,24 @@ function configureApiFetch(): void {
   });
 }
 
-function mountComposer(instanceId: string | undefined = "instance-1") {
+interface MountComposerOptions {
+  instanceId?: string;
+  session?: SessionListItem;
+  disabled?: boolean;
+}
+
+function mountComposer(options: MountComposerOptions = {}) {
   const sessionsStore = useSessionsStore();
-  sessionsStore.setSessions([createSession()]);
+  const session = options.session ?? createSession();
+  sessionsStore.setSessions([session]);
   sessionsStore.setActiveSessionId("session-1");
 
   return mount(Composer, {
     attachTo: document.body,
     props: {
       sessionId: "session-1",
-      instanceId,
+      instanceId: options.instanceId ?? "instance-1",
+      disabled: options.disabled,
     },
     global: {
       stubs: {
@@ -245,7 +278,7 @@ describe("Composer", () => {
   });
 
   it("does not intercept Shift+Enter and does not render autocomplete when instanceId is blank", async () => {
-    const wrapper = mountComposer("   ");
+    const wrapper = mountComposer({ instanceId: "   " });
     const textarea = wrapper.get("[data-testid='prompt-input']");
 
     await textarea.setValue("/");
@@ -264,5 +297,53 @@ describe("Composer", () => {
 
     expect(shiftEnterEvent.defaultPrevented).toBe(false);
     expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/prompt"))).toBe(false);
+  });
+
+  it("enables composer for a stopped session when capabilities canPrompt is true", async () => {
+    const wrapper = mountComposer({
+      session: createSession({
+        lifecycleStatus: "stopped",
+        sessionStatus: "stopped",
+        capabilities: createCapabilities({ canPrompt: true }),
+      }),
+    });
+
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='prompt-input']").attributes("disabled")).toBeUndefined();
+    expect(wrapper.get("[data-testid='prompt-send-button']").attributes("disabled")).toBeUndefined();
+  });
+
+  it("disables composer for a stopped session when capabilities canPrompt is false", async () => {
+    const wrapper = mountComposer({
+      session: createSession({
+        lifecycleStatus: "stopped",
+        sessionStatus: "stopped",
+        capabilities: createCapabilities({
+          canPrompt: false,
+          promptDisabledReason: "Manual stopped sessions cannot receive prompts.",
+        }),
+      }),
+    });
+
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='prompt-input']").attributes("disabled")).toBeDefined();
+    expect(wrapper.get("[data-testid='prompt-send-button']").attributes("disabled")).toBeDefined();
+  });
+
+  it("disables composer for an archived session", async () => {
+    const wrapper = mountComposer({
+      session: createSession({
+        retentionStatus: "archived",
+        archivedAt: "2026-05-28T00:00:00Z",
+        capabilities: createCapabilities({ canPrompt: true }),
+      }),
+    });
+
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='prompt-input']").attributes("disabled")).toBeDefined();
+    expect(wrapper.get("[data-testid='prompt-send-button']").attributes("disabled")).toBeDefined();
   });
 });

@@ -29,4 +29,14 @@ public interface IHarnessRuntime
 
     /// <summary>Resume an existing agent session using the stored resume token.</summary>
     Task<IHarnessSession> ResumeAsync(HarnessResumeOptions options, CancellationToken ct);
+
+    /// <summary>
+    /// Warms up a pooled instance for the specified owner by loading server-side preferences
+    /// and decrypted credentials. The owner identity must be resolved server-side — callers
+    /// must never supply caller-controlled owner IDs, credential hashes, resume tokens, or
+    /// working directories.
+    /// Returns <c>true</c> when warmup was attempted, <c>false</c> when this runtime does not
+    /// support pooled warmup or warmup was skipped (e.g. pooled mode disabled for the user).
+    /// </summary>
+    Task<bool> WarmupPooledInstanceAsync(string ownerUserId, CancellationToken ct);
 }

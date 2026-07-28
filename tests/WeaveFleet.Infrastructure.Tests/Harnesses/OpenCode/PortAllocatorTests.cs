@@ -1,4 +1,6 @@
+using System.Diagnostics.Metrics;
 using Shouldly;
+using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
@@ -6,7 +8,7 @@ namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
 public sealed class PortAllocatorTests
 {
     [Fact]
-    public void AllocatePort_ReturnsPortInRange()
+    public void allocate_port_returns_port_in_range()
     {
         var allocator = new PortAllocator(10000, 10009);
 
@@ -16,7 +18,7 @@ public sealed class PortAllocatorTests
     }
 
     [Fact]
-    public void AllocatePort_NeverReturnsSamePortTwice()
+    public void allocate_port_never_returns_same_port_twice()
     {
         var allocator = new PortAllocator(10000, 10004); // 5 ports
         var allocated = new HashSet<int>();
@@ -29,7 +31,7 @@ public sealed class PortAllocatorTests
     }
 
     [Fact]
-    public void AllocatePort_ThrowsWhenExhausted()
+    public void allocate_port_throws_when_exhausted()
     {
         var allocator = new PortAllocator(20000, 20002); // 3 ports
 
@@ -44,7 +46,7 @@ public sealed class PortAllocatorTests
     }
 
     [Fact]
-    public void ReleasePort_AllowsReallocation()
+    public void release_port_allows_reallocation()
     {
         var allocator = new PortAllocator(30000, 30000); // single port
 
@@ -58,7 +60,7 @@ public sealed class PortAllocatorTests
     }
 
     [Fact]
-    public void ReleasePort_UnknownPort_DoesNotThrow()
+    public void release_port_unknown_port_does_not_throw()
     {
         // ReleasePort on a port that was never allocated must not throw
         var allocator = new PortAllocator(40000, 40009);
@@ -67,7 +69,7 @@ public sealed class PortAllocatorTests
     }
 
     [Fact]
-    public void AllocatedCount_TracksCorrectly()
+    public void allocated_count_tracks_correctly()
     {
         var allocator = new PortAllocator(50000, 50009);
 
@@ -87,7 +89,7 @@ public sealed class PortAllocatorTests
     }
 
     [Fact]
-    public void AvailableCount_TracksCorrectly()
+    public void available_count_tracks_correctly()
     {
         var allocator = new PortAllocator(60000, 60004); // 5 ports
 
@@ -101,7 +103,7 @@ public sealed class PortAllocatorTests
     }
 
     [Fact]
-    public async Task ConcurrentAllocation_NoCollisions()
+    public async Task concurrent_allocation_no_collisions()
     {
         const int portCount = 50;
         var allocator = new PortAllocator(70000, 70000 + portCount - 1);
@@ -114,5 +116,80 @@ public sealed class PortAllocatorTests
 
         results.Count.ShouldBe(portCount);
         results.Distinct().Count().ShouldBe(portCount); // no duplicates
+    }
+
+    [Fact]
+    public void utilization_ratio_tracks_allocated_port_fraction()
+    {
+        var allocator = new PortAllocator(71000, 71003);
+
+        allocator.Capacity.ShouldBe(4);
+        allocator.UtilizationRatio.ShouldBe(0);
+
+        int first = allocator.AllocatePort();
+        allocator.AllocatePort();
+
+        allocator.UtilizationRatio.ShouldBe(0.5);
+
+        allocator.ReleasePort(first);
+        allocator.UtilizationRatio.ShouldBe(0.25);
+    }
+
+    [Fact]
+    public void utilization_metric_reports_allocated_port_fraction()
+    {
+        using var listener = new TestMeterListener();
+        listener.Start();
+        var allocator = new PortAllocator(72000, 72003);
+
+        allocator.AllocatePort();
+        allocator.AllocatePort();
+
+        listener.RecordObservableInstruments();
+
+        listener.GetObservableValues().ShouldContain(0.5);
+    }
+
+    private sealed class TestMeterListener : IDisposable
+    {
+        private readonly MeterListener _listener = new();
+        private readonly List<double> _observableValues = [];
+
+        public TestMeterListener()
+        {
+            _listener.InstrumentPublished = (instrument, listener) =>
+            {
+                if (instrument.Meter.Name == FleetInstrumentation.ServiceName
+                    && instrument.Name == "opencode_port_pool_utilization")
+                {
+                    listener.EnableMeasurementEvents(instrument);
+                }
+            };
+            _listener.SetMeasurementEventCallback<double>((_, measurement, _, _) =>
+            {
+                _observableValues.Add(measurement);
+            });
+        }
+
+        public void Start()
+        {
+            _listener.Start();
+        }
+
+        public void RecordObservableInstruments()
+        {
+            _observableValues.Clear();
+            _listener.RecordObservableInstruments();
+        }
+
+        public List<double> GetObservableValues()
+        {
+            return _observableValues;
+        }
+
+        public void Dispose()
+        {
+            _listener.Dispose();
+        }
     }
 }

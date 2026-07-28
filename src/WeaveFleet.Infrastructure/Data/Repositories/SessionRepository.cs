@@ -29,11 +29,11 @@ public sealed class SessionRepository(
             INSERT INTO sessions (id, workspace_id, instance_id, project_id, opencode_session_id, title,
                 status, directory, created_at, stopped_at, parent_session_id, activity_status,
                 lifecycle_status, retention_status, archived_at, is_hidden, total_tokens, total_cost,
-                harness_type, harness_resume_token, git_baseline_ref, git_repo_root, user_id)
+                harness_type, runtime_mode, harness_resume_token, git_baseline_ref, git_repo_root, user_id)
             SELECT @Id, @WorkspaceId, @InstanceId, @ProjectId, @OpencodeSessionId, @Title,
                 @Status, @Directory, @CreatedAt, @StoppedAt, @ParentSessionId, @ActivityStatus,
                 @LifecycleStatus, @RetentionStatus, @ArchivedAt, @IsHidden, @TotalTokens, @TotalCost,
-                @HarnessType, @HarnessResumeToken, @GitBaselineRef, @GitRepoRoot, @UserId
+                @HarnessType, @RuntimeMode, @HarnessResumeToken, @GitBaselineRef, @GitRepoRoot, @UserId
             FROM workspaces workspace_row
             WHERE workspace_row.id = @WorkspaceId
               AND workspace_row.user_id = @UserId
@@ -67,6 +67,7 @@ public sealed class SessionRepository(
                 cmd.AddParameter("TotalTokens", session.TotalTokens);
                 cmd.AddParameter("TotalCost", session.TotalCost);
                 cmd.AddParameter("HarnessType", session.HarnessType);
+                cmd.AddParameter("RuntimeMode", session.RuntimeMode);
                 cmd.AddParameter("HarnessResumeToken", session.HarnessResumeToken);
                 cmd.AddParameter("GitBaselineRef", session.GitBaselineRef);
                 cmd.AddParameter("GitRepoRoot", session.GitRepoRoot);
@@ -269,6 +270,8 @@ public sealed class SessionRepository(
         {
             "stopped" => "stopped",
             "completed" => "completed",
+            "error" => "error",
+            "disconnected" => "disconnected",
             _ => "running"
         };
         await connection.ExecuteNonQueryAsync(
@@ -529,7 +532,7 @@ public sealed class SessionRepository(
         // System-level recovery operation — no user filter
         using var conn = connectionFactory.CreateConnection();
         return await conn.ExecuteNonQueryAsync(
-            "UPDATE sessions SET status = 'stopped', stopped_at = @StoppedAt, lifecycle_status = 'stopped' WHERE status NOT IN ('stopped', 'completed', 'error')",
+            "UPDATE sessions SET status = 'stopped', stopped_at = @StoppedAt, lifecycle_status = 'stopped' WHERE status NOT IN ('stopped', 'completed', 'error') AND (runtime_mode IS NULL OR lower(runtime_mode) <> 'automatic')",
             cmd => { cmd.AddParameter("StoppedAt", stoppedAt); });
     }
 
@@ -581,6 +584,7 @@ public sealed class SessionRepository(
         TotalTokens = (int)r.GetInt64(r.GetOrdinal("total_tokens")),
         TotalCost = r.GetDouble(r.GetOrdinal("total_cost")),
         HarnessType = r.GetString(r.GetOrdinal("harness_type")),
+        RuntimeMode = r.GetString(r.GetOrdinal("runtime_mode")),
         HarnessResumeToken = r.GetNullableString(r.GetOrdinal("harness_resume_token")),
         GitBaselineRef = r.GetNullableString(r.GetOrdinal("git_baseline_ref")),
         GitRepoRoot = r.GetNullableString(r.GetOrdinal("git_repo_root")),

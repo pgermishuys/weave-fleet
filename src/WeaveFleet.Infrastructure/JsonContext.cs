@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
@@ -15,6 +16,7 @@ internal sealed record ActivityStatusPayload
 {
     [JsonPropertyName("sessionId")] public required string SessionId { get; init; }
     [JsonPropertyName("activityStatus")] public required string ActivityStatus { get; init; }
+    [JsonPropertyName("capabilities")] public required SessionActionCapabilities Capabilities { get; init; }
 }
 
 // ── Named types for ClaudeCodeMapper (replace anonymous types) ────────────────────────────────────
@@ -123,6 +125,7 @@ internal sealed partial class HarnessEventJsonContext : JsonSerializerContext
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(OpenCodeHealthResponse))]
+[JsonSerializable(typeof(OpenCodeSessionIdentity))]
 [JsonSerializable(typeof(OpenCodeSessionInfo))]
 [JsonSerializable(typeof(List<OpenCodeSessionInfo>))]
 [JsonSerializable(typeof(OpenCodeCreateSessionRequest))]
@@ -226,6 +229,7 @@ internal sealed record NuCodeStatusPayload
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(ActivityStatusPayload))]
+[JsonSerializable(typeof(SessionActionCapabilities))]
 [JsonSerializable(typeof(ClaudeCodeMessageUpdatedPayload))]
 [JsonSerializable(typeof(ClaudeCodeTextPartPayload))]
 [JsonSerializable(typeof(ClaudeCodeToolPartPayload))]
@@ -245,10 +249,15 @@ internal sealed record NuCodeStatusPayload
 [JsonSerializable(typeof(DeviceCodeResponse))]
 internal sealed partial class InfrastructureJsonContext : JsonSerializerContext
 {
-    /// <summary>Returns a serialized <c>{ "sessionId": "...", "activityStatus": "..." }</c> JsonElement.</summary>
-    internal static JsonElement SerializeActivityStatus(string sessionId, string activityStatus)
+    /// <summary>Returns a serialized activity-status payload.</summary>
+    internal static JsonElement SerializeActivityStatus(string sessionId, string activityStatus, SessionActionCapabilities capabilities)
         => JsonSerializer.SerializeToElement(
-            new ActivityStatusPayload { SessionId = sessionId, ActivityStatus = activityStatus },
+            new ActivityStatusPayload
+            {
+                SessionId = sessionId,
+                ActivityStatus = activityStatus,
+                Capabilities = capabilities
+            },
             Default.ActivityStatusPayload);
 
     /// <summary>A pre-computed empty JSON object <c>{}</c> as a <see cref="JsonElement"/>.</summary>

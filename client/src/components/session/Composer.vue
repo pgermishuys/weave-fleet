@@ -43,7 +43,7 @@ const { draft, setText, setAgentId, setModelId } = useDraftState(props.sessionId
   agentId: "",
   modelId: "",
 });
-const { error: sendPromptError, sendPrompt } = useSendPrompt(props.sessionId);
+const { canSend, error: sendPromptError, sendPrompt } = useSendPrompt(props.sessionId);
 const { error: sendCommandError, sendCommand } = useSendCommand(props.sessionId);
 const inputHistory = useInputHistory(props.sessionId);
 const historyEl = ref<HTMLElement | null>(null);
@@ -181,13 +181,12 @@ const effectiveActivityStatus = computed(() => {
 });
 
 const isDisabled = computed(() => {
-  const lifecycleStatus = sessionStateOverride.value?.lifecycleStatus ?? selectedSession.value?.lifecycleStatus;
   const retentionStatus = sessionStateOverride.value?.retentionStatus ?? selectedSession.value?.retentionStatus;
 
   return props.disabled
     || localDisabledOverride.value === true
     || retentionStatus === "archived"
-    || (lifecycleStatus !== undefined && lifecycleStatus !== "running");
+    || !canSend.value;
 });
 
 const sessionStatus = computed<"idle" | "busy" | "waiting_input">(() => {
@@ -224,9 +223,9 @@ watch(
 );
 
 watch(
-  () => [selectedSession.value?.retentionStatus, selectedSession.value?.lifecycleStatus, props.disabled] as const,
-  ([retentionStatus, lifecycleStatus, disabled]) => {
-    if (disabled || retentionStatus === "archived" || (lifecycleStatus !== undefined && lifecycleStatus !== "running")) {
+  () => [selectedSession.value?.retentionStatus, props.disabled, canSend.value] as const,
+  ([retentionStatus, disabled, nextCanSend]) => {
+    if (disabled || retentionStatus === "archived" || !nextCanSend) {
       localDisabledOverride.value = true;
       return;
     }
@@ -244,13 +243,12 @@ if (typeof window !== "undefined") {
     }
 
     const retentionStatus = customEvent.detail.patch?.retentionStatus;
-    const lifecycleStatus = customEvent.detail.patch?.lifecycleStatus;
-    if (retentionStatus === "archived" || (lifecycleStatus !== undefined && lifecycleStatus !== "running")) {
+    if (retentionStatus === "archived") {
       localDisabledOverride.value = true;
       return;
     }
 
-    if (retentionStatus === "active" && lifecycleStatus === "running") {
+    if (retentionStatus === "active" && canSend.value) {
       localDisabledOverride.value = null;
     }
   });
@@ -262,14 +260,12 @@ function syncDisabledStateFromPage(): void {
   }
 
   const hasArchivedBanner = document.querySelector('[data-testid="session-archived-banner"]') !== null;
-  const hasStoppedBanner = document.querySelector('[data-testid="session-stopped-banner"]') !== null;
-
-  if (hasArchivedBanner || hasStoppedBanner) {
+  if (hasArchivedBanner) {
     localDisabledOverride.value = true;
     return;
   }
 
-  if (!props.disabled) {
+  if (!props.disabled && canSend.value) {
     localDisabledOverride.value = null;
   }
 }

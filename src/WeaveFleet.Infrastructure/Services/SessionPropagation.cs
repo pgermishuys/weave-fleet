@@ -1,5 +1,8 @@
+using System.Text.Json;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace WeaveFleet.Infrastructure.Services;
 
@@ -20,6 +23,7 @@ internal static class SessionPropagation
         string? userId,
         SessionActivityTracker tracker,
         IEventBroadcaster broadcaster,
+        IServiceScopeFactory scopeFactory,
         CancellationToken ct)
     {
         var parentSessionId = tracker.GetParentSessionId(childSessionId);
@@ -30,7 +34,11 @@ internal static class SessionPropagation
         if (parentActivityStatus is null)
             return;
 
-        var payload = InfrastructureJsonContext.SerializeActivityStatus(parentSessionId, parentActivityStatus);
+        var payload = await BuildActivityStatusPayloadAsync(
+            parentSessionId,
+            parentActivityStatus,
+            scopeFactory,
+            ct).ConfigureAwait(false);
 
         await broadcaster.BroadcastAsync(
             "sessions",
@@ -45,5 +53,29 @@ internal static class SessionPropagation
             payload,
             userId,
             ct).ConfigureAwait(false);
+    }
+
+    private static async Task<JsonElement> BuildActivityStatusPayloadAsync(
+        string sessionId,
+        string activityStatus,
+        IServiceScopeFactory scopeFactory,
+        CancellationToken ct)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var sessionRepository = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
+        var capabilitiesResolver = scope.ServiceProvider.GetRequiredService<SessionCapabilitiesResolver>();
+        var session = await sessionRepository.GetByIdAsync(sessionId).ConfigureAwait(false);
+        if (session is not null)
+        {
+            session.ActivityStatus = activityStatus;
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        var capabilities = session is not null
+            ? capabilitiesResolver.Resolve(session)
+            : SessionCapabilitiesResolver.Resolve(null, null, null, activityStatus, isLive: false);
+
+        return InfrastructureJsonContext.SerializeActivityStatus(sessionId, activityStatus, capabilities);
     }
 }

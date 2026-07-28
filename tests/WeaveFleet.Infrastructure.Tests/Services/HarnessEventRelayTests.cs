@@ -62,6 +62,7 @@ public sealed class HarnessEventRelayTests
             services.AddSingleton(deltaBuffer);
             services.AddSingleton(activityWriteService);
             services.AddSingleton<IHarnessEventPersister>(persister);
+            services.AddSingleton(new SessionCapabilitiesResolver(new InstanceTracker()));
             services.AddTransient<DomainEventTranslator>();
         });
 
@@ -685,6 +686,7 @@ public sealed class HarnessEventRelayTests
         services.AddSingleton<IHarnessEventPersister>(persister);
         services.AddScoped<IHarnessEventLogRepository>(_ => logRepository);
         services.AddScoped<MessagePersistenceProjection>();
+        services.AddSingleton(new SessionCapabilitiesResolver(new InstanceTracker()));
         services.AddTransient<DomainEventTranslator>();
         var serviceProvider = services.BuildServiceProvider();
 

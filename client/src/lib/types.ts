@@ -51,6 +51,27 @@ export type SessionRetentionStatus = "active" | "archived";
  */
 export type InstanceStatus = "running" | "stopped";
 
+export interface SessionActionCapabilities {
+  canPrompt: boolean;
+  canStop: boolean;
+  canResume: boolean;
+  canRestart: boolean;
+  canAbort: boolean;
+  canArchive: boolean;
+  canUnarchive: boolean;
+  canFork: boolean;
+  canDelete: boolean;
+  promptDisabledReason: string | null;
+  stopDisabledReason: string | null;
+  resumeDisabledReason: string | null;
+  restartDisabledReason: string | null;
+  abortDisabledReason: string | null;
+  archiveDisabledReason: string | null;
+  unarchiveDisabledReason: string | null;
+  forkDisabledReason: string | null;
+  deleteDisabledReason: string | null;
+}
+
 export type SessionSourceType =
   | "manual"
   | "template"

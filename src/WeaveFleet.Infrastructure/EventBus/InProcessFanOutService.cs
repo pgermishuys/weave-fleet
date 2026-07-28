@@ -1,10 +1,13 @@
 #pragma warning disable CA1848, CA1873 // Temporary diagnostic logging
+using System.IO;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.EventBus;
 
@@ -84,10 +87,17 @@ internal sealed partial class InProcessFanOutService : BackgroundService
             persister.BufferTextDelta(sessionId, evt);
         }
 
+        var activityStatus = ParseActivityStatus(evt.Type, evt.Payload);
+
         // Fan out to the broadcaster on the per-session WebSocket topic.
         var payload = evt.Payload.HasValue
             ? evt.Payload.Value
             : InfrastructureJsonContext.EmptyObject;
+        if (eventType == EventTypes.SessionStatus)
+        {
+            payload = await EnrichSessionStatusPayloadAsync(payload, sessionId, activityStatus, ct)
+                .ConfigureAwait(false);
+        }
 
         await _broadcaster.BroadcastAsync(
             $"session:{sessionId}", eventType, payload, classification.IsAdvisory ? null : envelope.EventId, domainEvent, userId, ct)
@@ -97,21 +107,81 @@ internal sealed partial class InProcessFanOutService : BackgroundService
             sessionId, eventType, classification.IsAdvisory);
 
         // Activity-status side-channel for the global "sessions" topic.
-        var activityStatus = ParseActivityStatus(evt.Type, evt.Payload);
         if (activityStatus is not null)
         {
             _activityTracker.Update(sessionId, activityStatus, userId);
             await _broadcaster.BroadcastAsync(
                 "sessions",
                 "activity_status",
-                InfrastructureJsonContext.SerializeActivityStatus(sessionId, activityStatus),
+                await BuildSessionActivityStatusPayloadAsync(sessionId, activityStatus, ct).ConfigureAwait(false),
                 userId,
                 ct).ConfigureAwait(false);
 
-            await Services.SessionPropagation.PropagateToParentAsync(
-                sessionId, userId, _activityTracker, _broadcaster, ct)
+            await SessionPropagation.PropagateToParentAsync(
+                sessionId, userId, _activityTracker, _broadcaster, _scopeFactory, ct)
                 .ConfigureAwait(false);
         }
+    }
+
+    private async Task<JsonElement> EnrichSessionStatusPayloadAsync(
+        JsonElement payload,
+        string sessionId,
+        string? activityStatus,
+        CancellationToken ct)
+    {
+        if (payload.ValueKind != JsonValueKind.Object
+            || payload.TryGetProperty("capabilities", out _))
+        {
+            return payload.Clone();
+        }
+
+        var capabilities = await ResolveCapabilitiesAsync(sessionId, activityStatus, ct).ConfigureAwait(false);
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            foreach (var property in payload.EnumerateObject())
+            {
+                property.WriteTo(writer);
+            }
+
+            writer.WritePropertyName("capabilities");
+            JsonSerializer.Serialize(writer, capabilities, InfrastructureJsonContext.Default.SessionActionCapabilities);
+            writer.WriteEndObject();
+        }
+
+        return JsonDocument.Parse(buffer.ToArray()).RootElement.Clone();
+    }
+
+    private async Task<WeaveFleet.Domain.DTOs.SessionActionCapabilities> ResolveCapabilitiesAsync(
+        string sessionId,
+        string? activityStatus,
+        CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var sessionRepository = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
+        var capabilitiesResolver = scope.ServiceProvider.GetRequiredService<SessionCapabilitiesResolver>();
+        var session = await sessionRepository.GetByIdAsync(sessionId).ConfigureAwait(false);
+        if (session is not null && activityStatus is not null)
+        {
+            session.ActivityStatus = activityStatus;
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        return session is not null
+            ? capabilitiesResolver.Resolve(session)
+            : SessionCapabilitiesResolver.Resolve(null, null, null, activityStatus, isLive: false);
+    }
+
+    private async Task<JsonElement> BuildSessionActivityStatusPayloadAsync(
+        string sessionId,
+        string activityStatus,
+        CancellationToken ct)
+    {
+        var capabilities = await ResolveCapabilitiesAsync(sessionId, activityStatus, ct).ConfigureAwait(false);
+
+        return InfrastructureJsonContext.SerializeActivityStatus(sessionId, activityStatus, capabilities);
     }
 
     private static string? ParseActivityStatus(string eventType, JsonElement? payload)

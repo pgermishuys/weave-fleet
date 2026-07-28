@@ -35,6 +35,9 @@ public sealed class FleetOptions
     /// <summary>Seconds to wait for a harness process to exit gracefully before force-killing. Default: 10.</summary>
     public int HarnessShutdownTimeoutSeconds { get; set; } = 10;
 
+    /// <summary>Harness feature flags. Defaults preserve existing per-session runtime behavior.</summary>
+    public HarnessOptions Harness { get; set; } = new();
+
     // ─── Messages ─────────────────────────────────────────────────────────────
 
     /// <summary>Default page size when fetching messages from a live instance. Default: 10.</summary>
@@ -103,6 +106,22 @@ public sealed class FleetOptions
 
     /// <summary>Transactional outbox polling and cleanup configuration.</summary>
     public OutboxOptions Outbox { get; set; } = new();
+}
+
+/// <summary>Harness feature flag configuration.</summary>
+public sealed class HarnessOptions
+{
+    /// <summary>
+    /// Enables pooled OpenCode process mode for new sessions when also enabled in user preferences.
+    /// Default: false (per-session OpenCode process mode).
+    /// </summary>
+    public bool PooledOpenCodeHarness { get; set; }
+
+    /// <summary>
+    /// Seconds to keep an idle pooled OpenCode process alive after the last lease is released.
+    /// Default: 60.
+    /// </summary>
+    public int PooledOpenCodeIdleTtlSeconds { get; set; } = 60;
 }
 
 /// <summary>Transactional outbox polling and retention configuration.</summary>

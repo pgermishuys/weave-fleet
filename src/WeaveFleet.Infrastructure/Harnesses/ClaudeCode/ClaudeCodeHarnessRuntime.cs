@@ -212,4 +212,8 @@ public sealed class ClaudeCodeHarnessRuntime : IHarnessRuntime
         LogSpawned(_logger, instanceId, null);
         return Task.FromResult<IHarnessSession>(instance);
     }
+
+    /// <inheritdoc />
+    public Task<bool> WarmupPooledInstanceAsync(string ownerUserId, CancellationToken ct)
+        => Task.FromResult(false);
 }
