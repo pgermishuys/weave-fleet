@@ -2578,6 +2578,14 @@ sequenceDiagram
         </div>
 
         <div class="new-session-field">
+          <div class="new-session-label">Project</div>
+          <div class="file-picker-wrap">
+            <input class="new-session-input" id="newsession-project-input" type="text" placeholder="Select or create a project...">
+          </div>
+          <div class="new-session-desc">Optional: associate this session with a project for organization and tracking.</div>
+        </div>
+
+        <div class="new-session-field">
           <div class="new-session-label">Issue Source</div>
           <div class="source-toggle">
             <button class="source-toggle-btn active">Inline</button>
@@ -3649,6 +3657,157 @@ document.querySelectorAll('.artifact-pill-dropdown-item').forEach(item => {
 
   if (settingsInput) {
     initFilePicker(settingsInput);
+  }
+})();
+
+// Project Picker Component
+(function() {
+  // Mock data for projects
+  const EXISTING_PROJECTS = [
+    'weave-fleet',
+    'foundry',
+    'explain-ai',
+    'duende-identity'
+  ];
+
+  function initProjectPicker(inputEl) {
+    const wrap = inputEl.closest('.file-picker-wrap');
+    if (!wrap) {
+      console.error('Input must be wrapped in .file-picker-wrap');
+      return;
+    }
+
+    // Create dropdown
+    const dropdown = document.createElement('div');
+    dropdown.className = 'file-picker-dropdown';
+    wrap.appendChild(dropdown);
+
+    // Render dropdown content
+    function renderDropdown(filterText = '') {
+      const filter = filterText.toLowerCase().trim();
+      
+      // Filter existing projects
+      const filteredProjects = EXISTING_PROJECTS.filter(project => 
+        project.toLowerCase().includes(filter)
+      );
+
+      // Check if input exactly matches an existing project
+      const exactMatch = EXISTING_PROJECTS.some(project => 
+        project.toLowerCase() === filter
+      );
+
+      let html = '';
+
+      // Existing Projects section
+      if (filteredProjects.length > 0) {
+        html += '<div class="file-picker-section">';
+        html += '<div class="file-picker-section-label">Existing Projects</div>';
+        filteredProjects.forEach(project => {
+          const highlighted = highlightMatch(project, filter);
+          html += `
+            <div class="file-picker-item" data-project="${project}">
+              <i data-lucide="folder" class="file-picker-item-icon"></i>
+              <span class="file-picker-item-text">${highlighted}</span>
+            </div>
+          `;
+        });
+        html += '</div>';
+      }
+
+      // Show "Create [text]" option if there's input and no exact match
+      if (filter && !exactMatch) {
+        html += '<div class="file-picker-section">';
+        html += `
+          <div class="file-picker-item" data-project="${filterText}" data-create="true">
+            <i data-lucide="plus-circle" class="file-picker-item-icon"></i>
+            <span class="file-picker-item-text">Create <strong>${filterText}</strong></span>
+          </div>
+        `;
+        html += '</div>';
+      }
+
+      // No results
+      if (filteredProjects.length === 0 && !filter) {
+        html += '<div class="file-picker-section">';
+        html += '<div class="file-picker-item" style="color:var(--muted);cursor:default;">Start typing to filter or create a project</div>';
+        html += '</div>';
+      }
+
+      dropdown.innerHTML = html;
+      lucide.createIcons();
+
+      // Attach click handlers to items
+      dropdown.querySelectorAll('.file-picker-item[data-project]').forEach(item => {
+        item.addEventListener('click', () => {
+          inputEl.value = item.dataset.project;
+          closeDropdown();
+          inputEl.focus();
+        });
+      });
+    }
+
+    // Highlight matching text
+    function highlightMatch(text, filter) {
+      if (!filter) return text;
+      const index = text.toLowerCase().indexOf(filter);
+      if (index === -1) return text;
+      
+      const before = text.substring(0, index);
+      const match = text.substring(index, index + filter.length);
+      const after = text.substring(index + filter.length);
+      
+      return `${before}<span class="file-picker-highlight">${match}</span>${after}`;
+    }
+
+    function openDropdown() {
+      renderDropdown(inputEl.value);
+      dropdown.classList.add('open');
+    }
+
+    function closeDropdown() {
+      dropdown.classList.remove('open');
+    }
+
+    // Event listeners
+    inputEl.addEventListener('focus', () => {
+      openDropdown();
+    });
+
+    inputEl.addEventListener('input', () => {
+      renderDropdown(inputEl.value);
+      if (!dropdown.classList.contains('open')) {
+        dropdown.classList.add('open');
+      }
+    });
+
+    inputEl.addEventListener('blur', (e) => {
+      // Delay to allow click on dropdown item
+      setTimeout(() => {
+        if (!dropdown.contains(document.activeElement)) {
+          closeDropdown();
+        }
+      }, 200);
+    });
+
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeDropdown();
+      }
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+      if (!wrap.contains(e.target)) {
+        closeDropdown();
+      }
+    });
+  }
+
+  // Initialize project picker
+  const projectInput = document.getElementById('newsession-project-input');
+
+  if (projectInput) {
+    initProjectPicker(projectInput);
   }
 })();
 
