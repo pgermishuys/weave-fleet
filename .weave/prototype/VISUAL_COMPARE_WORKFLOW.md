@@ -152,10 +152,10 @@ Repeat steps 2-5 until the views converge.
 - No build step; opens directly via `file://`
 
 ### App access
-- Fleet .NET server serves built SPA from `src/WeaveFleet.Api/wwwroot/`
-- Default port: 5001 (production/dev mode)
-- Vite dev server: port 3002 (if running separately with `cd client && npm run dev`)
-- Set `FLEET_URL` environment variable to override
+- Default: Vite mock dev server at port 3002 (`cd client && npm run dev:mock`)
+- This uses `--mode mock` which provides fake API data — no .NET backend needed
+- Fleet .NET server at port 5001 can be used instead: `FLEET_URL=http://localhost:5001`
+- Set `FLEET_URL` environment variable to override the default
 
 ### Navigation in the prototype
 - Icon rail buttons use `[data-nav="..."]` attributes

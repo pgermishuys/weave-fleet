@@ -9,7 +9,7 @@
  *
  * Prerequisites:
  *   - Playwright chromium installed (node node_modules/@playwright/test/cli.js install chromium)
- *   - For app screenshots: Fleet dev server running on http://localhost:3002
+ *   - For app screenshots: `cd client && npm run dev:mock` running on http://localhost:3002
  *
  * Usage:
  *   bun run tsx visual-compare.ts                    # Both prototype + app, all views
@@ -24,7 +24,7 @@ import { mkdirSync } from "node:fs";
 
 export const PROTOTYPE_PATH = resolve(import.meta.dirname!, "../../.weave/prototype/index.html");
 export const OUTPUT_DIR = resolve(import.meta.dirname!, "findings/visual-compare");
-export const APP_URL = process.env.FLEET_URL ?? "http://localhost:5001";
+export const APP_URL = process.env.FLEET_URL ?? "http://localhost:3002";
 
 const VIEWPORT = { width: 1440, height: 900 };
 
