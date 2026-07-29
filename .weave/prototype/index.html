@@ -1776,8 +1776,7 @@ body {
   <main class="center-content">
     <!-- Top Tabs -->
     <div class="top-bar">
-      <button class="top-tab active" data-view="sessions">Sessions</button>
-      <button class="top-tab" data-view="conversation">Conversation</button>
+      <button class="top-tab active" data-view="conversation">Conversation</button>
       <button class="top-tab" data-view="settings" style="display:none;">Settings</button>
       <button class="top-tab" data-view="board" style="display:none;">Board</button>
       <button class="top-tab" data-view="analytics" style="display:none;">Analytics</button>
@@ -1786,7 +1785,7 @@ body {
     </div>
 
     <!-- Sessions View -->
-    <div class="view active" id="view-sessions">
+    <div class="view" id="view-sessions">
       <div class="sessions-table-wrap">
         <table class="sessions-table">
           <thead>
@@ -1841,7 +1840,7 @@ body {
     </div>
 
     <!-- Conversation View -->
-    <div class="view" id="view-conversation">
+    <div class="view active" id="view-conversation">
       <div class="breadcrumb" style="display:flex;align-items:center;justify-content:space-between;">
         <div>Sessions &rsaquo; Implement auth middleware &rsaquo; <span>shuttle / auth-layer</span></div>
         <div class="icon-toolbar">
@@ -3076,7 +3075,7 @@ document.querySelectorAll('.msg-action-btn').forEach(btn => {
 
 // Settings back button
 document.getElementById('settings-back').addEventListener('click', () => {
-  document.querySelector('.top-tab[data-view="sessions"]').click();
+  document.querySelector('.top-tab[data-view="conversation"]').click();
   document.querySelectorAll('.icon-rail-btn').forEach(b => b.classList.remove('active'));
   document.querySelector('.icon-rail-btn[data-nav="sessions"]').classList.add('active');
 });
