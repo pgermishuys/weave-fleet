@@ -18,7 +18,7 @@
   --muted: #6E6A65;
   --coral: #D95A3A;
   --indigo: #5B6EC7;
-  --radius: 7px;
+  --radius: 0px;
   --transition: 180ms ease-out;
   --font: 'Inter', -apple-system, sans-serif;
   --mono: 'Courier New', monospace;
@@ -125,10 +125,41 @@ body {
   border-radius: var(--radius);
   cursor: pointer;
   color: var(--muted);
-  transition: background var(--transition), color var(--transition);
+  transition: background var(--transition), color var(--transition), margin var(--transition);
 }
 .tree-child:hover { background: var(--bg); color: var(--text); }
 .tree-child.active { background: var(--bg); color: var(--text); font-weight: 500; }
+
+/* Drag and Drop */
+.tree-child.dragging { opacity: 0.5; cursor: grabbing; }
+.tree-child.drop-before { margin-top: 10px; position: relative; }
+.tree-child.drop-before::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--indigo);
+  border-radius: 1px;
+}
+.tree-child.drop-after { margin-bottom: 10px; position: relative; }
+.tree-child.drop-after::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--indigo);
+  border-radius: 1px;
+}
+.tree-group.drag-over .tree-children {
+  background: rgba(91, 110, 199, 0.05);
+  border-radius: 0;
+  outline: 2px dashed rgba(91, 110, 199, 0.3);
+  outline-offset: 2px;
+}
 
 /* Center Content */
 .center-content {
@@ -171,7 +202,7 @@ body {
   height: 32px;
   border: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 0 14px;
   font-size: 12px;
   font-weight: 500;
@@ -229,7 +260,7 @@ body {
   display: inline-flex;
   align-items: center;
   padding: 2px 10px;
-  border-radius: 12px;
+  border-radius: 0;
   font-size: 12px;
   font-weight: 500;
   border: 1px solid;
@@ -266,7 +297,7 @@ body {
 .msg-action-btn {
   width: 26px;
   height: 26px;
-  border-radius: 5px;
+  border-radius: 0;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--muted);
@@ -288,7 +319,7 @@ body {
   background: var(--text);
   color: white;
   padding: 4px 10px;
-  border-radius: 5px;
+  border-radius: 0;
   font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
@@ -299,7 +330,7 @@ body {
   display: inline;
   padding: 1px 4px;
   background: rgba(255,255,255,0.2);
-  border-radius: 3px;
+  border-radius: 0;
   font-family: var(--mono);
   font-size: 10px;
   margin-left: 6px;
@@ -385,7 +416,7 @@ body {
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0;
   font-family: var(--font);
   font-size: 12px;
   font-weight: 500;
@@ -407,7 +438,7 @@ body {
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #7BAF6E; }
 .status-badge {
   padding: 1px 8px;
-  border-radius: 4px;
+  border-radius: 0;
   background: var(--bg);
   border: 1px solid var(--border);
   font-family: var(--mono);
@@ -428,7 +459,7 @@ body {
   width: 200px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0;
   box-shadow: 0 4px 16px rgba(0,0,0,0.1);
   z-index: 9999;
   overflow: hidden;
@@ -455,7 +486,7 @@ body {
   font-size: 12px;
   font-weight: 500;
   color: var(--text);
-  border-radius: 4px;
+  border-radius: 0;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -581,7 +612,7 @@ body {
 }
 .viewer-back {
   width: 28px; height: 28px;
-  border-radius: 6px;
+  border-radius: 0;
   border: 1px solid transparent;
   background: transparent;
   color: var(--muted);
@@ -598,7 +629,7 @@ body {
   gap: 6px;
   padding: 4px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0;
   font-size: 12px;
   font-family: var(--mono);
   color: var(--text);
@@ -671,7 +702,7 @@ body {
   font-size: 12px;
   background: var(--bg);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: 0;
   border: 1px solid var(--border);
 }
 .viewer-raw-content {
@@ -694,7 +725,7 @@ body {
   cursor: pointer;
   padding: 4px 6px;
   margin-left: -6px;
-  border-radius: 4px;
+  border-radius: 0;
   transition: background var(--transition);
 }
 .rendered-markdown li:hover {
@@ -730,7 +761,7 @@ body {
   width: 260px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0;
   box-shadow: 0 4px 16px rgba(0,0,0,0.1);
   z-index: 50;
   padding: 12px;
@@ -763,14 +794,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: 0;
   transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
 .comment-popover-close:hover { background: var(--bg); border-color: var(--border); color: var(--text); }
 .comment-input {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 8px 10px;
   font-family: var(--font);
   font-size: 13px;
@@ -791,7 +822,7 @@ body {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -807,7 +838,7 @@ body {
   padding: 0 14px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0;
   font-size: 12px;
   font-weight: 500;
   color: var(--coral);
@@ -826,7 +857,7 @@ body {
   width: 280px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0;
   box-shadow: 0 4px 16px rgba(0,0,0,0.1);
   z-index: 9999;
   overflow: hidden;
@@ -876,7 +907,7 @@ body {
   font-size: 12px;
   color: var(--text);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 0;
   transition: background var(--transition), border-color var(--transition);
   width: 100%;
   text-align: left;
@@ -909,7 +940,7 @@ body {
 }
 .preview-action {
   width: 24px; height: 24px;
-  border-radius: 4px;
+  border-radius: 0;
   border: 1px solid transparent;
   background: transparent;
   color: var(--muted);
@@ -956,7 +987,7 @@ body {
 .todo-check {
   width: 16px;
   height: 16px;
-  border-radius: 4px;
+  border-radius: 0;
   border: 1.5px solid var(--border);
   flex-shrink: 0;
   margin-top: 1px;
@@ -972,7 +1003,7 @@ body {
 .icon-toolbar-btn {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: 0;
   border: 1px solid transparent;
   background: transparent;
   color: var(--muted);
@@ -1003,7 +1034,7 @@ body {
   background: var(--text);
   color: white;
   padding: 4px 10px;
-  border-radius: 5px;
+  border-radius: 0;
   font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
@@ -1014,12 +1045,108 @@ body {
   display: inline;
   padding: 1px 4px;
   background: rgba(255,255,255,0.2);
-  border-radius: 3px;
+  border-radius: 0;
   font-family: var(--mono);
   font-size: 10px;
   margin-left: 6px;
 }
 .icon-toolbar-btn:hover .tooltip { display: block; }
+
+/* Artifact Pill */
+.artifact-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: default;
+  border: 1px solid var(--border);
+  position: relative;
+}
+.artifact-pill i {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+/* Artifact Pill Dropdown */
+.artifact-pill-dropdown {
+  display: none;
+  position: fixed;
+  width: 260px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  z-index: 9999;
+  overflow: hidden;
+  flex-direction: column;
+}
+.artifact-pill-dropdown.open {
+  display: flex;
+}
+.artifact-pill-dropdown-header {
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+}
+.artifact-pill-dropdown-section {
+  padding: 8px 12px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  background: var(--bg);
+}
+.artifact-pill-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--transition);
+  border-bottom: 1px solid transparent;
+}
+.artifact-pill-dropdown-item:hover {
+  background: var(--bg);
+}
+.artifact-pill-dropdown-item i {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.artifact-pill-dropdown-item .item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.artifact-pill-dropdown-item .item-version {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: var(--font);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.artifact-pill-dropdown-item .item-version i {
+  width: 10px;
+  height: 10px;
+}
 
 /* Message icons (Lucide-based) */
 .msg-icon {
@@ -1072,7 +1199,7 @@ body {
   justify-content: space-between;
   padding: 6px 10px;
   font-size: 13px;
-  border-radius: 6px;
+  border-radius: 0;
   cursor: pointer;
   color: var(--text);
   transition: background var(--transition);
@@ -1131,7 +1258,7 @@ body {
   width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0;
   font-family: var(--mono);
   font-size: 13px;
   outline: none;
@@ -1142,7 +1269,7 @@ body {
 .settings-select {
   padding: 8px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0;
   font-family: var(--font);
   font-size: 13px;
   outline: none;
@@ -1192,7 +1319,7 @@ body {
   -webkit-appearance: none;
   appearance: none;
   background: var(--border);
-  border-radius: 2px;
+  border-radius: 0;
   outline: none;
 }
 .settings-slider::-webkit-slider-thumb {
@@ -1239,7 +1366,7 @@ body {
   width: 100%;
   padding: 10px 14px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0;
   font-family: var(--mono);
   font-size: 13px;
   outline: none;
@@ -1251,7 +1378,7 @@ body {
   width: 100%;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0;
   font-family: var(--font);
   font-size: 13px;
   outline: none;
@@ -1266,7 +1393,7 @@ body {
 .source-toggle {
   display: flex;
   gap: 0;
-  border-radius: 6px;
+  border-radius: 0;
   overflow: hidden;
   border: 1px solid var(--border);
   width: fit-content;
@@ -1307,7 +1434,7 @@ body {
 .btn-cancel {
   padding: 8px 16px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0;
   background: var(--surface);
   font-family: var(--font);
   font-size: 13px;
@@ -1325,12 +1452,12 @@ body {
   color: var(--muted);
   padding: 1px 4px;
   background: var(--bg);
-  border-radius: 3px;
+  border-radius: 0;
 }
 .btn-create {
   padding: 8px 20px;
   border: 1px solid var(--indigo);
-  border-radius: 6px;
+  border-radius: 0;
   background: var(--indigo);
   font-family: var(--font);
   font-size: 13px;
@@ -1349,7 +1476,7 @@ body {
   opacity: 0.7;
   padding: 1px 4px;
   background: rgba(255,255,255,0.2);
-  border-radius: 3px;
+  border-radius: 0;
 }
 
 /* Hotkey Bar */
@@ -1370,7 +1497,7 @@ body {
   padding: 1px 5px;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 0;
   font-family: var(--mono);
   font-size: 11px;
   margin-right: 4px;
@@ -1382,8 +1509,8 @@ body {
   <!-- Icon Rail -->
   <nav class="icon-rail">
     <button class="icon-rail-btn active" title="Sessions" data-nav="sessions"><i data-lucide="messages-square" style="width:18px;height:18px;"></i></button>
-    <button class="icon-rail-btn" title="Chat" data-nav="conversation"><i data-lucide="message-circle" style="width:18px;height:18px;"></i></button>
-    <button class="icon-rail-btn" title="Board"><i data-lucide="kanban" style="width:18px;height:18px;"></i></button>
+    <button class="icon-rail-btn" title="Board" data-nav="board"><i data-lucide="kanban" style="width:18px;height:18px;"></i></button>
+    <button class="icon-rail-btn" title="Analytics" data-nav="analytics"><i data-lucide="bar-chart-3" style="width:18px;height:18px;"></i></button>
     <button class="icon-rail-btn" title="Settings" style="margin-top:auto;" data-nav="settings"><i data-lucide="settings" style="width:18px;height:18px;"></i></button>
   </nav>
 
@@ -1394,27 +1521,27 @@ body {
       <div class="tree-group">
         <div class="tree-parent expanded"><span class="arrow">&#9654;</span> Implement auth middleware</div>
         <div class="tree-children">
-          <div class="tree-child active">shuttle / auth-layer</div>
-          <div class="tree-child">pattern / token-validation</div>
+          <div class="tree-child active" draggable="true">shuttle / auth-layer</div>
+          <div class="tree-child" draggable="true">pattern / token-validation</div>
         </div>
       </div>
       <div class="tree-group">
         <div class="tree-parent expanded"><span class="arrow">&#9654;</span> Refactor database layer</div>
         <div class="tree-children">
-          <div class="tree-child">shuttle / migration-runner</div>
-          <div class="tree-child">pattern / schema-diff</div>
+          <div class="tree-child" draggable="true">shuttle / migration-runner</div>
+          <div class="tree-child" draggable="true">pattern / schema-diff</div>
         </div>
       </div>
       <div class="tree-group">
         <div class="tree-parent"><span class="arrow">&#9654;</span> Add WebSocket support</div>
         <div class="tree-children">
-          <div class="tree-child">shuttle / ws-handler</div>
+          <div class="tree-child" draggable="true">shuttle / ws-handler</div>
         </div>
       </div>
       <div class="tree-group">
         <div class="tree-parent"><span class="arrow">&#9654;</span> CLI error formatting</div>
         <div class="tree-children">
-          <div class="tree-child">pattern / pretty-errors</div>
+          <div class="tree-child" draggable="true">pattern / pretty-errors</div>
         </div>
       </div>
     </div>
@@ -1426,9 +1553,9 @@ body {
     <div class="top-bar">
       <button class="top-tab active" data-view="sessions">Sessions</button>
       <button class="top-tab" data-view="conversation">Conversation</button>
-      <button class="top-tab" data-view="board">Board</button>
-      <button class="top-tab" data-view="analytics">Analytics</button>
       <button class="top-tab" data-view="settings" style="display:none;">Settings</button>
+      <button class="top-tab" data-view="board" style="display:none;">Board</button>
+      <button class="top-tab" data-view="analytics" style="display:none;">Analytics</button>
       <button class="top-tab new-session-btn" data-view="newsession" style="margin-left:auto;">+ New Session</button>
     </div>
 
@@ -1512,6 +1639,9 @@ body {
             <span class="icon-hover"><i data-lucide="external-link" style="width:16px;height:16px;"></i></span>
             <span class="tooltip">Open in editor <kbd>&#8984;&#8679;O</kbd></span>
           </button>
+          <span class="artifact-pill" id="artifact-pill">
+            <span id="artifact-pill-text">sample-prototype.html</span>
+          </span>
         </div>
       </div>
       <div class="conversation-wrap">
@@ -1588,7 +1718,7 @@ export { requestLogger } from './logger';
           <span class="queued-badge" id="queued-badge" title="1 queued comment — click to send to agent">
             <i data-lucide="message-square" style="width:14px;height:14px;"></i>
             <span class="queued-count">1</span>
-            <kbd style="font-family:var(--mono);font-size:10px;background:rgba(217,90,58,0.1);border:none;padding:1px 4px;border-radius:3px;">&#8679;C</kbd>
+            <kbd style="font-family:var(--mono);font-size:10px;background:rgba(217,90,58,0.1);border:none;padding:1px 4px;border-radius: 0;">&#8679;C</kbd>
             <!-- Dropdown -->
             <div class="queued-dropdown" id="queued-dropdown">
               <div class="queued-dropdown-header">Queued Comments</div>
@@ -1769,9 +1899,9 @@ export { requestLogger } from './logger';
                 <div class="settings-field-label">Zoom Level</div>
                 <div class="settings-field-desc">Adjust the interface zoom level.</div>
                 <div style="display:flex;align-items:center;gap:8px;">
-                  <button style="width:28px;height:28px;border:1px solid var(--border);border-radius:4px;background:var(--surface);cursor:pointer;font-size:14px;">-</button>
+                  <button style="width:28px;height:28px;border:1px solid var(--border);border-radius: 0;background:var(--surface);cursor:pointer;font-size:14px;">-</button>
                   <span style="font-family:var(--mono);font-size:13px;min-width:36px;text-align:center;">100%</span>
-                  <button style="width:28px;height:28px;border:1px solid var(--border);border-radius:4px;background:var(--surface);cursor:pointer;font-size:14px;">+</button>
+                  <button style="width:28px;height:28px;border:1px solid var(--border);border-radius: 0;background:var(--surface);cursor:pointer;font-size:14px;">+</button>
                   <i data-lucide="lock" style="width:14px;height:14px;color:var(--muted);margin-left:4px;"></i>
                 </div>
               </div>
@@ -1847,7 +1977,6 @@ export { requestLogger } from './logger';
     <div class="right-tabs">
       <button class="right-tab active" data-right="artifacts">Artifacts</button>
       <button class="right-tab" data-right="info">Info</button>
-      <button class="right-tab" data-right="todos">Todos</button>
     </div>
     <div class="right-content" style="display:flex;flex-direction:column;padding:0;">
       <div class="right-view active" id="right-artifacts" style="display:flex;flex-direction:column;flex:1;min-height:0;">
@@ -1916,10 +2045,31 @@ export { requestLogger } from './logger';
             <button class="viewer-back" id="viewer-back">
               <i data-lucide="chevron-left" style="width:16px;height:16px;"></i>
             </button>
-            <div class="viewer-file-select">
+            <div class="viewer-file-select" id="viewer-file-select" style="position:relative;cursor:pointer;">
               <i data-lucide="file-text" style="width:14px;height:14px;color:var(--muted);"></i>
               <span class="viewer-filename" id="viewer-filename">01-research-quest...</span>
               <span class="viewer-shortcut">&#8997;A</span>
+              <i data-lucide="chevron-down" style="width:12px;height:12px;color:var(--muted);"></i>
+              <div class="artifact-pill-dropdown" id="artifact-pill-dropdown">
+                <div class="artifact-pill-dropdown-header">1 src · 0 edit · 2 new</div>
+                <div class="artifact-pill-dropdown-section">NEW (2)</div>
+                <div class="artifact-pill-dropdown-item" data-artifact="dashboard">
+                  <i data-lucide="globe"></i>
+                  <span class="item-name">sample-prototype.html</span>
+                  <span class="item-version"><i data-lucide="layers"></i>0</span>
+                </div>
+                <div class="artifact-pill-dropdown-item" data-artifact="research">
+                  <i data-lucide="file-text"></i>
+                  <span class="item-name">01-research-questions-repos...</span>
+                  <span class="item-version"><i data-lucide="layers"></i>1</span>
+                </div>
+                <div class="artifact-pill-dropdown-section">SOURCE (1)</div>
+                <div class="artifact-pill-dropdown-item" data-artifact="ticket">
+                  <i data-lucide="file-text"></i>
+                  <span class="item-name">ticket.md</span>
+                  <span class="item-version"><i data-lucide="layers"></i>0</span>
+                </div>
+              </div>
             </div>
             <div class="viewer-mode-toggle">
               <button class="viewer-mode active" data-mode="rendered">RENDERED</button>
@@ -2010,13 +2160,6 @@ type: research-questions
           <div><strong style="color:var(--text)">Tokens</strong><br>4,218 in / 1,842 out</div>
         </div>
       </div>
-      <div class="right-view" id="right-todos" style="padding:16px;">
-        <div class="todo-item"><div class="todo-check done"></div><div>Set up JWT verification with public key</div></div>
-        <div class="todo-item"><div class="todo-check done"></div><div>Extract claims into request context</div></div>
-        <div class="todo-item"><div class="todo-check"></div><div>Add token refresh header support</div></div>
-        <div class="todo-item"><div class="todo-check"></div><div>Write unit tests for edge cases</div></div>
-        <div class="todo-item"><div class="todo-check"></div><div>Update middleware barrel export</div></div>
-      </div>
     </div>
   </aside>
 </div>
@@ -2046,7 +2189,7 @@ document.querySelectorAll('.top-tab').forEach(tab => {
     const gutter = document.getElementById('resize-gutter');
     const topBar = document.querySelector('.top-bar');
 
-    if (view === 'settings') {
+    if (view === 'settings' || view === 'board' || view === 'analytics') {
       contextPanel.style.display = 'none';
       rightPanel.style.display = 'none';
       gutter.style.display = 'none';
@@ -2094,14 +2237,14 @@ document.querySelectorAll('.icon-rail-btn[data-nav]').forEach(btn => {
 const sampleHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
 *{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;background:#f8f9fa;padding:32px}
 h1{font-size:28px;margin-bottom:4px}p.sub{color:#666;margin-bottom:24px}
-.stats{display:flex;gap:16px;margin-bottom:24px}.stat{flex:1;background:white;border:1px solid #e5e7eb;border-radius:8px;padding:16px}
+.stats{display:flex;gap:16px;margin-bottom:24px}.stat{flex:1;background:white;border:1px solid #e5e7eb;border-radius: 0;padding:16px}
 .stat-label{font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.5px}.stat-value{font-size:28px;font-weight:700;margin-top:4px}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card{background:white;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card{background:white;border-radius: 0;overflow:hidden;border:1px solid #e5e7eb}
 .card-img{height:120px}.card-img:nth-child(1){background:linear-gradient(135deg,#a78bfa,#6366f1)}
 .card-body{padding:16px}.card-title{font-weight:600;margin-bottom:4px}.card-desc{font-size:13px;color:#666;margin-bottom:12px}
 .card-footer{display:flex;justify-content:space-between;align-items:center}.price{font-weight:700}
-.btn{background:#6366f1;color:white;border:none;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer}
-footer{margin-top:24px;text-align:center;color:#888;font-size:13px;padding:16px;background:white;border-radius:8px;border:1px solid #e5e7eb}
+.btn{background:#6366f1;color:white;border:none;padding:6px 12px;border-radius: 0;font-size:12px;cursor:pointer}
+footer{margin-top:24px;text-align:center;color:#888;font-size:13px;padding:16px;background:white;border-radius: 0;border:1px solid #e5e7eb}
 </style></head><body>
 <h1>Product Dashboard</h1><p class="sub">Browse and manage your product catalog</p>
 <div class="stats"><div class="stat"><div class="stat-label">Total Products</div><div class="stat-value">1,247</div></div>
@@ -2401,8 +2544,239 @@ document.querySelectorAll('.source-toggle').forEach(toggle => {
   });
 });
 
+// Drag and Drop for Session Tree
+(function() {
+  let draggedElement = null;
+  let draggedData = null;
+  let expandTimeout = null;
+
+  // Helper: Clear all drag visual states
+  function clearDragStates() {
+    document.querySelectorAll('.tree-child').forEach(el => {
+      el.classList.remove('drop-before', 'drop-after');
+    });
+    document.querySelectorAll('.tree-group').forEach(el => {
+      el.classList.remove('drag-over');
+    });
+    if (expandTimeout) {
+      clearTimeout(expandTimeout);
+      expandTimeout = null;
+    }
+  }
+
+  // Dragstart: Store reference and set opacity
+  document.querySelectorAll('.tree-child').forEach(child => {
+    child.addEventListener('dragstart', (e) => {
+      draggedElement = child;
+      draggedData = {
+        text: child.textContent.trim(),
+        parentGroup: child.closest('.tree-group')
+      };
+      child.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', draggedData.text);
+    });
+
+    child.addEventListener('dragend', () => {
+      if (draggedElement) {
+        draggedElement.classList.remove('dragging');
+      }
+      clearDragStates();
+      draggedElement = null;
+      draggedData = null;
+    });
+  });
+
+  // Dragover on tree-child: Show insertion indicator
+  document.querySelectorAll('.tree-child').forEach(child => {
+    child.addEventListener('dragover', (e) => {
+      if (!draggedElement || draggedElement === child) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      // Clear previous indicators
+      clearDragStates();
+
+      // Calculate midpoint
+      const rect = child.getBoundingClientRect();
+      const midpoint = rect.top + rect.height / 2;
+      const dropPosition = e.clientY < midpoint ? 'before' : 'after';
+
+      // Apply indicator class
+      if (dropPosition === 'before') {
+        child.classList.add('drop-before');
+      } else {
+        child.classList.add('drop-after');
+      }
+    });
+
+    child.addEventListener('dragleave', (e) => {
+      // Only clear if we're actually leaving the element
+      if (!e.currentTarget.contains(e.relatedTarget)) {
+        child.classList.remove('drop-before', 'drop-after');
+      }
+    });
+
+    child.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (!draggedElement || draggedElement === child) return;
+
+      // Calculate drop position
+      const rect = child.getBoundingClientRect();
+      const midpoint = rect.top + rect.height / 2;
+      const dropPosition = e.clientY < midpoint ? 'before' : 'after';
+
+      // Insert the dragged element
+      if (dropPosition === 'before') {
+        child.parentNode.insertBefore(draggedElement, child);
+      } else {
+        child.parentNode.insertBefore(draggedElement, child.nextSibling);
+      }
+
+      clearDragStates();
+    });
+  });
+
+  // Dragover on tree-children container: Highlight group
+  document.querySelectorAll('.tree-children').forEach(container => {
+    container.addEventListener('dragover', (e) => {
+      if (!draggedElement) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      const group = container.closest('.tree-group');
+      if (group) {
+        group.classList.add('drag-over');
+      }
+    });
+
+    container.addEventListener('dragleave', (e) => {
+      if (!e.currentTarget.contains(e.relatedTarget)) {
+        const group = container.closest('.tree-group');
+        if (group) {
+          group.classList.remove('drag-over');
+        }
+      }
+    });
+
+    container.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (!draggedElement) return;
+
+      // If dropped on empty space in container, append to end
+      if (e.target === container || e.target.classList.contains('tree-children')) {
+        container.appendChild(draggedElement);
+      }
+
+      clearDragStates();
+    });
+  });
+
+  // Dragover on tree-parent: Highlight group and expand after delay
+  document.querySelectorAll('.tree-parent').forEach(parent => {
+    parent.addEventListener('dragover', (e) => {
+      if (!draggedElement) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      const group = parent.closest('.tree-group');
+      if (group) {
+        group.classList.add('drag-over');
+
+        // Auto-expand collapsed groups after 500ms hover
+        if (!parent.classList.contains('expanded')) {
+          if (!expandTimeout) {
+            expandTimeout = setTimeout(() => {
+              parent.classList.add('expanded');
+              const children = parent.nextElementSibling;
+              if (children) children.style.display = 'block';
+            }, 500);
+          }
+        }
+      }
+    });
+
+    parent.addEventListener('dragleave', (e) => {
+      if (!e.currentTarget.contains(e.relatedTarget)) {
+        const group = parent.closest('.tree-group');
+        if (group) {
+          group.classList.remove('drag-over');
+        }
+        if (expandTimeout) {
+          clearTimeout(expandTimeout);
+          expandTimeout = null;
+        }
+      }
+    });
+
+    parent.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (!draggedElement) return;
+
+      // Append to the group's children container
+      const children = parent.nextElementSibling;
+      if (children && children.classList.contains('tree-children')) {
+        children.appendChild(draggedElement);
+      }
+
+      clearDragStates();
+    });
+  });
+
+  // Dragover on tree-group: Highlight
+  document.querySelectorAll('.tree-group').forEach(group => {
+    group.addEventListener('dragover', (e) => {
+      if (!draggedElement) return;
+      e.preventDefault();
+    });
+  });
+})();
+
 // Initialize Lucide icons
 lucide.createIcons();
+
+// Artifact file-select dropdown
+document.getElementById('viewer-file-select').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const dropdown = document.getElementById('artifact-pill-dropdown');
+  dropdown.classList.toggle('open');
+  if (dropdown.classList.contains('open')) {
+    const rect = document.getElementById('viewer-file-select').getBoundingClientRect();
+    dropdown.style.top = (rect.bottom + 6) + 'px';
+    dropdown.style.left = rect.left + 'px';
+    lucide.createIcons();
+  }
+});
+
+// Close artifact dropdown on outside click
+document.addEventListener('click', (e) => {
+  const dropdown = document.getElementById('artifact-pill-dropdown');
+  if (dropdown && !e.target.closest('#viewer-file-select')) {
+    dropdown.classList.remove('open');
+  }
+});
+
+// Artifact dropdown item click: open artifact in viewer
+document.querySelectorAll('.artifact-pill-dropdown-item').forEach(item => {
+  item.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const artifactId = item.dataset.artifact;
+    const artifactName = item.querySelector('.item-name').textContent;
+    
+    // Update the breadcrumb pill label
+    document.getElementById('artifact-pill-text').textContent = artifactName;
+    
+    // Close dropdown
+    document.getElementById('artifact-pill-dropdown').classList.remove('open');
+    
+    // Find and click the corresponding artifact item in the right panel
+    const artifactItem = document.querySelector(`.artifact-item[data-file="${artifactId}"]`);
+    if (artifactItem) {
+      artifactItem.click();
+    }
+  });
+});
+
 </script>
 </body>
 </html>
