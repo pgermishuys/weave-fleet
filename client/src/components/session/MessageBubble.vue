@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { X } from "lucide-vue-next";
+import { X, User, Bot, Copy } from "lucide-vue-next";
 import ToolCard from "@/components/session/ToolCard.vue";
 import QuestionCard from "@/components/session/QuestionCard.vue";
 import type { AccumulatedToolPart } from "@/lib/api-types";
@@ -48,6 +48,7 @@ const props = defineProps<{
 }>();
 
 const lightboxUrl = ref<string | null>(null);
+const copied = ref(false);
 
 const now = useRelativeTime();
 const relativeTime = computed(() => props.createdAt ? formatRelativeTime(props.createdAt, now.value) : "");
@@ -85,6 +86,14 @@ const displayAuthor = computed(() => {
 const displayModelId = computed(() => {
   return props.role === "assistant" ? props.modelId?.trim() ?? "" : "";
 });
+
+function copyMessage() {
+  navigator.clipboard.writeText(props.body);
+  copied.value = true;
+  setTimeout(() => {
+    copied.value = false;
+  }, 1500);
+}
 </script>
 
 <template>
@@ -98,24 +107,115 @@ const displayModelId = computed(() => {
     data-testid="message-item"
     :data-role="role"
   >
-    <div
-      v-if="showIdentity || createdAt"
-      class="msg-header"
+    <button
+      type="button"
+      class="msg-copy-btn"
+      :title="copied ? 'Copied' : 'Copy message'"
+      @click="copyMessage"
     >
+      <Copy
+        v-if="!copied"
+        class="msg-copy-btn__icon"
+        aria-hidden="true"
+      />
       <span
-        v-if="showIdentity"
-        class="msg-author"
-        data-testid="message-sender-name"
-      >
-        {{ displayAuthor }}
-      </span>
-      <span
-        v-if="showIdentity && displayModelId"
-        class="msg-model"
-        data-testid="message-model-id"
-      >
-        · {{ displayModelId }}
-      </span>
+        v-else
+        class="msg-copy-btn__text"
+      >Copied</span>
+    </button>
+    
+    <div class="msg-layout">
+      <div class="msg-icon">
+        <User
+          v-if="role === 'user'"
+          class="msg-icon__svg"
+          aria-hidden="true"
+        />
+        <Bot
+          v-else
+          class="msg-icon__svg"
+          aria-hidden="true"
+        />
+      </div>
+      
+      <div class="msg-content">
+        <div class="msg-body">
+          <!-- eslint-disable-next-line vue/no-v-html -->
+          <div
+            v-if="body"
+            class="msg-body__content"
+            v-html="bodyHtml"
+          />
+
+          <div
+            v-if="images && images.length > 0"
+            class="msg-images"
+          >
+            <button
+              v-for="(img, idx) in images"
+              :key="idx"
+              type="button"
+              class="msg-image-thumb"
+              :title="img.filename"
+              @click="lightboxUrl = img.url"
+            >
+              <img
+                :src="img.url"
+                :alt="img.filename"
+                class="msg-image-thumb__img"
+              >
+            </button>
+          </div>
+
+          <Teleport to="body">
+            <div
+              v-if="lightboxUrl"
+              class="lightbox-overlay"
+              @click="lightboxUrl = null"
+            >
+              <img
+                :src="lightboxUrl"
+                alt="Image preview"
+                class="lightbox-image"
+                @click.stop
+              >
+              <button
+                type="button"
+                class="lightbox-close"
+                @click="lightboxUrl = null"
+              >
+                <X
+                  class="lightbox-close__icon"
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
+          </Teleport>
+
+          <ToolCard
+            v-for="tool in tools ?? []"
+            :id="tool.id"
+            :key="tool.id"
+            :title="tool.title"
+            :kind="tool.kind"
+            :status="tool.status"
+            :summary="tool.summary"
+            :output="tool.output"
+            :diff-lines="tool.diffLines"
+            :initially-collapsed="tool.initiallyCollapsed"
+          />
+
+          <QuestionCard
+            v-for="qpart in questionParts ?? []"
+            :key="qpart.partId"
+            :part="qpart"
+            :session-id="sessionId ?? ''"
+            :on-submit="makeSubmitHandler(qpart.callId)"
+            :on-dismiss="makeDismissHandler(qpart.callId)"
+          />
+        </div>
+      </div>
+
       <TooltipProvider v-if="createdAt">
         <Tooltip>
           <TooltipTrigger as-child>
@@ -127,187 +227,77 @@ const displayModelId = computed(() => {
         </Tooltip>
       </TooltipProvider>
     </div>
-
-    <div class="msg-body">
-      <!-- eslint-disable-next-line vue/no-v-html -->
-      <div
-        v-if="body"
-        class="msg-body__content"
-        v-html="bodyHtml"
-      />
-
-      <div
-        v-if="images && images.length > 0"
-        class="msg-images"
-      >
-        <button
-          v-for="(img, idx) in images"
-          :key="idx"
-          type="button"
-          class="msg-image-thumb"
-          :title="img.filename"
-          @click="lightboxUrl = img.url"
-        >
-          <img
-            :src="img.url"
-            :alt="img.filename"
-            class="msg-image-thumb__img"
-          >
-        </button>
-      </div>
-
-      <Teleport to="body">
-        <div
-          v-if="lightboxUrl"
-          class="lightbox-overlay"
-          @click="lightboxUrl = null"
-        >
-          <img
-            :src="lightboxUrl"
-            alt="Image preview"
-            class="lightbox-image"
-            @click.stop
-          >
-          <button
-            type="button"
-            class="lightbox-close"
-            @click="lightboxUrl = null"
-          >
-            <X
-              class="lightbox-close__icon"
-              aria-hidden="true"
-            />
-          </button>
-        </div>
-      </Teleport>
-
-      <ToolCard
-        v-for="tool in tools ?? []"
-        :id="tool.id"
-        :key="tool.id"
-        :title="tool.title"
-        :kind="tool.kind"
-        :status="tool.status"
-        :summary="tool.summary"
-        :output="tool.output"
-        :diff-lines="tool.diffLines"
-        :initially-collapsed="tool.initiallyCollapsed"
-      />
-
-      <QuestionCard
-        v-for="qpart in questionParts ?? []"
-        :key="qpart.partId"
-        :part="qpart"
-        :session-id="sessionId ?? ''"
-        :on-submit="makeSubmitHandler(qpart.callId)"
-        :on-dismiss="makeDismissHandler(qpart.callId)"
-      />
-    </div>
   </article>
 </template>
 
 <style scoped>
-@import "highlight.js/styles/github-dark.css";
+@import "highlight.js/styles/github.css";
 
 .message {
   width: var(--activity-bubble-width, 100%);
   box-sizing: border-box;
-  padding: 8px 10px 10px;
-  border: 1px solid transparent;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
   border-left: 3px solid transparent;
-  border-radius: 18px;
+  position: relative;
   background: transparent;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02);
-  transition: background 180ms ease-out, border-color 180ms ease-out, box-shadow 180ms ease-out;
+  transition: background 180ms ease-out, border-left-color 180ms ease-out;
 }
 
 .message:hover {
-  border-left-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  border-left-color: var(--indigo);
+  background: rgba(91, 110, 199, 0.03);
 }
 
-.message[data-role="user"] {
-  border-color: rgba(161, 161, 170, 0.24);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.025));
+.msg-layout {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
 }
 
-.message[data-role="assistant"] {
-  border-color: rgba(99, 102, 241, 0.18);
-  background: rgba(99, 102, 241, 0.06);
-}
-
-.message--user {
-  border-top-right-radius: 6px;
-}
-
-.message--assistant {
-  border-top-left-radius: 6px;
-}
-
-.message--first.message--user,
-.message--middle.message--user {
-  border-bottom-right-radius: 10px;
-}
-
-.message--last.message--user,
-.message--middle.message--user {
-  border-top-right-radius: 10px;
-}
-
-.message--first.message--assistant,
-.message--middle.message--assistant {
-  border-bottom-left-radius: 10px;
-}
-
-.message--last.message--assistant,
-.message--middle.message--assistant {
-  border-top-left-radius: 10px;
-}
-
-.msg-header {
+.msg-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-  width: 100%;
+  justify-content: center;
+  margin-top: 2px;
 }
 
-.message--user .msg-header {
-  justify-content: flex-start;
-  margin-bottom: 4px;
-}
-
-.msg-author {
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-
-.msg-model {
+.msg-icon__svg {
+  width: 16px;
+  height: 16px;
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 500;
+}
+
+.message--user .msg-icon__svg {
+  color: var(--text);
+}
+
+.message--assistant .msg-icon__svg {
+  color: var(--indigo);
+}
+
+.msg-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .msg-timestamp {
   color: var(--muted);
-  font-size: 10px;
-  margin-left: auto;
+  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 3px;
+  cursor: default;
 }
 
 .msg-body {
-  font-size: 12px;
-  line-height: 1.45;
-  color: #d4d4d8;
-}
-
-.message--user .msg-body {
-  color: #f4f4f5;
-}
-
-.message--identity-hidden .msg-header {
-  margin-bottom: 1px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
 }
 
 .message--user .msg-body__content {
@@ -345,21 +335,21 @@ const displayModelId = computed(() => {
 }
 
 .msg-body__content :deep(a) {
-  color: #818cf8;
+  color: var(--indigo);
 }
 
 .msg-body__content :deep(code:not(pre code)) {
   padding: 0.12rem 0.35rem;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #f4f4f5;
+  background: var(--bg, rgba(0, 0, 0, 0.04));
+  color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 0.88em;
 }
 
 .msg-body__content :deep(pre) {
   overflow-x: auto;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
 }
 
@@ -371,8 +361,8 @@ const displayModelId = computed(() => {
 
 .msg-body__content :deep(blockquote) {
   padding-left: 10px;
-  border-left: 2px solid rgba(255, 255, 255, 0.12);
-  color: #c4c4cc;
+  border-left: 2px solid var(--border);
+  color: var(--muted);
 }
 
 .msg-body__content :deep(table) {
@@ -385,17 +375,17 @@ const displayModelId = computed(() => {
 .msg-body__content :deep(th),
 .msg-body__content :deep(td) {
   padding: 4px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border);
   text-align: left;
 }
 
 .msg-body__content :deep(th) {
   font-weight: 600;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--bg, rgba(0, 0, 0, 0.04));
 }
 
 .msg-body__content :deep(tr:nth-child(even)) {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg, rgba(0, 0, 0, 0.02));
 }
 
 .msg-images {
@@ -426,5 +416,43 @@ const displayModelId = computed(() => {
   max-height: 120px;
   object-fit: cover;
   border-radius: 5px;
+}
+
+.msg-copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface, #fff);
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+  padding: 0;
+}
+
+.message:hover .msg-copy-btn {
+  opacity: 1;
+}
+
+.msg-copy-btn:hover {
+  background: var(--bg, rgba(0, 0, 0, 0.04));
+}
+
+.msg-copy-btn__icon {
+  width: 13px;
+  height: 13px;
+}
+
+.msg-copy-btn__text {
+  font-size: 9px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 </style>

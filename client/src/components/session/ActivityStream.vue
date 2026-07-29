@@ -62,7 +62,7 @@ const selectedSession = computed(() => {
 
 const resolvedInstanceId = computed(() => props.instanceId ?? selectedSession.value?.instanceId ?? "");
 
-const { messages: sessionMessages, delegations, forceIdle, hasMoreMessages, isLoadingOlder, loadOlderMessages } = useSessionEventsSwitch(
+const { messages: sessionMessages, delegations, sessionStatus, forceIdle, hasMoreMessages, isLoadingOlder, loadOlderMessages } = useSessionEventsSwitch(
   computed(() => props.sessionId),
   resolvedInstanceId,
 );
@@ -232,6 +232,8 @@ const messages = computed<ActivityMessage[]>(() => {
     } satisfies ActivityMessage;
   });
 });
+
+const isStreaming = computed(() => sessionStatus.value === "busy");
 
 function isNearBottom(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
@@ -745,6 +747,21 @@ function getStringValue(value: unknown): string | undefined {
           </a>
         </div>
       </div>
+
+      <!-- Streaming indicator -->
+      <div
+        v-if="isStreaming"
+        class="streaming-indicator"
+      >
+        <div class="streaming-indicator__layout">
+          <div class="streaming-indicator__icon">
+            <Bot class="streaming-indicator__icon-svg" aria-hidden="true" />
+          </div>
+          <div class="streaming-indicator__text">
+            Thinking...
+          </div>
+        </div>
+      </div>
     </section>
   </div>
 </template>
@@ -852,8 +869,8 @@ function getStringValue(value: unknown): string | undefined {
   display: flex;
   flex-direction: column;
   width: 100%;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: 0px;
+  margin-bottom: 0px;
 }
 
 .activity-message--assistant {
@@ -862,12 +879,50 @@ function getStringValue(value: unknown): string | undefined {
 
 .activity-message--user {
   align-items: flex-start;
-  padding-left: 32px;
 }
 
 .activity-message--first,
 .activity-message--middle {
-  margin-bottom: 2px;
+  margin-bottom: 0px;
+}
+
+.streaming-indicator {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 4px 0;
+  margin-bottom: 12px;
+}
+
+.streaming-indicator__layout {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.streaming-indicator__icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.streaming-indicator__icon-svg {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+
+.streaming-indicator__text {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.45;
 }
 
 .delegation-links {

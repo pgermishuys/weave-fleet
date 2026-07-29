@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { ChevronDown } from "lucide-vue-next";
 import DiffView from "@/components/session/DiffView.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
@@ -79,30 +78,25 @@ const STATUS_COLOR: Record<string, string> = {
 
 const statusColor = computed(() => STATUS_COLOR[props.status] ?? "var(--muted)");
 
-function toggleCollapsed(): void {
-  isCollapsed.value = !isCollapsed.value;
+function handleToggle(event: Event): void {
+  const target = event.target as HTMLDetailsElement;
+  isCollapsed.value = !target.open;
 }
 </script>
 
 <template>
-  <article
+  <details
     class="tool-card"
     :class="cardClassName"
     data-testid="tool-card"
     :data-tool-card-id="id"
+    :open="!isCollapsed"
+    @toggle="handleToggle"
   >
-    <button
-      type="button"
+    <summary
       class="tool-header"
-      :aria-expanded="!isCollapsed"
-      :aria-controls="`${id}-body`"
       data-testid="tool-card-header"
-      @click="toggleCollapsed"
     >
-      <ChevronDown
-        class="tool-header__chevron"
-        :class="{ 'tool-header__chevron--collapsed': isCollapsed }"
-      />
       <div class="tool-header__meta">
         <span class="tool-header__kind">{{ kind }}</span>
         <span class="tool-header__title">{{ title }}</span>
@@ -110,54 +104,50 @@ function toggleCollapsed(): void {
       <span class="tool-header__status" :style="{ color: statusColor }">
         <StatusGlyph :status="glyphStatus" />
       </span>
-    </button>
+    </summary>
 
-    <Transition name="collapse">
-      <div
-        v-if="!isCollapsed"
-        :id="`${id}-body`"
-        class="tool-body"
-        data-testid="tool-card-body"
+    <div
+      :id="`${id}-body`"
+      class="tool-body"
+      data-testid="tool-card-body"
+    >
+      <p
+        v-if="summary"
+        class="tool-summary"
+        data-testid="tool-card-summary"
       >
-        <p
-          v-if="summary"
-          class="tool-summary"
-          data-testid="tool-card-summary"
-        >
-          {{ summary }}
-        </p>
+        {{ summary }}
+      </p>
 
-        <DiffView
-          v-if="shouldShowDiff"
-          :lines="diffLines"
-        />
+      <DiffView
+        v-if="shouldShowDiff"
+        :lines="diffLines"
+      />
 
-        <pre
-          v-if="output"
-          class="tool-output"
-          data-testid="tool-card-output"
-        ><code>{{ output }}</code></pre>
+      <pre
+        v-if="output"
+        class="tool-output"
+        data-testid="tool-card-output"
+      ><code>{{ output }}</code></pre>
 
-        <p
-          v-if="shouldShowEmptyState"
-          class="tool-empty-state"
-          data-testid="tool-card-empty-state"
-        >
-          No output captured
-        </p>
-      </div>
-    </Transition>
-  </article>
+      <p
+        v-if="shouldShowEmptyState"
+        class="tool-empty-state"
+        data-testid="tool-card-empty-state"
+      >
+        No output captured
+      </p>
+    </div>
+  </details>
 </template>
 
 <style scoped>
 .tool-card {
-  margin-top: 10px;
+  background: var(--bg, #FAF9F7);
   border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  overflow: hidden;
-  background: var(--card-bg);
-  transition: border-color 0.25s ease, background-color 0.25s ease;
+  padding: 10px 12px;
+  margin-top: 8px;
+  border-radius: 0;
 }
 
 .tool-header {
@@ -165,34 +155,32 @@ function toggleCollapsed(): void {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 8px 12px;
-  border: 0;
+  padding: 4px 0;
   background: transparent;
-  color: inherit;
+  color: var(--muted);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
+  font-family: var(--font-mono-stack, 'Courier New', monospace);
   text-align: left;
-  transition: background-color 0.25s ease;
+  list-style: none;
+  transition: color 0.15s ease;
+}
+
+.tool-header::-webkit-details-marker {
+  display: none;
+}
+
+.tool-header::marker {
+  display: none;
 }
 
 .tool-header:hover {
-  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
 }
 
 .tool-header:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-.tool-header__chevron {
-  width: 14px;
-  height: 14px;
-  color: var(--muted);
-  transition: transform 0.25s ease;
-}
-
-.tool-header__chevron--collapsed {
-  transform: rotate(-90deg);
+  outline-offset: 2px;
 }
 
 .tool-header__meta {
@@ -204,18 +192,18 @@ function toggleCollapsed(): void {
 }
 
 .tool-header__kind {
-  color: var(--accent);
+  color: var(--muted);
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-weight: 500;
+  font-family: var(--font-mono-stack);
 }
 
 .tool-header__title {
   min-width: 0;
   overflow: hidden;
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
+  font-family: var(--font-mono-stack);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -227,33 +215,32 @@ function toggleCollapsed(): void {
 }
 
 .tool-body {
-  overflow: hidden auto;
+  padding-left: 16px;
+  margin-top: 4px;
 }
 
 .tool-summary {
-  margin: 0;
-  padding: 0 12px 10px;
-  color: #d4d4d8;
+  margin: 0 0 8px;
+  color: var(--muted);
   font-size: 11px;
   line-height: 1.6;
 }
 
 .tool-output {
-  margin: 0;
-  padding: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
-  background: rgba(255, 255, 255, 0.02);
-  color: #d4d4d8;
-  font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  font-family: var(--font-mono-stack);
   font-size: 10px;
-  line-height: 1.6;
+  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .tool-empty-state {
-  margin: 0;
-  padding: 0 12px 12px;
+  margin: 0 0 8px;
   color: var(--muted);
   font-size: 11px;
   font-style: italic;
