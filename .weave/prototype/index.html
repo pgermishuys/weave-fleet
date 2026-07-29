@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weave Fleet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #FAF9F7;
+  --surface: #FFFFFF;
+  --border: #E8E6E3;
+  --text: #1A1918;
+  --muted: #6E6A65;
+  --coral: #D95A3A;
+  --indigo: #5B6EC7;
+  --radius: 7px;
+  --transition: 180ms ease-out;
+  --font: 'Inter', -apple-system, sans-serif;
+  --mono: 'Courier New', monospace;
+}
+
+body {
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.5;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Layout */
+.app {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  gap: 8px;
+  background: var(--bg);
+}
+
+/* Icon Rail */
+.icon-rail {
+  width: 48px;
+  background: var(--surface);
+  border-right: none;
+  margin: 8px 0 8px 8px;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.icon-rail-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius);
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), color var(--transition);
+  font-size: 16px;
+}
+.icon-rail-btn:hover { background: var(--bg); color: var(--text); }
+.icon-rail-btn.active { background: var(--bg); color: var(--coral); }
+
+/* Context Panel */
+.context-panel {
+  width: 260px;
+  background: var(--surface);
+  border-right: none;
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.context-header {
+  padding: 16px 16px 12px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+}
+.session-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+.tree-group { margin-bottom: 4px; }
+.tree-parent {
+  padding: 8px 12px;
+  font-weight: 500;
+  font-size: 13px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background var(--transition);
+}
+.tree-parent:hover { background: var(--bg); }
+.tree-parent .arrow { font-size: 10px; color: var(--muted); transition: transform var(--transition); }
+.tree-parent.expanded .arrow { transform: rotate(90deg); }
+.tree-children { padding-left: 24px; }
+.tree-child {
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--muted);
+  transition: background var(--transition), color var(--transition);
+}
+.tree-child:hover { background: var(--bg); color: var(--text); }
+.tree-child.active { background: var(--bg); color: var(--text); font-weight: 500; }
+
+/* Center Content */
+.center-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  background: var(--surface);
+  margin: 8px 0 8px 0;
+  border: 1px solid var(--border);
+}
+
+/* Top Tabs */
+.top-bar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  display: flex;
+  align-items: stretch;
+  height: 44px;
+  flex-shrink: 0;
+}
+.top-tab {
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color var(--transition), border-color var(--transition);
+  display: flex;
+  align-items: center;
+}
+.top-tab:hover { color: var(--text); }
+.top-tab.active { color: var(--text); border-bottom-color: var(--coral); }
+
+/* Breadcrumb */
+.breadcrumb {
+  padding: 12px 24px;
+  font-size: 13px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.breadcrumb span { color: var(--text); font-weight: 500; }
+
+/* Views */
+.view { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+.view.active { display: flex; }
+
+/* Sessions Table */
+.sessions-table-wrap { flex: 1; overflow-y: auto; padding: 24px; }
+.sessions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.sessions-table th {
+  text-align: left;
+  padding: 8px 12px;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid var(--border);
+}
+.sessions-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.sessions-table tr:hover td { background: var(--bg); }
+
+/* Pill Badge */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid;
+}
+.pill-running { border-color: var(--indigo); color: var(--indigo); }
+.pill-idle { border-color: var(--border); color: var(--muted); }
+.pill-complete { border-color: #7BAF6E; color: #5A8A4E; }
+.pill-waiting { border-color: var(--coral); color: var(--coral); }
+
+/* Conversation View */
+.conversation-wrap { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+.msg {
+  display: flex;
+  gap: 12px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.msg-avatar {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  margin-top: 2px;
+}
+.msg-avatar.user { color: var(--text); }
+.msg-avatar.agent { color: var(--indigo); }
+.msg-avatar.thinking { color: var(--muted); }
+.msg-body { flex: 1; }
+.msg-meta { font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
+.msg-text { line-height: 1.6; }
+.msg-thinking { color: var(--muted); font-style: italic; font-size: 13px; }
+
+/* Tool Block */
+.tool-block {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: 8px;
+  overflow: hidden;
+}
+.tool-header {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--mono);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+.tool-header:hover { color: var(--text); }
+.tool-body {
+  display: none;
+  padding: 8px 12px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  white-space: pre-wrap;
+}
+.tool-block.open .tool-body { display: block; }
+
+/* Input Area */
+.input-area {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 16px 24px;
+  flex-shrink: 0;
+}
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.input-field {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font);
+  font-size: 14px;
+  outline: none;
+  transition: border-color var(--transition);
+}
+.input-field:focus { border-color: var(--indigo); }
+.send-btn {
+  padding: 10px 20px;
+  background: var(--text);
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--transition);
+}
+.send-btn:hover { opacity: 0.85; }
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: #7BAF6E; }
+.status-badge {
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+/* Right Panel — Split View */
+.right-panel {
+  width: 420px;
+  min-width: 200px;
+  max-width: 50%;
+  background: var(--surface);
+  border-left: none;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+  margin: 8px 8px 8px 0;
+  border: 1px solid var(--border);
+}
+
+/* Resize Handle — gap between panels */
+.resize-gutter {
+  width: 8px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  transition: background var(--transition);
+  margin: 8px 0;
+}
+.resize-gutter:hover,
+.resize-gutter.dragging {
+  background: rgba(91, 110, 199, 0.15);
+}
+.right-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+}
+.right-tab {
+  padding: 12px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color var(--transition);
+}
+.right-tab:hover { color: var(--text); }
+.right-tab.active { color: var(--text); border-bottom-color: var(--coral); }
+.right-content { flex: 1; overflow-y: auto; padding: 16px; }
+.right-view { display: none; }
+.right-view.active { display: block; }
+
+/* Artifacts */
+.artifact-stats {
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.artifact-stats .count { font-weight: 600; }
+.artifact-stats .count-new { color: #7BAF6E; }
+.artifact-stats .count-edit { color: var(--indigo); }
+.artifact-stats .count-src { color: var(--muted); }
+
+.artifact-list {
+  flex: 1;
+  overflow-y: auto;
+}
+.artifact-section { padding: 12px 16px 0; }
+.artifact-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.artifact-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: var(--mono);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.artifact-item:hover { background: var(--bg); }
+.artifact-item.selected { background: var(--bg); border: 1px solid var(--border); }
+.artifact-icon { font-size: 14px; color: var(--muted); flex-shrink: 0; }
+.artifact-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artifact-badge { font-size: 11px; color: var(--muted); font-family: var(--font); }
+.artifact-dot { width: 6px; height: 6px; border-radius: 50%; }
+.dot-new { background: #7BAF6E; }
+.dot-modified { background: var(--indigo); }
+.dot-source { background: var(--muted); }
+
+/* Artifact Preview */
+.artifact-preview {
+  border-top: 1px solid var(--border);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.preview-header {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text);
+}
+.preview-header .file-path { font-family: var(--mono); color: var(--muted); }
+.preview-actions {
+  display: flex;
+  gap: 4px;
+}
+.preview-action {
+  width: 24px; height: 24px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: background var(--transition), color var(--transition);
+}
+.preview-action:hover { background: var(--bg); color: var(--text); }
+.preview-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text);
+  background: var(--bg);
+}
+.preview-body .line-num {
+  display: inline-block;
+  width: 28px;
+  text-align: right;
+  margin-right: 16px;
+  color: var(--border);
+  user-select: none;
+}
+.preview-body .keyword { color: var(--indigo); }
+.preview-body .string { color: #B07B23; }
+.preview-body .comment { color: var(--muted); font-style: italic; }
+.preview-body .type { color: var(--coral); }
+
+/* Todos */
+.todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.todo-check {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid var(--border);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.todo-check.done { background: var(--indigo); border-color: var(--indigo); }
+
+/* Icon Toolbar */
+.icon-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.icon-toolbar-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), color var(--transition);
+  position: relative;
+}
+.icon-toolbar-btn:hover {
+  background: var(--bg);
+  color: var(--indigo);
+}
+.icon-toolbar-btn .icon-default { display: flex; }
+.icon-toolbar-btn .icon-hover { display: none; }
+.icon-toolbar-btn:hover .icon-default { display: none; }
+.icon-toolbar-btn:hover .icon-hover { display: flex; }
+
+/* Tooltip */
+.icon-toolbar-btn .tooltip {
+  display: none;
+  position: absolute;
+  bottom: -32px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 100;
+  pointer-events: none;
+}
+.icon-toolbar-btn .tooltip kbd {
+  display: inline;
+  padding: 1px 4px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 10px;
+  margin-left: 6px;
+}
+.icon-toolbar-btn:hover .tooltip { display: block; }
+
+/* Message icons (Lucide-based) */
+.msg-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--muted);
+}
+.msg-icon.user { color: var(--text); }
+.msg-icon.agent { color: var(--indigo); }
+.msg-icon.thinking { color: var(--muted); }
+
+/* Hotkey Bar */
+.hotkey-bar {
+  height: 32px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.hotkey-bar kbd {
+  display: inline-flex;
+  padding: 1px 5px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  margin-right: 4px;
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Icon Rail -->
+  <nav class="icon-rail">
+    <button class="icon-rail-btn active" title="Sessions" data-nav="sessions"><i data-lucide="messages-square" style="width:18px;height:18px;"></i></button>
+    <button class="icon-rail-btn" title="Chat" data-nav="conversation"><i data-lucide="message-circle" style="width:18px;height:18px;"></i></button>
+    <button class="icon-rail-btn" title="Board"><i data-lucide="kanban" style="width:18px;height:18px;"></i></button>
+    <button class="icon-rail-btn" title="Settings" style="margin-top:auto;"><i data-lucide="settings" style="width:18px;height:18px;"></i></button>
+  </nav>
+
+  <!-- Context Panel -->
+  <aside class="context-panel">
+    <div class="context-header">Sessions</div>
+    <div class="session-tree">
+      <div class="tree-group">
+        <div class="tree-parent expanded"><span class="arrow">&#9654;</span> Implement auth middleware</div>
+        <div class="tree-children">
+          <div class="tree-child active">shuttle / auth-layer</div>
+          <div class="tree-child">pattern / token-validation</div>
+        </div>
+      </div>
+      <div class="tree-group">
+        <div class="tree-parent expanded"><span class="arrow">&#9654;</span> Refactor database layer</div>
+        <div class="tree-children">
+          <div class="tree-child">shuttle / migration-runner</div>
+          <div class="tree-child">pattern / schema-diff</div>
+        </div>
+      </div>
+      <div class="tree-group">
+        <div class="tree-parent"><span class="arrow">&#9654;</span> Add WebSocket support</div>
+        <div class="tree-children">
+          <div class="tree-child">shuttle / ws-handler</div>
+        </div>
+      </div>
+      <div class="tree-group">
+        <div class="tree-parent"><span class="arrow">&#9654;</span> CLI error formatting</div>
+        <div class="tree-children">
+          <div class="tree-child">pattern / pretty-errors</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Center Content -->
+  <main class="center-content">
+    <!-- Top Tabs -->
+    <div class="top-bar">
+      <button class="top-tab active" data-view="sessions">Sessions</button>
+      <button class="top-tab" data-view="conversation">Conversation</button>
+      <button class="top-tab" data-view="board">Board</button>
+      <button class="top-tab" data-view="analytics">Analytics</button>
+    </div>
+
+    <!-- Sessions View -->
+    <div class="view active" id="view-sessions">
+      <div class="sessions-table-wrap">
+        <table class="sessions-table">
+          <thead>
+            <tr><th>Name</th><th>Status</th><th>Agent</th><th>Created</th><th>Updated</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-weight:500">Implement auth middleware</td>
+              <td><span class="pill pill-running">running</span></td>
+              <td>shuttle</td>
+              <td>Jul 28, 10:04</td>
+              <td>2m ago</td>
+            </tr>
+            <tr>
+              <td style="font-weight:500">Refactor database layer</td>
+              <td><span class="pill pill-waiting">waiting</span></td>
+              <td>pattern</td>
+              <td>Jul 28, 09:32</td>
+              <td>14m ago</td>
+            </tr>
+            <tr>
+              <td style="font-weight:500">Add WebSocket support</td>
+              <td><span class="pill pill-running">running</span></td>
+              <td>shuttle</td>
+              <td>Jul 28, 08:55</td>
+              <td>5m ago</td>
+            </tr>
+            <tr>
+              <td style="font-weight:500">CLI error formatting</td>
+              <td><span class="pill pill-complete">complete</span></td>
+              <td>pattern</td>
+              <td>Jul 27, 16:20</td>
+              <td>18h ago</td>
+            </tr>
+            <tr>
+              <td style="font-weight:500">Token validation edge cases</td>
+              <td><span class="pill pill-idle">idle</span></td>
+              <td>shuttle</td>
+              <td>Jul 27, 14:10</td>
+              <td>20h ago</td>
+            </tr>
+            <tr>
+              <td style="font-weight:500">Rate limiter configuration</td>
+              <td><span class="pill pill-complete">complete</span></td>
+              <td>pattern</td>
+              <td>Jul 27, 11:48</td>
+              <td>22h ago</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Conversation View -->
+    <div class="view" id="view-conversation">
+      <div class="breadcrumb" style="display:flex;align-items:center;justify-content:space-between;">
+        <div>Sessions &rsaquo; Implement auth middleware &rsaquo; <span>shuttle / auth-layer</span></div>
+        <div class="icon-toolbar">
+          <button class="icon-toolbar-btn">
+            <span class="icon-default"><i data-lucide="copy" style="width:16px;height:16px;"></i></span>
+            <span class="icon-hover"><i data-lucide="copy-check" style="width:16px;height:16px;"></i></span>
+            <span class="tooltip">Copy path</span>
+          </button>
+          <button class="icon-toolbar-btn">
+            <span class="icon-default"><i data-lucide="folder-closed" style="width:16px;height:16px;"></i></span>
+            <span class="icon-hover"><i data-lucide="folder-open" style="width:16px;height:16px;"></i></span>
+            <span class="tooltip">Open in explorer <kbd>&#8984;&#8679;O</kbd></span>
+          </button>
+          <button class="icon-toolbar-btn">
+            <span class="icon-default"><i data-lucide="columns-2" style="width:16px;height:16px;"></i></span>
+            <span class="icon-hover"><i data-lucide="columns-2" style="width:16px;height:16px;"></i></span>
+            <span class="tooltip">Split view</span>
+          </button>
+          <button class="icon-toolbar-btn">
+            <span class="icon-default"><i data-lucide="external-link" style="width:16px;height:16px;"></i></span>
+            <span class="icon-hover"><i data-lucide="external-link" style="width:16px;height:16px;"></i></span>
+            <span class="tooltip">Open in editor <kbd>&#8984;&#8679;O</kbd></span>
+          </button>
+        </div>
+      </div>
+      <div class="conversation-wrap">
+        <div class="msg">
+          <i data-lucide="user" class="msg-icon user"></i>
+          <div class="msg-body">
+            <div class="msg-meta">You &middot; 10:04</div>
+            <div class="msg-text">Add JWT validation middleware that checks the Authorization header, validates the token signature, and extracts claims into the request context.</div>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="brain" class="msg-icon thinking"></i>
+          <div class="msg-body">
+            <div class="msg-meta">shuttle &middot; 10:04</div>
+            <div class="msg-thinking">Analyzing the existing middleware chain and authentication setup...</div>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="bot" class="msg-icon agent"></i>
+          <div class="msg-body">
+            <div class="msg-meta">shuttle &middot; 10:05</div>
+            <div class="msg-text">I'll create the JWT middleware. First, let me check what dependencies are already available for token verification.</div>
+            <div class="tool-block">
+              <div class="tool-header" onclick="this.parentElement.classList.toggle('open')">&#9654; grep &mdash; "jsonwebtoken" in package.json</div>
+              <div class="tool-body">Found: "jsonwebtoken": "^9.0.0" in dependencies
+Found: "@types/jsonwebtoken": "^9.0.5" in devDependencies</div>
+            </div>
+            <div class="tool-block">
+              <div class="tool-header" onclick="this.parentElement.classList.toggle('open')">&#9654; read &mdash; src/middleware/index.ts</div>
+              <div class="tool-body">export { rateLimiter } from './rate-limiter';
+export { requestLogger } from './logger';
+// auth middleware will slot in here</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="bot" class="msg-icon agent"></i>
+          <div class="msg-body">
+            <div class="msg-meta">shuttle &middot; 10:06</div>
+            <div class="msg-text">I've created the auth middleware at <code>src/middleware/auth.ts</code>. It validates the Bearer token, verifies the signature using the configured public key, and attaches decoded claims to <code>req.context.user</code>. The middleware gracefully returns 401 for missing tokens and 403 for invalid signatures.</div>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="user" class="msg-icon user"></i>
+          <div class="msg-body">
+            <div class="msg-meta">You &middot; 10:07</div>
+            <div class="msg-text">Looks good. Can you also add support for token refresh via a custom header?</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="input-area">
+        <div class="input-row">
+          <input class="input-field" type="text" placeholder="Send a message...">
+          <button class="send-btn">Send</button>
+        </div>
+        <div class="status-bar">
+          <span class="status-dot"></span>
+          <span>IDLE</span>
+          <span class="status-badge">claude-opus-4</span>
+          <span>4,218 tokens</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Board View (placeholder) -->
+    <div class="view" id="view-board">
+      <div style="padding:48px 24px;color:var(--muted);text-align:center;">
+        <p style="font-size:16px;font-weight:500;margin-bottom:8px;">Board View</p>
+        <p>Kanban layout for session states. Coming soon.</p>
+      </div>
+    </div>
+
+    <!-- Analytics View (placeholder) -->
+    <div class="view" id="view-analytics">
+      <div style="padding:48px 24px;color:var(--muted);text-align:center;">
+        <p style="font-size:16px;font-weight:500;margin-bottom:8px;">Analytics</p>
+        <p>Token spend, session duration, agent utilization. Coming soon.</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Resize Gutter -->
+  <div class="resize-gutter" id="resize-gutter"></div>
+
+  <!-- Right Panel — Split View -->
+  <aside class="right-panel" id="right-panel">
+    <div class="right-tabs">
+      <button class="right-tab active" data-right="artifacts">Artifacts</button>
+      <button class="right-tab" data-right="info">Info</button>
+      <button class="right-tab" data-right="todos">Todos</button>
+    </div>
+    <div class="right-content" style="display:flex;flex-direction:column;padding:0;">
+      <div class="right-view active" id="right-artifacts" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+        <!-- Stats row -->
+        <div class="artifact-stats">
+          <span class="count count-new">2</span> new &middot;
+          <span class="count count-edit">2</span> edit &middot;
+          <span class="count count-src">2</span> source
+        </div>
+        <!-- File list (top half) -->
+        <div class="artifact-list" style="max-height:180px;overflow-y:auto;">
+          <div class="artifact-section">
+            <div class="artifact-label">New (2)</div>
+            <div class="artifact-item selected" data-file="auth">
+              <span class="artifact-dot dot-new"></span>
+              <span class="artifact-icon">&#128196;</span>
+              <span class="artifact-name">src/middleware/auth.ts</span>
+              <span class="artifact-badge">42 lines</span>
+            </div>
+            <div class="artifact-item" data-file="test">
+              <span class="artifact-dot dot-new"></span>
+              <span class="artifact-icon">&#128196;</span>
+              <span class="artifact-name">src/middleware/auth.test.ts</span>
+              <span class="artifact-badge">67 lines</span>
+            </div>
+          </div>
+          <div class="artifact-section">
+            <div class="artifact-label">Modified (2)</div>
+            <div class="artifact-item" data-file="index">
+              <span class="artifact-dot dot-modified"></span>
+              <span class="artifact-icon">&#128196;</span>
+              <span class="artifact-name">src/middleware/index.ts</span>
+              <span class="artifact-badge">+1 -0</span>
+            </div>
+            <div class="artifact-item" data-file="types">
+              <span class="artifact-dot dot-modified"></span>
+              <span class="artifact-icon">&#128196;</span>
+              <span class="artifact-name">src/types/request.ts</span>
+              <span class="artifact-badge">+8 -1</span>
+            </div>
+          </div>
+          <div class="artifact-section">
+            <div class="artifact-label">Source (2)</div>
+            <div class="artifact-item" data-file="pkg">
+              <span class="artifact-dot dot-source"></span>
+              <span class="artifact-icon">&#128196;</span>
+              <span class="artifact-name">package.json</span>
+              <span class="artifact-badge">read</span>
+            </div>
+            <div class="artifact-item" data-file="tsconfig">
+              <span class="artifact-dot dot-source"></span>
+              <span class="artifact-icon">&#128196;</span>
+              <span class="artifact-name">tsconfig.json</span>
+              <span class="artifact-badge">read</span>
+            </div>
+          </div>
+        </div>
+        <!-- Artifact Preview (bottom half) -->
+        <div class="artifact-preview">
+          <div class="preview-header">
+            <span class="file-path">src/middleware/auth.ts</span>
+            <div class="preview-actions">
+              <button class="preview-action" title="Copy">&#9112;</button>
+              <button class="preview-action" title="Open in editor">&#8599;</button>
+              <button class="preview-action" title="Diff view">&#8800;</button>
+            </div>
+          </div>
+          <div class="preview-body" id="preview-content">
+<span class="line-num"> 1</span><span class="keyword">import</span> { Request, Response, NextFunction } <span class="keyword">from</span> <span class="string">'express'</span>;
+<span class="line-num"> 2</span><span class="keyword">import</span> jwt <span class="keyword">from</span> <span class="string">'jsonwebtoken'</span>;
+<span class="line-num"> 3</span><span class="keyword">import</span> { AuthenticatedRequest } <span class="keyword">from</span> <span class="string">'../types/request'</span>;
+<span class="line-num"> 4</span>
+<span class="line-num"> 5</span><span class="comment">/** Validates JWT Bearer tokens and attaches claims to request context */</span>
+<span class="line-num"> 6</span><span class="keyword">export</span> <span class="keyword">function</span> <span class="type">authMiddleware</span>(publicKey: <span class="type">string</span>) {
+<span class="line-num"> 7</span>  <span class="keyword">return</span> (req: <span class="type">Request</span>, res: <span class="type">Response</span>, next: <span class="type">NextFunction</span>) => {
+<span class="line-num"> 8</span>    <span class="keyword">const</span> header = req.headers.authorization;
+<span class="line-num"> 9</span>
+<span class="line-num">10</span>    <span class="keyword">if</span> (!header?.startsWith(<span class="string">'Bearer '</span>)) {
+<span class="line-num">11</span>      <span class="keyword">return</span> res.status(<span class="string">401</span>).json({ error: <span class="string">'Missing token'</span> });
+<span class="line-num">12</span>    }
+<span class="line-num">13</span>
+<span class="line-num">14</span>    <span class="keyword">const</span> token = header.slice(7);
+<span class="line-num">15</span>
+<span class="line-num">16</span>    <span class="keyword">try</span> {
+<span class="line-num">17</span>      <span class="keyword">const</span> claims = jwt.verify(token, publicKey, {
+<span class="line-num">18</span>        algorithms: [<span class="string">'RS256'</span>],
+<span class="line-num">19</span>      });
+<span class="line-num">20</span>      (req <span class="keyword">as</span> <span class="type">AuthenticatedRequest</span>).context = {
+<span class="line-num">21</span>        user: claims,
+<span class="line-num">22</span>      };
+<span class="line-num">23</span>      next();
+<span class="line-num">24</span>    } <span class="keyword">catch</span> (err) {
+<span class="line-num">25</span>      <span class="keyword">return</span> res.status(<span class="string">403</span>).json({ error: <span class="string">'Invalid token'</span> });
+<span class="line-num">26</span>    }
+<span class="line-num">27</span>  };
+<span class="line-num">28</span>}
+          </div>
+        </div>
+      </div>
+      <div class="right-view" id="right-info" style="padding:16px;">
+        <div style="font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:12px;">
+          <div><strong style="color:var(--text)">Session</strong><br>shuttle / auth-layer</div>
+          <div><strong style="color:var(--text)">Task</strong><br>Implement auth middleware</div>
+          <div><strong style="color:var(--text)">Agent</strong><br>shuttle</div>
+          <div><strong style="color:var(--text)">Model</strong><br>claude-opus-4</div>
+          <div><strong style="color:var(--text)">Started</strong><br>Jul 28, 10:04 AM</div>
+          <div><strong style="color:var(--text)">Tokens</strong><br>4,218 in / 1,842 out</div>
+        </div>
+      </div>
+      <div class="right-view" id="right-todos" style="padding:16px;">
+        <div class="todo-item"><div class="todo-check done"></div><div>Set up JWT verification with public key</div></div>
+        <div class="todo-item"><div class="todo-check done"></div><div>Extract claims into request context</div></div>
+        <div class="todo-item"><div class="todo-check"></div><div>Add token refresh header support</div></div>
+        <div class="todo-item"><div class="todo-check"></div><div>Write unit tests for edge cases</div></div>
+        <div class="todo-item"><div class="todo-check"></div><div>Update middleware barrel export</div></div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- Hotkey Bar -->
+<div class="hotkey-bar">
+  <span><kbd>Ctrl</kbd><kbd>N</kbd> New session</span>
+  <span><kbd>Ctrl</kbd><kbd>K</kbd> Command</span>
+  <span><kbd>Ctrl</kbd><kbd>Enter</kbd> Send</span>
+  <span><kbd>Ctrl</kbd><kbd>.</kbd> Approve</span>
+  <span><kbd>Esc</kbd> Cancel</span>
+</div>
+
+<script>
+// Top tab switching
+document.querySelectorAll('.top-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.top-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('view-' + tab.dataset.view).classList.add('active');
+  });
+});
+
+// Right panel tab switching
+document.querySelectorAll('.right-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.right-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.right-view').forEach(v => v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('right-' + tab.dataset.right).classList.add('active');
+  });
+});
+
+// Tree toggle
+document.querySelectorAll('.tree-parent').forEach(parent => {
+  parent.addEventListener('click', () => {
+    parent.classList.toggle('expanded');
+    const children = parent.nextElementSibling;
+    if (children) children.style.display = parent.classList.contains('expanded') ? 'block' : 'none';
+  });
+});
+
+// Icon rail nav
+document.querySelectorAll('.icon-rail-btn[data-nav]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const view = btn.dataset.nav;
+    const tab = document.querySelector(`.top-tab[data-view="${view}"]`);
+    if (tab) tab.click();
+  });
+});
+
+// Artifact item selection
+document.querySelectorAll('.artifact-item[data-file]').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.artifact-item').forEach(i => i.classList.remove('selected'));
+    item.classList.add('selected');
+    const path = item.querySelector('.artifact-name').textContent;
+    document.querySelector('.preview-header .file-path').textContent = path;
+  });
+});
+
+// Resize gutter drag
+const gutter = document.getElementById('resize-gutter');
+const panel = document.getElementById('right-panel');
+let dragging = false;
+
+gutter.addEventListener('mousedown', (e) => {
+  dragging = true;
+  gutter.classList.add('dragging');
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  e.preventDefault();
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!dragging) return;
+  const app = document.querySelector('.app');
+  const appRect = app.getBoundingClientRect();
+  const newWidth = appRect.right - e.clientX - 8;
+  const maxWidth = appRect.width * 0.5;
+  const minWidth = 200;
+  panel.style.width = Math.max(minWidth, Math.min(maxWidth, newWidth)) + 'px';
+});
+
+document.addEventListener('mouseup', () => {
+  if (dragging) {
+    dragging = false;
+    gutter.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+});
+
+// Initialize Lucide icons
+lucide.createIcons();
+</script>
+</body>
+</html>
