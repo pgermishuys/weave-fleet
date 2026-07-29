@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -1479,6 +1480,111 @@ body {
   border-radius: 0;
 }
 
+/* Rich Tool Calls */
+.tool-call {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: 8px;
+  padding: 10px 12px;
+}
+.tool-call-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.tool-call-header .tool-label {
+  font-weight: 600;
+  color: var(--text);
+}
+.tool-call-header .tool-detail {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-call-header .tool-action {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color var(--transition);
+}
+.tool-call-header .tool-action:hover { color: var(--text); }
+.tool-call-preview {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.tool-call-code {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-x: auto;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.tool-call-code .line {
+  display: flex;
+  white-space: pre;
+}
+.tool-call-code .line-num {
+  width: 28px;
+  text-align: right;
+  color: var(--muted);
+  user-select: none;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+.tool-call-code .line-add {
+  color: #7BAF6E;
+}
+.tool-call-code .line-content {
+  color: var(--text);
+}
+
+/* Mermaid Diagram */
+.tool-call-diagram {
+  margin-top: 8px;
+  position: relative;
+}
+.tool-call-diagram .diagram-expand {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition), border-color var(--transition);
+  z-index: 10;
+}
+.tool-call-diagram .diagram-expand:hover { color: var(--text); border-color: var(--text); }
+.tool-call-diagram .mermaid {
+  background: white;
+  padding: 16px;
+  border: 1px solid var(--border);
+  overflow-x: auto;
+}
+
 /* Hotkey Bar */
 .hotkey-bar {
   height: 32px;
@@ -1694,6 +1800,113 @@ export { requestLogger } from './logger';
           <div class="msg-body">
             <div class="msg-meta">shuttle &middot; 10:06</div>
             <div class="msg-text">I've created the auth middleware at <code>src/middleware/auth.ts</code>. It validates the Bearer token, verifies the signature using the configured public key, and attaches decoded claims to <code>req.context.user</code>. The middleware gracefully returns 401 for missing tokens and 403 for invalid signatures.</div>
+          </div>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="bot" class="msg-icon agent"></i>
+          <div class="msg-body">
+            <div class="msg-meta">shuttle &middot; 10:06</div>
+            <div class="msg-text">Let me check the final answer template structure.</div>
+            <div class="tool-call">
+              <div class="tool-call-header">
+                <i data-lucide="file-text" style="width:16px;height:16px;color:var(--muted);"></i>
+                <span class="tool-label">Read</span>
+                <span class="tool-detail">.humanlayer/templates/final-answer.md</span>
+                <button class="tool-action"><i data-lucide="external-link" style="width:14px;height:14px;"></i></button>
+              </div>
+              <div class="tool-call-preview">└ 1 ### Next Steps ... (16 lines)</div>
+            </div>
+          </div>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="bot" class="msg-icon agent"></i>
+          <div class="msg-body">
+            <div class="msg-meta">shuttle &middot; 10:07</div>
+            <div class="msg-text">I need to load the dataviz skill for creating visual representations.</div>
+            <div class="tool-call">
+              <div class="tool-call-header">
+                <i data-lucide="layers" style="width:16px;height:16px;color:var(--muted);"></i>
+                <span class="tool-label">Skill</span>
+                <span class="tool-detail">skill: "dataviz"</span>
+              </div>
+              <div class="tool-call-preview">Launching skill: dataviz</div>
+            </div>
+          </div>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="bot" class="msg-icon agent"></i>
+          <div class="msg-body">
+            <div class="msg-meta">shuttle &middot; 10:08</div>
+            <div class="msg-text">Creating a sample prototype HTML file to demonstrate the dashboard layout.</div>
+            <div class="tool-call">
+              <div class="tool-call-header">
+                <i data-lucide="pencil" style="width:16px;height:16px;color:var(--muted);"></i>
+                <span class="tool-label">Write</span>
+                <span class="tool-detail">Create new file .humanlayer/tasks/sample-prototype.html</span>
+                <button class="tool-action"><i data-lucide="external-link" style="width:14px;height:14px;"></i></button>
+              </div>
+              <div class="tool-call-code">
+                <div class="line"><span class="line-num">1</span><span class="line-add">+</span><span class="line-content">&lt;!DOCTYPE html&gt;</span></div>
+                <div class="line"><span class="line-num">2</span><span class="line-add">+</span><span class="line-content">&lt;html lang="en"&gt;</span></div>
+                <div class="line"><span class="line-num">3</span><span class="line-add">+</span><span class="line-content">&lt;head&gt;</span></div>
+                <div class="line"><span class="line-num">4</span><span class="line-add">+</span><span class="line-content">  &lt;meta charset="UTF-8"&gt;</span></div>
+                <div class="line"><span class="line-num">5</span><span class="line-add">+</span><span class="line-content">  &lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;</span></div>
+                <div class="line"><span class="line-num">6</span><span class="line-add">+</span><span class="line-content">  &lt;title&gt;Dashboard Prototype&lt;/title&gt;</span></div>
+                <div class="line"><span class="line-num">7</span><span class="line-add">+</span><span class="line-content">  &lt;style&gt;</span></div>
+                <div class="line"><span class="line-num">8</span><span class="line-add">+</span><span class="line-content">    body { font-family: system-ui, sans-serif; margin: 0; padding: 24px; }</span></div>
+                <div class="line"><span class="line-num">9</span><span class="line-add">+</span><span class="line-content">    .card { background: white; border: 1px solid #e5e7eb; padding: 16px; }</span></div>
+                <div class="line"><span class="line-num">10</span><span class="line-add">+</span><span class="line-content">  &lt;/style&gt;</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="bot" class="msg-icon agent"></i>
+          <div class="msg-body">
+            <div class="msg-meta">shuttle &middot; 10:09</div>
+            <div class="msg-text">Here's a sequence diagram showing the e-commerce order flow:</div>
+            <div class="tool-call">
+              <div class="tool-call-diagram">
+                <button class="diagram-expand"><i data-lucide="maximize-2" style="width:14px;height:14px;"></i></button>
+                <div class="mermaid">
+sequenceDiagram
+    actor User
+    participant Browser as Web Browser
+    participant API as API Server
+    participant DB as Database
+    participant PG as Payment Gateway
+    participant Email as Email Service
+    User->>Browser: Click "Place Order"
+    Browser->>API: POST /orders (user_id, items)
+    API->>DB: Create order record
+    DB-->>API: order_id
+    API->>API: Calculate total
+    API->>PG: POST /charge (amount, card_token)
+    PG-->>API: payment_id, status: success
+    API->>DB: Update order status to "paid"
+    DB-->>API: ✓
+    API->>Email: Send confirmation (user_email, order_id)
+    Email-->>API: ✓
+    API-->>Browser: 200 OK (order_id, status)
+                </div>
+              </div>
+            </div>
           </div>
           <div class="msg-actions">
             <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
@@ -2734,6 +2947,9 @@ document.querySelectorAll('.source-toggle').forEach(toggle => {
 
 // Initialize Lucide icons
 lucide.createIcons();
+
+// Initialize Mermaid
+mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
 
 // Artifact file-select dropdown
 document.getElementById('viewer-file-select').addEventListener('click', (e) => {
