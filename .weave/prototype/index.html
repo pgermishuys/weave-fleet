@@ -223,13 +223,74 @@ body {
 .pill-waiting { border-color: var(--coral); color: var(--coral); }
 
 /* Conversation View */
-.conversation-wrap { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+.conversation-wrap { flex: 1; overflow-y: auto; overflow-x: visible; padding: 0; display: flex; flex-direction: column; position: relative; }
 .msg {
   display: flex;
   gap: 12px;
-  padding-bottom: 20px;
+  padding: 12px;
   border-bottom: 1px solid var(--border);
+  position: relative;
+  border-left: 3px solid transparent;
+  transition: background var(--transition), border-left-color var(--transition);
 }
+.msg-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+.msg:hover .msg-actions { display: flex; }
+.msg:hover {
+  background: rgba(91, 110, 199, 0.03);
+  border-left-color: var(--indigo);
+}
+.msg-action-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  position: relative;
+}
+.msg-action-btn:hover {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--text);
+}
+.msg-action-btn .msg-action-tooltip {
+  display: none;
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 100;
+  pointer-events: none;
+}
+.msg-action-btn .msg-action-tooltip kbd {
+  display: inline;
+  padding: 1px 4px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 10px;
+  margin-left: 6px;
+}
+.msg-action-btn:hover .msg-action-tooltip { display: block; }
 .msg-avatar {
   width: 20px;
   height: 20px;
@@ -434,6 +495,318 @@ body {
 .dot-new { background: #7BAF6E; }
 .dot-modified { background: var(--indigo); }
 .dot-source { background: var(--muted); }
+
+/* Viewer Toolbar */
+.viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.viewer-back {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), color var(--transition);
+}
+.viewer-back:hover { background: var(--bg); color: var(--text); }
+.viewer-file-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+.viewer-file-select:hover { border-color: var(--indigo); }
+.viewer-shortcut {
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: 4px;
+}
+.viewer-filename {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.viewer-mode-toggle {
+  display: flex;
+  margin-left: auto;
+}
+.viewer-mode {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color var(--transition);
+}
+.viewer-mode.active { color: var(--text); }
+.viewer-mode:hover { color: var(--text); }
+.viewer-actions {
+  display: flex;
+  gap: 2px;
+}
+
+/* Viewer Content */
+.viewer-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  min-height: 0;
+}
+.rendered-markdown {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+}
+.rendered-markdown h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--coral);
+  margin: 16px 0 12px;
+}
+.rendered-markdown h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 20px 0 8px;
+}
+.rendered-markdown ol, .rendered-markdown ul {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+.rendered-markdown code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.viewer-raw-content {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+  margin: 0;
+}
+.viewer-html-frame {
+  flex: 1;
+  min-height: 0;
+  background: white;
+}
+
+/* Inline Comments / Annotations */
+.rendered-markdown li {
+  position: relative;
+  cursor: pointer;
+  padding: 4px 6px;
+  margin-left: -6px;
+  border-radius: 4px;
+  transition: background var(--transition);
+}
+.rendered-markdown li:hover {
+  background: rgba(91, 110, 199, 0.06);
+}
+.rendered-markdown li.has-comment {
+  background: rgba(212, 160, 50, 0.08);
+  border-left: 2px solid #D4A032;
+  padding-left: 10px;
+}
+.comment-badge {
+  position: absolute;
+  right: -4px;
+  top: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--coral);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+/* Comment popover */
+.comment-popover {
+  position: absolute;
+  right: 20px;
+  top: 0;
+  width: 260px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  z-index: 50;
+  padding: 12px;
+  display: none;
+}
+.comment-popover.open { display: block; }
+.comment-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.comment-popover-header span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.comment-popover-header .draft-label {
+  font-weight: 400;
+  color: var(--muted);
+  font-style: italic;
+}
+.comment-popover-close {
+  width: 20px; height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+.comment-popover-close:hover { background: var(--bg); color: var(--text); }
+.comment-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: var(--font);
+  font-size: 13px;
+  resize: none;
+  outline: none;
+  min-height: 48px;
+  transition: border-color var(--transition);
+}
+.comment-input:focus { border-color: var(--indigo); }
+.comment-submit {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+.comment-submit button {
+  width: 24px; height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.comment-submit button:hover { color: var(--indigo); background: var(--bg); }
+
+/* Queued comments badge in conversation input */
+.queued-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--surface);
+  border: 1px solid var(--coral);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--coral);
+  cursor: pointer;
+  position: relative;
+}
+.queued-badge i { width: 14px; height: 14px; }
+.queued-badge .queued-count { font-weight: 600; }
+
+/* Queued dropdown */
+.queued-dropdown {
+  display: none;
+  position: absolute;
+  bottom: 36px;
+  left: 0;
+  width: 280px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  z-index: 100;
+  overflow: hidden;
+}
+.queued-dropdown.open { display: block; }
+.queued-dropdown-header {
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+.queued-dropdown-list {
+  max-height: 160px;
+  overflow-y: auto;
+}
+.queued-dropdown-item {
+  padding: 8px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.queued-dropdown-item .q-file {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.queued-dropdown-item .q-text {
+  color: var(--text);
+}
+.queued-dropdown-actions {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.queued-dropdown-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  font-family: var(--font);
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background var(--transition);
+  width: 100%;
+  text-align: left;
+}
+.queued-dropdown-action:hover { background: var(--bg); }
+.queued-dropdown-action i { width: 14px; height: 14px; color: var(--muted); }
 
 /* Artifact Preview */
 .artifact-preview {
@@ -750,6 +1123,9 @@ body {
             <div class="msg-meta">You &middot; 10:04</div>
             <div class="msg-text">Add JWT validation middleware that checks the Authorization header, validates the token signature, and extracts claims into the request context.</div>
           </div>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
         </div>
 
         <div class="msg">
@@ -757,6 +1133,9 @@ body {
           <div class="msg-body">
             <div class="msg-meta">shuttle &middot; 10:04</div>
             <div class="msg-thinking">Analyzing the existing middleware chain and authentication setup...</div>
+          </div>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
           </div>
         </div>
 
@@ -777,6 +1156,9 @@ export { requestLogger } from './logger';
 // auth middleware will slot in here</div>
             </div>
           </div>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
         </div>
 
         <div class="msg">
@@ -784,6 +1166,9 @@ export { requestLogger } from './logger';
           <div class="msg-body">
             <div class="msg-meta">shuttle &middot; 10:06</div>
             <div class="msg-text">I've created the auth middleware at <code>src/middleware/auth.ts</code>. It validates the Bearer token, verifies the signature using the configured public key, and attaches decoded claims to <code>req.context.user</code>. The middleware gracefully returns 401 for missing tokens and 403 for invalid signatures.</div>
+          </div>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
           </div>
         </div>
 
@@ -793,12 +1178,41 @@ export { requestLogger } from './logger';
             <div class="msg-meta">You &middot; 10:07</div>
             <div class="msg-text">Looks good. Can you also add support for token refresh via a custom header?</div>
           </div>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
         </div>
       </div>
 
       <div class="input-area">
         <div class="input-row">
           <input class="input-field" type="text" placeholder="Send a message...">
+          <span class="queued-badge" id="queued-badge" title="1 queued comment — click to send to agent">
+            <i data-lucide="message-square" style="width:14px;height:14px;"></i>
+            <span class="queued-count">1</span>
+            <kbd style="font-family:var(--mono);font-size:10px;background:rgba(217,90,58,0.1);border:none;padding:1px 4px;border-radius:3px;">&#8679;C</kbd>
+            <!-- Dropdown -->
+            <div class="queued-dropdown" id="queued-dropdown">
+              <div class="queued-dropdown-header">Queued Comments</div>
+              <div class="queued-dropdown-list" id="queued-list">
+                <div class="queued-dropdown-item">
+                  <span class="q-file">01-research-questions.md #2</span>
+                  <span class="q-text">What is this?</span>
+                </div>
+              </div>
+              <div class="queued-dropdown-actions">
+                <button class="queued-dropdown-action" onclick="sendComments(false)">
+                  <i data-lucide="send" style="width:14px;height:14px;"></i>
+                  Send Comments to Agent
+                </button>
+                <button class="queued-dropdown-action" onclick="sendComments(true)">
+                  <i data-lucide="send" style="width:14px;height:14px;"></i>
+                  Send Comments to Agent &amp; Resolve
+                  <span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted);">&#10003;</span>
+                </button>
+              </div>
+            </div>
+          </span>
           <button class="send-btn">Send</button>
         </div>
         <div class="status-bar">
@@ -839,99 +1253,152 @@ export { requestLogger } from './logger';
     </div>
     <div class="right-content" style="display:flex;flex-direction:column;padding:0;">
       <div class="right-view active" id="right-artifacts" style="display:flex;flex-direction:column;flex:1;min-height:0;">
-        <!-- Stats row -->
-        <div class="artifact-stats">
-          <span class="count count-new">2</span> new &middot;
-          <span class="count count-edit">2</span> edit &middot;
-          <span class="count count-src">2</span> source
+        <!-- State 1: File list -->
+        <div class="artifacts-list-state" id="artifacts-list-state">
+          <!-- Stats row -->
+          <div class="artifact-stats">
+            <span class="count count-new">2</span> new &middot;
+            <span class="count count-edit">2</span> edit &middot;
+            <span class="count count-src">2</span> source
+          </div>
+          <!-- File list -->
+          <div class="artifact-list">
+            <div class="artifact-section">
+              <div class="artifact-label">New (2)</div>
+              <div class="artifact-item" data-file="auth" data-type="code">
+                <span class="artifact-dot dot-new"></span>
+                <i data-lucide="file-code" style="width:14px;height:14px;color:var(--muted);flex-shrink:0;"></i>
+                <span class="artifact-name">src/middleware/auth.ts</span>
+                <span class="artifact-badge">42 lines</span>
+              </div>
+              <div class="artifact-item" data-file="research" data-type="markdown">
+                <span class="artifact-dot dot-new"></span>
+                <i data-lucide="file-text" style="width:14px;height:14px;color:var(--muted);flex-shrink:0;"></i>
+                <span class="artifact-name">01-research-questions.md</span>
+                <span class="artifact-badge">16 lines</span>
+              </div>
+            </div>
+            <div class="artifact-section">
+              <div class="artifact-label">Modified (2)</div>
+              <div class="artifact-item" data-file="index" data-type="code">
+                <span class="artifact-dot dot-modified"></span>
+                <i data-lucide="file-code" style="width:14px;height:14px;color:var(--muted);flex-shrink:0;"></i>
+                <span class="artifact-name">src/middleware/index.ts</span>
+                <span class="artifact-badge">+1 -0</span>
+              </div>
+              <div class="artifact-item" data-file="types" data-type="code">
+                <span class="artifact-dot dot-modified"></span>
+                <i data-lucide="file-code" style="width:14px;height:14px;color:var(--muted);flex-shrink:0;"></i>
+                <span class="artifact-name">src/types/request.ts</span>
+                <span class="artifact-badge">+8 -1</span>
+              </div>
+            </div>
+            <div class="artifact-section">
+              <div class="artifact-label">Source (1)</div>
+              <div class="artifact-item" data-file="ticket" data-type="markdown">
+                <span class="artifact-dot dot-source"></span>
+                <i data-lucide="file-text" style="width:14px;height:14px;color:var(--muted);flex-shrink:0;"></i>
+                <span class="artifact-name">ticket.md</span>
+                <span class="artifact-badge">read</span>
+              </div>
+              <div class="artifact-item" data-file="dashboard" data-type="html">
+                <span class="artifact-dot dot-new"></span>
+                <i data-lucide="globe" style="width:14px;height:14px;color:var(--muted);flex-shrink:0;"></i>
+                <span class="artifact-name">sample-prototype.html</span>
+                <span class="artifact-badge">256 lines</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <!-- File list (top half) -->
-        <div class="artifact-list" style="max-height:180px;overflow-y:auto;">
-          <div class="artifact-section">
-            <div class="artifact-label">New (2)</div>
-            <div class="artifact-item selected" data-file="auth">
-              <span class="artifact-dot dot-new"></span>
-              <span class="artifact-icon">&#128196;</span>
-              <span class="artifact-name">src/middleware/auth.ts</span>
-              <span class="artifact-badge">42 lines</span>
+
+        <!-- State 2: Document viewer -->
+        <div class="artifacts-viewer-state" id="artifacts-viewer-state" style="display:none;flex:1;flex-direction:column;min-height:0;">
+          <!-- Viewer toolbar -->
+          <div class="viewer-toolbar">
+            <button class="viewer-back" id="viewer-back">
+              <i data-lucide="chevron-left" style="width:16px;height:16px;"></i>
+            </button>
+            <div class="viewer-file-select">
+              <i data-lucide="file-text" style="width:14px;height:14px;color:var(--muted);"></i>
+              <span class="viewer-filename" id="viewer-filename">01-research-quest...</span>
+              <span class="viewer-shortcut">&#8997;A</span>
             </div>
-            <div class="artifact-item" data-file="test">
-              <span class="artifact-dot dot-new"></span>
-              <span class="artifact-icon">&#128196;</span>
-              <span class="artifact-name">src/middleware/auth.test.ts</span>
-              <span class="artifact-badge">67 lines</span>
+            <div class="viewer-mode-toggle">
+              <button class="viewer-mode active" data-mode="rendered">RENDERED</button>
+              <button class="viewer-mode" data-mode="raw">RAW</button>
             </div>
-          </div>
-          <div class="artifact-section">
-            <div class="artifact-label">Modified (2)</div>
-            <div class="artifact-item" data-file="index">
-              <span class="artifact-dot dot-modified"></span>
-              <span class="artifact-icon">&#128196;</span>
-              <span class="artifact-name">src/middleware/index.ts</span>
-              <span class="artifact-badge">+1 -0</span>
-            </div>
-            <div class="artifact-item" data-file="types">
-              <span class="artifact-dot dot-modified"></span>
-              <span class="artifact-icon">&#128196;</span>
-              <span class="artifact-name">src/types/request.ts</span>
-              <span class="artifact-badge">+8 -1</span>
+            <div class="viewer-actions">
+              <button class="preview-action"><i data-lucide="search" style="width:14px;height:14px;"></i></button>
+              <button class="preview-action"><i data-lucide="copy" style="width:14px;height:14px;"></i></button>
+              <button class="preview-action"><i data-lucide="columns-2" style="width:14px;height:14px;"></i></button>
+              <button class="preview-action"><i data-lucide="external-link" style="width:14px;height:14px;"></i></button>
+              <button class="preview-action"><i data-lucide="maximize-2" style="width:14px;height:14px;"></i></button>
             </div>
           </div>
-          <div class="artifact-section">
-            <div class="artifact-label">Source (2)</div>
-            <div class="artifact-item" data-file="pkg">
-              <span class="artifact-dot dot-source"></span>
-              <span class="artifact-icon">&#128196;</span>
-              <span class="artifact-name">package.json</span>
-              <span class="artifact-badge">read</span>
-            </div>
-            <div class="artifact-item" data-file="tsconfig">
-              <span class="artifact-dot dot-source"></span>
-              <span class="artifact-icon">&#128196;</span>
-              <span class="artifact-name">tsconfig.json</span>
-              <span class="artifact-badge">read</span>
+          <!-- Rendered view -->
+          <div class="viewer-content" id="viewer-rendered">
+            <div class="rendered-markdown">
+              <details>
+                <summary style="font-size:12px;color:var(--muted);cursor:pointer;">frontmatter (1)</summary>
+                <pre style="font-size:12px;color:var(--muted);padding:8px 0;">type: research-questions</pre>
+              </details>
+              <h1>Research Questions</h1>
+              <ol>
+                <li class="commentable">What is the overall purpose and intended use of this repository, and what problem does it solve or what capability does it provide?</li>
+                <li class="commentable has-comment">What are the complete project dependencies, external libraries, and NuGet packages currently referenced, and what does each one do?
+                  <span class="comment-badge">PG</span>
+                  <div class="comment-popover" id="comment-popover-1">
+                    <div class="comment-popover-header">
+                      <span>Pieter Germishuys <span class="draft-label">draft saved</span></span>
+                      <button class="comment-popover-close" onclick="this.closest('.comment-popover').classList.remove('open')">&times;</button>
+                    </div>
+                    <textarea class="comment-input" placeholder="Add comment...">What is this?</textarea>
+                    <div class="comment-submit">
+                      <button title="Send"><i data-lucide="send" style="width:14px;height:14px;"></i></button>
+                    </div>
+                  </div>
+                </li>
+                <li class="commentable">How is the .NET 10 console application configured, what are the build and runtime settings, and what platform targets are defined?</li>
+                <li class="commentable">What is the current state of the codebase in terms of source files, modules, and entry points, and what does each component do?</li>
+                <li class="commentable">What is the structure and organization of the repository directory hierarchy, including any test projects, configuration directories, or build artifacts?</li>
+                <li class="commentable">What version control setup exists (git history, remotes, branching strategy), and how is the project initialized?</li>
+                <li class="commentable">What documentation, README files, or inline code comments exist that explain how to build, run, and use this application?</li>
+              </ol>
+              <h2>Key Context Pointers</h2>
+              <ul>
+                <li class="commentable" style="color:var(--coral);">Filepath: <code>/Users/pgermishuys/source/research/agents/console-app/</code> — .NET console application directory <span class="comment-badge">PG</span></li>
+                <li class="commentable">Configuration file: <code>console-app/console-app.csproj</code> — MSBuild project configuration</li>
+                <li class="commentable">Entry point: <code>console-app/Program.cs</code> — main application file</li>
+                <li class="commentable">Technology: .NET 10, C#, console executable</li>
+              </ul>
             </div>
           </div>
-        </div>
-        <!-- Artifact Preview (bottom half) -->
-        <div class="artifact-preview">
-          <div class="preview-header">
-            <span class="file-path">src/middleware/auth.ts</span>
-            <div class="preview-actions">
-              <button class="preview-action" title="Copy">&#9112;</button>
-              <button class="preview-action" title="Open in editor">&#8599;</button>
-              <button class="preview-action" title="Diff view">&#8800;</button>
-            </div>
+          <!-- Raw view -->
+          <div class="viewer-content" id="viewer-raw" style="display:none;">
+            <pre class="viewer-raw-content">---
+type: research-questions
+---
+
+# Research Questions
+
+1. What is the overall purpose and intended use of this repository, and what problem does it solve or what capability does it provide?
+2. What are the complete project dependencies, external libraries, and NuGet packages currently referenced, and what does each one do?
+3. How is the .NET 10 console application configured, what are the build and runtime settings, and what platform targets are defined?
+4. What is the current state of the codebase in terms of source files, modules, and entry points, and what does each component do?
+5. What is the structure and organization of the repository directory hierarchy, including any test projects, configuration directories, or build artifacts?
+6. What version control setup exists (git history, remotes, branching strategy), and how is the project initialized?
+7. What documentation, README files, or inline code comments exist that explain how to build, run, and use this application?
+
+## Key Context Pointers
+
+- Filepath: `/Users/pgermishuys/source/research/agents/console-app/` — .NET console application directory
+- Configuration file: `console-app/console-app.csproj` — MSBuild project configuration
+- Entry point: `console-app/Program.cs` — main application file
+- Technology: .NET 10, C#, console executable</pre>
           </div>
-          <div class="preview-body" id="preview-content">
-<span class="line-num"> 1</span><span class="keyword">import</span> { Request, Response, NextFunction } <span class="keyword">from</span> <span class="string">'express'</span>;
-<span class="line-num"> 2</span><span class="keyword">import</span> jwt <span class="keyword">from</span> <span class="string">'jsonwebtoken'</span>;
-<span class="line-num"> 3</span><span class="keyword">import</span> { AuthenticatedRequest } <span class="keyword">from</span> <span class="string">'../types/request'</span>;
-<span class="line-num"> 4</span>
-<span class="line-num"> 5</span><span class="comment">/** Validates JWT Bearer tokens and attaches claims to request context */</span>
-<span class="line-num"> 6</span><span class="keyword">export</span> <span class="keyword">function</span> <span class="type">authMiddleware</span>(publicKey: <span class="type">string</span>) {
-<span class="line-num"> 7</span>  <span class="keyword">return</span> (req: <span class="type">Request</span>, res: <span class="type">Response</span>, next: <span class="type">NextFunction</span>) => {
-<span class="line-num"> 8</span>    <span class="keyword">const</span> header = req.headers.authorization;
-<span class="line-num"> 9</span>
-<span class="line-num">10</span>    <span class="keyword">if</span> (!header?.startsWith(<span class="string">'Bearer '</span>)) {
-<span class="line-num">11</span>      <span class="keyword">return</span> res.status(<span class="string">401</span>).json({ error: <span class="string">'Missing token'</span> });
-<span class="line-num">12</span>    }
-<span class="line-num">13</span>
-<span class="line-num">14</span>    <span class="keyword">const</span> token = header.slice(7);
-<span class="line-num">15</span>
-<span class="line-num">16</span>    <span class="keyword">try</span> {
-<span class="line-num">17</span>      <span class="keyword">const</span> claims = jwt.verify(token, publicKey, {
-<span class="line-num">18</span>        algorithms: [<span class="string">'RS256'</span>],
-<span class="line-num">19</span>      });
-<span class="line-num">20</span>      (req <span class="keyword">as</span> <span class="type">AuthenticatedRequest</span>).context = {
-<span class="line-num">21</span>        user: claims,
-<span class="line-num">22</span>      };
-<span class="line-num">23</span>      next();
-<span class="line-num">24</span>    } <span class="keyword">catch</span> (err) {
-<span class="line-num">25</span>      <span class="keyword">return</span> res.status(<span class="string">403</span>).json({ error: <span class="string">'Invalid token'</span> });
-<span class="line-num">26</span>    }
-<span class="line-num">27</span>  };
-<span class="line-num">28</span>}
+          <!-- HTML rendered view (iframe sandbox) -->
+          <div class="viewer-content viewer-html-frame" id="viewer-html" style="display:none;padding:0;">
+            <iframe id="html-preview-iframe" sandbox="allow-scripts" style="width:100%;height:100%;border:none;"></iframe>
           </div>
         </div>
       </div>
@@ -1004,13 +1471,96 @@ document.querySelectorAll('.icon-rail-btn[data-nav]').forEach(btn => {
   });
 });
 
-// Artifact item selection
+// Artifact item selection — open viewer
+const sampleHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;background:#f8f9fa;padding:32px}
+h1{font-size:28px;margin-bottom:4px}p.sub{color:#666;margin-bottom:24px}
+.stats{display:flex;gap:16px;margin-bottom:24px}.stat{flex:1;background:white;border:1px solid #e5e7eb;border-radius:8px;padding:16px}
+.stat-label{font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.5px}.stat-value{font-size:28px;font-weight:700;margin-top:4px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card{background:white;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb}
+.card-img{height:120px}.card-img:nth-child(1){background:linear-gradient(135deg,#a78bfa,#6366f1)}
+.card-body{padding:16px}.card-title{font-weight:600;margin-bottom:4px}.card-desc{font-size:13px;color:#666;margin-bottom:12px}
+.card-footer{display:flex;justify-content:space-between;align-items:center}.price{font-weight:700}
+.btn{background:#6366f1;color:white;border:none;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer}
+footer{margin-top:24px;text-align:center;color:#888;font-size:13px;padding:16px;background:white;border-radius:8px;border:1px solid #e5e7eb}
+</style></head><body>
+<h1>Product Dashboard</h1><p class="sub">Browse and manage your product catalog</p>
+<div class="stats"><div class="stat"><div class="stat-label">Total Products</div><div class="stat-value">1,247</div></div>
+<div class="stat"><div class="stat-label">Active Orders</div><div class="stat-value">342</div></div>
+<div class="stat"><div class="stat-label">Revenue (Today)</div><div class="stat-value">$8,429</div></div></div>
+<div class="grid">
+<div class="card"><div class="card-img" style="background:linear-gradient(135deg,#a78bfa,#6366f1)"></div><div class="card-body"><div class="card-title">Wireless Headphones</div><div class="card-desc">Premium noise-cancelling audio experience with 30-hour battery life.</div><div class="card-footer"><span class="price">$199.99</span><button class="btn">Add to Cart</button></div></div></div>
+<div class="card"><div class="card-img" style="background:linear-gradient(135deg,#67e8f9,#06b6d4)"></div><div class="card-body"><div class="card-title">Smart Watch</div><div class="card-desc">Track your fitness and stay connected with advanced health monitoring.</div><div class="card-footer"><span class="price">$299.99</span><button class="btn">Add to Cart</button></div></div></div>
+<div class="card"><div class="card-img" style="background:linear-gradient(135deg,#86efac,#22c55e)"></div><div class="card-body"><div class="card-title">Portable Charger</div><div class="card-desc">Fast charging for all your devices with compact design. Up to 20,000 mAh.</div><div class="card-footer"><span class="price">$49.99</span><button class="btn">Add to Cart</button></div></div></div>
+</div>
+<footer>&copy; 2024 Product Dashboard. All rights reserved.</footer>
+</body></html>`;
+
 document.querySelectorAll('.artifact-item[data-file]').forEach(item => {
   item.addEventListener('click', () => {
     document.querySelectorAll('.artifact-item').forEach(i => i.classList.remove('selected'));
     item.classList.add('selected');
-    const path = item.querySelector('.artifact-name').textContent;
-    document.querySelector('.preview-header .file-path').textContent = path;
+    const name = item.querySelector('.artifact-name').textContent;
+    const type = item.dataset.type;
+    document.getElementById('viewer-filename').textContent = name;
+    document.getElementById('artifacts-list-state').style.display = 'none';
+    const viewer = document.getElementById('artifacts-viewer-state');
+    viewer.style.display = 'flex';
+
+    // Show appropriate content based on type
+    const rendered = document.getElementById('viewer-rendered');
+    const raw = document.getElementById('viewer-raw');
+    const html = document.getElementById('viewer-html');
+    rendered.style.display = 'none';
+    raw.style.display = 'none';
+    html.style.display = 'none';
+
+    // Reset mode toggle
+    document.querySelectorAll('.viewer-mode').forEach(b => b.classList.remove('active'));
+    document.querySelector('.viewer-mode[data-mode="rendered"]').classList.add('active');
+
+    if (type === 'html') {
+      html.style.display = 'block';
+      const iframe = document.getElementById('html-preview-iframe');
+      iframe.srcdoc = sampleHtml;
+    } else {
+      rendered.style.display = 'block';
+    }
+
+    lucide.createIcons();
+  });
+});
+
+// Viewer back button
+document.getElementById('viewer-back').addEventListener('click', () => {
+  document.getElementById('artifacts-viewer-state').style.display = 'none';
+  document.getElementById('artifacts-list-state').style.display = 'block';
+});
+
+// RENDERED / RAW toggle
+document.querySelectorAll('.viewer-mode').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.viewer-mode').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const mode = btn.dataset.mode;
+    const rendered = document.getElementById('viewer-rendered');
+    const raw = document.getElementById('viewer-raw');
+    const html = document.getElementById('viewer-html');
+
+    // Determine current artifact type
+    const selected = document.querySelector('.artifact-item.selected');
+    const type = selected ? selected.dataset.type : 'markdown';
+
+    rendered.style.display = 'none';
+    raw.style.display = 'none';
+    html.style.display = 'none';
+
+    if (mode === 'rendered') {
+      if (type === 'html') html.style.display = 'block';
+      else rendered.style.display = 'block';
+    } else {
+      raw.style.display = 'block';
+    }
   });
 });
 
@@ -1045,6 +1595,107 @@ document.addEventListener('mouseup', () => {
     document.body.style.userSelect = '';
   }
 });
+
+// Comment badge click — toggle popover
+document.querySelectorAll('.comment-badge').forEach(badge => {
+  badge.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const popover = badge.nextElementSibling;
+    if (popover && popover.classList.contains('comment-popover')) {
+      popover.classList.toggle('open');
+    }
+  });
+});
+
+// Commentable items — click to open inline comment box
+document.querySelectorAll('.commentable').forEach(item => {
+  item.addEventListener('click', (e) => {
+    // Don't trigger if clicking on badge or inside popover
+    if (e.target.closest('.comment-badge') || e.target.closest('.comment-popover')) return;
+
+    // Close any other open popovers
+    document.querySelectorAll('.comment-popover.open').forEach(p => p.classList.remove('open'));
+
+    // Check if this item already has a popover
+    let popover = item.querySelector('.comment-popover');
+    if (popover) {
+      popover.classList.toggle('open');
+    } else {
+      // Create a new comment popover
+      item.style.position = 'relative';
+      const newPopover = document.createElement('div');
+      newPopover.className = 'comment-popover open';
+      newPopover.innerHTML = `
+        <div class="comment-popover-header">
+          <span>Pieter Germishuys</span>
+          <button class="comment-popover-close" onclick="this.closest('.comment-popover').classList.remove('open')">&times;</button>
+        </div>
+        <textarea class="comment-input" placeholder="Add comment..."></textarea>
+        <div class="comment-submit">
+          <button title="Send" onclick="submitComment(this)"><i data-lucide="send" style="width:14px;height:14px;"></i></button>
+        </div>
+      `;
+      item.appendChild(newPopover);
+      newPopover.querySelector('.comment-input').focus();
+      lucide.createIcons();
+    }
+  });
+});
+
+// Submit comment — mark item, update queued count, add to queue list
+function submitComment(btn) {
+  const popover = btn.closest('.comment-popover');
+  const item = popover.closest('.commentable');
+  const text = popover.querySelector('.comment-input').value;
+  if (!text.trim()) return;
+
+  // Mark as having comment
+  item.classList.add('has-comment');
+  if (!item.querySelector('.comment-badge')) {
+    const badge = document.createElement('span');
+    badge.className = 'comment-badge';
+    badge.textContent = 'PG';
+    badge.addEventListener('click', (e) => {
+      e.stopPropagation();
+      popover.classList.toggle('open');
+    });
+    item.insertBefore(badge, popover);
+  }
+  const header = popover.querySelector('.comment-popover-header span');
+  header.innerHTML = 'Pieter Germishuys <span class="draft-label">draft saved</span>';
+  popover.classList.remove('open');
+
+  // Add to queued list
+  const list = document.getElementById('queued-list');
+  const filename = document.getElementById('viewer-filename').textContent;
+  const itemIndex = Array.from(item.closest('ol, ul').children).indexOf(item) + 1;
+  const entry = document.createElement('div');
+  entry.className = 'queued-dropdown-item';
+  entry.innerHTML = `<span class="q-file">${filename} #${itemIndex}</span><span class="q-text">${text}</span>`;
+  list.appendChild(entry);
+
+  // Update count
+  const count = list.children.length;
+  document.querySelector('.queued-count').textContent = count;
+}
+
+// Queued badge click — toggle dropdown
+document.getElementById('queued-badge').addEventListener('click', (e) => {
+  e.stopPropagation();
+  document.getElementById('queued-dropdown').classList.toggle('open');
+});
+
+// Close dropdown on outside click
+document.addEventListener('click', () => {
+  document.getElementById('queued-dropdown').classList.remove('open');
+});
+
+// Send comments action
+function sendComments(resolve) {
+  document.getElementById('queued-dropdown').classList.remove('open');
+  // In a real app this would send to the agent
+  alert(resolve ? 'Comments sent to agent & resolved' : 'Comments sent to agent');
+}
 
 // Initialize Lucide icons
 lucide.createIcons();
