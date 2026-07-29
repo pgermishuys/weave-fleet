@@ -1,0 +1,6 @@
+{
+  "cloudMode": false,
+  "authEnabled": false,
+  "tokenAuthEnabled": false,
+  "availableHarnesses": ["opencode"]
+}

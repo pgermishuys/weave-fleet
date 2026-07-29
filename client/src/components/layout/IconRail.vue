@@ -266,8 +266,9 @@ function handleSelect(item: RailItem): void {
 .rail {
   width: 48px;
   min-width: 48px;
-  background: var(--rail-bg);
-  border-right: 1px solid var(--border);
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -302,13 +303,13 @@ function handleSelect(item: RailItem): void {
 }
 
 .rail-item:hover {
-  color: #a1a1aa;
+  color: var(--text);
 }
 
 .rail-item.active {
-  color: #fff;
-  border-left-color: var(--accent);
-  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border-left-color: var(--coral);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 
 .rail-logo {

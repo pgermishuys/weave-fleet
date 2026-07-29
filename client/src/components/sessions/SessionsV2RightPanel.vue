@@ -18,6 +18,14 @@ import { useSessionTodos } from "@/composables/use-session-todos";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
 
+interface Props {
+  width?: number;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  width: 360,
+});
+
 const sidebarStore = useSidebarStore();
 const sessionsStore = useSessionsStore();
 const sessionDiffsContext = useSessionDiffsContext();
@@ -139,7 +147,6 @@ function openDiffsTray(): void {
 
   context.openDiffsTray();
 }
-
 </script>
 
 <template>
@@ -152,6 +159,7 @@ function openDiffsTray(): void {
   <aside
     v-else
     class="right-panel"
+    :style="{ width: `${props.width}px`, minWidth: '280px' }"
     aria-label="Right panel"
   >
     <RightPanelTabs
@@ -189,11 +197,11 @@ function openDiffsTray(): void {
 
 <style scoped>
 .right-panel {
-  width: 280px;
-  min-width: 280px;
+  position: relative;
   min-height: 0;
   background: var(--panel-bg);
-  border-left: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
   display: flex;
   flex-direction: column;
   overflow: hidden;

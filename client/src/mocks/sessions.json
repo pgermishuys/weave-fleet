@@ -1,0 +1,105 @@
+[
+  {
+    "instanceId": "mock-instance-1",
+    "workspaceId": "mock-workspace-1",
+    "workspaceDirectory": "C:\\Users\\demo\\projects\\weave-fleet",
+    "workspaceDisplayName": "weave-fleet",
+    "isolationStrategy": "existing",
+    "sessionStatus": "idle",
+    "session": {
+      "id": "mock-session-1",
+      "title": "Implement mock API plugin for frontend",
+      "isHidden": false,
+      "time": {
+        "created": 1722259200000,
+        "updated": 1722262800000
+      }
+    },
+    "instanceStatus": "running",
+    "parentSessionId": null,
+    "sourceDirectory": "C:\\Users\\demo\\projects\\weave-fleet",
+    "branch": "main",
+    "activityStatus": "idle",
+    "lifecycleStatus": "running",
+    "retentionStatus": "active",
+    "archivedAt": null,
+    "typedInstanceStatus": "running",
+    "isHidden": false,
+    "totalTokens": 12500,
+    "totalCost": 0.15,
+    "projectId": "mock-project-1",
+    "projectName": "Fleet Core",
+    "harnessType": "opencode",
+    "origin": {
+      "sourceType": "github-issue",
+      "title": "Add mock API support",
+      "resourceUrl": "https://github.com/example/weave-fleet/issues/42",
+      "resourceId": "42",
+      "providerId": "github"
+    }
+  },
+  {
+    "instanceId": "mock-instance-2",
+    "workspaceId": "mock-workspace-2",
+    "workspaceDirectory": "C:\\Users\\demo\\projects\\my-app",
+    "workspaceDisplayName": "my-app",
+    "isolationStrategy": "worktree",
+    "sessionStatus": "active",
+    "session": {
+      "id": "mock-session-2",
+      "title": "Fix authentication flow",
+      "isHidden": false,
+      "time": {
+        "created": 1722255600000,
+        "updated": 1722263400000
+      }
+    },
+    "instanceStatus": "running",
+    "parentSessionId": null,
+    "sourceDirectory": "C:\\Users\\demo\\projects\\my-app",
+    "branch": "feature/auth-fix",
+    "activityStatus": "busy",
+    "lifecycleStatus": "running",
+    "retentionStatus": "active",
+    "archivedAt": null,
+    "typedInstanceStatus": "running",
+    "isHidden": false,
+    "totalTokens": 8300,
+    "totalCost": 0.09,
+    "projectId": null,
+    "projectName": null,
+    "harnessType": "opencode"
+  },
+  {
+    "instanceId": "mock-instance-3",
+    "workspaceId": "mock-workspace-3",
+    "workspaceDirectory": "C:\\Users\\demo\\projects\\docs-site",
+    "workspaceDisplayName": "docs-site",
+    "isolationStrategy": "existing",
+    "sessionStatus": "completed",
+    "session": {
+      "id": "mock-session-3",
+      "title": "Update documentation for v2.0",
+      "isHidden": false,
+      "time": {
+        "created": 1722248400000,
+        "updated": 1722252000000
+      }
+    },
+    "instanceStatus": "dead",
+    "parentSessionId": null,
+    "sourceDirectory": "C:\\Users\\demo\\projects\\docs-site",
+    "branch": "main",
+    "activityStatus": null,
+    "lifecycleStatus": "completed",
+    "retentionStatus": "active",
+    "archivedAt": null,
+    "typedInstanceStatus": "dead",
+    "isHidden": false,
+    "totalTokens": 5200,
+    "totalCost": 0.06,
+    "projectId": "mock-project-2",
+    "projectName": "Documentation",
+    "harnessType": "opencode"
+  }
+]

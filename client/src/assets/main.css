@@ -21,25 +21,32 @@
   --complete: #3b82f6;
   --error: #ef4444;
   --queued: #8b5cf6;
-  --radius-card: 8px;
-  --radius-btn: 6px;
-  --radius-panel: 12px;
+  --radius-card: 0px;
+  --radius-btn: 0px;
+  --radius-panel: 0px;
   --font-sans-stack: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
   --font-mono-stack: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
 }
 
 :root[data-theme="light"] {
-  --rail-bg: #f8fafc;
-  --panel-bg: #ffffff;
+  /* Prototype design tokens */
+  --bg: #FAF9F7;
+  --surface: #FFFFFF;
+  --coral: #D95A3A;
+  --indigo: #5B6EC7;
+  
+  /* Mapped to existing variables */
+  --rail-bg: #FFFFFF;
+  --panel-bg: #FFFFFF;
   --card-bg: #ffffff;
-  --main-bg: #f1f5f9;
-  --border: #dbe3ef;
-  --text: #0f172a;
-  --muted: #64748b;
-  --accent: #4f46e5;
+  --main-bg: #FAF9F7;
+  --border: #E8E6E3;
+  --text: #1A1918;
+  --muted: #6E6A65;
+  --accent: #5B6EC7;
   --primary: var(--accent);
   --primary-foreground: #ffffff;
-  --accent-dim: rgba(79, 70, 229, 0.12);
+  --accent-dim: rgba(91, 110, 199, 0.12);
   --running: #16a34a;
   --idle: #d97706;
   --complete: #2563eb;
@@ -225,6 +232,8 @@
   --color-accent-dim: var(--accent-dim);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-coral: var(--coral);
+  --color-indigo: var(--indigo);
   --color-running: var(--running);
   --color-idle: var(--idle);
   --color-complete: var(--complete);

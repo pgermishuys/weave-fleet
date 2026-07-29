@@ -15,11 +15,6 @@ const fontOptions: ReadonlyArray<{ id: FontFamily; label: string; fontFamily: st
     label: "Inter",
     fontFamily: '"Inter Variable", "Inter", system-ui, -apple-system, sans-serif',
   },
-  {
-    id: "dm-sans",
-    label: "DM Sans",
-    fontFamily: '"DM Sans Variable", "DM Sans", system-ui, -apple-system, sans-serif',
-  },
 ];
 
 function selectTheme(theme: ThemeSelection): void {

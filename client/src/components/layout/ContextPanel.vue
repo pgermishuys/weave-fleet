@@ -164,7 +164,8 @@ function onResizeStart(event: PointerEvent): void {
 .context-panel {
   position: relative;
   background: var(--panel-bg);
-  border-right: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
   display: flex;
   flex-direction: column;
   overflow: hidden;

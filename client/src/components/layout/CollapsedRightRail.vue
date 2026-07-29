@@ -89,7 +89,8 @@ function handleExpand(): void {
   width: 48px;
   min-width: 48px;
   min-height: 0;
-  border-left: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
   background: var(--panel-bg);
   display: flex;
 }

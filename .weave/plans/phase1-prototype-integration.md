@@ -33,7 +33,7 @@ Align the Vue app's visual layer with the prototype by swapping design tokens, r
 
 ## Tasks
 
-- [ ] 1. Add prototype design tokens to CSS
+- [x] 1. Add prototype design tokens to CSS
   - **What**: In `client/src/assets/main.css`, add a new theme block (or modify `:root[data-theme="light"]`) with prototype tokens: `--bg: #FAF9F7`, `--surface: #FFFFFF`, `--border: #E8E6E3`, `--text: #1A1918`, `--muted: #6E6A65`, `--coral: #D95A3A`, `--indigo: #5B6EC7`. Map these to existing variable names: `--main-bg → #FAF9F7`, `--panel-bg → #FFFFFF`, `--border → #E8E6E3`, `--text → #1A1918`, `--muted → #6E6A65`, `--accent → #5B6EC7`. Add `--coral: #D95A3A` as a new variable. Update the `@theme inline` block to expose `--color-coral`.
   - **Files**: `client/src/assets/main.css`
   - **Depends on**: None
@@ -41,7 +41,7 @@ Align the Vue app's visual layer with the prototype by swapping design tokens, r
     - Light theme uses warm-neutral palette
     - `--coral` and `--indigo` are available as Tailwind colors via `@theme inline`
 
-- [ ] 2. Zero radius override
+- [x] 2. Zero radius override
   - **What**: Set `--radius-card: 0px`, `--radius-btn: 0px`, `--radius-panel: 0px` in the `:root` block (applies to all themes). Remove any hardcoded `border-radius` in layout components that override these.
   - **Files**: `client/src/assets/main.css`
   - **Depends on**: None
@@ -49,7 +49,7 @@ Align the Vue app's visual layer with the prototype by swapping design tokens, r
     - All cards, buttons, panels render with sharp corners
     - No `border-radius` > 0 visible in the app
 
-- [ ] 3. Font stack confirmation
+- [x] 3. Font stack confirmation
   - **What**: Verify `--font-sans-stack` already uses Inter (it does). Ensure `--font-mono-stack` uses JetBrains Mono (it does). No DM Sans references exist. Confirm Google Fonts or local font loading includes Inter 400/500/600. Check `client/index.html` for font links.
   - **Files**: `client/index.html` (if font links need updating)
   - **Depends on**: None
@@ -57,7 +57,7 @@ Align the Vue app's visual layer with the prototype by swapping design tokens, r
     - `font-family` resolves to Inter for body, JetBrains Mono for code
     - No DM Sans references anywhere in client/
 
-- [ ] 4. App shell restructure with 8px gap panel layout
+- [x] 4. App shell restructure with 8px gap panel layout
   - **What**: Restructure `AppShell.vue` template so `.main` uses `gap: 8px` and `padding: 8px` (panels float in an 8px-gapped grid). Each panel (`IconRail`, `ContextPanel`, `CenterContent`, right panels) gets `border: 1px solid var(--border)` and `background: var(--panel-bg)`. The layout semantics become: `[rail][context]` base, where context composition changes by route. Rename existing components if needed to match vocabulary: `IconRail` → rail, `ContextPanel` → session-list, `CenterContent` → conversation area. Add a comment block at top of AppShell explaining the panel vocabulary.
   - **Files**: `client/src/components/layout/AppShell.vue`, `client/src/components/layout/IconRail.vue`, `client/src/components/layout/ContextPanel.vue`, `client/src/components/layout/CenterContent.vue`
   - **Depends on**: Task 1 (needs `--border` token correct)
@@ -67,7 +67,7 @@ Align the Vue app's visual layer with the prototype by swapping design tokens, r
     - Rail is 48px wide, fixed left
     - No resize gutter except between conversation and content (right panel)
 
-- [ ] 5. Message hover effect
+- [x] 5. Message hover effect
   - **What**: In `MessageBubble.vue`, add a hover state: `border-left: 3px solid var(--indigo)` (or `--accent` since we mapped it) and `background: color-mix(in srgb, var(--indigo) 5%, transparent)` on `.msg:hover` or equivalent wrapper. Use CSS transition `180ms ease-out`.
   - **Files**: `client/src/components/session/MessageBubble.vue`
   - **Depends on**: Task 1 (needs indigo token)
@@ -75,7 +75,7 @@ Align the Vue app's visual layer with the prototype by swapping design tokens, r
     - Hovering a message shows indigo left border + faint indigo background
     - Transition is smooth (180ms)
 
-- [ ] 6. Visual verification
+- [x] 6. Visual verification
   - **What**: Run `bun run tsx visual-compare.ts` in `tests/beta-harness/` to capture screenshots of both prototype and running app. Compare token colors, gap spacing, border radius, and hover states. Document any remaining discrepancies.
   - **Depends on**: Tasks 1-5
   - **Acceptance**:

@@ -1,5 +1,12 @@
+<!--
+Panel Vocabulary:
+  rail         — Always-visible icon navigation (left edge)
+  session-list — List of sessions
+  conversation — Message/activity stream
+  content      — Right-side artifact viewer
+-->
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useLocation } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import CommandPalette from "@/components/CommandPalette.vue";
@@ -51,6 +58,8 @@ const showBoardPanel = computed(() =>
   isBoardFeatureEnabled.value && !isSettingsRoute.value && activeRail.value === "board",
 );
 
+const showRightPanel = computed(() => showSessionsV2Panel.value || showBoardPanel.value);
+
 // Touch swipe support: swipe right from left edge to open drawer
 let touchStartX = 0;
 let touchStartY = 0;
@@ -95,6 +104,37 @@ function onTouchEnd(e: TouchEvent): void {
 
   touchStartX = -1;
   touchStartY = -1;
+}
+
+// --- Resize gutter logic ---
+const rightPanelWidth = ref(360);
+const isGutterDragging = ref(false);
+
+function onGutterPointerDown(e: PointerEvent): void {
+  isGutterDragging.value = true;
+  const startX = e.clientX;
+  const startWidth = rightPanelWidth.value;
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+
+  const onMove = (e: PointerEvent) => {
+    const delta = startX - e.clientX;
+    const mainEl = document.querySelector(".main");
+    const appWidth = mainEl?.getBoundingClientRect().width ?? window.innerWidth;
+    const maxWidth = appWidth * 0.5;
+    rightPanelWidth.value = Math.max(200, Math.min(maxWidth, startWidth + delta));
+  };
+
+  const onUp = () => {
+    isGutterDragging.value = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+  };
+
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
 }
 </script>
 
@@ -147,8 +187,21 @@ function onTouchEnd(e: TouchEvent): void {
         <slot />
       </CenterContent>
 
-      <SessionsV2RightPanel v-if="showSessionsV2Panel" />
-      <BoardRightPanel v-else-if="showBoardPanel" />
+      <div
+        v-if="showRightPanel"
+        class="resize-gutter"
+        :class="{ active: isGutterDragging }"
+        @pointerdown.prevent="onGutterPointerDown"
+      />
+
+      <SessionsV2RightPanel
+        v-if="showSessionsV2Panel"
+        :width="rightPanelWidth"
+      />
+      <BoardRightPanel
+        v-else-if="showBoardPanel"
+        :width="rightPanelWidth"
+      />
     </div>
 
     <CommandPalette />
@@ -167,6 +220,9 @@ function onTouchEnd(e: TouchEvent): void {
   display: flex;
   flex: 1;
   overflow: hidden;
+  gap: 8px;
+  padding: 8px;
+  background: var(--main-bg);
 }
 
 .mobile-menu-btn {
@@ -194,5 +250,20 @@ function onTouchEnd(e: TouchEvent): void {
 .mobile-menu-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.resize-gutter {
+  width: 8px;
+  margin: 0 -4px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 180ms ease-out;
+  z-index: 5;
+}
+
+.resize-gutter:hover,
+.resize-gutter.active {
+  background: rgba(91, 110, 199, 0.15);
 }
 </style>

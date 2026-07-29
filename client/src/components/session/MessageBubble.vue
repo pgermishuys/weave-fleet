@@ -214,10 +214,16 @@ const displayModelId = computed(() => {
   box-sizing: border-box;
   padding: 8px 10px 10px;
   border: 1px solid transparent;
+  border-left: 3px solid transparent;
   border-radius: 18px;
   background: transparent;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02);
-  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  transition: background 180ms ease-out, border-color 180ms ease-out, box-shadow 180ms ease-out;
+}
+
+.message:hover {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
 
 .message[data-role="user"] {

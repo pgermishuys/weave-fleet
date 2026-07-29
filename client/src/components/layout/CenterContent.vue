@@ -23,6 +23,9 @@ const noPadding = computed(() => location.value.pathname.startsWith("/sessions/"
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
 }
 
 .center__placeholder {
