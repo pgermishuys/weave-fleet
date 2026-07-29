@@ -345,44 +345,320 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
         const id = url.pathname.split("/")[3];
         console.log(`[mock-api] GET /api/sessions/${id}/messages`);
         
+        const now = Date.now();
         const mockMessages = [
+          // Message 1: User request
           {
             id: "msg-1",
-            sessionId: id,
             role: "user",
             parts: [
               {
                 type: "text",
-                text: "Can you help me implement a new feature?",
+                kind: 0,
+                text: "Add JWT validation middleware that checks the Authorization header, validates the token signature, and extracts claims into the request context.",
               },
             ],
-            createdAt: Date.now() - 120000,
+            timestamp: new Date(now - 600000).toISOString(),
+            textContent: "Add JWT validation middleware that checks the Authorization header, validates the token signature, and extracts claims into the request context.",
           },
+          // Message 2: Assistant reasoning
           {
             id: "msg-2",
-            sessionId: id,
+            role: "assistant",
+            parts: [
+              {
+                type: "reasoning",
+                kind: 0,
+                text: "I need to understand the existing middleware chain and authentication setup to determine where JWT validation should fit. First, I'll check if jsonwebtoken is already a dependency, then examine the current middleware structure to see what's already in place. This will help me design a middleware that integrates cleanly with the existing architecture.",
+                summary: "Analyzing existing middleware and auth setup",
+              },
+            ],
+            timestamp: new Date(now - 590000).toISOString(),
+            textContent: "",
+            agent: "shuttle",
+            modelId: "claude-sonnet-4-5",
+          },
+          // Message 3: Assistant with read/grep tools
+          {
+            id: "msg-3",
             role: "assistant",
             parts: [
               {
                 type: "text",
-                text: "Of course! I'd be happy to help you implement a new feature. Could you provide more details about what you'd like to build?",
+                kind: 0,
+                text: "Let me check the existing dependencies and middleware structure.",
+              },
+              {
+                type: "tool",
+                kind: 0,
+                toolCallId: "call-1",
+                toolName: "read",
+                arguments: { filePath: "package.json" },
+                state: 2,
+                metadata: {
+                  output: '{\n  "name": "api-server",\n  "version": "1.0.0",\n  "dependencies": {\n    "express": "^4.18.2",\n    "jsonwebtoken": "^9.0.2",\n    "bcrypt": "^5.1.1"\n  }\n}',
+                  summary: "Read 9 lines",
+                },
+              },
+              {
+                type: "tool",
+                kind: 0,
+                toolCallId: "call-2",
+                toolName: "grep",
+                arguments: { pattern: "jsonwebtoken", include: "*.ts" },
+                state: 2,
+                metadata: {
+                  output: "src/utils/token.ts:1:import jwt from 'jsonwebtoken';\nsrc/utils/token.ts:5:export function generateToken(payload: object) {\nsrc/utils/token.ts:6:  return jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: '1h' });\nsrc/utils/token.ts:7:}",
+                  summary: "Found 4 matches in 1 file",
+                },
+              },
+              {
+                type: "tool",
+                kind: 0,
+                toolCallId: "call-3",
+                toolName: "read",
+                arguments: { filePath: "src/middleware/index.ts" },
+                state: 2,
+                metadata: {
+                  output: "export { errorHandler } from './error-handler';\nexport { requestLogger } from './logger';\nexport { rateLimiter } from './rate-limiter';",
+                  summary: "Read 3 lines",
+                },
               },
             ],
-            createdAt: Date.now() - 60000,
+            timestamp: new Date(now - 580000).toISOString(),
+            textContent: "Let me check the existing dependencies and middleware structure.",
             agent: "shuttle",
-            modelID: "claude-sonnet-4-5",
+            modelId: "claude-sonnet-4-5",
           },
+          // Message 4: Assistant with write tool
           {
-            id: "msg-3",
-            sessionId: id,
+            id: "msg-4",
+            role: "assistant",
+            parts: [
+              {
+                type: "text",
+                kind: 0,
+                text: "I'll create the JWT middleware.",
+              },
+              {
+                type: "tool",
+                kind: 0,
+                toolCallId: "call-4",
+                toolName: "write",
+                arguments: { filePath: "src/middleware/auth.ts", content: "..." },
+                state: 2,
+                metadata: {
+                  output: "File written successfully",
+                  diffLines: [
+                    { type: "add", content: "import { Request, Response, NextFunction } from 'express';", newLineNumber: 1 },
+                    { type: "add", content: "import jwt from 'jsonwebtoken';", newLineNumber: 2 },
+                    { type: "add", content: "import { UnauthorizedError } from '../errors';", newLineNumber: 3 },
+                    { type: "add", content: "", newLineNumber: 4 },
+                    { type: "add", content: "export interface AuthRequest extends Request {", newLineNumber: 5 },
+                    { type: "add", content: "  user?: { id: string; email: string; role: string };", newLineNumber: 6 },
+                    { type: "add", content: "}", newLineNumber: 7 },
+                    { type: "add", content: "", newLineNumber: 8 },
+                    { type: "add", content: "export function authenticate(req: AuthRequest, res: Response, next: NextFunction) {", newLineNumber: 9 },
+                    { type: "add", content: "  const authHeader = req.headers.authorization;", newLineNumber: 10 },
+                    { type: "add", content: "  if (!authHeader?.startsWith('Bearer ')) {", newLineNumber: 11 },
+                    { type: "add", content: "    throw new UnauthorizedError('Missing or invalid Authorization header');", newLineNumber: 12 },
+                    { type: "add", content: "  }", newLineNumber: 13 },
+                    { type: "add", content: "", newLineNumber: 14 },
+                    { type: "add", content: "  const token = authHeader.slice(7);", newLineNumber: 15 },
+                    { type: "add", content: "  try {", newLineNumber: 16 },
+                    { type: "add", content: "    const payload = jwt.verify(token, process.env.JWT_SECRET!) as any;", newLineNumber: 17 },
+                    { type: "add", content: "    req.user = { id: payload.sub, email: payload.email, role: payload.role };", newLineNumber: 18 },
+                    { type: "add", content: "    next();", newLineNumber: 19 },
+                    { type: "add", content: "  } catch (err) {", newLineNumber: 20 },
+                    { type: "add", content: "    throw new UnauthorizedError('Invalid or expired token');", newLineNumber: 21 },
+                    { type: "add", content: "  }", newLineNumber: 22 },
+                    { type: "add", content: "}", newLineNumber: 23 },
+                  ],
+                },
+              },
+            ],
+            timestamp: new Date(now - 570000).toISOString(),
+            textContent: "I'll create the JWT middleware.",
+            agent: "shuttle",
+            modelId: "claude-sonnet-4-5",
+          },
+          // Message 5: Assistant with edit tool
+          {
+            id: "msg-5",
+            role: "assistant",
+            parts: [
+              {
+                type: "text",
+                kind: 0,
+                text: "Now I'll register the middleware in the index.",
+              },
+              {
+                type: "tool",
+                kind: 0,
+                toolCallId: "call-5",
+                toolName: "edit",
+                arguments: {
+                  filePath: "src/middleware/index.ts",
+                  oldString: "export { errorHandler } from './error-handler';\nexport { requestLogger } from './logger';\nexport { rateLimiter } from './rate-limiter';",
+                  newString: "export { authenticate } from './auth';\nexport { errorHandler } from './error-handler';\nexport { requestLogger } from './logger';\nexport { rateLimiter } from './rate-limiter';",
+                },
+                state: 2,
+                metadata: {
+                  output: "Edit applied successfully",
+                  diffLines: [
+                    { type: "add", content: "export { authenticate } from './auth';", newLineNumber: 1 },
+                    { type: "context", content: "export { errorHandler } from './error-handler';", newLineNumber: 2 },
+                    { type: "context", content: "export { requestLogger } from './logger';", newLineNumber: 3 },
+                    { type: "context", content: "export { rateLimiter } from './rate-limiter';", newLineNumber: 4 },
+                  ],
+                },
+              },
+            ],
+            timestamp: new Date(now - 560000).toISOString(),
+            textContent: "Now I'll register the middleware in the index.",
+            agent: "shuttle",
+            modelId: "claude-sonnet-4-5",
+          },
+          // Message 6: Assistant with bash tool (running)
+          {
+            id: "msg-6",
+            role: "assistant",
+            parts: [
+              {
+                type: "text",
+                kind: 0,
+                text: "Let me verify the tests pass.",
+              },
+              {
+                type: "tool",
+                kind: 0,
+                toolCallId: "call-6",
+                toolName: "bash",
+                arguments: { command: "npm test -- --testPathPattern=middleware", description: "Run middleware tests" },
+                state: 1,
+              },
+            ],
+            timestamp: new Date(now - 550000).toISOString(),
+            textContent: "Let me verify the tests pass.",
+            agent: "shuttle",
+            modelId: "claude-sonnet-4-5",
+          },
+          // Message 7: Assistant with glob tool
+          {
+            id: "msg-7",
+            role: "assistant",
+            parts: [
+              {
+                type: "text",
+                kind: 0,
+                text: "Searching for related test files.",
+              },
+              {
+                type: "tool",
+                kind: 0,
+                toolCallId: "call-7",
+                toolName: "glob",
+                arguments: { pattern: "**/*.test.ts" },
+                state: 2,
+                metadata: {
+                  output: "src/middleware/auth.test.ts\nsrc/middleware/error-handler.test.ts\nsrc/middleware/logger.test.ts\nsrc/middleware/rate-limiter.test.ts\nsrc/utils/token.test.ts",
+                  summary: "Found 5 files",
+                },
+              },
+            ],
+            timestamp: new Date(now - 540000).toISOString(),
+            textContent: "Searching for related test files.",
+            agent: "shuttle",
+            modelId: "claude-sonnet-4-5",
+          },
+          // Message 8: Assistant with skill tool
+          {
+            id: "msg-8",
+            role: "assistant",
+            parts: [
+              {
+                type: "text",
+                kind: 0,
+                text: "Loading the security review skill.",
+              },
+              {
+                type: "tool",
+                kind: 0,
+                toolCallId: "call-8",
+                toolName: "skill",
+                arguments: { name: "security-review" },
+                state: 2,
+                metadata: {
+                  output: "Skill loaded: security-review",
+                  summary: "Loaded security-review skill",
+                },
+              },
+            ],
+            timestamp: new Date(now - 530000).toISOString(),
+            textContent: "Loading the security review skill.",
+            agent: "shuttle",
+            modelId: "claude-sonnet-4-5",
+          },
+          // Message 9: Assistant with task/delegation tool
+          {
+            id: "msg-9",
+            role: "assistant",
+            parts: [
+              {
+                type: "text",
+                kind: 0,
+                text: "Delegating the security review to the warp agent.",
+              },
+              {
+                type: "tool",
+                kind: 0,
+                toolCallId: "call-9",
+                toolName: "task",
+                arguments: {
+                  agent: "warp",
+                  task: "Review src/middleware/auth.ts for security vulnerabilities",
+                },
+                state: 2,
+                metadata: {
+                  output: "Security review completed. No critical issues found. Recommendations:\n1. Consider adding rate limiting for failed auth attempts\n2. Add logging for authentication failures\n3. Validate JWT algorithm to prevent 'none' algorithm attacks",
+                  summary: "Security review completed",
+                },
+              },
+            ],
+            timestamp: new Date(now - 520000).toISOString(),
+            textContent: "Delegating the security review to the warp agent.",
+            agent: "shuttle",
+            modelId: "claude-sonnet-4-5",
+          },
+          // Message 10: Assistant summary
+          {
+            id: "msg-10",
+            role: "assistant",
+            parts: [
+              {
+                type: "text",
+                kind: 0,
+                text: "I've successfully implemented JWT validation middleware with the following components:\n\n1. **Created `src/middleware/auth.ts`** with:\n   - `authenticate()` function that extracts and validates JWT tokens\n   - Bearer token parsing from Authorization header\n   - Token signature verification using `jsonwebtoken`\n   - Claims extraction into `req.user` context\n   - Proper error handling for missing/invalid tokens\n\n2. **Updated `src/middleware/index.ts`** to export the new middleware\n\n3. **Security review completed** with recommendations for:\n   - Rate limiting for failed auth attempts\n   - Logging for authentication failures\n   - JWT algorithm validation\n\nThe middleware is ready to use. You can apply it to protected routes like:\n```typescript\napp.get('/api/protected', authenticate, (req, res) => {\n  // req.user is now available\n});\n```",
+              },
+            ],
+            timestamp: new Date(now - 510000).toISOString(),
+            textContent: "I've successfully implemented JWT validation middleware with the following components:\n\n1. **Created `src/middleware/auth.ts`** with:\n   - `authenticate()` function that extracts and validates JWT tokens\n   - Bearer token parsing from Authorization header\n   - Token signature verification using `jsonwebtoken`\n   - Claims extraction into `req.user` context\n   - Proper error handling for missing/invalid tokens\n\n2. **Updated `src/middleware/index.ts`** to export the new middleware\n\n3. **Security review completed** with recommendations for:\n   - Rate limiting for failed auth attempts\n   - Logging for authentication failures\n   - JWT algorithm validation\n\nThe middleware is ready to use. You can apply it to protected routes like:\n```typescript\napp.get('/api/protected', authenticate, (req, res) => {\n  // req.user is now available\n});\n```",
+            agent: "shuttle",
+            modelId: "claude-sonnet-4-5",
+          },
+          // Message 11: User follow-up
+          {
+            id: "msg-11",
             role: "user",
             parts: [
               {
                 type: "text",
-                text: "I need to add authentication to my app.",
+                kind: 0,
+                text: "Looks good. Can you also add token refresh support?",
               },
             ],
-            createdAt: Date.now() - 30000,
+            timestamp: new Date(now - 500000).toISOString(),
+            textContent: "Looks good. Can you also add token refresh support?",
           },
         ];
         

@@ -12,6 +12,8 @@
   --border: #1e1e22;
   --text: #e4e4e7;
   --muted: #71717a;
+  --coral: #D95A3A;
+  --indigo: #6366f1;
   --accent: #6366f1;
   --primary: var(--accent);
   --primary-foreground: #ffffff;
@@ -239,6 +241,7 @@
   --color-complete: var(--complete);
   --color-error: var(--error);
   --color-queued: var(--queued);
+  --color-surface: var(--panel-bg);
   --radius-card: var(--radius-card);
   --radius-btn: var(--radius-btn);
   --radius-panel: var(--radius-panel);

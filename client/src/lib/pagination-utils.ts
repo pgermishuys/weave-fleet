@@ -33,6 +33,7 @@ export interface FleetMessagePart {
   toolName?: string;
   arguments?: unknown;
   state?: number;        // ToolUseState enum: 0=Pending, 1=Running, 2=Completed, 3=Error
+  metadata?: unknown;    // Extra tool state fields (output, summary, diffLines) passed through to rendering
   // FilePart fields
   partId?: string;
   mime?: string;
@@ -204,7 +205,7 @@ export function convertFleetMessageToAccumulated(msg: FleetMessage): Accumulated
         type: "tool",
         tool: part.toolName ?? "",
         callId: part.toolCallId ?? "",
-        state: mapToolState(part.state, part.arguments),
+        state: mapToolState(part.state, part.arguments, part.metadata as Record<string, unknown> | undefined),
       });
     } else if (part.type === "file") {
       parts.push({
@@ -258,11 +259,11 @@ export function sortAccumulatedMessagesChronologically(messages: readonly Accumu
     .map(({ message }) => message)
 }
 
-function mapToolState(state?: number, toolArguments?: unknown): unknown {
+function mapToolState(state?: number, toolArguments?: unknown, extra?: Record<string, unknown>): unknown {
   // ToolUseState enum: 0=Pending, 1=Running, 2=Completed, 3=Error
   const statusMap: Record<number, string> = { 0: "pending", 1: "running", 2: "completed", 3: "error" };
   const status = state != null ? (statusMap[state] ?? "pending") : "pending";
-  const result: Record<string, unknown> = { status };
+  const result: Record<string, unknown> = { status, ...extra };
   if (toolArguments != null) {
     result.input = toolArguments;
   }

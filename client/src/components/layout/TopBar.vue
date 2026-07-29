@@ -129,7 +129,7 @@ const showUserAvatar = computed(() => config.value.authEnabled);
     <button
       v-if="isMobileNav"
       type="button"
-      class="topbar__icon-button ml-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-transparent text-[var(--muted)] transition-colors hover:bg-white/5 hover:text-[var(--text)]"
+      class="topbar__icon-button ml-2 inline-flex h-9 w-9 shrink-0 items-center justify-center border border-transparent text-[var(--muted)] transition-colors hover:bg-white/5 hover:text-[var(--text)]"
       :aria-label="mobileDrawerOpen ? 'Close menu' : 'Open menu'"
       :aria-expanded="mobileDrawerOpen"
       @click="openDrawer"
@@ -218,7 +218,7 @@ const showUserAvatar = computed(() => config.value.authEnabled);
   display: flex;
   align-items: center;
   gap: 6px;
-  border-radius: 20px;
+  border-radius: 0;
   padding: 4px 12px 4px 8px;
   font-size: 11px;
   line-height: 1;
