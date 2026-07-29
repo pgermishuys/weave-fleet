@@ -64,17 +64,17 @@ body {
   width: 32px;
   height: 32px;
   border-radius: var(--radius);
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--transition), color var(--transition);
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
   font-size: 16px;
 }
-.icon-rail-btn:hover { background: var(--bg); color: var(--text); }
+.icon-rail-btn:hover { background: var(--bg); border-color: var(--border); color: var(--text); }
 .icon-rail-btn.active { background: var(--bg); color: var(--coral); }
 
 /* Context Panel */
@@ -167,6 +167,23 @@ body {
 }
 .top-tab:hover { color: var(--text); }
 .top-tab.active { color: var(--text); border-bottom-color: var(--coral); }
+.top-tab.new-session-btn {
+  height: 32px;
+  border: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface);
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), border-color var(--transition);
+}
+.top-tab.new-session-btn:hover { background: var(--bg); border-color: #D0CDC8; }
 
 /* Breadcrumb */
 .breadcrumb {
@@ -363,18 +380,22 @@ body {
 }
 .input-field:focus { border-color: var(--indigo); }
 .send-btn {
-  padding: 10px 20px;
-  background: var(--text);
-  color: white;
-  border: none;
-  border-radius: var(--radius);
+  height: 32px;
+  padding: 0 14px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
   font-family: var(--font);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: opacity var(--transition);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), border-color var(--transition);
 }
-.send-btn:hover { opacity: 0.85; }
+.send-btn:hover { background: var(--bg); border-color: #D0CDC8; }
 .status-bar {
   display: flex;
   align-items: center;
@@ -391,6 +412,62 @@ body {
   border: 1px solid var(--border);
   font-family: var(--mono);
   font-size: 11px;
+  cursor: pointer;
+  position: relative;
+  transition: background var(--transition), border-color var(--transition);
+}
+.status-badge:hover { background: var(--surface); border-color: #D0CDC8; }
+
+/* Model Selector Dropdown */
+.model-selector {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 6px;
+  width: 200px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  z-index: 9999;
+  overflow: hidden;
+  flex-direction: column;
+}
+.model-selector.open { display: flex; }
+.model-selector-filter {
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font);
+  font-size: 12px;
+  outline: none;
+  background: var(--bg);
+}
+.model-selector-filter::placeholder { color: var(--muted); }
+.model-selector-list {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.model-selector-item {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background var(--transition);
+}
+.model-selector-item:hover { background: var(--bg); }
+.model-selector-item.active { color: var(--indigo); }
+.model-selector-item.active::before {
+  content: '●';
+  font-size: 8px;
+  color: var(--indigo);
 }
 
 /* Right Panel — Split View */
@@ -505,16 +582,16 @@ body {
 .viewer-back {
   width: 28px; height: 28px;
   border-radius: 6px;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--transition), color var(--transition);
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
-.viewer-back:hover { background: var(--bg); color: var(--text); }
+.viewer-back:hover { background: var(--bg); border-color: var(--border); color: var(--text); }
 .viewer-file-select {
   display: flex;
   align-items: center;
@@ -678,7 +755,7 @@ body {
 }
 .comment-popover-close {
   width: 20px; height: 20px;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -687,8 +764,9 @@ body {
   align-items: center;
   justify-content: center;
   border-radius: 4px;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
-.comment-popover-close:hover { background: var(--bg); color: var(--text); }
+.comment-popover-close:hover { background: var(--bg); border-color: var(--border); color: var(--text); }
 .comment-input {
   width: 100%;
   border: 1px solid var(--border);
@@ -722,19 +800,22 @@ body {
 
 /* Queued comments badge in conversation input */
 .queued-badge {
+  height: 32px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
+  padding: 0 14px;
   background: var(--surface);
-  border: 1px solid var(--coral);
+  border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 12px;
   font-weight: 500;
   color: var(--coral);
   cursor: pointer;
   position: relative;
+  transition: background var(--transition), border-color var(--transition);
 }
+.queued-badge:hover { background: var(--bg); border-color: #D0CDC8; }
 .queued-badge i { width: 14px; height: 14px; }
 .queued-badge .queued-count { font-weight: 600; }
 
@@ -789,18 +870,18 @@ body {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   font-family: var(--font);
   font-size: 12px;
   color: var(--text);
   cursor: pointer;
   border-radius: 6px;
-  transition: background var(--transition);
+  transition: background var(--transition), border-color var(--transition);
   width: 100%;
   text-align: left;
 }
-.queued-dropdown-action:hover { background: var(--bg); }
+.queued-dropdown-action:hover { background: var(--bg); border-color: var(--border); }
 .queued-dropdown-action i { width: 14px; height: 14px; color: var(--muted); }
 
 /* Artifact Preview */
@@ -829,7 +910,7 @@ body {
 .preview-action {
   width: 24px; height: 24px;
   border-radius: 4px;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -837,9 +918,9 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  transition: background var(--transition), color var(--transition);
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
-.preview-action:hover { background: var(--bg); color: var(--text); }
+.preview-action:hover { background: var(--bg); border-color: var(--border); color: var(--text); }
 .preview-body {
   flex: 1;
   overflow: auto;
@@ -892,18 +973,19 @@ body {
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--transition), color var(--transition);
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
   position: relative;
 }
 .icon-toolbar-btn:hover {
   background: var(--bg);
+  border-color: var(--border);
   color: var(--indigo);
 }
 .icon-toolbar-btn .icon-default { display: flex; }
@@ -1234,9 +1316,9 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: background var(--transition);
+  transition: background var(--transition), border-color var(--transition);
 }
-.btn-cancel:hover { background: var(--bg); }
+.btn-cancel:hover { background: var(--bg); border-color: #D0CDC8; }
 .btn-cancel kbd {
   font-family: var(--mono);
   font-size: 11px;
@@ -1258,9 +1340,9 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: opacity var(--transition);
+  transition: background var(--transition), border-color var(--transition);
 }
-.btn-create:hover { opacity: 0.9; }
+.btn-create:hover { background: #4a5db6; border-color: #4a5db6; }
 .btn-create kbd {
   font-family: var(--mono);
   font-size: 11px;
@@ -1346,8 +1428,8 @@ body {
       <button class="top-tab" data-view="conversation">Conversation</button>
       <button class="top-tab" data-view="board">Board</button>
       <button class="top-tab" data-view="analytics">Analytics</button>
-      <button class="top-tab" data-view="settings">Settings</button>
-      <button class="top-tab" data-view="newsession" style="margin-left:auto;color:var(--indigo);font-weight:600;">+ New Session</button>
+      <button class="top-tab" data-view="settings" style="display:none;">Settings</button>
+      <button class="top-tab new-session-btn" data-view="newsession" style="margin-left:auto;">+ New Session</button>
     </div>
 
     <!-- Sessions View -->
@@ -1534,7 +1616,12 @@ export { requestLogger } from './logger';
         <div class="status-bar">
           <span class="status-dot"></span>
           <span>IDLE</span>
-          <span class="status-badge">claude-opus-4</span>
+          <span class="status-badge" id="model-badge" onclick="toggleModelSelector(event)">claude-opus-4
+            <div class="model-selector" id="model-selector">
+              <input class="model-selector-filter" type="text" placeholder="Filter models..." oninput="filterModels(this.value)" onclick="event.stopPropagation()">
+              <div class="model-selector-list" id="model-list"></div>
+            </div>
+          </span>
           <span>4,218 tokens</span>
         </div>
       </div>
@@ -1560,6 +1647,11 @@ export { requestLogger } from './logger';
     <div class="view" id="view-settings">
       <div class="settings-layout">
         <nav class="settings-nav">
+          <div style="margin-bottom:16px;">
+            <button class="btn-cancel" id="settings-back" style="font-size:12px;padding:6px 12px;">
+              <i data-lucide="chevron-left" style="width:14px;height:14px;"></i> Back to app <kbd>ESC</kbd>
+            </button>
+          </div>
           <div class="settings-nav-title">Settings</div>
           <div class="settings-nav-section">
             <div class="settings-nav-item active">General <span class="nav-num">1</span></div>
@@ -1946,6 +2038,25 @@ document.querySelectorAll('.top-tab').forEach(tab => {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('view-' + tab.dataset.view).classList.add('active');
+
+    // Settings/new-session mode: hide context panel + right panel + gutter
+    const view = tab.dataset.view;
+    const contextPanel = document.querySelector('.context-panel');
+    const rightPanel = document.getElementById('right-panel');
+    const gutter = document.getElementById('resize-gutter');
+    const topBar = document.querySelector('.top-bar');
+
+    if (view === 'settings') {
+      contextPanel.style.display = 'none';
+      rightPanel.style.display = 'none';
+      gutter.style.display = 'none';
+      topBar.style.display = 'none';
+    } else {
+      contextPanel.style.display = '';
+      rightPanel.style.display = '';
+      gutter.style.display = '';
+      topBar.style.display = '';
+    }
   });
 });
 
@@ -1971,6 +2082,8 @@ document.querySelectorAll('.tree-parent').forEach(parent => {
 // Icon rail nav
 document.querySelectorAll('.icon-rail-btn[data-nav]').forEach(btn => {
   btn.addEventListener('click', () => {
+    document.querySelectorAll('.icon-rail-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
     const view = btn.dataset.nav;
     const tab = document.querySelector(`.top-tab[data-view="${view}"]`);
     if (tab) tab.click();
@@ -2209,6 +2322,52 @@ function sendComments(resolve) {
   alert(resolve ? 'Comments sent to agent & resolved' : 'Comments sent to agent');
 }
 
+// Model Selector
+const ALL_MODELS = [
+  'claude-opus-4', 'claude-opus-4.8', 'claude-opus-4.7', 'claude-opus-4.6', 'claude-opus-4.5',
+  'claude-sonnet-5', 'claude-sonnet-4.6', 'claude-sonnet-4',
+  'claude-haiku-4.5', 'claude-haiku-4',
+  'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo',
+  'gemini-2.5-pro', 'gemini-2.5-flash',
+  'deepseek-r1', 'deepseek-v3'
+];
+let currentModel = 'claude-opus-4';
+
+function renderModelList(filter = '') {
+  const list = document.getElementById('model-list');
+  const filtered = ALL_MODELS.filter(m => m.toLowerCase().includes(filter.toLowerCase()));
+  list.innerHTML = filtered.map(m =>
+    `<div class="model-selector-item${m === currentModel ? ' active' : ''}" onclick="selectModel('${m}', event)">${m}</div>`
+  ).join('');
+}
+
+function toggleModelSelector(e) {
+  e.stopPropagation();
+  const sel = document.getElementById('model-selector');
+  const isOpen = sel.classList.contains('open');
+  if (isOpen) {
+    sel.classList.remove('open');
+  } else {
+    renderModelList();
+    sel.classList.add('open');
+    sel.querySelector('.model-selector-filter').value = '';
+    sel.querySelector('.model-selector-filter').focus();
+  }
+}
+
+function filterModels(val) { renderModelList(val); }
+
+function selectModel(model, e) {
+  e.stopPropagation();
+  currentModel = model;
+  document.getElementById('model-badge').childNodes[0].textContent = model;
+  document.getElementById('model-selector').classList.remove('open');
+}
+
+document.addEventListener('click', () => {
+  document.getElementById('model-selector').classList.remove('open');
+});
+
 // Position tooltips with fixed positioning
 document.querySelectorAll('.msg-action-btn').forEach(btn => {
   btn.addEventListener('mouseenter', () => {
@@ -2223,6 +2382,13 @@ document.querySelectorAll('.msg-action-btn').forEach(btn => {
     const tooltip = btn.querySelector('.msg-action-tooltip');
     if (tooltip) tooltip.style.display = 'none';
   });
+});
+
+// Settings back button
+document.getElementById('settings-back').addEventListener('click', () => {
+  document.querySelector('.top-tab[data-view="sessions"]').click();
+  document.querySelectorAll('.icon-rail-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.icon-rail-btn[data-nav="sessions"]').classList.add('active');
 });
 
 // Source toggle buttons
