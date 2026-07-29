@@ -1567,6 +1567,17 @@ body {
 .tool-call-code .line-content {
   color: var(--text);
 }
+.tool-call-pattern {
+  display: inline-block;
+  padding: 2px 10px;
+  background: rgba(91, 110, 199, 0.08);
+  border: 1px solid rgba(91, 110, 199, 0.25);
+  border-radius: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--indigo);
+}
 
 /* Mermaid Diagram */
 .tool-call-diagram {
@@ -1619,6 +1630,69 @@ body {
   font-family: var(--mono);
   font-size: 11px;
   margin-right: 4px;
+}
+
+/* File Picker */
+.file-picker-wrap {
+  position: relative;
+  width: 100%;
+}
+.file-picker-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  z-index: 9999;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.file-picker-dropdown.open { display: block; }
+.file-picker-section {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.file-picker-section:last-child { border-bottom: none; }
+.file-picker-section-label {
+  padding: 6px 12px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+.file-picker-item {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: background var(--transition);
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+}
+.file-picker-item:hover { background: var(--bg); }
+.file-picker-item-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.file-picker-item-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-picker-highlight {
+  color: var(--indigo);
+  font-weight: 600;
 }
 
 /* Automations View */
@@ -1949,6 +2023,25 @@ export { requestLogger } from './logger';
                 <button class="tool-action"><i data-lucide="external-link" style="width:14px;height:14px;"></i></button>
               </div>
               <div class="tool-call-preview">└ 1 ### Next Steps ... (16 lines)</div>
+            </div>
+          </div>
+          <span class="msg-time"><span class="msg-time-rel">1m</span><span class="msg-time-abs">Jul 28 2026 10:06am</span></span>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="bot" class="msg-icon agent"></i>
+          <div class="msg-body">
+            <div class="msg-text">I'll use Glob to find all JavaScript files in the project.</div>
+            <div class="tool-call">
+              <div class="tool-call-header">
+                <i data-lucide="search" style="width:16px;height:16px;color:var(--muted);"></i>
+                <span class="tool-label">Glob</span>
+                <span class="tool-call-pattern">**/*.js</span>
+              </div>
+              <div class="tool-call-preview">└ 1 file: No files found</div>
             </div>
           </div>
           <span class="msg-time"><span class="msg-time-rel">1m</span><span class="msg-time-abs">Jul 28 2026 10:06am</span></span>
@@ -2381,7 +2474,9 @@ sequenceDiagram
               <div class="settings-field">
                 <div class="settings-field-label">Default Directory</div>
                 <div class="settings-field-desc">Default working directory for new tasks and one-off sessions.</div>
-                <input class="settings-input" type="text" value="~/">
+                <div class="file-picker-wrap">
+                  <input class="settings-input" id="settings-directory-input" type="text" value="~/">
+                </div>
               </div>
 
               <div class="settings-field">
@@ -2476,7 +2571,9 @@ sequenceDiagram
 
         <div class="new-session-field">
           <div class="new-session-label">Directory</div>
-          <input class="new-session-input" type="text" value="~/">
+          <div class="file-picker-wrap">
+            <input class="new-session-input" id="newsession-directory-input" type="text" value="~/">
+          </div>
           <div class="new-session-desc">The repository or directory you want to work out of for this session.</div>
         </div>
 
@@ -3378,6 +3475,180 @@ document.querySelectorAll('.artifact-pill-dropdown-item').forEach(item => {
         document.getElementById('trigger-event-fields').style.display = isSchedule ? 'none' : 'block';
       });
     });
+  }
+})();
+
+// File Picker Component
+(function() {
+  // Mock data for directories
+  const RECENT_DIRECTORIES = [
+    '/Users/pgermishuys/source/weave-fleet',
+    '/Users/pgermishuys/source/research',
+    '/Users/pgermishuys/source/weave',
+    '/Users/pgermishuys/source/poolumi',
+    '/Users/pgermishuys/source/labs'
+  ];
+
+  const AVAILABLE_PATHS = [
+    '/Users/pgermishuys/source/weave-fleet',
+    '/Users/pgermishuys/source/research',
+    '/Users/pgermishuys/source/weave',
+    '/Users/pgermishuys/source/poolumi',
+    '/Users/pgermishuys/source/labs',
+    '/Users/pgermishuys/source/dotnet-core',
+    '/Users/pgermishuys/source/experiments',
+    '/Users/pgermishuys/Documents',
+    '/Users/pgermishuys/Desktop',
+    '~/'
+  ];
+
+  function initFilePicker(inputEl, options = {}) {
+    const wrap = inputEl.closest('.file-picker-wrap');
+    if (!wrap) {
+      console.error('Input must be wrapped in .file-picker-wrap');
+      return;
+    }
+
+    // Create dropdown
+    const dropdown = document.createElement('div');
+    dropdown.className = 'file-picker-dropdown';
+    wrap.appendChild(dropdown);
+
+    // Render dropdown content
+    function renderDropdown(filterText = '') {
+      const filter = filterText.toLowerCase().trim();
+      
+      // Filter recent directories
+      const filteredRecent = RECENT_DIRECTORIES.filter(path => 
+        path.toLowerCase().includes(filter)
+      );
+
+      // Filter available paths
+      const filteredPaths = AVAILABLE_PATHS.filter(path => 
+        path.toLowerCase().includes(filter) && !RECENT_DIRECTORIES.includes(path)
+      );
+
+      let html = '';
+
+      // Recent Directories section
+      if (filteredRecent.length > 0) {
+        html += '<div class="file-picker-section">';
+        html += '<div class="file-picker-section-label">Recent Directories</div>';
+        filteredRecent.forEach(path => {
+          const highlighted = highlightMatch(path, filter);
+          html += `
+            <div class="file-picker-item" data-path="${path}">
+              <i data-lucide="clock" class="file-picker-item-icon"></i>
+              <span class="file-picker-item-text">${highlighted}</span>
+            </div>
+          `;
+        });
+        html += '</div>';
+      }
+
+      // Paths section
+      if (filteredPaths.length > 0) {
+        html += '<div class="file-picker-section">';
+        html += '<div class="file-picker-section-label">Paths</div>';
+        filteredPaths.forEach(path => {
+          const highlighted = highlightMatch(path, filter);
+          html += `
+            <div class="file-picker-item" data-path="${path}">
+              <i data-lucide="folder" class="file-picker-item-icon"></i>
+              <span class="file-picker-item-text">${highlighted}</span>
+            </div>
+          `;
+        });
+        html += '</div>';
+      }
+
+      // No results
+      if (filteredRecent.length === 0 && filteredPaths.length === 0 && filter) {
+        html += '<div class="file-picker-section">';
+        html += '<div class="file-picker-item" style="color:var(--muted);cursor:default;">No matching paths</div>';
+        html += '</div>';
+      }
+
+      dropdown.innerHTML = html;
+      lucide.createIcons();
+
+      // Attach click handlers to items
+      dropdown.querySelectorAll('.file-picker-item[data-path]').forEach(item => {
+        item.addEventListener('click', () => {
+          inputEl.value = item.dataset.path;
+          closeDropdown();
+          inputEl.focus();
+        });
+      });
+    }
+
+    // Highlight matching text
+    function highlightMatch(text, filter) {
+      if (!filter) return text;
+      const index = text.toLowerCase().indexOf(filter);
+      if (index === -1) return text;
+      
+      const before = text.substring(0, index);
+      const match = text.substring(index, index + filter.length);
+      const after = text.substring(index + filter.length);
+      
+      return `${before}<span class="file-picker-highlight">${match}</span>${after}`;
+    }
+
+    function openDropdown() {
+      renderDropdown(inputEl.value);
+      dropdown.classList.add('open');
+    }
+
+    function closeDropdown() {
+      dropdown.classList.remove('open');
+    }
+
+    // Event listeners
+    inputEl.addEventListener('focus', () => {
+      openDropdown();
+    });
+
+    inputEl.addEventListener('input', () => {
+      renderDropdown(inputEl.value);
+      if (!dropdown.classList.contains('open')) {
+        dropdown.classList.add('open');
+      }
+    });
+
+    inputEl.addEventListener('blur', (e) => {
+      // Delay to allow click on dropdown item
+      setTimeout(() => {
+        if (!dropdown.contains(document.activeElement)) {
+          closeDropdown();
+        }
+      }, 200);
+    });
+
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeDropdown();
+      }
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+      if (!wrap.contains(e.target)) {
+        closeDropdown();
+      }
+    });
+  }
+
+  // Initialize file pickers
+  const newsessionInput = document.getElementById('newsession-directory-input');
+  const settingsInput = document.getElementById('settings-directory-input');
+
+  if (newsessionInput) {
+    initFilePicker(newsessionInput);
+  }
+
+  if (settingsInput) {
+    initFilePicker(settingsInput);
   }
 })();
 
