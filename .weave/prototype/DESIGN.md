@@ -78,20 +78,28 @@ Tool calls in the conversation view use rich, interpreted cards (`.tool-call` cl
 <div class="msg">
   <i data-lucide="ICON" class="msg-icon TYPE"></i>
   <div class="msg-body">
-    <div class="msg-meta">NAME · TIME</div>
     <div class="msg-text">Content...</div>
     <!-- tool calls go here -->
   </div>
+  <span class="msg-time">
+    <span class="msg-time-rel">2m</span>
+    <span class="msg-time-abs">Jul 28 2026 10:05am</span>
+  </span>
   <div class="msg-actions">...</div>
 </div>
 ```
+
+- **No actor label** — the icon alone indicates user/agent/thinking
+- **Relative time** on the right edge (e.g. `2m`, `<1m`, `just now`)
+- **Absolute time** appears as a tooltip above on hover; relative time stays visible
+- **Action buttons** positioned at `right: 40px` to avoid overlapping the time
 
 Icon types: `user` (user icon, --text), `agent` (bot icon, --indigo), `thinking` (brain icon, --muted).
 
 ## Hover States
 
 - Messages: left border turns indigo, faint indigo background
-- Action buttons appear on message hover
+- Action buttons appear on message hover (positioned left of timestamp)
 - Tooltips use fixed positioning, dark background, white text
 
 ## Dependencies
