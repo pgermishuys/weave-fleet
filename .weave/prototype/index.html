@@ -1608,6 +1608,124 @@ body {
   font-size: 11px;
   margin-right: 4px;
 }
+
+/* Automations View */
+.automations-wrap {
+  padding: 32px 48px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+.automations-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+}
+.automations-title {
+  font-size: 22px;
+  font-weight: 600;
+}
+.automation-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 20px;
+  margin-bottom: 12px;
+}
+.automation-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.automation-card-name {
+  font-weight: 600;
+  font-size: 14px;
+  flex: 1;
+}
+.automation-card-status {
+  margin-left: 12px;
+}
+.automation-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: 12px;
+}
+.automation-action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.automation-action-btn:hover {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
+}
+.automation-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.automation-detail-row {
+  display: flex;
+  align-items: flex-start;
+}
+.automation-detail-label {
+  font-weight: 500;
+  color: var(--muted);
+  min-width: 80px;
+  display: inline-block;
+}
+.automation-detail-value {
+  color: var(--text);
+  flex: 1;
+}
+.automation-detail-value code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 0;
+  border: 1px solid var(--border);
+}
+
+/* Automation Form */
+.automation-form { max-width: 600px; }
+.automation-form-title { font-size: 22px; font-weight: 600; margin-bottom: 32px; }
+.automation-form-group { margin-bottom: 24px; }
+.automation-form-label { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.automation-form-desc { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+.automation-form-input {
+  width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 0;
+  font-family: var(--font); font-size: 13px; outline: none; background: var(--surface);
+  transition: border-color var(--transition);
+}
+.automation-form-input:focus { border-color: var(--indigo); }
+.automation-form-input--mono { font-family: var(--mono); }
+.automation-form-textarea {
+  width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 0;
+  font-family: var(--font); font-size: 13px; outline: none; resize: vertical; min-height: 80px;
+  background: var(--surface); transition: border-color var(--transition);
+}
+.automation-form-textarea:focus { border-color: var(--indigo); }
+.automation-form-select {
+  padding: 10px 14px; border: 1px solid var(--border); border-radius: 0;
+  font-family: var(--font); font-size: 13px; outline: none; background: var(--surface);
+  cursor: pointer; min-width: 180px;
+}
+.automation-form-section { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border); }
+.automation-form-section-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 20px; }
+.automation-form-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.automation-form-footer { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border); }
 </style>
 </head>
 <body>
@@ -1617,6 +1735,7 @@ body {
     <button class="icon-rail-btn active" title="Sessions" data-nav="sessions"><i data-lucide="messages-square" style="width:18px;height:18px;"></i></button>
     <button class="icon-rail-btn" title="Board" data-nav="board"><i data-lucide="kanban" style="width:18px;height:18px;"></i></button>
     <button class="icon-rail-btn" title="Analytics" data-nav="analytics"><i data-lucide="bar-chart-3" style="width:18px;height:18px;"></i></button>
+    <button class="icon-rail-btn" title="Automations" data-nav="automations"><i data-lucide="zap" style="width:18px;height:18px;"></i></button>
     <button class="icon-rail-btn" title="Settings" style="margin-top:auto;" data-nav="settings"><i data-lucide="settings" style="width:18px;height:18px;"></i></button>
   </nav>
 
@@ -1662,6 +1781,7 @@ body {
       <button class="top-tab" data-view="settings" style="display:none;">Settings</button>
       <button class="top-tab" data-view="board" style="display:none;">Board</button>
       <button class="top-tab" data-view="analytics" style="display:none;">Analytics</button>
+      <button class="top-tab" data-view="automations" style="display:none;">Automations</button>
       <button class="top-tab new-session-btn" data-view="newsession" style="margin-left:auto;">+ New Session</button>
     </div>
 
@@ -1983,6 +2103,220 @@ sequenceDiagram
       <div style="padding:48px 24px;color:var(--muted);text-align:center;">
         <p style="font-size:16px;font-weight:500;margin-bottom:8px;">Analytics</p>
         <p>Token spend, session duration, agent utilization. Coming soon.</p>
+      </div>
+    </div>
+
+    <!-- Automations View -->
+    <div class="view" id="view-automations">
+      <div class="automations-wrap">
+        <div class="automations-header">
+          <div class="automations-title">Automations</div>
+          <button class="btn-create">New Automation</button>
+        </div>
+
+        <!-- Automation Card 1 -->
+        <div class="automation-card">
+          <div class="automation-card-header">
+            <div class="automation-card-name">Daily code review digest</div>
+            <div class="automation-card-status">
+              <span class="pill pill-complete">Enabled</span>
+            </div>
+            <div class="automation-actions">
+              <button class="automation-action-btn" title="Run now">
+                <i data-lucide="play" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Pause">
+                <i data-lucide="pause" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Edit">
+                <i data-lucide="pencil" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Delete">
+                <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+              </button>
+            </div>
+          </div>
+          <div class="automation-card-details">
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Prompt:</span>
+              <span class="automation-detail-value">Generate a summary of all code reviews from the past 24 hours and send to #engineering</span>
+            </div>
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Trigger:</span>
+              <span class="automation-detail-value">Schedule: <code>0 9 * * 1-5</code> (9 AM weekdays)</span>
+            </div>
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Policy:</span>
+              <span class="automation-detail-value">Max 1 concurrent, 5/hour, 30min timeout</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Automation Card 2 -->
+        <div class="automation-card">
+          <div class="automation-card-header">
+            <div class="automation-card-name">PR merge cleanup</div>
+            <div class="automation-card-status">
+              <span class="pill pill-complete">Enabled</span>
+            </div>
+            <div class="automation-actions">
+              <button class="automation-action-btn" title="Run now">
+                <i data-lucide="play" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Pause">
+                <i data-lucide="pause" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Edit">
+                <i data-lucide="pencil" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Delete">
+                <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+              </button>
+            </div>
+          </div>
+          <div class="automation-card-details">
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Prompt:</span>
+              <span class="automation-detail-value">Delete merged branch, update related issues, notify team in Slack</span>
+            </div>
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Trigger:</span>
+              <span class="automation-detail-value">Event: <code>pull_request.merged</code></span>
+            </div>
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Policy:</span>
+              <span class="automation-detail-value">Max 3 concurrent, 20/hour, 15min timeout</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Automation Card 3 -->
+        <div class="automation-card">
+          <div class="automation-card-header">
+            <div class="automation-card-name">Stale branch reminder</div>
+            <div class="automation-card-status">
+              <span class="pill pill-idle">Disabled</span>
+            </div>
+            <div class="automation-actions">
+              <button class="automation-action-btn" title="Run now">
+                <i data-lucide="play" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Enable">
+                <i data-lucide="play-circle" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Edit">
+                <i data-lucide="pencil" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Delete">
+                <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+              </button>
+            </div>
+          </div>
+          <div class="automation-card-details">
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Prompt:</span>
+              <span class="automation-detail-value">Find branches with no commits in 30+ days, notify owners, suggest archival</span>
+            </div>
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Trigger:</span>
+              <span class="automation-detail-value">Schedule: <code>0 8 * * 1</code> (8 AM Mondays)</span>
+            </div>
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Policy:</span>
+              <span class="automation-detail-value">Max 1 concurrent, 2/hour, 10min timeout</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- New Automation Form -->
+      <div class="automations-wrap automation-form" id="automation-form-state" style="display:none;">
+        <div class="automation-form-title">New Automation</div>
+
+        <div class="automation-form-group">
+          <div class="automation-form-label">Name</div>
+          <input class="automation-form-input" type="text" placeholder="e.g., Daily standup reminder">
+        </div>
+
+        <div class="automation-form-group">
+          <div class="automation-form-label">Prompt</div>
+          <textarea class="automation-form-textarea" placeholder="Describe what this automation should do when triggered..."></textarea>
+          <div class="automation-form-desc">The instruction given to the agent when this automation fires.</div>
+        </div>
+
+        <div class="automation-form-section">
+          <div class="automation-form-section-title">Trigger</div>
+
+          <div class="automation-form-group">
+            <div class="automation-form-label">Type</div>
+            <div class="source-toggle" id="trigger-type-toggle">
+              <button class="source-toggle-btn active">Schedule</button>
+              <button class="source-toggle-btn">Event</button>
+            </div>
+          </div>
+
+          <div id="trigger-schedule-fields">
+            <div class="automation-form-group">
+              <div class="automation-form-label">Cron Expression</div>
+              <input class="automation-form-input automation-form-input--mono" type="text" placeholder="0 9 * * 1-5">
+              <div class="automation-form-desc">Minute Hour Day Month Weekday — e.g., <code style="font-family:var(--mono);font-size:12px;background:var(--bg);padding:2px 6px;border:1px solid var(--border);">0 9 * * 1-5</code> runs at 9 AM on weekdays</div>
+            </div>
+          </div>
+
+          <div id="trigger-event-fields" style="display:none;">
+            <div class="automation-form-group">
+              <div class="automation-form-label">Event Name</div>
+              <select class="automation-form-select">
+                <option value="" disabled selected>Select an event...</option>
+                <option>pull_request.opened</option>
+                <option>pull_request.merged</option>
+                <option>push</option>
+                <option>issue.created</option>
+                <option>issue.closed</option>
+                <option>comment.created</option>
+                <option>deployment.completed</option>
+              </select>
+            </div>
+
+            <div class="automation-form-group">
+              <div class="automation-form-label">Target</div>
+              <div class="source-toggle">
+                <button class="source-toggle-btn active">Act on source</button>
+                <button class="source-toggle-btn">Create new item</button>
+              </div>
+              <div class="automation-form-desc">Whether to act on the item that triggered the event, or create a new work item.</div>
+            </div>
+
+            <div class="automation-form-group">
+              <div class="automation-form-label">Filter (optional)</div>
+              <input class="automation-form-input automation-form-input--mono" type="text" placeholder='e.g., { "label": "bug" }'>
+              <div class="automation-form-desc">JSON filter expression to narrow which events trigger this automation.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="automation-form-section">
+          <div class="automation-form-section-title">Run Policy</div>
+          <div class="automation-form-row">
+            <div class="automation-form-group">
+              <div class="automation-form-label">Max Concurrent</div>
+              <input class="automation-form-input" type="number" value="1" min="1">
+            </div>
+            <div class="automation-form-group">
+              <div class="automation-form-label">Max per Hour</div>
+              <input class="automation-form-input" type="number" value="10" min="1">
+            </div>
+            <div class="automation-form-group">
+              <div class="automation-form-label">Timeout (min)</div>
+              <input class="automation-form-input" type="number" value="30" min="1">
+            </div>
+          </div>
+        </div>
+
+        <div class="automation-form-footer">
+          <button class="btn-cancel" id="automation-form-cancel">Cancel <kbd>ESC</kbd></button>
+          <button class="btn-create" id="automation-form-submit">Create Automation <kbd>&#8984;&#8629;</kbd></button>
+        </div>
       </div>
     </div>
 
@@ -2402,7 +2736,7 @@ document.querySelectorAll('.top-tab').forEach(tab => {
     const gutter = document.getElementById('resize-gutter');
     const topBar = document.querySelector('.top-bar');
 
-    if (view === 'settings' || view === 'board' || view === 'analytics') {
+    if (view === 'settings' || view === 'board' || view === 'analytics' || view === 'automations') {
       contextPanel.style.display = 'none';
       rightPanel.style.display = 'none';
       gutter.style.display = 'none';
@@ -2992,6 +3326,49 @@ document.querySelectorAll('.artifact-pill-dropdown-item').forEach(item => {
     }
   });
 });
+
+// Automations: New form toggle
+(function() {
+  const listState = document.querySelector('#view-automations .automations-wrap:not(.automation-form)');
+  const formState = document.getElementById('automation-form-state');
+  const newBtn = document.querySelector('#view-automations .btn-create:not(#automation-form-submit)');
+  const cancelBtn = document.getElementById('automation-form-cancel');
+  const submitBtn = document.getElementById('automation-form-submit');
+
+  if (newBtn) {
+    newBtn.addEventListener('click', () => {
+      listState.style.display = 'none';
+      formState.style.display = 'block';
+    });
+  }
+
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      formState.style.display = 'none';
+      listState.style.display = 'block';
+    });
+  }
+
+  if (submitBtn) {
+    submitBtn.addEventListener('click', () => {
+      // Simulate creation — just go back to list
+      formState.style.display = 'none';
+      listState.style.display = 'block';
+    });
+  }
+
+  // Trigger type toggle: show/hide schedule vs event fields
+  const triggerToggle = document.getElementById('trigger-type-toggle');
+  if (triggerToggle) {
+    triggerToggle.querySelectorAll('.source-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const isSchedule = btn.textContent.trim() === 'Schedule';
+        document.getElementById('trigger-schedule-fields').style.display = isSchedule ? 'block' : 'none';
+        document.getElementById('trigger-event-fields').style.display = isSchedule ? 'none' : 'block';
+      });
+    });
+  }
+})();
 
 </script>
 </body>
