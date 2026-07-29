@@ -18,7 +18,11 @@ interface MockRoute {
   handler: (url: URL, req: Request) => Response | Promise<Response>;
 }
 
-export function mockApiPlugin(): Plugin {
+interface MockApiOptions {
+  mode?: string;
+}
+
+export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
   const mockDir = resolve(__dirname, "src/mocks");
   
   // Load fixtures at plugin initialization
@@ -30,16 +34,6 @@ export function mockApiPlugin(): Plugin {
   };
 
   const routes: MockRoute[] = [
-    {
-      pattern: /^\/api\/sessions(\?.*)?$/,
-      handler: () => {
-        console.log("[mock-api] GET /api/sessions");
-        return new Response(JSON.stringify(fixtures.sessions), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      },
-    },
     {
       pattern: /^\/api\/fleet\/summary$/,
       handler: () => {
@@ -55,6 +49,42 @@ export function mockApiPlugin(): Plugin {
       handler: () => {
         console.log("[mock-api] GET /api/config");
         return new Response(JSON.stringify(fixtures.config), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/config\/client$/,
+      handler: () => {
+        console.log("[mock-api] GET /api/config/client");
+        return new Response(JSON.stringify({
+          cloudMode: false,
+          authEnabled: false,
+          tokenAuthEnabled: false,
+          availableHarnesses: ["opencode"],
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/user\/me$/,
+      handler: () => {
+        console.log("[mock-api] GET /api/user/me");
+        return new Response(JSON.stringify({
+          userId: "mock-user-001",
+          email: "dev@weavefleet.local",
+          displayName: "Mock Developer",
+          onboardingCompleted: true,
+          onboardingStatus: {
+            completed: true,
+            hasStoredCredentials: true,
+            hasCreatedSession: true,
+          },
+          createdAt: "2025-01-15T10:00:00Z",
+        }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
@@ -151,7 +181,7 @@ export function mockApiPlugin(): Plugin {
       pattern: /^\/api\/plugins$/,
       handler: () => {
         console.log("[mock-api] GET /api/plugins");
-        return new Response(JSON.stringify([]), {
+        return new Response(JSON.stringify({ plugins: [], statuses: [] }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
@@ -161,6 +191,529 @@ export function mockApiPlugin(): Plugin {
       pattern: /^\/api\/repositories$/,
       handler: () => {
         console.log("[mock-api] GET /api/repositories");
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    // ─── Priority 1: Session Detail & Interaction ───────────────────────────────
+    {
+      pattern: /^\/api\/sessions\/([^/]+)$/,
+      handler: (url) => {
+        const id = url.pathname.split("/")[3];
+        console.log(`[mock-api] GET /api/sessions/${id}`);
+        
+        // Find the session from the fixture
+        const sessionItem = fixtures.sessions.find((s: any) => s.session.id === id);
+        if (!sessionItem) {
+          return new Response(JSON.stringify({ error: "Session not found" }), {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        
+        // Build the GetSessionResponse shape
+        const response = {
+          id: sessionItem.session.id,
+          instanceId: sessionItem.instanceId,
+          parentSessionId: sessionItem.parentSessionId,
+          workspaceId: sessionItem.workspaceId,
+          workspaceDirectory: sessionItem.workspaceDirectory,
+          workspaceDisplayName: sessionItem.workspaceDisplayName,
+          sourceDirectory: sessionItem.sourceDirectory,
+          isolationStrategy: sessionItem.isolationStrategy,
+          branch: sessionItem.branch,
+          title: sessionItem.session.title,
+          createdAt: new Date(sessionItem.session.time.created).toISOString(),
+          stoppedAt: null,
+          activityStatus: sessionItem.activityStatus,
+          lifecycleStatus: sessionItem.lifecycleStatus,
+          retentionStatus: sessionItem.retentionStatus,
+          archivedAt: sessionItem.archivedAt,
+          totalTokens: sessionItem.totalTokens,
+          totalCost: sessionItem.totalCost,
+          harnessType: sessionItem.harnessType,
+          projectId: sessionItem.projectId,
+          origin: sessionItem.origin || null,
+          capabilities: {
+            canPrompt: true,
+            canAbort: sessionItem.activityStatus === "busy",
+            canResume: sessionItem.lifecycleStatus === "stopped",
+            canStop: sessionItem.lifecycleStatus === "running",
+            canFork: true,
+            canDelete: true,
+            canRename: true,
+            promptDisabledReason: null,
+            abortDisabledReason: sessionItem.activityStatus !== "busy" ? "Session is not active" : null,
+            resumeDisabledReason: sessionItem.lifecycleStatus !== "stopped" ? "Session is not stopped" : null,
+            stopDisabledReason: sessionItem.lifecycleStatus !== "running" ? "Session is not running" : null,
+            forkDisabledReason: null,
+            deleteDisabledReason: null,
+            renameDisabledReason: null,
+          },
+        };
+        
+        return new Response(JSON.stringify(response), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/sessions$/,
+      handler: async (url, req) => {
+        if (req.method === "POST") {
+          console.log("[mock-api] POST /api/sessions");
+          const newSessionId = `mock-session-${Date.now()}`;
+          return new Response(JSON.stringify({
+            instanceId: `mock-instance-${Date.now()}`,
+            workspaceId: `mock-workspace-${Date.now()}`,
+            session: {
+              id: newSessionId,
+              title: "New Session",
+              isHidden: false,
+              time: {
+                created: Date.now(),
+                updated: Date.now(),
+              },
+            },
+          }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        
+        // GET /api/sessions
+        console.log("[mock-api] GET /api/sessions");
+        return new Response(JSON.stringify(fixtures.sessions), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/prompt$/,
+      handler: (url) => {
+        const id = url.pathname.split("/")[3];
+        console.log(`[mock-api] POST /api/sessions/${id}/prompt`);
+        return new Response(JSON.stringify({ 
+          eventId: 1001,
+          correlationId: `corr-${Date.now()}`,
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/abort$/,
+      handler: (url) => {
+        const id = url.pathname.split("/")[3];
+        console.log(`[mock-api] POST /api/sessions/${id}/abort`);
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/resume$/,
+      handler: (url) => {
+        const id = url.pathname.split("/")[3];
+        console.log(`[mock-api] POST /api/sessions/${id}/resume`);
+        return new Response(JSON.stringify({
+          instanceId: `mock-instance-${Date.now()}`,
+          session: {
+            id,
+            title: "Resumed Session",
+            isHidden: false,
+            time: {
+              created: Date.now() - 3600000,
+              updated: Date.now(),
+            },
+          },
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/messages$/,
+      handler: (url) => {
+        const id = url.pathname.split("/")[3];
+        console.log(`[mock-api] GET /api/sessions/${id}/messages`);
+        
+        const mockMessages = [
+          {
+            id: "msg-1",
+            sessionId: id,
+            role: "user",
+            parts: [
+              {
+                type: "text",
+                text: "Can you help me implement a new feature?",
+              },
+            ],
+            createdAt: Date.now() - 120000,
+          },
+          {
+            id: "msg-2",
+            sessionId: id,
+            role: "assistant",
+            parts: [
+              {
+                type: "text",
+                text: "Of course! I'd be happy to help you implement a new feature. Could you provide more details about what you'd like to build?",
+              },
+            ],
+            createdAt: Date.now() - 60000,
+            agent: "shuttle",
+            modelID: "claude-sonnet-4-5",
+          },
+          {
+            id: "msg-3",
+            sessionId: id,
+            role: "user",
+            parts: [
+              {
+                type: "text",
+                text: "I need to add authentication to my app.",
+              },
+            ],
+            createdAt: Date.now() - 30000,
+          },
+        ];
+        
+        return new Response(JSON.stringify({
+          messages: mockMessages,
+          pagination: {
+            hasMore: false,
+            oldestMessageId: "msg-1",
+            totalCount: mockMessages.length,
+          },
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/origin$/,
+      handler: (url) => {
+        const id = url.pathname.split("/")[3];
+        console.log(`[mock-api] GET /api/sessions/${id}/origin`);
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/delegations$/,
+      handler: (url) => {
+        const id = url.pathname.split("/")[3];
+        console.log(`[mock-api] GET /api/sessions/${id}/delegations`);
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/diffs$/,
+      handler: (url) => {
+        const id = url.pathname.split("/")[3];
+        console.log(`[mock-api] GET /api/sessions/${id}/diffs`);
+        return new Response(JSON.stringify({ diffs: [], available: false }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/smart-links$/,
+      handler: (url) => {
+        const id = url.pathname.split("/")[3];
+        console.log(`[mock-api] GET /api/sessions/${id}/smart-links`);
+        return new Response(JSON.stringify({ links: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    // ─── Priority 2: Instance/Agent/Command/Models ──────────────────────────────
+    {
+      pattern: /^\/api\/instances\/([^/]+)\/agents$/,
+      handler: (url) => {
+        const id = url.pathname.split("/")[3];
+        console.log(`[mock-api] GET /api/instances/${id}/agents`);
+        return new Response(JSON.stringify({
+          instanceId: id,
+          agents: [
+            {
+              name: "shuttle",
+              description: "Domain specialist worker — executes delegated tasks completely",
+              mode: "agent",
+              hidden: false,
+              model: null,
+            },
+            {
+              name: "thread",
+              description: "Codebase explorer — searches and analyzes code",
+              mode: "agent",
+              hidden: false,
+              model: null,
+            },
+            {
+              name: "planner",
+              description: "Strategic planning agent — breaks down complex tasks",
+              mode: "agent",
+              hidden: false,
+              model: null,
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/instances\/([^/]+)\/commands$/,
+      handler: (url) => {
+        const id = url.pathname.split("/")[3];
+        console.log(`[mock-api] GET /api/instances/${id}/commands`);
+        return new Response(JSON.stringify({
+          instanceId: id,
+          commands: [
+            { name: "/plan", description: "Create a structured plan for a task" },
+            { name: "/review", description: "Review code changes" },
+            { name: "/test", description: "Run tests" },
+            { name: "/commit", description: "Create a git commit" },
+          ],
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/instances\/([^/]+)\/models$/,
+      handler: (url) => {
+        const id = url.pathname.split("/")[3];
+        console.log(`[mock-api] GET /api/instances/${id}/models`);
+        return new Response(JSON.stringify([
+          {
+            id: "anthropic",
+            name: "Anthropic",
+            models: [
+              { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" },
+              { id: "claude-opus-4", name: "Claude Opus 4" },
+              { id: "claude-haiku-4", name: "Claude Haiku 4" },
+            ],
+          },
+          {
+            id: "openai",
+            name: "OpenAI",
+            models: [
+              { id: "gpt-4o", name: "GPT-4o" },
+              { id: "gpt-4o-mini", name: "GPT-4o Mini" },
+            ],
+          },
+        ]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    // ─── Priority 3: Analytics ──────────────────────────────────────────────────
+    {
+      pattern: /^\/api\/analytics\/summary$/,
+      handler: () => {
+        console.log("[mock-api] GET /api/analytics/summary");
+        return new Response(JSON.stringify({
+          totalTokens: 125000,
+          totalCost: 1.85,
+          totalEstimatedCost: 1.92,
+          sessionCount: 42,
+          messageCount: 318,
+          topModels: [
+            { name: "claude-sonnet-4-5", tokens: 85000, cost: 1.25 },
+            { name: "gpt-4o", tokens: 40000, cost: 0.60 },
+          ],
+          topProjects: [
+            { name: "Fleet Core", tokens: 65000, cost: 0.95 },
+            { name: "Documentation", tokens: 35000, cost: 0.52 },
+          ],
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/analytics\/daily$/,
+      handler: () => {
+        console.log("[mock-api] GET /api/analytics/daily");
+        const today = new Date();
+        const dailyData = [];
+        for (let i = 6; i >= 0; i--) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - i);
+          dailyData.push({
+            date: date.toISOString().split("T")[0],
+            tokens: 15000 + Math.floor(Math.random() * 10000),
+            cost: 0.22 + Math.random() * 0.15,
+            estimatedCost: 0.24 + Math.random() * 0.16,
+            sessions: 5 + Math.floor(Math.random() * 5),
+            messages: 35 + Math.floor(Math.random() * 30),
+          });
+        }
+        return new Response(JSON.stringify(dailyData), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/analytics\/sessions$/,
+      handler: () => {
+        console.log("[mock-api] GET /api/analytics/sessions");
+        return new Response(JSON.stringify([
+          {
+            sessionId: "mock-session-1",
+            title: "Implement mock API plugin for frontend",
+            projectId: "mock-project-1",
+            projectName: "Fleet Core",
+            tokens: 12500,
+            cost: 0.15,
+            estimatedCost: 0.16,
+            models: ["claude-sonnet-4-5"],
+            durationSeconds: 3600,
+            createdAt: new Date(Date.now() - 86400000).toISOString(),
+          },
+          {
+            sessionId: "mock-session-2",
+            title: "Fix authentication flow",
+            projectId: null,
+            projectName: null,
+            tokens: 8300,
+            cost: 0.09,
+            estimatedCost: 0.10,
+            models: ["gpt-4o"],
+            durationSeconds: 2400,
+            createdAt: new Date(Date.now() - 172800000).toISOString(),
+          },
+          {
+            sessionId: "mock-session-3",
+            title: "Update documentation for v2.0",
+            projectId: "mock-project-2",
+            projectName: "Documentation",
+            tokens: 5200,
+            cost: 0.06,
+            estimatedCost: 0.07,
+            models: ["claude-haiku-4"],
+            durationSeconds: 1800,
+            createdAt: new Date(Date.now() - 259200000).toISOString(),
+          },
+        ]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/analytics\/models$/,
+      handler: () => {
+        console.log("[mock-api] GET /api/analytics/models");
+        return new Response(JSON.stringify([
+          {
+            modelId: "claude-sonnet-4-5",
+            providerId: "anthropic",
+            tokens: 85000,
+            cost: 1.25,
+            estimatedCost: 1.30,
+            messageCount: 185,
+            avgCostPerMessage: 0.0068,
+          },
+          {
+            modelId: "gpt-4o",
+            providerId: "openai",
+            tokens: 40000,
+            cost: 0.60,
+            estimatedCost: 0.62,
+            messageCount: 133,
+            avgCostPerMessage: 0.0045,
+          },
+        ]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    // ─── Priority 4: Other commonly hit endpoints ───────────────────────────────
+    {
+      pattern: /^\/api\/directories$/,
+      handler: () => {
+        console.log("[mock-api] GET /api/directories");
+        return new Response(JSON.stringify({
+          entries: [
+            {
+              name: "weave-fleet",
+              path: "C:\\source\\weave-fleet",
+              isGitRepo: true,
+            },
+            {
+              name: "my-app",
+              path: "C:\\Users\\demo\\projects\\my-app",
+              isGitRepo: true,
+            },
+          ],
+          currentPath: null,
+          parentPath: null,
+          roots: ["C:\\source", "C:\\Users\\demo\\projects"],
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/credentials$/,
+      handler: () => {
+        console.log("[mock-api] GET /api/credentials");
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/integrations\/github\/auth\/status$/,
+      handler: () => {
+        console.log("[mock-api] GET /api/integrations/github/auth/status");
+        return new Response(JSON.stringify({ authenticated: false }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/boards$/,
+      handler: () => {
+        console.log("[mock-api] GET /api/boards");
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/key-files$/,
+      handler: () => {
+        console.log("[mock-api] GET /api/key-files");
         return new Response(JSON.stringify([]), {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -180,8 +733,8 @@ export function mockApiPlugin(): Plugin {
   ];
 
   function shouldMock(): boolean {
-    // Force mock mode if MOCK_API=true
-    if (process.env.MOCK_API === "true") {
+    // Force mock mode if MOCK_API=true or --mode mock
+    if (process.env.MOCK_API === "true" || options.mode === "mock") {
       return true;
     }
     

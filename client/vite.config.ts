@@ -25,8 +25,8 @@ function getAppVersion(): string {
 
 export default defineConfig(({ mode }) => ({
   plugins: [
-    // Mock API plugin - only active when MOCK_API=true or FLEET_API_URL is not set
-    mockApiPlugin(),
+    // Mock API plugin - only active when mode=mock or MOCK_API=true
+    mockApiPlugin({ mode }),
     TanStackRouterVite({
       target: "vue",
       autoCodeSplitting: true,
