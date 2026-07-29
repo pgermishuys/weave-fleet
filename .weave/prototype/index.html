@@ -350,8 +350,21 @@ body {
 .msg-avatar.user { color: var(--text); }
 .msg-avatar.agent { color: var(--indigo); }
 .msg-avatar.thinking { color: var(--muted); }
-.msg-body { flex: 1; }
-.msg-meta { font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
+.msg-body { flex: 1; min-width: 0; }
+.msg-time {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 3px;
+  position: relative;
+  cursor: default;
+}
+.msg-time .msg-time-rel { display: inline; }
+.msg-time .msg-time-abs { display: none; position: absolute; right: 0; top: -28px; background: var(--text); color: white; padding: 4px 10px; font-size: 11px; font-weight: 500; white-space: nowrap; z-index: 100; pointer-events: none; }
+.msg-time:hover .msg-time-rel { visibility: hidden; }
+.msg-time:hover .msg-time-abs { display: block; }
 .msg-text { line-height: 1.6; }
 .msg-thinking { color: var(--muted); font-style: italic; font-size: 13px; }
 
@@ -1873,9 +1886,9 @@ body {
         <div class="msg">
           <i data-lucide="user" class="msg-icon user"></i>
           <div class="msg-body">
-            <div class="msg-meta">You &middot; 10:04</div>
             <div class="msg-text">Add JWT validation middleware that checks the Authorization header, validates the token signature, and extracts claims into the request context.</div>
           </div>
+          <span class="msg-time"><span class="msg-time-rel">3m</span><span class="msg-time-abs">Jul 28 2026 10:04am</span></span>
           <div class="msg-actions">
             <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
           </div>
@@ -1884,9 +1897,9 @@ body {
         <div class="msg">
           <i data-lucide="brain" class="msg-icon thinking"></i>
           <div class="msg-body">
-            <div class="msg-meta">shuttle &middot; 10:04</div>
             <div class="msg-thinking">Analyzing the existing middleware chain and authentication setup...</div>
           </div>
+          <span class="msg-time"><span class="msg-time-rel">3m</span><span class="msg-time-abs">Jul 28 2026 10:04am</span></span>
           <div class="msg-actions">
             <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
           </div>
@@ -1895,7 +1908,6 @@ body {
         <div class="msg">
           <i data-lucide="bot" class="msg-icon agent"></i>
           <div class="msg-body">
-            <div class="msg-meta">shuttle &middot; 10:05</div>
             <div class="msg-text">I'll create the JWT middleware. First, let me check what dependencies are already available for token verification.</div>
             <div class="tool-block">
               <div class="tool-header" onclick="this.parentElement.classList.toggle('open')">&#9654; grep &mdash; "jsonwebtoken" in package.json</div>
@@ -1909,6 +1921,7 @@ export { requestLogger } from './logger';
 // auth middleware will slot in here</div>
             </div>
           </div>
+          <span class="msg-time"><span class="msg-time-rel">2m</span><span class="msg-time-abs">Jul 28 2026 10:05am</span></span>
           <div class="msg-actions">
             <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
           </div>
@@ -1917,9 +1930,9 @@ export { requestLogger } from './logger';
         <div class="msg">
           <i data-lucide="bot" class="msg-icon agent"></i>
           <div class="msg-body">
-            <div class="msg-meta">shuttle &middot; 10:06</div>
             <div class="msg-text">I've created the auth middleware at <code>src/middleware/auth.ts</code>. It validates the Bearer token, verifies the signature using the configured public key, and attaches decoded claims to <code>req.context.user</code>. The middleware gracefully returns 401 for missing tokens and 403 for invalid signatures.</div>
           </div>
+          <span class="msg-time"><span class="msg-time-rel">1m</span><span class="msg-time-abs">Jul 28 2026 10:06am</span></span>
           <div class="msg-actions">
             <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
           </div>
@@ -1928,7 +1941,6 @@ export { requestLogger } from './logger';
         <div class="msg">
           <i data-lucide="bot" class="msg-icon agent"></i>
           <div class="msg-body">
-            <div class="msg-meta">shuttle &middot; 10:06</div>
             <div class="msg-text">Let me check the final answer template structure.</div>
             <div class="tool-call">
               <div class="tool-call-header">
@@ -1940,6 +1952,7 @@ export { requestLogger } from './logger';
               <div class="tool-call-preview">└ 1 ### Next Steps ... (16 lines)</div>
             </div>
           </div>
+          <span class="msg-time"><span class="msg-time-rel">1m</span><span class="msg-time-abs">Jul 28 2026 10:06am</span></span>
           <div class="msg-actions">
             <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
           </div>
@@ -1948,7 +1961,6 @@ export { requestLogger } from './logger';
         <div class="msg">
           <i data-lucide="bot" class="msg-icon agent"></i>
           <div class="msg-body">
-            <div class="msg-meta">shuttle &middot; 10:07</div>
             <div class="msg-text">I need to load the dataviz skill for creating visual representations.</div>
             <div class="tool-call">
               <div class="tool-call-header">
@@ -1959,6 +1971,7 @@ export { requestLogger } from './logger';
               <div class="tool-call-preview">Launching skill: dataviz</div>
             </div>
           </div>
+          <span class="msg-time"><span class="msg-time-rel">&lt;1m</span><span class="msg-time-abs">Jul 28 2026 10:07am</span></span>
           <div class="msg-actions">
             <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
           </div>
@@ -1967,7 +1980,6 @@ export { requestLogger } from './logger';
         <div class="msg">
           <i data-lucide="bot" class="msg-icon agent"></i>
           <div class="msg-body">
-            <div class="msg-meta">shuttle &middot; 10:08</div>
             <div class="msg-text">Creating a sample prototype HTML file to demonstrate the dashboard layout.</div>
             <div class="tool-call">
               <div class="tool-call-header">
@@ -1990,6 +2002,7 @@ export { requestLogger } from './logger';
               </div>
             </div>
           </div>
+          <span class="msg-time"><span class="msg-time-rel">&lt;1m</span><span class="msg-time-abs">Jul 28 2026 10:08am</span></span>
           <div class="msg-actions">
             <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
           </div>
@@ -1998,7 +2011,6 @@ export { requestLogger } from './logger';
         <div class="msg">
           <i data-lucide="bot" class="msg-icon agent"></i>
           <div class="msg-body">
-            <div class="msg-meta">shuttle &middot; 10:09</div>
             <div class="msg-text">Here's a sequence diagram showing the e-commerce order flow:</div>
             <div class="tool-call">
               <div class="tool-call-diagram">
@@ -2027,6 +2039,7 @@ sequenceDiagram
               </div>
             </div>
           </div>
+          <span class="msg-time"><span class="msg-time-rel">just now</span><span class="msg-time-abs">Jul 28 2026 10:09am</span></span>
           <div class="msg-actions">
             <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
           </div>
@@ -2035,9 +2048,9 @@ sequenceDiagram
         <div class="msg">
           <i data-lucide="user" class="msg-icon user"></i>
           <div class="msg-body">
-            <div class="msg-meta">You &middot; 10:07</div>
             <div class="msg-text">Looks good. Can you also add support for token refresh via a custom header?</div>
           </div>
+          <span class="msg-time"><span class="msg-time-rel">just now</span><span class="msg-time-abs">Jul 28 2026 10:07am</span></span>
           <div class="msg-actions">
             <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
           </div>
