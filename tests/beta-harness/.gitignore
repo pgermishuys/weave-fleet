@@ -11,3 +11,6 @@ node_modules/
 # Playwright caches
 playwright-report/
 test-results/
+
+# Visual comparison screenshots (ephemeral)
+findings/visual-compare/
