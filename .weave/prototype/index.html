@@ -741,15 +741,13 @@ body {
 /* Queued dropdown */
 .queued-dropdown {
   display: none;
-  position: absolute;
-  bottom: 36px;
-  left: 0;
+  position: fixed;
   width: 280px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.1);
-  z-index: 100;
+  z-index: 9999;
   overflow: hidden;
 }
 .queued-dropdown.open { display: block; }
@@ -953,6 +951,325 @@ body {
 .msg-icon.agent { color: var(--indigo); }
 .msg-icon.thinking { color: var(--muted); }
 
+/* Settings View */
+.settings-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+.settings-nav {
+  width: 180px;
+  padding: 24px 16px;
+  border-right: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+.settings-nav-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--coral);
+  margin-bottom: 12px;
+}
+.settings-nav-section {
+  margin-bottom: 16px;
+}
+.settings-nav-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  margin-bottom: 6px;
+  margin-top: 16px;
+}
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text);
+  transition: background var(--transition);
+}
+.settings-nav-item:hover { background: var(--bg); }
+.settings-nav-item.active { color: var(--coral); font-weight: 500; background: var(--bg); }
+.settings-nav-item .nav-num {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 48px;
+}
+.settings-breadcrumb {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.settings-page-title {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 32px;
+}
+.settings-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+}
+.settings-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 20px;
+}
+.settings-field {
+  margin-bottom: 24px;
+}
+.settings-field-label {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.settings-field-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+.settings-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--transition);
+  background: var(--surface);
+}
+.settings-input:focus { border-color: var(--indigo); }
+.settings-select {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font);
+  font-size: 13px;
+  outline: none;
+  background: var(--surface);
+  cursor: pointer;
+  min-width: 140px;
+}
+.settings-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--border);
+  cursor: pointer;
+  transition: background var(--transition);
+  flex-shrink: 0;
+}
+.settings-toggle.on { background: var(--indigo); }
+.settings-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  transition: transform var(--transition);
+}
+.settings-toggle.on::after { transform: translateX(16px); }
+.settings-field-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.settings-field-row .settings-field-text { flex: 1; }
+.settings-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+.settings-slider {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border);
+  border-radius: 2px;
+  outline: none;
+}
+.settings-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--indigo);
+  cursor: pointer;
+}
+.settings-slider-value {
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--muted);
+  min-width: 32px;
+  text-align: right;
+}
+
+/* New Session Form */
+.new-session-form {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 32px 48px;
+}
+.new-session-breadcrumb {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 24px;
+}
+.new-session-field {
+  margin-bottom: 24px;
+}
+.new-session-label {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.new-session-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.new-session-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--transition);
+  background: var(--surface);
+}
+.new-session-input:focus { border-color: var(--indigo); }
+.new-session-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font);
+  font-size: 13px;
+  outline: none;
+  resize: vertical;
+  min-height: 100px;
+  transition: border-color var(--transition);
+  background: var(--surface);
+}
+.new-session-textarea:focus { border-color: var(--indigo); }
+
+/* Source Toggle */
+.source-toggle {
+  display: flex;
+  gap: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  width: fit-content;
+}
+.source-toggle-btn {
+  padding: 8px 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border: none;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+  border-right: 1px solid var(--border);
+}
+.source-toggle-btn:last-child { border-right: none; }
+.source-toggle-btn.active {
+  background: var(--indigo);
+  color: white;
+}
+.source-toggle-btn:hover:not(.active) {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Form Footer */
+.new-session-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+.btn-cancel {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background var(--transition);
+}
+.btn-cancel:hover { background: var(--bg); }
+.btn-cancel kbd {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  padding: 1px 4px;
+  background: var(--bg);
+  border-radius: 3px;
+}
+.btn-create {
+  padding: 8px 20px;
+  border: 1px solid var(--indigo);
+  border-radius: 6px;
+  background: var(--indigo);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: opacity var(--transition);
+}
+.btn-create:hover { opacity: 0.9; }
+.btn-create kbd {
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.7;
+  padding: 1px 4px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 3px;
+}
+
 /* Hotkey Bar */
 .hotkey-bar {
   height: 32px;
@@ -985,7 +1302,7 @@ body {
     <button class="icon-rail-btn active" title="Sessions" data-nav="sessions"><i data-lucide="messages-square" style="width:18px;height:18px;"></i></button>
     <button class="icon-rail-btn" title="Chat" data-nav="conversation"><i data-lucide="message-circle" style="width:18px;height:18px;"></i></button>
     <button class="icon-rail-btn" title="Board"><i data-lucide="kanban" style="width:18px;height:18px;"></i></button>
-    <button class="icon-rail-btn" title="Settings" style="margin-top:auto;"><i data-lucide="settings" style="width:18px;height:18px;"></i></button>
+    <button class="icon-rail-btn" title="Settings" style="margin-top:auto;" data-nav="settings"><i data-lucide="settings" style="width:18px;height:18px;"></i></button>
   </nav>
 
   <!-- Context Panel -->
@@ -1029,6 +1346,8 @@ body {
       <button class="top-tab" data-view="conversation">Conversation</button>
       <button class="top-tab" data-view="board">Board</button>
       <button class="top-tab" data-view="analytics">Analytics</button>
+      <button class="top-tab" data-view="settings">Settings</button>
+      <button class="top-tab" data-view="newsession" style="margin-left:auto;color:var(--indigo);font-weight:600;">+ New Session</button>
     </div>
 
     <!-- Sessions View -->
@@ -1234,6 +1553,196 @@ export { requestLogger } from './logger';
       <div style="padding:48px 24px;color:var(--muted);text-align:center;">
         <p style="font-size:16px;font-weight:500;margin-bottom:8px;">Analytics</p>
         <p>Token spend, session duration, agent utilization. Coming soon.</p>
+      </div>
+    </div>
+
+    <!-- Settings View -->
+    <div class="view" id="view-settings">
+      <div class="settings-layout">
+        <nav class="settings-nav">
+          <div class="settings-nav-title">Settings</div>
+          <div class="settings-nav-section">
+            <div class="settings-nav-item active">General <span class="nav-num">1</span></div>
+            <div class="settings-nav-item">Agent <span class="nav-num">2</span></div>
+            <div class="settings-nav-item">Models <span class="nav-num">3</span></div>
+            <div class="settings-nav-item">Keybindings <span class="nav-num">4</span></div>
+          </div>
+          <div class="settings-nav-section-label">Account</div>
+          <div class="settings-nav-section">
+            <div class="settings-nav-item">Profile <span class="nav-num">5</span></div>
+            <div class="settings-nav-item">API Keys <span class="nav-num">6</span></div>
+          </div>
+          <div class="settings-nav-section-label">System</div>
+          <div class="settings-nav-section">
+            <div class="settings-nav-item">Connections <span class="nav-num">7</span></div>
+            <div class="settings-nav-item">Plugins <span class="nav-num">8</span></div>
+            <div class="settings-nav-item">Diagnostics <span class="nav-num">9</span></div>
+            <div class="settings-nav-item">Updates <span class="nav-num">10</span></div>
+          </div>
+        </nav>
+        <div class="settings-content">
+          <div class="settings-breadcrumb">Weave Fleet &rsaquo; Settings &rsaquo; General</div>
+          <div class="settings-page-title">General</div>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <div class="settings-group-title">Defaults</div>
+
+              <div class="settings-field">
+                <div class="settings-field-label">Default Editor</div>
+                <div class="settings-field-desc">Set your default editor for opening session directories. Use &#8984;&#8997;O to quickly open the current session's directory.</div>
+                <select class="settings-select">
+                  <option>VS Code</option>
+                  <option>Cursor</option>
+                  <option>Zed</option>
+                  <option>Vim</option>
+                </select>
+              </div>
+
+              <div class="settings-field">
+                <div class="settings-field-label">Default Directory</div>
+                <div class="settings-field-desc">Default working directory for new tasks and one-off sessions.</div>
+                <input class="settings-input" type="text" value="~/">
+              </div>
+
+              <div class="settings-field">
+                <div class="settings-field-label">Default Session View</div>
+                <div class="settings-field-desc">Choose whether default navigation opens the session list or the board view.</div>
+                <select class="settings-select">
+                  <option>Sessions</option>
+                  <option>Board</option>
+                  <option>Kanban</option>
+                </select>
+              </div>
+
+              <div class="settings-field">
+                <div class="settings-field-row">
+                  <div class="settings-field-text">
+                    <div class="settings-field-label">Batch Queue Delivery</div>
+                    <div class="settings-field-desc">Send all queued messages together as soon as the session is ready. Turn off to send them one at a time.</div>
+                  </div>
+                  <div class="settings-toggle on" onclick="this.classList.toggle('on')"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-col">
+              <div class="settings-group-title">Display &amp; Interaction</div>
+
+              <div class="settings-field">
+                <div class="settings-field-row">
+                  <div class="settings-field-text">
+                    <div class="settings-field-label">Show Agent Streaming</div>
+                    <div class="settings-field-desc">Show assistant output while it is still being generated. Turn off to only show completed messages.</div>
+                  </div>
+                  <div class="settings-toggle on" onclick="this.classList.toggle('on')"></div>
+                </div>
+              </div>
+
+              <div class="settings-field">
+                <div class="settings-field-row">
+                  <div class="settings-field-text">
+                    <div class="settings-field-label">Session Costs</div>
+                    <div class="settings-field-desc">Show session costs in the status bar next to the context gauge.</div>
+                  </div>
+                  <div class="settings-toggle" onclick="this.classList.toggle('on')"></div>
+                </div>
+              </div>
+
+              <div class="settings-field">
+                <div class="settings-field-row">
+                  <div class="settings-field-text">
+                    <div class="settings-field-label">Notification Sounds</div>
+                    <div class="settings-field-desc">Play a sound when a session needs your input or approval.</div>
+                  </div>
+                  <div class="settings-toggle on" onclick="this.classList.toggle('on')"></div>
+                </div>
+                <div class="settings-slider-row">
+                  <span style="font-size:12px;color:var(--muted);">Volume</span>
+                  <input type="range" class="settings-slider" min="0" max="100" value="20">
+                  <span class="settings-slider-value">20%</span>
+                </div>
+              </div>
+
+              <div class="settings-field">
+                <div class="settings-field-row">
+                  <div class="settings-field-text">
+                    <div class="settings-field-label">Split Diff View</div>
+                    <div class="settings-field-desc">Show code diffs in a side-by-side split view instead of inline.</div>
+                  </div>
+                  <div class="settings-toggle" onclick="this.classList.toggle('on')"></div>
+                </div>
+              </div>
+
+              <div class="settings-field">
+                <div class="settings-field-label">Zoom Level</div>
+                <div class="settings-field-desc">Adjust the interface zoom level.</div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <button style="width:28px;height:28px;border:1px solid var(--border);border-radius:4px;background:var(--surface);cursor:pointer;font-size:14px;">-</button>
+                  <span style="font-family:var(--mono);font-size:13px;min-width:36px;text-align:center;">100%</span>
+                  <button style="width:28px;height:28px;border:1px solid var(--border);border-radius:4px;background:var(--surface);cursor:pointer;font-size:14px;">+</button>
+                  <i data-lucide="lock" style="width:14px;height:14px;color:var(--muted);margin-left:4px;"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- New Session View -->
+    <div class="view" id="view-newsession">
+      <div class="new-session-form">
+        <div class="new-session-breadcrumb">Sessions &rsaquo; New</div>
+
+        <div class="new-session-field">
+          <div class="new-session-label">Directory</div>
+          <input class="new-session-input" type="text" value="~/">
+          <div class="new-session-desc">The repository or directory you want to work out of for this session.</div>
+        </div>
+
+        <div class="new-session-field">
+          <div class="new-session-label">Issue Source</div>
+          <div class="source-toggle">
+            <button class="source-toggle-btn active">Inline</button>
+            <button class="source-toggle-btn">Linear</button>
+            <button class="source-toggle-btn">Jira</button>
+            <button class="source-toggle-btn">GitHub</button>
+          </div>
+          <div class="new-session-desc">Describe the task directly</div>
+        </div>
+
+        <div class="new-session-field">
+          <textarea class="new-session-textarea" placeholder="Describe what you want to build..."></textarea>
+        </div>
+
+        <div class="new-session-field">
+          <div class="new-session-label">Name</div>
+          <input class="new-session-input" type="text" placeholder="Session name...">
+        </div>
+
+        <div class="new-session-field">
+          <div class="new-session-label">Agent</div>
+          <div class="source-toggle">
+            <button class="source-toggle-btn active">shuttle</button>
+            <button class="source-toggle-btn">pattern</button>
+            <button class="source-toggle-btn">thread</button>
+          </div>
+          <div class="new-session-desc">Choose which agent to assign this session to.</div>
+        </div>
+
+        <div class="new-session-field">
+          <div class="new-session-label">Model</div>
+          <select class="settings-select" style="width:100%;">
+            <option>claude-opus-4</option>
+            <option>claude-sonnet-4</option>
+            <option>claude-haiku-4</option>
+          </select>
+        </div>
+
+        <div class="new-session-footer">
+          <button class="btn-cancel">Cancel <kbd>ESC</kbd></button>
+          <button class="btn-create">Create Session <kbd>&#8984;&#8629;</kbd></button>
+        </div>
       </div>
     </div>
   </main>
@@ -1679,7 +2188,13 @@ function submitComment(btn) {
 // Queued badge click — toggle dropdown
 document.getElementById('queued-badge').addEventListener('click', (e) => {
   e.stopPropagation();
-  document.getElementById('queued-dropdown').classList.toggle('open');
+  const dropdown = document.getElementById('queued-dropdown');
+  dropdown.classList.toggle('open');
+  if (dropdown.classList.contains('open')) {
+    const rect = document.getElementById('queued-badge').getBoundingClientRect();
+    dropdown.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+    dropdown.style.left = rect.left + 'px';
+  }
 });
 
 // Close dropdown on outside click
@@ -1707,6 +2222,16 @@ document.querySelectorAll('.msg-action-btn').forEach(btn => {
   btn.addEventListener('mouseleave', () => {
     const tooltip = btn.querySelector('.msg-action-tooltip');
     if (tooltip) tooltip.style.display = 'none';
+  });
+});
+
+// Source toggle buttons
+document.querySelectorAll('.source-toggle').forEach(toggle => {
+  toggle.querySelectorAll('.source-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      toggle.querySelectorAll('.source-toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
   });
 });
 
