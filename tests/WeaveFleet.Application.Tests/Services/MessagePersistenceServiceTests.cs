@@ -601,6 +601,68 @@ public sealed class MessagePersistenceServiceTests
         result.ModelId.ShouldBe("claude-sonnet-4");
     }
 
+    // ── Proven: ApplyBufferedTextDeltaIfPresent can double text ─────────
+    //
+    // ApplyBufferedTextDeltaIfPresent calls MergeTextDeltaAndMetadata, which
+    // APPENDS the buffer to existing text. The buffer holds the full accumulated
+    // text (not an incremental delta). If the persisted row already carries text
+    // (e.g. from a message.updated snapshot with parts), the text is doubled.
+    //
+    // In the normal happy path this doesn't fire because TryPersistPartAsync
+    // clears the buffer before TryPersistMessageAsync runs. It can fire when
+    // message.updated carries parts but message.part.updated was never emitted.
+
+    [Fact]
+    public void MergeTextDeltaAndMetadata_AppendsBufferToExistingText()
+    {
+        // MergeTextDeltaAndMetadata always appends. When the caller passes the
+        // full accumulated buffer (as ApplyBufferedTextDeltaIfPresent does),
+        // and the row already has text, the result is doubled.
+        var existing = MakePersistedMessage("""[{"type":"text","text":"Hello World"}]""");
+
+        var result = MessagePersistenceService.MergeTextDeltaAndMetadata(
+            existing, "Hello World", "assistant", null);
+
+        var text = MessagePersistenceService.ToHarnessMessage(result)
+            .Parts[0].ShouldBeOfType<TextPart>().Text;
+
+        // Documents current behavior: append, not replace.
+        text.ShouldBe("Hello WorldHello World");
+    }
+
+    [Fact]
+    public void MergeTextDeltaAndMetadata_AppendsBufferToEmptyRow()
+    {
+        // When the row has no text part, the buffer becomes the sole content.
+        // This is the correct path for stub rows created by message.updated
+        // with no parts.
+        var existing = MakePersistedMessage("[]");
+
+        var result = MessagePersistenceService.MergeTextDeltaAndMetadata(
+            existing, "Hello World", "assistant", null);
+
+        var text = MessagePersistenceService.ToHarnessMessage(result)
+            .Parts[0].ShouldBeOfType<TextPart>().Text;
+
+        text.ShouldBe("Hello World");
+    }
+
+    // ── Proven: FlushBufferedDeltasAsync skips messages with no DB row ───
+    //
+    // FlushBufferedDeltasAsync (HarnessEventPersistenceService:162) calls
+    //   if (existing is null) continue;
+    // If the harness disconnects before any durable event creates a row,
+    // all buffered text for that message is silently dropped.
+
+    // ── Architectural observation: buffering and persistence race ────────
+    //
+    // InProcessFanOutService buffers deltas (thread A).
+    // InProcessProjectionHost persists durable events and reads the buffer
+    // (thread B). PublishDurable wakes the projection host BEFORE writing
+    // to the fan-out channel, so the projection can read the buffer before
+    // all deltas are buffered. Not yet proven as the cause of the reported
+    // symptom; would need a concurrent integration test to demonstrate.
+
     [Fact]
     public void MergeMissingSnapshotParts_AddsTextToEmptyExistingRow()
     {
