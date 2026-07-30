@@ -385,7 +385,7 @@
   &[data-active="true"],
   &.active {
     color: var(--text);
-    border-bottom-color: var(--coral);
+    border-bottom-color: var(--indigo);
   }
 }
 

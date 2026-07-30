@@ -311,7 +311,7 @@ function handleSelect(item: RailItem): void {
 
 .rail-item.active {
   color: var(--text);
-  border-left-color: var(--coral);
+  border-left-color: var(--indigo);
   background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 
@@ -370,8 +370,8 @@ function handleSelect(item: RailItem): void {
   left: 52px;
   top: 50%;
   transform: translate(0, -50%);
-  background: #27272a;
-  color: var(--text);
+  background: var(--color-popover);
+  color: var(--color-popover-foreground);
   font-size: 11px;
   padding: 4px 10px;
   border-radius: 0;
