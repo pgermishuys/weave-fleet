@@ -589,7 +589,7 @@ watch(
       >
         <div
           v-if="activeGitHubPreset"
-          class="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3"
+          class="flex flex-wrap items-start justify-between gap-3 border border-border bg-muted/20 p-3"
         >
           <div class="min-w-0 flex-1 space-y-2">
             <a
@@ -614,7 +614,7 @@ watch(
 
             <p
               v-if="gitHubContextPreview"
-              class="rounded-md border border-border/60 bg-background/70 px-3 py-2 text-sm text-muted-foreground"
+              class="border border-border/60 bg-background/70 px-3 py-2 text-sm text-muted-foreground"
             >
               {{ gitHubContextPreview }}
             </p>
@@ -649,7 +649,7 @@ watch(
               :aria-checked="sourceKind === 'repository'"
               :tabindex="sourceKind === 'repository' ? 0 : -1"
               :class="cn(
-                'inline-flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2 text-xs font-medium transition-colors',
+                'inline-flex flex-1 items-center justify-center gap-2 border px-4 py-2 text-xs font-medium transition-colors',
                 sourceKind === 'repository'
                   ? 'border-primary bg-primary/10 text-primary'
                   : 'border-border text-muted-foreground hover:text-foreground',
@@ -668,7 +668,7 @@ watch(
               :tabindex="sourceKind === 'directory' ? 0 : -1"
               :disabled="Boolean(activeGitHubPreset)"
               :class="cn(
-                'inline-flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2 text-xs font-medium transition-colors',
+                'inline-flex flex-1 items-center justify-center gap-2 border px-4 py-2 text-xs font-medium transition-colors',
                 sourceKind === 'directory'
                   ? 'border-primary bg-primary/10 text-primary'
                   : 'border-border text-muted-foreground hover:text-foreground',
@@ -711,7 +711,7 @@ watch(
 
               <div
                 v-if="isRepositoryListOpen && !isRepositoriesLoading"
-                class="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md border border-border shadow-xl shadow-black/50 ring-1 ring-white/[0.08]"
+                class="absolute z-50 mt-1 max-h-64 w-full overflow-auto border border-border shadow-xl shadow-black/50 ring-1 ring-white/[0.08]"
                 :style="{ backgroundColor: 'color-mix(in srgb, var(--card-bg) 100%, white 4%)' }"
               >
                 <button
@@ -764,7 +764,7 @@ watch(
                 :tabindex="isolationStrategy === 'worktree' ? 0 : -1"
                 :disabled="isCreating"
                 :class="cn(
-                  'inline-flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2 text-xs font-medium transition-colors',
+                  'inline-flex flex-1 items-center justify-center gap-2 border px-4 py-2 text-xs font-medium transition-colors',
                   isolationStrategy === 'worktree'
                     ? 'border-primary bg-primary/10 text-primary'
                     : 'border-border text-muted-foreground hover:text-foreground',
@@ -782,7 +782,7 @@ watch(
                 :tabindex="isolationStrategy === 'existing' ? 0 : -1"
                 :disabled="isCreating"
                 :class="cn(
-                  'inline-flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2 text-xs font-medium transition-colors',
+                  'inline-flex flex-1 items-center justify-center gap-2 border px-4 py-2 text-xs font-medium transition-colors',
                   isolationStrategy === 'existing'
                     ? 'border-primary bg-primary/10 text-primary'
                     : 'border-border text-muted-foreground hover:text-foreground',
@@ -1049,7 +1049,7 @@ watch(
         <div
           v-if="dialogError"
           data-testid="new-session-error"
-          class="flex items-start gap-3 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          class="flex items-start gap-3 border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
           role="alert"
         >
           <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />

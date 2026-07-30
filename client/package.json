@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "lint:design": "tsx scripts/lint-design-system.ts"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.2.8",

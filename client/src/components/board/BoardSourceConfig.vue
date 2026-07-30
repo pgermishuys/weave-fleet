@@ -3,6 +3,7 @@ import type { BoardSource } from "@/lib/board-api";
 import { computed, ref, shallowRef, watch } from "vue";
 import { createBoardSource, deleteBoardSource, listBoardSources } from "@/lib/board-api";
 import { useGitHubBookmarks } from "@/plugins/builtin/github/composables/use-github-bookmarks";
+import { Button } from "@/components/ui/button";
 
 interface Props {
   boardId: string | null;
@@ -280,14 +281,15 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
       role="alert"
     >
       <span>{{ sourceError ?? bookmarksError }}</span>
-      <button
+      <Button
         v-if="bookmarksError"
         type="button"
-        class="board-source-config__ghost-button"
+        variant="ghost"
+        size="sm"
         @click="refreshBookmarks"
       >
         Retry bookmarks
-      </button>
+      </Button>
     </div>
 
     <div
@@ -351,14 +353,15 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
           </span>
         </label>
 
-        <button
+        <Button
           type="submit"
-          class="board-source-config__button"
+          variant="default"
+          size="sm"
           data-testid="board-source-submit"
           :disabled="!canSubmit"
         >
           {{ isCreatingSource ? "Adding…" : "Add source" }}
-        </button>
+        </Button>
       </form>
 
       <p
@@ -407,15 +410,16 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
             </p>
           </div>
 
-          <button
+          <Button
             type="button"
-            class="board-source-config__ghost-button"
+            variant="ghost"
+            size="sm"
             data-testid="board-source-remove"
             :disabled="pendingDeleteSourceId === source.id || isCreatingSource"
             @click="handleRemoveSource(source.id)"
           >
             {{ pendingDeleteSourceId === source.id ? "Removing…" : "Remove" }}
-          </button>
+          </Button>
         </li>
       </ul>
       <div
@@ -543,26 +547,6 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
   color: var(--text);
 }
 
-.board-source-config__button,
-.board-source-config__ghost-button {
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--card-bg);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.board-source-config__button {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
-}
-
-.board-source-config__button:disabled,
-.board-source-config__ghost-button:disabled,
 .board-source-config__select:disabled,
 .board-source-config__input:disabled,
 .board-source-config__checkbox:disabled {

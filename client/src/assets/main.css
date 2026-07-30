@@ -23,9 +23,13 @@
   --complete: #3b82f6;
   --error: #ef4444;
   --queued: #8b5cf6;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
   --radius-card: 0px;
   --radius-btn: 0px;
   --radius-panel: 0px;
+  --transition: 180ms ease-out;
+  --bg: var(--main-bg);
   --font-sans-stack: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
   --font-mono-stack: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
 }
@@ -54,6 +58,8 @@
   --complete: #2563eb;
   --error: #dc2626;
   --queued: #7c3aed;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
 }
 
 /* ─── Weave Classic (Dark Slate + Purple) ──────────────────────────────── */
@@ -74,6 +80,8 @@
   --complete: #3b82f6;
   --error: #ef4444;
   --queued: #8b5cf6;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
 }
 
 /* ─── Black (OLED) ─────────────────────────────────────────────────────── */
@@ -94,6 +102,8 @@
   --complete: #3b82f6;
   --error: #ef4444;
   --queued: #8b5cf6;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
 }
 
 /* ─── Nord ─────────────────────────────────────────────────────────────── */
@@ -114,6 +124,8 @@
   --complete: #81A1C1;
   --error: #BF616A;
   --queued: #B48EAD;
+  --destructive: #BF616A;
+  --destructive-foreground: #ECEFF4;
 }
 
 /* ─── Dracula ──────────────────────────────────────────────────────────── */
@@ -134,6 +146,8 @@
   --complete: #8BE9FD;
   --error: #FF5555;
   --queued: #FF79C6;
+  --destructive: #FF5555;
+  --destructive-foreground: #282A36;
 }
 
 /* ─── Solarized Dark ──────────────────────────────────────────────────── */
@@ -154,6 +168,8 @@
   --complete: #268BD2;
   --error: #DC322F;
   --queued: #6C71C4;
+  --destructive: #DC322F;
+  --destructive-foreground: #FDF6E3;
 }
 
 /* ─── Solarized Light ─────────────────────────────────────────────────── */
@@ -174,6 +190,8 @@
   --complete: #268BD2;
   --error: #DC322F;
   --queued: #6C71C4;
+  --destructive: #DC322F;
+  --destructive-foreground: #FDF6E3;
 }
 
 /* ─── Monokai ──────────────────────────────────────────────────────────── */
@@ -194,6 +212,8 @@
   --complete: #66D9EF;
   --error: #F92672;
   --queued: #AE81FF;
+  --destructive: #F92672;
+  --destructive-foreground: #F8F8F2;
 }
 
 /* ─── GitHub Dark ──────────────────────────────────────────────────────── */
@@ -214,6 +234,8 @@
   --complete: #58A6FF;
   --error: #F85149;
   --queued: #BC8CFF;
+  --destructive: #F85149;
+  --destructive-foreground: #E6EDF3;
 }
 
 @theme inline {
@@ -241,6 +263,8 @@
   --color-complete: var(--complete);
   --color-error: var(--error);
   --color-queued: var(--queued);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-surface: var(--panel-bg);
   --radius-card: var(--radius-card);
   --radius-btn: var(--radius-btn);
@@ -336,6 +360,41 @@
 
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* ─── Design System Interactive Utilities ───────────────────────────────── */
+@utility list-item-hover {
+  background: transparent;
+  transition: background var(--transition);
+
+  &:hover {
+    background: var(--bg);
+  }
+}
+
+@utility tab-hover {
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  transition: color var(--transition), border-color var(--transition);
+
+  &:hover {
+    color: var(--text);
+  }
+
+  &[data-active="true"],
+  &.active {
+    color: var(--text);
+    border-bottom-color: var(--coral);
+  }
+}
+
+@utility interactive-icon {
+  color: var(--muted);
+  transition: color var(--transition);
+
+  &:hover {
+    color: var(--text);
   }
 }
 

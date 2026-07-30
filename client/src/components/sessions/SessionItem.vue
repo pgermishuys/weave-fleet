@@ -576,6 +576,7 @@ function removeSessionFromStore(): void {
   background: transparent;
   color: var(--text);
   text-align: left;
+  transition: background var(--transition);
 }
 
 .session-item--editing {
@@ -583,7 +584,7 @@ function removeSessionFromStore(): void {
 }
 
 .session-item:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg);
 }
 
 .session-item--editing:hover {

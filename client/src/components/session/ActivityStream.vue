@@ -796,7 +796,7 @@ function getStringValue(value: unknown): string | undefined {
   display: inline-flex;
   padding: 8px 12px;
   border: 1px solid rgba(129, 140, 248, 0.35);
-  border-radius: 999px;
+  border-radius: 0;
   background: rgba(24, 24, 27, 0.92);
   color: #e4e4e7;
   font-size: 0.875rem;
@@ -826,7 +826,7 @@ function getStringValue(value: unknown): string | undefined {
   background: none;
   cursor: pointer;
   opacity: 0.7;
-  transition: opacity 0.15s;
+  transition: opacity var(--transition);
 }
 
 .load-older-button:hover {
@@ -952,8 +952,8 @@ function getStringValue(value: unknown): string | undefined {
   color: inherit;
   text-decoration: none;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03);
-  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease,
-    transform 140ms ease;
+  transition: border-color var(--transition) ease, background-color var(--transition) ease, box-shadow var(--transition) ease,
+    transform var(--transition) ease;
 }
 
 .delegation-link:hover {

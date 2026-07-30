@@ -19,6 +19,7 @@ import { DEFAULT_ISSUE_FILTER, type IssueFilterState, type GitHubLabel, type Git
 import IssueItem from "@/plugins/builtin/github/IssueItem.vue";
 import PullRequestItem from "@/plugins/builtin/github/PullRequestItem.vue";
 import IssueFilterBar from "@/plugins/builtin/github/components/IssueFilterBar.vue";
+import { Button } from "@/components/ui/button";
 
 type Tab = "issues" | "pulls";
 
@@ -129,12 +130,13 @@ function goBack() {
   <div class="github-repo-page">
     <!-- Header -->
     <div class="repo-header">
-      <button
-        class="back-btn"
+      <Button
+        variant="ghost"
+        size="sm"
         @click="goBack"
       >
         <ArrowLeft :size="14" />
-      </button>
+      </Button>
       <span class="repo-name">{{ repoFullName }}</span>
     </div>
 
@@ -196,12 +198,13 @@ function goBack() {
         class="list-error"
       >
         <p>{{ issuesError }}</p>
-        <button
-          class="retry-btn"
+        <Button
+          variant="outline"
+          size="sm"
           @click="refetchIssues"
         >
           Retry
-        </button>
+        </Button>
       </div>
 
       <div
@@ -228,13 +231,15 @@ function goBack() {
             class="animate-spin"
           />
         </div>
-        <button
+        <Button
           v-else-if="issuesHasMore"
+          variant="ghost"
+          size="sm"
           class="load-more-btn"
           @click="loadMoreIssues"
         >
           Load more
-        </button>
+        </Button>
       </template>
     </div>
 
@@ -244,26 +249,31 @@ function goBack() {
       class="tab-content"
     >
       <div class="pr-filter-bar">
-        <button
-          :class="['state-btn', pullsStateFilter === 'open' && 'state-btn--active']"
+        <Button
+          variant="filter"
+          size="sm"
+          :data-active="pullsStateFilter === 'open'"
           @click="pullsStateFilter = 'open'"
         >
           <GitPullRequest :size="12" />
           Open
-        </button>
-        <button
-          :class="['state-btn', pullsStateFilter === 'closed' && 'state-btn--active']"
+        </Button>
+        <Button
+          variant="filter"
+          size="sm"
+          :data-active="pullsStateFilter === 'closed'"
           @click="pullsStateFilter = 'closed'"
         >
           Closed
-        </button>
-        <button
-          class="refresh-btn"
+        </Button>
+        <Button
+          variant="toolbar-icon"
+          size="toolbar"
           title="Refresh"
           @click="refetchPulls"
         >
           <RefreshCw :size="12" />
-        </button>
+        </Button>
       </div>
 
       <div
@@ -281,12 +291,13 @@ function goBack() {
         class="list-error"
       >
         <p>{{ pullsError }}</p>
-        <button
-          class="retry-btn"
+        <Button
+          variant="outline"
+          size="sm"
           @click="refetchPulls"
         >
           Retry
-        </button>
+        </Button>
       </div>
 
       <div
@@ -312,13 +323,15 @@ function goBack() {
             class="animate-spin"
           />
         </div>
-        <button
+        <Button
           v-else-if="pullsHasMore"
+          variant="ghost"
+          size="sm"
           class="load-more-btn"
           @click="loadMorePulls"
         >
           Load more
-        </button>
+        </Button>
       </template>
     </div>
   </div>
@@ -340,22 +353,6 @@ function goBack() {
   padding: 12px 16px 8px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-}
-
-.back-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  border-radius: 4px;
-}
-
-.back-btn:hover {
-  color: var(--text);
-  background: var(--sidebar-item-hover);
 }
 
 .repo-name {
@@ -386,6 +383,7 @@ function goBack() {
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
+  transition: color var(--transition), border-color var(--transition);
 }
 
 .tab-btn:hover {
@@ -404,7 +402,7 @@ function goBack() {
   min-width: 18px;
   height: 16px;
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--sidebar-item-hover);
   font-size: 10px;
   font-weight: 600;
@@ -426,46 +424,6 @@ function goBack() {
   gap: 2px;
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
-}
-
-.state-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  height: 28px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.state-btn:hover {
-  background: var(--sidebar-item-hover);
-  color: var(--text);
-}
-
-.state-btn--active {
-  background: var(--accent-muted, rgba(99, 102, 241, 0.15));
-  color: var(--accent);
-}
-
-.refresh-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 6px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  border-radius: 4px;
-  margin-left: auto;
-}
-
-.refresh-btn:hover {
-  color: var(--text);
 }
 
 /* ─── List states ─────────────────────────────────────────────────────────── */
@@ -502,32 +460,8 @@ function goBack() {
   color: var(--muted);
 }
 
-.retry-btn {
-  padding: 4px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.retry-btn:hover {
-  background: var(--sidebar-item-hover);
-}
-
 .load-more-btn {
   width: 100%;
-  padding: 10px;
-  border: none;
-  background: transparent;
-  color: var(--accent);
-  font-size: 12px;
-  cursor: pointer;
   border-top: 1px solid var(--border);
-}
-
-.load-more-btn:hover {
-  background: var(--sidebar-item-hover);
 }
 </style>

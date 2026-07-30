@@ -4,6 +4,7 @@ import { Bell, Menu } from "lucide-vue-next";
 import { useLocation } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
@@ -126,16 +127,17 @@ const showUserAvatar = computed(() => config.value.authEnabled);
 
 <template>
   <header class="topbar flex items-center justify-between pr-4">
-    <button
+    <Button
       v-if="isMobileNav"
-      type="button"
-      class="topbar__icon-button ml-2 inline-flex h-9 w-9 shrink-0 items-center justify-center border border-transparent text-[var(--muted)] transition-colors hover:bg-white/5 hover:text-[var(--text)]"
+      variant="toolbar-icon"
+      size="toolbar"
+      class="ml-2"
       :aria-label="mobileDrawerOpen ? 'Close menu' : 'Open menu'"
       :aria-expanded="mobileDrawerOpen"
       @click="openDrawer"
     >
       <Menu class="h-5 w-5" />
-    </button>
+    </Button>
 
     <nav
       class="breadcrumb flex min-w-0 items-center"
@@ -173,14 +175,14 @@ const showUserAvatar = computed(() => config.value.authEnabled);
         <span>{{ statusLabel }}</span>
       </div>
 
-      <button
+      <Button
         v-if="showNotifications"
-        type="button"
-        class="topbar__icon-button inline-flex h-8 w-8 items-center justify-center rounded-full border border-transparent text-[var(--muted)] transition-colors hover:border-[var(--border)] hover:bg-white/5 hover:text-[var(--text)]"
+        variant="toolbar-icon"
+        size="toolbar"
         aria-label="Notifications"
       >
         <Bell class="h-4 w-4" />
-      </button>
+      </Button>
 
       <Avatar
         v-if="showUserAvatar"
@@ -251,11 +253,6 @@ const showUserAvatar = computed(() => config.value.authEnabled);
 
 .dot--pulse {
   animation: pulse-dot 2s ease-in-out infinite;
-}
-
-.topbar__icon-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 @keyframes pulse-dot {

@@ -61,7 +61,7 @@ const metrics = computed<SummaryMetric[]>(() => {
       <div
         v-for="metric in metrics"
         :key="metric.testId"
-        class="space-y-1 rounded-lg border border-border/60 bg-background/60 px-4 py-3"
+        class="space-y-1 border border-border/60 bg-background/60 px-4 py-3"
       >
         <p class="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
           {{ metric.label }}

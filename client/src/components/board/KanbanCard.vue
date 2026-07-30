@@ -3,6 +3,7 @@ import { ExternalLink, Github, TriangleAlert } from "lucide-vue-next";
 import type { BoardCard } from "@/stores/board";
 import { computed, shallowRef } from "vue";
 import { formatRelativeTime } from "@/lib/format-utils";
+import { Button } from "@/components/ui/button";
 
 interface Props {
   card: BoardCard;
@@ -329,40 +330,44 @@ function handleDragEnd(): void {
     </p>
 
     <div class="k-card__actions">
-      <button
+      <Button
         v-if="isEditing"
         type="button"
-        class="k-card__action"
+        variant="ghost"
+        size="sm"
         :disabled="isMutating"
         @click="submitRename"
       >
         Save
-      </button>
-      <button
+      </Button>
+      <Button
         v-else
         type="button"
-        class="k-card__action"
+        variant="ghost"
+        size="sm"
         :disabled="isMutating"
         @click="beginRename"
       >
         Rename
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
-        class="k-card__action"
+        variant="ghost"
+        size="sm"
         :disabled="isMutating"
         @click="handleArchive"
       >
         Archive
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
-        class="k-card__action k-card__action--danger"
+        variant="destructive"
+        size="sm"
         :disabled="isMutating"
         @click="handleDelete"
       >
         Delete
-      </button>
+      </Button>
     </div>
   </article>
 </template>
@@ -570,25 +575,5 @@ function handleDragEnd(): void {
 .k-card__metadata {
   margin: 0;
   line-height: 1.5;
-}
-
-.k-card__action {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: transparent;
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 600;
-  padding: 6px 9px;
-  cursor: pointer;
-}
-
-.k-card__action:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.k-card__action--danger {
-  color: #fca5a5;
 }
 </style>

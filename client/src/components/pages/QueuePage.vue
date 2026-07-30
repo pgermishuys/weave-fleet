@@ -59,7 +59,7 @@ const queueStates = ["Running tasks", "Queued work", "Completed history"];
           <li
             v-for="state in queueStates"
             :key="state"
-            class="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground"
+            class="border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground"
           >
             {{ state }}
           </li>

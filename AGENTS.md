@@ -1,5 +1,13 @@
 # Weave Fleet — Agent Instructions
 
+## Toolchain
+
+- **Package manager / script runner:** Always use `bun`. Never use `npm` or `npx` directly.
+  - Run scripts: `bun run <script>`
+  - Execute binaries: `bunx <package>` (e.g., `bunx vue-tsc --noEmit`)
+  - Install packages: `bun install`
+  - If you truly need npm CLI behaviour, use `bunx npm <args>`
+
 ## Layout Vocabulary
 
 The application shell is a composable layout built from named panels:
@@ -24,7 +32,7 @@ The application shell is a composable layout built from named panels:
 | Panel             | Description                                                                 |
 |-------------------|-----------------------------------------------------------------------------|
 | `rail`            | Icon-only vertical nav bar (left edge, always visible)                      |
-| `session-list`    | List of sessions for the current workspace                                  |
+| `session-list`    | List of sessions for the current workspace (collapsible)                    |
 | `conversation`    | The message/activity stream for the active session                          |
 | `content`         | Right-side artifact viewer (rendered markdown, HTML preview, raw source)     |
 | `settings-menu`   | Left nav for settings categories                                            |

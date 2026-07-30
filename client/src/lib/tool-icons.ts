@@ -1,43 +1,50 @@
-/**
- * Icon lookup map — maps icon name strings (from the server API)
- * to Lucide Vue components.
- *
- * The server sends `iconName` as a string because component references
- * can't be serialized to JSON. This module bridges the gap.
- */
-
-import type { Component } from "vue";
+import type { Component } from 'vue'
 import {
-  Code2,
-  MousePointer2,
+  FileText,
+  Pencil,
+  Search,
+  Layers,
   Terminal,
-  FolderOpen,
-  Wind,
-  PenTool,
-  Braces,
-  SquareTerminal,
-  AppWindow,
+  GitBranch,
+  Globe,
+  MessageCircleQuestion,
   Wrench,
-} from "lucide-vue-next";
+} from 'lucide-vue-next'
 
-type IconComponent = Component;
+const iconMap: Record<string, Component> = {
+  read: FileText,
+  write: Pencil,
+  edit: Pencil,
+  glob: Search,
+  grep: Search,
+  skill: Layers,
+  bash: Terminal,
+  task: GitBranch,
+  webfetch: Globe,
+  question: MessageCircleQuestion,
+}
 
-const TOOL_ICON_MAP: Record<string, IconComponent> = {
-  "code-2": Code2,
-  "mouse-pointer-2": MousePointer2,
-  terminal: Terminal,
-  "folder-open": FolderOpen,
-  wind: Wind,
-  "pen-tool": PenTool,
-  braces: Braces,
-  "square-terminal": SquareTerminal,
-  "app-window": AppWindow,
-  wrench: Wrench,
-};
+const labelMap: Record<string, string> = {
+  read: 'Read',
+  write: 'Write',
+  edit: 'Edit',
+  glob: 'Glob',
+  grep: 'Grep',
+  skill: 'Skill',
+  bash: 'Bash',
+  task: 'Task',
+  webfetch: 'Web Fetch',
+  question: 'Question',
+}
 
-const DEFAULT_ICON: IconComponent = Wrench;
+export function getToolIcon(kind: string): Component {
+  return iconMap[kind] ?? Wrench
+}
 
-/** Resolve an icon name string to a Lucide component. */
-export function getToolIcon(iconName: string): IconComponent {
-  return TOOL_ICON_MAP[iconName] ?? DEFAULT_ICON;
+export function getToolDisplayLabel(kind: string): string {
+  if (labelMap[kind]) {
+    return labelMap[kind]
+  }
+  // Title case fallback: capitalize first letter
+  return kind.charAt(0).toUpperCase() + kind.slice(1)
 }

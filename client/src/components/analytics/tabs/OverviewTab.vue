@@ -392,7 +392,7 @@ function getMaxCost(costs: readonly number[]): number {
 
           <div
             v-else
-            class="flex min-h-[320px] items-center justify-center rounded-xl border border-dashed border-border/70 bg-muted/20 px-6 py-8 text-center text-sm text-muted-foreground"
+            class="flex min-h-[320px] items-center justify-center border border-dashed border-border/70 bg-muted/20 px-6 py-8 text-center text-sm text-muted-foreground"
           >
             {{ dailyEmptyMessage }}
           </div>

@@ -106,7 +106,7 @@ function handleSessionChanged(): void {
 
     <div
       v-if="error"
-      class="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+      class="border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
       role="alert"
     >
       {{ error }}
@@ -114,7 +114,7 @@ function handleSessionChanged(): void {
 
     <div
       v-if="isLoading && sessions.length === 0"
-      class="flex items-center justify-center rounded-xl border border-dashed border-border px-6 py-16"
+      class="flex items-center justify-center border border-dashed border-border px-6 py-16"
     >
       <LoaderCircle class="h-5 w-5 animate-spin text-muted-foreground" />
       <span class="ml-2 text-sm text-muted-foreground">Loading sessions…</span>
@@ -123,7 +123,7 @@ function handleSessionChanged(): void {
     <div
       v-else-if="isEmpty"
       data-testid="empty-state"
-      class="rounded-xl border border-dashed border-border px-6 py-16 text-center"
+      class="border border-dashed border-border px-6 py-16 text-center"
     >
       <h2 class="text-lg font-semibold text-foreground">
         No sessions yet

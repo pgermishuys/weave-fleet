@@ -188,7 +188,7 @@ onUnmounted(() => {
       <div
         v-if="showResumingBanner"
         data-testid="session-resuming-banner"
-        class="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3"
+        class="border border-sky-500/30 bg-sky-500/10 px-4 py-3"
       >
         <p class="text-sm text-foreground">
           Resuming session…
@@ -198,7 +198,7 @@ onUnmounted(() => {
       <div
         v-if="showStoppedBanner"
         data-testid="session-stopped-banner"
-        class="rounded-lg border border-border bg-muted/40 px-4 py-3"
+        class="border border-border bg-muted/40 px-4 py-3"
       >
         <p class="text-sm text-muted-foreground">
           {{ effectiveLifecycleStatus === "disconnected"
@@ -210,7 +210,7 @@ onUnmounted(() => {
       <div
         v-if="isArchived"
         data-testid="session-archived-banner"
-        class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3"
+        class="border border-amber-500/30 bg-amber-500/10 px-4 py-3"
       >
         <p class="text-sm text-foreground">
           This session is archived and read-only.
@@ -310,7 +310,7 @@ onUnmounted(() => {
   flex-shrink: 0;
   align-items: center;
   border: 1px solid var(--border);
-  border-radius: 9999px;
+  border-radius: 0;
   padding: 0.125rem 0.5rem;
   font-size: 0.75rem;
   font-weight: 500;

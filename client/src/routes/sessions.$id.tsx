@@ -886,7 +886,7 @@ const SessionDetailPage = defineComponent({
               {search.value.parentSessionId || selectedSession.value?.parentSessionId ? (
                 <button
                   type="button"
-                  class="inline-flex h-8 items-center justify-center gap-2 rounded-md border bg-background px-3 text-sm font-medium shadow-xs transition-all hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50"
+                  class="inline-flex h-8 items-center justify-center gap-2 border bg-background px-3 text-sm font-medium shadow-xs transition-all hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50"
                   onClick={() => void handleBackToParent()}
                 >
                   <ArrowLeft class="h-4 w-4" />

@@ -458,7 +458,7 @@ onUnmounted(stopTrayResize);
   width: 2px;
   background: transparent;
   content: "";
-  transition: background 120ms ease;
+  transition: background var(--transition);
 }
 
 .diffs-tray__resize-handle:hover::after,
@@ -517,7 +517,7 @@ onUnmounted(stopTrayResize);
   width: 28px;
   height: 28px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 0;
   background: transparent;
   color: var(--text);
   cursor: pointer;

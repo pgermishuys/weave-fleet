@@ -6,6 +6,7 @@ import AuthorFilter from "./filters/AuthorFilter.vue";
 import MilestoneFilter from "./filters/MilestoneFilter.vue";
 import AssigneeFilter from "./filters/AssigneeFilter.vue";
 import SortControl from "./filters/SortControl.vue";
+import { Button } from "@/components/ui/button";
 import type { IssueFilterState, GitHubLabel, GitHubMilestone, GitHubAssignee } from "../composables/github-types";
 
 const props = defineProps<{
@@ -51,20 +52,24 @@ function handleSortChange(sort: "created" | "updated" | "comments", direction: "
     <!-- Filter controls row -->
     <div class="filter-controls">
       <!-- State toggle -->
-      <button
-        :class="['state-btn', filter.state === 'open' && 'state-btn--active']"
+      <Button
+        variant="filter"
+        size="sm"
+        :data-active="filter.state === 'open'"
         @click="setFilter({ state: 'open' })"
       >
         <CircleDot :size="12" />
         <span>Open</span>
-      </button>
-      <button
-        :class="['state-btn', filter.state === 'closed' && 'state-btn--active']"
+      </Button>
+      <Button
+        variant="filter"
+        size="sm"
+        :data-active="filter.state === 'closed'"
         @click="setFilter({ state: 'closed' })"
       >
         <CircleCheck :size="12" />
         <span>Closed</span>
-      </button>
+      </Button>
 
       <!-- Separator -->
       <div class="filter-separator" />
@@ -121,30 +126,6 @@ function handleSortChange(sort: "created" | "updated" | "comments", direction: "
   align-items: center;
   gap: 2px;
   flex-wrap: wrap;
-}
-
-.state-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  height: 28px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.state-btn:hover {
-  background: var(--sidebar-item-hover);
-  color: var(--text);
-}
-
-.state-btn--active {
-  background: var(--accent-muted, rgba(99, 102, 241, 0.15));
-  color: var(--accent);
 }
 
 .filter-separator {

@@ -294,15 +294,18 @@ function handleSelect(item: RailItem): void {
   cursor: pointer;
   position: relative;
   font-size: 15px;
-  transition: color 0.25s ease, background-color 0.25s ease;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
   margin-bottom: 2px;
-  border: 0;
+  border: 1px solid transparent;
   border-left: 3px solid transparent;
   background: transparent;
   padding: 0;
 }
 
 .rail-item:hover {
+  background: var(--bg);
+  border-color: var(--border);
+  border-left-color: transparent;
   color: var(--text);
 }
 
@@ -354,7 +357,7 @@ function handleSelect(item: RailItem): void {
   font-weight: 700;
   min-width: 14px;
   height: 14px;
-  border-radius: 7px;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -371,11 +374,11 @@ function handleSelect(item: RailItem): void {
   color: var(--text);
   font-size: 11px;
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: 0;
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition: opacity var(--transition), transform var(--transition);
   z-index: 100;
 }
 

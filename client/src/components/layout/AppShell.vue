@@ -15,9 +15,11 @@ import BoardRightPanel from "@/components/board/BoardRightPanel.vue";
 import CenterContent from "@/components/layout/CenterContent.vue";
 import ContextPanel from "@/components/layout/ContextPanel.vue";
 import IconRail from "@/components/layout/IconRail.vue";
+import StatusBar from "@/components/layout/StatusBar.vue";
 import SessionsV2RightPanel from "@/components/sessions/SessionsV2RightPanel.vue";
 import { Menu } from "lucide-vue-next";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import { useCommands } from "@/composables/use-commands";
 import { useWeaveSocket } from "@/composables/use-weave-socket";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
@@ -162,16 +164,17 @@ function onGutterPointerDown(e: PointerEvent): void {
     </Sheet>
 
     <!-- Mobile: hamburger menu button -->
-    <button
+    <Button
       v-if="isMobileNav"
-      type="button"
+      variant="toolbar-icon"
+      size="toolbar"
       class="mobile-menu-btn"
       :aria-label="mobileDrawerOpen ? 'Close menu' : 'Open menu'"
       :aria-expanded="mobileDrawerOpen"
       @click="openDrawer"
     >
       <Menu class="h-5 w-5" />
-    </button>
+    </Button>
 
     <div
       class="main"
@@ -204,6 +207,8 @@ function onGutterPointerDown(e: PointerEvent): void {
       />
     </div>
 
+    <StatusBar />
+
     <CommandPalette />
     <TauriUpdateDialog />
   </div>
@@ -230,26 +235,6 @@ function onGutterPointerDown(e: PointerEvent): void {
   top: 8px;
   left: 8px;
   z-index: 10;
-  display: inline-flex;
-  height: 36px;
-  width: 36px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--panel-bg);
-  color: var(--muted);
-  transition: background 0.15s, color 0.15s;
-}
-
-.mobile-menu-btn:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text);
-}
-
-.mobile-menu-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 .resize-gutter {
@@ -258,7 +243,7 @@ function onGutterPointerDown(e: PointerEvent): void {
   flex-shrink: 0;
   cursor: col-resize;
   background: transparent;
-  transition: background 180ms ease-out;
+  transition: background var(--transition);
   z-index: 5;
 }
 

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, ref, useTemplateRef, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { Send, Paperclip, X, Hand } from "lucide-vue-next";
+import { Send, Paperclip, X, CircleX } from "lucide-vue-next";
 import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
 import AgentSelector from "@/components/session/AgentSelector.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
+import { Button } from "@/components/ui/button";
 import { useAgents } from "@/composables/use-agents";
 import { useAbortSession } from "@/composables/use-session-actions";
 import { useAutocomplete } from "@/composables/use-autocomplete";
@@ -702,15 +703,15 @@ function handleKeydown(event: KeyboardEvent): void {
       >
 
       <div class="composer-toolbar">
-        <button
-          type="button"
-          class="attach-btn"
+        <Button
+          variant="toolbar-icon"
+          size="toolbar"
           title="Attach image"
           :disabled="isDisabled"
           @click="fileInputRef?.click()"
         >
-          <Paperclip class="attach-btn__icon" />
-        </button>
+          <Paperclip class="size-3.5" />
+        </Button>
         <AgentSelector
           v-model="selectedAgentId"
           :agents="agents"
@@ -719,15 +720,15 @@ function handleKeydown(event: KeyboardEvent): void {
           v-model="selectedModelId"
           :models="models"
         />
-        <button
-          type="button"
-          class="interrupt-btn"
+        <Button
+          variant="toolbar-icon-danger"
+          size="toolbar"
           title="Interrupt"
           :disabled="!canInterrupt"
           @click="handleInterrupt"
         >
-          <Hand class="interrupt-btn__icon" />
-        </button>
+          <CircleX class="size-3.5" />
+        </Button>
 
         <div
           v-show="statusIndicatorVisible"
@@ -745,16 +746,17 @@ function handleKeydown(event: KeyboardEvent): void {
           >{{ busyStatusDots }}</span>
         </div>
 
-        <button
-          type="button"
-          class="send-btn"
+        <Button
+          variant="default"
+          size="sm"
+          class="ml-auto"
           data-testid="prompt-send-button"
           :disabled="isDisabled || !hasContent"
           @click="handleSend"
         >
-          <Send class="send-btn__icon" />
+          <Send class="size-3.5" />
           <span>Send</span>
-        </button>
+        </Button>
         <span
           v-if="queue.length > 0"
           class="queue-badge"
@@ -811,7 +813,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .composer-error {
   margin: 0 0 10px;
   border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
-  border-radius: 10px;
+  border-radius: 0;
   padding: 10px 12px;
   background: color-mix(in srgb, var(--error) 10%, transparent);
   color: var(--error);
@@ -931,37 +933,6 @@ function handleKeydown(event: KeyboardEvent): void {
   border-top: 1px solid var(--border);
 }
 
-.send-btn {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 16px;
-  border: none;
-  border-radius: 20px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.send-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.send-btn:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.7);
-  outline-offset: 2px;
-}
-
-.send-btn__icon {
-  width: 13px;
-  height: 13px;
-}
-
 .queue-badge {
   font-size: 10px;
   color: var(--muted);
@@ -987,7 +958,7 @@ function handleKeydown(event: KeyboardEvent): void {
   gap: 4px;
   padding: 6px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--panel-bg);
   font-size: 10px;
   color: var(--text);
@@ -1000,7 +971,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border: none;
   background: transparent;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 0;
 }
 
 .attachment-chip__thumb-btn:hover {
@@ -1010,7 +981,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .attachment-chip__thumb {
   width: 80px;
   height: 80px;
-  border-radius: 4px;
+  border-radius: 0;
   object-fit: cover;
 }
 
@@ -1039,7 +1010,7 @@ function handleKeydown(event: KeyboardEvent): void {
   color: #fff;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity var(--transition);
 }
 
 .attachment-chip:hover .attachment-chip__remove {
@@ -1053,64 +1024,6 @@ function handleKeydown(event: KeyboardEvent): void {
 .attachment-chip__remove-icon {
   width: 12px;
   height: 12px;
-}
-
-.attach-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.attach-btn:hover {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  color: var(--text);
-}
-
-.attach-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.attach-btn__icon {
-  width: 15px;
-  height: 15px;
-}
-
-.interrupt-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.interrupt-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  color: var(--destructive, #ef4444);
-}
-
-.interrupt-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.interrupt-btn__icon {
-  width: 15px;
-  height: 15px;
 }
 
 .sr-only {
@@ -1141,7 +1054,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .lightbox-image {
   max-width: 90vw;
   max-height: 90vh;
-  border-radius: 8px;
+  border-radius: 0;
   object-fit: contain;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   cursor: default;

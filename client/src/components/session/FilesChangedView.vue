@@ -537,13 +537,14 @@ function isEditableTarget(target: EventTarget | null): boolean {
   gap: 8px;
   padding: 6px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--panel) 86%, transparent);
   color: var(--text);
   cursor: pointer;
   font: inherit;
   font-size: 13px;
   font-weight: 600;
+  transition: background-color var(--transition);
 }
 
 .files-changed-view__back-button:hover {
@@ -700,17 +701,18 @@ function isEditableTarget(target: EventTarget | null): boolean {
   min-height: 30px;
   padding: 5px 12px;
   border: 1px solid color-mix(in srgb, var(--error) 42%, var(--border));
-  border-radius: 8px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--error) 10%, transparent);
   color: color-mix(in srgb, var(--error) 78%, var(--text));
   cursor: pointer;
   font: inherit;
   font-size: 12px;
   font-weight: 600;
+  transition: background var(--transition), border-color var(--transition);
 }
 
 .files-changed-view__retry-button:hover {
-  background: color-mix(in srgb, var(--error) 16%, transparent);
+  background: var(--bg);
 }
 
 .files-changed-view__retry-button:focus-visible {

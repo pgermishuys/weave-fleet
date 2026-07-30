@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { ChartNoAxesColumn } from "lucide-vue-next";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
 
 const props = defineProps<{
   totalTokens?: number | null;
@@ -49,9 +50,9 @@ function formatCurrency(amount: number | null): string {
 <template>
   <Popover>
     <PopoverTrigger as-child>
-      <button
-        type="button"
-        class="analytics-trigger"
+      <Button
+        variant="toolbar-icon"
+        size="toolbar"
         :class="{ 'analytics-trigger--active': hasMetrics }"
         aria-label="Show session analytics"
         title="Session analytics"
@@ -60,7 +61,7 @@ function formatCurrency(amount: number | null): string {
           class="analytics-trigger__icon"
           aria-hidden="true"
         />
-      </button>
+      </Button>
     </PopoverTrigger>
 
     <PopoverContent
@@ -99,39 +100,15 @@ function formatCurrency(amount: number | null): string {
 </template>
 
 <style scoped>
-.analytics-trigger {
-  display: inline-flex;
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted-foreground, var(--muted));
-  cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
-}
-
-.analytics-trigger:hover,
 .analytics-trigger--active {
-  border-color: color-mix(in srgb, var(--border) 72%, var(--foreground, var(--text)) 28%);
-  color: var(--foreground, var(--text));
-}
-
-.analytics-trigger:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.analytics-trigger:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
 }
 
 .analytics-trigger__icon {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 
 :deep(.analytics-popover) {

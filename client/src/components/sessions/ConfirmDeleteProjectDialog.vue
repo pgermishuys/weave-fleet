@@ -72,7 +72,7 @@ function handleConfirm(): void {
 
       <div class="grid gap-3">
         <label
-          class="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-muted/20 p-4 text-sm transition-colors hover:bg-muted/40"
+          class="flex cursor-pointer items-start gap-3 border border-border bg-muted/20 p-4 text-sm transition-colors hover:bg-muted/40"
           :class="selectedMode === 'move_to_scratch' ? 'border-primary bg-primary/5' : undefined"
         >
           <input
@@ -89,7 +89,7 @@ function handleConfirm(): void {
         </label>
 
         <label
-          class="flex cursor-pointer items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm transition-colors hover:bg-destructive/10"
+          class="flex cursor-pointer items-start gap-3 border border-destructive/40 bg-destructive/5 p-4 text-sm transition-colors hover:bg-destructive/10"
           :class="selectedMode === 'delete_sessions' ? 'border-destructive bg-destructive/10' : undefined"
         >
           <input

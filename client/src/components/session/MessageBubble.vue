@@ -26,6 +26,8 @@ interface ToolCardItem {
   output?: string;
   diffLines?: ToolCardDiffLine[];
   initiallyCollapsed?: boolean;
+  preview?: string;
+  isPatternTool?: boolean;
 }
 
 interface ImageAttachmentDisplay {
@@ -203,6 +205,8 @@ function copyMessage() {
             :output="tool.output"
             :diff-lines="tool.diffLines"
             :initially-collapsed="tool.initiallyCollapsed"
+            :preview="tool.preview"
+            :is-pattern-tool="tool.isPatternTool"
           />
 
           <QuestionCard
@@ -241,7 +245,7 @@ function copyMessage() {
   border-left: 3px solid transparent;
   position: relative;
   background: transparent;
-  transition: background 180ms ease-out, border-left-color 180ms ease-out;
+  transition: background var(--transition), border-left-color var(--transition);
 }
 
 .message:hover {
@@ -340,7 +344,7 @@ function copyMessage() {
 
 .msg-body__content :deep(code:not(pre code)) {
   padding: 0.12rem 0.35rem;
-  border-radius: 4px;
+  border-radius: 0;
   background: var(--bg, rgba(0, 0, 0, 0.04));
   color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
@@ -399,11 +403,11 @@ function copyMessage() {
   display: block;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
+  border-radius: 0;
   background: transparent;
   cursor: pointer;
   overflow: hidden;
-  transition: border-color 140ms ease;
+  transition: border-color var(--transition);
 }
 
 .msg-image-thumb:hover {
@@ -415,7 +419,7 @@ function copyMessage() {
   max-width: 180px;
   max-height: 120px;
   object-fit: cover;
-  border-radius: 5px;
+  border-radius: 0;
 }
 
 .msg-copy-btn {
@@ -428,12 +432,12 @@ function copyMessage() {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 0;
   background: var(--surface, #fff);
   color: var(--muted);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 180ms ease-out;
+  transition: opacity var(--transition);
   padding: 0;
 }
 

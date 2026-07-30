@@ -167,7 +167,7 @@ function selectItem(itemId: string): void {
   gap: 6px;
   padding: 5px 12px;
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: 0;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -225,7 +225,7 @@ function selectItem(itemId: string): void {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0;
   background: rgba(255, 255, 255, 0.02);
   color: var(--text);
   font-size: 11px;
@@ -248,7 +248,7 @@ function selectItem(itemId: string): void {
   gap: 12px;
   padding: 8px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;

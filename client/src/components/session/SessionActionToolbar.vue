@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Archive, GitFork, Loader2, OctagonX, Pencil, RotateCcw, Square, Trash2 } from "lucide-vue-next";
+import { Button } from "@/components/ui/button";
 
 const props = withDefaults(defineProps<{
   canAbort?: boolean;
@@ -39,11 +40,11 @@ const emit = defineEmits<{
     class="session-action-toolbar"
     aria-label="Session actions"
   >
-    <button
+    <Button
       v-if="props.canAbort"
-      type="button"
+      variant="toolbar-icon-danger"
+      size="toolbar"
       data-testid="abort-button"
-      class="session-action-toolbar__btn session-action-toolbar__btn--danger"
       :disabled="props.isPending || !props.hasSession || !props.hasInstance"
       title="Abort"
       @click="emit('abort')"
@@ -57,13 +58,13 @@ const emit = defineEmits<{
         v-else
         aria-hidden="true"
       />
-    </button>
+    </Button>
 
-    <button
+    <Button
       v-if="props.canResume"
-      type="button"
+      variant="toolbar-icon"
+      size="toolbar"
       data-testid="session-resume-button"
-      class="session-action-toolbar__btn"
       :disabled="props.isPending || !props.hasSession"
       title="Resume"
       @click="emit('resume')"
@@ -77,13 +78,13 @@ const emit = defineEmits<{
         v-else
         aria-hidden="true"
       />
-    </button>
+    </Button>
 
-    <button
+    <Button
       v-if="props.canStop"
-      type="button"
+      variant="toolbar-icon-danger"
+      size="toolbar"
       data-testid="session-stop-button"
-      class="session-action-toolbar__btn session-action-toolbar__btn--danger"
       :disabled="props.isPending || !props.hasSession || !props.hasInstance"
       title="Stop"
       @click="emit('stop')"
@@ -97,26 +98,26 @@ const emit = defineEmits<{
         v-else
         aria-hidden="true"
       />
-    </button>
+    </Button>
 
     <span class="session-action-toolbar__divider" />
 
-    <button
+    <Button
       v-if="props.canFork"
-      type="button"
+      variant="toolbar-icon"
+      size="toolbar"
       data-testid="session-archived-fork-button"
-      class="session-action-toolbar__btn"
       :disabled="props.isPending || !props.hasSession"
       title="Fork"
       @click="emit('fork')"
     >
       <GitFork aria-hidden="true" />
-    </button>
+    </Button>
 
-    <button
+    <Button
       v-if="props.canDelete"
-      type="button"
-      class="session-action-toolbar__btn"
+      variant="toolbar-icon"
+      size="toolbar"
       :disabled="props.isPending || !props.hasSession"
       title="Rename"
       @click="emit('rename')"
@@ -130,13 +131,13 @@ const emit = defineEmits<{
         v-else
         aria-hidden="true"
       />
-    </button>
+    </Button>
 
-    <button
+    <Button
       v-if="props.canDelete"
-      type="button"
+      variant="toolbar-icon-danger"
+      size="toolbar"
       data-testid="session-delete-button"
-      class="session-action-toolbar__btn session-action-toolbar__btn--danger"
       :disabled="props.isPending || !props.hasSession || !props.hasInstance"
       title="Delete"
       @click="emit('delete')"
@@ -150,13 +151,13 @@ const emit = defineEmits<{
         v-else
         aria-hidden="true"
       />
-    </button>
+    </Button>
 
-    <button
+    <Button
       v-if="props.canArchive"
-      type="button"
+      variant="toolbar-icon"
+      size="toolbar"
       data-testid="session-archive-banner-button"
-      class="session-action-toolbar__btn"
       :disabled="props.isPending || !props.hasSession"
       title="Archive"
       @click="emit('archive')"
@@ -170,7 +171,7 @@ const emit = defineEmits<{
         v-else
         aria-hidden="true"
       />
-    </button>
+    </Button>
 
     <p
       v-for="message in props.errors ?? []"
@@ -189,44 +190,6 @@ const emit = defineEmits<{
   align-items: center;
   gap: 2px;
   flex-wrap: wrap;
-}
-
-.session-action-toolbar__btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.session-action-toolbar__btn :deep(svg) {
-  width: 12px;
-  height: 12px;
-}
-
-.session-action-toolbar__btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.session-action-toolbar__btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.session-action-toolbar__btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.session-action-toolbar__btn--danger {
-  border-color: rgba(239, 68, 68, 0.35);
-  color: #fca5a5;
 }
 
 .session-action-toolbar__divider {

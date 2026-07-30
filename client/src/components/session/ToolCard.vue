@@ -3,6 +3,7 @@ import { computed, shallowRef, watch } from "vue";
 import DiffView from "@/components/session/DiffView.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
+import { getToolIcon, getToolDisplayLabel } from "@/lib/tool-icons";
 
 interface DiffLine {
   type: "add" | "remove" | "context";
@@ -21,6 +22,8 @@ const props = withDefaults(
     output?: string;
     diffLines?: DiffLine[];
     initiallyCollapsed?: boolean;
+    preview?: string;
+    isPatternTool?: boolean;
   }>(),
   {
     kind: "Tool",
@@ -29,6 +32,8 @@ const props = withDefaults(
     output: "",
     diffLines: () => [],
     initiallyCollapsed: false,
+    preview: "",
+    isPatternTool: false,
   },
 );
 
@@ -36,7 +41,9 @@ const workspaceUiStore = useWorkspaceUiStore();
 
 const shouldShowDiff = computed(() => workspaceUiStore.inlineToolDiffs && props.diffLines.length > 0);
 const isCollapsed = shallowRef(props.initiallyCollapsed && !shouldShowDiff.value);
-const shouldShowEmptyState = computed(() => !props.summary && !props.output && props.diffLines.length === 0);
+
+const toolIcon = computed(() => getToolIcon(props.kind));
+const displayLabel = computed(() => getToolDisplayLabel(props.kind));
 
 watch(
   () => props.initiallyCollapsed,
@@ -55,10 +62,6 @@ watch(shouldShowDiff, (nextValue) => {
     isCollapsed.value = false;
   }
 });
-
-const cardClassName = computed(() => ({
-  collapsed: isCollapsed.value,
-}));
 
 const TOOL_STATUS_TO_GLYPH: Record<string, string> = {
   Pending: "idle",
@@ -87,7 +90,6 @@ function handleToggle(event: Event): void {
 <template>
   <details
     class="tool-card"
-    :class="cardClassName"
     data-testid="tool-card"
     :data-tool-card-id="id"
     :open="!isCollapsed"
@@ -97,14 +99,20 @@ function handleToggle(event: Event): void {
       class="tool-header"
       data-testid="tool-card-header"
     >
-      <div class="tool-header__meta">
-        <span class="tool-header__kind">{{ kind }}</span>
-        <span class="tool-header__title">{{ title }}</span>
-      </div>
-      <span class="tool-header__status" :style="{ color: statusColor }">
+      <component :is="toolIcon" class="tool-header__icon" />
+      <span class="tool-header__label">{{ displayLabel }}</span>
+      <span v-if="isPatternTool" class="tool-header__pattern">{{ title }}</span>
+      <span v-else class="tool-header__detail">{{ title }}</span>
+      <span
+        v-if="status === 'Running' || status === 'Error'"
+        class="tool-header__status"
+        :style="{ color: statusColor }"
+      >
         <StatusGlyph :status="glyphStatus" />
       </span>
     </summary>
+
+    <p v-if="preview" class="tool-preview">{{ preview }}</p>
 
     <div
       :id="`${id}-body`"
@@ -129,41 +137,27 @@ function handleToggle(event: Event): void {
         class="tool-output"
         data-testid="tool-card-output"
       ><code>{{ output }}</code></pre>
-
-      <p
-        v-if="shouldShowEmptyState"
-        class="tool-empty-state"
-        data-testid="tool-card-empty-state"
-      >
-        No output captured
-      </p>
     </div>
   </details>
 </template>
 
 <style scoped>
 .tool-card {
-  background: var(--bg, #FAF9F7);
+  background: color-mix(in srgb, var(--panel-bg, #FAF9F7) 100%, transparent);
   border: 1px solid var(--border);
-  padding: 10px 12px;
-  margin-top: 8px;
   border-radius: 0;
+  margin-top: 8px;
+  padding: 10px 12px;
 }
 
 .tool-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  padding: 4px 0;
-  background: transparent;
-  color: var(--muted);
+  font-size: 13px;
   cursor: pointer;
-  font-size: 12px;
-  font-family: var(--font-mono-stack, 'Courier New', monospace);
-  text-align: left;
   list-style: none;
-  transition: color 0.15s ease;
+  transition: color var(--transition);
 }
 
 .tool-header::-webkit-details-marker {
@@ -174,48 +168,61 @@ function handleToggle(event: Event): void {
   display: none;
 }
 
-.tool-header:hover {
-  color: var(--text);
-}
-
-.tool-header:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.tool-header__meta {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-  flex: 1;
-}
-
-.tool-header__kind {
+.tool-header__icon {
+  width: 14px;
+  height: 14px;
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 500;
-  font-family: var(--font-mono-stack);
+  flex-shrink: 0;
 }
 
-.tool-header__title {
-  min-width: 0;
-  overflow: hidden;
+.tool-header__label {
+  font-weight: 600;
   color: var(--text);
-  font-weight: 500;
+  font-family: var(--font-sans-stack);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.tool-header__detail {
   font-family: var(--font-mono-stack);
+  font-size: 12px;
+  color: var(--muted);
+  flex: 1;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+
+.tool-header__pattern {
+  display: inline-block;
+  padding: 2px 10px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-radius: 0;
+  font-family: var(--font-mono-stack);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
 }
 
 .tool-header__status {
   display: flex;
   align-items: center;
   font-size: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.tool-preview {
+  margin: 6px 0 0;
+  font-family: var(--font-mono-stack);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .tool-body {
-  padding-left: 16px;
   margin-top: 4px;
 }
 
@@ -230,20 +237,12 @@ function handleToggle(event: Event): void {
   margin: 0 0 8px;
   padding: 8px 10px;
   border: 1px solid var(--border);
-  background: var(--bg);
+  background: color-mix(in srgb, var(--panel-bg) 100%, transparent);
   color: var(--muted);
   font-family: var(--font-mono-stack);
   font-size: 10px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.tool-empty-state {
-  margin: 0 0 8px;
-  color: var(--muted);
-  font-size: 11px;
-  font-style: italic;
-  line-height: 1.6;
 }
 </style>

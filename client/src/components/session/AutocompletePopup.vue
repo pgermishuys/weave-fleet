@@ -183,7 +183,7 @@ function handleSelect(value: string): void {
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 0;
   background: var(--card-bg);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   z-index: 250;
@@ -253,7 +253,7 @@ function handleSelect(value: string): void {
   width: 7px;
   height: 7px;
   border: 1px solid var(--card-bg);
-  border-radius: 999px;
+  border-radius: 0;
 }
 
 .autocomplete-popup__content {

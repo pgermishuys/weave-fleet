@@ -21,6 +21,7 @@ import {
   CommandEmpty,
   CommandGroup,
 } from "@/components/ui/command";
+import { Button } from "@/components/ui/button";
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 const { isConnected, isLoadingStatus } = useGitHubAuth();
@@ -103,10 +104,10 @@ async function handleSelectRepo(repo: { full_name: string; name: string; owner_l
       <div class="actions-bar">
         <Dialog v-model:open="isDialogOpen">
           <DialogTrigger as-child>
-            <button class="add-repo-btn">
+            <Button variant="outline" size="sm">
               <Plus :size="14" />
               Add Repository
-            </button>
+            </Button>
           </DialogTrigger>
           <DialogContent class="add-repo-dialog-content">
             <DialogHeader>
@@ -251,28 +252,10 @@ async function handleSelectRepo(repo: { full_name: string; name: string; owner_l
   color: var(--muted);
 }
 
-/* ─── Actions bar ─────────────────────────────────────────────────────────── */
 .actions-bar {
   display: flex;
   padding: 12px 16px;
   flex-shrink: 0;
-}
-
-.add-repo-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.add-repo-btn:hover {
-  background: var(--sidebar-item-hover);
 }
 
 /* ─── Repo grid ───────────────────────────────────────────────────────────── */
@@ -289,17 +272,17 @@ async function handleSelectRepo(repo: { full_name: string; name: string; owner_l
   gap: 8px;
   padding: 16px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--card, var(--sidebar));
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--transition);
   text-align: left;
   color: var(--text);
   font-size: 13px;
 }
 
 .repo-card:hover {
-  background: var(--accent, rgba(255, 255, 255, 0.05));
+  background: var(--bg);
 }
 
 /* ─── Dialog items ────────────────────────────────────────────────────────── */

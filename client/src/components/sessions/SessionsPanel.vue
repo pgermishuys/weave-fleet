@@ -11,6 +11,7 @@ import { useMoveSession } from "@/composables/use-session-actions";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
+import { Button } from "@/components/ui/button";
 import NewProjectDialog from "./NewProjectDialog.vue";
 import NewSessionDialog from "./NewSessionDialog.vue";
 import ProjectGroup from "./ProjectGroup.vue";
@@ -511,8 +512,9 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
   >
     <div class="panel-header-row">
       <div class="panel-actions">
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           class="panel-action-button"
           @click="handleNewSession"
         >
@@ -521,10 +523,11 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
             aria-hidden="true"
           />
           <span>New Session</span>
-        </button>
+        </Button>
 
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           class="panel-action-button panel-action-button--secondary"
           @click="handleNewProject"
         >
@@ -533,7 +536,7 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
             aria-hidden="true"
           />
           <span>New Project</span>
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -678,13 +681,9 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
 }
 
 .panel-action-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   min-height: 28px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text);
   font-size: 11px;
@@ -692,12 +691,9 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
 }
 
 .panel-action-button:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.panel-action-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
 }
 
 .panel-action-button--secondary {
@@ -706,6 +702,8 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
 }
 
 .panel-action-button--secondary:hover {
+  background: var(--bg);
+  border-color: var(--border);
   color: var(--text);
 }
 
@@ -733,7 +731,7 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
   width: 100%;
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
+  border-radius: 0;
   padding: 5px 8px 5px 28px;
   font-size: 12px;
   color: var(--text);
@@ -787,16 +785,19 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
 .sessions-feedback-banner__button {
   min-height: 28px;
   padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
+  border: 1px solid transparent;
+  border-radius: 0;
   background: transparent;
-  color: var(--text);
+  color: var(--muted);
   font-size: 11px;
   font-weight: 500;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
 
 .sessions-feedback-banner__button:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
 }
 
 .sessions-feedback-banner__button:focus-visible {
@@ -830,16 +831,19 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
 .sessions-feedback-state__button {
   min-height: 30px;
   padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text);
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
   font-size: 11px;
   font-weight: 500;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
 
 .sessions-feedback-state__button:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
 }
 
 .sessions-feedback-state__button:focus-visible {

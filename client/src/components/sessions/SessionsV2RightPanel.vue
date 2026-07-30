@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
+import ArtifactsPanel from "@/components/session/ArtifactsPanel.vue";
 import CollapsedRightRail from "@/components/layout/CollapsedRightRail.vue";
 import RightPanelTabs from "@/components/layout/RightPanelTabs.vue";
 import SessionDetailPanel from "@/components/session/SessionDetailPanel.vue";
@@ -95,6 +96,21 @@ watch(
 );
 
 // --- Tabs ---
+const rightPanelTabs = [
+  {
+    id: "artifacts",
+    label: "Artifacts",
+  },
+  {
+    id: "info",
+    label: "Info",
+  },
+] as const;
+
+type RightPanelTabId = (typeof rightPanelTabs)[number]["id"];
+
+const activeTabId = shallowRef<RightPanelTabId>("artifacts");
+
 const sessionTab = {
   id: "session",
   label: "Session",
@@ -118,6 +134,12 @@ const activeTab = computed(() => {
     description: `${statusLabel} session in ${projectLabel}. Details and quick actions for the selected session appear here.`,
   };
 });
+
+function handleTabSelect(tabId: string): void {
+  if (tabId === "artifacts" || tabId === "info") {
+    activeTabId.value = tabId;
+  }
+}
 
 function getStatusLabel(status: string): string {
   switch (status) {
@@ -163,33 +185,38 @@ function openDiffsTray(): void {
     aria-label="Right panel"
   >
     <RightPanelTabs
-      :tabs="[sessionTab]"
-      :active-tab="sessionTab.id"
+      :tabs="rightPanelTabs"
+      :active-tab="activeTabId"
+      @select="handleTabSelect"
       @collapse="handleCollapse"
     />
 
     <div class="right-content">
       <div class="right-content__panel">
-        <section
-          v-if="!selectedSession"
-          class="right-section"
-        >
-          <p class="right-section__eyebrow">
-            {{ activeTab.eyebrow }}
-          </p>
-          <h2 class="right-section__title">
-            {{ activeTab.title }}
-          </h2>
-          <p class="right-section__description">
-            {{ activeTab.description }}
-          </p>
-        </section>
+        <ArtifactsPanel v-if="activeTabId === 'artifacts'" />
 
-        <SessionDetailPanel
-          v-else
-          :session="selectedSession"
-          :open-diffs-tray="openDiffsTray"
-        />
+        <template v-else-if="activeTabId === 'info'">
+          <section
+            v-if="!selectedSession"
+            class="right-section"
+          >
+            <p class="right-section__eyebrow">
+              {{ activeTab.eyebrow }}
+            </p>
+            <h2 class="right-section__title">
+              {{ activeTab.title }}
+            </h2>
+            <p class="right-section__description">
+              {{ activeTab.description }}
+            </p>
+          </section>
+
+          <SessionDetailPanel
+            v-else
+            :session="selectedSession"
+            :open-diffs-tray="openDiffsTray"
+          />
+        </template>
       </div>
     </div>
   </aside>

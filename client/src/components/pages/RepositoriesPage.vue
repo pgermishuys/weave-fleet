@@ -114,7 +114,7 @@ function goToSettings(): void {
 
     <div
       v-if="isLoading"
-      class="flex flex-1 items-center justify-center gap-3 rounded-xl border border-border bg-card p-8 text-sm text-muted-foreground"
+      class="flex flex-1 items-center justify-center gap-3 border border-border bg-card p-8 text-sm text-muted-foreground"
     >
       <LoaderCircle
         :size="18"
@@ -125,7 +125,7 @@ function goToSettings(): void {
 
     <div
       v-else-if="errorMessage"
-      class="flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200"
+      class="flex items-start gap-3 border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200"
       role="alert"
     >
       <TriangleAlert
@@ -142,7 +142,7 @@ function goToSettings(): void {
 
     <div
       v-else-if="sortedRepositories.length === 0"
-      class="flex flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border bg-card/40 p-8 text-center"
+      class="flex flex-1 flex-col items-center justify-center gap-4 border border-dashed border-border bg-card/40 p-8 text-center"
     >
       <FolderGit2
         :size="44"
@@ -177,7 +177,7 @@ function goToSettings(): void {
       >
         <CardHeader class="gap-2 px-5">
           <div class="flex items-start gap-3">
-            <div class="rounded-lg border border-border bg-muted/30 p-2 text-muted-foreground">
+            <div class="border border-border bg-muted/30 p-2 text-muted-foreground">
               <FolderGit2 :size="16" />
             </div>
             <div class="min-w-0 flex-1">

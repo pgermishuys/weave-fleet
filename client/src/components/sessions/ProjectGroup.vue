@@ -447,11 +447,11 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
   background: transparent;
   color: var(--text);
   text-align: left;
-  transition: background-color 0.25s ease;
+  transition: background var(--transition);
 }
 
 .project-header:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg);
 }
 
 .project-header--editing {

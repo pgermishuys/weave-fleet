@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { PanelRightClose } from "lucide-vue-next";
+import { Button } from "@/components/ui/button";
 
 interface RightPanelTabOption {
   id: string;
@@ -48,8 +49,9 @@ function handleCollapse(): void {
       {{ tab.label }}
     </button>
 
-    <button
-      type="button"
+    <Button
+      variant="toolbar-icon"
+      size="toolbar"
       class="right-tabs__collapse"
       aria-label="Collapse right panel"
       @click="handleCollapse"
@@ -58,7 +60,7 @@ function handleCollapse(): void {
         :size="14"
         aria-hidden="true"
       />
-    </button>
+    </Button>
   </div>
 </template>
 
@@ -81,7 +83,7 @@ function handleCollapse(): void {
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color var(--transition), border-color var(--transition);
 }
 
 .right-tab:hover {
@@ -95,24 +97,6 @@ function handleCollapse(): void {
 
 .right-tabs__collapse {
   width: 34px;
-  border: 0;
   border-left: 1px solid var(--border);
-  background: transparent;
-  color: var(--muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: color 0.15s ease, background-color 0.15s ease;
-}
-
-.right-tabs__collapse:hover {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.right-tabs__collapse:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
 }
 </style>

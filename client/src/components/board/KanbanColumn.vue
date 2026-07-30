@@ -2,6 +2,7 @@
 import type { BoardCard, BoardLane } from "@/stores/board";
 import { computed, shallowRef, watch } from "vue";
 import KanbanCard from "@/components/board/KanbanCard.vue";
+import { Button } from "@/components/ui/button";
 
 interface CardDraftPayload {
   laneId: string;
@@ -271,56 +272,62 @@ function showDropSlot(index: number): boolean {
           v-if="isManageMode"
           class="kanban-col__lane-actions"
         >
-          <button
+          <Button
             type="button"
-            class="kanban-col__action"
+            variant="ghost"
+            size="sm"
             :disabled="isMutating || !canMoveLeft"
             @click="emit('moveLaneLeft', lane.id)"
           >
             ←
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            class="kanban-col__action"
+            variant="ghost"
+            size="sm"
             :disabled="isMutating || !canMoveRight"
             @click="emit('moveLaneRight', lane.id)"
           >
             →
-          </button>
-          <button
+          </Button>
+          <Button
             v-if="isEditingLane"
             type="button"
-            class="kanban-col__action"
+            variant="ghost"
+            size="sm"
             :disabled="isMutating"
             @click="submitLaneRename"
           >
             Save
-          </button>
-          <button
+          </Button>
+          <Button
             v-else
             type="button"
-            class="kanban-col__action"
+            variant="ghost"
+            size="sm"
             :disabled="isMutating"
             @click="beginLaneRename"
           >
             Rename
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            class="kanban-col__action"
+            variant="ghost"
+            size="sm"
             :disabled="isMutating || lane.isInbox"
             @click="handleSetInboxLane"
           >
             {{ lane.isInbox ? 'Inbox' : 'Make inbox' }}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            class="kanban-col__action kanban-col__action--danger"
+            variant="destructive"
+            size="sm"
             :disabled="isMutating"
             @click="handleDeleteLane"
           >
             Delete
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -390,33 +397,37 @@ function showDropSlot(index: number): boolean {
             @keydown.esc.prevent="cancelCreateCard"
           >
           <div class="kanban-col__composer-actions">
-            <button
+            <Button
               type="submit"
-              class="kanban-col__composer-button kanban-col__composer-button--primary"
+              variant="default"
+              size="sm"
               :disabled="isMutating || cardDraft.trim().length === 0"
             >
               Add card
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              class="kanban-col__composer-button"
+              variant="outline"
+              size="sm"
               :disabled="isMutating"
               @click="cancelCreateCard"
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </form>
 
-        <button
+        <Button
           v-else
           type="button"
-          class="kanban-col__composer-button kanban-col__composer-button--ghost"
+          variant="outline"
+          size="sm"
+          class="kanban-col__composer-button--ghost"
           :disabled="isMutating"
           @click="beginCreateCard"
         >
           + Add a card
-        </button>
+        </Button>
       </div>
     </div>
   </section>
@@ -504,28 +515,6 @@ function showDropSlot(index: number): boolean {
   color: var(--accent);
 }
 
-.kanban-col__action,
-.kanban-col__composer-button {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--card-bg);
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 600;
-  padding: 7px 10px;
-  cursor: pointer;
-}
-
-.kanban-col__action:disabled,
-.kanban-col__composer-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.kanban-col__action--danger {
-  color: #fca5a5;
-}
-
 .kanban-col__cards {
   display: flex;
   flex: 1;
@@ -574,12 +563,6 @@ function showDropSlot(index: number): boolean {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.kanban-col__composer-button--primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
 }
 
 .kanban-col__composer-button--ghost {

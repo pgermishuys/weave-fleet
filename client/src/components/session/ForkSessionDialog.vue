@@ -125,7 +125,7 @@ watch(
 
         <p
           v-if="error"
-          class="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          class="border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
           role="alert"
         >
           {{ error }}

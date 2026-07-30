@@ -348,7 +348,7 @@ function normalizeLineCount(value: number | null | undefined): number {
   margin: 0;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0;
   color: var(--muted);
   font-size: 11px;
   line-height: 1.5;
@@ -379,7 +379,7 @@ function normalizeLineCount(value: number | null | undefined): number {
 .files-changed-file-list__skeleton {
   width: 72%;
   height: 32px;
-  border-radius: 8px;
+  border-radius: 0;
   background: linear-gradient(
     90deg,
     color-mix(in srgb, var(--panel) 90%, var(--text) 10%) 0%,
@@ -434,13 +434,13 @@ function normalizeLineCount(value: number | null | undefined): number {
   min-height: 32px;
   padding: 6px 8px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 0;
   background: transparent;
   color: var(--text);
   cursor: pointer;
   font: inherit;
   text-align: left;
-  transition: background-color 0.2s ease, border-color 0.2s ease;
+  transition: background-color var(--transition), border-color var(--transition);
 }
 
 .files-changed-file-list--full .files-changed-file-list__row {

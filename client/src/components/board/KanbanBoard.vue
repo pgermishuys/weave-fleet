@@ -5,6 +5,7 @@ import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import BoardSourceConfig from "@/components/board/BoardSourceConfig.vue";
 import KanbanColumn from "@/components/board/KanbanColumn.vue";
+import { Button } from "@/components/ui/button";
 import { useKeyboardShortcut } from "@/composables/use-keyboard-shortcut";
 import { useBoardStore } from "@/stores/board";
 import { useKeybindingsStore, getBoardModeToggleShortcut } from "@/stores/keybindings";
@@ -413,21 +414,23 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
               @keydown.esc.prevent="cancelBoardRename"
             >
             <div class="kanban-header__rename-actions">
-              <button
+              <Button
                 type="submit"
-                class="kanban-header__rename-button kanban-header__rename-button--primary"
+                variant="default"
+                size="sm"
                 :disabled="isMutating || boardNameDraft.trim().length === 0"
               >
                 Save board
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                class="kanban-header__rename-button"
+                variant="outline"
+                size="sm"
                 :disabled="isMutating"
                 @click="cancelBoardRename"
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </form>
 
@@ -444,46 +447,51 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
       </div>
 
       <div class="kanban-header__actions">
-        <button
+        <Button
           type="button"
-          class="kanban-header__button kanban-header__button--mode"
+          variant="outline"
+          size="sm"
+          class="kanban-header__button--mode"
           :aria-pressed="isManageMode"
           :disabled="!isLoaded"
           @click="handleToggleBoardMode"
         >
           {{ boardModeLabel }}
-        </button>
+        </Button>
 
-        <button
+        <Button
           v-if="hasBoard"
           type="button"
-          class="kanban-header__button"
+          variant="default"
+          size="sm"
           data-testid="kanban-sync-button"
           :disabled="showLoadingState || isMutating"
           @click="handleSyncBoard"
         >
           {{ syncButtonLabel }}
-        </button>
+        </Button>
 
-        <button
+        <Button
           v-if="isManageMode && hasBoard && !isEditingBoard"
           type="button"
-          class="kanban-header__button"
+          variant="outline"
+          size="sm"
           :disabled="showLoadingState || isMutating"
           @click="beginBoardRename"
         >
           Rename board
-        </button>
+        </Button>
 
-        <button
+        <Button
           v-if="isManageMode"
           type="button"
-          class="kanban-header__button"
+          variant="default"
+          size="sm"
           :disabled="showLoadingState"
           @click="handleCreateFirstLane"
         >
           Add Lane
-        </button>
+        </Button>
       </div>
     </header>
 
@@ -524,21 +532,23 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
           :disabled="isMutating"
         >
         <div class="kanban-lane-creator__actions">
-          <button
+          <Button
             type="submit"
-            class="kanban-lane-creator__button kanban-lane-creator__button--primary"
+            variant="default"
+            size="sm"
             :disabled="isMutating || laneDraft.trim().length === 0"
           >
             Save lane
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            class="kanban-lane-creator__button"
+            variant="outline"
+            size="sm"
             :disabled="isMutating"
             @click="cancelAddLane"
           >
             Cancel
-          </button>
+          </Button>
         </div>
       </form>
     </section>
@@ -558,14 +568,15 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
           {{ syncFeedback.message }}
         </p>
       </div>
-      <button
+      <Button
         type="button"
-        class="kanban-toast__button"
+        variant="ghost"
+        size="sm"
         aria-label="Dismiss sync feedback"
         @click="handleDismissSyncFeedback"
       >
         Dismiss
-      </button>
+      </Button>
     </div>
 
     <div
@@ -577,20 +588,22 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
         {{ error }}
       </p>
       <div class="kanban-banner__actions">
-        <button
+        <Button
           type="button"
-          class="kanban-banner__button kanban-banner__button--primary"
+          variant="default"
+          size="sm"
           @click="handleRetryLoad"
         >
           Retry
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          class="kanban-banner__button"
+          variant="outline"
+          size="sm"
           @click="handleDismissError"
         >
           Dismiss
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -618,14 +631,15 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
       <p class="kanban-state__copy">
         Click Edit Board to unlock lane management, then add your first board column.
       </p>
-      <button
+      <Button
         v-if="isManageMode"
         type="button"
-        class="kanban-state__button"
+        variant="default"
+        size="sm"
         @click="handleCreateFirstLane"
       >
         Create first lane
-      </button>
+      </Button>
     </section>
 
     <div
@@ -660,14 +674,16 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
         v-if="isManageMode"
         class="kanban-board__adder"
       >
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           class="kanban-board__adder-button"
           :disabled="isMutating"
           @click="openAddLaneForm"
         >
           + Add another lane
-        </button>
+        </Button>
       </section>
     </div>
   </section>
@@ -690,7 +706,7 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
   gap: 16px;
   padding: 16px 24px 12px;
   border-bottom: 1px solid var(--border);
-  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  transition: background-color var(--transition), border-color var(--transition), box-shadow var(--transition);
 }
 
 .kanban-header--manage {
@@ -752,44 +768,8 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
   color: var(--muted);
 }
 
-.kanban-header__button,
-.kanban-header__rename-button,
-.kanban-state__button,
-.kanban-lane-creator__button,
-.kanban-banner__button,
-.kanban-board__adder-button {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--card-bg);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 9px 14px;
-  cursor: pointer;
-}
-
 .kanban-header__button--mode {
   border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
-}
-
-.kanban-header__button:disabled,
-.kanban-header__rename-button:disabled,
-.kanban-state__button:disabled,
-.kanban-lane-creator__button:disabled,
-.kanban-banner__button:disabled,
-.kanban-board__adder-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.kanban-header__button,
-.kanban-header__rename-button--primary,
-.kanban-state__button,
-.kanban-lane-creator__button--primary,
-.kanban-banner__button--primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
 }
 
 .kanban-summary {
@@ -894,22 +874,6 @@ function isLaneMoveEnabled(entries: readonly BoardLaneWithCards[], index: number
 
 .kanban-toast__title {
   font-weight: 700;
-}
-
-.kanban-toast__button {
-  border: 1px solid rgba(191, 219, 254, 0.45);
-  border-radius: var(--radius-btn);
-  background: transparent;
-  color: #dbeafe;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 9px 14px;
-  cursor: pointer;
-}
-
-.kanban-toast__button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
 }
 
 .kanban-banner__copy {
