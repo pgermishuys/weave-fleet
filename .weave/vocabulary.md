@@ -64,7 +64,7 @@ Component: `client/src/components/layout/StatusBar.vue` (to be created)
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| `--coral` | `#D95A3A` | Active rail indicator, primary CTAs |
+| `--indigo` | `#5B6EC7` | Active rail indicator, primary CTAs |
 | `--indigo` | `#5B6EC7` | Secondary accent, links |
 | `--bg` | `#FAF9F7` | Page background (light theme) |
 | `--border` | `#E8E6E3` | Panel/card borders (light theme) |
