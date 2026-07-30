@@ -178,6 +178,10 @@ public static class DependencyInjection
         // (InProcessFanOutService) survive across scoped persister invocations.
         services.AddSingleton<TextDeltaBuffer>();
 
+        // StreamingStateProvider — singleton, composes SessionActivityTracker + TextDeltaBuffer
+        // to provide unified snapshots for SignalR hubs.
+        services.AddSingleton<StreamingStateProvider>();
+
         // Harness event persister — scoped so message/session repositories flow through correctly.
         services.AddScoped<HarnessEventPersistenceService>();
         services.AddScoped<IHarnessEventPersister>(sp => sp.GetRequiredService<HarnessEventPersistenceService>());

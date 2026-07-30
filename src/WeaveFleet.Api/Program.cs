@@ -138,6 +138,13 @@ builder.Services.AddSingleton<WeaveFleet.Application.Services.KeyFileScanner>();
 #pragma warning restore IL2026
 builder.Services.AddHealthChecks();
 
+// ── SignalR ──────────────────────────────────────────────────────────────────
+builder.Services.AddSignalR()
+    .AddJsonProtocol(options =>
+    {
+        options.PayloadSerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default);
+    });
+
 // ── Data Protection ───────────────────────────────────────────────────────────
 var dataProtectionBuilder = builder.Services.AddDataProtection()
     .SetApplicationName("WeaveFleet");
@@ -534,8 +541,20 @@ app.Use(async (context, next) =>
 app.UseAuthentication();
 app.UseAuthorization();
 
-// WebSocket support (for /ws real-time events endpoint)
-app.UseWebSockets();
+// Origin validation for SignalR hubs
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/hubs"))
+    {
+        if (!IsHubOriginAllowed(context, fleetOptions))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+    }
+
+    await next();
+});
 
 // Health checks (registered before SPA fallback)
 app.MapHealthChecks("/healthz");
@@ -561,7 +580,7 @@ app.MapFallbackToFile("index.html")
 await app.RunAsync();
 
 static bool IsApiOrWebSocketRequest(PathString path)
-    => path.StartsWithSegments("/api") || path.StartsWithSegments("/ws");
+    => path.StartsWithSegments("/api") || path.StartsWithSegments("/hubs");
 
 static bool IsLocalhostRequest(HttpContext context)
 {
@@ -576,6 +595,21 @@ static bool HasBearerAuthorizationHeader(HttpRequest request)
 
     var authorizationHeader = authorizationHeaderValues.ToString();
     return authorizationHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase);
+}
+
+static bool IsHubOriginAllowed(HttpContext context, FleetOptions fleetOptions)
+{
+    if (!fleetOptions.Auth.Enabled)
+        return true;
+
+    var origin = context.Request.Headers.Origin.ToString();
+    if (string.IsNullOrWhiteSpace(origin))
+        return false;
+
+    if (fleetOptions.Auth.AllowedOrigins.Length == 0)
+        return false;
+
+    return fleetOptions.Auth.AllowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
 }
 
 static async Task RunLegacySessionImportAsync(

@@ -1097,41 +1097,6 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         _builder.MessageRepository.GetBySessionCalls.ShouldContain(c => c.SessionId == "s3" && c.Limit == 11);
     }
 
-    [Fact]
-    public async Task GetCommittedEvents_ReturnsHarnessEventLogRowsAsCommittedEvents()
-    {
-        var session = MakeSession("s-committed", "inst-1");
-        _builder.SessionRepository.Seed(session);
-        await _builder.HarnessEventLogRepository.AppendAsync(new HarnessEventLogEntry
-        {
-            SessionId = "s-committed",
-            EventId = 42,
-            SequenceNumber = 6,
-            Type = "message.updated",
-            Payload = "{\"info\":{\"id\":\"msg-1\"}}",
-            CreatedAt = "2026-01-01T00:00:00.0000000+00:00",
-            UserId = "user-1"
-        });
-
-        var result = await _sut.GetCommittedEventsAsync("s-committed", 41, 20);
-
-        result.IsSuccess.ShouldBeTrue();
-        result.Value.Count.ShouldBe(1);
-        result.Value[0].EventId.ShouldBe(42);
-        result.Value[0].SequenceNumber.ShouldBe(42);
-        result.Value[0].Topic.ShouldBe("session:s-committed");
-        result.Value[0].Type.ShouldBe("message.updated");
-    }
-
-    [Fact]
-    public async Task GetCommittedEvents_SessionNotFound_ReturnsNotFound()
-    {
-        var result = await _sut.GetCommittedEventsAsync("ghost", 0, 10);
-
-        result.IsFailure.ShouldBeTrue();
-        result.Error.Description.ShouldContain("Session");
-    }
-
     // ── Harness type tracking ─────────────────────────────────────────────────
 
     [Fact]

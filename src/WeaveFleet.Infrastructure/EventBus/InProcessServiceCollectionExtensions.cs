@@ -23,6 +23,7 @@ public static class InProcessServiceCollectionExtensions
         services.AddSingleton<InProcessChannels>();
 
         services.AddSingleton<InProcessEventStore>();
+        services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<InProcessEventStore>());
         services.AddSingleton<InProcessMetrics>();
         services.AddSingleton<IEventPublisher, InProcessEventPublisher>();
 

@@ -333,63 +333,6 @@ public sealed class MessagePersistenceTests : E2ETestBase,
     }
 
     [Fact]
-    public async Task NavigationBackToSession_ReplaysMissedCommittedEvents_ViaSequenceGapFill()
-    {
-        await WithFailureCapture(async () =>
-        {
-            var dashboard = new FleetDashboardPage(Page);
-            await dashboard.GotoAsync();
-
-            var dialog = await dashboard.ClickNewSessionAsync();
-            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
-
-            var detail = await dialog.SubmitAsync();
-            await detail.WaitForLoadedAsync();
-
-            var sessionUri = new Uri(Page.Url);
-            var sessionId = sessionUri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
-            var instanceId = GetRequiredQueryValue(sessionUri, "instanceId");
-
-            var tracker = _factory.KestrelServices.GetRequiredService<InstanceTracker>();
-            var harness = tracker.Get(instanceId).ShouldBeOfType<TestHarnessSession>();
-            var harnessSessionId = harness.InstanceId;
-
-            await PushDurableAssistantMessageAsync(
-                harness,
-                harnessSessionId,
-                sessionId,
-                "msg-online-1",
-                "Initial committed websocket event");
-
-            await detail.WaitForMessageTextAsync("Initial committed websocket event", 10_000);
-
-            await Page.GoBackAsync();
-            await dashboard.WaitForLoadedAsync();
-            await dashboard.GetSessionCard(sessionId)
-                .WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-
-            await PushDurableAssistantMessageAsync(
-                harness,
-                harnessSessionId,
-                sessionId,
-                "msg-gapfill-1",
-                "Recovered after reconnect via sequence gap fill");
-
-            var afterEventIdResponse = Page.WaitForResponseAsync(response =>
-                response.Url.Contains($"/api/sessions/{sessionId}/committed-events", StringComparison.Ordinal)
-                && response.Url.Contains("afterEventId=", StringComparison.Ordinal)
-                && response.Ok,
-                new PageWaitForResponseOptions { Timeout = 10_000 });
-
-            detail = await dashboard.ClickSessionCardAsync(sessionId);
-
-            var gapFillResponse = await afterEventIdResponse;
-            gapFillResponse.Url.ShouldContain("afterEventId=");
-            await detail.WaitForMessageTextAsync("Recovered after reconnect via sequence gap fill", 10_000);
-        });
-    }
-
-    [Fact]
     public async Task SwitchingFromAnotherSession_ShowsMessagesPushedWhileViewingDifferentSession()
     {
         await WithFailureCapture(async () =>

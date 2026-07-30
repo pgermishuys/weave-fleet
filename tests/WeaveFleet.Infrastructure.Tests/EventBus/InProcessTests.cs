@@ -132,17 +132,70 @@ public sealed class InProcessEventStoreTests
         }
     }
 
-    private static InProcessEnvelope MakeEnvelope(string messageId) => new(
+    [Fact]
+    public async Task get_last_event_id_returns_max_id_for_session()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        await using (keeper)
+        {
+            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
+            var id1 = store.Append(MakeEnvelope("msg-1", "sess-a"));
+            var id2 = store.Append(MakeEnvelope("msg-2", "sess-a"));
+            var id3 = store.Append(MakeEnvelope("msg-3", "sess-b"));
+
+            var lastIdA = store.GetLastEventId("sess-a");
+            var lastIdB = store.GetLastEventId("sess-b");
+
+            lastIdA.ShouldBe(id2);
+            lastIdB.ShouldBe(id3);
+        }
+    }
+
+    [Fact]
+    public async Task get_last_event_id_returns_zero_when_no_events_exist()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        await using (keeper)
+        {
+            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
+
+            var lastId = store.GetLastEventId("sess-nonexistent");
+
+            lastId.ShouldBe(0L);
+        }
+    }
+
+    [Fact]
+    public async Task get_last_event_id_ignores_other_sessions()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        await using (keeper)
+        {
+            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
+            var id1 = store.Append(MakeEnvelope("msg-1", "sess-x"));
+            var id2 = store.Append(MakeEnvelope("msg-2", "sess-y"));
+            var id3 = store.Append(MakeEnvelope("msg-3", "sess-x"));
+
+            var lastIdX = store.GetLastEventId("sess-x");
+
+            lastIdX.ShouldBe(id3);
+            lastIdX.ShouldBeGreaterThan(id1);
+        }
+    }
+
+    private static InProcessEnvelope MakeEnvelope(string messageId) => MakeEnvelope(messageId, "sess-1");
+
+    private static InProcessEnvelope MakeEnvelope(string messageId, string sessionId) => new(
         @event: new HarnessEvent
         {
             Type      = EventTypes.MessageCreated,
-            SessionId = "sess-1",
+            SessionId = sessionId,
             Timestamp = DateTimeOffset.UtcNow,
         },
         messageId:            messageId,
         tenant:               "tenant.default",
         projectId:            "proj-1",
-        sessionId:            "sess-1",
+        sessionId:            sessionId,
         eventType:            EventTypes.MessageCreated,
         userId:               "user-1",
         harnessType:          "opencode",

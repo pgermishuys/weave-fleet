@@ -2,7 +2,8 @@
 
 ## Status
 
-Reference document. Produced 2026-07-30.
+**COMPLETED** — Migration to SignalR finished 2026-07-30.  
+This document is retained for historical reference. Produced 2026-07-30.
 
 ## Purpose
 

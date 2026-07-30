@@ -2,7 +2,8 @@
 
 ## Status
 
-Draft. Produced 2026-07-30.
+**COMPLETED** — Migration finished 2026-07-30.  
+This document is retained for historical reference. Draft produced 2026-07-30.
 
 ## Goal
 

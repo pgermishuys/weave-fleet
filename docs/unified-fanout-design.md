@@ -7,7 +7,7 @@ Draft. Supersedes the dual-path (durable-via-outbox + ephemeral-via-core-NATS) s
 
 ## Context
 
-Today Weave Fleet delivers harness events to WebSocket clients via two independent
+Today Weave Fleet delivers harness events to SignalR clients via two independent
 paths that converge at `IEventBroadcaster`:
 
 1. **Durable events** (`message.*` lifecycle + `session.updated/error/compacted/deleted`)
@@ -66,8 +66,8 @@ at-least-once-to-SQLite for the events that need it.
                 ▼
          (single core NATS subject tree: tenant.*.project.*.session.*.>)
                 │
-                ├─ core NATS subscription ──► WebSocketFanOutSubscriber
-                │                              (delta-buffer + activity-status + broadcaster)
+                 ├─ core NATS subscription ──► SignalRFanOutSubscriber
+                 │                              (delta-buffer + activity-status + broadcaster)
                 │
                 └─ JetStream stream FLEET_EVENTS
                    (Subjects = durable leaf types only)
@@ -136,10 +136,10 @@ ordering guarantee, the delta→snapshot→normal-state transition is tear-free.
 - Existing sequence assignment, dispose flush, and activity-idle broadcast remain
   unchanged.
 
-### `EphemeralEventRelayService` → `WebSocketFanOutSubscriber`
+### `EphemeralEventRelayService` → `SignalRFanOutSubscriber`
 
 Rename and move to
-`src/WeaveFleet.Infrastructure/Nats/WebSocketFanOutSubscriber.cs`.
+`src/WeaveFleet.Infrastructure/Nats/SignalRFanOutSubscriber.cs`.
 
 - **Subscription filter:** `NatsNamingStrategy.FanOutSubscriptionFilter`
   (`tenant.*.project.*.session.*.>`) — whole tree, not just `.live.`.
@@ -196,7 +196,7 @@ Rename and move to
 
 ### Client (`client/src/lib/event-state.ts`, `client/src/hooks/use-session-events.ts`)
 
-- **Unchanged.** Receives the same events on the same WebSocket topic. Ordering
+- **Unchanged.** Receives the same events on the same SignalR hub topic. Ordering
   is now reliable end-to-end, so the reducers' implicit per-session ordering
   assumption is upheld by the transport instead of being coincidence.
 
@@ -238,7 +238,7 @@ Rename and move to
   `DurableStreamSubjects` list.
 - `HarnessEventRelay`: new test — an event whose classification requires reasoning
   filtering has its payload sanitized before it reaches the publisher.
-- `WebSocketFanOutSubscriber`: given a publisher emitting mixed durable + ephemeral
+- `SignalRFanOutSubscriber`: given a publisher emitting mixed durable + ephemeral
   events for one session, the subscriber receives them in publish order and
   broadcasts each on `session:{sid}`. Delta-buffer and activity-status side
   channels still fire for their respective event types.
@@ -253,7 +253,7 @@ Rename and move to
 
 ### End-to-end
 
-- `tests/WeaveFleet.E2E/` streaming scenario: WebSocket client receives
+- `tests/WeaveFleet.E2E/` streaming scenario: SignalR client receives
   `delta × N` then `message.updated` then no further deltas for that message, in
   that order. Final merged text matches the snapshot.
 - Auth E2E: tearing/ordering assertions around the delta→snapshot transition,
@@ -272,7 +272,7 @@ Rename and move to
 - Modify: `src/WeaveFleet.Infrastructure/Nats/NatsEventPublisher.cs`
 - Modify: `src/WeaveFleet.Infrastructure/Services/HarnessEventRelay.cs`
 - Rename + expand: `src/WeaveFleet.Infrastructure/Nats/EphemeralEventRelayService.cs`
-  → `WebSocketFanOutSubscriber.cs`
+  → `SignalRFanOutSubscriber.cs`
 - Modify: `src/WeaveFleet.Infrastructure/Services/HarnessEventPersistenceService.cs`
 - Modify: `src/WeaveFleet.Infrastructure/DependencyInjection.cs` (registration name
   only; behaviour unchanged)

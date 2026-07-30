@@ -116,7 +116,6 @@ export function useSessionEvents(
   const pagination = useMessagePagination()
   const { subscribe } = useWeaveSocket()
 
-  const loadCommittedEventsSinceRef = shallowRef<((afterEventId: number | null, signal?: AbortSignal) => Promise<void>) | null>(null)
   const loadDelegationsRef = shallowRef<((signal?: AbortSignal) => Promise<void>) | null>(null)
 
   watch(
@@ -208,59 +207,6 @@ export function useSessionEvents(
         }
       }
 
-      // Flag-off mode still relies on the committed-events REST gap-fill because the
-      // legacy v1 socket protocol cannot replay missed events after reconnect.
-      async function loadCommittedEventsSince(
-        afterEventId: number | null,
-        loadSignal?: AbortSignal,
-      ): Promise<void> {
-        if (!activeSessionId || !activeInstanceId) {
-          return
-        }
-
-        if (afterEventId == null) {
-          await loadAllMessages(loadSignal)
-          return
-        }
-
-        try {
-          const params = new URLSearchParams({
-            afterEventId: String(afterEventId),
-          })
-
-          const response = await apiFetch(
-            `/api/sessions/${encodeURIComponent(activeSessionId)}/committed-events?${params.toString()}`,
-            loadSignal ? { signal: loadSignal } : undefined,
-          )
-
-          if (!response.ok) {
-            const savedScroll = scrollPositionRef.value
-            await loadAllMessages(loadSignal)
-            if (savedScroll && !loadSignal?.aborted && isActive()) {
-              initialScrollPosition.value = savedScroll
-            }
-            return
-          }
-
-          const data = (await response.json()) as { events?: CommittedSessionEvent[] }
-          if (!data.events?.length || loadSignal?.aborted || !isActive()) {
-            return
-          }
-
-          applyCommittedEvents(data.events)
-        } catch (loadError) {
-          if (loadError instanceof DOMException && loadError.name === "AbortError") {
-            return
-          }
-
-          const savedScroll = scrollPositionRef.value
-          await loadAllMessages(loadSignal)
-          if (savedScroll && !loadSignal?.aborted && isActive()) {
-            initialScrollPosition.value = savedScroll
-          }
-        }
-      }
-
       async function loadInitialMessages(loadSignal?: AbortSignal): Promise<void> {
         if (!activeSessionId || !activeInstanceId) {
           return
@@ -306,7 +252,6 @@ export function useSessionEvents(
         }
       }
 
-      loadCommittedEventsSinceRef.value = loadCommittedEventsSince
       loadDelegationsRef.value = loadDelegations
       clearIdleFallback()
       skipInitialGapFill = !isWeaveSocketConnected()
@@ -367,10 +312,8 @@ export function useSessionEvents(
           scrollHeight: cached.scrollHeight,
         }
 
-        void Promise.all([
-          loadCommittedEventsSince(cached.lastEventId, signal),
-          loadDelegations(signal),
-        ]).finally(() => {
+        // SignalR transport: snapshot merge handles consistency, no gap-fill needed
+        void loadDelegations(signal).finally(() => {
           if (!signal.aborted && isActive()) {
             status.value = "connected"
           }
@@ -466,10 +409,13 @@ export function useSessionEvents(
           return
         }
 
-        void Promise.all([
-          loadCommittedEventsSince(lastEventId.value),
-          loadDelegations(),
-        ]).finally(() => {
+        // SignalR transport: re-subscribe automatically provides fresh snapshot with lastEventId.
+        // The snapshot merge handles consistency, so skip the manual gap-fill REST call.
+        const promises: Promise<void>[] = []
+
+        promises.push(loadDelegations())
+
+        void Promise.all(promises).finally(() => {
           if (isActive()) {
             stateSyncRunning(activeSessionId, sessionStatus.value)
           }
@@ -494,10 +440,6 @@ export function useSessionEvents(
         unsubscribeSessionSync()
         unsubscribeReconnect()
         unsubscribeDisconnect()
-
-        if (loadCommittedEventsSinceRef.value === loadCommittedEventsSince) {
-          loadCommittedEventsSinceRef.value = null
-        }
 
         if (loadDelegationsRef.value === loadDelegations) {
           loadDelegationsRef.value = null
@@ -629,10 +571,16 @@ export function useSessionEvents(
 
     status.value = "recovering"
 
-    void Promise.all([
-      loadCommittedEventsSinceRef.value?.(lastEventId.value),
-      loadDelegationsRef.value?.(),
-    ]).then(() => {
+    // SignalR transport: re-subscribe automatically provides fresh snapshot with lastEventId.
+    // The snapshot merge handles consistency, so skip the manual gap-fill REST call.
+    const promises: Promise<void>[] = []
+
+    const delegationsPromise = loadDelegationsRef.value?.()
+    if (delegationsPromise) {
+      promises.push(delegationsPromise)
+    }
+
+    void Promise.all(promises).then(() => {
       if (currentSessionId.value && currentInstanceId.value) {
         stateSyncRunning(currentSessionId.value, sessionStatus.value)
         status.value = "connected"

@@ -199,17 +199,6 @@ public sealed record SessionMessagesPagination(
     string? OldestMessageId,
     int TotalCount);
 
-public sealed record GetCommittedEventsResponse(
-    IReadOnlyList<CommittedEventItem> Events);
-
-public sealed record CommittedEventItem(
-    long EventId,
-    long SequenceNumber,
-    string Topic,
-    string Type,
-    JsonElement Payload,
-    long Timestamp);
-
 public sealed record GetSessionDiffsResponse(IReadOnlyList<FileDiffSummary> Diffs, bool Available);
 
 public sealed record FileDiffSummary(

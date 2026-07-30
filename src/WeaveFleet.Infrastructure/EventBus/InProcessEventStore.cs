@@ -2,6 +2,7 @@ using System.Data;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Data;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Data;
 
@@ -22,7 +23,7 @@ namespace WeaveFleet.Infrastructure.EventBus;
 /// between channel wake-ups.
 /// </para>
 /// </summary>
-internal sealed partial class InProcessEventStore
+internal sealed partial class InProcessEventStore : IEventStore
 {
     private readonly IDbConnectionFactory _db;
     private readonly ILogger<InProcessEventStore> _logger;
@@ -165,6 +166,21 @@ internal sealed partial class InProcessEventStore
             """;
         using var conn = _db.CreateConnection();
         conn.ExecuteNonQuery(sql, cmd => { cmd.AddParameter("Id", id); });
+    }
+
+    /// <summary>
+    /// Returns the highest event ID for the given session, or 0 if no events exist.
+    /// Used to set the dedup watermark when merging snapshots.
+    /// </summary>
+    public long GetLastEventId(string sessionId)
+    {
+        const string sql = """
+            SELECT COALESCE(MAX(id), 0)
+            FROM   inproc_events
+            WHERE  session_id = @SessionId
+            """;
+        using var conn = _db.CreateConnection();
+        return conn.ExecuteScalar<long>(sql, cmd => cmd.AddParameter("SessionId", sessionId));
     }
 
     [LoggerMessage(Level = LogLevel.Warning, EventId = 1,

@@ -50,7 +50,7 @@ Reference docs:
 
 ### Phase 1: Server-Side Hub
 
-- [ ] 1.1 Create StreamingStateProvider that aggregates in-flight state
+- [x] 1.1 Create StreamingStateProvider that aggregates in-flight state
   - **What**: The snapshot merge needs two pieces of in-flight state that live in different singletons:
     1. **Activity status** — `SessionActivityTracker` tracks busy/idle per session (status, userId, updatedAt). It does NOT hold message content.
     2. **Buffered text deltas** — `TextDeltaBuffer` accumulates `message.part.delta` fragments keyed by `(sessionId, messageId, partId)`. Its `SnapshotSession(sessionId)` method returns all buffered `(messageId, partId) → text` entries for a session.
@@ -69,7 +69,7 @@ Reference docs:
     - `SessionActivityTracker` and `TextDeltaBuffer` unchanged
     - Unit tests cover: no state, activity-only, deltas-only, both present
 
-- [ ] 1.2 Expose last event ID from InProcessEventStore
+- [x] 1.2 Expose last event ID from InProcessEventStore
   - **What**: Add a `GetLastEventId(string sessionId)` method to `InProcessEventStore` that returns the highest `id` from `inproc_events` for a given session. This is used by the snapshot merge to set the dedup watermark. The store is `internal sealed`, so consider whether to expose via a new interface or make the method `internal` and accessible to the hub via the same assembly or `InternalsVisibleTo`.
   - **Files**: `src/WeaveFleet.Infrastructure/EventBus/InProcessEventStore.cs`
   - **Depends on**: None
@@ -78,7 +78,7 @@ Reference docs:
     - Existing append/read methods unchanged
     - New unit test in `tests/WeaveFleet.Infrastructure.Tests/EventBus/InProcessTests.cs`
 
-- [ ] 1.3 Add SignalR infrastructure to API project
+- [x] 1.3 Add SignalR infrastructure to API project
   - **What**: Register SignalR services and map the hub endpoint. Add origin validation middleware for the `/hubs` path prefix (port logic from `WebSocketEndpoints.IsOriginAllowed()`).
     - In `Program.cs` (~line 538 area where `app.UseWebSockets()` lives): add `builder.Services.AddSignalR()` with JSON protocol options, add origin validation middleware before `MapHub`, call `app.MapHub<SessionEventsHub>("/hubs/session-events")`.
     - In `EndpointExtensions.cs`: the hub mapping should respect the same auth group (`RequireAuthorization("FleetUser")`) that wraps other endpoints when auth is enabled.
@@ -92,7 +92,7 @@ Reference docs:
     - Hub respects the same auth requirements as other API endpoints
     - Existing WebSocket endpoint still works (no regressions)
 
-- [ ] 1.4 Create SessionEventsHub
+- [x] 1.4 Create SessionEventsHub
   - **What**: Create the SignalR hub with three client-callable methods and a per-connection event pump.
   
     **Hub methods:**
@@ -126,7 +126,7 @@ Reference docs:
     - `UnsubscribeFromSessionAsync` removes topic from filter set
     - `OnDisconnectedAsync` cancels pump and disposes broadcaster subscription
 
-- [ ] 1.5 Implement atomic snapshot merge
+- [x] 1.5 Implement atomic snapshot merge
   - **What**: Port Foundry's snapshot merge into a partial class or helper method. When `SubscribeToSessionAsync` is called:
     1. Add connection to SignalR group (events start flowing)
     2. Read in-flight streaming state from `StreamingStateProvider.GetStreamingState()`
@@ -142,7 +142,7 @@ Reference docs:
     - Messages are sorted chronologically
     - In-flight messages win over persisted when IDs collide
 
-- [ ] 1.6 Write server-side tests
+- [x] 1.6 Write server-side tests
   - **What**: Unit and integration tests for the hub and snapshot merge.
     - Unit tests: snapshot merge logic (in-flight vs persisted precedence, empty states, ordering)
     - Integration tests: connect to hub, subscribe, receive snapshot; subscribe then trigger harness event and receive via hub; origin validation rejects bad origins
@@ -156,7 +156,7 @@ Reference docs:
 
 ### Phase 2: Client-Side Migration
 
-- [ ] 2.1 Install @microsoft/signalr
+- [x] 2.1 Install @microsoft/signalr
   - **What**: Add the SignalR client package using bun.
     ```bash
     cd client && bun add @microsoft/signalr
@@ -167,7 +167,7 @@ Reference docs:
     - `@microsoft/signalr` appears in `client/package.json` dependencies
     - `bun install` succeeds
 
-- [ ] 2.2 Create use-signalr-socket.ts
+- [x] 2.2 Create use-signalr-socket.ts
   - **What**: New composable implementing the full public API surface of `use-weave-socket.ts` using SignalR's `HubConnection`. This includes:
   
     **`WeaveSocketAPI` interface (lines 18-22):**
@@ -203,7 +203,7 @@ Reference docs:
     - `__WEAVE_SOCKET_TEST_API` populated for E2E tests
     - Event callbacks match the same shape as the raw WebSocket implementation
 
-- [ ] 2.3 Add transport toggle to use-weave-socket.ts
+- [x] 2.3 Add transport toggle to use-weave-socket.ts
   - **What**: Modify `use-weave-socket.ts` to check for a transport flag and delegate to either the existing raw WebSocket implementation or the new SignalR composable.
     - Check `localStorage.getItem("fleet:transport")` and URL parameter `?transport=signalr`
     - Default to `"websocket"` (zero risk to existing users)
@@ -218,7 +218,7 @@ Reference docs:
     - All consumers compile without changes
     - `isWeaveSocketConnected`, `onDisconnect`, `onReconnect` exports still work for both transports
 
-- [ ] 2.4 Simplify reconnect in use-session-events.ts for SignalR path
+- [x] 2.4 Simplify reconnect in use-session-events.ts for SignalR path
   - **What**: When SignalR transport is active, the manual gap-fill REST call (`GET /api/sessions/{id}/committed-events`) is unnecessary because the snapshot merge handles consistency on re-subscribe. Add a conditional path:
     - If SignalR: on reconnect, re-subscribe to session -> hydrate from fresh snapshot -> use `lastEventId` for dedup
     - If WebSocket: keep existing gap-fill logic unchanged
@@ -231,7 +231,7 @@ Reference docs:
     - No visual tearing on reconnect with SignalR transport
     - Existing tests in `client/src/composables/__tests__/use-session-events.test.ts` still pass
 
-- [ ] 2.5 Write client-side tests
+- [x] 2.5 Write client-side tests
   - **What**: Tests for the new SignalR composable and transport toggle.
     - Test SignalR connection lifecycle (connect, disconnect, reconnect)
     - Test snapshot hydration from `SubscribeToSessionAsync` return value
@@ -275,7 +275,7 @@ Reference docs:
     - SignalR event delivery latency within 2× of raw WebSocket (measured p50 and p99)
     - Memory usage within 1.5× of raw WebSocket baseline under same load
 
-- [ ] 3.4 E2E test suite with SignalR transport
+- [x] 3.4 E2E test suite with SignalR transport
   - **What**: Run the full E2E test suite (`tests/WeaveFleet.E2E/`) with `fleet:transport=signalr` active. All existing tests must pass. Add SignalR-specific E2E tests for reconnect scenarios.
   - **Files**: `tests/WeaveFleet.E2E/Tests/` (new or updated test files)
   - **Depends on**: Phase 2 complete
@@ -284,7 +284,7 @@ Reference docs:
     - New reconnect E2E tests pass
     - No regressions
 
-- [ ] 3.5 Flip default transport to SignalR
+- [x] 3.5 Flip default transport to SignalR
   - **What**: Change the default transport from `"websocket"` to `"signalr"` in `use-weave-socket.ts`. Users can still override back to `"websocket"` via localStorage if needed.
   - **Files**: `client/src/composables/use-weave-socket.ts`
   - **Depends on**: 3.1, 3.2, 3.3, 3.4 all passing
@@ -295,7 +295,7 @@ Reference docs:
 
 ### Phase 4: Cleanup
 
-- [ ] 4.1 Remove WebSocket endpoint and protocol files
+- [x] 4.1 Remove WebSocket endpoint and protocol files
   - **What**: Delete the raw WebSocket implementation and remove its registration.
     - Delete `WebSocketEndpoints.cs`
     - Delete `WebSocketV2Protocol.cs`
@@ -308,7 +308,7 @@ Reference docs:
     - Application compiles and starts
     - `/ws` endpoint no longer responds
 
-- [ ] 4.2 Remove transport toggle code
+- [x] 4.2 Remove transport toggle code
   - **What**: Remove the toggle logic from `use-weave-socket.ts`. Either inline the SignalR implementation or rename `use-signalr-socket.ts` to be the sole implementation. Remove the raw WebSocket connection code.
   - **Files**: `client/src/composables/use-weave-socket.ts`, potentially delete or rename `client/src/composables/use-signalr-socket.ts`
   - **Depends on**: 4.1
@@ -317,7 +317,7 @@ Reference docs:
     - `WeaveSocketAPI` is backed solely by SignalR
     - All consumers still work without changes
 
-- [ ] 4.3 Remove gap-fill REST endpoint if unused
+- [x] 4.3 Remove gap-fill REST endpoint if unused
   - **What**: Check whether `GET /api/sessions/{id}/committed-events` (in `SessionEndpoints.cs` ~line 320) has any remaining consumers. If not, remove it. Known references: `use-session-events.ts` (gap-fill on reconnect, removed in 2.4), `MessagePersistenceTests.cs` (E2E test). If the E2E test is the only remaining consumer, update or remove that test.
   - **Files**: `src/WeaveFleet.Api/Endpoints/SessionEndpoints.cs`, `tests/WeaveFleet.E2E/Tests/MessagePersistenceTests.cs`
   - **Depends on**: 4.2
@@ -325,7 +325,7 @@ Reference docs:
     - If no consumers remain: endpoint removed, related tests updated
     - If external consumers exist: endpoint preserved, documented as legacy
 
-- [ ] 4.4 Remove WebSocket-specific tests
+- [x] 4.4 Remove WebSocket-specific tests
   - **What**: Delete test files that only test the removed WebSocket code:
     - `tests/WeaveFleet.Api.Tests/Endpoints/WebSocketV2ProtocolTests.cs`
     - `tests/WeaveFleet.Api.Tests/Endpoints/WebSocketV2SubscriptionStateTests.cs`
@@ -339,7 +339,7 @@ Reference docs:
     - All remaining tests pass
     - SignalR hub tests (from 1.6) and E2E tests (from 3.4) provide equivalent coverage
 
-- [ ] 4.5 Update documentation
+- [x] 4.5 Update documentation
   - **What**: Update `docs/unified-fanout-design.md` to reference SignalR instead of raw WebSocket. Mark the migration docs as completed. Remove any WebSocket-specific developer guidance.
   - **Files**: `docs/unified-fanout-design.md`, `docs/signalr-migration/` (mark status as completed)
   - **Depends on**: 4.1, 4.2, 4.3, 4.4

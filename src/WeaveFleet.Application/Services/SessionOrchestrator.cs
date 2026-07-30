@@ -1076,40 +1076,6 @@ public sealed partial class SessionOrchestrator(
         return await GetPersistedMessagesAsync(id, query, ct);
     }
 
-    public async Task<Result<IReadOnlyList<CommittedEvent>>> GetCommittedEventsAsync(
-        string sessionId,
-        long afterEventId,
-        int? limit,
-        CancellationToken ct = default)
-    {
-        using var _scope = BeginSessionScope(sessionId);
-        _ = ct;
-
-        var session = await sessionRepository.GetByIdAsync(sessionId);
-        if (session is null)
-            return FleetError.NotFoundFor(nameof(Session), sessionId);
-
-        // Harness events live in the harness_events log. Gap-fill uses the log/store event id
-        // as the durable cursor so pump sequence resets on harness restarts cannot create
-        // duplicate or skipped replay windows.
-        var topic = $"session:{sessionId}";
-        var rows = await harnessEventLogRepository.GetBySessionAfterEventIdAsync(
-            sessionId,
-            Math.Max(0, afterEventId),
-            Math.Max(1, limit ?? options.Outbox.DispatchBatchSize));
-
-        var events = rows
-            .Select(row => new CommittedEvent(
-                row.EventId,
-                topic,
-                row.Type,
-                row.Payload,
-                DateTimeOffset.Parse(row.CreatedAt, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind)))
-            .ToList();
-
-        return Result.Success<IReadOnlyList<CommittedEvent>>(events);
-    }
-
     private async Task<Result<MessagePage>> GetPersistedMessagesAsync(
         string sessionId,
         MessageQuery? query,
@@ -1810,13 +1776,3 @@ public sealed record CreateSessionRequest
 
 /// <summary>Result of a successful <see cref="SessionOrchestrator.CreateSessionAsync"/> call.</summary>
 public sealed record CreateSessionResult(Session Session, string InstanceId, string WorkspaceId);
-
-public sealed record CommittedEvent(
-    long EventId,
-    string Topic,
-    string Type,
-    string Payload,
-    DateTimeOffset Timestamp)
-{
-    public long SequenceNumber => EventId;
-}

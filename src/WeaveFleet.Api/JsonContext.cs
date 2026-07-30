@@ -129,8 +129,6 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(IReadOnlyList<HarnessMessage>))]
 [JsonSerializable(typeof(GetSessionMessagesApiResponse))]
 [JsonSerializable(typeof(SessionMessagesPagination))]
-[JsonSerializable(typeof(GetCommittedEventsResponse))]
-[JsonSerializable(typeof(CommittedEventItem))]
 [JsonSerializable(typeof(GetSessionDiffsResponse))]
 [JsonSerializable(typeof(FileDiffSummary))]
 [JsonSerializable(typeof(IReadOnlyList<FileDiffSummary>))]

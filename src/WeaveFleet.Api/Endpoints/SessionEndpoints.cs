@@ -316,29 +316,6 @@ public static class SessionEndpoints
         })
         .WithName("GetSessionMessages");
 
-        // GET /api/sessions/{id}/committed-events?afterEventId=N&limit=M
-        group.MapGet("/{id}/committed-events", async (
-            string id,
-            long? afterEventId,
-            long? afterSequenceNumber,
-            int? limit,
-            SessionOrchestrator orchestrator) =>
-        {
-            var cursor = afterEventId ?? afterSequenceNumber ?? 0;
-            var result = await orchestrator.GetCommittedEventsAsync(id, cursor, limit);
-            return result.Match(
-                events => Results.Ok(new GetCommittedEventsResponse(
-                    events.Select(evt => new CommittedEventItem(
-                        evt.EventId,
-                        evt.SequenceNumber,
-                        evt.Topic,
-                        evt.Type,
-                        JsonSerializer.Deserialize(evt.Payload, ApiJsonContext.Default.JsonElement),
-                        evt.Timestamp.ToUnixTimeMilliseconds())).ToList())),
-                err => err.ToSessionApiResult());
-        })
-        .WithName("GetCommittedSessionEvents");
-
         // GET /api/sessions/{id}/diffs
         group.MapGet("/{id}/diffs", async (
             string id,
