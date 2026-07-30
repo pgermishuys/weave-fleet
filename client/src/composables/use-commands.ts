@@ -149,7 +149,7 @@ export function useCommands() {
       return;
     }
 
-    await abortSession(currentSession.session.id, currentSession.instanceId);
+    await abortSession(currentSession.session.id);
     sessionsStore.patchSession(currentSession.session.id, {
       activityStatus: "idle",
       sessionStatus: "idle",

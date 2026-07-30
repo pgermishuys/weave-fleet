@@ -86,7 +86,7 @@ export interface UseResumeSessionResult {
 }
 
 export interface UseAbortSessionResult {
-  abortSession: (sessionId: string, instanceId: string) => Promise<void>;
+  abortSession: (sessionId: string) => Promise<void>;
   isAborting: Readonly<ShallowRef<boolean>>;
   error: Readonly<ShallowRef<string | undefined>>;
 }
@@ -541,10 +541,9 @@ export function useResumeSession(): UseResumeSessionResult {
 export function useAbortSession(): UseAbortSessionResult {
   const state = createMutationState();
 
-  async function abortSession(sessionId: string, instanceId: string): Promise<void> {
+  async function abortSession(sessionId: string): Promise<void> {
     await state.execute(async () => {
-      const params = new URLSearchParams({ instanceId });
-      const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/abort?${params.toString()}`, {
+      const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/abort`, {
         method: "POST",
       });
 

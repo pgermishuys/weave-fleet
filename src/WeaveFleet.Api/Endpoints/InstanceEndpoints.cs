@@ -15,7 +15,10 @@ public static class InstanceEndpoints
     {
         var group = app.MapGroup("/api/instances/{id}").WithTags("Instances");
 
-        // GET /api/instances/{id}/models — harness capabilities (model list)
+        /// <summary>
+        /// GET /api/instances/{id}/models — harness capabilities (model list)
+        /// </summary>
+        /// <remarks>Deprecated: use session-scoped equivalents.</remarks>
         group.MapGet("/models", async (string id, InstanceTracker tracker, InstanceService instanceService, IUserContext userContext, CancellationToken ct) =>
         {
             var instance = tracker.Get(id);
@@ -34,7 +37,10 @@ public static class InstanceEndpoints
         })
         .WithName("GetInstanceModels");
 
-        // GET /api/instances/{id}/commands — available slash commands
+        /// <summary>
+        /// GET /api/instances/{id}/commands — available slash commands
+        /// </summary>
+        /// <remarks>Deprecated: use session-scoped equivalents.</remarks>
         group.MapGet("/commands", async (string id, InstanceTracker tracker, InstanceService instanceService, IUserContext userContext, CancellationToken ct) =>
         {
             var instance = tracker.Get(id);
@@ -82,7 +88,10 @@ public static class InstanceEndpoints
         })
         .WithName("SendInstanceCommand");
 
-        // GET /api/instances/{id}/agents — available agents
+        /// <summary>
+        /// GET /api/instances/{id}/agents — available agents
+        /// </summary>
+        /// <remarks>Deprecated: use session-scoped equivalents.</remarks>
         group.MapGet("/agents", async (string id, InstanceTracker tracker, InstanceService instanceService, IUserContext userContext, CancellationToken ct) =>
         {
             var instance = tracker.Get(id);
@@ -105,8 +114,11 @@ public static class InstanceEndpoints
         })
         .WithName("GetInstanceAgents");
 
-        // GET /api/instances/{id}/find/files?q= — file search in instance working dir
-        // Uses the DB-backed instance record to get the working directory, then searches filesystem.
+        /// <summary>
+        /// GET /api/instances/{id}/find/files?q= — file search in instance working dir
+        /// Uses the DB-backed instance record to get the working directory, then searches filesystem.
+        /// </summary>
+        /// <remarks>Deprecated: use session-scoped equivalents.</remarks>
         group.MapGet("/find/files", async (
             string id,
             string? q,

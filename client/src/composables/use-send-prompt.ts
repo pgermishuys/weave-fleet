@@ -365,7 +365,7 @@ async function readPromptErrorMessage(response: Response): Promise<string> {
 export function useSendPrompt(sessionId: string) {
   const sessionsStore = useSessionsStore();
   const { sessions } = storeToRefs(sessionsStore);
-  const { defaultAgentId, agentsById } = useAgents();
+  const { defaultAgentId, agentsById } = useAgents(sessionId);
   const { defaultModelKey, modelsByKey } = useModels(sessionId);
   const sendError = shallowRef<string | undefined>(undefined);
   const { draft, resetText } = useDraftState(sessionId, {

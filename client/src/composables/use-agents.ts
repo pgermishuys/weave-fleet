@@ -20,29 +20,22 @@ function toAgentOptions(agents: readonly AutocompleteAgent[]): AgentOption[] {
     }));
 }
 
-export function useAgents(instanceId?: string) {
+export function useAgents(sessionId?: string) {
   const sessionsStore = useSessionsStore();
-  const { sessions, activeSessionId } = storeToRefs(sessionsStore);
+  const { activeSessionId } = storeToRefs(sessionsStore);
 
   const agents = ref<AgentOption[]>([]);
   const agentsById = ref<Record<string, AgentOption>>({});
   const isLoading = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);
 
-  const resolvedInstanceId = computed(() => {
-    if (instanceId) {
-      return instanceId;
-    }
-
-    const activeSession = sessions.value.find((session) => session.session.id === activeSessionId.value);
-    return activeSession?.instanceId ?? "";
-  });
+  const resolvedSessionId = computed(() => sessionId ?? activeSessionId.value ?? "");
   const defaultAgentId = computed(() => agents.value[0]?.id ?? "");
 
   watch(
-    resolvedInstanceId,
-    async (nextInstanceId, _previous, onCleanup) => {
-      if (!nextInstanceId) {
+    resolvedSessionId,
+    async (nextSessionId, _previous, onCleanup) => {
+      if (!nextSessionId) {
         agents.value = [];
         agentsById.value = {};
         isLoading.value = false;
@@ -59,7 +52,7 @@ export function useAgents(instanceId?: string) {
       error.value = undefined;
 
       try {
-        const response = await apiFetch(`/api/instances/${encodeURIComponent(nextInstanceId)}/agents`, {
+        const response = await apiFetch(`/api/sessions/${encodeURIComponent(nextSessionId)}/agents`, {
           signal: controller.signal,
         });
 

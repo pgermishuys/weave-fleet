@@ -47,7 +47,7 @@ function configureApiFetch(): void {
 
     if (url.includes("/find/files?q=")) {
       return createJsonResponse({
-        instanceId: "instance-1",
+        sessionId: "instance-1",
         files: ["src/alpha.ts", "src/components/"],
       });
     }
@@ -56,7 +56,7 @@ function configureApiFetch(): void {
   });
 }
 
-async function mountAutocomplete(initialValue: string, cursor: number, instanceId: Ref<string> | string = "instance-1") {
+async function mountAutocomplete(initialValue: string, cursor: number, sessionId: Ref<string> | string = "instance-1") {
   const value = shallowRef(initialValue);
   const cursorPosition = shallowRef(cursor);
   const input = document.createElement("textarea");
@@ -69,7 +69,7 @@ async function mountAutocomplete(initialValue: string, cursor: number, instanceI
       value.value = nextValue;
       input.value = nextValue;
     },
-    instanceId,
+    sessionId,
     inputRef,
     cursorPosition,
   }));
@@ -185,18 +185,18 @@ describe("useAutocomplete", () => {
     expect(value.value).toBe("/help ");
   });
 
-  it("reloads instance-scoped suggestions when the instance id changes", async () => {
-    const instanceId = shallowRef("instance-1");
+  it("reloads session-scoped suggestions when the session id changes", async () => {
+    const sessionId = shallowRef("instance-1");
 
-    await mountAutocomplete("/", 1, instanceId);
+    await mountAutocomplete("/", 1, sessionId);
     await flushAll();
 
-    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/api/instances/instance-1/commands"))).toBe(true);
+    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/api/sessions/instance-1/commands"))).toBe(true);
 
-    instanceId.value = "instance-2";
+    sessionId.value = "instance-2";
     await flushAll();
 
-    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/api/instances/instance-2/commands"))).toBe(true);
-    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/api/instances/instance-2/agents"))).toBe(true);
+    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/api/sessions/instance-2/commands"))).toBe(true);
+    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/api/sessions/instance-2/agents"))).toBe(true);
   });
 });

@@ -2,7 +2,7 @@ import { computed, onUnmounted, readonly, ref, shallowRef, toValue, watch, type 
 import { apiFetch } from "@/lib/api-client";
 
 interface FindFilesResponse {
-  instanceId: string;
+  sessionId: string;
   files?: string[];
 }
 
@@ -12,11 +12,11 @@ export interface UseFindFilesResult {
   error: Readonly<ShallowRef<string | undefined>>;
 }
 
-export function useFindFiles(instanceId: MaybeRefOrGetter<string | null | undefined>, query: MaybeRefOrGetter<string>): UseFindFilesResult {
+export function useFindFiles(sessionId: MaybeRefOrGetter<string | null | undefined>, query: MaybeRefOrGetter<string>): UseFindFilesResult {
   const files = ref<string[]>([]);
   const isLoading = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);
-  const currentInstanceId = computed(() => toValue(instanceId)?.trim() ?? "");
+  const currentSessionId = computed(() => toValue(sessionId)?.trim() ?? "");
   const currentQuery = computed(() => toValue(query));
 
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -32,8 +32,8 @@ export function useFindFiles(instanceId: MaybeRefOrGetter<string | null | undefi
     controller = undefined;
   }
 
-  async function fetchFiles(activeInstanceId: string, trimmedQuery: string, signal: AbortSignal): Promise<void> {
-    const url = `/api/instances/${encodeURIComponent(activeInstanceId)}/find/files?q=${encodeURIComponent(trimmedQuery)}`;
+  async function fetchFiles(activeSessionId: string, trimmedQuery: string, signal: AbortSignal): Promise<void> {
+    const url = `/api/sessions/${encodeURIComponent(activeSessionId)}/find/files?q=${encodeURIComponent(trimmedQuery)}`;
     const response = await apiFetch(url, { signal });
     if (!response.ok) {
       const data = (await response.json().catch(() => ({}))) as { error?: string };
@@ -45,12 +45,12 @@ export function useFindFiles(instanceId: MaybeRefOrGetter<string | null | undefi
   }
 
   watch(
-    [currentInstanceId, currentQuery],
-    ([activeInstanceId, nextQuery]) => {
+    [currentSessionId, currentQuery],
+    ([activeSessionId, nextQuery]) => {
       const trimmedQuery = nextQuery.trim();
       cleanupPending();
 
-      if (!activeInstanceId || trimmedQuery === "") {
+      if (!activeSessionId || trimmedQuery === "") {
         files.value = [];
         isLoading.value = false;
         error.value = undefined;
@@ -62,7 +62,7 @@ export function useFindFiles(instanceId: MaybeRefOrGetter<string | null | undefi
         isLoading.value = true;
         error.value = undefined;
 
-        void fetchFiles(activeInstanceId, trimmedQuery, controller.signal)
+        void fetchFiles(activeSessionId, trimmedQuery, controller.signal)
           .catch((fetchError: unknown) => {
             if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
               return;

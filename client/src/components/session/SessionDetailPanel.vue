@@ -217,7 +217,7 @@ async function handleAbort(): Promise<void> {
   }
 
   try {
-    await abortSession(sessionId.value, resolvedInstanceId.value);
+    await abortSession(sessionId.value);
     refreshPanelData();
   } catch {
     // Error is exposed inline by the composable.

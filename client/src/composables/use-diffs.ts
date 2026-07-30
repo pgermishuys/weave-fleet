@@ -16,7 +16,6 @@ export interface UseDiffsResult {
 
 export function useDiffs(
   sessionId: MaybeRefOrGetter<string | null | undefined>,
-  instanceId: MaybeRefOrGetter<string | null | undefined>,
 ): UseDiffsResult {
   const diffs = ref<FileDiffItem[]>([]);
   const available = shallowRef(false);
@@ -24,16 +23,14 @@ export function useDiffs(
   const isStale = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);
   const currentSessionId = computed(() => toValue(sessionId) ?? "");
-  const currentInstanceId = computed(() => toValue(instanceId) ?? "");
   const { subscribeV2 } = useWeaveSocket();
 
   let requestId = 0;
 
   async function fetchDiffs(): Promise<void> {
     const activeSessionId = currentSessionId.value;
-    const activeInstanceId = currentInstanceId.value;
 
-    if (!activeSessionId || !activeInstanceId) {
+    if (!activeSessionId) {
       requestId += 1;
       diffs.value = [];
       available.value = false;
@@ -48,7 +45,7 @@ export function useDiffs(
     error.value = undefined;
 
     try {
-      const url = `/api/sessions/${encodeURIComponent(activeSessionId)}/diffs?instanceId=${encodeURIComponent(activeInstanceId)}`;
+      const url = `/api/sessions/${encodeURIComponent(activeSessionId)}/diffs`;
       const response = await apiFetch(url);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -80,7 +77,7 @@ export function useDiffs(
   }
 
   function markStale(): void {
-    if (!currentSessionId.value || !currentInstanceId.value) {
+    if (!currentSessionId.value) {
       return;
     }
 
@@ -88,7 +85,7 @@ export function useDiffs(
   }
 
   watch(
-    [currentSessionId, currentInstanceId],
+    currentSessionId,
     () => {
       requestId += 1;
       diffs.value = [];

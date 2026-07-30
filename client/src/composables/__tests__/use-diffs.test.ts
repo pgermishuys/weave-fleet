@@ -53,9 +53,8 @@ describe("useDiffs", () => {
     }));
 
     const sessionId = shallowRef("session-1");
-    const instanceId = shallowRef("instance-1");
     const { useDiffs } = await import("@/composables/use-diffs");
-    const { result, wrapper } = await mountComposable(() => useDiffs(sessionId, instanceId));
+    const { result, wrapper } = await mountComposable(() => useDiffs(sessionId));
 
     expect(subscribeV2Mock).toHaveBeenCalledWith("session:session-1", expect.any(Function), expect.any(Function));
 
@@ -74,7 +73,7 @@ describe("useDiffs", () => {
     await flushAll();
 
     expect(apiFetchMock).toHaveBeenCalledTimes(1);
-    expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/session-1/diffs?instanceId=instance-1");
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/session-1/diffs");
     expect(result.diffs.value).toEqual([
       { file: "src/App.vue", status: "modified", additions: 3, deletions: 1 },
     ]);
@@ -93,9 +92,8 @@ describe("useDiffs", () => {
     }));
 
     const sessionId = shallowRef("session-1");
-    const instanceId = shallowRef("instance-1");
     const { useDiffs } = await import("@/composables/use-diffs");
-    const { result, wrapper } = await mountComposable(() => useDiffs(sessionId, instanceId));
+    const { result, wrapper } = await mountComposable(() => useDiffs(sessionId));
 
     result.markStale();
 
@@ -111,9 +109,8 @@ describe("useDiffs", () => {
 
   it("clears_stale_state_when_session_or_instance_changes", async () => {
     const sessionId = shallowRef("session-1");
-    const instanceId = shallowRef("instance-1");
     const { useDiffs } = await import("@/composables/use-diffs");
-    const { result, wrapper } = await mountComposable(() => useDiffs(sessionId, instanceId));
+    const { result, wrapper } = await mountComposable(() => useDiffs(sessionId));
 
     result.markStale();
     expect(result.isStale.value).toBe(true);
@@ -128,9 +125,8 @@ describe("useDiffs", () => {
 
   it("ignores turn ended events for other sessions", async () => {
     const sessionId = shallowRef("session-1");
-    const instanceId = shallowRef("instance-1");
     const { useDiffs } = await import("@/composables/use-diffs");
-    const { wrapper } = await mountComposable(() => useDiffs(sessionId, instanceId));
+    const { wrapper } = await mountComposable(() => useDiffs(sessionId));
 
     v2EventCallback?.({
       type: "turn.ended",
@@ -158,9 +154,8 @@ describe("useDiffs", () => {
     }));
 
     const sessionId = shallowRef("session-1");
-    const instanceId = shallowRef("instance-1");
     const { useDiffs } = await import("@/composables/use-diffs");
-    const { result, wrapper } = await mountComposable(() => useDiffs(sessionId, instanceId));
+    const { result, wrapper } = await mountComposable(() => useDiffs(sessionId));
 
     await result.fetchDiffs();
     await flushAll();
@@ -186,9 +181,8 @@ describe("useDiffs", () => {
     }));
 
     const sessionId = shallowRef("session-1");
-    const instanceId = shallowRef("instance-1");
     const { useDiffs } = await import("@/composables/use-diffs");
-    const { result, wrapper } = await mountComposable(() => useDiffs(sessionId, instanceId));
+    const { result, wrapper } = await mountComposable(() => useDiffs(sessionId));
 
     await result.fetchDiffs();
     await flushAll();

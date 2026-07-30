@@ -131,6 +131,7 @@ function configureApiFetch(): void {
 }
 
 interface MountComposerOptions {
+  sessionId?: string;
   instanceId?: string;
   session?: SessionListItem;
   disabled?: boolean;
@@ -145,7 +146,7 @@ function mountComposer(options: MountComposerOptions = {}) {
   return mount(Composer, {
     attachTo: document.body,
     props: {
-      sessionId: "session-1",
+      sessionId: options.sessionId ?? "session-1",
       instanceId: options.instanceId ?? "instance-1",
       disabled: options.disabled,
     },
@@ -277,8 +278,8 @@ describe("Composer", () => {
     expect(body.model).toEqual({ providerID: "provider-2", modelID: "shared-model" });
   });
 
-  it("does not intercept Shift+Enter and does not render autocomplete when instanceId is blank", async () => {
-    const wrapper = mountComposer({ instanceId: "   " });
+  it("does not intercept Shift+Enter and does not render autocomplete when sessionId is blank", async () => {
+    const wrapper = mountComposer({ sessionId: "   " });
     const textarea = wrapper.get("[data-testid='prompt-input']");
 
     await textarea.setValue("/");
@@ -310,7 +311,13 @@ describe("Composer", () => {
 
     await flushPromises();
 
-    expect(wrapper.get("[data-testid='prompt-input']").attributes("disabled")).toBeUndefined();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+    expect(textarea.attributes("disabled")).toBeUndefined();
+
+    // Add content to verify the send button can be enabled
+    await textarea.setValue("test message");
+    await flushPromises();
+
     expect(wrapper.get("[data-testid='prompt-send-button']").attributes("disabled")).toBeUndefined();
   });
 

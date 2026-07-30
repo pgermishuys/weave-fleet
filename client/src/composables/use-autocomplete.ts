@@ -15,7 +15,7 @@ export interface AutocompleteItem {
 export interface UseAutocompleteParams {
   value: Ref<string>;
   setValue: (value: string) => void;
-  instanceId: MaybeRefOrGetter<string | null | undefined>;
+  sessionId: MaybeRefOrGetter<string | null | undefined>;
   inputRef: Ref<HTMLTextAreaElement | null>;
   cursorPosition: Ref<number>;
 }
@@ -43,16 +43,16 @@ interface UseStaticInstanceDataResult<T> {
   error: Readonly<ShallowRef<string | undefined>>;
 }
 
-function useInstanceCommands(instanceId: MaybeRefOrGetter<string | null | undefined>): UseStaticInstanceDataResult<AutocompleteCommand> {
+function useSessionCommands(sessionId: MaybeRefOrGetter<string | null | undefined>): UseStaticInstanceDataResult<AutocompleteCommand> {
   const data = ref<AutocompleteCommand[]>([]);
-  const currentInstanceId = computed(() => toValue(instanceId)?.trim() ?? "");
-  const isLoading = shallowRef(Boolean(currentInstanceId.value));
+  const currentSessionId = computed(() => toValue(sessionId)?.trim() ?? "");
+  const isLoading = shallowRef(Boolean(currentSessionId.value));
   const error = shallowRef<string | undefined>(undefined);
 
   watch(
-    currentInstanceId,
-    async (nextInstanceId, _previousInstanceId, onCleanup) => {
-      if (!nextInstanceId) {
+    currentSessionId,
+    async (nextSessionId, _previousSessionId, onCleanup) => {
+      if (!nextSessionId) {
         data.value = [];
         isLoading.value = false;
         error.value = undefined;
@@ -67,7 +67,7 @@ function useInstanceCommands(instanceId: MaybeRefOrGetter<string | null | undefi
       error.value = undefined;
 
       try {
-        const response = await apiFetch(`/api/instances/${encodeURIComponent(nextInstanceId)}/commands`, {
+        const response = await apiFetch(`/api/sessions/${encodeURIComponent(nextSessionId)}/commands`, {
           signal: controller.signal,
         });
 
@@ -94,16 +94,16 @@ function useInstanceCommands(instanceId: MaybeRefOrGetter<string | null | undefi
   return { data: readonly(data), isLoading: readonly(isLoading), error: readonly(error) };
 }
 
-function useInstanceAgents(instanceId: MaybeRefOrGetter<string | null | undefined>): UseStaticInstanceDataResult<AutocompleteAgent> {
+function useSessionAgents(sessionId: MaybeRefOrGetter<string | null | undefined>): UseStaticInstanceDataResult<AutocompleteAgent> {
   const data = ref<AutocompleteAgent[]>([]);
-  const currentInstanceId = computed(() => toValue(instanceId)?.trim() ?? "");
-  const isLoading = shallowRef(Boolean(currentInstanceId.value));
+  const currentSessionId = computed(() => toValue(sessionId)?.trim() ?? "");
+  const isLoading = shallowRef(Boolean(currentSessionId.value));
   const error = shallowRef<string | undefined>(undefined);
 
   watch(
-    currentInstanceId,
-    async (nextInstanceId, _previousInstanceId, onCleanup) => {
-      if (!nextInstanceId) {
+    currentSessionId,
+    async (nextSessionId, _previousSessionId, onCleanup) => {
+      if (!nextSessionId) {
         data.value = [];
         isLoading.value = false;
         error.value = undefined;
@@ -118,7 +118,7 @@ function useInstanceAgents(instanceId: MaybeRefOrGetter<string | null | undefine
       error.value = undefined;
 
       try {
-        const response = await apiFetch(`/api/instances/${encodeURIComponent(nextInstanceId)}/agents`, {
+        const response = await apiFetch(`/api/sessions/${encodeURIComponent(nextSessionId)}/agents`, {
           signal: controller.signal,
         });
 
@@ -148,7 +148,7 @@ function useInstanceAgents(instanceId: MaybeRefOrGetter<string | null | undefine
 export function useAutocomplete({
   value,
   setValue,
-  instanceId,
+  sessionId,
   inputRef,
   cursorPosition,
 }: UseAutocompleteParams): UseAutocompleteResult {
@@ -196,9 +196,9 @@ export function useAutocomplete({
     return value.value.slice(computedTrigger.value.startIndex + 1, cursorPosition.value);
   });
 
-  const { data: commands, isLoading: commandsLoading, error: commandsError } = useInstanceCommands(instanceId);
-  const { data: agents, isLoading: agentsLoading, error: agentsError } = useInstanceAgents(instanceId);
-  const { files, isLoading: filesLoading, error: filesError } = useFindFiles(instanceId, filterText);
+  const { data: commands, isLoading: commandsLoading, error: commandsError } = useSessionCommands(sessionId);
+  const { data: agents, isLoading: agentsLoading, error: agentsError } = useSessionAgents(sessionId);
+  const { files, isLoading: filesLoading, error: filesError } = useFindFiles(sessionId, filterText);
 
   const isSuppressed = computed(() => suppressedValue.value !== null && suppressedValue.value === value.value);
   const isOpen = computed(() => computedTrigger.value !== null && !isSuppressed.value);

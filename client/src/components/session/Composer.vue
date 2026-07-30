@@ -37,7 +37,7 @@ const emit = defineEmits<{
   promptSent: [];
 }>();
 
-const { agents, defaultAgentId } = useAgents();
+const { agents, defaultAgentId } = useAgents(props.sessionId);
 const { abortSession, isAborting } = useAbortSession();
 const { models, defaultModelKey } = useModels(props.sessionId);
 const { draft, setText, setAgentId, setModelId } = useDraftState(props.sessionId, {
@@ -207,7 +207,7 @@ const canInterrupt = computed(() => sessionStatus.value === "busy" && !isAbortin
 async function handleInterrupt(): Promise<void> {
   if (!canInterrupt.value || !props.instanceId) return;
   try {
-    await abortSession(props.sessionId, props.instanceId);
+    await abortSession(props.sessionId);
     sessionsStore.patchSession(props.sessionId, { activityStatus: "idle", sessionStatus: "idle" });
   } catch {
     // Errors are handled by the mutation composable state.
@@ -324,12 +324,11 @@ defineExpose({
 });
 
 const cursorPosition = shallowRef(0);
-const normalizedInstanceId = computed(() => props.instanceId?.trim() ?? "");
-const autocompleteEnabled = computed(() => normalizedInstanceId.value.length > 0);
+const hasValidSessionId = computed(() => Boolean(props.sessionId?.trim()));
 const autocomplete = useAutocomplete({
   value: computed(() => draft.text),
   setValue: setText,
-  instanceId: normalizedInstanceId,
+  sessionId: computed(() => props.sessionId),
   inputRef: textareaRef,
   cursorPosition,
 });
@@ -565,9 +564,9 @@ function handleKeydown(event: KeyboardEvent): void {
     return;
   }
 
-  const autocompleteWasOpen = autocompleteEnabled.value && autocomplete.isOpen.value;
+  const autocompleteWasOpen = hasValidSessionId.value && autocomplete.isOpen.value;
 
-  if (autocompleteEnabled.value) {
+  if (hasValidSessionId.value) {
     autocomplete.onKeyDown(event);
 
     if (autocompleteWasOpen && ["Enter", "Tab", "Escape"].includes(event.key)) {
@@ -615,11 +614,11 @@ function handleKeydown(event: KeyboardEvent): void {
       @drop="handleDrop"
     >
       <AutocompletePopup
-        :open="autocompleteEnabled && autocomplete.isOpen.value"
-        :items="autocompleteEnabled ? autocomplete.items.value : []"
-        :is-loading="autocompleteEnabled ? autocomplete.isLoading.value : false"
-        :selected-value="autocompleteEnabled ? autocomplete.selectedValue.value : null"
-        :error="autocompleteEnabled ? autocomplete.error.value : undefined"
+        :open="hasValidSessionId && autocomplete.isOpen.value"
+        :items="hasValidSessionId ? autocomplete.items.value : []"
+        :is-loading="hasValidSessionId ? autocomplete.isLoading.value : false"
+        :selected-value="hasValidSessionId ? autocomplete.selectedValue.value : null"
+        :error="hasValidSessionId ? autocomplete.error.value : undefined"
         :on-select="autocomplete.onSelect"
       />
 

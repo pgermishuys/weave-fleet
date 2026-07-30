@@ -9,7 +9,7 @@ import type { ResumeSessionResponse, SessionListItem } from "@/lib/api-types";
 // ---------------------------------------------------------------------------
 
 export interface SessionAbortActions {
-  abortSession: (sessionId: string, instanceId: string) => Promise<void>;
+  abortSession: (sessionId: string) => Promise<void>;
   isAborting: Readonly<ShallowRef<boolean>>;
   error: Readonly<ShallowRef<string | undefined>>;
 }

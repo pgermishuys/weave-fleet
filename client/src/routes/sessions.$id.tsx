@@ -331,7 +331,6 @@ const SessionDetailPage = defineComponent({
 
     const diffState = useDiffs(
       () => params.value.id,
-      () => instanceId.value,
     );
     function openDiffsTray(): void {
       if (viewMode.value !== "chat") {
@@ -340,7 +339,7 @@ const SessionDetailPage = defineComponent({
 
       isDiffsTrayOpen.value = true;
 
-      if (!diffState.isLoading.value && (diffState.isStale.value || diffState.diffs.value.length === 0) && params.value.id && instanceId.value) {
+      if (!diffState.isLoading.value && (diffState.isStale.value || diffState.diffs.value.length === 0) && params.value.id) {
         void diffState.fetchDiffs();
       }
     }
@@ -364,9 +363,9 @@ const SessionDetailPage = defineComponent({
     });
 
     watch(
-      [() => params.value.id, instanceId],
-      async ([sessionId, activeInstanceId]) => {
-        if (sessionId && activeInstanceId) {
+      () => params.value.id,
+      async (sessionId) => {
+        if (sessionId) {
           await diffState.fetchDiffs();
         }
       },
@@ -583,7 +582,7 @@ const SessionDetailPage = defineComponent({
       }
 
       try {
-        await abortSession(params.value.id, instanceId.value);
+        await abortSession(params.value.id);
         refreshRemoteSession();
       } catch {
         // Error is exposed inline by the action toolbar.

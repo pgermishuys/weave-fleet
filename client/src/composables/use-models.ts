@@ -40,15 +40,12 @@ export function useModels(sessionId?: string) {
   const error = shallowRef<string | undefined>(undefined);
 
   const resolvedSessionId = computed(() => sessionId ?? activeSessionId.value ?? "");
-  const instanceId = computed(() => {
-    return sessions.value.find((session) => session.session.id === resolvedSessionId.value)?.instanceId ?? "";
-  });
   const defaultModelKey = computed(() => models.value[0]?.selectionKey ?? "");
 
   watch(
-    instanceId,
-    async (nextInstanceId, _previous, onCleanup) => {
-        if (!nextInstanceId) {
+    resolvedSessionId,
+    async (nextSessionId, _previous, onCleanup) => {
+        if (!nextSessionId) {
           models.value = [];
           modelsByKey.value = {};
           isLoading.value = false;
@@ -65,7 +62,7 @@ export function useModels(sessionId?: string) {
       error.value = undefined;
 
       try {
-        const response = await apiFetch(`/api/instances/${encodeURIComponent(nextInstanceId)}/models`, {
+        const response = await apiFetch(`/api/sessions/${encodeURIComponent(nextSessionId)}/models`, {
           signal: controller.signal,
         });
 

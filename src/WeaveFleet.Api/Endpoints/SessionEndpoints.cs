@@ -448,6 +448,71 @@ public static class SessionEndpoints
         })
         .WithName("MoveSessionToProject");
 
+        // GET /api/sessions/{id}/models — session-scoped model list
+        group.MapGet("/{id}/models", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.GetSessionModelsAsync(id, ct);
+            return result.Match(
+                providers =>
+                {
+                    var items = providers.Select(p => new InstanceProviderItem(
+                        p.Id,
+                        p.Name ?? p.Id,
+                        p.Models.Select(m => new InstanceModelItem(m.Id, m.Name ?? m.Id)).ToList())).ToList();
+                    return Results.Ok(items);
+                },
+                err => err.ToSessionApiResult());
+        })
+        .WithName("GetSessionModels");
+
+        // GET /api/sessions/{id}/commands — session-scoped commands list
+        group.MapGet("/{id}/commands", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.GetSessionCommandsAsync(id, ct);
+            return result.Match(
+                commands =>
+                {
+                    var items = commands.Select(c => new InstanceCommandItem(c.Name, c.Description)).ToList();
+                    return Results.Ok(new InstanceCommandsResponse(id, items));
+                },
+                err => err.ToSessionApiResult());
+        })
+        .WithName("GetSessionCommands");
+
+        // GET /api/sessions/{id}/agents — session-scoped agents list
+        group.MapGet("/{id}/agents", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.GetSessionAgentsAsync(id, ct);
+            return result.Match(
+                agents =>
+                {
+                    var items = agents.Select(a => new InstanceAgentItem(
+                        a.Name,
+                        a.Description,
+                        a.Mode ?? "agent",
+                        a.Hidden,
+                        a.ModelProviderId is not null
+                            ? new InstanceAgentModelRef(a.ModelProviderId, a.ModelId ?? string.Empty)
+                            : null)).ToList();
+                    return Results.Ok(new InstanceAgentsResponse(id, items));
+                },
+                err => err.ToSessionApiResult());
+        })
+        .WithName("GetSessionAgents");
+
+        // GET /api/sessions/{id}/find/files?q= — session-scoped file search
+        group.MapGet("/{id}/find/files", async (string id, string? q, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(q))
+                return Results.Ok(new InstanceFilesResponse(id, Array.Empty<string>()));
+
+            var result = await orchestrator.FindSessionFilesAsync(id, q, ct);
+            return result.Match(
+                files => Results.Ok(new InstanceFilesResponse(id, files.ToArray())),
+                err => err.ToSessionApiResult());
+        })
+        .WithName("FindSessionFiles");
+
         return app;
     }
 

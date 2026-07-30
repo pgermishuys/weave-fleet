@@ -1462,6 +1462,90 @@ public sealed partial class SessionOrchestrator(
         return Unit.Value;
     }
 
+    // ── Session-scoped capabilities ────────────────────────────────────────────
+
+    public async Task<Result<IReadOnlyList<ProviderInfo>>> GetSessionModelsAsync(
+        string sessionId,
+        CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(sessionId);
+        var sessionResult = await GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
+        if (instanceResult.IsFailure)
+            return instanceResult.Error;
+
+        var providers = await instanceResult.Value.GetProvidersAsync(ct);
+        return Result.Success(providers);
+    }
+
+    public async Task<Result<IReadOnlyList<CommandInfo>>> GetSessionCommandsAsync(
+        string sessionId,
+        CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(sessionId);
+        var sessionResult = await GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
+        if (instanceResult.IsFailure)
+            return instanceResult.Error;
+
+        var commands = await instanceResult.Value.GetCommandsAsync(ct);
+        return Result.Success(commands);
+    }
+
+    public async Task<Result<IReadOnlyList<AgentInfo>>> GetSessionAgentsAsync(
+        string sessionId,
+        CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(sessionId);
+        var sessionResult = await GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
+        if (instanceResult.IsFailure)
+            return instanceResult.Error;
+
+        var agents = await instanceResult.Value.GetAgentsAsync(ct);
+        return Result.Success(agents);
+    }
+
+    public async Task<Result<IReadOnlyList<string>>> FindSessionFilesAsync(
+        string sessionId,
+        string query,
+        CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(sessionId);
+        var sessionResult = await GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
+        if (instanceResult.IsFailure)
+            return instanceResult.Error;
+
+        if (string.IsNullOrWhiteSpace(query) || !Directory.Exists(sessionResult.Value.Directory))
+            return Result.Success<IReadOnlyList<string>>(Array.Empty<string>());
+
+        // Normalize query separators to the OS path separator for consistent matching
+        var normalizedQuery = query.Replace('/', Path.DirectorySeparatorChar)
+                                   .Replace('\\', Path.DirectorySeparatorChar);
+
+        var files = Directory
+            .EnumerateFiles(sessionResult.Value.Directory, "*", SearchOption.AllDirectories)
+            .Select(f => f[sessionResult.Value.Directory.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+            .Where(relative => relative.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase))
+            .Take(50)
+            .ToArray();
+
+        return Result.Success<IReadOnlyList<string>>(files);
+    }
+
     // ── Private helpers ────────────────────────────────────────────────────────
 
     private async Task<Result<IHarnessSession>> GetOrActivateInstanceAsync(Session session, CancellationToken ct)
