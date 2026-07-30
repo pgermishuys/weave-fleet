@@ -34,24 +34,14 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
 </script>
 
 <template>
-  <section class="mx-auto grid max-w-3xl gap-6">
-    <div class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
-      <div class="flex items-start gap-3">
-        <div class="rounded-btn border border-border bg-main-bg p-2 text-text">
-          <Settings2
-            :size="18"
-            aria-hidden="true"
-          />
-        </div>
-        <div class="space-y-2">
-          <h1 class="text-2xl font-semibold tracking-tight text-text">
-            Settings
-          </h1>
-          <p class="text-sm text-muted">
-            Manage credentials, workspace preferences, appearance, skills, harnesses, system details, and plugin-provided settings.
-          </p>
-        </div>
-      </div>
+  <section class="grid gap-6">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight text-text">
+        Settings
+      </h1>
+      <p class="mt-1 text-sm text-muted">
+        Manage credentials, workspace preferences, appearance, skills, harnesses, system details, and plugin-provided settings.
+      </p>
     </div>
 
     <WorkspaceSection v-if="activeSection === 'workspace'" />
