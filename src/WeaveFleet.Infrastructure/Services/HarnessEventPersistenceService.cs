@@ -324,7 +324,8 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
             if (!payload.TryGetProperty("part", out var partEl) || partEl.ValueKind != JsonValueKind.Object)
                 return false;
 
-            if (!partEl.TryGetProperty("messageID", out var messageIdEl))
+            // Check for both messageID (uppercase D, used by ClaudeCode/Pi) and messageId (lowercase d, used by OpenCode)
+            if (!partEl.TryGetProperty("messageID", out var messageIdEl) && !partEl.TryGetProperty("messageId", out messageIdEl))
                 return false;
 
             var messageId = messageIdEl.GetString();

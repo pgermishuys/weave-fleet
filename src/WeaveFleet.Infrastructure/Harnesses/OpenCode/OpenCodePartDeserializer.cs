@@ -31,6 +31,7 @@ internal static class OpenCodePartDeserializer
         {
             "text" => partEl.Deserialize(OpenCodeJsonContext.Default.OpenCodeTextPart),
             "tool" => DeserializeToolPart(partEl),
+            "tool-result" => partEl.Deserialize(OpenCodeJsonContext.Default.OpenCodeToolResultPart),
             "reasoning" => partEl.Deserialize(OpenCodeJsonContext.Default.OpenCodeReasoningPart),
             "step-start" => partEl.Deserialize(OpenCodeJsonContext.Default.OpenCodeStepStartPart),
             "step-finish" => partEl.Deserialize(OpenCodeJsonContext.Default.OpenCodeStepFinishPart),

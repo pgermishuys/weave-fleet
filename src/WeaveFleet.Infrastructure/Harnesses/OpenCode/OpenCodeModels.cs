@@ -292,6 +292,7 @@ internal sealed record OpenCodeCacheTokens
 [JsonDerivedType(typeof(OpenCodePatchPart), "patch")]
 [JsonDerivedType(typeof(OpenCodeRetryPart), "retry")]
 [JsonDerivedType(typeof(OpenCodeCompactionPart), "compaction")]
+[JsonDerivedType(typeof(OpenCodeToolResultPart), "tool-result")]
 internal record OpenCodeMessagePart
 {
     [JsonPropertyName("id")] public string Id { get; init; } = string.Empty;
@@ -386,6 +387,14 @@ internal sealed record OpenCodeRetryPart : OpenCodeMessagePart
 internal sealed record OpenCodeCompactionPart : OpenCodeMessagePart
 {
     [JsonPropertyName("summary")] public string? Summary { get; init; }
+}
+
+/// <summary>Tool result part.</summary>
+internal sealed record OpenCodeToolResultPart : OpenCodeMessagePart
+{
+    [JsonPropertyName("callId")] public string? CallId { get; init; }
+    [JsonPropertyName("content")] public string? Content { get; init; }
+    [JsonPropertyName("isError")] public bool IsError { get; init; }
 }
 
 // ---------------------------------------------------------------------------

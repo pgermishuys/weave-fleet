@@ -109,6 +109,12 @@ internal static class OpenCodeMapper
             case OpenCodePatchPart patchPart:
                 return new PatchPart(patchPart.Patch);
 
+            case OpenCodeToolResultPart toolResultPart:
+                return new ToolResultPart(
+                    toolResultPart.CallId ?? toolResultPart.Id,
+                    toolResultPart.Content ?? string.Empty,
+                    toolResultPart.IsError);
+
             default:
                 return null;
         }

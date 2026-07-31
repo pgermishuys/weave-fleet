@@ -231,7 +231,20 @@ internal sealed class PiMapper
             ? new ToolErrorState { Input = finalState.Input, Output = finalState.Output }
             : new ToolCompletedState { Input = finalState.Input, Output = finalState.Output, Metadata = ToolResultDetails(evt.Result) };
 
-        return [CreateToolPartUpdatedEvent(finalState, invocationState)];
+        var toolStateEvent = CreateToolPartUpdatedEvent(finalState, invocationState);
+
+        // Extract content string from tool result
+        var content = ExtractToolResultContent(evt.Result);
+        var toolResultPayload = ToolResultEventBuilder.BuildPayload(
+            finalState.MessageId,
+            _sessionId,
+            finalState.ToolCallId,
+            content,
+            evt.IsError);
+
+        var toolResultEvent = CreateEvent(EventTypes.MessagePartUpdated, toolResultPayload);
+
+        return [toolStateEvent, toolResultEvent];
     }
 
     private IReadOnlyList<HarnessEvent> MapResponse(PiResponseEvent evt)
@@ -641,6 +654,20 @@ internal sealed class PiMapper
 
         var text = string.Concat(result.Content.OfType<PiTextContent>().Select(content => content.Text));
         return text.Length == 0 ? null : JsonSerializer.SerializeToElement(text, PiMapperJsonContext.Default.String);
+    }
+
+    private static string? ExtractToolResultContent(PiToolResult? result)
+    {
+        if (result is null)
+            return null;
+
+        // If there's structured details, serialize it as JSON string
+        if (result.Details is { ValueKind: not JsonValueKind.Undefined } details)
+            return details.GetRawText();
+
+        // Otherwise, concatenate text content
+        var text = string.Concat(result.Content.OfType<PiTextContent>().Select(content => content.Text));
+        return text.Length == 0 ? null : text;
     }
 
     private static JsonElement? ToolResultDetails(PiToolResult? result)

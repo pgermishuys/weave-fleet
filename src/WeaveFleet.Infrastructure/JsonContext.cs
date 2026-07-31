@@ -160,6 +160,7 @@ internal sealed partial class HarnessEventJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(OpenCodePatchPart))]
 [JsonSerializable(typeof(OpenCodeRetryPart))]
 [JsonSerializable(typeof(OpenCodeCompactionPart))]
+[JsonSerializable(typeof(OpenCodeToolResultPart))]
 [JsonSerializable(typeof(OpenCodeToolState))]
 [JsonSerializable(typeof(OpenCodeToolPending))]
 [JsonSerializable(typeof(OpenCodeToolRunning))]
