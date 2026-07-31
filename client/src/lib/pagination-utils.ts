@@ -39,6 +39,9 @@ export interface FleetMessagePart {
   mime?: string;
   filename?: string;
   url?: string;
+  // ToolResultPart fields
+  content?: string;
+  isError?: boolean;
   // StepFinishPart fields
   index?: number;
   reason?: string;
@@ -188,6 +191,14 @@ export function convertFleetMessageToAccumulated(msg: FleetMessage): Accumulated
   let tokensOutput = 0;
   let tokensReasoning = 0;
 
+  // Pre-scan: collect tool results keyed by toolCallId so we can merge them into tool state
+  const toolResults = new Map<string, { content: string; isError: boolean }>();
+  for (const part of msg.parts) {
+    if (part.type === "tool-result" && part.toolCallId) {
+      toolResults.set(part.toolCallId, { content: part.content ?? "", isError: part.isError ?? false });
+    }
+  }
+
   for (const part of msg.parts) {
     if (part.type === "text") {
       // Fleet TextPart has no ID — generate a stable one from message ID + index
@@ -205,7 +216,7 @@ export function convertFleetMessageToAccumulated(msg: FleetMessage): Accumulated
         type: "tool",
         tool: part.toolName ?? "",
         callId: part.toolCallId ?? "",
-        state: mapToolState(part.state, part.arguments, part.metadata as Record<string, unknown> | undefined),
+        state: mapToolState(part.state, part.arguments, part.metadata as Record<string, unknown> | undefined, toolResults.get(part.toolCallId ?? "")),
       });
     } else if (part.type === "file") {
       parts.push({
@@ -259,13 +270,21 @@ export function sortAccumulatedMessagesChronologically(messages: readonly Accumu
     .map(({ message }) => message)
 }
 
-function mapToolState(state?: number, toolArguments?: unknown, extra?: Record<string, unknown>): unknown {
+function mapToolState(state?: number, toolArguments?: unknown, extra?: Record<string, unknown>, toolResult?: { content: string; isError: boolean }): unknown {
   // ToolUseState enum: 0=Pending, 1=Running, 2=Completed, 3=Error
   const statusMap: Record<number, string> = { 0: "pending", 1: "running", 2: "completed", 3: "error" };
   const status = state != null ? (statusMap[state] ?? "pending") : "pending";
   const result: Record<string, unknown> = { status, ...extra };
   if (toolArguments != null) {
     result.input = toolArguments;
+  }
+  if (toolResult) {
+    // Try to parse as JSON; fall back to raw string
+    try {
+      result.output = JSON.parse(toolResult.content);
+    } catch {
+      result.output = toolResult.content;
+    }
   }
   return result;
 }

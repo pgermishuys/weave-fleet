@@ -243,6 +243,7 @@
   --font-mono: var(--font-mono-stack);
   --color-background: var(--panel-bg);
   --color-foreground: var(--text);
+  --color-card: var(--card-bg);
   --color-popover: var(--card-bg);
   --color-popover-foreground: var(--text);
   --color-rail-bg: var(--rail-bg);

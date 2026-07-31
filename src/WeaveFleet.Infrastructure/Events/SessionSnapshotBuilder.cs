@@ -176,6 +176,14 @@ public sealed class SessionSnapshotBuilder(
         double totalReasoningTokens = 0;
         long? completedAt = null;
 
+        // Pre-scan to build a lookup of tool results by ToolCallId
+        var toolResults = new Dictionary<string, ToolResultPart>(StringComparer.Ordinal);
+        foreach (var part in persistedParts)
+        {
+            if (part is ToolResultPart resultPart)
+                toolResults[resultPart.ToolCallId] = resultPart;
+        }
+
         for (var index = 0; index < persistedParts.Count; index++)
         {
             switch (persistedParts[index])
@@ -209,7 +217,7 @@ public sealed class SessionSnapshotBuilder(
                         MessageId = message.Id,
                         ToolName = toolPart.ToolName,
                         CallId = toolPart.ToolCallId,
-                        State = ToToolInvocationState(toolPart),
+                        State = ToToolInvocationState(toolPart, toolResults),
                     });
                     break;
 
@@ -280,20 +288,42 @@ public sealed class SessionSnapshotBuilder(
         };
     }
 
-    private static ToolInvocationState ToToolInvocationState(ToolUsePart toolPart)
+    private static ToolInvocationState ToToolInvocationState(ToolUsePart toolPart, Dictionary<string, ToolResultPart> toolResults)
     {
         var input = toolPart.Arguments.ValueKind == JsonValueKind.Undefined
             ? (JsonElement?)null
             : toolPart.Arguments.Clone();
 
+        JsonElement? output = null;
+        if (toolResults.TryGetValue(toolPart.ToolCallId, out var resultPart))
+        {
+            output = ParseToolResultContent(resultPart.Content);
+        }
+
         return toolPart.State switch
         {
             ToolUseState.Pending => new ToolPendingState { Input = input },
             ToolUseState.Running => new ToolRunningState { Input = input },
-            ToolUseState.Completed => new ToolCompletedState { Input = input },
-            ToolUseState.Error => new ToolErrorState { Input = input },
+            ToolUseState.Completed => new ToolCompletedState { Input = input, Output = output },
+            ToolUseState.Error => new ToolErrorState { Input = input, Output = output },
             _ => new ToolPendingState { Input = input },
         };
+    }
+
+    private static JsonElement? ParseToolResultContent(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return null;
+
+        try
+        {
+            return JsonDocument.Parse(content).RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            // Content is not valid JSON, wrap it as a JSON string
+            return JsonSerializer.SerializeToElement(content, ApplicationJsonContext.Default.String);
+        }
     }
 
     private static long ParseUnixTimeMilliseconds(string timestamp)

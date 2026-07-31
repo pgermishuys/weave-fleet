@@ -4,6 +4,7 @@ import { storeToRefs } from "pinia";
 import { X } from "lucide-vue-next";
 import ArtifactsPanel from "@/components/session/ArtifactsPanel.vue";
 import ArtifactViewerToolbar from "@/components/session/ArtifactViewerToolbar.vue";
+import AnnotationPopover from "@/components/annotations/AnnotationPopover.vue";
 import CollapsedRightRail from "@/components/layout/CollapsedRightRail.vue";
 import RightPanelTabs from "@/components/layout/RightPanelTabs.vue";
 import SessionDetailPanel from "@/components/session/SessionDetailPanel.vue";
@@ -19,9 +20,15 @@ import { provideSessionDetailContext } from "@/composables/use-session-detail-co
 import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { useSessionTodos } from "@/composables/use-session-todos";
 import { useVisualPanel } from "@/composables/use-visual-panel";
+import { useAnnotation } from "@/composables/use-annotation";
+import { useSendPrompt } from "@/composables/use-send-prompt";
+import { useDraftState } from "@/composables/use-draft-state";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
 import { getVisualRenderer } from "@/lib/visual-renderer-registry";
+import { formatAnnotationPrompt } from "@/lib/format-annotation-prompt";
+import { extractAnchorText } from "@/lib/annotation-types";
+import type { AnnotationAnchor } from "@/lib/annotation-types";
 
 interface Props {
   width?: number;
@@ -210,6 +217,58 @@ function handleCloseVisual(): void {
   clearVisual();
   activeTabId.value = "artifacts";
 }
+
+// --- Annotation flow ---
+// We need to initialize these composables with the active session ID
+// Since the session ID can change, we'll handle the case where there's no active session
+const currentSessionId = computed(() => activeSessionId.value ?? "");
+
+const {
+  activeAnchor,
+  isPopoverOpen,
+  popoverPosition,
+  openAnnotation,
+  closeAnnotation,
+  submitAnnotation,
+} = useAnnotation({
+  onSubmit: (formattedText: string) => {
+    const sessionId = currentSessionId.value;
+    if (!sessionId) return;
+    
+    // Get the composables for the current session
+    const { sendPrompt } = useSendPrompt(sessionId);
+    const { setText } = useDraftState(sessionId, {
+      agentId: "",
+      modelId: "",
+    });
+    
+    // Format the annotation prompt with file path if available
+    const filePath = visualPayload.value?.sourceFilePath ?? "";
+    const anchorText = activeAnchor.value ? extractAnchorText(activeAnchor.value) : "";
+    const prompt = formatAnnotationPrompt(filePath, anchorText, formattedText);
+    
+    // Set the draft text and send
+    setText(prompt);
+    sendPrompt();
+  },
+});
+
+function handleAnnotate(anchor: AnnotationAnchor, position: { x: number; y: number }): void {
+  openAnnotation(anchor, position);
+}
+
+function handleAnnotationSend(text: string): void {
+  submitAnnotation(text);
+}
+
+function handleAnnotationCancel(): void {
+  closeAnnotation();
+}
+
+// Check if the current visual renderer is the MarkdownRenderer
+const isMarkdownRenderer = computed(() => {
+  return visualPayload.value?.$type === "markdown";
+});
 </script>
 
 <template>
@@ -252,7 +311,12 @@ function handleCloseVisual(): void {
             </button>
           </div>
           <div class="visual-panel__content">
-            <component :is="visualRenderer" :content="visualPayload.content" />
+            <component
+              :is="visualRenderer"
+              :content="visualPayload.content"
+              :annotatable="isMarkdownRenderer"
+              @annotate="handleAnnotate"
+            />
           </div>
         </section>
 
@@ -282,6 +346,18 @@ function handleCloseVisual(): void {
         </template>
       </div>
     </div>
+
+    <!-- Annotation Popover -->
+    <Teleport to="body">
+      <AnnotationPopover
+        v-if="isPopoverOpen && activeAnchor"
+        :x="popoverPosition.x"
+        :y="popoverPosition.y"
+        :anchor-text="extractAnchorText(activeAnchor)"
+        @send="handleAnnotationSend"
+        @cancel="handleAnnotationCancel"
+      />
+    </Teleport>
   </aside>
 </template>
 
