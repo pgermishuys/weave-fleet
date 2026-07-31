@@ -68,14 +68,15 @@ public sealed class PiTranscriptReplayTests
     {
         var events = ReplayFixture("tool-validation.jsonl");
 
-        events.Count.ShouldBe(96);
+        // After wrapping tool-result events, the count increased by 1
+        events.Count.ShouldBe(97);
         AssertTypeCounts(events, new Dictionary<string, int>
         {
             [EventTypes.SessionUpdated] = 2,
             [EventTypes.SessionStatus] = 6,
             [EventTypes.MessageCreated] = 4,
             [EventTypes.MessageUpdated] = 10,
-            [EventTypes.MessagePartUpdated] = 49,
+            [EventTypes.MessagePartUpdated] = 50,
             [EventTypes.MessagePartDelta] = 25,
         });
 

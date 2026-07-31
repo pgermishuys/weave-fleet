@@ -1,13 +1,19 @@
+using System.Data;
 using System.Text.Json;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using WeaveFleet.Application;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Data.Repositories;
 using WeaveFleet.Infrastructure.Events;
+using WeaveFleet.Infrastructure.Harnesses;
+using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.Tests.Data;
+using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Infrastructure.Tests.Events;
 

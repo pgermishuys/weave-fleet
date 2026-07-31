@@ -234,7 +234,7 @@ public sealed class ClaudeCodeMapperTests
     }
 
     [Fact]
-    public void ToFrontendEvents_AssistantMessageWithToolResult_DoesNotEmitToolResultPartEvent()
+    public void ToFrontendEvents_AssistantMessageWithToolResult_EmitsToolResultPartEvent()
     {
         var msg = new ClaudeCodeAssistantMessage
         {
@@ -251,8 +251,21 @@ public sealed class ClaudeCodeMapperTests
 
         var events = ClaudeCodeMapper.ToFrontendEvents(msg, "fleet-sess-1");
 
-        events.Count.ShouldBe(2);
-        events.All(evt => evt.Payload?.ToString()?.Contains("sensitive output", StringComparison.Ordinal) != true).ShouldBeTrue();
+        // 1 message.updated + 2 message.part.updated (text + tool-result)
+        events.Count.ShouldBe(3);
+        events[0].Type.ShouldBe("message.updated");
+        events[1].Type.ShouldBe("message.part.updated");
+        events[2].Type.ShouldBe("message.part.updated");
+
+        var toolResultPayload = events[2].Payload!.Value;
+        // Tool result event is now wrapped in a "part" property
+        var toolResultPart = toolResultPayload.GetProperty("part");
+        toolResultPart.GetProperty("type").GetString().ShouldBe("tool-result");
+        toolResultPart.GetProperty("callId").GetString().ShouldBe("toolu_1");
+        toolResultPart.GetProperty("content").GetString().ShouldBe("sensitive output");
+        toolResultPart.GetProperty("isError").GetBoolean().ShouldBeFalse();
+        toolResultPart.GetProperty("messageId").GetString().ShouldBe("msg-tool-result-1");
+        toolResultPart.GetProperty("sessionId").GetString().ShouldBe("fleet-sess-1");
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Shouldly;
+using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
@@ -555,5 +556,161 @@ public sealed class OpenCodeModelsSerializationTests
         json.ShouldContain("\"model\":\"openai/gpt-4o\"");
         json.ShouldContain("\"agent\":\"build\"");
         json.ShouldContain("\"arguments\":\"some args\"");
+    }
+
+    // ---------------------------------------------------------------------------
+    // OpenCodeToolResultPart — tool-result type
+    // ---------------------------------------------------------------------------
+
+    [Fact]
+    public void ToolResultPart_Deserializes()
+    {
+        const string json = """
+        {
+          "type":"tool-result",
+          "id":"part-1",
+          "sessionId":"sess-1",
+          "messageId":"msg-1",
+          "callId":"call-123",
+          "content":"Tool execution successful",
+          "isError":false
+        }
+        """;
+
+        var result = JsonSerializer.Deserialize<OpenCodeMessagePart>(json, Options);
+
+        result.ShouldNotBeNull();
+        var toolResultPart = result.ShouldBeOfType<OpenCodeToolResultPart>();
+        toolResultPart.Id.ShouldBe("part-1");
+        toolResultPart.SessionId.ShouldBe("sess-1");
+        toolResultPart.MessageId.ShouldBe("msg-1");
+        toolResultPart.CallId.ShouldBe("call-123");
+        toolResultPart.Content.ShouldBe("Tool execution successful");
+        toolResultPart.IsError.ShouldBe(false);
+    }
+
+    [Fact]
+    public void ToolResultPart_WithError_Deserializes()
+    {
+        const string json = """
+        {
+          "type":"tool-result",
+          "id":"part-error",
+          "sessionId":"sess-1",
+          "messageId":"msg-1",
+          "callId":"call-error",
+          "content":"Tool execution failed",
+          "isError":true
+        }
+        """;
+
+        var result = JsonSerializer.Deserialize<OpenCodeMessagePart>(json, Options);
+
+        result.ShouldNotBeNull();
+        var toolResultPart = result.ShouldBeOfType<OpenCodeToolResultPart>();
+        toolResultPart.CallId.ShouldBe("call-error");
+        toolResultPart.Content.ShouldBe("Tool execution failed");
+        toolResultPart.IsError.ShouldBe(true);
+    }
+
+    [Fact]
+    public void ToolResultPart_RoundTrips_ThroughDeserializer()
+    {
+        const string json = """
+        {
+          "type":"tool-result",
+          "id":"part-rt",
+          "sessionId":"sess-rt",
+          "messageId":"msg-rt",
+          "callId":"call-rt",
+          "content":"Round trip test",
+          "isError":false
+        }
+        """;
+
+        var jsonElement = JsonDocument.Parse(json).RootElement;
+        var part = OpenCodePartDeserializer.DeserializePart(jsonElement);
+
+        part.ShouldNotBeNull();
+        var toolResultPart = part.ShouldBeOfType<OpenCodeToolResultPart>();
+        toolResultPart.Id.ShouldBe("part-rt");
+        toolResultPart.SessionId.ShouldBe("sess-rt");
+        toolResultPart.MessageId.ShouldBe("msg-rt");
+        toolResultPart.CallId.ShouldBe("call-rt");
+        toolResultPart.Content.ShouldBe("Round trip test");
+        toolResultPart.IsError.ShouldBe(false);
+    }
+
+    [Fact]
+    public void ToolResultEventBuilder_BuildsPayload_ThatDeserializesCorrectly()
+    {
+        var payload = ToolResultEventBuilder.BuildPayload(
+            messageId: "msg-builder",
+            sessionId: "sess-builder",
+            callId: "call-builder",
+            content: "Builder test content",
+            isError: false);
+
+        payload.ValueKind.ShouldBe(JsonValueKind.Object);
+
+        // Payload should be wrapped in a "part" property
+        payload.TryGetProperty("part", out var partEl).ShouldBeTrue();
+        partEl.ValueKind.ShouldBe(JsonValueKind.Object);
+
+        // The inner part should have messageId (lowercase d)
+        partEl.TryGetProperty("messageId", out var messageIdEl).ShouldBeTrue();
+        messageIdEl.GetString().ShouldBe("msg-builder");
+
+        // Deserialize the inner part element
+        var part = OpenCodePartDeserializer.DeserializePart(partEl);
+
+        part.ShouldNotBeNull();
+        var toolResultPart = part.ShouldBeOfType<OpenCodeToolResultPart>();
+        toolResultPart.MessageId.ShouldBe("msg-builder");
+        toolResultPart.SessionId.ShouldBe("sess-builder");
+        toolResultPart.CallId.ShouldBe("call-builder");
+        toolResultPart.Content.ShouldBe("Builder test content");
+        toolResultPart.IsError.ShouldBe(false);
+    }
+
+    [Fact]
+    public void ToolResultEventBuilder_WithError_BuildsPayload_ThatDeserializesCorrectly()
+    {
+        var payload = ToolResultEventBuilder.BuildPayload(
+            messageId: "msg-error-builder",
+            sessionId: "sess-error-builder",
+            callId: "call-error-builder",
+            content: "Error content",
+            isError: true);
+
+        // Payload should be wrapped in a "part" property
+        payload.TryGetProperty("part", out var partEl).ShouldBeTrue();
+
+        var part = OpenCodePartDeserializer.DeserializePart(partEl);
+
+        part.ShouldNotBeNull();
+        var toolResultPart = part.ShouldBeOfType<OpenCodeToolResultPart>();
+        toolResultPart.IsError.ShouldBe(true);
+        toolResultPart.Content.ShouldBe("Error content");
+    }
+
+    [Fact]
+    public void ToolResultEventBuilder_WithNullContent_BuildsPayload_ThatDeserializesCorrectly()
+    {
+        var payload = ToolResultEventBuilder.BuildPayload(
+            messageId: "msg-null",
+            sessionId: "sess-null",
+            callId: "call-null",
+            content: null,
+            isError: false);
+
+        // Payload should be wrapped in a "part" property
+        payload.TryGetProperty("part", out var partEl).ShouldBeTrue();
+
+        var part = OpenCodePartDeserializer.DeserializePart(partEl);
+
+        part.ShouldNotBeNull();
+        var toolResultPart = part.ShouldBeOfType<OpenCodeToolResultPart>();
+        toolResultPart.Content.ShouldBeNull();
     }
 }

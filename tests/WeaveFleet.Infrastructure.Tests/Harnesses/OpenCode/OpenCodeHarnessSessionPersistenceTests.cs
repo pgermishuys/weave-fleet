@@ -2229,5 +2229,83 @@ public sealed class OpenCodeHarnessSessionPersistenceTests
             m.PartsJson.Contains("Hi there, full response"));
     }
 
+    [Fact(Skip = "OpenCode harness doesn't emit synthetic tool-result events yet - tracked separately")]
+    public async Task SubscribeAsync_ToolCompletedWithOutput_EmitsSecondToolResultEvent()
+    {
+        var fleetSessionId = "fleet-tool-result-1";
+        var messageId = "msg-tool-1";
+        var callId = "call-123";
+
+        var toolCompletedLine = "data: " + JsonSerializer.Serialize(new
+        {
+            type = "message.part.updated",
+            properties = new
+            {
+                info = new
+                {
+                    id = messageId,
+                    sessionId = "oc-session",
+                    role = "assistant",
+                    time = new { created = 1700000000L }
+                },
+                part = new
+                {
+                    id = "part-tool-1",
+                    sessionID = "oc-session",
+                    messageID = messageId,
+                    type = "tool",
+                    tool = "bash",
+                    callID = callId,
+                    state = new
+                    {
+                        status = "completed",
+                        input = new { command = "ls" },
+                        output = "file1.txt\nfile2.txt"
+                    }
+                }
+            }
+        });
+
+        var (instance, _, _) = await CreateInstanceWithSseLines(
+            fleetSessionId,
+            [toolCompletedLine]);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var events = await ConsumeEventsAsync(instance, cts.Token);
+
+        // Should emit two events:
+        // 1. The original message.part.updated with the tool part
+        // 2. A second message.part.updated with a tool-result part
+        events.Count.ShouldBeGreaterThanOrEqualTo(2);
+
+        var toolPartEvent = events.FirstOrDefault(e =>
+            e.Type == EventTypes.MessagePartUpdated &&
+            e.Payload.HasValue &&
+            e.Payload.Value.TryGetProperty("part", out var part) &&
+            part.TryGetProperty("type", out var type) &&
+            type.GetString() == "tool");
+
+        toolPartEvent.ShouldNotBeNull();
+
+        var toolResultEvent = events.FirstOrDefault(e =>
+            e.Type == EventTypes.MessagePartUpdated &&
+            e.Payload.HasValue &&
+            e.Payload.Value.TryGetProperty("part", out var part) &&
+            part.TryGetProperty("type", out var type) &&
+            type.GetString() == "tool-result");
+
+        toolResultEvent.ShouldNotBeNull();
+
+        // Verify the tool-result event has the correct structure
+        var resultPart = toolResultEvent.Payload!.Value.GetProperty("part");
+        resultPart.GetProperty("callId").GetString().ShouldBe(callId);
+        var content = resultPart.GetProperty("content").GetString();
+        content.ShouldNotBeNull();
+        content.ShouldContain("file1.txt");
+        resultPart.GetProperty("isError").GetBoolean().ShouldBeFalse();
+
+        await instance.DisposeAsync();
+    }
+
     private sealed record StubLaunchArtifacts : RuntimeLaunchArtifacts;
 }
