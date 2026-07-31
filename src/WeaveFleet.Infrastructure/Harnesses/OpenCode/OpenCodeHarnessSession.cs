@@ -350,6 +350,11 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 TryCacheQuestionMapping(harnessEvent);
 
             yield return harnessEvent;
+
+            // Emit synthetic tool-result event if this is a completed tool part with output
+            var toolResultEvent = TryBuildToolResultEvent(sseEvt, harnessEvent);
+            if (toolResultEvent is not null)
+                yield return toolResultEvent;
         }
     }
 
@@ -957,5 +962,95 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         {
             LogDelegationFailed(_logger, _fleetSessionId, ex);
         }
+    }
+
+    /// <summary>
+    /// Attempts to build a synthetic tool-result event from a completed tool part.
+    /// Returns <c>null</c> if the event is not a completed tool part with output.
+    /// </summary>
+    private HarnessEvent? TryBuildToolResultEvent(OpenCodeSseEvent sseEvt, HarnessEvent harnessEvent)
+    {
+        // Only process message.part.updated events
+        if (sseEvt.Type != EventTypes.MessagePartUpdated)
+            return null;
+
+        // Extract the part object from properties
+        if (sseEvt.Properties.ValueKind != JsonValueKind.Object)
+            return null;
+
+        if (!sseEvt.Properties.TryGetProperty("part", out var partEl) || partEl.ValueKind != JsonValueKind.Object)
+            return null;
+
+        // Check part.type == "tool"
+        if (!partEl.TryGetProperty("type", out var typeEl) || typeEl.ValueKind != JsonValueKind.String)
+            return null;
+
+        var partType = typeEl.GetString();
+        if (!string.Equals(partType, "tool", StringComparison.Ordinal))
+            return null;
+
+        // Check part.state.status == "completed" or "error"
+        if (!partEl.TryGetProperty("state", out var stateEl) || stateEl.ValueKind != JsonValueKind.Object)
+            return null;
+
+        if (!stateEl.TryGetProperty("status", out var statusEl) || statusEl.ValueKind != JsonValueKind.String)
+            return null;
+
+        var status = statusEl.GetString();
+        if (status is not ("completed" or "error"))
+            return null;
+
+        // Extract state.output
+        if (!stateEl.TryGetProperty("output", out var outputEl))
+            return null;
+
+        // Serialize output to string
+        string? content = outputEl.ValueKind == JsonValueKind.String
+            ? outputEl.GetString()
+            : outputEl.GetRawText();
+
+        // Extract callId (try both "callId" and "callID")
+        string? callId = null;
+        if (partEl.TryGetProperty("callId", out var callIdEl) && callIdEl.ValueKind == JsonValueKind.String)
+            callId = callIdEl.GetString();
+        else if (partEl.TryGetProperty("callID", out callIdEl) && callIdEl.ValueKind == JsonValueKind.String)
+            callId = callIdEl.GetString();
+
+        // Fallback to part.id if callId is not found
+        if (string.IsNullOrWhiteSpace(callId))
+        {
+            if (partEl.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.String)
+                callId = idEl.GetString();
+        }
+
+        if (string.IsNullOrWhiteSpace(callId))
+            return null;
+
+        // Extract messageId
+        string? messageId = null;
+        if (partEl.TryGetProperty("messageId", out var messageIdEl) && messageIdEl.ValueKind == JsonValueKind.String)
+            messageId = messageIdEl.GetString();
+        else if (partEl.TryGetProperty("messageID", out messageIdEl) && messageIdEl.ValueKind == JsonValueKind.String)
+            messageId = messageIdEl.GetString();
+
+        if (string.IsNullOrWhiteSpace(messageId))
+            return null;
+
+        // Resolve session ID (use routed fleet session ID if available, otherwise use fleet session ID)
+        var sessionId = harnessEvent.FleetSessionId ?? _fleetSessionId;
+
+        // Build payload
+        var isError = string.Equals(status, "error", StringComparison.Ordinal);
+        var payload = ToolResultEventBuilder.BuildPayload(messageId, sessionId, callId, content, isError);
+
+        // Return synthetic event
+        return new HarnessEvent
+        {
+            Type = EventTypes.MessagePartUpdated,
+            SessionId = harnessEvent.SessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = payload,
+            FleetSessionId = harnessEvent.FleetSessionId
+        };
     }
 }
