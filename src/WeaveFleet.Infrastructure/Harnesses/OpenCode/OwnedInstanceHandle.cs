@@ -12,6 +12,7 @@ internal sealed class OwnedInstanceHandle : IOpenCodeInstanceHandle
     private readonly int _allocatedPort;
     private readonly string _workingDirectory;
     private readonly TimeSpan _shutdownTimeout;
+    private readonly TaskCompletionSource _sseConnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _portReleased;
 
     public OwnedInstanceHandle(
@@ -56,15 +57,14 @@ internal sealed class OwnedInstanceHandle : IOpenCodeInstanceHandle
     public Task WaitForEventSubscriptionAsync(string openCodeSessionId, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(openCodeSessionId);
-        ct.ThrowIfCancellationRequested();
-        return Task.CompletedTask;
+        return _sseConnected.Task.WaitAsync(ct);
     }
 
     public Task SendCommandAsync(string openCodeSessionId, OpenCodeCommandRequest request, CancellationToken ct) =>
         HttpClient.SendCommandAsync(openCodeSessionId, request, _workingDirectory, ct);
 
     public IAsyncEnumerable<OpenCodeSseEvent> SubscribeEvents(string? openCodeSessionId, CancellationToken ct) =>
-        HttpClient.SubscribeToEventsAsync(_workingDirectory, ct);
+        HttpClient.SubscribeToEventsAsync(_workingDirectory, () => { _sseConnected.TrySetResult(); return Task.CompletedTask; }, ct);
 
     public async Task StopAsync(CancellationToken ct)
     {

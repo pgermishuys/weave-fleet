@@ -573,6 +573,23 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc />
+    public Task WaitForEventSubscriptionAsync(CancellationToken ct)
+    {
+        // Delegate to the instance handle, which signals readiness when the SSE stream is connected.
+        // For owned instances, this waits for the SSE response headers to be received.
+        // For pooled instances, this waits for the demultiplexer subscription to be established.
+        var openCodeSessionId = _openCodeSessionId;
+        if (string.IsNullOrWhiteSpace(openCodeSessionId))
+        {
+            // No session ID yet — return completed task since subscription will be established
+            // when SubscribeAsync is called (which happens before any prompts are sent).
+            return Task.CompletedTask;
+        }
+
+        return _instanceHandle.WaitForEventSubscriptionAsync(openCodeSessionId, ct);
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct)
     {
         var commands = await _instanceHandle.HttpClient.GetCommandsAsync(_workingDirectory, ct).ConfigureAwait(false);

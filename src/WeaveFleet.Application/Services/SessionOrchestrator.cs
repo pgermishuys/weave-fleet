@@ -328,10 +328,10 @@ public sealed partial class SessionOrchestrator(
             return instanceResult.Error;
         }
 
-        // Track in-memory handle
-        instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
-
         // 4. Persist session
+        // NOTE: the session row must be persisted BEFORE the instance is registered with the
+        // tracker, because registration starts the HarnessEventRelay pump which resolves the
+        // Fleet session id via the DB. Registering first races the pump against the insert.
         // For pooled/automatic sessions, HarnessResumeToken is set here from the eagerly-created
         // OpenCode session ID (available because SpawnAsync returns after OC session creation).
         // For non-pooled sessions, ResumeToken is null at spawn time and is updated later via
@@ -368,11 +368,17 @@ public sealed partial class SessionOrchestrator(
             {
                 // Rollback: best-effort delete of the OC session (releases lease, removes binding
                 // table entry, and issues OC-level DELETE). The resume token must not be logged or
-                // persisted when this path is taken. Deregister the in-memory handle too.
-                instanceTracker.Remove(harnessInstance.InstanceId);
+                // persisted when this path is taken.
                 await SafeDeleteAsync(harnessInstance, ct);
                 throw;
             }
+
+            // Track in-memory handle immediately after successful persistence (and before the
+            // non-transactional broadcast) so the relay pump started by registration can resolve
+            // the Fleet session id from the DB, and a broadcast failure cannot leave a persisted
+            // session with an untracked instance.
+            instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
+
             await eventBroadcaster.BroadcastAsync("sessions", "session_created",
                 JsonSerializer.SerializeToElement(new SessionCreatedOutboxPayload
                 {
@@ -414,11 +420,13 @@ public sealed partial class SessionOrchestrator(
             {
                 // Rollback: best-effort delete of the OC session (releases lease, removes binding
                 // table entry, and issues OC-level DELETE). The resume token must not be logged or
-                // persisted when this path is taken. Deregister the in-memory handle too.
-                instanceTracker.Remove(harnessInstance.InstanceId);
+                // persisted when this path is taken.
                 await SafeDeleteAsync(harnessInstance, ct);
                 throw;
             }
+
+            // Track in-memory handle immediately after successful persistence (see comment above).
+            instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
         }
 
         await sessionSourceUsageRepository.InsertAsync(new SessionSourceUsage
@@ -573,8 +581,10 @@ public sealed partial class SessionOrchestrator(
             directory: workspaceResult.Value,
             url: string.Empty);
 
-        instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
+        // Update the DB mapping BEFORE registering: registration starts the relay pump, which
+        // resolves the Fleet session id by instance id from the DB.
         await sessionRepository.UpdateForResumeAsync(session.Id, harnessInstance.InstanceId);
+        instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
 
         session.InstanceId = harnessInstance.InstanceId;
         return session;
@@ -836,6 +846,10 @@ public sealed partial class SessionOrchestrator(
                 return new PromptSessionResult(publishResult.EventId, effectiveCorrelationId);
 
             await messageRepository.UpsertAsync(persisted);
+
+            // Ensure the event subscription is established before sending the prompt.
+            // This prevents early events from being lost during activation/resume.
+            await EnsureEventSubscriptionReadyAsync(instanceResult.Value, id, ct).ConfigureAwait(false);
 
             await instanceResult.Value.SendPromptAsync(text, options, ct);
 
@@ -1658,8 +1672,10 @@ public sealed partial class SessionOrchestrator(
             return instanceResult.Error;
         }
 
-        instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
+        // Update the DB mapping BEFORE registering: registration starts the relay pump, which
+        // resolves the Fleet session id by instance id from the DB.
         await sessionRepository.UpdateForResumeAsync(session.Id, harnessInstance.InstanceId).ConfigureAwait(false);
+        instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
         session.InstanceId = harnessInstance.InstanceId;
         session.Status = "active";
         session.LifecycleStatus = _lifecycleStatusRunning;
@@ -1796,6 +1812,34 @@ public sealed partial class SessionOrchestrator(
     [LoggerMessage(Level = LogLevel.Error,
         Message = "Unexpected failure sending prompt to session {SessionId}")]
     private partial void LogPromptUnexpectedFailure(Exception ex, string sessionId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Event subscription readiness timed out for session {SessionId} after {TimeoutMs}ms — proceeding with prompt")]
+    private partial void LogSubscriptionReadinessTimeout(string sessionId, int timeoutMs);
+
+    /// <summary>
+    /// Waits for the harness event subscription to be established before proceeding.
+    /// This ensures events emitted immediately after activation/resume are not lost.
+    /// Times out after 5 seconds and proceeds with a warning rather than failing the operation.
+    /// </summary>
+    private async Task EnsureEventSubscriptionReadyAsync(
+        IHarnessSession instance,
+        string sessionId,
+        CancellationToken ct)
+    {
+        const int timeoutMs = 5000;
+        try
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(timeoutMs);
+            await instance.WaitForEventSubscriptionAsync(timeoutCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Timeout — log warning and proceed rather than failing the prompt.
+            LogSubscriptionReadinessTimeout(sessionId, timeoutMs);
+        }
+    }
 
     private async Task<string?> ResolveProjectNameAsync(string? projectId)
     {

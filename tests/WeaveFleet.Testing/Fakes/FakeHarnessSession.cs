@@ -105,6 +105,14 @@ public sealed class FakeHarnessSession : IHarnessSession
     public Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct)
         => Task.FromResult(new HealthCheckResult(true, null));
 
+    public Task WaitForEventSubscriptionAsync(CancellationToken ct)
+    {
+        // Fake harness session uses an unbounded channel which is immediately ready.
+        // Tests that need to verify subscription timing should use SubscriptionGatedHarnessSession.
+        ct.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
         => Task.FromResult<IReadOnlyList<AgentInfo>>([]);
 

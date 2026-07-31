@@ -123,7 +123,24 @@ internal sealed class PooledOpenCodeInstance : IAsyncDisposable
         return lease;
     }
 
-    internal void RemoveLease(InstanceLease lease) => _leases.TryRemove(lease.Id, out _);
+    internal void RemoveLease(InstanceLease lease)
+    {
+        _leases.TryRemove(lease.Id, out _);
+        
+        // Clean up event subscription readiness trackers for the sessions that were bound to this lease.
+        // Complete any pending waiters before removal to avoid leaving them hanging.
+        var sessionIds = lease.OpenCodeSessionIdsToCleanup;
+        if (sessionIds is not null)
+        {
+            foreach (var sessionId in sessionIds)
+            {
+                if (_eventSubscriptionReady.TryRemove(sessionId, out var tcs))
+                {
+                    tcs.TrySetResult();
+                }
+            }
+        }
+    }
 
     internal async Task ReportCrashAsync(Exception exception)
     {

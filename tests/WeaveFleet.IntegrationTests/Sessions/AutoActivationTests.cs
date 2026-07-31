@@ -162,13 +162,14 @@ public sealed class AutoActivationTests
         var stopResult = await sut.StopSessionAsync(sessionId, CancellationToken.None);
         stopResult.IsSuccess.ShouldBeTrue();
 
-        runtime.DefaultSession = new FakeHarnessSession("inst-manual-resumed") { ResumeToken = "manual-resume" };
+        var resumedSession = new FakeHarnessSession("inst-manual-resumed") { ResumeToken = "manual-resume" };
+        runtime.DefaultSession = resumedSession;
         var promptResult = await sut.PromptSessionAsync(sessionId, "hello manual", options: null, CancellationToken.None);
 
         promptResult.IsFailure.ShouldBeTrue();
         promptResult.Error.Code.ShouldBe("Instance.NotFound");
         runtime.ResumeCalls.ShouldBeEmpty();
-        runtime.DefaultSession.SendPromptCalls.ShouldBeEmpty();
+        resumedSession.SendPromptCalls.ShouldBeEmpty();
         tracker.Get("inst-manual-resumed").ShouldBeNull();
     }
 

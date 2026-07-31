@@ -203,6 +203,8 @@ public sealed class InstanceEndpointTenantIsolationTests : IAsyncLifetime
         public Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct)
             => Task.FromResult(new HealthCheckResult(true, null));
 
+        public Task WaitForEventSubscriptionAsync(CancellationToken ct) => Task.CompletedTask;
+
         public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
             => Task.FromResult<IReadOnlyList<AgentInfo>>([]);
 

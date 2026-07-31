@@ -310,6 +310,7 @@ public sealed class SessionEndpointTenantIsolationTests : IAsyncLifetime
         public Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct) => inner.GetMessagesAsync(query, ct);
         public IAsyncEnumerable<HarnessEvent> SubscribeAsync(CancellationToken ct) => inner.SubscribeAsync(ct);
         public Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct) => inner.CheckHealthAsync(ct);
+        public Task WaitForEventSubscriptionAsync(CancellationToken ct) => inner.WaitForEventSubscriptionAsync(ct);
         public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct) => inner.GetAgentsAsync(ct);
         public Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct) => inner.GetCommandsAsync(ct);
         public Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct) => Task.FromResult(providers);

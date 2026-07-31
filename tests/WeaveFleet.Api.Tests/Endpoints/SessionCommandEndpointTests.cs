@@ -186,6 +186,7 @@ public sealed class SessionCommandEndpointTests : IAsyncLifetime, IDisposable
         public Task RejectQuestionAsync(string requestId, CancellationToken ct) => Task.CompletedTask;
         public Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct) => Task.FromResult(new MessagePage([], false));
         public Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct) => Task.FromResult(new HealthCheckResult(true, null));
+        public Task WaitForEventSubscriptionAsync(CancellationToken ct) => Task.CompletedTask;
         public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<AgentInfo>>([]);
         public Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<CommandInfo>>([]);
         public Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<ProviderInfo>>([]);

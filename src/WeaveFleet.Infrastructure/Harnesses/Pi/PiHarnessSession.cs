@@ -218,6 +218,14 @@ internal sealed class PiHarnessSession : IHarnessSession
         }
     }
 
+    public Task WaitForEventSubscriptionAsync(CancellationToken ct)
+    {
+        // Pi uses stdio streams which are synchronously available when the process starts.
+        // No async subscription establishment is needed.
+        ct.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
         => Task.FromResult<IReadOnlyList<AgentInfo>>([]);
 
