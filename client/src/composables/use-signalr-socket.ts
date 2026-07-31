@@ -170,6 +170,8 @@ async function connect(): Promise<void> {
 
   try {
     await hubConnection.start()
+    // Subscribe any topics that were registered before the connection was ready
+    await resubscribeAll()
   } catch (error) {
     console.error("Failed to start SignalR connection:", error)
     connection = null
