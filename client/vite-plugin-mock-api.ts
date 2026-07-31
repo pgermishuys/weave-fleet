@@ -9,7 +9,7 @@
  *   - Set FLEET_API_URL to bypass mocking and use real backend
  */
 
-import type { Plugin, ViteDevServer } from "vite";
+import type { Plugin, ViteDevServer, PreviewServer } from "vite";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
@@ -1089,7 +1089,7 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       });
     },
     
-    configurePreviewServer(server: ViteDevServer) {
+    configurePreviewServer(server: PreviewServer) {
       // Reuse the same middleware for preview mode
       if (!shouldMock()) {
         return;

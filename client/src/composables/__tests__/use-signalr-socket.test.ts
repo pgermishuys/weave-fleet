@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { HubConnectionState } from "@microsoft/signalr"
 import type { SessionSnapshot } from "@/lib/session-snapshot"
-import type { DomainEvent } from "@/lib/domain-events"
+import type { DomainEvent, SessionStarted } from "@/lib/domain-events"
 import { flushAll, mountComposable } from "./test-utils"
 
 // Mock HubConnection
@@ -48,28 +48,47 @@ let closeHandler: (() => void) | null = null
 
 function createSessionSnapshot(sessionId: string): SessionSnapshot {
   return {
-    sessionId,
+    session: {
+      id: sessionId,
+      title: "Test Session",
+      status: "idle",
+    },
     messages: [
       {
-        messageId: "msg-1",
-        sessionId,
-        role: "assistant",
-        parts: [{ partId: "part-1", type: "text", text: "Hello from snapshot" }],
-        createdAt: 1000,
-        agent: "Test Agent",
+        info: {
+          id: "msg-1",
+          role: "assistant",
+          sessionID: sessionId,
+          agent: "Test Agent",
+          modelID: null,
+          parentID: null,
+          time: { created: 1000, completed: 1100 },
+          cost: null,
+          tokens: null,
+        },
+        parts: [{ id: "part-1", sessionID: sessionId, messageID: "msg-1", type: "text", text: "Hello from snapshot" }],
       },
     ],
     delegations: [],
-    sessionStatus: "idle",
+    activityStatus: "idle",
     lastEventId: 5,
-    pagination: { hasMore: false, oldestMessageId: null, totalCount: 1 },
+    hasMore: false,
+    cursor: null,
   }
 }
 
-function createDomainEvent(type: string, eventId?: number): DomainEvent {
-  const event: DomainEvent = {
-    type,
-    properties: { status: "busy" },
+function createDomainEvent(type: DomainEvent["type"], eventId?: number): SessionStarted {
+  const event: SessionStarted = {
+    type: "session.started",
+    payload: { 
+      sessionId: "test-session", 
+      instanceId: null,
+      workspaceId: null,
+      title: "Test Session",
+      projectId: null,
+      parentSessionId: null,
+      isHidden: false,
+    },
   }
   if (eventId !== undefined) {
     event.eventId = eventId
@@ -364,7 +383,7 @@ describe("useSignalRSocket", () => {
       result.subscribeV2("session-1", vi.fn(), onEvent2)
       await flushAll()
 
-      const eventData = createDomainEvent("session.status", 10)
+      const eventData = createDomainEvent("session.started", 10)
       eventHandler?.("session-1", 10, eventData)
 
       expect(onEvent1).toHaveBeenCalledWith({ ...eventData, eventId: 10 })
@@ -387,7 +406,7 @@ describe("useSignalRSocket", () => {
       result.subscribeV2("session-2", vi.fn(), onEvent2)
       await flushAll()
 
-      const eventData = createDomainEvent("session.status", 10)
+      const eventData = createDomainEvent("session.started", 10)
       eventHandler?.("session-1", 10, eventData)
 
       expect(onEvent1).toHaveBeenCalled()
@@ -425,7 +444,7 @@ describe("useSignalRSocket", () => {
       result.subscribeV2("session-1", vi.fn(), v2Callback)
       await flushAll()
 
-      const eventData = createDomainEvent("session.status", 10)
+      const eventData = createDomainEvent("session.started", 10)
       eventHandler?.("session-1", 10, eventData)
 
       expect(v1Callback).toHaveBeenCalledWith("session-1", eventData)
