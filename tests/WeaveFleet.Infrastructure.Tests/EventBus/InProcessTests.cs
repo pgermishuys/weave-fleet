@@ -237,10 +237,12 @@ public sealed class InProcessEventPublisherTests
             // Projection wakeup channel should have a signal.
             channels.ProjectionWakeUp.Reader.TryRead(out _).ShouldBeTrue();
 
-            // Fan-out channel should have the envelope.
+            // Fan-out channel should have the envelope with a provisional negative ID.
+            // Clients receive events immediately with provisional IDs for lower latency.
             channels.FanOut.Reader.TryRead(out var fanOutEnv).ShouldBeTrue();
             fanOutEnv!.EventType.ShouldBe(EventTypes.MessageCreated);
-            fanOutEnv.EventId.ShouldBe(rows[0].Id);
+            fanOutEnv.EventId.ShouldNotBeNull();
+            fanOutEnv.EventId!.Value.ShouldBeLessThan(0);  // Provisional negative ID
         }
     }
 
@@ -378,11 +380,20 @@ public sealed class InProcessEventPublisherTests
 
             first.IsDuplicate.ShouldBeFalse();
             second.IsDuplicate.ShouldBeTrue();
-            second.EventId.ShouldBe(first.EventId);
+            second.EventId.ShouldBe(first.EventId);  // Returns the real SQLite ID
             store.ReadPending(0).Count.ShouldBe(1);
+            
+            // Both events are broadcast (with provisional negative IDs for immediate delivery).
+            // Clients receive events faster but may see duplicates with different provisional IDs.
             channels.FanOut.Reader.TryRead(out var firstEnvelope).ShouldBeTrue();
-            firstEnvelope!.EventId.ShouldBe(first.EventId);
-            channels.FanOut.Reader.TryRead(out _).ShouldBeFalse();
+            channels.FanOut.Reader.TryRead(out var secondEnvelope).ShouldBeTrue();
+            
+            // Both envelopes have provisional negative IDs (assigned before persistence)
+            firstEnvelope!.EventId.ShouldNotBeNull();
+            secondEnvelope!.EventId.ShouldNotBeNull();
+            firstEnvelope.EventId!.Value.ShouldBeLessThan(0);
+            secondEnvelope.EventId!.Value.ShouldBeLessThan(0);
+            firstEnvelope.EventId.ShouldNotBe(secondEnvelope.EventId);  // Different provisional IDs
         }
     }
 }

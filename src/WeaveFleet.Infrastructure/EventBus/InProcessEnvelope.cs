@@ -54,4 +54,10 @@ internal sealed class InProcessEnvelope
     public long? EventId { get; set; }
 
     public DomainEvent? DomainEvent { get; init; }
+
+    /// <summary>
+    /// The source_reference of the session that emitted this event, used for automation
+    /// feedback-loop detection. Null if not loaded or not set on the session.
+    /// </summary>
+    public string? SourceReference { get; init; }
 }

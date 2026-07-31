@@ -28,4 +28,10 @@ public readonly record struct EventPublishContext(
     /// Gets the caller-supplied idempotency key for client-originated events when one exists.
     /// </summary>
     public string? CorrelationId { get; init; }
+
+    /// <summary>
+    /// Gets the source_reference of the session that emitted this event, used for automation
+    /// feedback-loop detection. Null if not loaded or not set on the session.
+    /// </summary>
+    public string? SourceReference { get; init; }
 }

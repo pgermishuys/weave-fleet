@@ -88,6 +88,7 @@ const panelComponents = computed<Record<ContextPanelKey, Component>>(() => ({
   sessions: SessionsPanel,
   board: BoardControlsPanel,
   analytics: SessionsPanel,
+  automations: SessionsPanel,
   ...registeredPluginPanels.value,
 }));
 

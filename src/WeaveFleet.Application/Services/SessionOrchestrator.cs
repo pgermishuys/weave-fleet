@@ -353,6 +353,7 @@ public sealed partial class SessionOrchestrator(
             GitRepoRoot = gitBaseline?.RepoRoot,
             UserId = userContext.UserId,
             HarnessResumeToken = harnessInstance.ResumeToken,
+            SourceReference = request.SourceReference,
         };
 
         var createdAt = DateTime.UtcNow.ToString("O");
@@ -1856,6 +1857,10 @@ public sealed record CreateSessionRequest
     /// and directory-path validation is bypassed. Must not be set from external API requests.
     /// </summary>
     internal bool IsInternalRequest { get; init; }
+    /// <summary>
+    /// Optional automation reference. When set, links this session to an automation execution.
+    /// </summary>
+    public string? SourceReference { get; init; }
 }
 
 /// <summary>Result of a successful <see cref="SessionOrchestrator.CreateSessionAsync"/> call.</summary>

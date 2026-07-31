@@ -110,6 +110,15 @@ internal sealed record GitHubSourceInput
     [JsonPropertyName("branch")] public string? Branch { get; init; }
 }
 
+/// <summary>Input payload for the automation session source provider.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record AutomationSourceInput
+{
+    [JsonPropertyName("automationId")] public string? AutomationId { get; init; }
+    [JsonPropertyName("automationName")] public string? AutomationName { get; init; }
+    [JsonPropertyName("trigger")] public string? Trigger { get; init; }
+}
+
 // ── Source-generated contexts ─────────────────────────────────────────────────────────────────────
 
 /// <summary>Default (PascalCase) options for NATS HarnessEvent serialization.
@@ -246,6 +255,7 @@ internal sealed record NuCodeStatusPayload
 [JsonSerializable(typeof(List<string>))]
 [JsonSerializable(typeof(RepositorySourceInput))]
 [JsonSerializable(typeof(GitHubSourceInput))]
+[JsonSerializable(typeof(AutomationSourceInput))]
 [JsonSerializable(typeof(DeviceCodeResponse))]
 internal sealed partial class InfrastructureJsonContext : JsonSerializerContext
 {

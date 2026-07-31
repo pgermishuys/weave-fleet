@@ -9,6 +9,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Cronos" />
+    <PackageReference Include="Ulid" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="Resources\key-file-types.json" />
   </ItemGroup>
 

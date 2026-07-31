@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.EventBus;
 
@@ -28,6 +29,19 @@ internal sealed class InProcessChannels
     /// </summary>
     internal Channel<InProcessEnvelope> FanOut { get; } =
         Channel.CreateUnbounded<InProcessEnvelope>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = false,
+            AllowSynchronousContinuations = false,
+        });
+
+    /// <summary>
+    /// Carries every event (durable + ephemeral) to <see cref="AutomationEventDispatcherService"/>
+    /// for automation trigger matching. Not persisted — events are dropped if the service is
+    /// not running.
+    /// </summary>
+    internal Channel<AutomationEventNotification> AutomationEvents { get; } =
+        Channel.CreateUnbounded<AutomationEventNotification>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = false,

@@ -67,6 +67,7 @@ public static class EndpointExtensions
         apiScope.MapClientConfigEndpoints(fleetOptions);
         apiScope.MapBackendPluginEndpoints();
         apiScope.MapSmartLinkEndpoints();
+        apiScope.MapAutomationEndpoints();
         apiScope.MapTelemetryEndpoints();
         apiScope.MapAdminEndpoints();
 

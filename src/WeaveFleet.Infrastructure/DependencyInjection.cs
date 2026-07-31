@@ -98,6 +98,8 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IBoardRepository, BoardRepository>();
         services.AddScoped<ISmartLinkRepository, SmartLinkRepository>();
+        services.AddScoped<IAutomationRepository, AutomationRepository>();
+        services.AddScoped<IAutomationEventLedgerRepository, AutomationEventLedgerRepository>();
 
         // Credential storage — user-scoped repositories and application services
         services.AddScoped<IUserPreferenceRepository, DapperUserPreferenceRepository>();
@@ -117,6 +119,9 @@ public static class DependencyInjection
         services.AddScoped<SessionCallbackService>();
         services.AddScoped<DelegationService>();
         services.AddScoped<SmartLinkService>();
+        services.AddScoped<AutomationService>();
+        services.AddScoped<AutomationExecutionService>();
+        services.AddScoped<EventTriggerMatcher>();
         services.AddScoped<SessionActivityWriteService>();
         services.AddScoped<ILegacySessionImporter, LegacySessionImporter>();
         services.AddScoped<UserService>();
@@ -124,6 +129,7 @@ public static class DependencyInjection
         services.AddScoped<ISessionSourceProvider, LocalDirectorySessionSourceProvider>();
         services.AddSingleton<ISessionSourceProvider, RepositorySessionSourceProvider>();
         services.AddScoped<ISessionSourceProvider, GitHubSessionSourceProvider>();
+        services.AddScoped<ISessionSourceProvider, AutomationSessionSourceProvider>();
         services.AddScoped<SystemUserContext>();
 
         // ConfigService — singleton, no DB dependency, file-based
@@ -202,6 +208,10 @@ public static class DependencyInjection
 
         services.AddHostedService<OutboxDispatchBackgroundService>();
         services.AddHostedService<OutboxCleanupBackgroundService>();
+
+        // Automation background services
+        services.AddHostedService<AutomationSchedulerService>();
+        services.AddHostedService<AutomationEventDispatcherService>();
 
         // ── Analytics ─────────────────────────────────────────────────────────
         if (options.AnalyticsEnabled)

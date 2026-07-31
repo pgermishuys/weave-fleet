@@ -182,7 +182,7 @@ async function screenshotAllApp(baseUrl?: string): Promise<void> {
     { name: "settings", path: "/settings" },
     { name: "board", path: "/board" },
     { name: "analytics", path: "/analytics" },
-    { name: "pipelines", path: "/pipelines" },
+    { name: "automations", path: "/automations" },
   ];
 
   for (const route of routes) {

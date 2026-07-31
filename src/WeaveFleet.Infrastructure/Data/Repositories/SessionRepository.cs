@@ -29,11 +29,13 @@ public sealed class SessionRepository(
             INSERT INTO sessions (id, workspace_id, instance_id, project_id, opencode_session_id, title,
                 status, directory, created_at, stopped_at, parent_session_id, activity_status,
                 lifecycle_status, retention_status, archived_at, is_hidden, total_tokens, total_cost,
-                harness_type, runtime_mode, harness_resume_token, git_baseline_ref, git_repo_root, user_id)
+                harness_type, runtime_mode, harness_resume_token, git_baseline_ref, git_repo_root, user_id,
+                source_reference)
             SELECT @Id, @WorkspaceId, @InstanceId, @ProjectId, @OpencodeSessionId, @Title,
                 @Status, @Directory, @CreatedAt, @StoppedAt, @ParentSessionId, @ActivityStatus,
                 @LifecycleStatus, @RetentionStatus, @ArchivedAt, @IsHidden, @TotalTokens, @TotalCost,
-                @HarnessType, @RuntimeMode, @HarnessResumeToken, @GitBaselineRef, @GitRepoRoot, @UserId
+                @HarnessType, @RuntimeMode, @HarnessResumeToken, @GitBaselineRef, @GitRepoRoot, @UserId,
+                @SourceReference
             FROM workspaces workspace_row
             WHERE workspace_row.id = @WorkspaceId
               AND workspace_row.user_id = @UserId
@@ -72,6 +74,7 @@ public sealed class SessionRepository(
                 cmd.AddParameter("GitBaselineRef", session.GitBaselineRef);
                 cmd.AddParameter("GitRepoRoot", session.GitRepoRoot);
                 cmd.AddParameter("UserId", insertUserId);
+                cmd.AddParameter("SourceReference", session.SourceReference);
             },
             transaction);
     }
@@ -591,5 +594,6 @@ public sealed class SessionRepository(
         UserId = r.GetString(r.GetOrdinal("user_id")),
         SelectedProviderId = r.GetNullableString(r.GetOrdinal("selected_provider_id")),
         SelectedModelId = r.GetNullableString(r.GetOrdinal("selected_model_id")),
+        SourceReference = r.GetNullableString(r.GetOrdinal("source_reference")),
     };
 }

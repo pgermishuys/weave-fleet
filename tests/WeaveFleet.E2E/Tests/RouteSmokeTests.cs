@@ -27,7 +27,7 @@ public sealed class RouteSmokeTests : E2ETestBase,
     [InlineData("/settings", "Settings")]
     [InlineData("/board", "Kanban Board")]
     [InlineData("/queue", "Task Queue")]
-    [InlineData("/pipelines", "Pipelines")]
+    [InlineData("/automations", "Automations")]
     [InlineData("/repositories", "Repositories")]
     [InlineData("/templates", "Templates")]
     [InlineData("/welcome", "Weave")]

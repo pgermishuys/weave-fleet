@@ -4,7 +4,7 @@ import type { SidebarRail } from "@/stores/sidebar";
 import type { PluginConnectionStatus } from "@/plugins/types";
 import { computed, onMounted, onUnmounted, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
-import { BarChart3, LayoutGrid, MessageSquare, Puzzle, Settings } from "lucide-vue-next";
+import { BarChart3, LayoutGrid, MessageSquare, Puzzle, Settings, Zap } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import weaveLogo from "@/assets/weave_logo.png";
 import { apiFetch } from "@/lib/api-client";
@@ -32,6 +32,7 @@ const ALL_TOP_ITEMS: readonly RailItem[] = [
 
 const bottomItems: readonly RailItem[] = [
   { id: "marketplace", label: "Plugins", icon: Puzzle },
+  { id: "automations", label: "Automations", icon: Zap, to: "/automations" },
   { id: "analytics", label: "Analytics", icon: BarChart3, to: "/analytics" },
   { id: "settings", label: "Settings", icon: Settings, to: "/settings" },
 ];
@@ -78,6 +79,10 @@ const currentRouteRail = computed<RailItemId | null>(() => {
 
   if (pathname.value === "/analytics" || pathname.value.startsWith("/analytics/")) {
     return "analytics";
+  }
+
+  if (pathname.value === "/automations" || pathname.value.startsWith("/automations/")) {
+    return "automations";
   }
 
   if (pathname.value === "/settings") {
@@ -141,7 +146,7 @@ function getStatusBadgeCount(count: number): number | undefined {
 }
 
 function isSidebarRail(value: RailItemId): value is SidebarRail {
-  return ["board", "sessions", "analytics", "github", "marketplace", "settings"].includes(value);
+  return ["board", "sessions", "analytics", "automations", "github", "marketplace", "settings"].includes(value);
 }
 
 async function loadPluginStatuses(): Promise<void> {

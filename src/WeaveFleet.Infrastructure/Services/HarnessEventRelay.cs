@@ -155,6 +155,7 @@ public sealed class HarnessEventRelay : BackgroundService
         string? sessionUserId = null;
         string? sessionProjectId = null;
         string? sessionHarnessType = null;
+        string? sessionSourceReference = null;
         for (int attempt = 0; attempt < 10 && !ct.IsCancellationRequested; attempt++)
         {
             using var scope = _scopeFactory.CreateScope();
@@ -166,6 +167,7 @@ public sealed class HarnessEventRelay : BackgroundService
                 sessionUserId = session.UserId;
                 sessionProjectId = session.ProjectId;
                 sessionHarnessType = session.HarnessType;
+                sessionSourceReference = session.SourceReference;
                 _logger.LogDebug("[Relay:Pump] Resolved session for instance={InstanceId}: fleetSession={FleetSession} harness={HarnessType}", instanceId, fleetSessionId, sessionHarnessType);
                 break;
             }
@@ -235,7 +237,8 @@ public sealed class HarnessEventRelay : BackgroundService
                             sessionHarnessType,
                             pumpDedupKey)
                         {
-                            DomainEvent = domainEvent
+                            DomainEvent = domainEvent,
+                            SourceReference = sessionSourceReference
                         },
                         ct).ConfigureAwait(false);
                 }

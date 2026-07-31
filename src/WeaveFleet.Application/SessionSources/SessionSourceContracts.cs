@@ -21,6 +21,7 @@ public static class SessionSourceProviderIds
     public const string Local = "builtin.local";
     public const string Repository = "builtin.repository";
     public const string GitHub = "builtin.github";
+    public const string Automation = "builtin.automation";
 }
 
 public static class SessionSourceTypeNames
@@ -30,6 +31,7 @@ public static class SessionSourceTypeNames
     public const string ExternalDocument = "external-document";
     public const string GitHubIssue = "github-issue";
     public const string GitHubPullRequest = "github-pull-request";
+    public const string Automation = "automation";
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -152,10 +154,30 @@ public static class SessionSourceCatalog
         ProducesContext: true,
         RequiresConfirmation: true);
 
+    public static SessionSourceDescriptor AutomationStartSession { get; } = new(
+        new SessionSourceKey
+        {
+            ProviderId = SessionSourceProviderIds.Automation,
+            SourceType = SessionSourceTypeNames.Automation,
+            ActionId = SessionSourceActions.StartSession,
+            ContractVersion = 1
+        },
+        "Automation",
+        SessionSourceKinds.Workspace,
+        [
+            new SessionSourceInputField("automationId", "string", true, null, "Automation identifier."),
+            new SessionSourceInputField("automationName", "string", true, null, "Automation display name."),
+            new SessionSourceInputField("trigger", "string", false, null, "Trigger type (schedule, manual, event).")
+        ],
+        ProducesWorkspace: true,
+        ProducesContext: false,
+        RequiresConfirmation: false);
+
     public static IReadOnlyList<SessionSourceDescriptor> CoreDescriptors { get; } =
     [
         DirectoryStartSession,
         RepositoryStartSession,
-        ExternalDocumentAddToSession
+        ExternalDocumentAddToSession,
+        AutomationStartSession
     ];
 }

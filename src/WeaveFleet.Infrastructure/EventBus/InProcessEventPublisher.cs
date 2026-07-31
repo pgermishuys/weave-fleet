@@ -1,8 +1,10 @@
 #pragma warning disable CA1848, CA1873 // Temporary diagnostic logging
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.EventBus;
 
@@ -26,6 +28,12 @@ internal sealed class InProcessEventPublisher : IEventPublisher
     private readonly InProcessChannels _channels;
     private readonly InProcessMetrics _metrics;
     private readonly ILogger<InProcessEventPublisher> _logger;
+
+    /// <summary>
+    /// Monotonic counter for provisional event IDs used during broadcast before SQLite persistence.
+    /// Negative IDs ensure no collision with SQLite rowids (which are always positive).
+    /// </summary>
+    private long _nextProvisionalId = -1;
 
     public InProcessEventPublisher(
         InProcessEventStore store,
@@ -83,28 +91,51 @@ internal sealed class InProcessEventPublisher : IEventPublisher
             internalPumpDedupKey: context.InternalPumpDedupKey,
             isDurable:            true)
         {
-            DomainEvent = context.DomainEvent
+            DomainEvent = context.DomainEvent,
+            SourceReference = context.SourceReference
         };
 
         var sw = Stopwatch.StartNew();
         string result = "ok";
         try
         {
+            // 1. Assign provisional negative ID for immediate broadcast
+            //    (negative IDs never collide with positive SQLite rowids)
+            var provisionalId = Interlocked.Decrement(ref _nextProvisionalId);
+            envelope.EventId = provisionalId;
+
+            // 2. Broadcast to clients IMMEDIATELY (non-blocking channel write)
+            var broadcastStart = sw.Elapsed.TotalMilliseconds;
+            _channels.FanOut.Writer.TryWrite(envelope);
+            var broadcastEnd = sw.Elapsed.TotalMilliseconds;
+
+            // 2b. Send to automation dispatcher
+            WriteToAutomationChannel(envelope);
+
+            // 3. Persist to SQLite (blocking, but AFTER broadcast)
+            var persistStart = sw.Elapsed.TotalMilliseconds;
             var appendResult = _store.AppendIdempotent(envelope);
+            var persistEnd = sw.Elapsed.TotalMilliseconds;
+
             if (appendResult.IsDuplicate)
             {
                 result = "duplicate";
                 _metrics.RecordPublish(routing: "durable", eventType: evt.Type, result: result);
+                _logger.LogDebug(
+                    "[Publisher:Durable] type={Type} broadcast={BroadcastMs:F1}ms persist={PersistMs:F1}ms total={TotalMs:F1}ms result=duplicate provisionalId={ProvisionalId} realId={RealId}",
+                    evt.Type, broadcastEnd - broadcastStart, persistEnd - persistStart, sw.Elapsed.TotalMilliseconds, provisionalId, appendResult.EventId);
+                // Duplicate was already broadcast with provisional ID; client will deduplicate if needed
                 return new PublishResult(appendResult.EventId, IsDuplicate: true);
             }
 
-            envelope.EventId = appendResult.EventId;
-
-            // Wake up the projection host to process this event.
+            // 4. Wake up the projection host to process this event
+            //    (projection host reads from store, so it gets the real ID)
             _channels.ProjectionWakeUp.Writer.TryWrite(null!);
 
-            // Forward to the fan-out channel so WebSocket clients receive it immediately.
-            _channels.FanOut.Writer.TryWrite(envelope);
+            _logger.LogDebug(
+                "[Publisher:Durable] type={Type} broadcast={BroadcastMs:F1}ms persist={PersistMs:F1}ms total={TotalMs:F1}ms provisionalId={ProvisionalId} realId={RealId}",
+                evt.Type, broadcastEnd - broadcastStart, persistEnd - persistStart, sw.Elapsed.TotalMilliseconds, provisionalId, appendResult.EventId);
+
             return new PublishResult(appendResult.EventId, IsDuplicate: false);
         }
         catch
@@ -137,13 +168,15 @@ internal sealed class InProcessEventPublisher : IEventPublisher
             internalPumpDedupKey: context.InternalPumpDedupKey,
             isDurable:            false)
         {
-            DomainEvent = context.DomainEvent
+            DomainEvent = context.DomainEvent,
+            SourceReference = context.SourceReference
         };
 
         string result = "ok";
         try
         {
             _channels.FanOut.Writer.TryWrite(envelope);
+            WriteToAutomationChannel(envelope);
         }
         catch
         {
@@ -154,5 +187,23 @@ internal sealed class InProcessEventPublisher : IEventPublisher
         {
             _metrics.RecordPublish(routing: "ephemeral", eventType: evt.Type, result: result);
         }
+    }
+
+    private void WriteToAutomationChannel(InProcessEnvelope envelope)
+    {
+        // Map envelope to AutomationEventNotification
+        // EventId: use the envelope's EventId if available (durable), otherwise generate from messageId
+        var eventId = envelope.EventId?.ToString(CultureInfo.InvariantCulture) ?? envelope.MessageId;
+
+        // EventSummary: use domain event type if available, otherwise harness event type
+        var eventSummary = envelope.DomainEvent?.GetType().Name ?? envelope.EventType;
+
+        var notification = new AutomationEventNotification(
+            EventType: envelope.EventType,
+            EventId: eventId,
+            SessionSourceReference: envelope.SourceReference,
+            EventSummary: eventSummary);
+
+        _channels.AutomationEvents.Writer.TryWrite(notification);
     }
 }
