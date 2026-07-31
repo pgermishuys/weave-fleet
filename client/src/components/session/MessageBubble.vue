@@ -4,6 +4,7 @@ import { X, User, Bot, Copy } from "lucide-vue-next";
 import ToolCard from "@/components/session/ToolCard.vue";
 import QuestionCard from "@/components/session/QuestionCard.vue";
 import type { AccumulatedToolPart } from "@/lib/api-types";
+import type { VisualPayload } from "@/lib/visual-payload";
 import { useQuestionAnswer } from "@/composables/use-question-answer";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { formatRelativeTime, formatAbsoluteTimestamp } from "@/lib/format-utils";
@@ -47,6 +48,10 @@ const props = defineProps<{
   sessionId?: string;
   showIdentity: boolean;
   clusterPosition: "single" | "first" | "middle" | "last";
+}>();
+
+const emit = defineEmits<{
+  "expand-visual": [payload: VisualPayload];
 }>();
 
 const lightboxUrl = ref<string | null>(null);
@@ -95,6 +100,10 @@ function copyMessage() {
   setTimeout(() => {
     copied.value = false;
   }, 1500);
+}
+
+function handleExpandVisual(payload: VisualPayload): void {
+  emit("expand-visual", payload);
 }
 </script>
 
@@ -207,6 +216,7 @@ function copyMessage() {
             :initially-collapsed="tool.initiallyCollapsed"
             :preview="tool.preview"
             :is-pattern-tool="tool.isPatternTool"
+            @expand-visual="handleExpandVisual"
           />
 
           <QuestionCard

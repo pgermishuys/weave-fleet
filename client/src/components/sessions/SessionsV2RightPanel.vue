@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
+import { X } from "lucide-vue-next";
 import ArtifactsPanel from "@/components/session/ArtifactsPanel.vue";
 import CollapsedRightRail from "@/components/layout/CollapsedRightRail.vue";
 import RightPanelTabs from "@/components/layout/RightPanelTabs.vue";
@@ -16,8 +17,10 @@ import {
 import { provideSessionDetailContext } from "@/composables/use-session-detail-context";
 import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { useSessionTodos } from "@/composables/use-session-todos";
+import { useVisualPanel } from "@/composables/use-visual-panel";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
+import { getVisualRenderer } from "@/lib/visual-renderer-registry";
 
 interface Props {
   width?: number;
@@ -30,6 +33,7 @@ const props = withDefaults(defineProps<Props>(), {
 const sidebarStore = useSidebarStore();
 const sessionsStore = useSessionsStore();
 const sessionDiffsContext = useSessionDiffsContext();
+const { visualPayload, clearVisual } = useVisualPanel();
 
 const { rightPanelCollapsed } = storeToRefs(sidebarStore);
 const { sessions, activeSessionId } = storeToRefs(sessionsStore);
@@ -95,19 +99,45 @@ watch(
   { flush: "post", immediate: true },
 );
 
-// --- Tabs ---
-const rightPanelTabs = [
-  {
-    id: "artifacts",
-    label: "Artifacts",
+// Auto-expand and switch to Visual tab when visual payload is set.
+watch(
+  visualPayload,
+  (next, prev) => {
+    if (next && !prev) {
+      sidebarStore.setRightPanelCollapsed(false);
+      activeTabId.value = "visual";
+    }
   },
-  {
-    id: "info",
-    label: "Info",
-  },
-] as const;
+  { flush: "post" },
+);
 
-type RightPanelTabId = (typeof rightPanelTabs)[number]["id"];
+// --- Tabs ---
+const rightPanelTabs = computed(() => {
+  const tabs = [
+    {
+      id: "artifacts",
+      label: "Artifacts",
+    },
+    {
+      id: "info",
+      label: "Info",
+    },
+  ] as const;
+
+  if (visualPayload.value) {
+    return [
+      {
+        id: "visual",
+        label: "Visual",
+      },
+      ...tabs,
+    ] as const;
+  }
+
+  return tabs;
+});
+
+type RightPanelTabId = "artifacts" | "info" | "visual";
 
 const activeTabId = shallowRef<RightPanelTabId>("artifacts");
 
@@ -136,7 +166,7 @@ const activeTab = computed(() => {
 });
 
 function handleTabSelect(tabId: string): void {
-  if (tabId === "artifacts" || tabId === "info") {
+  if (tabId === "artifacts" || tabId === "info" || tabId === "visual") {
     activeTabId.value = tabId;
   }
 }
@@ -169,6 +199,16 @@ function openDiffsTray(): void {
 
   context.openDiffsTray();
 }
+
+const visualRenderer = computed(() => {
+  if (!visualPayload.value) return null;
+  return getVisualRenderer(visualPayload.value.$type);
+});
+
+function handleCloseVisual(): void {
+  clearVisual();
+  activeTabId.value = "artifacts";
+}
 </script>
 
 <template>
@@ -193,6 +233,27 @@ function openDiffsTray(): void {
 
     <div class="right-content">
       <div class="right-content__panel">
+        <section
+          v-if="activeTabId === 'visual' && visualPayload && visualRenderer"
+          class="visual-panel"
+        >
+          <div class="visual-panel__header">
+            <h2 class="visual-panel__title">
+              {{ visualPayload.title ?? 'Visual Content' }}
+            </h2>
+            <button
+              class="visual-panel__close"
+              data-testid="visual-panel-close"
+              @click="handleCloseVisual"
+            >
+              <X class="visual-panel__close-icon" />
+            </button>
+          </div>
+          <div class="visual-panel__content">
+            <component :is="visualRenderer" :content="visualPayload.content" />
+          </div>
+        </section>
+
         <ArtifactsPanel v-if="activeTabId === 'artifacts'" />
 
         <template v-else-if="activeTabId === 'info'">
@@ -275,5 +336,59 @@ function openDiffsTray(): void {
   font-size: 11px;
   line-height: 1.4;
   color: var(--muted);
+}
+
+.visual-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+}
+
+.visual-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.visual-panel__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.visual-panel__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--surface, #fff);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.visual-panel__close:hover {
+  background: var(--bg, rgba(0, 0, 0, 0.04));
+  color: var(--text);
+}
+
+.visual-panel__close-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.visual-panel__content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 </style>

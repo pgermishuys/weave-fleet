@@ -4,6 +4,8 @@ import DiffView from "@/components/session/DiffView.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { getToolIcon, getToolDisplayLabel } from "@/lib/tool-icons";
+import { parseVisualPayload, type VisualPayload } from "@/lib/visual-payload";
+import { getVisualRenderer } from "@/lib/visual-renderer-registry";
 
 interface DiffLine {
   type: "add" | "remove" | "context";
@@ -37,6 +39,10 @@ const props = withDefaults(
   },
 );
 
+const emit = defineEmits<{
+  "expand-visual": [payload: VisualPayload];
+}>();
+
 const workspaceUiStore = useWorkspaceUiStore();
 
 const shouldShowDiff = computed(() => workspaceUiStore.inlineToolDiffs && props.diffLines.length > 0);
@@ -44,6 +50,12 @@ const isCollapsed = shallowRef(props.initiallyCollapsed && !shouldShowDiff.value
 
 const toolIcon = computed(() => getToolIcon(props.kind));
 const displayLabel = computed(() => getToolDisplayLabel(props.kind));
+
+const visualPayload = computed(() => parseVisualPayload(props.output));
+const visualRenderer = computed(() => {
+  if (!visualPayload.value) return null;
+  return getVisualRenderer(visualPayload.value.$type);
+});
 
 watch(
   () => props.initiallyCollapsed,
@@ -84,6 +96,12 @@ const statusColor = computed(() => STATUS_COLOR[props.status] ?? "var(--muted)")
 function handleToggle(event: Event): void {
   const target = event.target as HTMLDetailsElement;
   isCollapsed.value = !target.open;
+}
+
+function handleExpandVisual(): void {
+  if (visualPayload.value) {
+    emit("expand-visual", visualPayload.value);
+  }
 }
 </script>
 
@@ -132,11 +150,34 @@ function handleToggle(event: Event): void {
         :lines="diffLines"
       />
 
+      <div
+        v-if="visualPayload && visualRenderer"
+        class="tool-visual"
+        data-testid="tool-card-visual"
+      >
+        <component :is="visualRenderer" :content="visualPayload.content" />
+        <button
+          class="tool-visual__expand"
+          data-testid="tool-visual-expand"
+          @click="handleExpandVisual"
+        >
+          Expand
+        </button>
+      </div>
+
       <pre
-        v-if="output"
+        v-if="output && !visualPayload"
         class="tool-output"
         data-testid="tool-card-output"
       ><code>{{ output }}</code></pre>
+
+      <p
+        v-if="!summary && !output && !shouldShowDiff"
+        class="tool-empty"
+        data-testid="tool-card-empty-state"
+      >
+        No output captured
+      </p>
     </div>
   </details>
 </template>
@@ -244,5 +285,31 @@ function handleToggle(event: Event): void {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.tool-visual {
+  margin: 8px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-bg) 100%, transparent);
+  position: relative;
+}
+
+.tool-visual__expand {
+  margin-top: 8px;
+  padding: 4px 12px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 0;
+  font-family: var(--font-sans-stack);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity var(--transition);
+}
+
+.tool-visual__expand:hover {
+  opacity: 0.85;
 }
 </style>

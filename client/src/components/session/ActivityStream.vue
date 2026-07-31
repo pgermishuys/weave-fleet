@@ -11,11 +11,13 @@ import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { CommandEventName } from "@/lib/command-events";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart } from "@/lib/api-types";
+import type { VisualPayload } from "@/lib/visual-payload";
 import { isQuestionPart } from "@/lib/question-types";
 import { diagLog } from "@/lib/message-diagnostics";
 import { sortAccumulatedMessagesChronologically } from "@/lib/pagination-utils";
 import { useSessionsStore } from "@/stores/sessions";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
+import { useVisualPanel } from "@/composables/use-visual-panel";
 
 interface ImageAttachmentDisplay {
   url: string;
@@ -55,6 +57,7 @@ const props = defineProps<{
 const router = useRouter();
 const sessionsStore = useSessionsStore();
 const { sessions } = storeToRefs(sessionsStore);
+const { showVisual } = useVisualPanel();
 
 const selectedSession = computed(() => {
   return sessions.value.find((session) => session.session.id === props.sessionId) ?? null;
@@ -641,6 +644,10 @@ function formatToolStatus(value: unknown): string {
 function getStringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
+
+function handleExpandVisual(payload: VisualPayload): void {
+  showVisual(payload);
+}
 </script>
 
 <template>
@@ -698,6 +705,7 @@ function getStringValue(value: unknown): string | undefined {
           :session-id="props.sessionId"
           :show-identity="message.showIdentity"
           :cluster-position="message.clusterPosition"
+          @expand-visual="handleExpandVisual"
         />
         <div
           v-if="message.optimisticStatus === 'needs_retry'"
