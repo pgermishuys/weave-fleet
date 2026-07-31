@@ -3,6 +3,7 @@ import { computed, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { X } from "lucide-vue-next";
 import ArtifactsPanel from "@/components/session/ArtifactsPanel.vue";
+import ArtifactViewerToolbar from "@/components/session/ArtifactViewerToolbar.vue";
 import CollapsedRightRail from "@/components/layout/CollapsedRightRail.vue";
 import RightPanelTabs from "@/components/layout/RightPanelTabs.vue";
 import SessionDetailPanel from "@/components/session/SessionDetailPanel.vue";
@@ -237,7 +238,8 @@ function handleCloseVisual(): void {
           v-if="activeTabId === 'visual' && visualPayload && visualRenderer"
           class="visual-panel"
         >
-          <div class="visual-panel__header">
+          <ArtifactViewerToolbar v-if="visualPayload.sourceFilePath" />
+          <div v-else class="visual-panel__header">
             <h2 class="visual-panel__title">
               {{ visualPayload.title ?? 'Visual Content' }}
             </h2>

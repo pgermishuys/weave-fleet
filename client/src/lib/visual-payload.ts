@@ -2,6 +2,9 @@ export interface VisualPayload {
   $type: 'visual/sequence' | 'visual/flow' | 'html' | 'markdown'
   content: string | Record<string, unknown>
   title?: string
+  sourceFilePath?: string
+  sourceText?: string
+  viewMode?: 'rendered' | 'source'
 }
 
 const VALID_TYPES = new Set(['visual/sequence', 'visual/flow', 'html', 'markdown'])

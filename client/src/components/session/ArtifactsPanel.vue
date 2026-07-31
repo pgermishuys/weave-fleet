@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { storeToRefs } from "pinia";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
+import { useArtifactViewer } from "@/composables/use-artifact-viewer";
 import type { FileDiffItem } from "@/lib/api-types";
 
 interface GroupedFile {
@@ -16,6 +17,7 @@ interface GroupedFile {
 const sessionsStore = useSessionsStore();
 const { activeSessionId } = storeToRefs(sessionsStore);
 const sessionDiffsContext = useSessionDiffsContext();
+const { openFile } = useArtifactViewer();
 
 const diffs = computed<readonly FileDiffItem[]>(() => {
   const context = sessionDiffsContext.value;
@@ -80,8 +82,7 @@ const summary = computed(() => {
 });
 
 function handleFileClick(file: GroupedFile): void {
-  // TODO: Wire to file viewer/diff viewer
-  console.log("File clicked:", file.path);
+  openFile(file.path);
 }
 
 function getFileName(path: string): string {
