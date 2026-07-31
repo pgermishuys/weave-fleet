@@ -7,7 +7,9 @@ import { storeToRefs } from "pinia";
 import BoardControlsPanel from "@/components/board/BoardControlsPanel.vue";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
 import SettingsNavPanel from "@/components/settings/SettingsNavPanel.vue";
+import AutomationsNavPanel from "@/components/automations/AutomationsNavPanel.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
+import { useAutomationsNav } from "@/composables/use-automations-nav";
 import { getSidebarPanels } from "@/plugins/slots";
 import { useSidebarStore } from "@/stores/sidebar";
 
@@ -32,6 +34,20 @@ const SettingsContextPanel = defineComponent({
       h(SettingsNavPanel, {
         modelValue: activeSection.value,
         "onUpdate:modelValue": setActiveSection,
+      });
+  },
+});
+
+const AutomationsContextPanel = defineComponent({
+  name: "AutomationsContextPanel",
+  setup() {
+    const { activeAutomationId, setActiveAutomation, startCreate } = useAutomationsNav();
+
+    return () =>
+      h(AutomationsNavPanel, {
+        modelValue: activeAutomationId.value,
+        "onUpdate:modelValue": setActiveAutomation,
+        onCreate: startCreate,
       });
   },
 });
@@ -88,7 +104,7 @@ const panelComponents = computed<Record<ContextPanelKey, Component>>(() => ({
   sessions: SessionsPanel,
   board: BoardControlsPanel,
   analytics: SessionsPanel,
-  automations: SessionsPanel,
+  automations: AutomationsContextPanel,
   ...registeredPluginPanels.value,
 }));
 

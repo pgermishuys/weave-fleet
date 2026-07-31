@@ -25,7 +25,7 @@ The application shell is a composable layout built from named panels:
 |--------------|---------------------------------------------|
 | Sessions     | `[session-list][conversation][content]`     |
 | Settings     | `[settings-menu][settings-detail]`          |
-| Automations  | `[automations-list]`                        |
+| Automations  | `[automations-list][automations-detail]`    |
 
 ### Panel Definitions
 
@@ -37,7 +37,8 @@ The application shell is a composable layout built from named panels:
 | `content`         | Right-side artifact viewer (rendered markdown, HTML preview, raw source)     |
 | `settings-menu`   | Left nav for settings categories                                            |
 | `settings-detail` | Detail pane for the selected settings category                              |
-| `automations-list`| List/card view of configured automations                                    |
+| `automations-list`| List of automations in the left nav panel                                   |
+| `automations-detail`| Detail pane for the selected automation                                   |
 
 ### Resize Gutters
 
