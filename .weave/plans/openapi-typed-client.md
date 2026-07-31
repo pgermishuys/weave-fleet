@@ -82,7 +82,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
 ### Phase 1: Wire Up OpenAPI Generation
 
 - [ ] 1. Add OpenAPI services to Program.cs
-  - **What**: Add `builder.Services.AddOpenApi()` with a document transformer that sets `info.Title = "Weave Fleet API"` and `info.Version = "v1"`. Follow the Foundry pattern at `src/Foundry.Api/Program.cs` lines 27-35. Place the call after `builder.Services.AddProblemDetails()` (line 376).
+  - **What**: Add `builder.Services.AddOpenApi()` with a document transformer that sets `info.Title = "Weave Fleet API"` and `info.Version = "v1"`. Follow the Foundry pattern at `src/Foundry.Api/Program.cs` lines 27-35. Place the call after `builder.Services.AddProblemDetails()` (line 383).
   - **Files**: `src/WeaveFleet.Api/Program.cs`
   - **Depends on**: None
   - **Acceptance**:
@@ -239,6 +239,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - `client/src/composables/use-models.ts` -- GET models/providers
     - `client/src/composables/use-harnesses.ts` -- GET harness info
     - `client/src/composables/use-find-files.ts` -- GET file search
+    - `client/src/composables/use-enabled-harnesses.ts` -- GET enabled harnesses
   - **Depends on**: Task 8
   - **Acceptance**:
     - No `apiFetch` imports remain in the listed files
@@ -302,6 +303,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - `client/src/plugins/builtin/smart-links/SmartLinkItem.vue` -- individual smart link
     - `client/src/plugins/builtin/smart-links/providers/github-smart-link-provider.ts` -- GitHub link resolution
     - `client/src/lib/board-api.ts` -- board operations
+    - `client/src/lib/track-action.ts` -- analytics/telemetry tracking
     - `client/src/components/auth/AuthGate.vue` -- GET /api/auth/me
     - `client/src/components/layout/IconRail.vue` -- GET plugin catalog
     - `client/src/components/pages/GitHubIssuePage.vue` -- GET issue detail
