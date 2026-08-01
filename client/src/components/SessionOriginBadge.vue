@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Github, Link2 } from "lucide-vue-next";
-import type { SessionOrigin } from "@/lib/api-types";
+import type { SessionOrigin } from "@/api/client";
 
 interface Props {
   origin?: SessionOrigin | null;

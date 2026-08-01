@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { storeToRefs } from "pinia";
 import { useActivityStream } from "@/composables/use-activity-stream";
-import type { SessionListItem } from "@/lib/api-types";
+import type { SessionListItem } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
 
 type BoardActivityTone = "running" | "complete" | "error" | "queued" | "muted";

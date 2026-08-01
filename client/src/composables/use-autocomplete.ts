@@ -1,7 +1,7 @@
 import { computed, readonly, ref, shallowRef, toValue, watch, type ComputedRef, type MaybeRefOrGetter, type Ref, type ShallowRef } from "vue";
 import { useFindFiles } from "@/composables/use-find-files";
-import { apiFetch } from "@/lib/api-client";
-import type { AutocompleteAgent, AutocompleteCommand } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { AutocompleteAgent, AutocompleteCommand } from "@/api/client";
 
 export interface AutocompleteItem {
   id: string;
@@ -67,16 +67,17 @@ function useSessionCommands(sessionId: MaybeRefOrGetter<string | null | undefine
       error.value = undefined;
 
       try {
-        const response = await apiFetch(`/api/sessions/${encodeURIComponent(nextSessionId)}/commands`, {
+        const { data: responseData, error, response } = await api.GET("/api/sessions/{id}/commands", {
+          params: { path: { id: nextSessionId } },
           signal: controller.signal,
         });
 
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => ({}))) as { error?: string };
-          throw new Error(payload.error ?? `HTTP ${response.status}`);
+        if (error || !response.ok) {
+          const payload = error as { error?: string } | undefined;
+          throw new Error((payload as any)?.error ?? `HTTP ${response.status}`);
         }
 
-        const body = (await response.json()) as { commands?: AutocompleteCommand[] };
+        const body = responseData as unknown as { commands?: AutocompleteCommand[] };
         data.value = body.commands ?? [];
       } catch (fetchError) {
         if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
@@ -118,16 +119,17 @@ function useSessionAgents(sessionId: MaybeRefOrGetter<string | null | undefined>
       error.value = undefined;
 
       try {
-        const response = await apiFetch(`/api/sessions/${encodeURIComponent(nextSessionId)}/agents`, {
+        const { data: responseData, error, response } = await api.GET("/api/sessions/{id}/agents", {
+          params: { path: { id: nextSessionId } },
           signal: controller.signal,
         });
 
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => ({}))) as { error?: string };
-          throw new Error(payload.error ?? `HTTP ${response.status}`);
+        if (error || !response.ok) {
+          const payload = error as { error?: string } | undefined;
+          throw new Error((payload as any)?.error ?? `HTTP ${response.status}`);
         }
 
-        const body = (await response.json()) as { agents?: AutocompleteAgent[] } | AutocompleteAgent[];
+        const body = responseData as unknown as { agents?: AutocompleteAgent[] } | AutocompleteAgent[];
         data.value = Array.isArray(body) ? body : body.agents ?? [];
       } catch (fetchError) {
         if (fetchError instanceof DOMException && fetchError.name === "AbortError") {

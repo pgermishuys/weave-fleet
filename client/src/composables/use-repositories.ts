@@ -1,6 +1,6 @@
 import { onMounted, onUnmounted, readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
-import type { RepositoryScanResponse, ScannedRepository } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { RepositoryScanResponse, ScannedRepository } from "@/api/client";
 
 export function groupByRoot(repositories: ScannedRepository[]): Map<string, ScannedRepository[]> {
   const grouped = new Map<string, ScannedRepository[]>();
@@ -48,18 +48,21 @@ export function useRepositories(): UseRepositoriesResult {
     error.value = null;
 
     try {
-      const response = await apiFetch(endpoint, {
-        method: endpoint.includes("refresh") ? "POST" : "GET",
-      });
+      const { data, error: apiError } = endpoint.includes("refresh")
+        ? await api.POST("/api/repositories/refresh", {})
+        : await api.GET("/api/repositories", {});
 
-      if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? "Failed to load repositories");
+      if (apiError) {
+        throw new Error(String(apiError));
       }
 
-      const data = (await response.json()) as RepositoryScanResponse;
-      applyData(data);
-      broadcastReposUpdate(data);
+      if (!data) {
+        throw new Error("No data returned");
+      }
+
+      const responseData = data as RepositoryScanResponse;
+      applyData(responseData);
+      broadcastReposUpdate(responseData);
     } catch (fetchError) {
       error.value = fetchError instanceof Error ? fetchError.message : "Unknown error";
     } finally {

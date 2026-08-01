@@ -1,6 +1,6 @@
 import type { Component } from "vue";
 import type { FleetPluginTrustLevel } from "@/plugins/types";
-import type { SessionSourceSelection } from "@/lib/api-types";
+import type { SessionSourceSelection } from "@/api/client";
 
 /**
  * Transitional compatibility types.

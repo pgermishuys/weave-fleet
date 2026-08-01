@@ -1,12 +1,12 @@
 import { readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import { api } from "@/api/client";
 import type {
   NuCodeProvider,
   NuCodeStoreCredentialsRequest,
   NuCodeTestConnectionResponse,
   NuCodeDeviceCodeResponse,
   NuCodeDevicePollResponse,
-} from "@/lib/api-types";
+} from "@/api/client";
 
 export interface UseNuCodeProvidersResult {
   providers: Readonly<Ref<readonly NuCodeProvider[]>>;
@@ -30,16 +30,18 @@ export function useNuCodeProviders(): UseNuCodeProvidersResult {
     error.value = undefined;
 
     try {
-      const response = await apiFetch("/api/nucode/providers");
-      if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `HTTP ${response.status}`);
+      const { data, error: apiError } = await api.GET("/api/nucode/providers");
+      if (apiError) {
+        throw new Error(apiError ? String(apiError) : "Failed to load providers");
       }
-      const data = (await response.json()) as unknown;
-      if (!Array.isArray(data)) {
+      if (!data) {
+        throw new Error("No data returned");
+      }
+      const result = data as unknown;
+      if (!Array.isArray(result)) {
         throw new Error("Unexpected response shape from /api/nucode/providers");
       }
-      providers.value = data as NuCodeProvider[];
+      providers.value = result as NuCodeProvider[];
     } catch (fetchError) {
       error.value = fetchError instanceof Error ? fetchError.message : "Failed to load providers";
     } finally {
@@ -49,76 +51,81 @@ export function useNuCodeProviders(): UseNuCodeProvidersResult {
 
   async function storeCredentials(providerId: string, fields: Record<string, string>): Promise<void> {
     const request: NuCodeStoreCredentialsRequest = { fields };
-    const response = await apiFetch(`/api/nucode/providers/${encodeURIComponent(providerId)}/credentials`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request),
+    const { error: apiError } = await api.PUT("/api/nucode/providers/{id}/credentials", {
+      params: { path: { id: providerId } },
+      body: request as never,
     });
 
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
-      throw new Error(data.error ?? `HTTP ${response.status}`);
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to store credentials");
     }
 
     await fetchProviders();
   }
 
   async function deleteCredentials(providerId: string): Promise<void> {
-    const response = await apiFetch(`/api/nucode/providers/${encodeURIComponent(providerId)}/credentials`, {
-      method: "DELETE",
+    const { error: apiError } = await api.DELETE("/api/nucode/providers/{id}/credentials", {
+      params: { path: { id: providerId } },
     });
 
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
-      throw new Error(data.error ?? `HTTP ${response.status}`);
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to delete credentials");
     }
 
     await fetchProviders();
   }
 
   async function testConnection(providerId: string): Promise<NuCodeTestConnectionResponse> {
-    const response = await apiFetch(`/api/nucode/providers/${encodeURIComponent(providerId)}/test`, {
-      method: "POST",
+    const { data, error: apiError } = await api.POST("/api/nucode/providers/{id}/test", {
+      params: { path: { id: providerId } },
     });
 
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
-      throw new Error(data.error ?? `HTTP ${response.status}`);
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to test connection");
     }
 
-    return (await response.json()) as NuCodeTestConnectionResponse;
+    if (!data) {
+      throw new Error("No data returned");
+    }
+
+    return data as NuCodeTestConnectionResponse;
   }
 
   async function requestDeviceCode(providerId: string): Promise<NuCodeDeviceCodeResponse> {
-    const response = await apiFetch(`/api/nucode/providers/${encodeURIComponent(providerId)}/auth/device-code`, {
-      method: "POST",
+    const { data, error: apiError } = await api.POST("/api/nucode/providers/{id}/auth/device-code", {
+      params: { path: { id: providerId } },
     });
 
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
-      throw new Error(data.error ?? `HTTP ${response.status}`);
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to request device code");
     }
 
-    return (await response.json()) as NuCodeDeviceCodeResponse;
+    if (!data) {
+      throw new Error("No data returned");
+    }
+
+    return data as NuCodeDeviceCodeResponse;
   }
 
   async function pollDeviceFlow(providerId: string, deviceCode: string): Promise<NuCodeDevicePollResponse> {
-    const response = await apiFetch(`/api/nucode/providers/${encodeURIComponent(providerId)}/auth/poll`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ deviceCode }),
+    const { data, error: apiError } = await api.POST("/api/nucode/providers/{id}/auth/poll", {
+      params: { path: { id: providerId } },
+      body: { deviceCode } as never,
     });
 
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
-      throw new Error(data.error ?? `HTTP ${response.status}`);
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to poll device flow");
     }
 
-    return (await response.json()) as NuCodeDevicePollResponse;
+    if (!data) {
+      throw new Error("No data returned");
+    }
+
+    return data as NuCodeDevicePollResponse;
   }
 
   return {
-    providers: readonly(providers),
+    providers: readonly(providers) as Readonly<Ref<readonly NuCodeProvider[]>>,
     isLoading: readonly(isLoading),
     error: readonly(error),
     fetchProviders,

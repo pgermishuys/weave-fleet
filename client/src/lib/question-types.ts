@@ -1,4 +1,4 @@
-import type { AccumulatedToolPart } from "./api-types";
+import type { AccumulatedToolPart } from "./client-types";
 
 // ── Question tool input schema (mirrors opencode's Question.Info) ─────────────
 

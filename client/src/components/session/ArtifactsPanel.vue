@@ -4,7 +4,7 @@ import { storeToRefs } from "pinia";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { useArtifactViewer } from "@/composables/use-artifact-viewer";
-import type { FileDiffItem } from "@/lib/api-types";
+import type { FileDiffItem } from "@/api/client";
 
 interface GroupedFile {
   path: string;

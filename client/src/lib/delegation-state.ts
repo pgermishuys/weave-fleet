@@ -1,4 +1,4 @@
-import type { DelegationDto } from "@/lib/api-types";
+import type { DelegationDto } from "@/lib/client-types";
 
 type DelegationEvent = {
   delegationId: string;

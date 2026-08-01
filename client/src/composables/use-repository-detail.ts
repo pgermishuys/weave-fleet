@@ -1,6 +1,6 @@
 import { shallowRef, watch, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
-import type { RepositoryDetail, RepositoryDetailResponse } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { RepositoryDetail, RepositoryDetailResponse } from "@/api/client";
 
 export interface UseRepositoryDetailResult {
   detail: ShallowRef<RepositoryDetail | null>;
@@ -33,17 +33,21 @@ export function useRepositoryDetail(path: string | null): UseRepositoryDetailRes
       detail.value = null;
 
       try {
-        const response = await apiFetch(`/api/repositories/detail?path=${encodeURIComponent(nextPath)}`, {
+        const { data, error: apiError } = await api.GET("/api/repositories/detail", {
+          params: { query: { path: nextPath } },
           signal: controller.signal,
         });
 
-        if (!response.ok) {
-          const data = (await response.json().catch(() => ({}))) as { error?: string };
-          throw new Error(data.error ?? "Failed to load repository detail");
+        if (apiError) {
+          throw new Error(String(apiError));
         }
 
-        const data = (await response.json()) as RepositoryDetailResponse;
-        detail.value = data.repository;
+        if (!data) {
+          throw new Error("No data returned");
+        }
+
+        const responseData = data as RepositoryDetailResponse;
+        detail.value = responseData.repository;
       } catch (fetchError) {
         if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
           return;

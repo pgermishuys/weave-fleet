@@ -1,7 +1,7 @@
 import { storeToRefs } from "pinia";
 import { computed, readonly, ref, shallowRef, watch } from "vue";
-import { apiFetch } from "@/lib/api-client";
-import type { AvailableProvider } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { AvailableProvider } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
 
 export interface ModelOption {
@@ -62,16 +62,17 @@ export function useModels(sessionId?: string) {
       error.value = undefined;
 
       try {
-        const response = await apiFetch(`/api/sessions/${encodeURIComponent(nextSessionId)}/models`, {
+        const { data, error, response } = await api.GET("/api/sessions/{id}/models", {
+          params: { path: { id: nextSessionId } },
           signal: controller.signal,
         });
 
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => ({}))) as { error?: string };
-          throw new Error(payload.error ?? `HTTP ${response.status}`);
+        if (error || !response.ok) {
+          const payload = error as { error?: string } | undefined;
+          throw new Error((payload as any)?.error ?? `HTTP ${response.status}`);
         }
 
-        const body = (await response.json()) as { providers?: AvailableProvider[] } | AvailableProvider[];
+        const body = data as unknown as { providers?: AvailableProvider[] } | AvailableProvider[];
         const providers = Array.isArray(body) ? body : body.providers ?? [];
         const nextModels = toModelOptions(providers);
 

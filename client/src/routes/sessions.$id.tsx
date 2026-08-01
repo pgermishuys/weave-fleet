@@ -22,7 +22,7 @@ import {
 import { incrementPendingPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { provideSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { apiFetch } from "@/lib/api-client";
-import type { SessionActionCapabilities, SessionListItem, SessionOrigin } from "@/lib/api-types";
+import type { SessionActionCapabilities, SessionListItem, SessionOrigin } from "@/api/client";
 import type { SessionActivityStatus } from "@/lib/types";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";

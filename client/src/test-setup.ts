@@ -1,6 +1,7 @@
 import { config } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, vi } from "vitest";
+import { setApiBase } from "@/api/client";
 
 class ResizeObserverMock {
   observe(): void {}
@@ -65,6 +66,9 @@ if (typeof window !== "undefined" && !("IntersectionObserver" in window)) {
 
 setActivePinia(createPinia());
 config.global.plugins = [createPinia()];
+
+// Set a base URL for the API client in tests
+setApiBase("http://localhost:5000");
 
 beforeEach(() => {
   const pinia = createPinia();

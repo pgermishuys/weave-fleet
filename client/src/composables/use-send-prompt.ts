@@ -1,10 +1,11 @@
 import { storeToRefs } from "pinia";
 import { computed, reactive, readonly, shallowRef } from "vue";
+import type { components } from "@/api/generated/schema";
 import { useAgents } from "@/composables/use-agents";
 import { useDraftState, type EffortLevel } from "@/composables/use-draft-state";
 import { useModels } from "@/composables/use-models";
-import { apiFetch } from "@/lib/api-client";
-import type { AccumulatedMessage, ImageAttachment } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { AccumulatedMessage, ImageAttachment } from "@/lib/client-types";
 import { diagLog } from "@/lib/message-diagnostics";
 import { useSessionsStore } from "@/stores/sessions";
 
@@ -397,19 +398,18 @@ export function useSendPrompt(sessionId: string) {
 
   async function postPrompt(promptId: string, request: BackendSendPromptRequest): Promise<void> {
     try {
-      const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/prompt`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const { data, error, response } = await api.POST("/api/sessions/{id}/prompt", {
+        params: {
+          path: { id: sessionId },
         },
-        body: JSON.stringify(request),
+        body: request as components["schemas"]["SendPromptApiRequest"],
       });
 
-      if (!response.ok) {
+      if (error || !response.ok) {
         throw new Error(await readPromptErrorMessage(response));
       }
 
-      const receipt = await response.json().catch((): BackendSendPromptResponse => ({})) as BackendSendPromptResponse;
+      const receipt = data as unknown as BackendSendPromptResponse;
       confirmSentPrompt(sessionId, {
         correlationId: receipt.correlationId ?? request.correlationId,
         eventId: receipt.eventId,

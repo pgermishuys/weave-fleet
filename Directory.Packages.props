@@ -9,6 +9,7 @@
     <PackageVersion Include="Duende.IdentityServer" Version="7.4.7" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.5" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.4" />
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.8.0" />
     <PackageVersion Include="Dapper" Version="2.1.66" />
     <PackageVersion Include="Dapper.AOT" Version="1.0.48" />
     <PackageVersion Include="dbup-sqlite" Version="6.0.1" />

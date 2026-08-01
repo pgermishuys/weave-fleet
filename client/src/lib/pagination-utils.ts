@@ -5,7 +5,7 @@
  * Extracted for testability — no React or Next.js dependencies.
  */
 
-import type { AccumulatedMessage, AccumulatedPart } from "@/lib/api-types";
+import type { AccumulatedMessage, AccumulatedPart } from "@/lib/client-types";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

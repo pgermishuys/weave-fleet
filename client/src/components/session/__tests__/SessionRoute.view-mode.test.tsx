@@ -3,7 +3,7 @@ import type { DefineComponent } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { clearPendingPrompts, clearSentPrompts } from "@/composables/use-send-prompt";
-import type { FileDiffItem } from "@/lib/api-types";
+import type { FileDiffItem } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
 
 const { navigateMock, params, search, diffState, apiFetchMock } = vi.hoisted(() => ({

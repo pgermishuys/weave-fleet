@@ -13,7 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateProject } from "@/composables/use-session-actions";
-import type { ProjectResponse } from "@/lib/api-types";
+import type { ProjectResponse } from "@/api/client";
 
 const open = defineModel<boolean>("open", { default: false });
 

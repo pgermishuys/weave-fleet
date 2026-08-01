@@ -20,7 +20,7 @@ import { useSendPrompt } from "@/composables/use-send-prompt";
 import { parseSlashCommand } from "@/lib/slash-command-utils";
 import { trackAction } from "@/lib/track-action";
 import { useSessionsStore } from "@/stores/sessions";
-import type { ImageAttachment } from "@/lib/api-types";
+import type { ImageAttachment } from "@/lib/client-types";
 import { ALLOWED_IMAGE_MIMES, MAX_IMAGE_BYTES, MAX_ATTACHMENTS_PER_PROMPT } from "@/lib/image-validation";
 
 defineOptions({

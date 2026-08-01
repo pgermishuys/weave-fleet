@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { ClientConfigResponse, UserMeResponse } from "@/lib/api-types";
+import type { ClientConfigResponse, UserMeResponse } from "@/api/client";
 import { computed, onMounted, shallowRef } from "vue";
 import { storeToRefs } from "pinia";
 import OnboardingGate from "@/components/auth/OnboardingGate.vue";
-import { apiFetch } from "@/lib/api-client";
+import { api } from "@/api/client";
 import { useAppShellStore } from "@/stores/app-shell";
 
 const appShellStore = useAppShellStore();
@@ -21,35 +21,33 @@ async function hydrateShell(): Promise<void> {
   errorMessage.value = null;
 
   try {
-    const clientConfigResponse = await apiFetch("/api/config/client");
+    const { data: clientConfig, error: configError, response: configResponse } = await api.GET("/api/config/client");
 
-    if (clientConfigResponse.status === 401) {
+    if ((configResponse as Response).status === 401) {
       appShellStore.clear();
       redirectToLogin();
       return;
     }
 
-    if (!clientConfigResponse.ok) {
-      throw new Error(`Client config request failed with status ${clientConfigResponse.status}.`);
+    if (configError || !clientConfig) {
+      throw new Error(`Client config request failed with status ${(configResponse as Response).status}.`);
     }
 
-    const clientConfig = await clientConfigResponse.json() as ClientConfigResponse;
-    appShellStore.setConfig(clientConfig);
+    appShellStore.setConfig(clientConfig as ClientConfigResponse);
 
-    const userResponse = await apiFetch("/api/user/me");
+    const { data: currentUser, error: userError, response: userResponse } = await api.GET("/api/user/me");
 
-    if (userResponse.status === 401) {
+    if ((userResponse as Response).status === 401) {
       appShellStore.clear();
       redirectToLogin();
       return;
     }
 
-    if (!userResponse.ok) {
-      throw new Error(`Current user request failed with status ${userResponse.status}.`);
+    if (userError || !currentUser) {
+      throw new Error(`Current user request failed with status ${(userResponse as Response).status}.`);
     }
 
-    const currentUser = await userResponse.json() as UserMeResponse;
-    appShellStore.setUser(currentUser);
+    appShellStore.setUser(currentUser as UserMeResponse);
   } catch (error) {
     appShellStore.clear();
     errorMessage.value = error instanceof Error ? error.message : "Unable to verify your session.";

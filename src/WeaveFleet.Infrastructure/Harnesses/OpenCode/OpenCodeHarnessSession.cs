@@ -597,6 +597,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public async Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct)
     {
+        await EnsureConnectedAsync(ct).ConfigureAwait(false);
         var commands = await _instanceHandle.HttpClient.GetCommandsAsync(_workingDirectory, ct).ConfigureAwait(false);
         return commands.Select(c => new CommandInfo
         {
@@ -608,6 +609,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public async Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
     {
+        await EnsureConnectedAsync(ct).ConfigureAwait(false);
         var agents = await _instanceHandle.HttpClient.GetAgentsAsync(_workingDirectory, ct).ConfigureAwait(false);
         return agents.Select(a => new AgentInfo
         {
@@ -623,6 +625,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public async Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
     {
+        await EnsureConnectedAsync(ct).ConfigureAwait(false);
         var response = await _instanceHandle.HttpClient.GetProvidersAsync(_workingDirectory, ct).ConfigureAwait(false);
         // Only return connected providers (ones where credentials are configured).
         var connectedSet = response.Connected?.ToHashSet(StringComparer.Ordinal)

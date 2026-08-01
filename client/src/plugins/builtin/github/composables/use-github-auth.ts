@@ -1,6 +1,6 @@
 import { computed, onMounted, onUnmounted, readonly, shallowRef, watch, type ComputedRef, type ShallowRef } from "vue";
 import { apiFetch } from "@/lib/api-client";
-import type { DeviceCodeResponse, PollRequest, PollResponse } from "@/lib/api-types";
+import type { DeviceCodeResponse, PollRequest, PollResponse } from "@/api/client";
 
 export type GitHubDeviceFlowState =
   | { status: "idle" }

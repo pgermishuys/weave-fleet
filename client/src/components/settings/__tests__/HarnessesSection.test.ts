@@ -2,7 +2,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import HarnessesSection from "@/components/settings/HarnessesSection.vue";
-import type { HarnessInfo } from "@/lib/api-types";
+import type { HarnessInfo } from "@/api/client";
 
 const { apiFetchMock } = vi.hoisted(() => ({
   apiFetchMock: vi.fn(),

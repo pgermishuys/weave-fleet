@@ -1,4 +1,4 @@
-import type { AccumulatedMessage, DelegationDto } from "@/lib/api-types"
+import type { AccumulatedMessage, DelegationDto } from "@/lib/client-types"
 import { confirmSentPrompt } from "@/composables/use-send-prompt"
 import { applyDelegationCreated, applyDelegationUpdated } from "@/lib/delegation-state"
 import type { DelegationCompleted, DelegationCreated, DelegationUpdated, DomainEvent, MessageLifecyclePayload } from "@/lib/domain-events"

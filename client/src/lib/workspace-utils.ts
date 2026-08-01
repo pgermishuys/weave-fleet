@@ -3,7 +3,7 @@
  * Extracted from use-workspaces hook for testability and reuse.
  */
 
-import type { SessionListItem } from "@/lib/api-types";
+import type { SessionListItem } from "@/api/client";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 

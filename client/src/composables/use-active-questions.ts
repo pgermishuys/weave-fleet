@@ -1,5 +1,5 @@
 import { computed } from "vue";
-import type { AccumulatedMessage, AccumulatedToolPart } from "@/lib/api-types";
+import type { AccumulatedMessage, AccumulatedToolPart } from "@/lib/client-types";
 import { isQuestionPart, getQuestionStatus, getQuestionInput } from "@/lib/question-types";
 
 export interface ActiveQuestion {

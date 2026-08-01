@@ -38,8 +38,14 @@ const {
 let socketCallback: ((topic: string, data: unknown) => void) | null = null
 let reconnectCallback: (() => void) | null = null
 
-vi.mock("@/lib/api-client", () => ({
-  apiFetch: apiFetchMock,
+vi.mock("@/api/client", () => ({
+  api: {
+    GET: apiFetchMock,
+    POST: vi.fn(),
+    PUT: vi.fn(),
+    DELETE: vi.fn(),
+    PATCH: vi.fn(),
+  },
 }))
 
 vi.mock("@/composables/use-weave-socket", () => ({
@@ -176,11 +182,19 @@ describe("useSessionEvents", () => {
     onDisconnectMock.mockImplementation(() => vi.fn())
     apiFetchMock.mockImplementation((url: string) => {
       if (url.includes("/delegations")) {
-        return Promise.resolve(createJsonResponse([]))
+        return Promise.resolve({
+          data: [],
+          error: undefined,
+          response: createJsonResponse([]),
+        })
       }
 
       if (url.includes("/committed-events")) {
-        return Promise.resolve(createJsonResponse({ events: [] }))
+        return Promise.resolve({
+          data: { events: [] },
+          error: undefined,
+          response: createJsonResponse({ events: [] }),
+        })
       }
 
       throw new Error(`Unexpected apiFetch call: ${url}`)
@@ -200,7 +214,10 @@ describe("useSessionEvents", () => {
     const requestedUrls = apiFetchMock.mock.calls.map(([url]) => url)
 
     expect(loadInitialMessagesMock).toHaveBeenCalledWith("session-1", "instance-1", expect.any(AbortSignal))
-    expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/session-1/delegations", { signal: expect.any(AbortSignal) })
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/{id}/delegations", {
+      params: { path: { id: "session-1" } },
+      signal: expect.any(AbortSignal)
+    })
     expect(requestedUrls).not.toContain("/api/sessions/session-1/status?instanceId=instance-1")
     expect(result.sessionStatus.value).toBe("idle")
   })
@@ -234,10 +251,10 @@ describe("useSessionEvents", () => {
 
     // SignalR transport: no gap-fill calls, only delegations
     expect(apiFetchMock.mock.calls.map(([url]) => url)).toEqual([
-      "/api/sessions/session-1/delegations",
-      "/api/sessions/session-1/delegations",
-      "/api/sessions/session-1/delegations",
-      "/api/sessions/session-1/delegations",
+      "/api/sessions/{id}/delegations",
+      "/api/sessions/{id}/delegations",
+      "/api/sessions/{id}/delegations",
+      "/api/sessions/{id}/delegations",
     ])
     expect(apiFetchMock.mock.calls.map(([url]) => url)).not.toContain("/api/sessions/session-1/status?instanceId=instance-1")
   })

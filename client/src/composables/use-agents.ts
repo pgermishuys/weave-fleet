@@ -1,7 +1,7 @@
 import { storeToRefs } from "pinia";
 import { computed, readonly, ref, shallowRef, watch } from "vue";
-import { apiFetch } from "@/lib/api-client";
-import type { AutocompleteAgent } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { AutocompleteAgent } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
 
 export interface AgentOption {
@@ -52,16 +52,17 @@ export function useAgents(sessionId?: string) {
       error.value = undefined;
 
       try {
-        const response = await apiFetch(`/api/sessions/${encodeURIComponent(nextSessionId)}/agents`, {
+        const { data, error, response } = await api.GET("/api/sessions/{id}/agents", {
+          params: { path: { id: nextSessionId } },
           signal: controller.signal,
         });
 
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => ({}))) as { error?: string };
-          throw new Error(payload.error ?? `HTTP ${response.status}`);
+        if (error || !response.ok) {
+          const payload = error as { error?: string } | undefined;
+          throw new Error((payload as any)?.error ?? `HTTP ${response.status}`);
         }
 
-        const body = (await response.json()) as { agents?: AutocompleteAgent[] } | AutocompleteAgent[];
+        const body = data as unknown as { agents?: AutocompleteAgent[] } | AutocompleteAgent[];
         const nextAgents = toAgentOptions(Array.isArray(body) ? body : body.agents ?? []);
 
         agents.value = nextAgents;

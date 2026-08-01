@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.OpenApi;
 using WeaveFleet.Api;
 using WeaveFleet.Api.Auth;
 using WeaveFleet.Api.Endpoints;
@@ -382,6 +383,16 @@ JsonSerializationSetup.ConfigureHttpJson(builder.Services);
 // with the source-generated context.
 builder.Services.AddProblemDetails();
 
+builder.Services.AddOpenApi(options =>
+{
+    options.AddDocumentTransformer((document, context, ct) =>
+    {
+        document.Info.Title = "Weave Fleet API";
+        document.Info.Version = "v1";
+        return Task.CompletedTask;
+    });
+});
+
 // Use Fleet.Host/Port as the listen URL (overrides the "Urls" config key)
 builder.WebHost.UseUrls(fleetOptions.ListenUrl);
 
@@ -540,6 +551,9 @@ app.Use(async (context, next) =>
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+if (app.Environment.IsDevelopment())
+    app.MapOpenApi();
 
 // Origin validation for SignalR hubs
 app.Use(async (context, next) =>

@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref, shallowRef } from "vue";
-import type { SessionListItem } from "@/lib/api-types";
+import type { SessionListItem } from "@/api/client";
 
 type SessionStateOverride = Partial<Pick<SessionListItem, "activityStatus" | "lifecycleStatus" | "retentionStatus" | "sessionStatus">>;
 

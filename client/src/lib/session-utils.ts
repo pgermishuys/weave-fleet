@@ -1,4 +1,4 @@
-import type { SessionListItem } from "@/lib/api-types";
+import type { SessionListItem } from "@/api/client";
 
 export interface NestedSession {
   item: SessionListItem;

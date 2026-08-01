@@ -1,4 +1,4 @@
-import type { ClientConfigResponse, UserMeResponse } from "@/lib/api-types";
+import type { ClientConfigResponse, UserMeResponse } from "@/api/client";
 import { defineStore } from "pinia";
 import { computed, shallowRef } from "vue";
 

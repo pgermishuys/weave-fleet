@@ -8,8 +8,8 @@ import {
   type MaybeRefOrGetter,
   type ShallowRef,
 } from "vue";
-import type { FleetSummaryResponse } from "@/lib/api-types";
-import { apiFetch } from "@/lib/api-client";
+import type { FleetSummaryResponse } from "@/api/client";
+import { api } from "@/api/client";
 
 export interface UseFleetSummaryOptions {
   pollIntervalMs?: MaybeRefOrGetter<number>;
@@ -69,25 +69,25 @@ export function useFleetSummary(options: UseFleetSummaryOptions = {}): UseFleetS
     }
 
     try {
-      const response = await apiFetch("/api/fleet/summary");
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data = (await response.json()) as FleetSummaryResponse;
+      const { data, error: apiError } = await api.GET("/api/fleet/summary");
       if (disposed || currentRequestId !== requestId) {
         return;
       }
 
+      if (apiError || !data) {
+        throw new Error(apiError ? String(apiError) : "No data returned");
+      }
+
+      const typedData = data as FleetSummaryResponse;
       const previous = summary.value;
       summary.value = previous
-        && previous.activeSessions === data.activeSessions
-        && previous.idleSessions === data.idleSessions
-        && previous.totalTokens === data.totalTokens
-        && previous.totalCost === data.totalCost
-        && previous.queuedTasks === data.queuedTasks
+        && previous.activeSessions === typedData.activeSessions
+        && previous.idleSessions === typedData.idleSessions
+        && previous.totalTokens === typedData.totalTokens
+        && previous.totalCost === typedData.totalCost
+        && previous.queuedTasks === typedData.queuedTasks
         ? previous
-        : data;
+        : typedData;
       error.value = undefined;
       hasLoadedOnce = true;
     } catch (fetchError) {

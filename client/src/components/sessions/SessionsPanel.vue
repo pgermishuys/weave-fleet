@@ -3,7 +3,7 @@ import { computed, onUnmounted, reactive, shallowRef, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
 import { LoaderCircle, Plus, Search } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
-import type { CreateSessionResponse, SessionListItem } from "@/lib/api-types";
+import type { CreateSessionResponse, SessionListItem } from "@/api/client";
 import { useActivityStream } from "@/composables/use-activity-stream";
 import { useProjects } from "@/composables/use-projects";
 import { useSessions } from "@/composables/use-sessions";

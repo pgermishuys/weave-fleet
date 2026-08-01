@@ -15,7 +15,7 @@ import { Line } from "vue-chartjs"
 import StatCard from "@/components/analytics/cards/StatCard.vue"
 import HorizontalCostBars from "@/components/analytics/charts/HorizontalCostBars.vue"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import type { AnalyticsSummary, DailyAnalytics, ModelAnalytics } from "@/lib/api-types"
+import type { AnalyticsSummary, DailyAnalytics, ModelAnalytics } from "@/api/client"
 import type { AnalyticsProjectOption } from "@/composables/use-analytics-filters"
 
 ChartJS.register(CategoryScale, Legend, LineElement, LinearScale, PointElement, Tooltip)

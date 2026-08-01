@@ -13,11 +13,11 @@ import type {
   AccumulatedMessage,
   CommittedSessionEvent,
   DelegationDto,
-  SessionListItem,
   WebSocketEvent,
-} from "@/lib/api-types"
+} from "@/lib/client-types"
+import type { SessionListItem } from "@/api/client"
 import type { SessionStreamStatus } from "@/lib/domain-event-reducer"
-import { apiFetch } from "@/lib/api-client"
+import { api } from "@/api/client"
 import { applyDelegationCreated, applyDelegationUpdated } from "@/lib/delegation-state"
 import { applyPartUpdate, applyTextDelta, ensureMessage, mergeMessageUpdate } from "@/lib/event-state"
 import { convertFleetMessageToAccumulated, prependMessages, type FleetMessage } from "@/lib/pagination-utils"
@@ -149,17 +149,24 @@ export function useSessionEvents(
         }
 
         try {
-          const response = await apiFetch(`/api/sessions/${encodeURIComponent(activeSessionId)}/messages`, loadSignal ? { signal: loadSignal } : undefined)
-          if (!response.ok) {
+          const { data, error, response } = await api.GET("/api/sessions/{id}/messages", {
+            params: {
+              path: { id: activeSessionId },
+            },
+            signal: loadSignal,
+          });
+
+          if (error || !response.ok || loadSignal?.aborted || !isActive()) {
             return
           }
 
-          const data = (await response.json()) as { messages?: FleetMessage[] }
-          if (!data.messages?.length || loadSignal?.aborted || !isActive()) {
+          // Response body is not typed in schema, use data from openapi-fetch
+          const responseData = data as unknown as { messages?: FleetMessage[] }
+          if (!responseData.messages?.length || loadSignal?.aborted || !isActive()) {
             return
           }
 
-          messages.value = data.messages
+          messages.value = responseData.messages
             .map(convertFleetMessageToAccumulated)
             .slice(-MAX_MESSAGES)
           pagination.resetPagination()
@@ -230,21 +237,21 @@ export function useSessionEvents(
         }
 
         try {
-          const response = await apiFetch(
-            `/api/sessions/${encodeURIComponent(activeSessionId)}/delegations`,
-            loadSignal ? { signal: loadSignal } : undefined,
-          )
-          if (!response.ok) {
+          const { data, error } = await api.GET("/api/sessions/{id}/delegations", {
+            params: {
+              path: { id: activeSessionId },
+            },
+            signal: loadSignal,
+          });
+
+          if (error || !data || loadSignal?.aborted || !isActive()) {
             return
           }
 
-          const data = (await response.json()) as DelegationDto[]
-          if (!loadSignal?.aborted && isActive()) {
-            const nextDelegations = Array.isArray(data) ? data : []
-            delegations.value = nextDelegations
-            syncDerivedSessionStatus(activeSessionId, sessionStatus, explicitStatus, delegations)
-            maybeResolveIdleFallback()
-          }
+          const nextDelegations = Array.isArray(data) ? data as DelegationDto[] : []
+          delegations.value = nextDelegations
+          syncDerivedSessionStatus(activeSessionId, sessionStatus, explicitStatus, delegations)
+          maybeResolveIdleFallback()
         } catch (loadError) {
           if (loadError instanceof DOMException && loadError.name === "AbortError") {
             return

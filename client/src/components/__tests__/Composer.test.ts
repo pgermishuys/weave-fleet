@@ -2,16 +2,22 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionsStore } from "@/stores/sessions";
 import Composer from "@/components/session/Composer.vue";
-import type { SessionListItem } from "@/lib/api-types";
+import type { SessionListItem } from "@/api/client";
 import { createModelSelectionKey } from "@/composables/use-models";
 
-const { apiFetchMock } = vi.hoisted(() => ({
-  apiFetchMock: vi.fn(),
+vi.mock("@/api/client", () => ({
+  api: {
+    GET: vi.fn(),
+    POST: vi.fn(),
+    PUT: vi.fn(),
+    DELETE: vi.fn(),
+    PATCH: vi.fn(),
+  },
 }));
 
-vi.mock("@/lib/api-client", () => ({
-  apiFetch: apiFetchMock,
-}));
+import { api } from "@/api/client";
+
+const mockApi = vi.mocked(api);
 
 function createJsonResponse<T>(body: T, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -78,55 +84,104 @@ function createSession(overrides: Partial<SessionListItem> = {}): SessionListIte
 }
 
 function configureApiFetch(): void {
-  apiFetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
-    if (url.endsWith("/agents")) {
-      return createJsonResponse([
-        { name: "alpha", description: "Planner", mode: "primary", color: "#ff00aa" },
-      ]);
-    }
-
-    if (url.endsWith("/models")) {
-      return createJsonResponse({
-        providers: [
-          {
-            id: "provider-1",
-            name: "Provider One",
-            models: [{ id: "shared-model", name: "Model 1" }],
-          },
-          {
-            id: "provider-2",
-            name: "Provider Two",
-            models: [{ id: "shared-model", name: "Model 1" }],
-          },
+  mockApi.GET.mockImplementation(async (url: string) => {
+    if (url === "/api/agents") {
+      return {
+        data: [
+          { name: "alpha", description: "Planner", mode: "primary", color: "#ff00aa" },
         ],
-      });
+        error: undefined,
+        response: new Response(),
+      } as any;
     }
 
-    if (url.endsWith("/commands")) {
-      return createJsonResponse({
-        commands: [
-          { name: "help", description: "Show help" },
-          { name: "status", description: "Show status" },
-        ],
-      });
+    if (url === "/api/models") {
+      return {
+        data: {
+          providers: [
+            {
+              id: "provider-1",
+              name: "Provider One",
+              models: [{ id: "shared-model", name: "Model 1" }],
+            },
+            {
+              id: "provider-2",
+              name: "Provider Two",
+              models: [{ id: "shared-model", name: "Model 1" }],
+            },
+          ],
+        },
+        error: undefined,
+        response: new Response(),
+      } as any;
     }
 
-    if (url.includes("/find/files?q=")) {
-      return createJsonResponse({
-        instanceId: "instance-1",
-        files: ["src/main.ts"],
-      });
+    if (url === "/api/sessions/{id}/commands") {
+      return {
+        data: undefined,
+        error: undefined,
+        response: new Response(JSON.stringify({
+          commands: [
+            { name: "help", description: "Show help" },
+            { name: "status", description: "Show status" },
+          ],
+        }), { headers: { "Content-Type": "application/json" } }),
+      } as any;
     }
 
-    if (url.endsWith("/prompt") && options?.method === "POST") {
-      return createJsonResponse({}, 200);
+    if (url === "/api/instances/{instanceId}/commands") {
+      return {
+        data: {
+          commands: [
+            { name: "help", description: "Show help" },
+            { name: "status", description: "Show status" },
+          ],
+        },
+        error: undefined,
+        response: new Response(),
+      } as any;
     }
 
-    if (url.endsWith("/command") && options?.method === "POST") {
-      return createJsonResponse({}, 202);
+    if (url === "/api/instances/{instanceId}/find/files") {
+      return {
+        data: {
+          instanceId: "instance-1",
+          files: ["src/main.ts"],
+        },
+        error: undefined,
+        response: new Response(),
+      } as any;
     }
 
-    throw new Error(`Unhandled apiFetch call: ${url}`);
+    throw new Error(`Unhandled GET call: ${url}`);
+  });
+
+  mockApi.POST.mockImplementation(async (url: string) => {
+    if (url === "/api/sessions/{id}/prompt") {
+      return {
+        data: {},
+        error: undefined,
+        response: new Response(),
+      } as any;
+    }
+
+    if (url === "/api/sessions/{id}/command") {
+      return {
+        data: {},
+        error: undefined,
+        response: new Response(null, { status: 202 }),
+      } as any;
+    }
+
+    if (url === "/api/telemetry/actions") {
+      return {
+        data: {},
+        error: undefined,
+        response: new Response(),
+      } as any;
+    }
+
+    throw new Error(`Unhandled POST call: ${url}`);
   });
 }
 
@@ -186,7 +241,8 @@ function mountComposer(options: MountComposerOptions = {}) {
 
 describe("Composer", () => {
   beforeEach(() => {
-    apiFetchMock.mockReset();
+    mockApi.GET.mockReset();
+    mockApi.POST.mockReset();
     configureApiFetch();
   });
 
@@ -227,7 +283,14 @@ describe("Composer", () => {
     await flushPromises();
 
     expect(enterEvent.defaultPrevented).toBe(true);
-    expect(apiFetchMock.mock.calls.some(([url, options]) => String(url).endsWith("/prompt") && options?.method === "POST")).toBe(true);
+    expect(mockApi.POST).toHaveBeenCalledWith(
+      "/api/sessions/{id}/prompt",
+      expect.objectContaining({
+        params: expect.objectContaining({
+          path: { id: "session-1" },
+        }),
+      })
+    );
     expect(wrapper.emitted("promptSent")).toHaveLength(1);
   });
 
@@ -247,8 +310,14 @@ describe("Composer", () => {
     await flushPromises();
 
     expect(enterEvent.defaultPrevented).toBe(true);
-    expect(apiFetchMock.mock.calls.some(([url, options]) => String(url).endsWith("/command") && options?.method === "POST")).toBe(true);
-    expect(apiFetchMock.mock.calls.some(([url, options]) => String(url).endsWith("/prompt") && options?.method === "POST")).toBe(false);
+    expect(mockApi.POST).toHaveBeenCalledWith(
+      "/api/sessions/{id}/command",
+      expect.objectContaining({
+        params: expect.objectContaining({
+          path: { id: "session-1" },
+        }),
+      })
+    );
     expect(wrapper.emitted("promptSent")).toHaveLength(1);
   });
 
@@ -271,10 +340,10 @@ describe("Composer", () => {
     textarea.element.dispatchEvent(enterEvent);
     await flushPromises();
 
-    const promptCall = apiFetchMock.mock.calls.find(([url, options]) => String(url).endsWith("/prompt") && options?.method === "POST");
+    const promptCall = (mockApi.POST.mock.calls as any[]).find(([url]) => url === "/api/sessions/{id}/prompt");
     expect(promptCall).toBeTruthy();
     const [, options] = promptCall!;
-    const body = JSON.parse(String(options?.body)) as { model?: { providerID: string; modelID: string } };
+    const body = options?.body as { model?: { providerID: string; modelID: string } };
     expect(body.model).toEqual({ providerID: "provider-2", modelID: "shared-model" });
   });
 
@@ -297,7 +366,7 @@ describe("Composer", () => {
     textarea.element.dispatchEvent(shiftEnterEvent);
 
     expect(shiftEnterEvent.defaultPrevented).toBe(false);
-    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/prompt"))).toBe(false);
+    expect(mockApi.POST).not.toHaveBeenCalled();
   });
 
   it("enables composer for a stopped session when capabilities canPrompt is true", async () => {

@@ -1,6 +1,6 @@
 import { shallowRef, watch, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
-import type { RepositoryInfo, RepositoryInfoResponse } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { RepositoryInfo, RepositoryInfoResponse } from "@/api/client";
 
 export interface UseRepositoryInfoResult {
   info: ShallowRef<RepositoryInfo | null>;
@@ -33,17 +33,21 @@ export function useRepositoryInfo(path: string | null): UseRepositoryInfoResult 
       info.value = null;
 
       try {
-        const response = await apiFetch(`/api/repositories/info?path=${encodeURIComponent(nextPath)}`, {
+        const { data, error: apiError } = await api.GET("/api/repositories/info", {
+          params: { query: { path: nextPath } },
           signal: controller.signal,
         });
 
-        if (!response.ok) {
-          const data = (await response.json().catch(() => ({}))) as { error?: string };
-          throw new Error(data.error ?? "Failed to load repository info");
+        if (apiError) {
+          throw new Error(String(apiError));
         }
 
-        const data = (await response.json()) as RepositoryInfoResponse;
-        info.value = data.repository;
+        if (!data) {
+          throw new Error("No data returned");
+        }
+
+        const responseData = data as RepositoryInfoResponse;
+        info.value = responseData.repository;
       } catch (fetchError) {
         if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
           return;

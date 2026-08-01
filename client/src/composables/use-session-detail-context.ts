@@ -2,7 +2,7 @@
  * Provide/inject contract for the session detail panel.
  */
 import { type ComputedRef, type InjectionKey, type ShallowRef, inject, provide } from "vue";
-import type { ResumeSessionResponse, SessionListItem } from "@/lib/api-types";
+import type { ResumeSessionResponse, SessionListItem } from "@/api/client";
 
 // ---------------------------------------------------------------------------
 // Action composable interfaces

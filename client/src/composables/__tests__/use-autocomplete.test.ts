@@ -3,10 +3,21 @@ import { shallowRef, type Ref } from "vue";
 import { useAutocomplete } from "@/composables/use-autocomplete";
 import { flushAll, mountComposable } from "./test-utils";
 
-const { apiFetchMock } = vi.hoisted(() => ({
-  apiFetchMock: vi.fn(),
+const { mockApi } = vi.hoisted(() => ({
+  mockApi: {
+    GET: vi.fn(),
+    POST: vi.fn(),
+    PUT: vi.fn(),
+    DELETE: vi.fn(),
+    PATCH: vi.fn(),
+  },
 }));
 
+vi.mock("@/api/client", () => ({
+  api: mockApi,
+}));
+
+const apiFetchMock = vi.fn();
 vi.mock("@/lib/api-client", () => ({
   apiFetch: apiFetchMock,
 }));
@@ -27,24 +38,41 @@ function createKeyboardEvent(key: string): KeyboardEvent {
 }
 
 function configureApiFetch(): void {
-  apiFetchMock.mockImplementation(async (url: string) => {
-    if (url.endsWith("/commands")) {
-      return createJsonResponse({
-        commands: [
-          { name: "help", description: "Show help" },
-          { name: "hello", description: "Say hello" },
-          { name: "status", description: "Show status" },
+  // Mock api.GET for commands and agents
+  mockApi.GET.mockImplementation(async (url: string) => {
+    if (url === "/api/sessions/{id}/commands") {
+      return {
+        data: undefined,
+        error: undefined,
+        response: createJsonResponse({
+          commands: [
+            { name: "help", description: "Show help" },
+            { name: "hello", description: "Say hello" },
+            { name: "status", description: "Show status" },
+          ],
+        }),
+      } as any;
+    }
+
+    if (url === "/api/agents") {
+      return {
+        data: [
+          { name: "alpha", description: "Planner", mode: "primary", color: "#ff00aa" },
+          { name: "beta", description: "Reviewer", mode: "secondary", color: "#00aaff" },
         ],
-      });
+        error: undefined,
+        response: createJsonResponse([
+          { name: "alpha", description: "Planner", mode: "primary", color: "#ff00aa" },
+          { name: "beta", description: "Reviewer", mode: "secondary", color: "#00aaff" },
+        ]),
+      } as any;
     }
 
-    if (url.endsWith("/agents")) {
-      return createJsonResponse([
-        { name: "alpha", description: "Planner", mode: "primary", color: "#ff00aa" },
-        { name: "beta", description: "Reviewer", mode: "secondary", color: "#00aaff" },
-      ]);
-    }
+    throw new Error(`Unhandled GET call: ${url}`);
+  });
 
+  // Mock apiFetch for file search
+  apiFetchMock.mockImplementation(async (url: string) => {
     if (url.includes("/find/files?q=")) {
       return createJsonResponse({
         sessionId: "instance-1",
@@ -85,6 +113,7 @@ async function mountAutocomplete(initialValue: string, cursor: number, sessionId
 describe("useAutocomplete", () => {
   beforeEach(() => {
     apiFetchMock.mockReset();
+    mockApi.GET.mockReset();
     configureApiFetch();
   });
 

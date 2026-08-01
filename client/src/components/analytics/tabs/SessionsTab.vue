@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-vue-next";
-import type { SessionAnalytics } from "@/lib/api-types";
+import type { SessionAnalytics } from "@/api/client";
 import { formatAnalyticsCost } from "@/lib/format-utils";
 
 export type SessionsTabSortBy =

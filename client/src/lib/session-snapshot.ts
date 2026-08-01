@@ -1,4 +1,4 @@
-import type { DelegationDto } from "@/lib/api-types";
+import type { DelegationDto } from "@/lib/client-types";
 import type { MessageLifecyclePayload } from "@/lib/domain-events";
 
 export interface SessionSnapshotSession {

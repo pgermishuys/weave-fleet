@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import type { Component } from "vue";
 import type { SidebarRail } from "@/stores/sidebar";
-import type { PluginConnectionStatus } from "@/plugins/types";
+import type { PluginConnectionStatus, FleetPluginStatus } from "@/plugins/types";
 import { computed, onMounted, onUnmounted, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
 import { BarChart3, LayoutGrid, MessageSquare, Puzzle, Settings, Zap } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import weaveLogo from "@/assets/weave_logo.png";
-import { apiFetch } from "@/lib/api-client";
-import type { PluginCatalogResponse } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { PluginCatalogResponse } from "@/api/client";
 import { usePluginRuntime } from "@/plugins/composable";
 import { getSidebarViews } from "@/plugins/slots";
 import { useBoardFeature } from "@/composables/use-board-feature";
@@ -153,14 +153,13 @@ async function loadPluginStatuses(): Promise<void> {
   pluginRuntime.setLoading(true);
 
   try {
-    const response = await apiFetch("/api/plugins");
+    const { data, error: apiError, response } = await api.GET("/api/plugins");
 
-    if (!response.ok) {
+    if (apiError || !data) {
       throw new Error(`HTTP ${response.status}`);
     }
 
-    const data = (await response.json()) as PluginCatalogResponse;
-    pluginRuntime.setStatuses(data.statuses);
+    pluginRuntime.setStatuses((data as PluginCatalogResponse).statuses as unknown as FleetPluginStatus[]);
     pluginRuntime.setError(undefined);
   } catch (error) {
     pluginRuntime.setError(error instanceof Error ? error.message : String(error));

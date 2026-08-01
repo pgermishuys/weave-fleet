@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef } from "vue";
-import type { AccumulatedToolPart } from "@/lib/api-types";
+import type { AccumulatedToolPart } from "@/lib/client-types";
 import {
   getQuestionInput,
   getQuestionAnswers,

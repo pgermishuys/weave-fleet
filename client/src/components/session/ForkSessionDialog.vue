@@ -42,7 +42,7 @@ function handleOpenChange(value: boolean): void {
 async function handleSubmit(): Promise<void> {
   try {
     const response = await forkSession(props.sessionId, {
-      title: title.value.trim() || undefined,
+      title: title.value.trim() || null,
     });
 
     emit("update:open", false);

@@ -1,4 +1,4 @@
-import type { AccumulatedMessage } from "@/lib/api-types";
+import type { AccumulatedMessage } from "@/lib/client-types";
 
 const TODO_STATUSES = ["pending", "in_progress", "completed", "cancelled"] as const;
 const TODO_PRIORITIES = ["high", "medium", "low"] as const;

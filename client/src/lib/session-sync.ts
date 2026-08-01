@@ -1,4 +1,4 @@
-import type { SessionListItem } from "@/lib/api-types";
+import type { SessionListItem } from "@/api/client";
 
 const SESSION_SYNC_EVENT = "weave:session-sync";
 

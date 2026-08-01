@@ -6,7 +6,7 @@ import { LoaderCircle, Plus } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { useActivityStream } from "@/composables/use-activity-stream";
 import { useSessions } from "@/composables/use-sessions";
-import type { SessionListItem } from "@/lib/api-types";
+import type { SessionListItem } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import RetentionFilter from "./RetentionFilter.vue";

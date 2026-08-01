@@ -1,5 +1,5 @@
 import { reactive, computed, type ComputedRef } from "vue";
-import type { ImageAttachment } from "@/lib/api-types";
+import type { ImageAttachment } from "@/lib/client-types";
 
 export interface PendingAttachment extends ImageAttachment {
   id: string;

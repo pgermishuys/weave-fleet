@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
-import type { HarnessInfo } from "@/lib/api-types";
+import type { HarnessInfo } from "@/api/client";
 import { usePreferencesStore } from "@/stores/preferences";
 import { mountComposable } from "./test-utils";
 
@@ -9,8 +9,14 @@ const { apiFetchMock } = vi.hoisted(() => ({
   apiFetchMock: vi.fn(),
 }));
 
-vi.mock("@/lib/api-client", () => ({
-  apiFetch: apiFetchMock,
+vi.mock("@/api/client", () => ({
+  api: {
+    GET: apiFetchMock,
+    POST: vi.fn(),
+    PUT: vi.fn(),
+    DELETE: vi.fn(),
+    PATCH: vi.fn(),
+  },
 }));
 
 function createJsonResponse<T>(body: T, status = 200): Response {
@@ -44,14 +50,26 @@ function createHarness(type: string, overrides: Partial<HarnessInfo> = {}): Harn
 function mockApiResponses(harnesses: HarnessInfo[], preferences: Record<string, string> = {}): void {
   apiFetchMock.mockImplementation((path: string) => {
     if (path === "/api/harnesses") {
-      return Promise.resolve(createJsonResponse(harnesses));
+      return Promise.resolve({
+        data: harnesses,
+        error: undefined,
+        response: createJsonResponse(harnesses),
+      });
     }
 
     if (path === "/api/preferences") {
-      return Promise.resolve(createJsonResponse(preferences));
+      return Promise.resolve({
+        data: preferences,
+        error: undefined,
+        response: createJsonResponse(preferences),
+      });
     }
 
-    return Promise.resolve(createJsonResponse({ error: "unexpected path" }, 404));
+    return Promise.resolve({
+      data: undefined,
+      error: { message: "unexpected path" },
+      response: createJsonResponse({ error: "unexpected path" }, 404),
+    });
   });
 }
 

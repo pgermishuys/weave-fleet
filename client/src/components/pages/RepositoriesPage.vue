@@ -4,8 +4,8 @@ import { useRouter } from "@tanstack/vue-router";
 import { FolderGit2, LoaderCircle, RefreshCw, Settings2, TriangleAlert } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { apiFetch } from "@/lib/api-client";
-import type { RepositoryScanResponse, ScannedRepository } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { RepositoryScanResponse, ScannedRepository } from "@/api/client";
 
 const router = useRouter();
 
@@ -42,22 +42,26 @@ async function loadRepositories(forceRefresh = false): Promise<void> {
 
   try {
     if (forceRefresh) {
-      const refreshResponse = await apiFetch("/api/repositories/refresh", { method: "POST" });
+      const { error: refreshError } = await api.POST("/api/repositories/refresh", {});
 
-      if (!refreshResponse.ok) {
-        throw new Error(`Refresh failed with HTTP ${refreshResponse.status}`);
+      if (refreshError) {
+        throw new Error(String(refreshError));
       }
     }
 
-    const response = await apiFetch("/api/repositories");
+    const { data, error: apiError } = await api.GET("/api/repositories", {});
 
-    if (!response.ok) {
-      throw new Error(`Unable to load repositories (HTTP ${response.status})`);
+    if (apiError) {
+      throw new Error(String(apiError));
     }
 
-    const data = (await response.json()) as RepositoryScanResponse;
-    repositories.value = data.repositories;
-    scannedAt.value = data.scannedAt;
+    if (!data) {
+      throw new Error("No data returned");
+    }
+
+    const responseData = data as RepositoryScanResponse;
+    repositories.value = responseData.repositories;
+    scannedAt.value = responseData.scannedAt;
   } catch (error) {
     repositories.value = [];
     scannedAt.value = null;

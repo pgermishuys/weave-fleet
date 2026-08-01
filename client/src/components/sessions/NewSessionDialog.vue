@@ -31,7 +31,7 @@ import type {
   ProjectResponse,
   ScannedRepository,
   SessionSourceSelection,
-} from "@/lib/api-types";
+} from "@/api/client";
 import {
   buildGitHubSessionSourceSelection,
   findRepositoryForGitHubPreset,

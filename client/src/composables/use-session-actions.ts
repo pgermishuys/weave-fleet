@@ -1,5 +1,6 @@
 import { computed, readonly, shallowRef, type ComputedRef, type ShallowRef } from "vue";
 import { getActivePinia } from "pinia";
+import type { components } from "@/api/generated/schema";
 import type {
   CreateProjectRequest,
   CreateSessionRequest,
@@ -11,8 +12,8 @@ import type {
   SessionListItem,
   SessionSourceSelection,
   UpdateProjectRequest,
-} from "@/lib/api-types";
-import { apiFetch } from "@/lib/api-client";
+} from "@/api/client";
+import { api } from "@/api/client";
 import { trackAction } from "@/lib/track-action";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
@@ -23,6 +24,8 @@ export interface CreateSessionOptions {
   branch?: string;
   source?: SessionSourceSelection;
   harnessType?: string;
+  initialPrompt?: string;
+  onComplete?: components["schemas"]["OnCompleteInfo"];
   projectId?: string;
 }
 
@@ -206,32 +209,32 @@ function buildForkedSessionListItem(
   };
 }
 
-export function useCreateSession(endpoint = "/api/sessions"): UseCreateSessionResult {
+export function useCreateSession(endpoint?: string): UseCreateSessionResult {
   const state = createMutationState();
 
   async function createSession(directory?: string, opts?: CreateSessionOptions): Promise<CreateSessionResponse> {
     return state.execute(async () => {
       const body: CreateSessionRequest = {
-        directory,
-        title: opts?.title,
-        isolationStrategy: opts?.isolationStrategy,
-        branch: opts?.branch,
-        source: opts?.source,
-        harnessType: opts?.harnessType,
-        projectId: opts?.projectId,
+        directory: directory ?? null,
+        title: opts?.title ?? null,
+        isolationStrategy: opts?.isolationStrategy ?? null,
+        branch: opts?.branch ?? null,
+        source: opts?.source ?? null,
+        harnessType: opts?.harnessType ?? null,
+        initialPrompt: opts?.initialPrompt ?? null,
+        onComplete: opts?.onComplete ?? null,
+        projectId: opts?.projectId ?? null,
       };
 
-      const response = await apiFetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+      const { data, error, response } = await api.POST("/api/sessions", {
+        body: body as components["schemas"]["CreateSessionApiRequest"],
       });
 
-      if (!response.ok) {
+      if (error || !response.ok) {
         throw new Error(await readErrorMessage(response));
       }
 
-      const result = (await response.json()) as CreateSessionResponse;
+      const result = data as unknown as CreateSessionResponse;
       trackAction("session.create", result.session.id);
       return result;
     }, "Failed to create session");
@@ -249,17 +252,16 @@ export function useCreateProject(): UseCreateProjectResult {
 
   async function createProject(request: CreateProjectRequest): Promise<ProjectResponse> {
     return state.execute(async () => {
-      const response = await apiFetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(request),
+      const { data, error, response } = await api.POST("/api/projects", {
+        body: request as components["schemas"]["CreateProjectRequest"],
       });
 
-      if (!response.ok) {
+      if (error || !response.ok) {
         throw new Error(await readErrorMessage(response));
       }
 
-      return (await response.json()) as ProjectResponse;
+      // Response body is not typed in schema, use data from openapi-fetch
+      return data as unknown as ProjectResponse;
     }, "Failed to create project");
   }
 
@@ -277,11 +279,13 @@ export function useDeleteSession(): UseDeleteSessionResult {
     void instanceId;
 
     await state.execute(async () => {
-      const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}`, {
-        method: "DELETE",
+      const { error, response } = await api.DELETE("/api/sessions/{id}", {
+        params: {
+          path: { id: sessionId },
+        },
       });
 
-      if (!response.ok) {
+      if (error || !response.ok) {
         throw new Error(await readErrorMessage(response));
       }
 
@@ -301,12 +305,14 @@ export function useDeleteProject(): UseDeleteProjectResult {
 
   async function deleteProject(projectId: string, mode: DeleteProjectMode = "move_to_scratch"): Promise<void> {
     await state.execute(async () => {
-      const params = new URLSearchParams({ mode });
-      const response = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}?${params.toString()}`, {
-        method: "DELETE",
+      const { error, response } = await api.DELETE("/api/projects/{id}", {
+        params: {
+          path: { id: projectId },
+          query: { mode },
+        },
       });
 
-      if (!response.ok) {
+      if (error || !response.ok) {
         throw new Error(await readErrorMessage(response));
       }
     }, "Failed to delete project");
@@ -345,13 +351,14 @@ export function useRenameSession(): UseRenameSessionResult {
 
     try {
       await state.execute(async () => {
-        const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title }),
+        const { error, response } = await api.PATCH("/api/sessions/{id}", {
+          params: {
+            path: { id: sessionId },
+          },
+          body: { title } as components["schemas"]["UpdateSessionTitleRequest"],
         });
 
-        if (!response.ok) {
+        if (error || !response.ok) {
           throw new Error(await readErrorMessage(response));
         }
 
@@ -390,13 +397,14 @@ export function useMoveSession(): UseMoveSessionResult {
 
   async function moveSession(sessionId: string, projectId: string | null): Promise<void> {
     await state.execute(async () => {
-      const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/project`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId }),
+      const { error, response } = await api.PATCH("/api/sessions/{id}/project", {
+        params: {
+          path: { id: sessionId },
+        },
+        body: { projectId } as components["schemas"]["MoveSessionRequest"],
       });
 
-      if (!response.ok) {
+      if (error || !response.ok) {
         throw new Error(await readErrorMessage(response));
       }
     }, "Failed to move session");
@@ -414,13 +422,14 @@ function createRetentionMutation(targetStatus: "archived" | "active", actionName
 
   async function updateRetention(sessionId: string): Promise<void> {
     await state.execute(async () => {
-      const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/retention`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ retentionStatus: targetStatus }),
+      const { error, response } = await api.PATCH("/api/sessions/{id}/retention", {
+        params: {
+          path: { id: sessionId },
+        },
+        body: { retentionStatus: targetStatus } as components["schemas"]["UpdateSessionRetentionRequest"],
       });
 
-      if (!response.ok) {
+      if (error || !response.ok) {
         throw new Error(await readErrorMessage(response));
       }
 
@@ -457,17 +466,19 @@ export function useForkSession(): UseForkSessionResult {
 
     try {
       const sourceSession = sessionsStore?.sessions.find((item) => item.session.id === sessionId);
-      const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/fork`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(opts ?? {}),
+      const { data, error: apiError, response } = await api.POST("/api/sessions/{id}/fork", {
+        params: {
+          path: { id: sessionId },
+        },
+        body: (opts ?? {}) as components["schemas"]["ForkSessionApiRequest"],
       });
 
-      if (!response.ok) {
+      if (apiError || !response.ok) {
         throw new Error(await readErrorMessage(response));
       }
 
-      const payload = (await response.json()) as ForkSessionResponse;
+      // Response body is not typed in schema, use data from openapi-fetch
+      const payload = data as unknown as ForkSessionResponse;
       const nextSession = buildForkedSessionListItem(sourceSession, payload);
 
       sessionsStore?.upsertSession(nextSession);
@@ -506,11 +517,13 @@ export function useResumeSession(): UseResumeSessionResult {
     error.value = undefined;
 
     try {
-      const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/resume`, {
-        method: "POST",
+      const { data, error: apiError, response } = await api.POST("/api/sessions/{id}/resume", {
+        params: {
+          path: { id: sessionId },
+        },
       });
 
-      if (!response.ok) {
+      if (apiError || !response.ok) {
         if (response.status === 409) {
           throw new Error("Session is already active");
         }
@@ -518,7 +531,8 @@ export function useResumeSession(): UseResumeSessionResult {
         throw new Error(await readErrorMessage(response));
       }
 
-      const result = (await response.json()) as ResumeSessionResponse;
+      // Response body is not typed in schema, use data from openapi-fetch
+      const result = data as unknown as ResumeSessionResponse;
       trackAction("session.resume", sessionId);
       return result;
     } catch (requestError) {
@@ -543,11 +557,13 @@ export function useAbortSession(): UseAbortSessionResult {
 
   async function abortSession(sessionId: string): Promise<void> {
     await state.execute(async () => {
-      const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/abort`, {
-        method: "POST",
+      const { error, response } = await api.POST("/api/sessions/{id}/abort", {
+        params: {
+          path: { id: sessionId },
+        },
       });
 
-      if (!response.ok) {
+      if (error || !response.ok) {
         throw new Error(await readErrorMessage(response));
       }
 
@@ -574,11 +590,13 @@ export function useTerminateSession(): UseTerminateSessionResult {
     void opts;
 
     await state.execute(async () => {
-      const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/stop`, {
-        method: "POST",
+      const { error, response } = await api.POST("/api/sessions/{id}/stop", {
+        params: {
+          path: { id: sessionId },
+        },
       });
 
-      if (!response.ok) {
+      if (error || !response.ok) {
         throw new Error(await readErrorMessage(response));
       }
     }, "Failed to terminate session");
@@ -596,17 +614,19 @@ export function useUpdateProject(): UseUpdateProjectResult {
 
   async function updateProject(projectId: string, request: UpdateProjectRequest): Promise<ProjectResponse> {
     return state.execute(async () => {
-      const response = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(request),
+      const { data, error, response } = await api.PATCH("/api/projects/{id}", {
+        params: {
+          path: { id: projectId },
+        },
+        body: request as components["schemas"]["UpdateProjectRequest"],
       });
 
-      if (!response.ok) {
+      if (error || !response.ok) {
         throw new Error(await readErrorMessage(response));
       }
 
-      return (await response.json()) as ProjectResponse;
+      // Response body is not typed in schema, use data from openapi-fetch
+      return data as unknown as ProjectResponse;
     }, "Failed to update project");
   }
 
@@ -622,13 +642,14 @@ export function useReorderProject(): UseReorderProjectResult {
 
   async function reorderProject(projectId: string, newPosition: number): Promise<void> {
     await state.execute(async () => {
-      const response = await apiFetch(`/api/projects/${encodeURIComponent(projectId)}/reorder`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position: newPosition }),
+      const { error, response } = await api.PATCH("/api/projects/{id}/reorder", {
+        params: {
+          path: { id: projectId },
+        },
+        body: { position: newPosition } as components["schemas"]["ReorderProjectRequest"],
       });
 
-      if (!response.ok) {
+      if (error || !response.ok) {
         throw new Error(await readErrorMessage(response));
       }
     }, "Failed to reorder project");

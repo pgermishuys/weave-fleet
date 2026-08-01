@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from "pinia";
 import { computed, readonly, ref, shallowRef } from "vue";
 import type { Ref, ShallowRef } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { FileDiffItem, SessionListItem } from "@/lib/api-types";
+import type { FileDiffItem, SessionListItem } from "@/api/client";
 import { SessionDetailContextKey, type SessionDetailContext } from "@/composables/use-session-detail-context";
 import { SessionDiffsContextKey } from "@/composables/use-session-diffs-context";
 import { useSessionsStore } from "@/stores/sessions";

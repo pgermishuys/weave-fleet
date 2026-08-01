@@ -1,4 +1,4 @@
-import type { ScannedRepository, SessionSourceSelection } from "@/lib/api-types";
+import type { ScannedRepository, SessionSourceSelection } from "@/api/client";
 
 export type GitHubSessionSourceType = "github-issue" | "github-pull-request";
 export type GitHubRepositoryIsolationStrategy = "existing" | "worktree" | "clone";

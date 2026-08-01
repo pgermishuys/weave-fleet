@@ -1,5 +1,5 @@
 import { computed, readonly, ref, shallowRef, type ComputedRef, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import { api } from "@/api/client";
 
 export interface InstalledSkill {
   name: string;
@@ -53,12 +53,12 @@ export function useConfig(): UseConfigResult {
       isLoading.value = true;
       error.value = undefined;
 
-      const response = await apiFetch("/api/config");
-      if (!response.ok) {
+      const { data: configData, error: apiError, response } = await api.GET("/api/config");
+      if (apiError || !response.ok) {
         throw new Error(`Failed to fetch config: ${response.status}`);
       }
 
-      data.value = (await response.json()) as ConfigData;
+      data.value = configData as unknown as ConfigData;
     } catch (fetchError) {
       error.value = fetchError instanceof Error ? fetchError.message : "Unknown error";
     } finally {
@@ -70,10 +70,8 @@ export function useConfig(): UseConfigResult {
     try {
       error.value = undefined;
 
-      const response = await apiFetch("/api/config", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
+      const { response } = await api.PUT("/api/config", {
+        body: config as never,
       });
 
       if (!response.ok) {

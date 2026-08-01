@@ -1,5 +1,5 @@
 import { readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import { api } from "@/api/client";
 
 export interface KeyFilesResponse {
   filesByTool: Record<string, readonly string[]>;
@@ -22,17 +22,20 @@ export function useKeyFiles(): UseKeyFilesResult {
     error.value = undefined;
 
     try {
-      const response = await apiFetch(
-        `/api/key-files?directory=${encodeURIComponent(directory)}`,
-      );
+      const { data, error: apiError } = await api.GET("/api/key-files", {
+        params: { query: { directory } },
+      });
 
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `HTTP ${response.status}`);
+      if (apiError) {
+        throw new Error(apiError ? String(apiError) : "Failed to load key files");
       }
 
-      const data = (await response.json()) as KeyFilesResponse;
-      filesByTool.value = data.filesByTool ?? {};
+      if (!data) {
+        throw new Error("No data returned");
+      }
+
+      const result = data as KeyFilesResponse;
+      filesByTool.value = result.filesByTool ?? {};
     } catch (fetchError) {
       error.value = fetchError instanceof Error ? fetchError.message : "Failed to load key files";
     } finally {

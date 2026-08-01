@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { AddWorkspaceRootResponse, WorkspaceRootItem, WorkspaceRootsResponse } from "@/lib/api-types";
+import type { AddWorkspaceRootResponse, WorkspaceRootItem, WorkspaceRootsResponse } from "@/api/client";
 import { onMounted, reactive, ref, shallowRef, watch } from "vue";
 import { AlertCircle, Folder, FolderGit2, LoaderCircle, Plus, RefreshCw, Trash2 } from "lucide-vue-next";
-import { apiFetch } from "@/lib/api-client";
+import { api } from "@/api/client";
 import DirectoryPickerPopover from "@/components/ui/DirectoryPickerPopover.vue";
 import { useDirectoryBrowser } from "@/composables/use-directory-browser";
 import {
@@ -58,12 +58,16 @@ async function loadWorkspaceRoots(): Promise<void> {
   workspaceRootsError.value = null;
 
   try {
-    const response = await apiFetch("/api/workspace-roots");
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    const { data, error: apiError } = await api.GET("/api/workspace-roots");
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to load workspace roots");
     }
 
-    const payload = await response.json() as WorkspaceRootsResponse;
+    if (!data) {
+      throw new Error("No data returned");
+    }
+
+    const payload = data as WorkspaceRootsResponse;
     workspaceRoots.value = payload.roots;
 
     const preferredRootStillExists = payload.roots.some((root) => root.path === workspacePreferences.preferredRootPath);
@@ -96,22 +100,19 @@ async function addWorkspaceRoot(): Promise<void> {
   addWorkspaceRootError.value = null;
 
   try {
-    const response = await apiFetch("/api/workspace-roots", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path }),
+    const { error: apiError } = await api.POST("/api/workspace-roots", {
+      body: { path } as never,
     });
 
-    const payload = await response.json().catch(() => ({})) as Partial<AddWorkspaceRootResponse> & { error?: string };
-    if (!response.ok) {
-      throw new Error(payload.error ?? "Failed to add workspace root.");
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to add workspace root");
     }
 
     newWorkspaceRoot.value = "";
     await loadWorkspaceRoots();
 
     if (workspacePreferences.autoRefreshRepositories) {
-      await apiFetch("/api/repositories/refresh", { method: "POST" });
+      await api.POST("/api/repositories/refresh");
     }
   } catch (error) {
     addWorkspaceRootError.value = error instanceof Error
@@ -130,12 +131,12 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
   deletingRootId.value = root.id;
 
   try {
-    const response = await apiFetch(`/api/workspace-roots/${encodeURIComponent(root.id)}`, {
-      method: "DELETE",
+    const { error: apiError } = await api.DELETE("/api/workspace-roots/{id}", {
+      params: { path: { id: root.id } },
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to remove workspace root");
     }
 
     if (workspacePreferences.preferredRootPath === root.path) {
@@ -145,7 +146,7 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
     await loadWorkspaceRoots();
 
     if (workspacePreferences.autoRefreshRepositories) {
-      await apiFetch("/api/repositories/refresh", { method: "POST" });
+      await api.POST("/api/repositories/refresh");
     }
   } catch (error) {
     workspaceRootsError.value = error instanceof Error

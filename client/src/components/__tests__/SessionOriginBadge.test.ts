@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import SessionOriginBadge from "@/components/SessionOriginBadge.vue";
-import type { SessionOrigin } from "@/lib/api-types";
+import type { SessionOrigin } from "@/api/client";
 
 function createOrigin(overrides: Partial<SessionOrigin> = {}): SessionOrigin {
   return {

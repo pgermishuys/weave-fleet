@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, shallowRef } from "vue";
 import { AlertCircle, Check, KeyRound, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-vue-next";
-import { apiFetch } from "@/lib/api-client";
-import type { CredentialSummary, StoreCredentialRequest } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { CredentialSummary, StoreCredentialRequest } from "@/api/client";
 
 interface ProviderPreset {
   label: string;
@@ -42,6 +42,7 @@ const form = reactive<StoreCredentialRequest>({
   namespace: "",
   kind: "api-key",
   value: "",
+  metadata: null,
 });
 
 const hasCredentials = computed(() => credentials.value.length > 0);
@@ -98,13 +99,16 @@ async function loadCredentials(): Promise<void> {
   loadError.value = null;
 
   try {
-    const response = await apiFetch("/api/credentials");
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({})) as { error?: string };
-      throw new Error(payload.error ?? `HTTP ${response.status}`);
+    const { data, error: apiError } = await api.GET("/api/credentials");
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to load credentials");
     }
 
-    credentials.value = await response.json() as CredentialSummary[];
+    if (!data) {
+      throw new Error("No data returned");
+    }
+
+    credentials.value = data as CredentialSummary[];
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : "Failed to load API keys.";
   } finally {
@@ -122,20 +126,17 @@ async function storeCredential(): Promise<void> {
   formError.value = null;
 
   try {
-    const response = await apiFetch("/api/credentials", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const { error: apiError } = await api.PUT("/api/credentials", {
+      body: {
         label: form.label.trim(),
         namespace: form.namespace.trim(),
         kind: form.kind.trim(),
         value: form.value.trim(),
-      } satisfies StoreCredentialRequest),
+      } as never,
     });
 
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({})) as { error?: string };
-      throw new Error(payload.error ?? `HTTP ${response.status}`);
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to save credential");
     }
 
     await loadCredentials();
@@ -157,15 +158,13 @@ async function updateCredential(id: string): Promise<void> {
   actionError.value = null;
 
   try {
-    const response = await apiFetch(`/api/credentials/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: editingValue.value.trim() } satisfies UpdateCredentialRequest),
+    const { error: apiError } = await api.PUT("/api/credentials/{id}", {
+      params: { path: { id } },
+      body: { value: editingValue.value.trim() } as never,
     });
 
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({})) as { error?: string };
-      throw new Error(payload.error ?? `HTTP ${response.status}`);
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to update credential");
     }
 
     await loadCredentials();
@@ -182,13 +181,12 @@ async function removeCredential(id: string): Promise<void> {
   actionError.value = null;
 
   try {
-    const response = await apiFetch(`/api/credentials/${encodeURIComponent(id)}`, {
-      method: "DELETE",
+    const { error: apiError } = await api.DELETE("/api/credentials/{id}", {
+      params: { path: { id } },
     });
 
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({})) as { error?: string };
-      throw new Error(payload.error ?? `HTTP ${response.status}`);
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to remove credential");
     }
 
     if (editingId.value === id) {

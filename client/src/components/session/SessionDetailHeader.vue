@@ -3,7 +3,7 @@ import { computed, onUnmounted, watch } from "vue";
 import SessionOriginBadge from "@/components/SessionOriginBadge.vue";
 import SessionAnalyticsPopover from "@/components/session/SessionAnalyticsPopover.vue";
 import { Badge } from "@/components/ui/badge";
-import type { SessionOrigin } from "@/lib/api-types";
+import type { SessionOrigin } from "@/api/client";
 import { useHarnesses } from "@/composables/use-harnesses";
 
 interface Props {

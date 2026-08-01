@@ -7,7 +7,7 @@ import {
   useForkSession,
   useResumeSession,
 } from "@/composables/use-session-actions";
-import type { CreateSessionResponse, ForkSessionResponse, SessionListItem } from "@/lib/api-types";
+import type { CreateSessionResponse, ForkSessionResponse, SessionListItem } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
 import { flushAll, mountComposable } from "./test-utils";
 
@@ -15,8 +15,14 @@ const { apiFetchMock } = vi.hoisted(() => ({
   apiFetchMock: vi.fn(),
 }));
 
-vi.mock("@/lib/api-client", () => ({
-  apiFetch: apiFetchMock,
+vi.mock("@/api/client", () => ({
+  api: {
+    GET: vi.fn(),
+    POST: apiFetchMock,
+    PUT: vi.fn(),
+    DELETE: apiFetchMock,
+    PATCH: apiFetchMock,
+  },
 }));
 
 function createJsonResponse<T>(body: T, status = 200): Response {
@@ -87,7 +93,7 @@ describe("useSessionActions", () => {
         time: { created: 1, updated: 2 },
       },
     };
-    const deferred = createDeferred<Response>();
+    const deferred = createDeferred<{ data: any; error: any; response: Response }>();
     apiFetchMock.mockReturnValue(deferred.promise);
 
     const { result } = await mountComposable(() => useCreateSession());
@@ -101,9 +107,7 @@ describe("useSessionActions", () => {
 
     expect(result.isLoading.value).toBe(true);
     expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      body: {
         directory: "/tmp/project",
         title: "My session",
         isolationStrategy: "clone",
@@ -111,10 +115,14 @@ describe("useSessionActions", () => {
         source: undefined,
         harnessType: "opencode",
         projectId: "project-1",
-      }),
+      },
     });
 
-    deferred.resolve(createJsonResponse(responseBody));
+    deferred.resolve({
+      data: undefined,
+      error: undefined,
+      response: createJsonResponse(responseBody),
+    });
 
     await expect(createPromise).resolves.toEqual(responseBody);
     expect(result.isLoading.value).toBe(false);
@@ -122,13 +130,20 @@ describe("useSessionActions", () => {
   });
 
   it("reports API errors for project deletion", async () => {
-    apiFetchMock.mockResolvedValue(createJsonResponse({ error: "Cannot delete project" }, 400));
+    apiFetchMock.mockResolvedValue({
+      data: undefined,
+      error: { error: "Cannot delete project" } as any,
+      response: createJsonResponse({ error: "Cannot delete project" }, 400),
+    });
 
     const { result } = await mountComposable(() => useDeleteProject());
 
     await expect(result.deleteProject("project-1")).rejects.toThrow("Cannot delete project");
-    expect(apiFetchMock).toHaveBeenCalledWith("/api/projects/project-1?mode=move_to_scratch", {
-      method: "DELETE",
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/projects/{id}", {
+      params: {
+        path: { id: "project-1" },
+        query: { mode: "move_to_scratch" },
+      },
     });
     expect(result.error.value).toBe("Cannot delete project");
     expect(result.isDeleting.value).toBe(false);
@@ -148,7 +163,7 @@ describe("useSessionActions", () => {
         time: { created: 10, updated: 11 },
       },
     };
-    const deferred = createDeferred<Response>();
+    const deferred = createDeferred<{ data: any; error: any; response: Response }>();
     apiFetchMock.mockReturnValue(deferred.promise);
 
     const { result } = await mountComposable(() => useForkSession());
@@ -157,7 +172,11 @@ describe("useSessionActions", () => {
     expect(result.isForking.value).toBe(true);
     expect(result.forkingSessionId.value).toBe("session-1");
 
-    deferred.resolve(createJsonResponse(responseBody));
+    deferred.resolve({
+      data: undefined,
+      error: undefined,
+      response: createJsonResponse(responseBody),
+    });
 
     await expect(forkPromise).resolves.toEqual(responseBody);
     expect(result.isForking.value).toBe(false);
@@ -179,10 +198,11 @@ describe("useSessionActions", () => {
       activityStatus: "idle",
       sessionStatus: "idle",
     });
-    expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/session-1/fork", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Forked" }),
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/{id}/fork", {
+      body: { title: "Forked" },
+      params: {
+        path: { id: "session-1" },
+      },
     });
   });
 
@@ -206,7 +226,7 @@ describe("useSessionActions", () => {
   });
 
   it("turns resume conflicts into user-friendly errors", async () => {
-    const deferred = createDeferred<Response>();
+    const deferred = createDeferred<{ data: any; error: any; response: Response }>();
     apiFetchMock.mockReturnValue(deferred.promise);
 
     const { result } = await mountComposable(() => useResumeSession());
@@ -215,7 +235,11 @@ describe("useSessionActions", () => {
     expect(result.isResuming.value).toBe(true);
     expect(result.resumingSessionId.value).toBe("session-1");
 
-    deferred.resolve(createJsonResponse({ error: "conflict" }, 409));
+    deferred.resolve({
+      data: undefined,
+      error: { error: "conflict" } as any,
+      response: createJsonResponse({ error: "conflict" }, 409),
+    });
 
     await expect(resumePromise).rejects.toThrow("Session is already active");
     expect(result.error.value).toBe("Session is already active");

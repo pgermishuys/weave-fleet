@@ -7,7 +7,7 @@ import {
   type MaybeRefOrGetter,
   type ShallowRef,
 } from "vue"
-import type { AccumulatedMessage, DelegationDto } from "@/lib/api-types"
+import type { AccumulatedMessage, DelegationDto } from "@/lib/client-types"
 import type { SessionStreamStatus } from "@/lib/domain-event-reducer"
 import { useSessionEvents, type SessionConnectionStatus, type UseSessionEventsResult } from "@/composables/use-session-events"
 import { useSessionStream } from "@/composables/use-session-stream"

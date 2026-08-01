@@ -1,4 +1,4 @@
-import type { AccumulatedToolPart } from "@/lib/api-types";
+import type { AccumulatedToolPart } from "@/lib/client-types";
 import { getToolLabel } from "@/lib/tool-labels";
 
 export interface DiffLine {

@@ -6,7 +6,7 @@
  * No React dependencies — pure TypeScript module.
  */
 
-import type { AccumulatedMessage, DelegationDto } from "@/lib/api-types";
+import type { AccumulatedMessage, DelegationDto } from "@/lib/client-types";
 import type { SessionStreamStatus } from "@/lib/domain-event-reducer";
 import type { PrReference } from "@/lib/pr-utils";
 

@@ -1,5 +1,5 @@
 import { computed, onUnmounted, readonly, ref, shallowRef, toValue, watch, type MaybeRefOrGetter, type Ref, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import { api } from "@/api/client";
 
 interface FindFilesResponse {
   sessionId: string;
@@ -33,15 +33,20 @@ export function useFindFiles(sessionId: MaybeRefOrGetter<string | null | undefin
   }
 
   async function fetchFiles(activeSessionId: string, trimmedQuery: string, signal: AbortSignal): Promise<void> {
-    const url = `/api/sessions/${encodeURIComponent(activeSessionId)}/find/files?q=${encodeURIComponent(trimmedQuery)}`;
-    const response = await apiFetch(url, { signal });
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
-      throw new Error(data.error ?? `HTTP ${response.status}`);
+    const { data, error, response } = await api.GET("/api/sessions/{id}/find/files", {
+      params: {
+        path: { id: activeSessionId },
+        query: { q: trimmedQuery },
+      },
+      signal,
+    });
+    if (error || !response.ok) {
+      const payload = error as { error?: string } | undefined;
+      throw new Error((payload as any)?.error ?? `HTTP ${response.status}`);
     }
 
-    const data = (await response.json()) as FindFilesResponse;
-    files.value = Array.isArray(data.files) ? data.files : [];
+    const responseData = data as unknown as FindFilesResponse;
+    files.value = Array.isArray(responseData.files) ? responseData.files : [];
   }
 
   watch(
