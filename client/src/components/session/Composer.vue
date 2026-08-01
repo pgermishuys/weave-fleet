@@ -729,22 +729,6 @@ function handleKeydown(event: KeyboardEvent): void {
           <CircleX class="size-3.5" />
         </Button>
 
-        <div
-          v-show="statusIndicatorVisible"
-          class="composer-status"
-          aria-live="polite"
-        >
-          <span
-            class="composer-status__dot"
-            aria-hidden="true"
-          />
-          <span class="composer-status__label">{{ busyStatusLabel }}</span>
-          <span
-            class="composer-status__dots"
-            aria-hidden="true"
-          >{{ busyStatusDots }}</span>
-        </div>
-
         <Button
           variant="default"
           size="sm"
@@ -799,16 +783,6 @@ function handleKeydown(event: KeyboardEvent): void {
   background: var(--panel-bg);
 }
 
-.composer-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.4;
-}
-
 .composer-error {
   margin: 0 0 10px;
   border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
@@ -818,42 +792,6 @@ function handleKeydown(event: KeyboardEvent): void {
   color: var(--error);
   font-size: 11px;
   line-height: 1.5;
-}
-
-.composer-status__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--accent);
-  box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.45);
-  animation: composer-status-pulse 1.5s ease-out infinite;
-}
-
-.composer-status__label {
-  color: var(--muted);
-}
-
-.composer-status__dots {
-  display: inline-block;
-  min-width: 20px;
-  color: var(--muted);
-}
-
-@keyframes composer-status-pulse {
-  0% {
-    transform: scale(0.96);
-    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
-  }
-
-  70% {
-    transform: scale(1);
-    box-shadow: 0 0 0 8px rgba(99, 102, 241, 0);
-  }
-
-  100% {
-    transform: scale(0.96);
-    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
-  }
 }
 
 .composer-box {

@@ -765,8 +765,8 @@ function handleExpandVisual(payload: VisualPayload): void {
           <div class="streaming-indicator__icon">
             <Bot class="streaming-indicator__icon-svg" aria-hidden="true" />
           </div>
-          <div class="streaming-indicator__text">
-            Thinking...
+          <div class="streaming-indicator__dots">
+            <span class="streaming-dots-loader" aria-hidden="true" />
           </div>
         </div>
       </div>
@@ -898,13 +898,15 @@ function handleExpandVisual(payload: VisualPayload): void {
   display: flex;
   flex-direction: column;
   width: 100%;
-  padding: 4px 0;
+  padding: 4px 12px;
   margin-bottom: 12px;
+  border-left: 3px solid transparent;
+  box-sizing: border-box;
 }
 
 .streaming-indicator__layout {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: flex-start;
 }
 
@@ -924,13 +926,49 @@ function handleExpandVisual(payload: VisualPayload): void {
   color: var(--muted);
 }
 
-.streaming-indicator__text {
-  flex: 1;
-  min-width: 0;
-  color: var(--muted);
-  font-size: 12px;
-  font-style: italic;
-  line-height: 1.45;
+.streaming-indicator__dots {
+  display: flex;
+  align-items: center;
+  height: 20px;
+  padding-left: calc(32 * 0.45px);
+}
+
+.streaming-dots-loader {
+  --color-1: var(--muted);
+  --color-2: color-mix(in srgb, var(--muted) 20%, transparent);
+  --size: 0.45px;
+
+  display: inline-block;
+  width: calc(16 * var(--size));
+  height: calc(16 * var(--size));
+  border-radius: 50%;
+  background-color: var(--color-1);
+  box-shadow:
+    calc(32 * var(--size)) 0 var(--color-1),
+    calc(-32 * var(--size)) 0 var(--color-1);
+  position: relative;
+  animation: streaming-dots-flash 0.5s ease-out infinite alternate;
+}
+
+@keyframes streaming-dots-flash {
+  0% {
+    background-color: var(--color-2);
+    box-shadow:
+      calc(32 * var(--size)) 0 var(--color-2),
+      calc(-32 * var(--size)) 0 var(--color-1);
+  }
+  50% {
+    background-color: var(--color-1);
+    box-shadow:
+      calc(32 * var(--size)) 0 var(--color-2),
+      calc(-32 * var(--size)) 0 var(--color-2);
+  }
+  100% {
+    background-color: var(--color-2);
+    box-shadow:
+      calc(32 * var(--size)) 0 var(--color-1),
+      calc(-32 * var(--size)) 0 var(--color-2);
+  }
 }
 
 .delegation-links {
