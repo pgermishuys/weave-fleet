@@ -38,6 +38,7 @@
     "pinia": "^3.0.4",
     "reka-ui": "^2.9.6",
     "simple-icons": "^16.22.0",
+    "svg-pan-zoom": "^3.6.2",
     "tailwind-merge": "^3.5.0",
     "vue": "^3.5.22",
     "vue-chartjs": "^5.3.3"
@@ -49,6 +50,7 @@
     "@types/dagre": "^0.7.54",
     "@types/dompurify": "^3.2.0",
     "@types/node": "^25.5.0",
+    "@types/svg-pan-zoom": "^3.4.0",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vitejs/plugin-vue-jsx": "^5.1.5",
     "@vitest/coverage-v8": "^4.1.4",

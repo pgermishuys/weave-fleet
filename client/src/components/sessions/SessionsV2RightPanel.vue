@@ -291,7 +291,7 @@ const isMarkdownRenderer = computed(() => {
       @collapse="handleCollapse"
     />
 
-    <div class="right-content">
+    <div class="right-content" :class="{ 'right-content--visual': activeTabId === 'visual' && visualPayload && visualRenderer }">
       <div class="right-content__panel">
         <section
           v-if="activeTabId === 'visual' && visualPayload && visualRenderer"
@@ -378,12 +378,19 @@ const isMarkdownRenderer = computed(() => {
   min-height: 0;
   overflow-y: auto;
   padding: 10px 10px 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.right-content--visual {
+  overflow: hidden;
 }
 
 .right-content__panel {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 .right-section {
@@ -467,6 +474,6 @@ const isMarkdownRenderer = computed(() => {
 .visual-panel__content {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
 }
 </style>
