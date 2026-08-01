@@ -113,6 +113,7 @@ public sealed class SessionOrchestratorBuilder
             _userContext,
             _options,
             SmartLinkRepository,
+            new SessionActivityTracker(),
             NullLogger<SessionOrchestrator>.Instance,
             sessionActivityWriteService: null,
             gitDiffService: _gitDiffService);
