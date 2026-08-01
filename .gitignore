@@ -46,3 +46,6 @@ client/coverage/
 
 # Claude Code agent runtime artefacts
 .claude/
+
+# OpenAPI spec (generated build artifact)
+client/openapi.json

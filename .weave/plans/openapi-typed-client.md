@@ -81,7 +81,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
 
 ### Phase 1: Wire Up OpenAPI Generation
 
-- [ ] 1. Add OpenAPI services to Program.cs
+- [x] 1. Add OpenAPI services to Program.cs
   - **What**: Add `builder.Services.AddOpenApi()` with a document transformer that sets `info.Title = "Weave Fleet API"` and `info.Version = "v1"`. Follow the Foundry pattern at `src/Foundry.Api/Program.cs` lines 27-35. Place the call after `builder.Services.AddProblemDetails()` (line 383).
   - **Files**: `src/WeaveFleet.Api/Program.cs`
   - **Depends on**: None
@@ -89,7 +89,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - `builder.Services.AddOpenApi(...)` is called with title/version transformer
     - No new NuGet packages needed (.NET 10 includes it in the Web SDK)
 
-- [ ] 2. Map the OpenAPI endpoint
+- [x] 2. Map the OpenAPI endpoint
   - **What**: Add `app.MapOpenApi()` to the middleware pipeline. Place it after `app.UseAuthorization()` and before `app.MapHealthChecks()`. Wrap it in an environment check so it only runs in Development: `if (app.Environment.IsDevelopment()) app.MapOpenApi();`. This keeps the spec endpoint out of production/AOT builds.
   - **Files**: `src/WeaveFleet.Api/Program.cs`
   - **Depends on**: Task 1
@@ -98,7 +98,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - Running `dotnet run` and hitting `http://localhost:5001/openapi/v1.json` returns a valid OpenAPI 3.1 JSON document
     - All endpoints with `.WithName()` and `.Produces<T>()` appear in the spec
 
-- [ ] 3. Create the export PowerShell script
+- [x] 3. Create the export PowerShell script
   - **What**: Create `scripts/export-openapi.ps1` modeled on `C:\source\foundry\scripts\export-openapi.ps1`. The script should: (a) start the API via `dotnet run --project src/WeaveFleet.Api --urls http://localhost:5001`, (b) poll `/openapi/v1.json` until ready (max 60 seconds -- Fleet takes longer to start than Foundry due to migrations), (c) download and save to `client/openapi.json`, (d) print path count and metadata, (e) stop the API process in a `finally` block. Use port 5001 and adjust paths for Fleet's layout.
   - **Files**: `scripts/export-openapi.ps1`
   - **Depends on**: Task 2
@@ -107,7 +107,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - Script cleans up the dotnet process even on failure
     - Script prints endpoint count on success
 
-- [ ] 4. Install client-side packages
+- [x] 4. Install client-side packages
   - **What**: Run `bun add openapi-fetch` and `bun add -d openapi-typescript` in the `client/` directory. Add a `"generate-api"` script to `client/package.json`: `"generate-api": "openapi-typescript openapi.json -o src/api/generated/schema.d.ts"`. Match Foundry's versions: `openapi-fetch@^0.13.3` and `openapi-typescript@^7.4.4`.
   - **Files**: `client/package.json`
   - **Depends on**: None (can run in parallel with Tasks 1-3)
@@ -117,7 +117,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - `bun run generate-api` script is defined in package.json
     - `bun install` succeeds without errors
 
-- [ ] 5. Generate the TypeScript schema
+- [x] 5. Generate the TypeScript schema
   - **What**: Run the full pipeline: `pwsh scripts/export-openapi.ps1` then `cd client && bun run generate-api`. This creates `client/src/api/generated/schema.d.ts`. Add `client/openapi.json` to `.gitignore` (it is a build artifact), but commit `client/src/api/generated/schema.d.ts` (developers need it without running the API).
   - **Files**: `client/src/api/generated/schema.d.ts` (generated), `client/openapi.json` (generated, gitignored), `.gitignore`
   - **Depends on**: Tasks 2, 3, 4
@@ -127,7 +127,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - `client/openapi.json` is listed in `.gitignore`
     - `bunx vue-tsc --noEmit` passes in `client/`
 
-- [ ] 6. Create the typed API client wrapper
+- [x] 6. Create the typed API client wrapper
   - **What**: Create `client/src/api/client.ts` modeled on Foundry's `src/Foundry.Web/src/api/client.ts`, but with Fleet-specific middleware for CSRF tokens and credentials. Use `openapi-fetch`'s `createClient<paths>()` with a custom `fetch` implementation that replicates the CSRF and credentials logic from `api-client.ts`. Import `getApiBase` (or inline the same logic) for `baseUrl`. Re-export `paths` for convenience. The client must: (a) read the CSRF cookie and attach `X-CSRF-Token` header on mutating requests, (b) set `credentials: "include"`, (c) use the same base URL resolution as `apiFetch()`.
   - **Files**: `client/src/api/client.ts`
   - **Depends on**: Task 5
@@ -138,7 +138,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - `credentials: "include"` is set on all requests
     - `bunx vue-tsc --noEmit` passes
 
-- [ ] 7. Verify Phase 1 end-to-end
+- [x] 7. Verify Phase 1 end-to-end
   - **What**: Run the full verification sequence: (a) `dotnet build src/WeaveFleet.Api` succeeds, (b) `cd client && bun run typecheck` passes, (c) `cd client && bun run test` passes, (d) manually start the API and confirm `/openapi/v1.json` returns valid JSON with all expected paths.
   - **Depends on**: Tasks 1-6
   - **Acceptance**:
@@ -149,7 +149,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
 
 ### Phase 2: Migrate Call Sites & Agent Skill
 
-- [ ] 8. Extract client-only types from api-types.ts
+- [x] 8. Extract client-only types from api-types.ts
   - **What**: Create `client/src/lib/client-types.ts` and move all types that are constructed client-side (not REST API response shapes) out of `api-types.ts`. These types cannot come from OpenAPI generation. Move the following types and their re-exports:
     - `AccumulatedTextPart`, `AccumulatedReasoningPart`, `AccumulatedToolPart`, `AccumulatedFilePart`, `AccumulatedPart`, `AccumulatedMessage`
     - `WebSocketEvent`, `CommittedSessionEvent`
@@ -194,7 +194,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
   - `client/src/components/session/QuestionCard.vue` -- `AccumulatedToolPart`
   - `client/src/components/session/Composer.vue` -- `ImageAttachment`
 
-- [ ] 9. Migrate batch: Sessions & Session Actions
+- [x] 9. Migrate batch: Sessions & Session Actions
   - **What**: Replace `apiFetch()` calls with typed `api.GET()` / `api.POST()` / `api.PUT()` / `api.DELETE()` calls. Remove manual type annotations that are now inferred from the schema. Update imports from `@/lib/api-types` to `@/api/client` for any API response types that now come from OpenAPI.
 
     Pattern for each file: (a) replace `import { apiFetch } from "@/lib/api-client"` with `import { api } from "@/api/client"`, (b) replace `const response = await apiFetch("/api/sessions", { method: "GET" }); const data = await response.json() as SessionListItem[]` with `const { data, error } = await api.GET("/api/sessions")`, (c) add error handling for `error` if not already present.
@@ -217,7 +217,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - `bun run typecheck` passes
     - `bun run test` passes
 
-- [ ] 10. Migrate batch: Projects & Fleet Summary
+- [x] 10. Migrate batch: Projects & Fleet Summary
   - **What**: Same migration pattern as Task 9.
   - **Files**:
     - `client/src/composables/use-projects.ts` -- CRUD projects, reorder
@@ -230,7 +230,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - `bun run typecheck` passes
     - `bun run test` passes
 
-- [ ] 11. Migrate batch: Instance, Harness & Autocomplete
+- [x] 11. Migrate batch: Instance, Harness & Autocomplete
   - **What**: Same migration pattern. These composables talk to instance-scoped endpoints (`/api/instances/{id}/...`).
   - **Files**:
     - `client/src/composables/use-agents.ts` -- GET agents
@@ -246,7 +246,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - `bun run typecheck` passes
     - `bun run test` passes
 
-- [ ] 12. Migrate batch: Settings, Credentials, Preferences & NuCode
+- [x] 12. Migrate batch: Settings, Credentials, Preferences & NuCode
   - **What**: Same migration pattern. Covers settings-related API calls.
   - **Files**:
     - `client/src/composables/use-credentials.ts` -- CRUD credentials
@@ -267,7 +267,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - `bun run typecheck` passes
     - `bun run test` passes
 
-- [ ] 13. Migrate batch: Repositories, Directories & Workspaces
+- [x] 13. Migrate batch: Repositories, Directories & Workspaces
   - **What**: Same migration pattern.
   - **Files**:
     - `client/src/composables/use-repositories.ts` -- GET/POST repositories
@@ -285,7 +285,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - `bun run typecheck` passes
     - `bun run test` passes
 
-- [ ] 14. Migrate batch: Analytics, Plugins, Auth, GitHub & Remaining
+- [x] 14. Migrate batch: Analytics, Plugins, Auth, GitHub & Remaining
   - **What**: Same migration pattern. This is the catch-all for remaining files.
   - **Files**:
     - `client/src/composables/use-analytics-summary.ts` -- GET analytics summary
@@ -317,7 +317,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - `bun run typecheck` passes
     - `bun run test` passes
 
-- [ ] 15. Migrate tests that import apiFetch or api-types
+- [x] 15. Migrate tests that import apiFetch or api-types
   - **What**: Update test files that mock `apiFetch` or import from `api-types`. Tests that mock `apiFetch` need to mock the `api` client instead. Tests that only import types need their import paths updated.
   - **Files**:
     - `client/src/lib/__tests__/domain-event-reducer.test.ts` -- mocks `apiFetch`, imports `DelegationDto`
@@ -340,7 +340,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - No test mocks `apiFetch` (they mock `api` or `@/api/client` instead)
     - `bun run test` passes
 
-- [ ] 16. Delete api-types.ts and clean up api-client.ts
+- [x] 16. Delete api-types.ts and clean up api-client.ts
   - **What**: (a) Delete `client/src/lib/api-types.ts` entirely. At this point, all REST API types come from `@/api/client` (OpenAPI-generated) and all client-only types live in `@/lib/client-types.ts`. (b) Remove the `apiFetch()` function from `client/src/lib/api-client.ts`. Keep `apiUrl()`, `wsUrl()`, `setApiBase()`, and the CSRF cookie helper (which is used by the typed client too). (c) Grep the entire `client/src/` tree for any remaining references to `api-types` or `apiFetch` and fix them.
   - **Files**:
     - `client/src/lib/api-types.ts` (delete)
@@ -354,7 +354,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - `bun run typecheck` passes
     - `bun run test` passes
 
-- [ ] 17. Create weave-fleet-api agent skill
+- [x] 17. Create weave-fleet-api agent skill
   - **What**: Create a new skill at `C:\Users\piete\.config\opencode\skills\weave-fleet-api\` modeled on the Foundry API skill at `C:\Users\piete\.config\opencode\skills\foundry-api\SKILL.md`. The skill should include:
     - `SKILL.md` with skill metadata, context, available actions, and usage examples
     - `scripts/weave-fleet-api.ps1` PowerShell helper script for programmatic API interaction
@@ -378,7 +378,7 @@ Weave Fleet is a .NET 10 minimal API backend (`src/WeaveFleet.Api/`) with a Vue 
     - Script supports at least: `health`, `openapi`, `list-sessions`, `get-session`, `create-session`, `list-projects`, `get-fleet-summary`
     - Running `weave-fleet-api.ps1 -Action health` against a running API returns success
 
-- [ ] 18. Final verification
+- [x] 18. Final verification
   - **What**: Run the complete verification suite for both phases.
   - **Depends on**: Tasks 16, 17
   - **Acceptance**:
