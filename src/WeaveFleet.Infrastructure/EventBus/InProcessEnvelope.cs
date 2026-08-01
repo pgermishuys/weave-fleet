@@ -60,4 +60,10 @@ internal sealed class InProcessEnvelope
     /// feedback-loop detection. Null if not loaded or not set on the session.
     /// </summary>
     public string? SourceReference { get; init; }
+
+    /// <summary>
+    /// Trace context from the originating operation, used to link async event processing
+    /// spans back to the parent trace (e.g., the prompt HTTP request).
+    /// </summary>
+    public System.Diagnostics.ActivityContext? TraceContext { get; init; }
 }

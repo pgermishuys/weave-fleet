@@ -214,8 +214,9 @@ public sealed class InProcessEventPublisherTests
             var store    = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
             var channels = new InProcessChannels();
             var metrics  = new InProcessMetrics();
+            var pipelineMetrics = new PipelineLatencyMetrics();
             var publisher = new InProcessEventPublisher(
-                store, channels, metrics,
+                store, channels, metrics, pipelineMetrics,
                 NullLogger<InProcessEventPublisher>.Instance);
 
             var evt = new HarnessEvent
@@ -255,8 +256,9 @@ public sealed class InProcessEventPublisherTests
             var store    = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
             var channels = new InProcessChannels();
             var metrics  = new InProcessMetrics();
+            var pipelineMetrics = new PipelineLatencyMetrics();
             var publisher = new InProcessEventPublisher(
-                store, channels, metrics,
+                store, channels, metrics, pipelineMetrics,
                 NullLogger<InProcessEventPublisher>.Instance);
 
             var evt = new HarnessEvent
@@ -292,8 +294,9 @@ public sealed class InProcessEventPublisherTests
             var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
             var channels = new InProcessChannels();
             var metrics = new InProcessMetrics();
+            var pipelineMetrics = new PipelineLatencyMetrics();
             var publisher = new InProcessEventPublisher(
-                store, channels, metrics,
+                store, channels, metrics, pipelineMetrics,
                 NullLogger<InProcessEventPublisher>.Instance);
 
             var evt = new HarnessEvent
@@ -335,8 +338,9 @@ public sealed class InProcessEventPublisherTests
             var store    = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
             var channels = new InProcessChannels();
             var metrics  = new InProcessMetrics();
+            var pipelineMetrics = new PipelineLatencyMetrics();
             var publisher = new InProcessEventPublisher(
-                store, channels, metrics,
+                store, channels, metrics, pipelineMetrics,
                 NullLogger<InProcessEventPublisher>.Instance);
 
             var ctx = new WeaveFleet.Application.Events.EventPublishContext("sess-dd", "proj-1", null, null, InternalPumpDedupKey: 7);
@@ -358,8 +362,9 @@ public sealed class InProcessEventPublisherTests
             var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
             var channels = new InProcessChannels();
             var metrics = new InProcessMetrics();
+            var pipelineMetrics = new PipelineLatencyMetrics();
             var publisher = new InProcessEventPublisher(
-                store, channels, metrics,
+                store, channels, metrics, pipelineMetrics,
                 NullLogger<InProcessEventPublisher>.Instance);
 
             var evt = new HarnessEvent { Type = EventTypes.UserPromptCommitted, SessionId = "sess-corr", Timestamp = DateTimeOffset.UtcNow };
@@ -507,6 +512,7 @@ public sealed class InProcessFanOutServiceTests
             channels,
             broadcaster,
             new SessionActivityTracker(),
+            new PipelineLatencyMetrics(),
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<InProcessFanOutService>.Instance);
 
@@ -577,6 +583,7 @@ public sealed class InProcessFanOutServiceTests
             channels,
             broadcaster,
             new SessionActivityTracker(),
+            new PipelineLatencyMetrics(),
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<InProcessFanOutService>.Instance);
 
@@ -646,6 +653,7 @@ public sealed class InProcessFanOutServiceTests
             channels,
             broadcaster,
             new SessionActivityTracker(),
+            new PipelineLatencyMetrics(),
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<InProcessFanOutService>.Instance);
 

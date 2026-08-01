@@ -32,6 +32,7 @@ public static class InProcessServiceCollectionExtensions
         services.AddSingleton<InProcessEventStore>();
         services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<InProcessEventStore>());
         services.AddSingleton<InProcessMetrics>();
+        services.AddSingleton<PipelineLatencyMetrics>();
         services.AddSingleton<IEventPublisher, InProcessEventPublisher>();
 
         // BackgroundServices — order matters: projection host must drain startup backlog before

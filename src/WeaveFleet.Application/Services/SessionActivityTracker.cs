@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 
 namespace WeaveFleet.Application.Services;
 
@@ -131,4 +132,28 @@ public sealed class SessionActivityTracker
     /// </summary>
     public SessionActivitySnapshot? Get(string fleetSessionId)
         => _state.TryGetValue(fleetSessionId, out var snapshot) ? snapshot : null;
+
+    // ── Prompt trace context correlation ──────────────────────────────────────
+
+    private readonly ConcurrentDictionary<string, ActivityContext> _promptTraceContexts = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Stores the trace context of the current prompt operation so that async relay
+    /// events can link back to the originating prompt trace.
+    /// </summary>
+    public void SetPromptTraceContext(string fleetSessionId, ActivityContext context)
+        => _promptTraceContexts[fleetSessionId] = context;
+
+    /// <summary>
+    /// Retrieves the trace context of the most recent prompt for a session, or <c>null</c>
+    /// if no prompt context is stored.
+    /// </summary>
+    public ActivityContext? GetPromptTraceContext(string fleetSessionId)
+        => _promptTraceContexts.TryGetValue(fleetSessionId, out var ctx) ? ctx : null;
+
+    /// <summary>
+    /// Clears the stored prompt trace context for a session (e.g. when the session goes idle).
+    /// </summary>
+    public void ClearPromptTraceContext(string fleetSessionId)
+        => _promptTraceContexts.TryRemove(fleetSessionId, out _);
 }

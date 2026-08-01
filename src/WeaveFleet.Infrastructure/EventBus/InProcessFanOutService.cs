@@ -1,9 +1,11 @@
 #pragma warning disable CA1848, CA1873 // Temporary diagnostic logging
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -29,6 +31,7 @@ internal sealed partial class InProcessFanOutService : BackgroundService
     private readonly InProcessChannels _channels;
     private readonly IEventBroadcaster _broadcaster;
     private readonly SessionActivityTracker _activityTracker;
+    private readonly PipelineLatencyMetrics _pipelineMetrics;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<InProcessFanOutService> _logger;
 
@@ -36,12 +39,14 @@ internal sealed partial class InProcessFanOutService : BackgroundService
         InProcessChannels channels,
         IEventBroadcaster broadcaster,
         SessionActivityTracker activityTracker,
+        PipelineLatencyMetrics pipelineMetrics,
         IServiceScopeFactory scopeFactory,
         ILogger<InProcessFanOutService> logger)
     {
         _channels = channels;
         _broadcaster = broadcaster;
         _activityTracker = activityTracker;
+        _pipelineMetrics = pipelineMetrics;
         _scopeFactory = scopeFactory;
         _logger = logger;
     }
@@ -63,12 +68,21 @@ internal sealed partial class InProcessFanOutService : BackgroundService
 
     private async Task ForwardAsync(InProcessEnvelope envelope, CancellationToken ct)
     {
+        using var activity = FleetInstrumentation.ActivitySource.StartActivity(
+            "fleet.fanout",
+            ActivityKind.Internal,
+            envelope.TraceContext ?? default);
+
+        var fanoutStart = Stopwatch.GetTimestamp();
         var sessionId = envelope.SessionId;
         var eventType = envelope.EventType;
         var userId    = envelope.UserId;
         var evt       = envelope.Event;
         var domainEvent = envelope.DomainEvent;
         var classification = EventTypeMetadata.Classify(eventType);
+
+        activity?.SetTag(FleetInstrumentation.SessionIdTag, sessionId);
+        activity?.SetTag("event.type", eventType);
 
         _logger.LogDebug("[FanOut] type={Type} session={Session} user={User} isDurable={IsDurable}",
             eventType, sessionId, userId, envelope.IsDurable);
@@ -102,6 +116,8 @@ internal sealed partial class InProcessFanOutService : BackgroundService
         await _broadcaster.BroadcastAsync(
             $"session:{sessionId}", eventType, payload, classification.IsAdvisory ? null : envelope.EventId, domainEvent, userId, ct)
             .ConfigureAwait(false);
+
+        _pipelineMetrics.RecordFanoutHop(Stopwatch.GetElapsedTime(fanoutStart).TotalMilliseconds, eventType);
 
         _logger.LogDebug("[FanOut] Broadcast topic=session:{Session} type={Type} advisory={Advisory}",
             sessionId, eventType, classification.IsAdvisory);

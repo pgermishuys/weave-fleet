@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Services;
@@ -27,6 +28,7 @@ internal sealed class InProcessEventPublisher : IEventPublisher
     private readonly InProcessEventStore _store;
     private readonly InProcessChannels _channels;
     private readonly InProcessMetrics _metrics;
+    private readonly PipelineLatencyMetrics _pipelineMetrics;
     private readonly ILogger<InProcessEventPublisher> _logger;
 
     /// <summary>
@@ -39,17 +41,27 @@ internal sealed class InProcessEventPublisher : IEventPublisher
         InProcessEventStore store,
         InProcessChannels channels,
         InProcessMetrics metrics,
+        PipelineLatencyMetrics pipelineMetrics,
         ILogger<InProcessEventPublisher> logger)
     {
         _store = store;
         _channels = channels;
         _metrics = metrics;
+        _pipelineMetrics = pipelineMetrics;
         _logger = logger;
     }
 
     public Task<PublishResult> PublishAsync(HarnessEvent evt, EventPublishContext context, CancellationToken ct)
     {
+        using var activity = FleetInstrumentation.ActivitySource.StartActivity(
+            "fleet.publish",
+            ActivityKind.Internal,
+            context.TraceContext ?? default);
+        activity?.SetTag(FleetInstrumentation.SessionIdTag, context.FleetSessionId);
+        activity?.SetTag("event.type", evt.Type);
+
         var classification = EventTypeMetadata.Classify(evt.Type);
+        activity?.SetTag("event.routing", classification.IsDurable ? "durable" : classification.IsEphemeralRelay ? "ephemeral" : "dropped");
 
         _logger.LogDebug("[Publisher] type={Type} session={Session} isDurable={IsDurable} isEphemeral={IsEphemeral} isKnown={IsKnown}",
             evt.Type, context.FleetSessionId, classification.IsDurable, classification.IsEphemeralRelay, classification.IsKnown);
@@ -92,7 +104,8 @@ internal sealed class InProcessEventPublisher : IEventPublisher
             isDurable:            true)
         {
             DomainEvent = context.DomainEvent,
-            SourceReference = context.SourceReference
+            SourceReference = context.SourceReference,
+            TraceContext = context.TraceContext
         };
 
         var sw = Stopwatch.StartNew();
@@ -146,6 +159,7 @@ internal sealed class InProcessEventPublisher : IEventPublisher
         finally
         {
             sw.Stop();
+            _pipelineMetrics.RecordPublishHop(sw.Elapsed.TotalMilliseconds, "total", evt.Type);
             _metrics.RecordPublishDuration(sw.Elapsed.TotalMilliseconds, evt.Type, result);
             _metrics.RecordPublish(routing: "durable", eventType: evt.Type, result: result);
         }
@@ -169,7 +183,8 @@ internal sealed class InProcessEventPublisher : IEventPublisher
             isDurable:            false)
         {
             DomainEvent = context.DomainEvent,
-            SourceReference = context.SourceReference
+            SourceReference = context.SourceReference,
+            TraceContext = context.TraceContext
         };
 
         string result = "ok";

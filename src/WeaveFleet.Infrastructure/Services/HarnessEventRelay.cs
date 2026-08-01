@@ -1,9 +1,11 @@
 #pragma warning disable CA1848, CA1873 // Temporary diagnostic logging
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
@@ -148,6 +150,11 @@ public sealed class HarnessEventRelay : BackgroundService
 
     private async Task PumpAsync(string instanceId, IHarnessSession instance, CancellationToken ct)
     {
+        using var pumpActivity = FleetInstrumentation.ActivitySource.StartActivity(
+            "fleet.relay.pump",
+            ActivityKind.Consumer);
+        pumpActivity?.SetTag("instance.id", instanceId);
+
         _logger.LogDebug("[Relay:Pump] Starting pump for instance={InstanceId} type={Type}", instanceId, instance.GetType().Name);
         // Resolve fleet session metadata with retry to handle the race where
         // InstanceTracker.Register() fires before ISessionRepository.InsertAsync() completes.
@@ -189,6 +196,9 @@ public sealed class HarnessEventRelay : BackgroundService
             return;
         }
 
+        pumpActivity?.SetTag(FleetInstrumentation.SessionIdTag, fleetSessionId);
+        pumpActivity?.SetTag("harness.type", sessionHarnessType);
+
         var suppressedUserMessageIds = new HashSet<string>(StringComparer.Ordinal);
         using var translationScope = _scopeFactory.CreateScope();
         var translator = translationScope.ServiceProvider.GetRequiredService<DomainEventTranslator>();
@@ -227,6 +237,22 @@ public sealed class HarnessEventRelay : BackgroundService
 
                 try
                 {
+                    // Link relay event spans back to the originating prompt trace so you can
+                    // navigate from a prompt to all its response events in the trace viewer.
+                    var promptCtx = _activityTracker.GetPromptTraceContext(targetFleetSessionId);
+                    var links = promptCtx.HasValue
+                        ? new[] { new ActivityLink(promptCtx.Value) }
+                        : Array.Empty<ActivityLink>();
+
+                    using var eventActivity = FleetInstrumentation.ActivitySource.StartActivity(
+                        "fleet.relay.event",
+                        ActivityKind.Internal,
+                        parentContext: default,
+                        links: links);
+                    eventActivity?.SetTag(FleetInstrumentation.SessionIdTag, targetFleetSessionId);
+                    eventActivity?.SetTag("event.type", evt.Type);
+
+                    var traceContext = Activity.Current?.Context;
                     var pumpDedupKey = NextInternalPumpDedupKey(instanceId);
                     _ = await _publisher.PublishAsync(
                         eventToPublish,
@@ -238,7 +264,8 @@ public sealed class HarnessEventRelay : BackgroundService
                             pumpDedupKey)
                         {
                             DomainEvent = domainEvent,
-                            SourceReference = sessionSourceReference
+                            SourceReference = sessionSourceReference,
+                            TraceContext = traceContext
                         },
                         ct).ConfigureAwait(false);
                 }
@@ -285,6 +312,7 @@ public sealed class HarnessEventRelay : BackgroundService
             // on "busy" after a crash/disconnect. This isn't tied to an event, so it stays in
             // the relay (the only code that knows when a pump ends).
             _activityTracker.Remove(fleetSessionId);
+            _activityTracker.ClearPromptTraceContext(fleetSessionId);
             await _broadcaster.BroadcastAsync(
                 "sessions",
                 "activity_status",

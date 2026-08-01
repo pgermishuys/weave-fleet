@@ -44,6 +44,7 @@ public sealed partial class SessionOrchestrator(
     IUserContext userContext,
     FleetOptions options,
     ISmartLinkRepository smartLinkRepository,
+    SessionActivityTracker sessionActivityTracker,
     ILogger<SessionOrchestrator> logger,
     SessionActivityWriteService? sessionActivityWriteService = null,
     GitDiffService? gitDiffService = null)
@@ -134,6 +135,7 @@ public sealed partial class SessionOrchestrator(
             userContext,
             options,
             smartLinkRepository,
+            new SessionActivityTracker(),
             logger,
             sessionActivityWriteService: null)
     {
@@ -181,6 +183,7 @@ public sealed partial class SessionOrchestrator(
             userContext,
             options,
             smartLinkRepository,
+            new SessionActivityTracker(),
             logger,
             sessionActivityWriteService: null)
     {
@@ -807,6 +810,15 @@ public sealed partial class SessionOrchestrator(
         string? correlationId,
         CancellationToken ct)
     {
+        using var promptActivity = FleetInstrumentation.ActivitySource.StartActivity(
+            "fleet.prompt_session",
+            ActivityKind.Internal);
+        promptActivity?.SetTag(FleetInstrumentation.SessionIdTag, id);
+
+        // Store trace context so the async relay pump can link response events back to this prompt.
+        if (promptActivity is not null)
+            sessionActivityTracker.SetPromptTraceContext(id, promptActivity.Context);
+
         using var _ = BeginSessionScope(id);
         var sessionResult = await GetSessionAsync(id);
         if (sessionResult.IsFailure)
@@ -1153,6 +1165,7 @@ public sealed partial class SessionOrchestrator(
                 InternalPumpDedupKey: 0)
             {
                 CorrelationId = correlationId,
+                TraceContext = Activity.Current?.Context,
             },
             ct).ConfigureAwait(false);
 
@@ -1565,6 +1578,11 @@ public sealed partial class SessionOrchestrator(
 
     private async Task<Result<IHarnessSession>> GetOrActivateInstanceAsync(Session session, CancellationToken ct)
     {
+        using var activateActivity = FleetInstrumentation.ActivitySource.StartActivity(
+            "fleet.activate_instance",
+            ActivityKind.Internal);
+        activateActivity?.SetTag(FleetInstrumentation.SessionIdTag, session.Id);
+
         var instance = instanceTracker.Get(session.InstanceId);
         if (instance is not null)
             return Result.Success<IHarnessSession>(instance);
@@ -1828,15 +1846,26 @@ public sealed partial class SessionOrchestrator(
         CancellationToken ct)
     {
         const int timeoutMs = 5000;
+
+        using var subActivity = FleetInstrumentation.ActivitySource.StartActivity(
+            "fleet.ensure_subscription",
+            ActivityKind.Internal);
+        subActivity?.SetTag(FleetInstrumentation.SessionIdTag, sessionId);
+
         try
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeoutCts.CancelAfter(timeoutMs);
             await instance.WaitForEventSubscriptionAsync(timeoutCts.Token).ConfigureAwait(false);
+
+            subActivity?.SetTag("subscription.ready", true);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             // Timeout — log warning and proceed rather than failing the prompt.
+            subActivity?.SetTag("subscription.ready", false);
+            subActivity?.SetTag("subscription.timeout_ms", timeoutMs);
+
             LogSubscriptionReadinessTimeout(sessionId, timeoutMs);
         }
     }

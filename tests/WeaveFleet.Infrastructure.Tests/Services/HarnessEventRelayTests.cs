@@ -145,10 +145,12 @@ public sealed class HarnessEventRelayTests
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
         await using var _ = keeper;
         var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
+        var pipelineMetrics = new PipelineLatencyMetrics();
         var publisher = new InProcessEventPublisher(
             store,
             channels,
             metrics,
+            pipelineMetrics,
             NullLogger<InProcessEventPublisher>.Instance);
         var relay = new HarnessEventRelay(
             tracker,
@@ -210,15 +212,18 @@ public sealed class HarnessEventRelayTests
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
         await using var _ = keeper;
         var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
+        var pipelineMetrics = new PipelineLatencyMetrics();
         var publisher = new InProcessEventPublisher(
             store,
             channels,
             metrics,
+            pipelineMetrics,
             NullLogger<InProcessEventPublisher>.Instance);
         var fanOut = new InProcessFanOutService(
             channels,
             broadcaster,
             activityTracker,
+            new PipelineLatencyMetrics(),
             scopeFactory,
             NullLogger<InProcessFanOutService>.Instance);
         var relay = new HarnessEventRelay(
@@ -694,17 +699,20 @@ public sealed class HarnessEventRelayTests
         var broadcaster = new FakeEventBroadcaster();
         var channels = new InProcessChannels();
         var metrics = new InProcessMetrics();
+        var pipelineMetrics = new PipelineLatencyMetrics();
         var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
         var publisher = new InProcessEventPublisher(
             store,
             channels,
             metrics,
+            pipelineMetrics,
             NullLogger<InProcessEventPublisher>.Instance);
         var activityTracker = new SessionActivityTracker();
         var fanOut = new InProcessFanOutService(
             channels,
             broadcaster,
             activityTracker,
+            pipelineMetrics,
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<InProcessFanOutService>.Instance);
         var projectionHost = new InProcessProjectionHost(
