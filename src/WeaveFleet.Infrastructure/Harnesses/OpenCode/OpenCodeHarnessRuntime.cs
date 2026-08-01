@@ -472,9 +472,9 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         //       through the session source provider, before any lease or OC session creation)
         //   (c) Acquire the pooled lease and create the OpenCode session for the exact workspace
         //       directory. The in-memory session mapping and the OpenCode session ID (resume token)
-        //       are captured eagerly. SSE event subscription is deferred to first prompt (lazy) so
-        //       that the test-observable ordering is preserved and warm scratch directories (from
-        //       WarmupPooledInstanceAsync) are never reused as real workspace directories.
+        //       are captured eagerly. SSE event subscription is established immediately at spawn time
+        //       so the stream is already warm when the first prompt arrives. Warm scratch directories
+        //       (from WarmupPooledInstanceAsync) are never reused as real workspace directories.
         //   (d) Caller (SessionOrchestrator) persists Fleet instance/session rows with the eager
         //       resume token (harnessInstance.ResumeToken) only after this succeeds.
         //
@@ -518,10 +518,10 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                 options.WorkingDirectory,
                 credentialHash);
 
-            // Build the leased handle. SSE event subscription (BindSessionAsync) is deferred to
-            // first prompt via EnsureSessionAsync, preserving the original lazy SSE setup sequence.
-            // The sessionBoundAsync callback fires when the OC session is first bound in EnsureSessionAsync,
-            // updating the in-memory mapping if needed (e.g. credential refresh at prompt time).
+            // Build the leased handle and eagerly establish the SSE subscription so the stream
+            // is already warm when the first prompt arrives. The sessionBoundAsync callback fires
+            // during BindSessionAsync, updating the in-memory mapping if needed (e.g. credential
+            // refresh at prompt time).
             var instanceHandle = new LeasedInstanceHandle(
                 leaseToRelease,
                 _poolDemultiplexer,
@@ -533,6 +533,10 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                 leaseGeneration);
 
             leaseToRelease = null;
+
+            // Eagerly bind the session and establish the SSE subscription at spawn time.
+            // BindSessionAsync is idempotent, so if EnsureSessionAsync is called later it's a no-op.
+            await instanceHandle.BindSessionAsync(openCodeSession.Id, ct).ConfigureAwait(false);
 
             var instance = new OpenCodeHarnessSession(
                 instanceId: instanceId,
