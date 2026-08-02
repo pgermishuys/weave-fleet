@@ -15,6 +15,15 @@ using WeaveFleet.Infrastructure.Events;
 namespace WeaveFleet.Infrastructure.Services;
 
 /// <summary>
+/// Parsed activity status with optional retry metadata.
+/// </summary>
+internal sealed record ParsedActivityStatus(
+    string Status,
+    int? RetryAttempt = null,
+    string? RetryMessage = null,
+    DateTimeOffset? RetryNext = null);
+
+/// <summary>
 /// Background service that subscribes to <see cref="InstanceTracker"/> registration/removal
 /// events and maintains one async-enumerable pump per live harness instance. Each pump:
 /// <list type="number">
@@ -203,6 +212,10 @@ public sealed class HarnessEventRelay : BackgroundService
         using var translationScope = _scopeFactory.CreateScope();
         var translator = translationScope.ServiceProvider.GetRequiredService<DomainEventTranslator>();
 
+        // Resync activity status on pump start (handles reconnect gaps where busy→idle was missed).
+        // Query the harness's current status and seed the tracker + broadcast if different.
+        await ResyncActivityStatusAsync(instance, fleetSessionId, sessionUserId, ct).ConfigureAwait(false);
+
         try
         {
             await foreach (var evt in instance.SubscribeAsync(ct).ConfigureAwait(false))
@@ -268,6 +281,37 @@ public sealed class HarnessEventRelay : BackgroundService
                             TraceContext = traceContext
                         },
                         ct).ConfigureAwait(false);
+
+                    // Handle activity_status events directly in the relay to avoid lossy channel drops.
+                    // The per-session broadcast still happens via InProcessFanOutService, but the
+                    // global "sessions" topic broadcast + tracker update happen here synchronously.
+                    var parsedStatus = ParseActivityStatus(evt.Type, evt.Payload);
+                    if (parsedStatus is not null)
+                    {
+                        _activityTracker.Update(
+                            targetFleetSessionId,
+                            parsedStatus.Status,
+                            sessionUserId,
+                            parsedStatus.RetryAttempt,
+                            parsedStatus.RetryMessage,
+                            parsedStatus.RetryNext);
+
+                        await _broadcaster.BroadcastAsync(
+                            "sessions",
+                            "activity_status",
+                            await BuildActivityStatusPayloadAsync(
+                                targetFleetSessionId,
+                                parsedStatus.Status,
+                                parsedStatus.RetryAttempt,
+                                parsedStatus.RetryMessage,
+                                parsedStatus.RetryNext).ConfigureAwait(false),
+                            sessionUserId,
+                            ct).ConfigureAwait(false);
+
+                        await SessionPropagation.PropagateToParentAsync(
+                            targetFleetSessionId, sessionUserId, _activityTracker, _broadcaster, _scopeFactory, ct)
+                            .ConfigureAwait(false);
+                    }
                 }
                 catch (Exception pubEx)
                 {
@@ -322,7 +366,12 @@ public sealed class HarnessEventRelay : BackgroundService
         }
     }
 
-    private async Task<JsonElement> BuildActivityStatusPayloadAsync(string sessionId, string activityStatus)
+    private async Task<JsonElement> BuildActivityStatusPayloadAsync(
+        string sessionId,
+        string activityStatus,
+        int? retryAttempt = null,
+        string? retryMessage = null,
+        DateTimeOffset? retryNext = null)
     {
         using var scope = _scopeFactory.CreateScope();
         var sessionRepository = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
@@ -337,7 +386,47 @@ public sealed class HarnessEventRelay : BackgroundService
             ? capabilitiesResolver.Resolve(session)
             : SessionCapabilitiesResolver.Resolve(null, null, null, activityStatus, isLive: false);
 
-        return InfrastructureJsonContext.SerializeActivityStatus(sessionId, activityStatus, capabilities);
+        return InfrastructureJsonContext.SerializeActivityStatus(
+            sessionId,
+            activityStatus,
+            capabilities,
+            retryAttempt,
+            retryMessage,
+            retryNext);
+    }
+
+    private static ParsedActivityStatus? ParseActivityStatus(string eventType, JsonElement? payload)
+    {
+        if (eventType == EventTypes.SessionIdle)
+            return new ParsedActivityStatus("idle");
+
+        if (eventType == EventTypes.SessionStatus && payload.HasValue
+            && payload.Value.TryGetProperty("status", out var statusProp)
+            && statusProp.TryGetProperty("type", out var typeProp))
+        {
+            var statusType = typeProp.GetString();
+            if (statusType is null)
+                return null;
+
+            // If status is "retry", extract retry metadata
+            if (statusType == "retry")
+            {
+                var attempt = statusProp.TryGetProperty("count", out var countProp) && countProp.TryGetInt32(out var c) ? c : (int?)null;
+                var message = statusProp.TryGetProperty("reason", out var reasonProp) ? reasonProp.GetString() : null;
+                DateTimeOffset? next = null;
+
+                if (statusProp.TryGetProperty("delay", out var delayProp) && delayProp.TryGetInt32(out var delayMs))
+                {
+                    next = DateTimeOffset.UtcNow.AddMilliseconds(delayMs);
+                }
+
+                return new ParsedActivityStatus(statusType, attempt, message, next);
+            }
+
+            return new ParsedActivityStatus(statusType);
+        }
+
+        return null;
     }
 
     private long NextInternalPumpDedupKey(string instanceId)
@@ -390,5 +479,52 @@ public sealed class HarnessEventRelay : BackgroundService
         }
 
         return messageId.GetString();
+    }
+
+    /// <summary>
+    /// Queries the harness instance's current activity status and seeds the tracker + broadcasts
+    /// a correction if the status differs from the tracker's current value. This ensures that
+    /// if a busy→idle transition was missed during a reconnect gap, the state is corrected.
+    /// </summary>
+    private async Task ResyncActivityStatusAsync(
+        IHarnessSession instance,
+        string fleetSessionId,
+        string? sessionUserId,
+        CancellationToken ct)
+    {
+        try
+        {
+            var currentActivityStatus = await instance.GetActivityStatusAsync(ct).ConfigureAwait(false);
+            if (currentActivityStatus is null)
+            {
+                // Harness doesn't support activity status queries, skip resync
+                return;
+            }
+
+            // Check if the tracker's current status differs from the queried status
+            var trackedSnapshot = _activityTracker.Get(fleetSessionId);
+            if (trackedSnapshot?.ActivityStatus != currentActivityStatus)
+            {
+                // Update tracker and broadcast correction
+                _activityTracker.Update(fleetSessionId, currentActivityStatus, sessionUserId);
+                await _broadcaster.BroadcastAsync(
+                    "sessions",
+                    "activity_status",
+                    await BuildActivityStatusPayloadAsync(fleetSessionId, currentActivityStatus).ConfigureAwait(false),
+                    sessionUserId,
+                    ct).ConfigureAwait(false);
+
+                _logger.LogDebug(
+                    "[Relay:Resync] Corrected activity status for session={Session} from {Old} to {New}",
+                    fleetSessionId,
+                    trackedSnapshot?.ActivityStatus ?? "null",
+                    currentActivityStatus);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Best-effort resync — never crash the pump
+            _logger.LogWarning(ex, "[Relay:Resync] Failed to resync activity status for session={Session}", fleetSessionId);
+        }
     }
 }

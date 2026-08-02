@@ -156,16 +156,16 @@ public sealed class SnapshotMergeTests
     }
 
     [Fact]
-    public async Task BuildAtomicSnapshot_ActivityStatus_FallsBackToPersistedWhenNoInFlight()
+    public async Task BuildAtomicSnapshot_ActivityStatus_FallsBackToIdleWhenNoInFlight()
     {
         var hub = CreateHub(
-            persistedSnapshot: CreateSnapshot("session-1", [], "busy"),
+            persistedSnapshot: CreateSnapshot("session-1", [], "idle"), // Persisted as "idle" (or could be any value, it's ignored)
             streamingState: CreateEmptyStreamingState(),
             lastEventId: 0);
 
         var snapshot = await InvokeSnapshotBuilder(hub, "session-1");
 
-        snapshot.ActivityStatus.ShouldBe("busy");
+        snapshot.ActivityStatus.ShouldBe("idle"); // Falls back to "idle" when no in-flight status
     }
 
     [Fact]

@@ -36,7 +36,7 @@ public sealed class SessionServiceTests
         });
 
         var orchestrator = _builder.Build();
-        _sut = new SessionService(_builder.SessionRepository, _builder.ProjectRepository, orchestrator);
+        _sut = new SessionService(_builder.SessionRepository, _builder.ProjectRepository, orchestrator, _builder.ActivityTracker);
     }
 
     [Fact]
@@ -173,22 +173,28 @@ public sealed class SessionServiceTests
     [Fact]
     public async Task GetFleetSummaryAsync_ReturnsAggregatedData()
     {
-        // Seed 3 active + 1 idle sessions with tokens/cost totalling 1000 / $0.50
+        // Seed 4 active sessions: 3 busy + 1 idle, with tokens/cost totalling 1000 / $0.50
         for (var i = 1; i <= 3; i++)
+        {
+            var sessionId = $"active-{i}";
             _builder.SessionRepository.Seed(new Session
             {
-                Id = $"active-{i}", WorkspaceId = "w1", InstanceId = "i1",
+                Id = sessionId, WorkspaceId = "w1", InstanceId = "i1",
                 OpencodeSessionId = $"oc-active-{i}", Title = "Active", Status = "active",
                 Directory = "/tmp", CreatedAt = "2026-01-01",
                 TotalTokens = 300, TotalCost = 0.15
             });
+            // Mark as busy in the activity tracker
+            _builder.ActivityTracker.Update(sessionId, "busy", "user-1");
+        }
         _builder.SessionRepository.Seed(new Session
         {
             Id = "idle-1", WorkspaceId = "w1", InstanceId = "i1",
-            OpencodeSessionId = "oc-idle-1", Title = "Idle", Status = "idle",
+            OpencodeSessionId = "oc-idle-1", Title = "Idle", Status = "active", // Must be "active" to be returned by ListActiveAsync
             Directory = "/tmp", CreatedAt = "2026-01-01",
             TotalTokens = 100, TotalCost = 0.05
         });
+        // idle-1 will fall back to "idle" since no tracker entry
 
         var result = await _sut.GetFleetSummaryAsync();
 

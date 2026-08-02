@@ -198,6 +198,7 @@ const sessionStatus = computed<"idle" | "busy" | "waiting_input">(() => {
   const activity = effectiveActivityStatus.value;
   if (activity === "busy") return "busy";
   if (activity === "delegating") return "busy";
+  if (activity === "retry") return "busy";
   if (activity === "waiting_input") return "waiting_input";
   return "idle";
 });
@@ -217,7 +218,7 @@ async function handleInterrupt(): Promise<void> {
 watch(
   effectiveActivityStatus,
   (activityStatus) => {
-    if (activityStatus === "busy" || activityStatus === "delegating") {
+    if (activityStatus === "busy" || activityStatus === "delegating" || activityStatus === "retry") {
       optimisticBusy.value = false;
     }
   },

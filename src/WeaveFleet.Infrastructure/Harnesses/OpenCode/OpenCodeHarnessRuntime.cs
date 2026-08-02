@@ -92,7 +92,9 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             scopeFactory,
             logger,
             loggerFactory,
-            analyticsCollector: null)
+            analyticsCollector: null,
+            broadcaster: null,
+            activityTracker: null)
     {
     }
 
@@ -113,7 +115,34 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             logger,
             loggerFactory,
             new OpenCodeFeatureFlagProvider(options, scopeFactory),
-            analyticsCollector)
+            analyticsCollector,
+            broadcaster: null,
+            activityTracker: null)
+    {
+    }
+
+    /// <summary>Initialises the runtime with required dependencies.</summary>
+    public OpenCodeHarnessRuntime(
+        IHttpClientFactory httpClientFactory,
+        PortAllocator portAllocator,
+        FleetOptions options,
+        IServiceScopeFactory scopeFactory,
+        ILogger<OpenCodeHarnessRuntime> logger,
+        ILoggerFactory loggerFactory,
+        IAnalyticsCollector? analyticsCollector,
+        IEventBroadcaster? broadcaster,
+        SessionActivityTracker? activityTracker)
+        : this(
+            httpClientFactory,
+            portAllocator,
+            options,
+            scopeFactory,
+            logger,
+            loggerFactory,
+            new OpenCodeFeatureFlagProvider(options, scopeFactory),
+            analyticsCollector,
+            broadcaster,
+            activityTracker)
     {
     }
 
@@ -127,6 +156,32 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         ILoggerFactory loggerFactory,
         OpenCodeFeatureFlagProvider featureFlagProvider,
         IAnalyticsCollector? analyticsCollector)
+        : this(
+            httpClientFactory,
+            portAllocator,
+            options,
+            scopeFactory,
+            logger,
+            loggerFactory,
+            featureFlagProvider,
+            analyticsCollector,
+            broadcaster: null,
+            activityTracker: null)
+    {
+    }
+
+    /// <summary>Initialises the runtime with required dependencies.</summary>
+    internal OpenCodeHarnessRuntime(
+        IHttpClientFactory httpClientFactory,
+        PortAllocator portAllocator,
+        FleetOptions options,
+        IServiceScopeFactory scopeFactory,
+        ILogger<OpenCodeHarnessRuntime> logger,
+        ILoggerFactory loggerFactory,
+        OpenCodeFeatureFlagProvider featureFlagProvider,
+        IAnalyticsCollector? analyticsCollector,
+        IEventBroadcaster? broadcaster,
+        SessionActivityTracker? activityTracker)
     {
         _httpClientFactory = httpClientFactory;
         _portAllocator = portAllocator;
@@ -143,7 +198,11 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         _pooledInstanceRegistry = new PooledOpenCodeInstanceRegistry(
             CreatePooledInstanceAsync,
             TimeSpan.FromSeconds(options.Harness.PooledOpenCodeIdleTtlSeconds),
-            loggerFactory.CreateLogger<PooledOpenCodeInstanceRegistry>());
+            loggerFactory.CreateLogger<PooledOpenCodeInstanceRegistry>(),
+            _poolBindingTable,
+            broadcaster,
+            activityTracker,
+            scopeFactory);
     }
 
     internal OpenCodeHarnessRuntime(
@@ -156,6 +215,33 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         OpenCodeFeatureFlagProvider featureFlagProvider,
         IAnalyticsCollector? analyticsCollector,
         Func<string, string, IReadOnlyDictionary<string, string>, CancellationToken, Task<PooledOpenCodeInstance>> pooledInstanceFactory)
+        : this(
+            httpClientFactory,
+            portAllocator,
+            options,
+            scopeFactory,
+            logger,
+            loggerFactory,
+            featureFlagProvider,
+            analyticsCollector,
+            pooledInstanceFactory,
+            broadcaster: null,
+            activityTracker: null)
+    {
+    }
+
+    internal OpenCodeHarnessRuntime(
+        IHttpClientFactory httpClientFactory,
+        PortAllocator portAllocator,
+        FleetOptions options,
+        IServiceScopeFactory scopeFactory,
+        ILogger<OpenCodeHarnessRuntime> logger,
+        ILoggerFactory loggerFactory,
+        OpenCodeFeatureFlagProvider featureFlagProvider,
+        IAnalyticsCollector? analyticsCollector,
+        Func<string, string, IReadOnlyDictionary<string, string>, CancellationToken, Task<PooledOpenCodeInstance>> pooledInstanceFactory,
+        IEventBroadcaster? broadcaster,
+        SessionActivityTracker? activityTracker)
     {
         _httpClientFactory = httpClientFactory;
         _portAllocator = portAllocator;
@@ -172,7 +258,11 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         _pooledInstanceRegistry = new PooledOpenCodeInstanceRegistry(
             pooledInstanceFactory,
             TimeSpan.FromSeconds(options.Harness.PooledOpenCodeIdleTtlSeconds),
-            loggerFactory.CreateLogger<PooledOpenCodeInstanceRegistry>());
+            loggerFactory.CreateLogger<PooledOpenCodeInstanceRegistry>(),
+            _poolBindingTable,
+            broadcaster,
+            activityTracker,
+            scopeFactory);
     }
 
     public async ValueTask DisposeAsync()

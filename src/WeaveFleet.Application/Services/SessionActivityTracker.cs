@@ -10,7 +10,10 @@ public sealed record SessionActivitySnapshot(
     string FleetSessionId,
     string ActivityStatus,
     string? UserId,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    int? RetryAttempt = null,
+    string? RetryMessage = null,
+    DateTimeOffset? RetryNext = null);
 
 /// <summary>
 /// Thread-safe in-memory tracker for per-session activity status (busy/idle).
@@ -37,13 +40,16 @@ public sealed class SessionActivityTracker
     /// <summary>
     /// Update (or insert) the activity status for a fleet session.
     /// </summary>
-    public void Update(string fleetSessionId, string activityStatus, string? userId)
+    public void Update(string fleetSessionId, string activityStatus, string? userId, int? retryAttempt = null, string? retryMessage = null, DateTimeOffset? retryNext = null)
     {
         _state[fleetSessionId] = new SessionActivitySnapshot(
             fleetSessionId,
             activityStatus,
             userId,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            RetryAttempt: retryAttempt,
+            RetryMessage: retryMessage,
+            RetryNext: retryNext);
     }
 
     /// <summary>
@@ -69,6 +75,11 @@ public sealed class SessionActivityTracker
     /// Register a parent-child delegation relationship so that parent busy state
     /// can be derived from child activity.
     /// </summary>
+    /// <remarks>
+    /// This propagation handles Fleet DelegationService delegations (separate opencode sessions).
+    /// For opencode task-tool delegations, the parent stays busy server-side and no client-side
+    /// propagation is needed.
+    /// </remarks>
     public void RegisterChild(string childSessionId, string parentSessionId)
     {
         _childToParent[childSessionId] = parentSessionId;
@@ -102,6 +113,12 @@ public sealed class SessionActivityTracker
     /// Returns <c>"busy"</c> if the session itself is busy <em>or</em> any registered
     /// child session is busy. Returns <c>null</c> if the session is not tracked.
     /// </summary>
+    /// <remarks>
+    /// This parent-child propagation applies to Fleet DelegationService delegations (separate
+    /// opencode sessions where the parent doesn't stay busy server-side). For opencode task-tool
+    /// delegations, the parent remains busy server-side while the child runs, so no propagation
+    /// is needed.
+    /// </remarks>
     public string? GetEffectiveActivityStatus(string sessionId)
     {
         var own = Get(sessionId);

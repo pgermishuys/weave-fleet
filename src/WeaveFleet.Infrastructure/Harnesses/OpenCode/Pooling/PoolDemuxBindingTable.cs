@@ -210,6 +210,23 @@ internal sealed class PoolDemuxBindingTable : IOpenCodeSseEventBindingResolver
         return removedSessionIds;
     }
 
+    public IReadOnlyList<PoolDemuxBinding> GetBindingsForInstance(PooledOpenCodeInstance instance)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+
+        var bindings = new List<PoolDemuxBinding>();
+        foreach (var pair in _bindings.ToArray())
+        {
+            var binding = pair.Value;
+            if (ReferenceEquals(binding.Instance, instance))
+            {
+                bindings.Add(binding);
+            }
+        }
+
+        return bindings;
+    }
+
     public void MoveBindings(
         PooledOpenCodeInstance sourceInstance,
         PooledOpenCodeInstance targetInstance,

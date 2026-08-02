@@ -5,7 +5,7 @@ import type { DelegationCompleted, DelegationCreated, DelegationUpdated, DomainE
 import { applyPartUpdate, applyTextDelta, ensureMessage, mergeMessageUpdate } from "@/lib/event-state"
 import type { SessionSnapshot, SessionSnapshotDelegation } from "@/lib/session-snapshot"
 
-export type SessionStreamExplicitStatus = "idle" | "busy"
+export type SessionStreamExplicitStatus = "idle" | "busy" | "retry"
 
 export type SessionStreamStatus = SessionStreamExplicitStatus | "delegating"
 
@@ -24,6 +24,7 @@ export interface SessionStreamState {
 
 const IDLE_ACTIVITY_STATUSES = new Set(["idle"])
 const BUSY_ACTIVITY_STATUSES = new Set(["busy", "working"])
+const RETRY_ACTIVITY_STATUSES = new Set(["retry"])
 const ACTIVE_DELEGATION_STATUSES = new Set<DelegationDto["status"]>(["pending", "running"])
 
 export function createSessionStreamState(snapshot: SessionSnapshot): SessionStreamState {
@@ -131,6 +132,10 @@ function toExplicitStatus(activityStatus: string): SessionStreamExplicitStatus {
     return "busy"
   }
 
+  if (RETRY_ACTIVITY_STATUSES.has(activityStatus)) {
+    return "retry"
+  }
+
   if (IDLE_ACTIVITY_STATUSES.has(activityStatus)) {
     return "idle"
   }
@@ -144,6 +149,10 @@ function deriveSessionStatus(
 ): SessionStreamStatus {
   if (explicitStatus === "busy") {
     return "busy"
+  }
+
+  if (explicitStatus === "retry") {
+    return "retry"
   }
 
   if (hasActiveDelegations(delegations)) {

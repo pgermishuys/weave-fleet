@@ -70,7 +70,7 @@ public static class SessionEndpoints
                 {
                     var workspace = await workspaceRepository.GetByIdAsync(session.WorkspaceId);
                     var primaryOrigin = await sessionSourceUsageRepository.GetPrimaryBySessionIdAsync(session.Id);
-                    var activityStatus = activityTracker.GetEffectiveActivityStatus(session.Id) ?? session.ActivityStatus;
+                    var activityStatus = activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle";
 
                     return Results.Ok(new GetSessionResponse(
                         Id: session.Id,
@@ -364,13 +364,13 @@ public static class SessionEndpoints
         .WithName("GetSessionDiffs");
 
         // GET /api/sessions/{id}/status
-        group.MapGet("/{id}/status", async (string id, SessionService sessionService) =>
+        group.MapGet("/{id}/status", async (string id, SessionService sessionService, SessionActivityTracker activityTracker) =>
         {
             var result = await sessionService.GetSessionAsync(id);
             return result.Match(
                 session => Results.Ok(new GetSessionStatusResponse(
                     session.Status,
-                    session.ActivityStatus,
+                    activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle",
                     session.LifecycleStatus ?? "running",
                     session.RetentionStatus,
                     session.ArchivedAt)),
@@ -532,12 +532,12 @@ public static class SessionEndpoints
         var createdMs = TryParseUnixMs(s.CreatedAt);
         var updatedMs = createdMs; // Sessions don't have an updated_at; use created_at
 
-        var sessionStatus = DeriveAggregatedSessionStatus(s, parentIdsWithBusyChildren);
-        var lifecycleStatus = s.LifecycleStatus ?? "running";
-
         // Prefer the tracker's derived effective activity status (child busy → parent busy)
         // over the DB-persisted value, which may lag real-time state.
-        var activityStatus = activityTracker.GetEffectiveActivityStatus(s.Id) ?? s.ActivityStatus;
+        var activityStatus = activityTracker.GetEffectiveActivityStatus(s.Id) ?? "idle";
+        var sessionStatus = DeriveAggregatedSessionStatus(s, activityStatus, parentIdsWithBusyChildren);
+        var lifecycleStatus = s.LifecycleStatus ?? "running";
+
         var origin = originsBySessionId.TryGetValue(s.Id, out var sessionSourceUsage)
             ? ToOriginDto(sessionSourceUsage)
             : null;
@@ -614,20 +614,19 @@ public static class SessionEndpoints
         return Results.Conflict(new ErrorResponse(getDisabledReason(capabilities) ?? fallbackDisabledReason));
     }
 
-    private static string DeriveSessionStatus(Session s) =>
+    private static string DeriveSessionStatus(Session s, string activityStatus) =>
         s.Status switch
         {
             "stopped" => "stopped",
             "completed" => "completed",
-            _ => s.ActivityStatus switch
+            _ => activityStatus switch
             {
                 "idle" => "idle",
-                null => "idle",
                 _ => "active"
             }
         };
 
-    private static string DeriveAggregatedSessionStatus(Session session, HashSet<string> parentIdsWithBusyChildren)
+    private static string DeriveAggregatedSessionStatus(Session session, string activityStatus, HashSet<string> parentIdsWithBusyChildren)
     {
         if (session.Status is "stopped" or "completed" or "error" or "disconnected")
         {
@@ -636,7 +635,7 @@ public static class SessionEndpoints
 
         return parentIdsWithBusyChildren.Contains(session.Id)
             ? "active"
-            : DeriveSessionStatus(session);
+            : DeriveSessionStatus(session, activityStatus);
     }
 
     private static FileDiffSummary ToFileDiffSummary(WeaveFleet.Application.Services.FileDiffContent diff) =>
@@ -727,9 +726,9 @@ public static class SessionEndpoints
     {
         var createdMs = TryParseUnixMs(s.CreatedAt);
         var updatedMs = createdMs;
-        var sessionStatus = DeriveAggregatedSessionStatus(s, parentIdsWithBusyChildren);
+        var activityStatus = activityTracker.GetEffectiveActivityStatus(s.Id) ?? "idle";
+        var sessionStatus = DeriveAggregatedSessionStatus(s, activityStatus, parentIdsWithBusyChildren);
         var lifecycleStatus = s.LifecycleStatus ?? "running";
-        var activityStatus = activityTracker.GetEffectiveActivityStatus(s.Id) ?? s.ActivityStatus;
 
         return new SessionListResponse(
             InstanceId: s.InstanceId,

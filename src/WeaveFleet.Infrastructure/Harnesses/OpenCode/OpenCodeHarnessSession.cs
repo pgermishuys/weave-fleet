@@ -578,6 +578,40 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc />
+    public async Task<string?> GetActivityStatusAsync(CancellationToken ct)
+    {
+        if (!_instanceHandle.IsRunning)
+        {
+            return null;
+        }
+
+        try
+        {
+            var statusDict = await _instanceHandle.HttpClient.GetSessionStatusAsync(_workingDirectory, ct).ConfigureAwait(false);
+            
+            // For non-pooled sessions, there should only be one session in the directory
+            foreach (var (_, status) in statusDict)
+            {
+                return status switch
+                {
+                    OpenCodeIdleStatus => "idle",
+                    OpenCodeBusyStatus => "busy",
+                    OpenCodeRetryStatus => "busy", // Treat retry as busy
+                    _ => "idle" // Default to idle for unknown status types
+                };
+            }
+
+            // No status found, default to idle
+            return "idle";
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            // Best-effort query — return null on failure
+            return null;
+        }
+    }
+
+    /// <inheritdoc />
     public Task WaitForEventSubscriptionAsync(CancellationToken ct)
     {
         // Delegate to the instance handle, which signals readiness when the SSE stream is connected.

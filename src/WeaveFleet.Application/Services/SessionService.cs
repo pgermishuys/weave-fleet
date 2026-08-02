@@ -12,7 +12,8 @@ namespace WeaveFleet.Application.Services;
 public sealed class SessionService(
     ISessionRepository sessionRepository,
     IProjectRepository projectRepository,
-    SessionOrchestrator sessionOrchestrator)
+    SessionOrchestrator sessionOrchestrator,
+    SessionActivityTracker activityTracker)
 {
     public async Task<Result<IReadOnlyList<Session>>> ListSessionsAsync(
         int limit = 100,
@@ -107,13 +108,26 @@ public sealed class SessionService(
 
     public async Task<Result<FleetSummary>> GetFleetSummaryAsync()
     {
-        var (active, idle) = await sessionRepository.GetStatusCountsAsync();
+        // Get all active sessions and compute counts from the tracker
+        var activeSessions = await sessionRepository.ListActiveAsync();
+        var activeCount = 0;
+        var idleCount = 0;
+
+        foreach (var session in activeSessions)
+        {
+            var effectiveStatus = activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle";
+            if (effectiveStatus == "busy")
+                activeCount++;
+            else
+                idleCount++;
+        }
+
         var (totalTokens, totalCost) = await sessionRepository.GetFleetTokenTotalsAsync();
 
         return Result.Success(new FleetSummary
         {
-            ActiveSessions = active,
-            IdleSessions = idle,
+            ActiveSessions = activeCount,
+            IdleSessions = idleCount,
             TotalTokens = totalTokens,
             TotalCost = totalCost,
             QueuedTasks = 0  // placeholder — Phase 5 will implement real task queue

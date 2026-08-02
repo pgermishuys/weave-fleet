@@ -232,6 +232,121 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task Hub_sends_activity_status_retry_event_with_correct_shape()
+    {
+        var sessionId = await CreateSessionAsync();
+        var topic = $"session:{sessionId}";
+
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+
+        var broadcaster = _server.Services.GetRequiredService<IEventBroadcaster>();
+        var nextRetryTime = DateTimeOffset.UtcNow.AddSeconds(30);
+        var payload = JsonSerializer.SerializeToElement(new
+        {
+            activityStatus = "retry",
+            attempt = 2,
+            message = "Rate limit exceeded, retrying...",
+            next = nextRetryTime.ToString("O")
+        });
+
+        await broadcaster.BroadcastAsync(
+            topic,
+            "activity_status",
+            payload,
+            eventId: 4,
+            domainEvent: null,
+            userId: "local-user",
+            ct: CancellationToken.None);
+
+        var received = await WaitForEventAsync(TimeSpan.FromSeconds(5));
+        received.ShouldNotBeNull("No activity_status retry event received");
+
+        received.Data.TryGetProperty("type", out var typeEl).ShouldBeTrue(
+            $"Missing 'type'. Actual: {received.Data.GetRawText()}");
+        typeEl.GetString().ShouldBe("activity_status");
+
+        received.Data.TryGetProperty("properties", out var props).ShouldBeTrue(
+            $"Missing 'properties'. Actual: {received.Data.GetRawText()}");
+        
+        props.GetProperty("activityStatus").GetString().ShouldBe("retry");
+        props.GetProperty("attempt").GetInt32().ShouldBe(2);
+        props.GetProperty("message").GetString().ShouldBe("Rate limit exceeded, retrying...");
+        
+        // Verify 'next' is present and is a valid ISO timestamp
+        props.TryGetProperty("next", out var nextProp).ShouldBeTrue(
+            $"Missing 'next' field in retry event. Actual properties: {props.GetRawText()}");
+        var nextStr = nextProp.GetString();
+        nextStr.ShouldNotBeNullOrEmpty();
+        
+        // Verify it's a valid ISO 8601 timestamp
+        DateTimeOffset.TryParse(nextStr, out var parsedNext).ShouldBeTrue(
+            $"'next' field is not a valid ISO timestamp: {nextStr}");
+        
+        // Verify it's approximately the time we sent (within 1 second tolerance)
+        var diff = Math.Abs((parsedNext - nextRetryTime).TotalSeconds);
+        diff.ShouldBeLessThan(1.0, 
+            $"'next' timestamp differs too much. Expected: {nextRetryTime:O}, Actual: {parsedNext:O}");
+    }
+
+    [Fact]
+    public async Task Hub_delivers_rapid_activity_status_events_losslessly_in_order()
+    {
+        // Arrange: create a session and subscribe
+        var sessionId = await CreateSessionAsync();
+        var topic = $"session:{sessionId}";
+
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+
+        // Wait for the hub pump to be subscribed to the broadcaster
+        await WaitForBroadcasterSubscriberAsync();
+
+        var broadcaster = _server.Services.GetRequiredService<IEventBroadcaster>();
+
+        // Clear any events received during subscription (snapshot, etc.)
+        var initialCount = _receivedEvents.Count;
+
+        // Act: rapidly broadcast busy then idle
+        var busyPayload = JsonSerializer.SerializeToElement(new { activityStatus = "busy" });
+        var idlePayload = JsonSerializer.SerializeToElement(new { activityStatus = "idle" });
+
+        await broadcaster.BroadcastAsync(
+            topic,
+            "activity_status",
+            busyPayload,
+            eventId: 100,
+            domainEvent: null,
+            userId: "local-user",
+            ct: CancellationToken.None);
+
+        await broadcaster.BroadcastAsync(
+            topic,
+            "activity_status",
+            idlePayload,
+            eventId: 101,
+            domainEvent: null,
+            userId: "local-user",
+            ct: CancellationToken.None);
+
+        // Assert: wait for both events to arrive
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (_receivedEvents.Count < initialCount + 2 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(50);
+        }
+
+        var newEvents = _receivedEvents.Skip(initialCount).ToList();
+        newEvents.Count.ShouldBe(2, $"Expected 2 events but received {newEvents.Count}. Events: {string.Join(", ", newEvents.Select(e => $"[{e.EventId}:{e.Data.GetProperty("type").GetString()}]"))}");
+
+        var first = newEvents[0];
+        first.EventId.ShouldBe(100);
+        first.Data.GetProperty("properties").GetProperty("activityStatus").GetString().ShouldBe("busy");
+
+        var second = newEvents[1];
+        second.EventId.ShouldBe(101);
+        second.Data.GetProperty("properties").GetProperty("activityStatus").GetString().ShouldBe("idle");
+    }
+
+    [Fact]
     public async Task Snapshot_returns_messages_on_subscribe()
     {
         var sessionId = await CreateSessionAsync();

@@ -36,6 +36,7 @@ public sealed class SessionOrchestratorBuilder
     public FakeHarnessRegistry HarnessRegistry { get; } = new();
     public InMemoryUserPreferenceRepository UserPreferenceRepository { get; } = new();
     public InstanceTracker InstanceTracker { get; } = new();
+    public SessionActivityTracker ActivityTracker { get; } = new();
 
     // ── Overridable dependencies ─────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ public sealed class SessionOrchestratorBuilder
             _userContext,
             _options,
             SmartLinkRepository,
-            new SessionActivityTracker(),
+            ActivityTracker,
             NullLogger<SessionOrchestrator>.Instance,
             sessionActivityWriteService: null,
             gitDiffService: _gitDiffService);

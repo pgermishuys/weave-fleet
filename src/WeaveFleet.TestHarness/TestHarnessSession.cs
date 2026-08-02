@@ -84,6 +84,10 @@ public sealed class TestHarnessSession : IHarnessSession
         => Task.FromResult(new HealthCheckResult(Healthy: true, Message: null));
 
     /// <inheritdoc/>
+    public Task<string?> GetActivityStatusAsync(CancellationToken ct)
+        => Task.FromResult<string?>("idle");
+
+    /// <inheritdoc/>
     public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
         => Task.FromResult<IReadOnlyList<AgentInfo>>([]);
 

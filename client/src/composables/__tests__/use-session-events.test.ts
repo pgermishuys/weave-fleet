@@ -325,11 +325,20 @@ describe("useSessionEvents", () => {
   it("keeps idle session-sync updates delegating while active delegations exist", async () => {
     apiFetchMock.mockImplementation((url: string) => {
       if (url.includes("/delegations")) {
-        return Promise.resolve(createJsonResponse([createDelegation({ status: "pending" })]))
+        const delegations = [createDelegation({ status: "pending" })]
+        return Promise.resolve({
+          data: delegations,
+          error: undefined,
+          response: createJsonResponse(delegations),
+        })
       }
 
       if (url.includes("/committed-events")) {
-        return Promise.resolve(createJsonResponse({ events: [] }))
+        return Promise.resolve({
+          data: { events: [] },
+          error: undefined,
+          response: createJsonResponse({ events: [] }),
+        })
       }
 
       throw new Error(`Unexpected apiFetch call: ${url}`)
@@ -607,29 +616,53 @@ describe("useSessionEvents", () => {
     })
     apiFetchMock.mockImplementation((url: string) => {
       if (url.includes("/delegations")) {
-        return Promise.resolve(createJsonResponse([]))
+        return Promise.resolve({
+          data: [],
+          error: undefined,
+          response: createJsonResponse([]),
+        })
       }
 
       if (url.includes("/committed-events")) {
-        return Promise.resolve(createJsonResponse({
-          events: [
-            {
-              eventId: 11,
-              topic: "session:session-1",
-              type: "message.updated",
-              payload: {
-                info: {
-                  id: "msg-gap-fill",
-                  role: "assistant",
-                  sessionID: "session-1",
-                  time: { created: 1_000 },
+        return Promise.resolve({
+          data: {
+            events: [
+              {
+                eventId: 11,
+                topic: "session:session-1",
+                type: "message.updated",
+                payload: {
+                  info: {
+                    id: "msg-gap-fill",
+                    role: "assistant",
+                    sessionID: "session-1",
+                    time: { created: 1_000 },
+                  },
+                  parts: [{ id: "part-1", type: "text", text: "Gap-filled content" }],
                 },
-                parts: [{ id: "part-gap-fill", type: "text", text: "gap filled" }],
               },
-              timestamp: 1_000,
-            },
-          ],
-        }))
+            ],
+          },
+          error: undefined,
+          response: createJsonResponse({
+            events: [
+              {
+                eventId: 11,
+                topic: "session:session-1",
+                type: "message.updated",
+                payload: {
+                  info: {
+                    id: "msg-gap-fill",
+                    role: "assistant",
+                    sessionID: "session-1",
+                    time: { created: 1_000 },
+                  },
+                  parts: [{ id: "part-1", type: "text", text: "Gap-filled content" }],
+                },
+              },
+            ],
+          }),
+        })
       }
 
       throw new Error(`Unexpected apiFetch call: ${url}`)

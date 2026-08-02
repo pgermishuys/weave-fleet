@@ -218,6 +218,12 @@ internal sealed class PiHarnessSession : IHarnessSession
         }
     }
 
+    public Task<string?> GetActivityStatusAsync(CancellationToken ct)
+    {
+        // Pi doesn't have a status query endpoint, so we return null
+        return Task.FromResult<string?>(null);
+    }
+
     public Task WaitForEventSubscriptionAsync(CancellationToken ct)
     {
         // Pi uses stdio streams which are synchronously available when the process starts.

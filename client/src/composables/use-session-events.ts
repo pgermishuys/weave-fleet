@@ -42,6 +42,7 @@ export interface UseSessionEventsResult {
   delegations: Ref<readonly DelegationDto[]>
   status: Readonly<ShallowRef<SessionConnectionStatus>>
   sessionStatus: Readonly<ShallowRef<SessionStreamStatus>>
+  retryMetadata: Readonly<ShallowRef<RetryMetadata | undefined>>
   error: Readonly<ShallowRef<string | undefined>>
   forceBusy: () => void
   forceIdle: () => void
@@ -57,7 +58,13 @@ export interface UseSessionEventsResult {
   scrollPositionRef: ShallowRef<{ scrollTop: number; scrollHeight: number } | null>
 }
 
-type SessionStreamExplicitStatus = "idle" | "busy" | "delegating"
+type SessionStreamExplicitStatus = "idle" | "busy" | "delegating" | "retry"
+
+interface RetryMetadata {
+  attempt: number
+  message?: string
+  next?: string
+}
 
 interface SessionEventState {
   messages: Ref<AccumulatedMessage[]>
@@ -65,12 +72,13 @@ interface SessionEventState {
   status: ShallowRef<SessionConnectionStatus>
   sessionStatus: ShallowRef<SessionStreamStatus>
   explicitStatus: ShallowRef<SessionStreamExplicitStatus>
+  retryMetadata: ShallowRef<RetryMetadata | undefined>
   error: ShallowRef<string | undefined>
   onAgentSwitch: ShallowRef<((agent: string) => void) | undefined>
   lastEventId: ShallowRef<number | null>
-  scheduleIdleFallback?: () => void
-  clearIdleFallback?: () => void
-  maybeResolveIdleFallback?: () => void
+  scheduleSafetyNetFallback?: () => void
+  clearSafetyNetFallback?: () => void
+  maybeResolveSafetyNetFallback?: () => void
   syncSessionStore?: (patch: SessionStorePatch) => void
 }
 
@@ -81,9 +89,9 @@ type SessionStorePatch = Partial<Pick<
 type SessionActionCapabilities = NonNullable<SessionListItem["capabilities"]>
 
 const MAX_MESSAGES = 500
-// Flag-off mode still uses the legacy v1 stream, which does not emit turn.ended.
-// Keep the idle fallback so reconnects/crashes do not leave sessions stuck busy.
-const IDLE_FALLBACK_MS = 2500
+// Safety net: if no status update arrives for 60s while session appears busy, force idle.
+// Should never fire under normal operation (server is authoritative).
+const SAFETY_NET_FALLBACK_MS = 60_000
 const ACTIVE_DELEGATION_STATUSES = new Set<DelegationDto["status"]>(["pending", "running"])
 
 export function useSessionEvents(
@@ -99,6 +107,7 @@ export function useSessionEvents(
   const status = shallowRef<SessionConnectionStatus>("connecting")
   const sessionStatus = shallowRef<SessionStreamStatus>("idle")
   const explicitStatus = shallowRef<SessionStreamExplicitStatus>("idle")
+  const retryMetadata = shallowRef<RetryMetadata | undefined>(undefined)
   const error = shallowRef<string | undefined>(undefined)
   const cacheHit = shallowRef(false)
   const initialScrollPosition = shallowRef<{ scrollTop: number; scrollHeight: number } | null>(null)
@@ -106,8 +115,8 @@ export function useSessionEvents(
   const reconnectAttempt = shallowRef(0)
   const lastEventId = shallowRef<number | null>(null)
   const onAgentSwitchRef = shallowRef<((agent: string) => void) | undefined>(toValue(onAgentSwitch))
-  let idleFallbackTimer: ReturnType<typeof setTimeout> | null = null
-  let idleFallbackPending = false
+  let safetyNetTimer: ReturnType<typeof setTimeout> | null = null
+  let safetyNetPending = false
   let skipInitialGapFill = true
 
   const currentSessionId = computed(() => toValue(sessionId))
@@ -189,12 +198,13 @@ export function useSessionEvents(
           status,
           sessionStatus,
           explicitStatus,
+          retryMetadata,
           error,
           onAgentSwitch: onAgentSwitchRef,
           lastEventId,
-          scheduleIdleFallback,
-          clearIdleFallback,
-          maybeResolveIdleFallback,
+          scheduleSafetyNetFallback,
+          clearSafetyNetFallback,
+          maybeResolveSafetyNetFallback,
           syncSessionStore: (patch) => {
             syncSessionStore(activeSessionId, patch)
           },
@@ -251,7 +261,7 @@ export function useSessionEvents(
           const nextDelegations = Array.isArray(data) ? data as DelegationDto[] : []
           delegations.value = nextDelegations
           syncDerivedSessionStatus(activeSessionId, sessionStatus, explicitStatus, delegations)
-          maybeResolveIdleFallback()
+          maybeResolveSafetyNetFallback()
         } catch (loadError) {
           if (loadError instanceof DOMException && loadError.name === "AbortError") {
             return
@@ -260,7 +270,7 @@ export function useSessionEvents(
       }
 
       loadDelegationsRef.value = loadDelegations
-      clearIdleFallback()
+      clearSafetyNetFallback()
       skipInitialGapFill = !isWeaveSocketConnected()
 
       messages.value = []
@@ -282,7 +292,7 @@ export function useSessionEvents(
         onCleanup(() => {
           disposed = true
           abortController.abort()
-          clearIdleFallback()
+          clearSafetyNetFallback()
         })
 
         return
@@ -295,7 +305,7 @@ export function useSessionEvents(
         onCleanup(() => {
           disposed = true
           abortController.abort()
-          clearIdleFallback()
+          clearSafetyNetFallback()
         })
 
         return
@@ -352,12 +362,13 @@ export function useSessionEvents(
           status,
           sessionStatus,
           explicitStatus,
+          retryMetadata,
           error,
           onAgentSwitch: onAgentSwitchRef,
           lastEventId,
-          scheduleIdleFallback,
-          clearIdleFallback,
-          maybeResolveIdleFallback,
+          scheduleSafetyNetFallback,
+          clearSafetyNetFallback,
+          maybeResolveSafetyNetFallback,
           syncSessionStore: (patch) => {
             syncSessionStore(activeSessionId, patch)
           },
@@ -384,23 +395,23 @@ export function useSessionEvents(
           return
         }
 
-        const incomingActivityStatus = operation.session.activityStatus
+          const incomingActivityStatus = operation.session.activityStatus
         if (incomingActivityStatus === "busy") {
           explicitStatus.value = "busy"
           syncDerivedSessionStatus(activeSessionId, sessionStatus, explicitStatus, delegations)
-          scheduleIdleFallback()
+          scheduleSafetyNetFallback()
           return
         }
 
         if (incomingActivityStatus === "delegating") {
-          clearIdleFallback()
+          clearSafetyNetFallback()
           explicitStatus.value = "delegating"
           syncDerivedSessionStatus(activeSessionId, sessionStatus, explicitStatus, delegations)
           return
         }
 
         if (incomingActivityStatus === "idle") {
-          clearIdleFallback()
+          clearSafetyNetFallback()
           explicitStatus.value = "idle"
           syncDerivedSessionStatus(activeSessionId, sessionStatus, explicitStatus, delegations)
         }
@@ -442,7 +453,7 @@ export function useSessionEvents(
       onCleanup(() => {
         disposed = true
         abortController.abort()
-        clearIdleFallback()
+        clearSafetyNetFallback()
         unsubscribeTopic()
         unsubscribeSessionSync()
         unsubscribeReconnect()
@@ -470,7 +481,7 @@ export function useSessionEvents(
   )
 
   function forceIdle(): void {
-    clearIdleFallback()
+    clearSafetyNetFallback()
     explicitStatus.value = "idle"
     syncDerivedSessionStatus(currentSessionId.value, sessionStatus, explicitStatus, delegations)
   }
@@ -478,7 +489,7 @@ export function useSessionEvents(
   function forceBusy(): void {
     explicitStatus.value = "busy"
     syncDerivedSessionStatus(currentSessionId.value, sessionStatus, explicitStatus, delegations)
-    scheduleIdleFallback()
+    scheduleSafetyNetFallback()
   }
 
   function syncSessionStore(
@@ -532,41 +543,42 @@ export function useSessionEvents(
     }
   }
 
-  function clearIdleFallback(): void {
-    if (idleFallbackTimer === null) {
-      idleFallbackPending = false
+  function clearSafetyNetFallback(): void {
+    if (safetyNetTimer === null) {
+      safetyNetPending = false
       return
     }
 
-    clearTimeout(idleFallbackTimer)
-    idleFallbackTimer = null
-    idleFallbackPending = false
+    clearTimeout(safetyNetTimer)
+    safetyNetTimer = null
+    safetyNetPending = false
   }
 
-  function scheduleIdleFallback(): void {
-    clearIdleFallback()
-    idleFallbackPending = true
-    idleFallbackTimer = setTimeout(() => {
-      idleFallbackTimer = null
+  function scheduleSafetyNetFallback(): void {
+    clearSafetyNetFallback()
+    safetyNetPending = true
+    safetyNetTimer = setTimeout(() => {
+      safetyNetTimer = null
 
       if (hasActiveDelegations(delegations.value)) {
         return
       }
 
-      resolveIdleFallback()
-    }, IDLE_FALLBACK_MS)
+      console.warn("Safety net: forcing idle after 60s without status update")
+      resolveSafetyNetFallback()
+    }, SAFETY_NET_FALLBACK_MS)
   }
 
-  function maybeResolveIdleFallback(): void {
-    if (!idleFallbackPending || idleFallbackTimer !== null || hasActiveDelegations(delegations.value)) {
+  function maybeResolveSafetyNetFallback(): void {
+    if (!safetyNetPending || safetyNetTimer !== null || hasActiveDelegations(delegations.value)) {
       return
     }
 
-    resolveIdleFallback()
+    resolveSafetyNetFallback()
   }
 
-  function resolveIdleFallback(): void {
-    idleFallbackPending = false
+  function resolveSafetyNetFallback(): void {
+    safetyNetPending = false
     explicitStatus.value = "idle"
     syncDerivedSessionStatus(currentSessionId.value, sessionStatus, explicitStatus, delegations)
   }
@@ -604,6 +616,7 @@ export function useSessionEvents(
     delegations: readonlyDelegations,
     status: readonly(status),
     sessionStatus: readonly(sessionStatus),
+    retryMetadata: readonly(retryMetadata),
     error: readonly(error),
     forceBusy,
     forceIdle,
@@ -656,16 +669,28 @@ export function handleEvent(
     const rawActivityStatus = properties?.activityStatus
 
     if (rawActivityStatus === "idle") {
-      clearIdleFallbackForState(state)
+      clearSafetyNetFallbackForState(state)
       state.explicitStatus.value = "idle"
+      state.retryMetadata.value = undefined
       syncDerivedSessionStatusForState(sessionId, state)
     } else if (rawActivityStatus === "busy" || rawActivityStatus === "working") {
       state.explicitStatus.value = "busy"
+      state.retryMetadata.value = undefined
       syncDerivedSessionStatusForState(sessionId, state)
-      scheduleIdleFallbackForState(state)
+      scheduleSafetyNetFallbackForState(state)
     } else if (rawActivityStatus === "delegating") {
-      clearIdleFallbackForState(state)
+      clearSafetyNetFallbackForState(state)
       state.explicitStatus.value = "delegating"
+      state.retryMetadata.value = undefined
+      syncDerivedSessionStatusForState(sessionId, state)
+    } else if (rawActivityStatus === "retry") {
+      clearSafetyNetFallbackForState(state)
+      state.explicitStatus.value = "retry"
+      state.retryMetadata.value = {
+        attempt: properties?.attempt ?? 1,
+        message: properties?.message,
+        next: properties?.next,
+      }
       syncDerivedSessionStatusForState(sessionId, state)
     }
 
@@ -681,15 +706,15 @@ export function handleEvent(
       : rawStatus?.type
 
     if (statusType === "idle") {
-      clearIdleFallbackForState(state)
+      clearSafetyNetFallbackForState(state)
       state.explicitStatus.value = "idle"
       syncDerivedSessionStatusForState(sessionId, state)
     } else if (statusType === "busy" || statusType === "working") {
       state.explicitStatus.value = "busy"
       syncDerivedSessionStatusForState(sessionId, state)
-      scheduleIdleFallbackForState(state)
+      scheduleSafetyNetFallbackForState(state)
     } else if (statusType === "delegating") {
-      clearIdleFallbackForState(state)
+      clearSafetyNetFallbackForState(state)
       state.explicitStatus.value = "delegating"
       syncDerivedSessionStatusForState(sessionId, state)
     }
@@ -697,14 +722,14 @@ export function handleEvent(
   }
 
   if (type === "session.idle") {
-    clearIdleFallbackForState(state)
+    clearSafetyNetFallbackForState(state)
     state.explicitStatus.value = "idle"
     syncDerivedSessionStatusForState(sessionId, state)
     return
   }
 
   if (type === "message.updated") {
-    scheduleIdleFallbackForState(state)
+    scheduleSafetyNetFallbackForState(state)
     const info = properties?.info
     if (!info?.id) {
       return
@@ -760,7 +785,7 @@ export function handleEvent(
       createdAt: delegationCreatedAt,
     })
     syncDerivedSessionStatusForState(sessionId, state)
-    maybeResolveIdleFallbackForState(state)
+    maybeResolveSafetyNetFallbackForState(state)
     return
   }
 
@@ -778,12 +803,12 @@ export function handleEvent(
       createdAt: delegationCreatedAt,
     })
     syncDerivedSessionStatusForState(sessionId, state)
-    maybeResolveIdleFallbackForState(state)
+    maybeResolveSafetyNetFallbackForState(state)
     return
   }
 
   if (type === "message.part.updated") {
-    scheduleIdleFallbackForState(state)
+    scheduleSafetyNetFallbackForState(state)
     const part = properties?.part
     if (!part?.messageID) {
       diagLog("msg.part.updated", "DROPPED: missing part.messageID", { properties })
@@ -811,7 +836,7 @@ export function handleEvent(
   }
 
   if (type === "message.part.delta") {
-    scheduleIdleFallbackForState(state)
+    scheduleSafetyNetFallbackForState(state)
     const { messageID, partID, field, delta } = properties ?? {}
     if (field !== "text" || !messageID || !partID) {
       return
@@ -913,18 +938,18 @@ function getEventIdWithCompatibilityFallback(event: Pick<WebSocketEvent, "eventI
   return Number.NaN
 }
 
-function scheduleIdleFallbackForState(state: SessionEventState): void {
-  const scheduler = (state as SessionEventState & { scheduleIdleFallback?: () => void }).scheduleIdleFallback
+function scheduleSafetyNetFallbackForState(state: SessionEventState): void {
+  const scheduler = (state as SessionEventState & { scheduleSafetyNetFallback?: () => void }).scheduleSafetyNetFallback
   scheduler?.()
 }
 
-function clearIdleFallbackForState(state: SessionEventState): void {
-  const clearer = (state as SessionEventState & { clearIdleFallback?: () => void }).clearIdleFallback
+function clearSafetyNetFallbackForState(state: SessionEventState): void {
+  const clearer = (state as SessionEventState & { clearSafetyNetFallback?: () => void }).clearSafetyNetFallback
   clearer?.()
 }
 
-function maybeResolveIdleFallbackForState(state: SessionEventState): void {
-  const resolver = (state as SessionEventState & { maybeResolveIdleFallback?: () => void }).maybeResolveIdleFallback
+function maybeResolveSafetyNetFallbackForState(state: SessionEventState): void {
+  const resolver = (state as SessionEventState & { maybeResolveSafetyNetFallback?: () => void }).maybeResolveSafetyNetFallback
   resolver?.()
 }
 
@@ -954,12 +979,23 @@ function syncDerivedSessionStatus(
   })
 }
 
+/**
+ * Derives the session status from the explicit status and delegations.
+ * 
+ * Note: This does NOT compute parent busy status from child sessions. The server
+ * handles parent-child propagation via SessionActivityTracker for Fleet DelegationService
+ * delegations. For opencode task-tool delegations, the parent stays busy server-side.
+ */
 function deriveSessionStatus(
   explicitStatus: SessionStreamExplicitStatus,
   delegations: DelegationDto[],
 ): SessionStreamStatus {
   if (explicitStatus === "busy") {
     return "busy"
+  }
+
+  if (explicitStatus === "retry") {
+    return "retry"
   }
 
   if (explicitStatus === "delegating") {
@@ -981,9 +1017,13 @@ function toExplicitStatus(status: SessionStreamStatus): SessionStreamExplicitSta
   return status
 }
 
-function mapSessionStatusToActivityStatus(status: SessionStreamStatus): "idle" | "busy" | "delegating" {
+function mapSessionStatusToActivityStatus(status: SessionStreamStatus): "idle" | "busy" | "delegating" | "retry" {
   if (status === "delegating") {
     return "delegating"
+  }
+
+  if (status === "retry") {
+    return "retry"
   }
 
   return status === "idle" ? "idle" : "busy"

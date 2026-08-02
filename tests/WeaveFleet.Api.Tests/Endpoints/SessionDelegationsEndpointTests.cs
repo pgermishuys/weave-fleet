@@ -29,10 +29,12 @@ public sealed class SessionDelegationsEndpointTests
             CreatedAt = DateTime.UtcNow.ToString("O")
         });
 
+        var builder = new SessionOrchestratorBuilder();
         var sessionService = new SessionService(
             sessionRepo,
             new InMemoryProjectRepository(),
-            new SessionOrchestratorBuilder().Build());
+            builder.Build(),
+            builder.ActivityTracker);
 
         var delegationRepo = new InMemoryDelegationRepository();
         delegationRepo.Seed(new Delegation
@@ -62,10 +64,12 @@ public sealed class SessionDelegationsEndpointTests
     [Fact]
     public async Task GetSessionDelegations_WhenSessionMissing_ReturnsNotFound()
     {
+        var builder = new SessionOrchestratorBuilder();
         var sessionService = new SessionService(
             new InMemorySessionRepository(),
             new InMemoryProjectRepository(),
-            new SessionOrchestratorBuilder().Build());
+            builder.Build(),
+            builder.ActivityTracker);
 
         var delegationService = new DelegationService(
             new InMemoryDelegationRepository(),

@@ -18,6 +18,9 @@ interface Props {
   retentionStatus?: string | null;
   totalTokens?: number | null;
   totalCost?: number | null;
+  retryAttempt?: number | null;
+  retryMessage?: string | null;
+  retryNext?: string | null;
   sessionStateChanged?: (patch: {
     activityStatus?: string | null;
     lifecycleStatus?: string | null;
@@ -41,6 +44,9 @@ const sessionStatusIndicator = computed(() => {
     case "resuming":
       return "resuming";
     default:
+      if (effectiveActivityStatus.value === "retry") {
+        return "retry";
+      }
       return effectiveActivityStatus.value === "busy" || effectiveActivityStatus.value === "delegating"
         ? "working"
         : "idle";
@@ -54,6 +60,8 @@ const sessionStatusLabel = computed(() => {
       return "Disconnected";
     case "resuming":
       return "Resuming…";
+    case "retry":
+      return props.retryAttempt ? `Retrying (attempt ${props.retryAttempt})…` : "Retrying…";
     default:
       return "Idle";
   }

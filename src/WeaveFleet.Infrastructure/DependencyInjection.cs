@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
@@ -255,7 +256,16 @@ public static class DependencyInjection
         // Register OpenCodeHarness (descriptor) and OpenCodeHarnessRuntime (provisioning) as separate singletons.
         services.AddSingleton<OpenCodeHarness>();
         services.AddSingleton<IHarness>(sp => sp.GetRequiredService<OpenCodeHarness>());
-        services.AddSingleton<OpenCodeHarnessRuntime>();
+        services.AddSingleton<OpenCodeHarnessRuntime>(sp => new OpenCodeHarnessRuntime(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<PortAllocator>(),
+            sp.GetRequiredService<FleetOptions>(),
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            sp.GetRequiredService<ILogger<OpenCodeHarnessRuntime>>(),
+            sp.GetRequiredService<ILoggerFactory>(),
+            sp.GetService<IAnalyticsCollector>(),
+            sp.GetRequiredService<IEventBroadcaster>(),
+            sp.GetRequiredService<SessionActivityTracker>()));
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<OpenCodeHarnessRuntime>());
         services.AddSingleton<IOpenCodePoolHealthCheck, PoolHealthCheck>();
 

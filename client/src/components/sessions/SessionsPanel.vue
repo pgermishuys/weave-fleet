@@ -132,6 +132,13 @@ function handleActivityStatus(payload: unknown): void {
         sessionStatus: "active",
       });
       break;
+    case "retry":
+      sessionsStore.patchSession(sessionId, {
+        activityStatus: "retry",
+        lifecycleStatus: "running",
+        sessionStatus: "active",
+      });
+      break;
     case "idle":
       sessionsStore.patchSession(sessionId, {
         activityStatus: "idle",

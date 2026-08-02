@@ -501,17 +501,17 @@ public sealed class InProcessFanOutServiceTests
         var instanceTracker = new InstanceTracker();
         await using var liveSession = new FakeHarnessSession("inst-status-capabilities");
         instanceTracker.Register("inst-status-capabilities", liveSession);
+        var activityTracker = new SessionActivityTracker();
         var services = new ServiceCollection();
         services.AddSingleton<IHarnessEventPersister, NoOpHarnessEventPersister>();
         services.AddSingleton(sessionRepository);
         services.AddSingleton<WeaveFleet.Domain.Repositories.ISessionRepository>(sessionRepository);
-        services.AddSingleton(new SessionCapabilitiesResolver(instanceTracker));
+        services.AddSingleton(new SessionCapabilitiesResolver(instanceTracker, activityTracker));
 
         await using var serviceProvider = services.BuildServiceProvider();
         var service = new InProcessFanOutService(
             channels,
             broadcaster,
-            new SessionActivityTracker(),
             new PipelineLatencyMetrics(),
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<InProcessFanOutService>.Instance);
@@ -566,23 +566,24 @@ public sealed class InProcessFanOutServiceTests
             LifecycleStatus = "running",
             RetentionStatus = "active",
             RuntimeMode = "manual",
-            ActivityStatus = "idle",
+            // ActivityStatus is no longer persisted - it's tracked in-memory
             UserId = "user-1"
         });
         var instanceTracker = new InstanceTracker();
         await using var liveSession = new FakeHarnessSession("inst-activity-capabilities");
         instanceTracker.Register("inst-activity-capabilities", liveSession);
+        var activityTracker = new SessionActivityTracker();
         var services = new ServiceCollection();
         services.AddSingleton<IHarnessEventPersister, NoOpHarnessEventPersister>();
         services.AddSingleton(sessionRepository);
         services.AddSingleton<WeaveFleet.Domain.Repositories.ISessionRepository>(sessionRepository);
-        services.AddSingleton(new SessionCapabilitiesResolver(instanceTracker));
+        services.AddSingleton(instanceTracker);
+        services.AddSingleton(new SessionCapabilitiesResolver(instanceTracker, activityTracker));
 
         await using var serviceProvider = services.BuildServiceProvider();
         var service = new InProcessFanOutService(
             channels,
             broadcaster,
-            new SessionActivityTracker(),
             new PipelineLatencyMetrics(),
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<InProcessFanOutService>.Instance);
@@ -608,15 +609,17 @@ public sealed class InProcessFanOutServiceTests
                 internalPumpDedupKey: 1,
                 isDurable: false)).ShouldBeTrue();
 
-            await WaitForBroadcastsAsync(broadcaster, expectedCount: 2, cts.Token);
+            await WaitForBroadcastsAsync(broadcaster, expectedCount: 1, cts.Token);
 
-            var activityBroadcast = broadcaster.Broadcasts.Single(record =>
-                record.Topic == "sessions"
-                && record.Type == "activity_status");
-            activityBroadcast.Payload.GetProperty("sessionId").GetString().ShouldBe("sess-activity-capabilities");
-            activityBroadcast.Payload.GetProperty("activityStatus").GetString().ShouldBe("busy");
-            activityBroadcast.Payload.GetProperty("capabilities").GetProperty("canAbort").GetBoolean().ShouldBeTrue();
-            activityBroadcast.Payload.GetProperty("capabilities").GetProperty("canPrompt").GetBoolean().ShouldBeTrue();
+            // InProcessFanOutService broadcasts the session status event on the session-specific topic
+            // with enriched capabilities. The global "sessions" topic activity_status broadcast
+            // is now handled by HarnessEventRelay (not tested here).
+            var sessionBroadcast = broadcaster.Broadcasts.Single(record =>
+                record.Topic == "session:sess-activity-capabilities"
+                && record.Type == "session.status");
+            sessionBroadcast.Payload.GetProperty("status").GetProperty("type").GetString().ShouldBe("busy");
+            sessionBroadcast.Payload.GetProperty("capabilities").GetProperty("canAbort").GetBoolean().ShouldBeTrue();
+            sessionBroadcast.Payload.GetProperty("capabilities").GetProperty("canPrompt").GetBoolean().ShouldBeTrue();
         }
         finally
         {
@@ -652,7 +655,6 @@ public sealed class InProcessFanOutServiceTests
         var service = new InProcessFanOutService(
             channels,
             broadcaster,
-            new SessionActivityTracker(),
             new PipelineLatencyMetrics(),
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<InProcessFanOutService>.Instance);

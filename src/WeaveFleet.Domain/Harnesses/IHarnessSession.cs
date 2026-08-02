@@ -63,6 +63,13 @@ public interface IHarnessSession : IAsyncDisposable
     /// <summary>Check whether this instance is still healthy.</summary>
     Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct);
 
+    /// <summary>
+    /// Query the current activity status of the harness session (busy/idle).
+    /// Returns null if the harness does not support activity status queries.
+    /// Used for resync on SSE reconnect to correct missed state transitions.
+    /// </summary>
+    Task<string?> GetActivityStatusAsync(CancellationToken ct);
+
     /// <summary>List available agents for this instance.</summary>
     Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct);
 

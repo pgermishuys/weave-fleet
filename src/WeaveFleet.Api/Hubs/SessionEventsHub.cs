@@ -171,8 +171,8 @@ public class SessionEventsHub : Hub
         // 4. Merge: apply in-flight text deltas to persisted messages
         var mergedMessages = ApplyStreamingDeltas(persistedSnapshot.Messages, streamingState.BufferedDeltas);
 
-        // 5. Use in-flight activity status if available, otherwise fall back to persisted
-        var activityStatus = streamingState.ActivitySnapshot?.ActivityStatus ?? persistedSnapshot.ActivityStatus;
+        // 5. Use in-flight activity status if available, otherwise fall back to "idle"
+        var activityStatus = streamingState.ActivitySnapshot?.ActivityStatus ?? "idle";
 
         return persistedSnapshot with
         {

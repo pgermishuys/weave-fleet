@@ -31,7 +31,7 @@ opencode guarantees `session.status { type: "idle" }` at turn end via Effect.ens
 
 ### Phase 1: Lossless Activity-Status Path
 
-- [ ] 1. Harden InProcessFanOutService for activity_status events
+- [x] 1. Harden InProcessFanOutService for activity_status events
   - **What**: In `ForwardAsync`, detect activity_status event class. On failure, retry up to 3 times with 50ms backoff before logging and dropping. Alternatively, split activity_status into a dedicated synchronous path that bypasses the fire-and-forget channel (preferred: call tracker.Update + broadcaster.Broadcast directly from the relay for this event type, skipping the lossy fan-out).
   - **Files**: `src/WeaveFleet.Infrastructure/EventBus/InProcessFanOutService.cs`, `src/WeaveFleet.Infrastructure/Services/HarnessEventRelay.cs`
   - **Depends on**: None
@@ -39,7 +39,7 @@ opencode guarantees `session.status { type: "idle" }` at turn end via Effect.ens
     - activity_status events are never silently dropped (verified by test)
     - Other event types still use existing async path (no perf regression)
 
-- [ ] 2. Add integration test for lossless delivery
+- [x] 2. Add integration test for lossless delivery
   - **What**: SignalR contract test that broadcasts activity_status(busy) then activity_status(idle) rapidly and asserts both arrive at the client hub connection in order.
   - **Files**: `tests/WeaveFleet.IntegrationTests/Sessions/SignalREventContractTests.cs`
   - **Depends on**: Task 1
@@ -49,7 +49,7 @@ opencode guarantees `session.status { type: "idle" }` at turn end via Effect.ens
 
 ### Phase 2: One-Shot Resync on (Re)connect
 
-- [ ] 3. Implement resync on SSE stream (re)establishment
+- [x] 3. Implement resync on SSE stream (re)establishment
   - **What**: When HarnessEventRelay (non-pooled) or SseEventDemultiplexer (pooled) connects/reconnects to an opencode instance's SSE endpoint, immediately issue `GET /session/status` for each bound opencode session. Feed results into SessionActivityTracker and broadcast corrections via IEventBroadcaster. This replaces relying on the stale in-memory state surviving a reconnect gap.
   - **Files**: `src/WeaveFleet.Infrastructure/Services/HarnessEventRelay.cs`, `src/WeaveFleet.Infrastructure/Services/SseEventDemultiplexer.cs` (or equivalent pooled SSE handler), `src/WeaveFleet.Application/Services/SessionActivityTracker.cs`
   - **Depends on**: Task 1
@@ -57,7 +57,7 @@ opencode guarantees `session.status { type: "idle" }` at turn end via Effect.ens
     - After SSE reconnect, tracker state matches opencode's actual status
     - Broadcast sent only if state differs from tracker's current value (no spurious idle→idle)
 
-- [ ] 4. Add integration test for resync
+- [x] 4. Add integration test for resync
   - **What**: Simulate SSE disconnect+reconnect; assert that a session left busy during the gap is corrected to idle after reconnect (or stays busy if opencode reports busy).
   - **Files**: `tests/WeaveFleet.IntegrationTests/Sessions/` (new test class or extend existing)
   - **Depends on**: Task 3
@@ -66,7 +66,7 @@ opencode guarantees `session.status { type: "idle" }` at turn end via Effect.ens
 
 ### Phase 3: Synthetic Idle on Pooled Instance Fault
 
-- [ ] 5. Broadcast synthetic idle on pooled instance crash/SSE termination
+- [x] 5. Broadcast synthetic idle on pooled instance crash/SSE termination
   - **What**: In the pooled SSE handler (SseEventDemultiplexer or PooledOpenCodeInstanceRegistry fault handler), when an instance's SSE stream terminates unexpectedly or a lease faults permanently: look up all fleet session bindings in PoolDemuxBindingTable for that instance, broadcast `activity_status("idle")` for each, and clear their tracker entries. Use value `"idle"` (not a new "disconnected" — keep it simple; the session's connection status is a separate concern).
   - **Files**: `src/WeaveFleet.Infrastructure/Services/SseEventDemultiplexer.cs`, `src/WeaveFleet.Infrastructure/Pool/PooledOpenCodeInstanceRegistry.cs`, `src/WeaveFleet.Infrastructure/Pool/PoolDemuxBindingTable.cs`
   - **Depends on**: Task 1
@@ -74,7 +74,7 @@ opencode guarantees `session.status { type: "idle" }` at turn end via Effect.ens
     - On pooled instance crash, all bound sessions transition to idle in tracker and receive broadcast
     - Mirrors non-pooled HarnessEventRelay finally-block behavior (lines 314-321)
 
-- [ ] 6. Add test for pooled crash → synthetic idle
+- [x] 6. Add test for pooled crash → synthetic idle
   - **What**: Unit or integration test: register bindings, simulate instance fault, assert idle broadcast for each binding.
   - **Files**: `tests/WeaveFleet.IntegrationTests/` or `tests/WeaveFleet.Infrastructure.Tests/`
   - **Depends on**: Task 5
@@ -83,7 +83,7 @@ opencode guarantees `session.status { type: "idle" }` at turn end via Effect.ens
 
 ### Phase 4: Remove Persisted Activity Status
 
-- [ ] 7. Stop reading persisted activity_status
+- [x] 7. Stop reading persisted activity_status
   - **What**: Replace `?? s.ActivityStatus` fallback in SessionEndpoints.cs (:73, :540, :732) with `?? "idle"`. Replace `?? persistedSnapshot.ActivityStatus` in SessionEventsHub.cs:175 with tracker lookup (already available) `?? "idle"`. Replace `GetStatusCountsInternalAsync` in SessionRepository.cs with a method that queries SessionActivityTracker for counts. Update LegacySessionImporter to not rely on the column for runtime status.
   - **Files**: `src/WeaveFleet.Api/Endpoints/SessionEndpoints.cs`, `src/WeaveFleet.Api/Hubs/SessionEventsHub.cs`, `src/WeaveFleet.Infrastructure/Persistence/SessionRepository.cs`, `src/WeaveFleet.Infrastructure/Import/LegacySessionImporter.cs`
   - **Depends on**: Tasks 1-5 (all server hardening live)
@@ -92,7 +92,7 @@ opencode guarantees `session.status { type: "idle" }` at turn end via Effect.ens
     - Snapshot merge tests updated to reflect new fallback
     - `dotnet build` passes; existing tests pass or are updated
 
-- [ ] 8. Stop writing persisted activity_status
+- [x] 8. Stop writing persisted activity_status
   - **What**: Remove `activity_status` from INSERT in SessionRepository.cs:27-79. Remove the NULL-set on resume (:386). Keep column in DB for now (drop in next migration cycle).
   - **Files**: `src/WeaveFleet.Infrastructure/Persistence/SessionRepository.cs`
   - **Depends on**: Task 7
@@ -100,7 +100,7 @@ opencode guarantees `session.status { type: "idle" }` at turn end via Effect.ens
     - No writes to the column
     - Existing sessions with stale data unaffected (reads already replaced)
 
-- [ ] 9. Update affected tests
+- [x] 9. Update affected tests
   - **What**: Fix SnapshotMergeTests.cs:144-169, SessionDiffEndpointTests, EndpointGuardTests to match new behavior (no persisted status in snapshots, fallback is "idle").
   - **Files**: `tests/WeaveFleet.IntegrationTests/Sessions/SnapshotMergeTests.cs`, other affected test files in `tests/`
   - **Depends on**: Tasks 7-8
@@ -109,7 +109,7 @@ opencode guarantees `session.status { type: "idle" }` at turn end via Effect.ens
 
 ### Phase 5: Surface Retry Status End-to-End
 
-- [ ] 10. Propagate retry status through tracker and broadcast
+- [x] 10. Propagate retry status through tracker and broadcast
   - **What**: SessionActivityTracker.Update should store retry metadata (attempt, message, next) when status is "retry". Broadcast payload for activity_status should include these fields when present. Define a small DTO or extend existing event shape.
   - **Files**: `src/WeaveFleet.Application/Services/SessionActivityTracker.cs`, `src/WeaveFleet.Infrastructure/EventBus/InProcessFanOutService.cs` (or wherever broadcast payload is shaped)
   - **Depends on**: Task 9
@@ -117,7 +117,7 @@ opencode guarantees `session.status { type: "idle" }` at turn end via Effect.ens
     - Retry events carry attempt/message/next in SignalR broadcast
     - SignalR contract test verifies shape
 
-- [ ] 11. Add SignalR contract test for retry event shape
+- [x] 11. Add SignalR contract test for retry event shape
   - **What**: Assert that a retry event arrives with `{ status: "retry", attempt: N, message: "...", next: "ISO timestamp" }`.
   - **Files**: `tests/WeaveFleet.IntegrationTests/Sessions/SignalREventContractTests.cs`
   - **Depends on**: Task 10
@@ -126,7 +126,7 @@ opencode guarantees `session.status { type: "idle" }` at turn end via Effect.ens
 
 ### Phase 6: Client Simplification
 
-- [ ] 12. Remove 2500ms idle fallback timer
+- [x] 12. Remove 2500ms idle fallback timer
   - **What**: Delete `IDLE_FALLBACK_MS`, `scheduleIdleFallback`, and all call sites in `use-session-events.ts`. Replace with a 60s last-resort fallback that logs a warning (safety net, should never fire). The server is now authoritative.
   - **Files**: `client/src/composables/use-session-events.ts`
   - **Depends on**: Tasks 1-11 (server fully authoritative)
@@ -135,7 +135,7 @@ opencode guarantees `session.status { type: "idle" }` at turn end via Effect.ens
     - 60s fallback exists with console.warn
     - `bun run test` passes in client/
 
-- [ ] 13. Render retry state in UI
+- [x] 13. Render retry state in UI
   - **What**: Update `deriveSessionStatus` (:957-974) to return a "retry" status with metadata. Update the session status display component to show "Retrying (attempt N)…" with next-retry countdown.
   - **Files**: `client/src/composables/use-session-events.ts`, relevant Vue component(s) displaying session status
   - **Depends on**: Task 12
@@ -143,7 +143,7 @@ opencode guarantees `session.status { type: "idle" }` at turn end via Effect.ens
     - UI shows retry state with attempt number
     - `bun run test` passes
 
-- [ ] 14. Simplify parent-child busy propagation
+- [x] 14. Simplify parent-child busy propagation
   - **What**: In `deriveSessionStatus`, remove client-side parent-inherits-child-busy logic (opencode handles this server-side). Keep SessionActivityTracker's parent-child propagation ONLY for Fleet-level DelegationService delegations (separate opencode sessions where parent doesn't stay busy). Add comment explaining the distinction.
   - **Files**: `client/src/composables/use-session-events.ts`, `src/WeaveFleet.Application/Services/SessionActivityTracker.cs`
   - **Depends on**: Task 13
