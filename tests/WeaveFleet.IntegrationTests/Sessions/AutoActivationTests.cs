@@ -428,8 +428,10 @@ public sealed class AutoActivationTests
             userContext,
             options,
             builder.SmartLinkRepository,
+            new SessionActivityTracker(),
             NullLogger<SessionOrchestrator>.Instance,
-            sessionActivityWriteService: null);
+            sessionActivityWriteService: null,
+            gitDiffService: null);
     }
 
     private static HarnessEvent CreateAssistantResponseEvent(string openCodeSessionId, string messageId, string text)

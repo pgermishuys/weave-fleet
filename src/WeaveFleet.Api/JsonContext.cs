@@ -76,6 +76,21 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(DelegationCompletedPayload))]
 [JsonSerializable(typeof(SessionDeletedPayload))]
 [JsonSerializable(typeof(ErrorResponse))]
+// Message event parts (polymorphic hierarchy)
+[JsonSerializable(typeof(MessageEventPart))]
+[JsonSerializable(typeof(TextMessageEventPart))]
+[JsonSerializable(typeof(ReasoningMessageEventPart))]
+[JsonSerializable(typeof(ToolMessageEventPart))]
+[JsonSerializable(typeof(FileMessageEventPart))]
+[JsonSerializable(typeof(StepStartedMessageEventPart))]
+[JsonSerializable(typeof(StepFinishedMessageEventPart))]
+// Tool invocation states (polymorphic hierarchy)
+[JsonSerializable(typeof(ToolInvocationState))]
+[JsonSerializable(typeof(ToolPendingState))]
+[JsonSerializable(typeof(ToolRunningState))]
+[JsonSerializable(typeof(ToolCompletedState))]
+[JsonSerializable(typeof(ToolErrorState))]
+[JsonSerializable(typeof(ToolCancelledState))]
 // Shared
 [JsonSerializable(typeof(ApiErrorResponse))]
 // Fleet

@@ -208,3 +208,31 @@
 {"level":30,"time":1785493037842,"pid":64628,"hostname":"aurora-desktop","name":"weave","module":"adapter-opencode/plugin","agentCount":10,"msg":"Weave agents injected into OpenCode config"}
 {"level":30,"time":1785493037842,"pid":64628,"hostname":"aurora-desktop","name":"weave","module":"adapter-opencode/plugin","msg":"Set default_agent to 'loom'"}
 {"level":30,"time":1785493037842,"pid":64628,"hostname":"aurora-desktop","name":"weave","module":"adapter-opencode/plugin","commands":["start-work","weave:start"],"msg":"Weave slash commands registered"}
+{"level":30,"time":1785666856868,"pid":79248,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","directory":"/Users/pgermishuys/source/weave-fleet","msg":"Weave plugin starting"}
+{"level":30,"time":1785666856874,"pid":79248,"hostname":"Pieters-MacBook-Pro.local","name":"weave:config","module":"loader","msg":"Config loaded successfully"}
+{"level":30,"time":1785666856880,"pid":79248,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","agentCount":8,"msg":"Agents translated for config hook injection"}
+{"level":30,"time":1785666856880,"pid":79248,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","msg":"Weave plugin hooks ready — returning immediately"}
+{"level":30,"time":1785666856881,"pid":79248,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","agentCount":8,"msg":"Weave agents injected into OpenCode config"}
+{"level":30,"time":1785666856881,"pid":79248,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","msg":"Set default_agent to 'loom'"}
+{"level":30,"time":1785666856881,"pid":79248,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","commands":["start-work","weave:start"],"msg":"Weave slash commands registered"}
+{"level":30,"time":1785666862552,"pid":79401,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","directory":"/Users/pgermishuys/source/weave-fleet","msg":"Weave plugin starting"}
+{"level":30,"time":1785666862558,"pid":79401,"hostname":"Pieters-MacBook-Pro.local","name":"weave:config","module":"loader","msg":"Config loaded successfully"}
+{"level":30,"time":1785666862563,"pid":79401,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","agentCount":8,"msg":"Agents translated for config hook injection"}
+{"level":30,"time":1785666862563,"pid":79401,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","msg":"Weave plugin hooks ready — returning immediately"}
+{"level":30,"time":1785666862563,"pid":79401,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","agentCount":8,"msg":"Weave agents injected into OpenCode config"}
+{"level":30,"time":1785666862563,"pid":79401,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","msg":"Set default_agent to 'loom'"}
+{"level":30,"time":1785666862563,"pid":79401,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","commands":["start-work","weave:start"],"msg":"Weave slash commands registered"}
+{"level":30,"time":1785666954707,"pid":81246,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","directory":"/Users/pgermishuys/source/weave-fleet","msg":"Weave plugin starting"}
+{"level":30,"time":1785666954713,"pid":81246,"hostname":"Pieters-MacBook-Pro.local","name":"weave:config","module":"loader","msg":"Config loaded successfully"}
+{"level":30,"time":1785666954718,"pid":81246,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","agentCount":10,"msg":"Agents translated for config hook injection"}
+{"level":30,"time":1785666954718,"pid":81246,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","msg":"Weave plugin hooks ready — returning immediately"}
+{"level":30,"time":1785666954718,"pid":81246,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","agentCount":10,"msg":"Weave agents injected into OpenCode config"}
+{"level":30,"time":1785666954718,"pid":81246,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","msg":"Set default_agent to 'loom'"}
+{"level":30,"time":1785666954718,"pid":81246,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","commands":["start-work","weave:start"],"msg":"Weave slash commands registered"}
+{"level":30,"time":1785667566483,"pid":85431,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","directory":"/Users/pgermishuys/source/weave-fleet","msg":"Weave plugin starting"}
+{"level":30,"time":1785667566488,"pid":85431,"hostname":"Pieters-MacBook-Pro.local","name":"weave:config","module":"loader","msg":"Config loaded successfully"}
+{"level":30,"time":1785667566494,"pid":85431,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","agentCount":10,"msg":"Agents translated for config hook injection"}
+{"level":30,"time":1785667566494,"pid":85431,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","msg":"Weave plugin hooks ready — returning immediately"}
+{"level":30,"time":1785667566494,"pid":85431,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","agentCount":10,"msg":"Weave agents injected into OpenCode config"}
+{"level":30,"time":1785667566494,"pid":85431,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","msg":"Set default_agent to 'loom'"}
+{"level":30,"time":1785667566494,"pid":85431,"hostname":"Pieters-MacBook-Pro.local","name":"weave","module":"adapter-opencode/plugin","commands":["start-work","weave:start"],"msg":"Weave slash commands registered"}

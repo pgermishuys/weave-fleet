@@ -1564,8 +1564,10 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
             userContext,
             options,
             _builder.SmartLinkRepository,
+            new SessionActivityTracker(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance,
-            sessionActivityWriteService: null);
+            sessionActivityWriteService: null,
+            gitDiffService: null);
     }
 
     private static SessionOrchestratorBuilder CreateBuilderWithGitDiffService(GitDiffService gitDiffService)

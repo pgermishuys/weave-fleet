@@ -11,7 +11,9 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
@@ -242,6 +244,86 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
         snapshot.TryGetProperty("messages", out var messages).ShouldBeTrue(
             $"Snapshot missing 'messages'. Actual: {snapshot.GetRawText()}");
         messages.ValueKind.ShouldBe(JsonValueKind.Array);
+    }
+
+    [Fact]
+    public async Task Snapshot_includes_tool_output_in_completed_state()
+    {
+        // Arrange: create a session and persist a message with a completed tool part
+        var sessionId = await CreateSessionAsync();
+        await PersistMessageWithCompletedToolAsync(sessionId);
+
+        // Act: subscribe and get snapshot
+        var snapshot = await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+
+        // Assert: snapshot contains messages
+        snapshot.TryGetProperty("messages", out var messages).ShouldBeTrue(
+            $"Snapshot missing 'messages'. Actual: {snapshot.GetRawText()}");
+        messages.ValueKind.ShouldBe(JsonValueKind.Array);
+        messages.GetArrayLength().ShouldBeGreaterThan(0, "Expected at least one message in snapshot");
+
+        // Find the message with tool parts
+        var messageWithTool = messages.EnumerateArray()
+            .FirstOrDefault(m => m.TryGetProperty("parts", out var parts) 
+                && parts.EnumerateArray().Any(p => p.TryGetProperty("type", out var t) && t.GetString() == "tool"));
+
+        messageWithTool.ValueKind.ShouldNotBe(JsonValueKind.Undefined, 
+            $"No message with tool part found. Messages: {messages.GetRawText()}");
+
+        // Find the tool part
+        messageWithTool.TryGetProperty("parts", out var messageParts).ShouldBeTrue();
+        var toolPart = messageParts.EnumerateArray()
+            .First(p => p.TryGetProperty("type", out var t) && t.GetString() == "tool");
+
+        // Verify tool part has state
+        toolPart.TryGetProperty("state", out var state).ShouldBeTrue(
+            $"Tool part missing 'state'. Actual: {toolPart.GetRawText()}");
+
+        // THE CRITICAL ASSERTION: state must have 'output' field for completed tools
+        // The client's getToolOutput() function looks for state.output
+        state.TryGetProperty("output", out var output).ShouldBeTrue(
+            $"Tool state missing 'output' field. This is the bug! Actual state JSON: {state.GetRawText()}");
+
+        // Verify output contains the expected data
+        output.ValueKind.ShouldNotBe(JsonValueKind.Null);
+        output.TryGetProperty("result", out var result).ShouldBeTrue(
+            $"Tool output missing 'result'. Actual: {output.GetRawText()}");
+        result.GetString().ShouldBe("test output");
+    }
+
+    private async Task PersistMessageWithCompletedToolAsync(string sessionId)
+    {
+        var messageRepo = _server.Services.GetRequiredService<IMessageRepository>();
+        
+        var messageId = $"msg-{Guid.NewGuid():N}";
+        var toolCallId = $"call-{Guid.NewGuid():N}";
+        
+        // Create a message with a tool use part and a tool result part
+        var parts = new MessagePart[]
+        {
+            new ToolUsePart(
+                ToolCallId: toolCallId,
+                ToolName: "bash",
+                Arguments: JsonSerializer.SerializeToElement(new { command = "echo test" }),
+                State: ToolUseState.Completed),
+            new ToolResultPart(
+                ToolCallId: toolCallId,
+                Content: JsonSerializer.Serialize(new { result = "test output" }),
+                IsError: false)
+        };
+
+        var harnessMessage = new HarnessMessage
+        {
+            Id = messageId,
+            Role = "assistant",
+            Parts = parts,
+            Timestamp = DateTimeOffset.UtcNow,
+            Agent = null,
+            ModelId = null
+        };
+
+        var persistedMessage = MessagePersistenceService.ToPersistedMessage(sessionId, harnessMessage);
+        await messageRepo.UpsertAsync(persistedMessage);
     }
 
     private async Task<string> CreateSessionAsync()
