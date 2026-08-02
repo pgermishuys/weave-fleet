@@ -566,10 +566,11 @@ function removeSessionFromStore(): void {
 .session-item {
   width: 100%;
   min-width: 0;
+  min-height: 40px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 12px 4px 32px;
+  gap: 10px;
+  padding: 0 12px;
   cursor: pointer;
   border: 0;
   border-left: 3px solid transparent;
