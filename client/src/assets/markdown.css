@@ -1,0 +1,289 @@
+/* ─── Markdown Shared Styles ────────────────────────────────────────────── */
+/* Token-driven markdown styling for both MessageBubble and MarkdownRenderer  */
+/* Apply .md-content class to container holding markdown-it rendered content  */
+
+/* ─── Syntax Highlighting Theme Variables ─────────────────────────────────── */
+:root {
+  /* Default dark syntax tokens */
+  --syntax-keyword: #c678dd;
+  --syntax-string: #98c379;
+  --syntax-number: #d19a66;
+  --syntax-comment: #8b949e;
+  --syntax-function: #61afef;
+  --syntax-attr: #e5c07b;
+  --syntax-type: #e06c75;
+  --syntax-literal: #56b6c2;
+
+  /* Markdown role tokens (theme-aware) */
+  --md-heading: var(--accent);
+  --md-strong: var(--idle);
+  --md-inline-code: var(--running);
+  --md-marker: var(--idle);
+}
+
+:root[data-theme="light"],
+:root[data-theme="solarized-light"] {
+  /* Light syntax tokens */
+  --syntax-keyword: #a626a4;
+  --syntax-string: #50a14f;
+  --syntax-number: #986801;
+  --syntax-comment: #a0a1a7;
+  --syntax-function: #4078f2;
+  --syntax-attr: #c18401;
+  --syntax-type: #e45649;
+  --syntax-literal: #0184bc;
+
+  /* WCAG AA overrides for markdown role tokens (≥4.5:1 on #FDF6E3) */
+  --md-heading: #4a5ba0;        /* Darker indigo/blue: 6.06:1 light, 5.91:1 solar */
+  --md-strong: #8a5a00;         /* Darker amber/bronze: 5.63:1 light, 5.49:1 solar */
+  --md-inline-code: #157339;    /* Darker green: 5.63:1 light, 5.49:1 solar, 5.00:1 on accent-dim */
+  --md-marker: #8a5a00;         /* Darker amber/bronze: 5.63:1 light, 5.49:1 solar */
+}
+
+/* ─── Markdown Base Styles ────────────────────────────────────────────────── */
+.md-content * {
+  max-width: 100%;
+}
+
+.md-content p,
+.md-content ul,
+.md-content ol,
+.md-content pre,
+.md-content blockquote,
+.md-content table,
+.md-content hr {
+  margin: 0 0 8px;
+}
+
+.md-content *:last-child {
+  margin-bottom: 0;
+}
+
+/* ─── Headings ────────────────────────────────────────────────────────────── */
+.md-content h1,
+.md-content h2,
+.md-content h3 {
+  color: var(--md-heading);
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 1.2em;
+  margin-bottom: 0.4em;
+}
+
+.md-content h4,
+.md-content h5,
+.md-content h6 {
+  color: var(--muted);
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 1em;
+  margin-bottom: 0.4em;
+}
+
+.md-content h1 {
+  font-size: 1.35em;
+}
+
+.md-content h2 {
+  font-size: 1.2em;
+}
+
+.md-content h3 {
+  font-size: 1.1em;
+}
+
+.md-content h4,
+.md-content h5,
+.md-content h6 {
+  font-size: 1em;
+}
+
+.md-content h1:first-child,
+.md-content h2:first-child,
+.md-content h3:first-child,
+.md-content h4:first-child,
+.md-content h5:first-child,
+.md-content h6:first-child {
+  margin-top: 0;
+}
+
+/* ─── Lists ───────────────────────────────────────────────────────────────── */
+.md-content ul {
+  padding-left: 16px;
+  list-style-type: disc;
+}
+
+.md-content ol {
+  padding-left: 16px;
+  list-style-type: decimal;
+}
+
+.md-content li + li {
+  margin-top: 2px;
+}
+
+.md-content li::marker {
+  color: var(--md-marker);
+}
+
+/* ─── Inline Emphasis ─────────────────────────────────────────────────────── */
+.md-content strong,
+.md-content b {
+  color: var(--md-strong);
+  font-weight: 600;
+}
+
+
+/* ─── Blockquote ──────────────────────────────────────────────────────────── */
+.md-content blockquote {
+  padding-left: 12px;
+  border-left: 2px solid var(--accent);
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ─── Links ───────────────────────────────────────────────────────────────── */
+.md-content a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.md-content a:hover {
+  text-decoration: underline;
+}
+
+/* ─── Inline Code ─────────────────────────────────────────────────────────── */
+.md-content code:not(pre code) {
+  padding: 0.12rem 0.35rem;
+  background: var(--accent-dim);
+  color: var(--md-inline-code);
+  font-family: var(--font-mono-stack);
+  font-size: 0.88em;
+  border-radius: 2px;
+}
+
+/* ─── Code Blocks ─────────────────────────────────────────────────────────── */
+.md-content pre {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.md-content pre code {
+  display: block;
+  padding: 10px 12px;
+  font-size: 10px;
+  font-family: var(--font-mono-stack);
+  background: transparent;
+  color: var(--text);
+}
+
+/* ─── Horizontal Rule ─────────────────────────────────────────────────────── */
+.md-content hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1em 0;
+}
+
+/* ─── Strikethrough ───────────────────────────────────────────────────────── */
+.md-content del,
+.md-content s {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+/* ─── Tables ──────────────────────────────────────────────────────────────── */
+.md-content table {
+  display: block;
+  overflow-x: auto;
+  width: auto;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+
+.md-content th,
+.md-content td {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.md-content th {
+  font-weight: 600;
+  background: var(--accent-dim);
+}
+
+.md-content tr:nth-child(even) {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+/* ─── Syntax Highlighting (highlight.js) ─────────────────────────────────── */
+.md-content .hljs {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  color: var(--text);
+}
+
+.md-content .hljs-keyword,
+.md-content .hljs-selector-tag,
+.md-content .hljs-section {
+  color: var(--syntax-keyword);
+}
+
+.md-content .hljs-string,
+.md-content .hljs-regexp,
+.md-content .hljs-template-tag {
+  color: var(--syntax-string);
+}
+
+.md-content .hljs-number {
+  color: var(--syntax-number);
+}
+
+.md-content .hljs-comment,
+.md-content .hljs-quote,
+.md-content .hljs-meta {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+
+.md-content .hljs-function,
+.md-content .hljs-title,
+.md-content .hljs-class .hljs-title,
+.md-content .hljs-title.class_ {
+  color: var(--syntax-function);
+}
+
+.md-content .hljs-attr,
+.md-content .hljs-attribute,
+.md-content .hljs-property {
+  color: var(--syntax-attr);
+}
+
+.md-content .hljs-built_in,
+.md-content .hljs-type,
+.md-content .hljs-variable,
+.md-content .hljs-name {
+  color: var(--syntax-type);
+}
+
+.md-content .hljs-literal,
+.md-content .hljs-symbol,
+.md-content .hljs-bullet,
+.md-content .hljs-link {
+  color: var(--syntax-literal);
+}
+
+.md-content .hljs-emphasis {
+  font-style: italic;
+}
+
+.md-content .hljs-strong {
+  font-weight: bold;
+}
+
+/* ─── Images ──────────────────────────────────────────────────────────────── */
+.md-content img {
+  max-width: 100%;
+  height: auto;
+}

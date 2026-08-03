@@ -154,7 +154,7 @@ function handleExpandVisual(payload: VisualPayload): void {
           <!-- eslint-disable-next-line vue/no-v-html -->
           <div
             v-if="body"
-            class="msg-body__content"
+            class="msg-body__content md-content"
             v-html="bodyHtml"
           />
 
@@ -245,8 +245,6 @@ function handleExpandVisual(payload: VisualPayload): void {
 </template>
 
 <style scoped>
-@import "highlight.js/styles/github.css";
-
 .message {
   width: var(--activity-bubble-width, 100%);
   box-sizing: border-box;
@@ -316,90 +314,6 @@ function handleExpandVisual(payload: VisualPayload): void {
 
 .message--user .msg-body__content {
   text-align: left;
-}
-
-.msg-body__content :deep(*) {
-  max-width: 100%;
-}
-
-.msg-body__content :deep(p),
-.msg-body__content :deep(ul),
-.msg-body__content :deep(ol),
-.msg-body__content :deep(pre),
-.msg-body__content :deep(blockquote) {
-  margin: 0 0 8px;
-}
-
-.msg-body__content :deep(*:last-child) {
-  margin-bottom: 0;
-}
-
-.msg-body__content :deep(ul) {
-  padding-left: 16px;
-  list-style-type: disc;
-}
-
-.msg-body__content :deep(ol) {
-  padding-left: 16px;
-  list-style-type: decimal;
-}
-
-.msg-body__content :deep(li + li) {
-  margin-top: 2px;
-}
-
-.msg-body__content :deep(a) {
-  color: var(--indigo);
-}
-
-.msg-body__content :deep(code:not(pre code)) {
-  padding: 0.12rem 0.35rem;
-  border-radius: 0;
-  background: var(--bg, rgba(0, 0, 0, 0.04));
-  color: var(--text);
-  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 0.88em;
-}
-
-.msg-body__content :deep(pre) {
-  overflow-x: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-}
-
-.msg-body__content :deep(pre code) {
-  display: block;
-  padding: 10px 12px;
-  font-size: 10px;
-}
-
-.msg-body__content :deep(blockquote) {
-  padding-left: 10px;
-  border-left: 2px solid var(--border);
-  color: var(--muted);
-}
-
-.msg-body__content :deep(table) {
-  width: auto;
-  margin: 0 0 8px;
-  border-collapse: collapse;
-  font-size: 0.92em;
-}
-
-.msg-body__content :deep(th),
-.msg-body__content :deep(td) {
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  text-align: left;
-}
-
-.msg-body__content :deep(th) {
-  font-weight: 600;
-  background: var(--bg, rgba(0, 0, 0, 0.04));
-}
-
-.msg-body__content :deep(tr:nth-child(even)) {
-  background: var(--bg, rgba(0, 0, 0, 0.02));
 }
 
 .msg-images {

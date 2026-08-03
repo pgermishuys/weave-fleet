@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "./transitions.css";
+@import "./markdown.css";
 
 :root {
   --visual-vh: 100dvh;
