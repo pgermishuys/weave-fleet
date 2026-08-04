@@ -1,4 +1,6 @@
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
@@ -26,12 +28,12 @@ public sealed class AutomationRepository : IAutomationRepository
                 id, name, prompt, trigger_type, trigger_config,
                 max_concurrent_runs, max_runs_per_hour, timeout_minutes,
                 is_enabled, is_deleted, workspace_id, model, agent,
-                created_at, updated_at, user_id
+                created_at, updated_at, user_id, target_tags, target_type
             ) VALUES (
                 @Id, @Name, @Prompt, @TriggerType, @TriggerConfig,
                 @MaxConcurrentRuns, @MaxRunsPerHour, @TimeoutMinutes,
                 @IsEnabled, @IsDeleted, @WorkspaceId, @Model, @Agent,
-                @CreatedAt, @UpdatedAt, @UserId
+                @CreatedAt, @UpdatedAt, @UserId, @TargetTags, @TargetType
             )
             """,
             cmd =>
@@ -52,6 +54,8 @@ public sealed class AutomationRepository : IAutomationRepository
                 cmd.AddParameter("CreatedAt", automation.CreatedAt);
                 cmd.AddParameter("UpdatedAt", automation.UpdatedAt);
                 cmd.AddParameter("UserId", _userContext.UserId);
+                cmd.AddParameter("TargetTags", SerializeTargetTags(automation.TargetTags));
+                cmd.AddParameter("TargetType", automation.TargetType);
             });
     }
 
@@ -71,7 +75,9 @@ public sealed class AutomationRepository : IAutomationRepository
                 workspace_id = @WorkspaceId,
                 model = @Model,
                 agent = @Agent,
-                updated_at = @UpdatedAt
+                updated_at = @UpdatedAt,
+                target_tags = @TargetTags,
+                target_type = @TargetType
             WHERE id = @Id AND user_id = @UserId AND is_deleted = 0
             """,
             cmd =>
@@ -89,6 +95,8 @@ public sealed class AutomationRepository : IAutomationRepository
                 cmd.AddParameter("Agent", automation.Agent);
                 cmd.AddParameter("UpdatedAt", automation.UpdatedAt);
                 cmd.AddParameter("UserId", _userContext.UserId);
+                cmd.AddParameter("TargetTags", SerializeTargetTags(automation.TargetTags));
+                cmd.AddParameter("TargetType", automation.TargetType);
             });
     }
 
@@ -196,6 +204,8 @@ public sealed class AutomationRepository : IAutomationRepository
         var modelOrd = r.GetOrdinal("model");
         var agentOrd = r.GetOrdinal("agent");
         var updatedAtOrd = r.GetOrdinal("updated_at");
+        var targetTagsOrd = r.GetOrdinal("target_tags");
+        var targetTypeOrd = r.GetOrdinal("target_type");
 
         return new Automation
         {
@@ -215,6 +225,37 @@ public sealed class AutomationRepository : IAutomationRepository
             CreatedAt = r.GetString(r.GetOrdinal("created_at")),
             UpdatedAt = r.GetNullableString(updatedAtOrd),
             UserId = r.GetString(r.GetOrdinal("user_id")),
+            TargetTags = DeserializeTargetTags(r.GetNullableString(targetTagsOrd)),
+            TargetType = r.GetString(targetTypeOrd),
         };
+    }
+
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "List<string> is a simple type safe for JSON serialization")]
+    private static string? SerializeTargetTags(List<string> targetTags)
+    {
+        if (targetTags.Count == 0)
+        {
+            return null;
+        }
+
+        return JsonSerializer.Serialize(targetTags);
+    }
+
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "List<string> is a simple type safe for JSON deserialization")]
+    private static List<string> DeserializeTargetTags(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
     }
 }

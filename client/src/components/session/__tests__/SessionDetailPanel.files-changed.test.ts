@@ -114,6 +114,7 @@ function createSession(overrides: Partial<SessionListItem> = {}): SessionListIte
         created: 0,
         updated: 0,
       },
+      tags: [],
     },
     instanceStatus: "running",
     sourceDirectory: null,
@@ -125,6 +126,7 @@ function createSession(overrides: Partial<SessionListItem> = {}): SessionListIte
     typedInstanceStatus: "running",
     isHidden: false,
     capabilities: createCapabilities(),
+    tags: [],
     ...overrides,
   };
 }
@@ -164,7 +166,10 @@ function createSessionDetailContext(overrides: Partial<Pick<SessionDetailContext
     resume: {
       resumeSession: vi.fn(async () => ({
         instanceId: "instance-1",
-        session: createSession().session,
+        session: {
+          ...createSession().session,
+          tags: [],
+        },
       })),
       isResuming: computed(() => false),
       resumingSessionId: readonly(shallowRef<string | null>(null)),

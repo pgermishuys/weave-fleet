@@ -73,6 +73,7 @@ public sealed partial class AutomationEventDispatcherService : BackgroundService
         var matcher = scope.ServiceProvider.GetRequiredService<EventTriggerMatcher>();
         var ledger = scope.ServiceProvider.GetRequiredService<IAutomationEventLedgerRepository>();
         var executor = scope.ServiceProvider.GetRequiredService<AutomationExecutionService>();
+        var sessionRepo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
 
         // Find matching automations
         var matchingAutomations = await matcher.FindMatchingAutomationsAsync(notification.EventType, ct).ConfigureAwait(false);
@@ -83,6 +84,14 @@ public sealed partial class AutomationEventDispatcherService : BackgroundService
             return;
         }
 
+        // Load session tags if SessionId is present
+        List<string>? sessionTags = null;
+        if (!string.IsNullOrWhiteSpace(notification.SessionId))
+        {
+            var session = await sessionRepo.GetByIdAsync(notification.SessionId).ConfigureAwait(false);
+            sessionTags = session?.Tags;
+        }
+
         LogFoundMatchingAutomations(notification.EventType, notification.EventId, matchingAutomations.Count);
 
         // Process each matching automation
@@ -90,6 +99,25 @@ public sealed partial class AutomationEventDispatcherService : BackgroundService
         {
             try
             {
+                // Filter by target tags: if automation has TargetTags, session must have at least one matching tag
+                if (automation.TargetTags.Count > 0)
+                {
+                    if (sessionTags == null || sessionTags.Count == 0)
+                    {
+                        LogSkippedNoSessionTags(automation.Id, automation.Name, notification.EventId);
+                        continue;
+                    }
+
+                    var hasMatchingTag = automation.TargetTags.Any(targetTag =>
+                        sessionTags.Contains(targetTag, StringComparer.OrdinalIgnoreCase));
+
+                    if (!hasMatchingTag)
+                    {
+                        LogSkippedTagMismatch(automation.Id, automation.Name, notification.EventId);
+                        continue;
+                    }
+                }
+
                 // Check if already processed (deduplication)
                 var isProcessed = await ledger.IsProcessedAsync(automation.Id, notification.EventId).ConfigureAwait(false);
                 if (isProcessed)
@@ -138,6 +166,12 @@ public sealed partial class AutomationEventDispatcherService : BackgroundService
     [LoggerMessage(Level = LogLevel.Debug, Message = "Skipped duplicate: automation {AutomationId} ({AutomationName}) already processed event {EventId}.")]
     private partial void LogSkippedDuplicate(string automationId, string automationName, string eventId);
 
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Skipped automation {AutomationId} ({AutomationName}) for event {EventId}: session has no tags but automation requires tags.")]
+    private partial void LogSkippedNoSessionTags(string automationId, string automationName, string eventId);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Skipped automation {AutomationId} ({AutomationName}) for event {EventId}: session tags do not match automation target tags.")]
+    private partial void LogSkippedTagMismatch(string automationId, string automationName, string eventId);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Executing automation {AutomationId} ({AutomationName}) for event type={EventType} id={EventId}.")]
     private partial void LogExecutingAutomation(string automationId, string automationName, string eventType, string eventId);
 
@@ -150,10 +184,12 @@ public sealed partial class AutomationEventDispatcherService : BackgroundService
 /// </summary>
 /// <param name="EventType">The domain event type (e.g., "session.started", "message.created").</param>
 /// <param name="EventId">The unique event identifier for deduplication.</param>
+/// <param name="SessionId">The session ID that emitted the event, if any.</param>
 /// <param name="SessionSourceReference">The source_reference of the session that emitted the event, if any.</param>
 /// <param name="EventSummary">Optional human-readable summary of the event for context.</param>
 public sealed record AutomationEventNotification(
     string EventType,
     string EventId,
+    string? SessionId,
     string? SessionSourceReference,
     string? EventSummary = null);

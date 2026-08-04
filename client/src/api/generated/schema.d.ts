@@ -613,6 +613,22 @@ export interface paths {
         patch: operations["MoveSessionToProject"];
         trace?: never;
     };
+    "/api/sessions/{id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["UpdateSessionTags"];
+        trace?: never;
+    };
     "/api/sessions/{id}/models": {
         parameters: {
             query?: never;
@@ -2122,6 +2138,7 @@ export interface components {
             workspaceId?: null | string;
             model?: null | string;
             agent?: null | string;
+            targetTags?: null | string[];
         };
         CreateBoardCardRequest: {
             laneId: string;
@@ -2155,6 +2172,7 @@ export interface components {
             source: null | components["schemas"]["SessionSourceSelection"];
             onComplete: null | components["schemas"]["OnCompleteInfo"];
             projectId: null | string;
+            tags: null | string[];
         };
         CredentialResponse: {
             id: string;
@@ -2431,6 +2449,7 @@ export interface components {
             id: string;
             title: string;
             time: components["schemas"]["SessionTime"];
+            tags: string[];
         };
         SessionListResponse: {
             instanceId: string;
@@ -2458,6 +2477,7 @@ export interface components {
             projectName: null | string;
             harnessType: null | string;
             capabilities: components["schemas"]["SessionActionCapabilities"];
+            tags: string[];
             origin?: null | components["schemas"]["SessionOriginDto"];
         };
         SessionOriginDto: {
@@ -2579,6 +2599,7 @@ export interface components {
             workspaceId?: null | string;
             model?: null | string;
             agent?: null | string;
+            targetTags?: null | string[];
         };
         UpdateBoardCardRequest: {
             title: null | string;
@@ -2609,6 +2630,9 @@ export interface components {
         };
         UpdateSessionRetentionRequest: {
             retentionStatus: string;
+        };
+        UpdateSessionTagsRequest: {
+            tags: string[];
         };
         UpdateSessionTitleRequest: {
             title: string;
@@ -3450,6 +3474,7 @@ export interface operations {
                 status?: string;
                 retentionStatus?: string;
                 projectId?: string;
+                tags?: string;
             };
             header?: never;
             path?: never;
@@ -3937,6 +3962,30 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["MoveSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UpdateSessionTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSessionTagsRequest"];
             };
         };
         responses: {

@@ -106,6 +106,7 @@ function createSessionListItem() {
         created: 1,
         updated: 2,
       },
+      tags: [],
     },
     instanceStatus: "running" as const,
     parentSessionId: null,
@@ -121,6 +122,7 @@ function createSessionListItem() {
     projectName: "API",
     totalTokens: 10,
     totalCost: 1,
+    tags: [],
   }
 }
 

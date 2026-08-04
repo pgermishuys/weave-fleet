@@ -36,6 +36,8 @@ const timeoutMinutes = shallowRef(30);
 const workspaceId = shallowRef<string>("");
 const model = shallowRef<string>("");
 const agent = shallowRef<string>("");
+const targetTags = shallowRef<string[]>([]);
+const targetType = shallowRef<string>("new_session");
 const submitAttempted = shallowRef(false);
 const isLoadingEventCatalog = shallowRef(false);
 const eventCatalog = shallowRef<string[]>([]);
@@ -77,6 +79,52 @@ const validationMessage = computed(() => {
   return null;
 });
 
+const isDirty = computed(() => {
+  if (props.mode === "create") {
+    return true; // Always allow submit in create mode if validation passes
+  }
+
+  if (!props.initialValues) {
+    return false;
+  }
+
+  // Check if any field has changed from initial values
+  const initial = props.initialValues;
+  
+  if (name.value !== (initial.name ?? "")) return true;
+  if (prompt.value !== (initial.prompt ?? "")) return true;
+  if (triggerType.value !== (initial.triggerType === "event" ? "event" : "schedule")) return true;
+  
+  // Compare triggerConfig, extracting eventType from JSON if needed
+  let initialConfigValue = initial.triggerConfig ?? "";
+  if (initial.triggerType === "event" && initialConfigValue) {
+    try {
+      const parsed = JSON.parse(initialConfigValue);
+      if (parsed.eventType) {
+        initialConfigValue = parsed.eventType;
+      }
+    } catch {
+      // If parsing fails, use the raw value
+    }
+  }
+  if (triggerConfig.value !== initialConfigValue) return true;
+  
+  if (maxConcurrentRuns.value !== (initial.maxConcurrentRuns ?? 1)) return true;
+  if (maxRunsPerHour.value !== (initial.maxRunsPerHour ?? 10)) return true;
+  if (timeoutMinutes.value !== (initial.timeoutMinutes ?? 30)) return true;
+  if (workspaceId.value !== (initial.workspaceId ?? "")) return true;
+  if (model.value !== (initial.model ?? "")) return true;
+  if (agent.value !== (initial.agent ?? "")) return true;
+  if (targetType.value !== (initial.targetType ?? "new_session")) return true;
+  
+  // Check target tags array
+  const initialTags = initial.targetTags ?? [];
+  if (targetTags.value.length !== initialTags.length) return true;
+  if (targetTags.value.some((tag, idx) => tag !== initialTags[idx])) return true;
+
+  return false;
+});
+
 const dialogError = computed(() => {
   if (submitAttempted.value && validationMessage.value) {
     return validationMessage.value;
@@ -86,7 +134,7 @@ const dialogError = computed(() => {
 });
 
 const canSubmit = computed(() => {
-  return validationMessage.value === null;
+  return validationMessage.value === null && isDirty.value;
 });
 
 function initializeForm(): void {
@@ -94,13 +142,29 @@ function initializeForm(): void {
     name.value = props.initialValues.name ?? "";
     prompt.value = props.initialValues.prompt ?? "";
     triggerType.value = (props.initialValues.triggerType === "event" ? "event" : "schedule") as "schedule" | "event";
-    triggerConfig.value = props.initialValues.triggerConfig ?? "";
+    
+    // Extract eventType from JSON if this is an event trigger
+    let configValue = props.initialValues.triggerConfig ?? "";
+    if (props.initialValues.triggerType === "event" && configValue) {
+      try {
+        const parsed = JSON.parse(configValue);
+        if (parsed.eventType) {
+          configValue = parsed.eventType;
+        }
+      } catch {
+        // If parsing fails, use the raw value
+      }
+    }
+    triggerConfig.value = configValue;
+    
     maxConcurrentRuns.value = props.initialValues.maxConcurrentRuns ?? 1;
     maxRunsPerHour.value = props.initialValues.maxRunsPerHour ?? 10;
     timeoutMinutes.value = props.initialValues.timeoutMinutes ?? 30;
     workspaceId.value = props.initialValues.workspaceId ?? "";
     model.value = props.initialValues.model ?? "";
     agent.value = props.initialValues.agent ?? "";
+    targetTags.value = props.initialValues.targetTags ? [...props.initialValues.targetTags] : [];
+    targetType.value = props.initialValues.targetType ?? "new_session";
   } else {
     resetForm();
   }
@@ -117,6 +181,8 @@ function resetForm(): void {
   workspaceId.value = "";
   model.value = "";
   agent.value = "";
+  targetTags.value = [];
+  targetType.value = "new_session";
   submitAttempted.value = false;
   eventCatalogError.value = null;
 }
@@ -146,17 +212,24 @@ function handleSubmit(): void {
     return;
   }
 
+  // Wrap event type in JSON for event triggers
+  const configValue = triggerType.value === "event"
+    ? JSON.stringify({ eventType: trimmedTriggerConfig.value })
+    : trimmedTriggerConfig.value;
+
   const data: CreateAutomationRequest = {
     name: trimmedName.value,
     prompt: trimmedPrompt.value,
     triggerType: triggerType.value,
-    triggerConfig: trimmedTriggerConfig.value,
+    triggerConfig: configValue,
     maxConcurrentRuns: maxConcurrentRuns.value,
     maxRunsPerHour: maxRunsPerHour.value,
     timeoutMinutes: timeoutMinutes.value,
     workspaceId: workspaceId.value.trim() || null,
     model: model.value.trim() || null,
     agent: agent.value.trim() || null,
+    targetType: targetType.value,
+    targetTags: targetTags.value.length > 0 ? targetTags.value : undefined,
   };
 
   emit("submit", data);
@@ -407,6 +480,51 @@ watch(
         v-model="agent"
         placeholder="Agent name"
       />
+    </div>
+
+    <div class="space-y-2">
+      <label
+        for="automation-target-type"
+        class="text-sm font-medium text-foreground"
+      >Target Type</label>
+      <Select
+        id="automation-target-type"
+        v-model="targetType"
+      >
+        <SelectTrigger class="w-full">
+          <SelectValue placeholder="Select target type…" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="new_session">
+            New Session
+          </SelectItem>
+          <SelectItem value="most_recent_session">
+            Most Recent Session
+          </SelectItem>
+          <SelectItem value="tagged_session">
+            Tagged Session
+          </SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+
+    <div
+      v-if="targetType === 'tagged_session'"
+      class="space-y-2"
+    >
+      <label
+        for="automation-target-tags"
+        class="text-sm font-medium text-foreground"
+      >Target Tags <span class="font-normal text-muted-foreground">(optional)</span></label>
+      <Input
+        id="automation-target-tags"
+        :model-value="targetTags.join(', ')"
+        placeholder="tag1, tag2, tag3"
+        @update:model-value="(value: string | number) => targetTags = String(value).split(',').map((t: string) => t.trim()).filter((t: string) => t.length > 0)"
+      />
+      <p class="text-xs text-muted-foreground opacity-50">
+        Sessions must have at least one matching tag
+      </p>
     </div>
 
     <div

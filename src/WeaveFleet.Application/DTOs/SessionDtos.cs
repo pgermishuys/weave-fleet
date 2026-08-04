@@ -28,7 +28,8 @@ public sealed record SessionListResponse(
     string? ProjectId,
     string? ProjectName,
     string? HarnessType,
-    SessionActionCapabilities Capabilities)
+    SessionActionCapabilities Capabilities,
+    List<string> Tags)
 {
     public SessionOriginDto? Origin { get; init; }
 }
@@ -49,7 +50,8 @@ public sealed record SessionOriginDto(
 public sealed record SessionFleetInfo(
     string Id,
     string Title,
-    SessionTime Time);
+    SessionTime Time,
+    List<string> Tags);
 
 /// <summary>Timestamps for a session (Unix ms).</summary>
 public sealed record SessionTime(long Created, long Updated);

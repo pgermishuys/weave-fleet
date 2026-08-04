@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onUnmounted, watch } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import SessionOriginBadge from "@/components/SessionOriginBadge.vue";
 import SessionAnalyticsPopover from "@/components/session/SessionAnalyticsPopover.vue";
 import { Badge } from "@/components/ui/badge";
 import type { SessionOrigin } from "@/api/client";
 import { useHarnesses } from "@/composables/use-harnesses";
+import { useSessionsStore } from "@/stores/sessions";
+import { X, Plus } from "lucide-vue-next";
 
 interface Props {
   id: string;
@@ -21,6 +23,7 @@ interface Props {
   retryAttempt?: number | null;
   retryMessage?: string | null;
   retryNext?: string | null;
+  tags?: readonly string[];
   sessionStateChanged?: (patch: {
     activityStatus?: string | null;
     lifecycleStatus?: string | null;
@@ -31,7 +34,11 @@ interface Props {
 
 const props = defineProps<Props>();
 const { harnesses } = useHarnesses();
+const sessionsStore = useSessionsStore();
 let composerDisabledSyncTimer: ReturnType<typeof setInterval> | null = null;
+
+const isAddingTag = ref(false);
+const newTagInput = ref("");
 
 const sessionTitle = computed(() => props.title?.trim() || "Untitled session");
 const projectLabel = computed(() => props.projectName?.trim() || "Ungrouped");
@@ -126,6 +133,82 @@ watch([isArchived, showStoppedBanner], () => {
   syncComposerDisabledState();
 }, { immediate: true });
 
+async function removeTag(tagToRemove: string): Promise<void> {
+  if (!props.tags) return;
+  
+  const updatedTags = props.tags.filter((t) => t !== tagToRemove);
+  await updateTags(updatedTags);
+}
+
+async function addTag(): Promise<void> {
+  const trimmedTag = newTagInput.value.trim();
+  if (!trimmedTag) {
+    isAddingTag.value = false;
+    newTagInput.value = "";
+    return;
+  }
+
+  const currentTags = props.tags ?? [];
+  if (currentTags.includes(trimmedTag)) {
+    // Tag already exists, just close the input
+    isAddingTag.value = false;
+    newTagInput.value = "";
+    return;
+  }
+
+  const updatedTags = [...currentTags, trimmedTag];
+  await updateTags(updatedTags);
+  
+  isAddingTag.value = false;
+  newTagInput.value = "";
+}
+
+async function updateTags(tags: readonly string[]): Promise<void> {
+  try {
+    const response = await fetch(`/api/sessions/${props.id}/tags`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({ tags: [...tags] }),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to update tags: ${response.statusText}`);
+    }
+    
+    // Update the store with the new tags
+    sessionsStore.patchSession(props.id, { tags });
+  } catch (error) {
+    console.error("Failed to update tags:", error);
+  }
+}
+
+function startAddingTag(): void {
+  isAddingTag.value = true;
+  // Focus the input on next tick
+  setTimeout(() => {
+    const input = document.querySelector('[data-testid="tag-input"]') as HTMLInputElement | null;
+    input?.focus();
+  }, 0);
+}
+
+function cancelAddingTag(): void {
+  isAddingTag.value = false;
+  newTagInput.value = "";
+}
+
+function handleTagInputKeydown(event: KeyboardEvent): void {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    addTag();
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    cancelAddingTag();
+  }
+}
+
 onUnmounted(() => {
   if (composerDisabledSyncTimer !== null) {
     clearInterval(composerDisabledSyncTimer);
@@ -176,6 +259,46 @@ onUnmounted(() => {
           >
             {{ harnessLabel }}
           </span>
+        </div>
+
+        <div class="session-detail-header__tags-row">
+          <Badge
+            v-for="tag in props.tags"
+            :key="tag"
+            variant="outline"
+            class="session-detail-header__tag"
+          >
+            {{ tag }}
+            <button
+              type="button"
+              :aria-label="`Remove tag ${tag}`"
+              class="session-detail-header__tag-remove"
+              @click="removeTag(tag)"
+            >
+              <X :size="12" />
+            </button>
+          </Badge>
+
+          <input
+            v-if="isAddingTag"
+            v-model="newTagInput"
+            type="text"
+            data-testid="tag-input"
+            placeholder="Tag name..."
+            class="session-detail-header__tag-input"
+            @blur="addTag"
+            @keydown="handleTagInputKeydown"
+          />
+
+          <button
+            v-if="!isAddingTag"
+            type="button"
+            aria-label="Add tag"
+            class="session-detail-header__tag-add"
+            @click="startAddingTag"
+          >
+            <Plus :size="14" />
+          </button>
         </div>
       </div>
 
@@ -271,7 +394,8 @@ onUnmounted(() => {
 }
 
 .session-detail-header__title-row,
-.session-detail-header__meta-row {
+.session-detail-header__meta-row,
+.session-detail-header__tags-row {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -311,6 +435,66 @@ onUnmounted(() => {
   flex-shrink: 0;
   font-size: 0.78rem;
   color: var(--muted-foreground, var(--muted));
+}
+
+.session-detail-header__tags-row {
+  flex-wrap: wrap;
+}
+
+.session-detail-header__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding-right: 0.25rem;
+}
+
+.session-detail-header__tag-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  padding: 0.125rem;
+  cursor: pointer;
+  color: var(--muted-foreground, var(--muted));
+  transition: color 0.15s;
+}
+
+.session-detail-header__tag-remove:hover {
+  color: var(--foreground, var(--text));
+}
+
+.session-detail-header__tag-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--border);
+  border-radius: 0;
+  background: transparent;
+  padding: 0.125rem 0.375rem;
+  cursor: pointer;
+  color: var(--muted-foreground, var(--muted));
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.session-detail-header__tag-add:hover {
+  border-color: var(--foreground, var(--text));
+  color: var(--foreground, var(--text));
+}
+
+.session-detail-header__tag-input {
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--background, var(--panel-bg));
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--foreground, var(--text));
+  outline: none;
+  min-width: 120px;
+}
+
+.session-detail-header__tag-input:focus {
+  border-color: var(--ring);
 }
 
 .session-detail-header__status {

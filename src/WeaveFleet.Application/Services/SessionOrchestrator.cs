@@ -357,6 +357,7 @@ public sealed partial class SessionOrchestrator(
             UserId = userContext.UserId,
             HarnessResumeToken = harnessInstance.ResumeToken,
             SourceReference = request.SourceReference,
+            Tags = request.Tags ?? []
         };
 
         var createdAt = DateTime.UtcNow.ToString("O");
@@ -1934,6 +1935,10 @@ public sealed record CreateSessionRequest
     /// Optional automation reference. When set, links this session to an automation execution.
     /// </summary>
     public string? SourceReference { get; init; }
+    /// <summary>
+    /// Optional tags for categorizing and filtering sessions.
+    /// </summary>
+    public List<string>? Tags { get; init; }
 }
 
 /// <summary>Result of a successful <see cref="SessionOrchestrator.CreateSessionAsync"/> call.</summary>

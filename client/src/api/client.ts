@@ -134,7 +134,9 @@ export type NuCodeDevicePollRequest = components["schemas"]["NuCodeDevicePollReq
 export type CredentialSummary = components["schemas"]["CredentialResponse"];
 export type NuCodeCredentialField = components["schemas"]["NuCodeCredentialFieldResponse"];
 export type NuCodeProvider = components["schemas"]["NuCodeProviderResponse"];
-export type FleetSession = components["schemas"]["SessionFleetInfo"];
+export type FleetSession = Omit<components["schemas"]["SessionFleetInfo"], "tags"> & {
+  tags: readonly string[];
+};
 export type SessionSourceKey = components["schemas"]["SessionSourceKey"];
 export type SessionSourceSelection = components["schemas"]["SessionSourceSelection"];
 export type SessionActionCapabilities = components["schemas"]["SessionActionCapabilities"];
@@ -468,11 +470,7 @@ export interface SessionListItem {
   workspaceDisplayName: string | null;
   isolationStrategy: string;
   sessionStatus: string;
-  session: {
-    id: string;
-    title: string;
-    time: components["schemas"]["SessionTime"];
-  };
+  session: FleetSession;
   instanceStatus: string;
   parentSessionId?: string | null;
   sourceDirectory?: string | null;
@@ -490,6 +488,7 @@ export interface SessionListItem {
   harnessType?: string | null;
   capabilities?: SessionActionCapabilities;
   origin?: SessionOrigin | null;
+  tags: readonly string[];
 }
 
 export interface AnalyticsSummary {

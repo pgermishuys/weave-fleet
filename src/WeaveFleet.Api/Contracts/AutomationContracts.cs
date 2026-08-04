@@ -10,7 +10,9 @@ public sealed record CreateAutomationRequest(
     int TimeoutMinutes = 30,
     string? WorkspaceId = null,
     string? Model = null,
-    string? Agent = null);
+    string? Agent = null,
+    List<string>? TargetTags = null,
+    string? TargetType = null);
 
 public sealed record UpdateAutomationRequest(
     string Name,
@@ -22,7 +24,9 @@ public sealed record UpdateAutomationRequest(
     int TimeoutMinutes = 30,
     string? WorkspaceId = null,
     string? Model = null,
-    string? Agent = null);
+    string? Agent = null,
+    List<string>? TargetTags = null,
+    string? TargetType = null);
 
 public sealed record AutomationResponse(
     string Id,
@@ -38,6 +42,8 @@ public sealed record AutomationResponse(
     string? Model,
     string? Agent,
     string CreatedAt,
-    string? UpdatedAt);
+    string? UpdatedAt,
+    List<string>? TargetTags,
+    string TargetType);
 
 public sealed record AutomationListResponse(IReadOnlyList<AutomationResponse> Automations);

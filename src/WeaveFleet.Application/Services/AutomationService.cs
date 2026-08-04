@@ -26,7 +26,9 @@ public sealed class AutomationService(
         int timeoutMinutes,
         string? workspaceId = null,
         string? model = null,
-        string? agent = null)
+        string? agent = null,
+        List<string>? targetTags = null,
+        string? targetType = null)
     {
         // Validate cron expression if trigger type is schedule
         if (triggerType.Equals("schedule", StringComparison.OrdinalIgnoreCase))
@@ -58,6 +60,8 @@ public sealed class AutomationService(
             WorkspaceId = workspaceId,
             Model = model,
             Agent = agent,
+            TargetTags = targetTags ?? [],
+            TargetType = targetType ?? "new_session",
             CreatedAt = DateTime.UtcNow.ToString("O"),
             UserId = userContext.UserId
         };
@@ -81,7 +85,9 @@ public sealed class AutomationService(
         int timeoutMinutes,
         string? workspaceId = null,
         string? model = null,
-        string? agent = null)
+        string? agent = null,
+        List<string>? targetTags = null,
+        string? targetType = null)
     {
         var existing = await automationRepository.GetByIdAsync(id);
         if (existing is null)
@@ -112,6 +118,8 @@ public sealed class AutomationService(
         existing.WorkspaceId = workspaceId;
         existing.Model = model;
         existing.Agent = agent;
+        existing.TargetTags = targetTags ?? [];
+        existing.TargetType = targetType ?? "new_session";
         existing.UpdatedAt = DateTime.UtcNow.ToString("O");
 
         await automationRepository.UpdateAsync(existing);

@@ -1,6 +1,8 @@
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
+using System.Text.Json;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
@@ -24,18 +26,22 @@ public sealed class SessionRepository(
             ? userContext.UserId
             : session.UserId;
 
+        var tagsJson = session.Tags.Count > 0
+            ? SerializeTags(session.Tags)
+            : null;
+
         await connection.ExecuteNonQueryAsync(
             """
             INSERT INTO sessions (id, workspace_id, instance_id, project_id, opencode_session_id, title,
                 status, directory, created_at, stopped_at, parent_session_id,
                 lifecycle_status, retention_status, archived_at, is_hidden, total_tokens, total_cost,
                 harness_type, runtime_mode, harness_resume_token, git_baseline_ref, git_repo_root, user_id,
-                source_reference)
+                source_reference, tags)
             SELECT @Id, @WorkspaceId, @InstanceId, @ProjectId, @OpencodeSessionId, @Title,
                 @Status, @Directory, @CreatedAt, @StoppedAt, @ParentSessionId,
                 @LifecycleStatus, @RetentionStatus, @ArchivedAt, @IsHidden, @TotalTokens, @TotalCost,
                 @HarnessType, @RuntimeMode, @HarnessResumeToken, @GitBaselineRef, @GitRepoRoot, @UserId,
-                @SourceReference
+                @SourceReference, @Tags
             FROM workspaces workspace_row
             WHERE workspace_row.id = @WorkspaceId
               AND workspace_row.user_id = @UserId
@@ -74,6 +80,7 @@ public sealed class SessionRepository(
                 cmd.AddParameter("GitRepoRoot", session.GitRepoRoot);
                 cmd.AddParameter("UserId", insertUserId);
                 cmd.AddParameter("SourceReference", session.SourceReference);
+                cmd.AddParameter("Tags", tagsJson);
             },
             transaction);
     }
@@ -109,7 +116,7 @@ public sealed class SessionRepository(
         int offset = 0,
         IReadOnlyList<string>? statuses = null,
         string? projectId = null)
-        => await ListAsync(limit, offset, statuses, projectId, retentionStatuses: null);
+        => await ListAsync(limit, offset, statuses, projectId, retentionStatuses: null, tags: null);
 
     public async Task<IReadOnlyList<Session>> ListAsync(
         int limit,
@@ -117,6 +124,15 @@ public sealed class SessionRepository(
         IReadOnlyList<string>? statuses,
         string? projectId,
         IReadOnlyList<string>? retentionStatuses)
+        => await ListAsync(limit, offset, statuses, projectId, retentionStatuses, tags: null);
+
+    public async Task<IReadOnlyList<Session>> ListAsync(
+        int limit,
+        int offset,
+        IReadOnlyList<string>? statuses,
+        string? projectId,
+        IReadOnlyList<string>? retentionStatuses,
+        IReadOnlyList<string>? tags)
     {
         using var conn = connectionFactory.CreateConnection();
         var dbConn = (DbConnection)conn;
@@ -141,6 +157,22 @@ public sealed class SessionRepository(
         {
             sql.Append(" AND retention_status ");
             SqlInExpander.AppendInClause(sql, cmd, "RetentionStatus", retentionStatuses);
+        }
+        if (tags is { Count: > 0 })
+        {
+            // SQLite: use LIKE matching for JSON array elements
+            // Match any tag in the filter list: tags column contains '["tag1","tag2"]'
+            sql.Append(" AND (");
+            for (var i = 0; i < tags.Count; i++)
+            {
+                if (i > 0)
+                    sql.Append(" OR ");
+                var paramName = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Tag{i}");
+                sql.Append(System.Globalization.CultureInfo.InvariantCulture, $"tags LIKE @{paramName}");
+                // Match tag as JSON string element: "tag" anywhere in the JSON array
+                cmd.AddParameter(paramName, $"%\"{tags[i]}\"%");
+            }
+            sql.Append(')');
         }
 
         sql.Append(" ORDER BY created_at DESC LIMIT @Limit OFFSET @Offset");
@@ -564,34 +596,79 @@ public sealed class SessionRepository(
             });
     }
 
-    private static Session ReadSession(DbDataReader r) => new()
+    public async Task UpdateTagsAsync(string id, List<string> tags)
     {
-        Id = r.GetString(r.GetOrdinal("id")),
-        WorkspaceId = r.GetString(r.GetOrdinal("workspace_id")),
-        InstanceId = r.GetString(r.GetOrdinal("instance_id")),
-        ProjectId = r.GetNullableString(r.GetOrdinal("project_id")),
-        OpencodeSessionId = r.GetString(r.GetOrdinal("opencode_session_id")),
-        Title = r.GetString(r.GetOrdinal("title")),
-        Status = r.GetString(r.GetOrdinal("status")),
-        Directory = r.GetString(r.GetOrdinal("directory")),
-        CreatedAt = r.GetString(r.GetOrdinal("created_at")),
-        StoppedAt = r.GetNullableString(r.GetOrdinal("stopped_at")),
-        ParentSessionId = r.GetNullableString(r.GetOrdinal("parent_session_id")),
-        ActivityStatus = r.GetNullableString(r.GetOrdinal("activity_status")),
-        LifecycleStatus = r.GetNullableString(r.GetOrdinal("lifecycle_status")),
-        RetentionStatus = r.GetString(r.GetOrdinal("retention_status")),
-        ArchivedAt = r.GetNullableString(r.GetOrdinal("archived_at")),
-        IsHidden = r.GetInt64(r.GetOrdinal("is_hidden")) != 0,
-        TotalTokens = (int)r.GetInt64(r.GetOrdinal("total_tokens")),
-        TotalCost = r.GetDouble(r.GetOrdinal("total_cost")),
-        HarnessType = r.GetString(r.GetOrdinal("harness_type")),
-        RuntimeMode = r.GetString(r.GetOrdinal("runtime_mode")),
-        HarnessResumeToken = r.GetNullableString(r.GetOrdinal("harness_resume_token")),
-        GitBaselineRef = r.GetNullableString(r.GetOrdinal("git_baseline_ref")),
-        GitRepoRoot = r.GetNullableString(r.GetOrdinal("git_repo_root")),
-        UserId = r.GetString(r.GetOrdinal("user_id")),
-        SelectedProviderId = r.GetNullableString(r.GetOrdinal("selected_provider_id")),
-        SelectedModelId = r.GetNullableString(r.GetOrdinal("selected_model_id")),
-        SourceReference = r.GetNullableString(r.GetOrdinal("source_reference")),
-    };
+        using var conn = connectionFactory.CreateConnection();
+        var tagsJson = tags.Count > 0 ? SerializeTags(tags) : null;
+        await conn.ExecuteNonQueryAsync(
+            "UPDATE sessions SET tags = @Tags WHERE id = @Id AND user_id = @UserId",
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("Tags", tagsJson);
+                cmd.AddParameter("UserId", userContext.UserId);
+            });
+    }
+
+    private static Session ReadSession(DbDataReader r)
+    {
+        var tagsJson = r.GetNullableString(r.GetOrdinal("tags"));
+        var tags = DeserializeTags(tagsJson);
+
+        return new Session
+        {
+            Id = r.GetString(r.GetOrdinal("id")),
+            WorkspaceId = r.GetString(r.GetOrdinal("workspace_id")),
+            InstanceId = r.GetString(r.GetOrdinal("instance_id")),
+            ProjectId = r.GetNullableString(r.GetOrdinal("project_id")),
+            OpencodeSessionId = r.GetString(r.GetOrdinal("opencode_session_id")),
+            Title = r.GetString(r.GetOrdinal("title")),
+            Status = r.GetString(r.GetOrdinal("status")),
+            Directory = r.GetString(r.GetOrdinal("directory")),
+            CreatedAt = r.GetString(r.GetOrdinal("created_at")),
+            StoppedAt = r.GetNullableString(r.GetOrdinal("stopped_at")),
+            ParentSessionId = r.GetNullableString(r.GetOrdinal("parent_session_id")),
+            ActivityStatus = r.GetNullableString(r.GetOrdinal("activity_status")),
+            LifecycleStatus = r.GetNullableString(r.GetOrdinal("lifecycle_status")),
+            RetentionStatus = r.GetString(r.GetOrdinal("retention_status")),
+            ArchivedAt = r.GetNullableString(r.GetOrdinal("archived_at")),
+            IsHidden = r.GetInt64(r.GetOrdinal("is_hidden")) != 0,
+            TotalTokens = (int)r.GetInt64(r.GetOrdinal("total_tokens")),
+            TotalCost = r.GetDouble(r.GetOrdinal("total_cost")),
+            HarnessType = r.GetString(r.GetOrdinal("harness_type")),
+            RuntimeMode = r.GetString(r.GetOrdinal("runtime_mode")),
+            HarnessResumeToken = r.GetNullableString(r.GetOrdinal("harness_resume_token")),
+            GitBaselineRef = r.GetNullableString(r.GetOrdinal("git_baseline_ref")),
+            GitRepoRoot = r.GetNullableString(r.GetOrdinal("git_repo_root")),
+            UserId = r.GetString(r.GetOrdinal("user_id")),
+            SelectedProviderId = r.GetNullableString(r.GetOrdinal("selected_provider_id")),
+            SelectedModelId = r.GetNullableString(r.GetOrdinal("selected_model_id")),
+            SourceReference = r.GetNullableString(r.GetOrdinal("source_reference")),
+            Tags = tags,
+        };
+    }
+
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "List<string> is a simple type safe for JSON serialization")]
+    private static string SerializeTags(List<string> tags)
+    {
+        return JsonSerializer.Serialize(tags);
+    }
+
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "List<string> is a simple type safe for JSON deserialization")]
+    private static List<string> DeserializeTags(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
 }

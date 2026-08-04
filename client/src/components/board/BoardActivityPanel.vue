@@ -96,6 +96,7 @@ function createFallbackSession(
         created: now,
         updated: now,
       },
+      tags: [],
     },
     instanceStatus: "running",
     parentSessionId: null,
@@ -109,6 +110,7 @@ function createFallbackSession(
     isHidden: false,
     projectId: null,
     projectName,
+    tags: [],
   };
 }
 

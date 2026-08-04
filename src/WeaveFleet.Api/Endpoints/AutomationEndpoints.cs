@@ -11,9 +11,9 @@ public static class AutomationEndpoints
 {
     private static readonly string[] EventCatalog =
     [
-        "SessionStarted", "SessionIdled", "SessionStopped", "SessionDeleted",
-        "SessionArchived", "TurnStarted", "TurnEnded", "MessageCreated",
-        "MessageUpdated", "DelegationCreated", "DelegationUpdated", "DelegationCompleted"
+        "session.created", "session.idle", "session.status", "session.deleted",
+        "message.created", "message.updated",
+        "delegation.created", "delegation.updated", "delegation.completed"
     ];
 
     public static IEndpointRouteBuilder MapAutomationEndpoints(this IEndpointRouteBuilder app)
@@ -26,7 +26,7 @@ public static class AutomationEndpoints
             var result = await service.CreateAsync(
                 request.Name, request.Prompt, request.TriggerType, request.TriggerConfig,
                 request.MaxConcurrentRuns, request.MaxRunsPerHour, request.TimeoutMinutes,
-                request.WorkspaceId, request.Model, request.Agent);
+                request.WorkspaceId, request.Model, request.Agent, request.TargetTags, request.TargetType);
             return result.Match(
                 automation => Results.Created($"/api/automations/{automation.Id}", MapToResponse(automation)),
                 error => error.Code switch
@@ -43,7 +43,7 @@ public static class AutomationEndpoints
             var result = await service.UpdateAsync(id,
                 request.Name, request.Prompt, request.TriggerType, request.TriggerConfig,
                 request.MaxConcurrentRuns, request.MaxRunsPerHour, request.TimeoutMinutes,
-                request.WorkspaceId, request.Model, request.Agent);
+                request.WorkspaceId, request.Model, request.Agent, request.TargetTags, request.TargetType);
             return result.Match(
                 automation => Results.Ok(MapToResponse(automation)),
                 error => error.Code switch
@@ -134,7 +134,7 @@ public static class AutomationEndpoints
     private static AutomationResponse MapToResponse(Automation a) => new(
         a.Id, a.Name, a.Prompt, a.TriggerType, a.TriggerConfig,
         a.MaxConcurrentRuns, a.MaxRunsPerHour, a.TimeoutMinutes,
-        a.IsEnabled, a.WorkspaceId, a.Model, a.Agent, a.CreatedAt, a.UpdatedAt);
+        a.IsEnabled, a.WorkspaceId, a.Model, a.Agent, a.CreatedAt, a.UpdatedAt, a.TargetTags, a.TargetType);
 }
 
 #pragma warning restore IL2026

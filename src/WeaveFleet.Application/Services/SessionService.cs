@@ -20,7 +20,8 @@ public sealed class SessionService(
         int offset = 0,
         IReadOnlyList<string>? statuses = null,
         string? projectId = null,
-        string? retentionStatus = null)
+        string? retentionStatus = null,
+        IReadOnlyList<string>? tags = null)
     {
         IReadOnlyList<string>? retentionStatuses = retentionStatus switch
         {
@@ -29,7 +30,7 @@ public sealed class SessionService(
             _ => [retentionStatus]
         };
 
-        var sessions = await sessionRepository.ListAsync(limit, offset, statuses, projectId, retentionStatuses);
+        var sessions = await sessionRepository.ListAsync(limit, offset, statuses, projectId, retentionStatuses, tags);
 
         return Result.Success(sessions);
     }
@@ -83,6 +84,20 @@ public sealed class SessionService(
 
         await sessionRepository.UpdateTitleAsync(id, title);
         return Unit.Value;
+    }
+
+    public async Task<Result<Session>> UpdateSessionTagsAsync(string id, List<string> tags)
+    {
+        SetSessionTag(id);
+        var session = await sessionRepository.GetByIdAsync(id);
+        if (session is null)
+            return FleetError.NotFoundFor(nameof(Session), id);
+
+        await sessionRepository.UpdateTagsAsync(id, tags);
+        
+        // Fetch the updated session to return
+        var updatedSession = await sessionRepository.GetByIdAsync(id);
+        return updatedSession!;
     }
 
     public async Task<Result<Unit>> MoveSessionToProjectAsync(string sessionId, string? projectId)

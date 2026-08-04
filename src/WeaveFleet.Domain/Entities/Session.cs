@@ -40,4 +40,6 @@ public sealed class Session
     public string? SelectedProviderId { get; set; }
     /// <inheritdoc cref="SelectedProviderId" />
     public string? SelectedModelId { get; set; }
+
+    public List<string> Tags { get; set; } = [];
 }

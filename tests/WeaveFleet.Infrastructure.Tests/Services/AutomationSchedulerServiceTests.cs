@@ -313,7 +313,7 @@ public sealed class AutomationSchedulerServiceTests
             if (serviceType == typeof(AutomationExecutionService))
             {
                 // Create a real AutomationExecutionService with a tracking logger
-                return new AutomationExecutionService(null!, _logger);
+                return new AutomationExecutionService(null!, null!, _logger);
             }
             return null;
         }

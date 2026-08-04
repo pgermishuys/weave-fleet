@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useAutomationsNav } from '@/composables/use-automations-nav'
 import { useAutomations } from '@/composables/use-automations'
 import AutomationForm from '@/components/automations/AutomationForm.vue'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Play, Pause, Edit, Trash2 } from 'lucide-vue-next'
+import { Play, Edit, Trash2 } from 'lucide-vue-next'
 import type { CreateAutomationRequest } from '@/composables/use-automations'
 
 const { viewMode, activeAutomationId, setActiveAutomation, clearSelection } = useAutomationsNav()
@@ -32,6 +33,7 @@ const {
 const isEditingInline = ref(false)
 const deleteConfirmOpen = ref(false)
 const automationToDelete = ref<string | null>(null)
+const isTogglingEnabled = ref(false)
 
 const currentAutomation = computed(() => {
   if (!activeAutomationId.value) return null
@@ -81,14 +83,39 @@ async function handlePlay() {
   await runAutomation(currentAutomation.value.id)
 }
 
-async function handlePause() {
-  if (!currentAutomation.value) return
-  await disableAutomation(currentAutomation.value.id)
+async function handleToggleEnabled(enabled: boolean) {
+  if (!currentAutomation.value || isTogglingEnabled.value) return
+  isTogglingEnabled.value = true
+  try {
+    if (enabled) {
+      await enableAutomation(currentAutomation.value.id)
+    } else {
+      await disableAutomation(currentAutomation.value.id)
+    }
+  } catch (e) {
+    console.error('[AutomationDetailPanel] toggle failed:', e)
+  } finally {
+    isTogglingEnabled.value = false
+  }
 }
 
 function formatTriggerConfig(config: string | undefined): string {
   if (!config) return 'None'
   return config
+}
+
+function formatTargetType(targetType: string | undefined): string {
+  if (!targetType) return 'New Session'
+  switch (targetType) {
+    case 'new_session':
+      return 'New Session'
+    case 'most_recent_session':
+      return 'Most Recent Session'
+    case 'tagged_session':
+      return 'Tagged Session'
+    default:
+      return targetType
+  }
 }
 </script>
 
@@ -130,22 +157,20 @@ function formatTriggerConfig(config: string | undefined): string {
           <div class="mb-4 flex items-start justify-between">
             <div class="flex-1">
               <h2 class="text-2xl font-semibold">{{ currentAutomation.name }}</h2>
-              <Badge :variant="currentAutomation.isEnabled ? 'default' : 'secondary'" class="mt-2">
-                {{ currentAutomation.isEnabled ? 'Enabled' : 'Disabled' }}
-              </Badge>
+              <div class="mt-2 flex items-center gap-2">
+                <Switch
+                  :model-value="currentAutomation.isEnabled"
+                  :disabled="isTogglingEnabled"
+                  @update:model-value="(val: boolean) => handleToggleEnabled(val)"
+                />
+                <span class="text-sm text-muted-foreground">
+                  {{ currentAutomation.isEnabled ? 'Enabled' : 'Disabled' }}
+                </span>
+              </div>
             </div>
             <div class="flex gap-2">
               <Button variant="outline" size="icon" @click="handlePlay" title="Run now">
                 <Play class="h-4 w-4" />
-              </Button>
-              <Button
-                v-if="currentAutomation.isEnabled"
-                variant="outline"
-                size="icon"
-                @click="handlePause"
-                title="Pause"
-              >
-                <Pause class="h-4 w-4" />
               </Button>
               <Button variant="outline" size="icon" @click="startEdit" title="Edit">
                 <Edit class="h-4 w-4" />
@@ -185,6 +210,15 @@ function formatTriggerConfig(config: string | undefined): string {
             </div>
           </section>
 
+          <!-- Target section -->
+          <section>
+            <h3 class="mb-2 text-sm font-medium text-muted-foreground">Target</h3>
+            <div class="text-sm">
+              <span class="font-medium">Target:</span>
+              <span class="ml-2">{{ formatTargetType(currentAutomation.targetType) }}</span>
+            </div>
+          </section>
+
           <!-- Policy section -->
           <section>
             <h3 class="mb-2 text-sm font-medium text-muted-foreground">Policy</h3>
@@ -216,6 +250,9 @@ function formatTriggerConfig(config: string | undefined): string {
               </Badge>
               <Badge v-if="currentAutomation.agent" variant="outline">
                 Agent: {{ currentAutomation.agent }}
+              </Badge>
+              <Badge v-if="currentAutomation.targetTags && currentAutomation.targetTags.length > 0" v-for="tag in currentAutomation.targetTags" :key="tag" variant="outline">
+                Tag: {{ tag }}
               </Badge>
               <Badge variant="outline">
                 Created: {{ new Date(currentAutomation.createdAt).toLocaleDateString() }}

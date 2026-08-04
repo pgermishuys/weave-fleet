@@ -18,7 +18,7 @@ public static class SessionEndpoints
     {
         var group = app.MapGroup("/api/sessions").WithTags("Sessions");
 
-        // GET /api/sessions?limit=&offset=&status=&projectId=
+        // GET /api/sessions?limit=&offset=&status=&projectId=&tags=
         group.MapGet("/", async (
             SessionService sessionService,
             ISessionRepository sessionRepository,
@@ -30,13 +30,18 @@ public static class SessionEndpoints
             int offset = 0,
             string? status = null,
             string? retentionStatus = null,
-            string? projectId = null) =>
+            string? projectId = null,
+            string? tags = null) =>
         {
             IReadOnlyList<string>? statuses = status is not null
                 ? [status]
                 : null;
 
-            var result = await sessionService.ListSessionsAsync(limit, offset, statuses, projectId, retentionStatus);
+            IReadOnlyList<string>? tagsList = tags is not null
+                ? tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                : null;
+
+            var result = await sessionService.ListSessionsAsync(limit, offset, statuses, projectId, retentionStatus, tagsList);
             return await result.Match<Task<IResult>>(async sessions =>
                 {
                     var projectNamesById = (await projectRepository.ListAsync())
@@ -153,7 +158,8 @@ public static class SessionEndpoints
                 Source = req.Source,
                 OnCompleteTargetSessionId = req.OnComplete?.NotifySessionId,
                 OnCompleteTargetInstanceId = req.OnComplete?.NotifyInstanceId,
-                ProjectId = req.ProjectId
+                ProjectId = req.ProjectId,
+                Tags = req.Tags
             });
             return result.Match(
                 r => Results.Ok(new CreateSessionApiResponse(
@@ -448,6 +454,16 @@ public static class SessionEndpoints
         })
         .WithName("MoveSessionToProject");
 
+        // PATCH /api/sessions/{id}/tags — replace session tags
+        group.MapPatch("/{id}/tags", async (string id, UpdateSessionTagsRequest req, SessionService sessionService) =>
+        {
+            var result = await sessionService.UpdateSessionTagsAsync(id, req.Tags);
+            return result.Match(
+                session => Results.Ok(session),
+                error => error.ToSessionApiResult());
+        })
+        .WithName("UpdateSessionTags");
+
         // GET /api/sessions/{id}/models — session-scoped model list
         group.MapGet("/{id}/models", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
         {
@@ -552,7 +568,8 @@ public static class SessionEndpoints
             Session: new SessionFleetInfo(
                 Id: s.Id,
                 Title: s.Title,
-                Time: new SessionTime(createdMs, updatedMs)),
+                Time: new SessionTime(createdMs, updatedMs),
+                Tags: s.Tags ?? []),
             InstanceStatus: "running",        // enriched in Phase 4
             ParentSessionId: s.ParentSessionId,
             SourceDirectory: null,            // enriched in Phase 4
@@ -570,7 +587,8 @@ public static class SessionEndpoints
                 ? projectName
                 : null,
             HarnessType: s.HarnessType,
-            Capabilities: capabilitiesResolver.Resolve(s))
+            Capabilities: capabilitiesResolver.Resolve(s),
+            Tags: s.Tags ?? [])
         {
             Origin = origin
         };
@@ -740,7 +758,8 @@ public static class SessionEndpoints
             Session: new SessionFleetInfo(
                 Id: s.Id,
                 Title: s.Title,
-                Time: new SessionTime(createdMs, updatedMs)),
+                Time: new SessionTime(createdMs, updatedMs),
+                Tags: s.Tags ?? []),
             InstanceStatus: "running",
             ParentSessionId: s.ParentSessionId,
             SourceDirectory: null,
@@ -758,7 +777,8 @@ public static class SessionEndpoints
                 ? projectName
                 : null,
             HarnessType: s.HarnessType,
-            Capabilities: capabilitiesResolver.Resolve(s));
+            Capabilities: capabilitiesResolver.Resolve(s),
+            Tags: s.Tags ?? []);
     }
 
     private static async Task<ModelResolutionResult> ResolveSessionModelAsync(
@@ -811,7 +831,8 @@ internal sealed record CreateSessionApiRequest(
     string? InitialPrompt,
     SessionSourceSelection? Source,
     OnCompleteInfo? OnComplete,
-    string? ProjectId);
+    string? ProjectId,
+    List<string>? Tags);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record OnCompleteInfo(string NotifySessionId, string NotifyInstanceId);
@@ -843,6 +864,9 @@ internal sealed record SendCommandApiRequest(
     ModelRef? Model);
 
 internal sealed record QuestionAnswerApiRequest(IReadOnlyList<IReadOnlyList<string>> Answers);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record UpdateSessionTagsRequest(List<string> Tags);
 
 internal sealed record SessionOriginRecordDto(
     string SourceType,

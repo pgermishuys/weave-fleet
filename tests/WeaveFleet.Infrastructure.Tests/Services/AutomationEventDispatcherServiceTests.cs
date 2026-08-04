@@ -44,6 +44,7 @@ public sealed class AutomationEventDispatcherServiceTests
         await channel.Writer.WriteAsync(new AutomationEventNotification(
             EventType: "session.started",
             EventId: "evt-duplicate",
+            SessionId: null,
             SessionSourceReference: null
         ));
 
@@ -88,6 +89,7 @@ public sealed class AutomationEventDispatcherServiceTests
         await channel.Writer.WriteAsync(new AutomationEventNotification(
             EventType: "message.created",
             EventId: "evt-loop",
+            SessionId: null,
             SessionSourceReference: "automation:auto-1"
         ));
 
@@ -133,6 +135,7 @@ public sealed class AutomationEventDispatcherServiceTests
         await channel.Writer.WriteAsync(new AutomationEventNotification(
             EventType: "message.created",
             EventId: "evt-loop-upper",
+            SessionId: null,
             SessionSourceReference: "AUTOMATION:auto-1"
         ));
 
@@ -169,6 +172,7 @@ public sealed class AutomationEventDispatcherServiceTests
         await channel.Writer.WriteAsync(new AutomationEventNotification(
             EventType: "session.started",
             EventId: "evt-no-match",
+            SessionId: null,
             SessionSourceReference: null
         ));
 
@@ -189,12 +193,14 @@ public sealed class AutomationEventDispatcherServiceTests
     private static IServiceScopeFactory BuildScopeFactory(
         IAutomationRepository automationRepo,
         IAutomationEventLedgerRepository ledgerRepo,
-        FakeAutomationExecutionService executionService)
+        FakeAutomationExecutionService executionService,
+        ISessionRepository? sessionRepo = null)
     {
         var services = new ServiceCollection();
         services.AddSingleton(automationRepo);
         services.AddSingleton(ledgerRepo);
         services.AddSingleton(executionService);
+        services.AddSingleton<ISessionRepository>(sessionRepo ?? new FakeSessionRepository());
         services.AddSingleton<EventTriggerMatcher>();
         services.AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(NullLogger<>));
 
@@ -303,4 +309,63 @@ internal sealed class FakeAutomationExecutionService
         ExecutedAutomations.Add((automation.Id, eventType, eventSummary));
         return Task.CompletedTask;
     }
+}
+
+internal sealed class FakeSessionRepository : ISessionRepository
+{
+    private readonly Dictionary<string, Domain.Entities.Session> _store = new();
+
+    public List<string> GetByIdAsyncCalls { get; } = [];
+
+    public void Seed(Domain.Entities.Session session) => _store[session.Id] = session;
+
+    public Task<Domain.Entities.Session?> GetByIdAsync(string id)
+    {
+        GetByIdAsyncCalls.Add(id);
+        return Task.FromResult(_store.GetValueOrDefault(id));
+    }
+
+    public Task UpdateTagsAsync(string id, List<string> tags)
+    {
+        if (_store.TryGetValue(id, out var session))
+            session.Tags = tags;
+        return Task.CompletedTask;
+    }
+
+    // Not implemented - not needed for these tests
+    public Task InsertAsync(Domain.Entities.Session session) => throw new NotImplementedException();
+    public Task InsertAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, Domain.Entities.Session session) => throw new NotImplementedException();
+    public Task<Domain.Entities.Session?> GetByHarnessIdAsync(string harnessSessionId) => throw new NotImplementedException();
+    public Task<IReadOnlyList<Domain.Entities.Session>> ListAsync(int limit = 100, int offset = 0, IReadOnlyList<string>? statuses = null, string? projectId = null) => throw new NotImplementedException();
+    public Task<IReadOnlyList<Domain.Entities.Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses) => throw new NotImplementedException();
+    public Task<IReadOnlyList<Domain.Entities.Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses, IReadOnlyList<string>? tags) => throw new NotImplementedException();
+    public Task DeleteByProjectIdAsync(string projectId) => throw new NotImplementedException();
+    public Task<int> CountAsync(IReadOnlyList<string>? statuses = null) => throw new NotImplementedException();
+    public Task<int> CountAsync(IReadOnlyList<string>? statuses, IReadOnlyList<string>? retentionStatuses) => throw new NotImplementedException();
+    public Task<(int Active, int Idle)> GetStatusCountsAsync() => throw new NotImplementedException();
+    public Task<IReadOnlyList<Domain.Entities.Session>> ListActiveAsync() => throw new NotImplementedException();
+    public Task<IReadOnlyList<Domain.Entities.Session>> ListActiveAsync(IReadOnlyList<string>? retentionStatuses) => throw new NotImplementedException();
+    public Task UpdateStatusAsync(string id, string status, string? stoppedAt = null) => throw new NotImplementedException();
+    public Task UpdateStatusAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, string id, string status, string? stoppedAt) => throw new NotImplementedException();
+    public Task ArchiveAsync(string id, string archivedAt) => throw new NotImplementedException();
+    public Task ArchiveAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, string id, string archivedAt) => throw new NotImplementedException();
+    public Task UnarchiveAsync(string id) => throw new NotImplementedException();
+    public Task UnarchiveAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, string id) => throw new NotImplementedException();
+    public Task<IReadOnlyList<Domain.Entities.Session>> GetForInstanceAsync(string instanceId) => throw new NotImplementedException();
+    public Task<Domain.Entities.Session?> GetAnyForInstanceAsync(string instanceId) => throw new NotImplementedException();
+    public Task<IReadOnlyList<Domain.Entities.Session>> GetNonTerminalForInstanceAsync(string instanceId) => throw new NotImplementedException();
+    public Task UpdateTitleAsync(string id, string title) => throw new NotImplementedException();
+    public Task UpdateForResumeAsync(string id, string instanceId) => throw new NotImplementedException();
+    public Task UpdateResumeTokenAsync(string id, string resumeToken) => throw new NotImplementedException();
+    public Task<IReadOnlyList<Domain.Entities.Session>> GetActiveChildrenAsync(string parentDbId) => throw new NotImplementedException();
+    public Task<IReadOnlySet<string>> GetIdsWithActiveChildrenAsync() => throw new NotImplementedException();
+    public Task<IReadOnlyList<Domain.Entities.Session>> GetForWorkspaceAsync(string workspaceId) => throw new NotImplementedException();
+    public Task<IReadOnlyList<Domain.Entities.Session>> GetForWorkspaceAsync(string workspaceId, IReadOnlyList<string>? retentionStatuses) => throw new NotImplementedException();
+    public Task<bool> DeleteAsync(string id) => throw new NotImplementedException();
+    public Task<bool> DeleteAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, string id) => throw new NotImplementedException();
+    public Task<(int TotalTokens, double TotalCost)?> IncrementTokensAsync(string id, int tokens, double cost) => throw new NotImplementedException();
+    public Task<(int TotalTokens, double TotalCost)> GetFleetTokenTotalsAsync() => throw new NotImplementedException();
+    public Task<int> MarkAllNonTerminalStoppedAsync(string stoppedAt) => throw new NotImplementedException();
+    public Task UpdateProjectAsync(string id, string? projectId) => throw new NotImplementedException();
+    public Task UpdateSelectedModelAsync(string id, string providerId, string modelId) => throw new NotImplementedException();
 }

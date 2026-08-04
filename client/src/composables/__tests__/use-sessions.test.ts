@@ -43,6 +43,7 @@ function createSession(id: string, overrides: Partial<SessionListItem> = {}): Se
         created: 1,
         updated: 2,
       },
+      tags: [],
     },
     activityStatus: "busy",
     lifecycleStatus: "running",
@@ -50,6 +51,7 @@ function createSession(id: string, overrides: Partial<SessionListItem> = {}): Se
     archivedAt: null,
     typedInstanceStatus: "running",
     isHidden: false,
+    tags: [],
     ...overrides,
   };
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Play, Pause, Edit, Trash2 } from "lucide-vue-next";
+import { Play, Edit, Trash2 } from "lucide-vue-next";
+import { Switch } from "@/components/ui/switch";
 import type { Automation } from "@/composables/use-automations";
 
 defineProps<{
@@ -8,7 +9,7 @@ defineProps<{
 
 defineEmits<{
   play: [id: string];
-  pause: [id: string];
+  toggleEnabled: [id: string, enabled: boolean];
   edit: [id: string];
   delete: [id: string];
 }>();
@@ -33,6 +34,11 @@ defineEmits<{
           >
             Disabled
           </span>
+          <Switch
+            :model-value="automation.isEnabled"
+            @update:model-value="(enabled: boolean) => $emit('toggleEnabled', automation.id, enabled)"
+            class="ml-2"
+          />
         </div>
 
         <!-- Prompt -->
@@ -102,18 +108,10 @@ defineEmits<{
       <div class="flex items-center gap-2">
         <button
           class="p-2 text-muted transition-colors hover:text-text"
-          :title="automation.isEnabled ? 'Run now' : 'Enable automation'"
+          title="Run now"
           @click="$emit('play', automation.id)"
         >
           <Play :size="18" />
-        </button>
-        <button
-          v-if="automation.isEnabled"
-          class="p-2 text-muted transition-colors hover:text-text"
-          title="Disable automation"
-          @click="$emit('pause', automation.id)"
-        >
-          <Pause :size="18" />
         </button>
         <button
           class="p-2 text-muted transition-colors hover:text-text"

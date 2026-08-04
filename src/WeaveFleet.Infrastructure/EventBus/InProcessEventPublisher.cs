@@ -216,6 +216,7 @@ internal sealed class InProcessEventPublisher : IEventPublisher
         var notification = new AutomationEventNotification(
             EventType: envelope.EventType,
             EventId: eventId,
+            SessionId: envelope.SessionId,
             SessionSourceReference: envelope.SourceReference,
             EventSummary: eventSummary);
 

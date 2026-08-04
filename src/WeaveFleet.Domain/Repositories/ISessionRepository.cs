@@ -11,6 +11,7 @@ public interface ISessionRepository
     Task<Session?> GetByHarnessIdAsync(string harnessSessionId);
     Task<IReadOnlyList<Session>> ListAsync(int limit = 100, int offset = 0, IReadOnlyList<string>? statuses = null, string? projectId = null);
     Task<IReadOnlyList<Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses);
+    Task<IReadOnlyList<Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses, IReadOnlyList<string>? tags);
     Task DeleteByProjectIdAsync(string projectId);
     Task<int> CountAsync(IReadOnlyList<string>? statuses = null);
     Task<int> CountAsync(IReadOnlyList<string>? statuses, IReadOnlyList<string>? retentionStatuses);
@@ -44,4 +45,8 @@ public interface ISessionRepository
     /// (which loses local state) can fall back to it on the next prompt.
     /// </summary>
     Task UpdateSelectedModelAsync(string id, string providerId, string modelId);
+    /// <summary>
+    /// Update the tags for a session.
+    /// </summary>
+    Task UpdateTagsAsync(string id, List<string> tags);
 }

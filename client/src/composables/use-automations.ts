@@ -16,6 +16,8 @@ export interface Automation {
   agent: string | null;
   createdAt: string;
   updatedAt: string | null;
+  targetType?: string;
+  targetTags?: readonly string[];
 }
 
 export interface CreateAutomationRequest {
@@ -29,6 +31,8 @@ export interface CreateAutomationRequest {
   workspaceId?: string | null;
   model?: string | null;
   agent?: string | null;
+  targetType?: string;
+  targetTags?: string[];
 }
 
 export type UpdateAutomationRequest = CreateAutomationRequest;

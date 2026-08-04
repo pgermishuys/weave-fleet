@@ -65,6 +65,7 @@ function createSession(overrides: Partial<SessionListItem> = {}): SessionListIte
         created: 1,
         updated: 2,
       },
+      tags: [],
     },
     instanceStatus: "running",
     parentSessionId: null,
@@ -79,6 +80,7 @@ function createSession(overrides: Partial<SessionListItem> = {}): SessionListIte
     projectId: "project-1",
     projectName: "Project",
     capabilities: createCapabilities(),
+    tags: [],
     ...overrides,
   };
 }

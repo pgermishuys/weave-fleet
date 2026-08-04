@@ -58,6 +58,7 @@ function createSessionListItem(overrides: Partial<SessionListItem> = {}): Sessio
         created: 1,
         updated: 2,
       },
+      tags: [],
     },
     instanceStatus: "running",
     parentSessionId: null,
@@ -73,6 +74,7 @@ function createSessionListItem(overrides: Partial<SessionListItem> = {}): Sessio
     projectName: "Api",
     totalTokens: 123,
     totalCost: 4.56,
+    tags: [],
     ...overrides,
   };
 }
@@ -91,6 +93,7 @@ describe("useSessionActions", () => {
         id: "session-1",
         title: "My session",
         time: { created: 1, updated: 2 },
+        tags: [],
       },
     };
     const deferred = createDeferred<{ data: any; error: any; response: Response }>();
@@ -161,6 +164,7 @@ describe("useSessionActions", () => {
         id: "session-2",
         title: "Forked",
         time: { created: 10, updated: 11 },
+        tags: [],
       },
     };
     const deferred = createDeferred<{ data: any; error: any; response: Response }>();

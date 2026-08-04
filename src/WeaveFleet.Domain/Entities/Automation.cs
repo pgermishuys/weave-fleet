@@ -18,6 +18,8 @@ public sealed class Automation
     public string? WorkspaceId { get; set; }
     public string? Model { get; set; }
     public string? Agent { get; set; }
+    public List<string> TargetTags { get; set; } = [];
+    public string TargetType { get; set; } = "new_session";
     public string CreatedAt { get; set; } = string.Empty;
     public string? UpdatedAt { get; set; }
     public string UserId { get; set; } = string.Empty;

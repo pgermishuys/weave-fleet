@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Services;
 
@@ -11,6 +12,7 @@ namespace WeaveFleet.Application.Services;
 /// </summary>
 public sealed partial class AutomationExecutionService(
     SessionOrchestrator sessionOrchestrator,
+    ISessionRepository sessionRepository,
     ILogger<AutomationExecutionService> logger)
 {
     /// <summary>
@@ -36,35 +38,153 @@ public sealed partial class AutomationExecutionService(
             // 2. If event-triggered, prepend event context
             var finalPrompt = BuildFinalPrompt(expandedPrompt, eventType, eventSummary);
 
-            // 3. Create session via SessionOrchestrator
-            // Use the automation's workspace if specified, otherwise let orchestrator manage it
-            var request = new CreateSessionRequest
+            // 3. Route based on target type
+            var targetType = automation.TargetType ?? "new_session";
+            
+            switch (targetType)
             {
-                Title = $"Automation: {automation.Name}",
-                InitialPrompt = finalPrompt,
-                ProjectId = null, // Automations use default/scratch project
-                HarnessType = null, // Use default harness
-                Directory = automation.WorkspaceId, // Use automation's workspace if specified
-                IsolationStrategy = string.IsNullOrWhiteSpace(automation.WorkspaceId) ? "clone" : "existing",
-                Source = BuildSessionSource(automation, eventType),
-                SourceReference = $"automation:{automation.Id}"
-            };
-
-            var result = await sessionOrchestrator.CreateSessionAsync(request, ct);
-
-            if (result.IsSuccess)
-            {
-                LogExecutionSucceeded(automation.Id, automation.Name, result.Value.Session.Id);
-            }
-            else
-            {
-                LogExecutionFailed(automation.Id, automation.Name, result.Error.Code, result.Error.Description);
+                case "most_recent_session":
+                    await ExecuteOnMostRecentSessionAsync(automation, finalPrompt, ct);
+                    break;
+                
+                case "tagged_session":
+                    await ExecuteOnTaggedSessionAsync(automation, finalPrompt, ct);
+                    break;
+                
+                case "new_session":
+                default:
+                    await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType, ct);
+                    break;
             }
         }
         catch (Exception ex)
         {
             // Errors are logged, not thrown — automation execution is fire-and-forget
             LogExecutionException(ex, automation.Id, automation.Name);
+        }
+    }
+
+    /// <summary>
+    /// Executes automation on a new session.
+    /// </summary>
+    private async Task ExecuteOnNewSessionAsync(
+        Automation automation,
+        string finalPrompt,
+        string? eventType,
+        CancellationToken ct)
+    {
+        var request = new CreateSessionRequest
+        {
+            Title = $"Automation: {automation.Name}",
+            InitialPrompt = finalPrompt,
+            ProjectId = null, // Automations use default/scratch project
+            HarnessType = null, // Use default harness
+            Directory = automation.WorkspaceId, // Use automation's workspace if specified
+            IsolationStrategy = string.IsNullOrWhiteSpace(automation.WorkspaceId) ? "clone" : "existing",
+            Source = BuildSessionSource(automation, eventType),
+            SourceReference = $"automation:{automation.Id}"
+        };
+
+        var result = await sessionOrchestrator.CreateSessionAsync(request, ct);
+
+        if (result.IsSuccess)
+        {
+            LogExecutionSucceeded(automation.Id, automation.Name, result.Value.Session.Id);
+        }
+        else
+        {
+            LogExecutionFailed(automation.Id, automation.Name, result.Error.Code, result.Error.Description);
+        }
+    }
+
+    /// <summary>
+    /// Executes automation on the most recent session, falling back to new session if none found.
+    /// </summary>
+    private async Task ExecuteOnMostRecentSessionAsync(
+        Automation automation,
+        string finalPrompt,
+        CancellationToken ct)
+    {
+        // Query for the most recent session (limit=1, ordered by created_at DESC)
+        var sessions = await sessionRepository.ListAsync(
+            limit: 1,
+            offset: 0,
+            statuses: ["active", "idle"],
+            projectId: null,
+            retentionStatuses: null,
+            tags: null);
+
+        if (sessions.Count > 0)
+        {
+            var targetSession = sessions[0];
+            var result = await sessionOrchestrator.PromptSessionAsync(
+                targetSession.Id,
+                finalPrompt,
+                options: null,
+                ct);
+
+            if (result.IsSuccess)
+            {
+                LogExecutionSucceeded(automation.Id, automation.Name, targetSession.Id);
+            }
+            else
+            {
+                LogExecutionFailed(automation.Id, automation.Name, result.Error.Code, result.Error.Description);
+            }
+        }
+        else
+        {
+            LogNoSessionFoundFallingBack(automation.Id, automation.Name, "most_recent_session");
+            await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType: null, ct);
+        }
+    }
+
+    /// <summary>
+    /// Executes automation on the most recent session matching target tags, falling back to new session if none found.
+    /// </summary>
+    private async Task ExecuteOnTaggedSessionAsync(
+        Automation automation,
+        string finalPrompt,
+        CancellationToken ct)
+    {
+        if (automation.TargetTags.Count == 0)
+        {
+            LogNoTagsSpecifiedFallingBack(automation.Id, automation.Name);
+            await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType: null, ct);
+            return;
+        }
+
+        // Query for the most recent session with matching tags
+        var sessions = await sessionRepository.ListAsync(
+            limit: 1,
+            offset: 0,
+            statuses: ["active", "idle"],
+            projectId: null,
+            retentionStatuses: null,
+            tags: automation.TargetTags);
+
+        if (sessions.Count > 0)
+        {
+            var targetSession = sessions[0];
+            var result = await sessionOrchestrator.PromptSessionAsync(
+                targetSession.Id,
+                finalPrompt,
+                options: null,
+                ct);
+
+            if (result.IsSuccess)
+            {
+                LogExecutionSucceeded(automation.Id, automation.Name, targetSession.Id);
+            }
+            else
+            {
+                LogExecutionFailed(automation.Id, automation.Name, result.Error.Code, result.Error.Description);
+            }
+        }
+        else
+        {
+            LogNoSessionFoundFallingBack(automation.Id, automation.Name, $"tagged_session (tags: {string.Join(", ", automation.TargetTags)})");
+            await ExecuteOnNewSessionAsync(automation, finalPrompt, eventType: null, ct);
         }
     }
 
@@ -141,4 +261,10 @@ public sealed partial class AutomationExecutionService(
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Automation execution threw exception: {AutomationId} ({AutomationName})")]
     private partial void LogExecutionException(Exception ex, string automationId, string automationName);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "No session found for automation {AutomationId} ({AutomationName}) with target type '{TargetType}', falling back to new session")]
+    private partial void LogNoSessionFoundFallingBack(string automationId, string automationName, string targetType);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "No tags specified for automation {AutomationId} ({AutomationName}) with target type 'tagged_session', falling back to new session")]
+    private partial void LogNoTagsSpecifiedFallingBack(string automationId, string automationName);
 }

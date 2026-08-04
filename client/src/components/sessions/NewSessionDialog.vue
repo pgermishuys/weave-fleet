@@ -89,6 +89,7 @@ const selectedProjectId = shallowRef(props.initialProjectId ?? UNGROUPED_PROJECT
 const selectedHarnessType = shallowRef(defaultHarnessType.value);
 const submitAttempted = shallowRef(false);
 const activeGitHubPreset = shallowRef<GitHubSessionSourcePreset | null>(null);
+const tags = shallowRef<string[]>([]);
 
 const {
   repositories,
@@ -319,6 +320,7 @@ function resetForm(): void {
   selectedHarnessType.value = getPreferredHarnessType();
   submitAttempted.value = false;
   activeGitHubPreset.value = null;
+  tags.value = [];
 }
 
 function applyInitialSource(): void {
@@ -474,6 +476,7 @@ async function handleSubmit(): Promise<void> {
       branch: isolationStrategy.value === "worktree" ? effectiveBranch.value || undefined : undefined,
       harnessType: resolvedHarnessType.value || undefined,
       projectId: selectedProjectId.value !== UNGROUPED_PROJECT_ID ? selectedProjectId.value : undefined,
+      tags: tags.value.length > 0 ? tags.value : undefined,
     });
 
     open.value = false;
@@ -743,8 +746,30 @@ watch(
                 >
                   No repositories match your search.
                 </p>
-              </div>
-            </div>
+          </div>
+
+          <div class="space-y-2">
+            <label
+              for="new-session-tags"
+              class="text-sm font-medium text-foreground"
+            >Tags <span class="font-normal text-muted-foreground">(optional)</span></label>
+            <Input
+              id="new-session-tags"
+              :model-value="tags.join(', ')"
+              placeholder="e.g. review-requested, deploy"
+              :disabled="isCreating"
+              @update:model-value="(value) => {
+                tags = String(value)
+                  .split(',')
+                  .map(tag => tag.trim())
+                  .filter(tag => tag.length > 0);
+              }"
+            />
+            <p class="text-xs text-muted-foreground opacity-50">
+              Comma-separated tags for organizing sessions.
+            </p>
+          </div>
+        </div>
           </div>
 
           <div class="space-y-2">
@@ -1011,6 +1036,28 @@ watch(
                 </SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div class="space-y-2">
+            <label
+              for="new-session-tags"
+              class="text-sm font-medium text-foreground"
+            >Tags <span class="font-normal text-muted-foreground">(optional)</span></label>
+            <Input
+              id="new-session-tags"
+              :model-value="tags.join(', ')"
+              placeholder="e.g. review-requested, deploy"
+              :disabled="isCreating"
+              @update:model-value="(value) => {
+                tags = String(value)
+                  .split(',')
+                  .map(tag => tag.trim())
+                  .filter(tag => tag.length > 0);
+              }"
+            />
+            <p class="text-xs text-muted-foreground opacity-50">
+              Comma-separated tags for organizing sessions.
+            </p>
           </div>
 
           <div

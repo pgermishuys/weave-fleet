@@ -208,6 +208,7 @@ describe("session route files view close", () => {
           created: 0,
           updated: 0,
         },
+        tags: [],
       },
       instanceStatus: "running",
       sourceDirectory: null,
@@ -218,6 +219,7 @@ describe("session route files view close", () => {
       archivedAt: null,
       typedInstanceStatus: "running",
       isHidden: false,
+      tags: [],
     }]);
     diffState.diffs.value = [{
       file: "src/changed.ts",

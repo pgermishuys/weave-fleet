@@ -27,6 +27,7 @@ export interface CreateSessionOptions {
   initialPrompt?: string;
   onComplete?: components["schemas"]["OnCompleteInfo"];
   projectId?: string;
+  tags?: string[];
 }
 
 export interface UseCreateSessionResult {
@@ -206,6 +207,7 @@ function buildForkedSessionListItem(
     totalCost: sourceSession?.totalCost,
     projectId: sourceSession?.projectId ?? null,
     projectName: sourceSession?.projectName ?? null,
+    tags: response.session.tags,
   };
 }
 
@@ -224,6 +226,7 @@ export function useCreateSession(endpoint?: string): UseCreateSessionResult {
         initialPrompt: opts?.initialPrompt ?? null,
         onComplete: opts?.onComplete ?? null,
         projectId: opts?.projectId ?? null,
+        tags: opts?.tags ?? null,
       };
 
       const { data, error, response } = await api.POST("/api/sessions", {
