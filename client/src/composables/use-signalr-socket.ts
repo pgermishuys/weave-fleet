@@ -45,6 +45,9 @@ const lastSnapshotsV2 = new Map<string, SessionSnapshot>()
 const reconnectCallbacks = new Map<string, () => void>()
 const disconnectCallbacks = new Map<string, () => void>()
 
+// Per-topic operation queue to ensure subscribe/unsubscribe operations are sequenced
+const topicOperationQueues = new Map<string, Promise<void>>()
+
 let reconnectCallbackNextId = 0
 let disconnectCallbackNextId = 0
 let connection: HubConnection | null = null
@@ -193,6 +196,28 @@ function hasListenersForTopic(topic: string): boolean {
   return (topicListeners.get(topic)?.size ?? 0) > 0 || (topicListenersV2.get(topic)?.size ?? 0) > 0
 }
 
+/**
+ * Queues an operation for a topic to ensure subscribe/unsubscribe operations are sequenced.
+ * This prevents fire-and-forget unsubscribe from racing with a subsequent subscribe.
+ */
+function queueTopicOperation<T>(topic: string, operation: () => Promise<T>): Promise<T> {
+  const existingQueue = topicOperationQueues.get(topic) ?? Promise.resolve()
+  
+  const newQueue = existingQueue
+    .then(() => operation())
+    .catch((error) => {
+      // Log but don't propagate errors to the queue chain
+      console.error(`Topic operation failed for ${topic}:`, error)
+      throw error
+    })
+  
+  // Store a void promise to keep the chain alive (errors are swallowed)
+  const voidQueue: Promise<void> = newQueue.then(() => {}).catch(() => {})
+  topicOperationQueues.set(topic, voidQueue)
+  
+  return newQueue
+}
+
 function addTopicListeners(topics: string[], callback: TopicCallback): Unsubscribe {
   for (const topic of topics) {
     let listeners = topicListeners.get(topic)
@@ -247,17 +272,16 @@ function addTopicListenerV2(
     onSnapshot(lastSnapshot)
   }
 
-  // Subscribe to the session via SignalR
+  // Subscribe to the session via SignalR, queued to ensure ordering
   // The hub expects just the session ID (not the "session:" prefixed topic)
   if (connection?.state === HubConnectionState.Connected) {
     const sessionId = topic.startsWith("session:") ? topic.slice(8) : topic
-    connection.invoke<SessionSnapshot>("SubscribeToSessionAsync", sessionId)
-      .then((snapshot) => {
-        dispatchSnapshot(topic, snapshot)
-      })
-      .catch((error) => {
-        console.error(`Failed to subscribe to session ${topic}:`, error)
-      })
+    queueTopicOperation(topic, async () => {
+      const snapshot = await connection!.invoke<SessionSnapshot>("SubscribeToSessionAsync", sessionId)
+      dispatchSnapshot(topic, snapshot)
+    }).catch((error) => {
+      console.error(`Failed to subscribe to session ${topic}:`, error)
+    })
   }
 
   return () => {
@@ -274,10 +298,12 @@ function addTopicListenerV2(
       
       if (connection?.state === HubConnectionState.Connected) {
         const sessionId = topic.startsWith("session:") ? topic.slice(8) : topic
-        connection.invoke("UnsubscribeFromSessionAsync", sessionId)
-          .catch((error) => {
-            console.error(`Failed to unsubscribe from session ${topic}:`, error)
-          })
+        // Queue the unsubscribe to ensure it happens after any pending subscribe
+        queueTopicOperation(topic, async () => {
+          await connection!.invoke("UnsubscribeFromSessionAsync", sessionId)
+        }).catch((error) => {
+          console.error(`Failed to unsubscribe from session ${topic}:`, error)
+        })
       }
       return
     }
@@ -313,6 +339,7 @@ export function _resetForTesting(): void {
   lastSnapshotsV2.clear()
   reconnectCallbacks.clear()
   disconnectCallbacks.clear()
+  topicOperationQueues.clear()
   syncTestApi()
 }
 

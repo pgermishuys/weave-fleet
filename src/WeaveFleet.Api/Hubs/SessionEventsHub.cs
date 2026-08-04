@@ -227,6 +227,7 @@ public class SessionEventsHub : Hub
 
     /// <summary>
     /// Unsubscribe from a session topic. Removes the connection from the SignalR group and updates the topic filter.
+    /// This method is idempotent and safe to call multiple times.
     /// </summary>
     /// <param name="sessionId">The session identifier.</param>
     public async Task UnsubscribeFromSessionAsync(string sessionId)
@@ -234,10 +235,10 @@ public class SessionEventsHub : Hub
         var connectionId = Context.ConnectionId;
         var topic = $"session:{sessionId}";
 
-        // Remove connection from SignalR group
+        // Remove connection from SignalR group (idempotent)
         await Groups.RemoveFromGroupAsync(connectionId, topic);
 
-        // Remove topic from connection's filter set
+        // Remove topic from connection's filter set (idempotent)
         if (ConnectionTopics.TryGetValue(connectionId, out var topics))
         {
             topics.TryRemove(topic, out _);
