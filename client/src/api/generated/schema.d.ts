@@ -693,6 +693,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/files/browse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["BrowseSessionDirectory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/files/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ReadSessionFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects": {
         parameters: {
             query?: never;
@@ -2109,6 +2141,15 @@ export interface components {
             cardsMarkedStale: number | string;
             syncedAt: string;
         };
+        BrowseEntryDto: {
+            name: string;
+            relativePath: string;
+            isDirectory: boolean;
+        };
+        BrowseSessionDirectoryResponse: {
+            entries: components["schemas"]["BrowseEntryDto"][];
+            currentPath: string;
+        };
         ClientConfigResponse: {
             cloudMode: boolean;
             authEnabled: boolean;
@@ -2139,6 +2180,7 @@ export interface components {
             model?: null | string;
             agent?: null | string;
             targetTags?: null | string[];
+            targetType?: null | string;
         };
         CreateBoardCardRequest: {
             laneId: string;
@@ -2385,6 +2427,12 @@ export interface components {
         QuestionAnswerApiRequest: {
             answers: string[][];
         };
+        ReadSessionFileResponse: {
+            path: string;
+            content: null | string;
+            isBinary: boolean;
+            isTruncated: boolean;
+        };
         RenameWorkspaceRequest: {
             displayName: string;
         };
@@ -2600,6 +2648,7 @@ export interface components {
             model?: null | string;
             agent?: null | string;
             targetTags?: null | string[];
+            targetType?: null | string;
         };
         UpdateBoardCardRequest: {
             title: null | string;
@@ -4073,6 +4122,82 @@ export interface operations {
         responses: {
             /** @description OK */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BrowseSessionDirectory: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrowseSessionDirectoryResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ReadSessionFile: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadSessionFileResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -6,6 +6,7 @@ import ArtifactsPanel from "@/components/session/ArtifactsPanel.vue";
 import ArtifactViewerToolbar from "@/components/session/ArtifactViewerToolbar.vue";
 import AnnotationPopover from "@/components/annotations/AnnotationPopover.vue";
 import CollapsedRightRail from "@/components/layout/CollapsedRightRail.vue";
+import FileBrowserPanel from "@/components/session/FileBrowserPanel.vue";
 import RightPanelTabs from "@/components/layout/RightPanelTabs.vue";
 import SessionDetailPanel from "@/components/session/SessionDetailPanel.vue";
 import {
@@ -127,6 +128,10 @@ const rightPanelTabs = computed(() => {
       label: "Artifacts",
     },
     {
+      id: "files",
+      label: "Files",
+    },
+    {
       id: "info",
       label: "Info",
     },
@@ -145,7 +150,7 @@ const rightPanelTabs = computed(() => {
   return tabs;
 });
 
-type RightPanelTabId = "artifacts" | "info" | "visual";
+type RightPanelTabId = "artifacts" | "files" | "info" | "visual";
 
 const activeTabId = shallowRef<RightPanelTabId>("artifacts");
 
@@ -174,7 +179,7 @@ const activeTab = computed(() => {
 });
 
 function handleTabSelect(tabId: string): void {
-  if (tabId === "artifacts" || tabId === "info" || tabId === "visual") {
+  if (tabId === "artifacts" || tabId === "files" || tabId === "info" || tabId === "visual") {
     activeTabId.value = tabId;
   }
 }
@@ -321,6 +326,8 @@ const isMarkdownRenderer = computed(() => {
         </section>
 
         <ArtifactsPanel v-if="activeTabId === 'artifacts'" />
+
+        <FileBrowserPanel v-if="activeTabId === 'files'" :session-id="activeSessionId ?? ''" />
 
         <template v-else-if="activeTabId === 'info'">
           <section

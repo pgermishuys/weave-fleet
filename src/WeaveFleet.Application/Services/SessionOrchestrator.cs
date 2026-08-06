@@ -1575,6 +1575,121 @@ public sealed partial class SessionOrchestrator(
         return Result.Success<IReadOnlyList<string>>(files);
     }
 
+    public async Task<Result<BrowseDirectoryResult>> BrowseSessionDirectoryAsync(
+        string sessionId,
+        string? path,
+        CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(sessionId);
+        var sessionResult = await GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var sessionDirectory = sessionResult.Value.Directory;
+        if (!Directory.Exists(sessionDirectory))
+            return FleetError.ValidationError("Session.Directory", "Session directory does not exist.");
+
+        // Resolve target directory with path traversal protection
+        var targetDirectory = string.IsNullOrWhiteSpace(path)
+            ? sessionDirectory
+            : Path.GetFullPath(Path.Combine(sessionDirectory, path));
+
+        var sessionDirectoryFullPath = Path.GetFullPath(sessionDirectory);
+        if (!IsSameOrChildPath(targetDirectory, sessionDirectoryFullPath))
+            return FleetError.ValidationError("Session.Directory", "Path traversal is not allowed.");
+
+        if (!Directory.Exists(targetDirectory))
+            return FleetError.ValidationError("Session.Directory", "Directory does not exist.");
+
+        // Enumerate entries
+        var entries = Directory.EnumerateFileSystemEntries(targetDirectory, "*", SearchOption.TopDirectoryOnly)
+            .Select(fullPath =>
+            {
+                var name = Path.GetFileName(fullPath);
+                var isDirectory = Directory.Exists(fullPath);
+                var relativePath = Path.GetRelativePath(sessionDirectoryFullPath, fullPath)
+                    .Replace(Path.DirectorySeparatorChar, '/')
+                    .Replace(Path.AltDirectorySeparatorChar, '/');
+                return new BrowseEntry(name, relativePath, isDirectory);
+            })
+            .ToList();
+
+        // Filter out .git and .gitignored paths
+        var entryNames = entries.Select(e => e.Name).ToList();
+        var allowedNames = await GitIgnoreService.FilterIgnoredPathsAsync(targetDirectory, entryNames, ct).ConfigureAwait(false);
+        var allowedSet = new HashSet<string>(allowedNames, StringComparer.Ordinal);
+        var filteredEntries = entries.Where(e => allowedSet.Contains(e.Name)).ToList();
+
+        // Sort: directories first, then files, both alphabetical
+        var sortedEntries = filteredEntries
+            .OrderByDescending(e => e.IsDirectory)
+            .ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var currentPath = string.IsNullOrWhiteSpace(path)
+            ? string.Empty
+            : path.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/').Trim('/');
+
+        return new BrowseDirectoryResult(sortedEntries, currentPath);
+    }
+
+    public async Task<Result<ReadFileResult>> ReadSessionFileAsync(
+        string sessionId,
+        string? path,
+        CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(sessionId);
+        if (string.IsNullOrWhiteSpace(path))
+            return FleetError.ValidationError("Session.File", "Path parameter is required.");
+
+        var sessionResult = await GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var sessionDirectory = sessionResult.Value.Directory;
+        if (!Directory.Exists(sessionDirectory))
+            return FleetError.ValidationError("Session.Directory", "Session directory does not exist.");
+
+        // Resolve target file with path traversal protection
+        var targetFilePath = Path.GetFullPath(Path.Combine(sessionDirectory, path));
+        var sessionDirectoryFullPath = Path.GetFullPath(sessionDirectory);
+        if (!IsSameOrChildPath(targetFilePath, sessionDirectoryFullPath))
+            return FleetError.ValidationError("Session.File", "Path traversal is not allowed.");
+
+        if (!File.Exists(targetFilePath))
+            return FleetError.NotFoundFor("File", path);
+
+        try
+        {
+            var fileInfo = new FileInfo(targetFilePath);
+            const int maxFileContentBytes = 512 * 1024;
+            if (fileInfo.Length > maxFileContentBytes)
+            {
+                return new ReadFileResult(path, Content: null, IsBinary: false, IsTruncated: true);
+            }
+
+            var bytes = await File.ReadAllBytesAsync(targetFilePath, ct).ConfigureAwait(false);
+            if (bytes.Contains((byte)0))
+            {
+                return new ReadFileResult(path, Content: null, IsBinary: true, IsTruncated: false);
+            }
+
+            try
+            {
+                var content = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
+                return new ReadFileResult(path, content, IsBinary: false, IsTruncated: false);
+            }
+            catch (System.Text.DecoderFallbackException)
+            {
+                return new ReadFileResult(path, Content: null, IsBinary: true, IsTruncated: false);
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
+        {
+            return FleetError.NotFoundFor("File", path);
+        }
+    }
+
     // ── Private helpers ────────────────────────────────────────────────────────
 
     private async Task<Result<IHarnessSession>> GetOrActivateInstanceAsync(Session session, CancellationToken ct)
@@ -1902,6 +2017,33 @@ public sealed partial class SessionOrchestrator(
         Activity.Current?.SetTag(FleetInstrumentation.SessionIdTag, sessionId);
         return logger.BeginScope(new Dictionary<string, object> { [FleetInstrumentation.SessionIdTag] = sessionId });
     }
+
+    private static bool IsSameOrChildPath(string candidatePath, string rootPath)
+    {
+        var root = TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
+        var candidate = TrimEndingDirectorySeparator(Path.GetFullPath(candidatePath));
+        if (PathsEqual(candidate, root))
+            return true;
+
+        return candidate.StartsWith(EnsureEndingDirectorySeparator(root), PathStringComparison);
+    }
+
+    private static bool PathsEqual(string left, string right) =>
+        string.Equals(
+            TrimEndingDirectorySeparator(left),
+            TrimEndingDirectorySeparator(right),
+            PathStringComparison);
+
+    private static string EnsureEndingDirectorySeparator(string path) =>
+        Path.EndsInDirectorySeparator(path) ? path : path + Path.DirectorySeparatorChar;
+
+    private static string TrimEndingDirectorySeparator(string path) =>
+        Path.GetPathRoot(path) == path
+            ? path
+            : path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+    private static StringComparison PathStringComparison =>
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 }
 
 // ── Request / Result DTOs ──────────────────────────────────────────────────────
@@ -1943,3 +2085,12 @@ public sealed record CreateSessionRequest
 
 /// <summary>Result of a successful <see cref="SessionOrchestrator.CreateSessionAsync"/> call.</summary>
 public sealed record CreateSessionResult(Session Session, string InstanceId, string WorkspaceId);
+
+/// <summary>Result of browsing a session directory.</summary>
+public sealed record BrowseDirectoryResult(IReadOnlyList<BrowseEntry> Entries, string CurrentPath);
+
+/// <summary>Represents a file or directory entry in a browsed directory.</summary>
+public sealed record BrowseEntry(string Name, string RelativePath, bool IsDirectory);
+
+/// <summary>Result of reading a session file.</summary>
+public sealed record ReadFileResult(string Path, string? Content, bool IsBinary, bool IsTruncated);

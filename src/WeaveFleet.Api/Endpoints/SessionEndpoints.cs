@@ -529,6 +529,38 @@ public static class SessionEndpoints
         })
         .WithName("FindSessionFiles");
 
+        // GET /api/sessions/{id}/files/browse?path= — session directory browser
+        group.MapGet("/{id}/files/browse", async (string id, string? path, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.BrowseSessionDirectoryAsync(id, path, ct);
+            return result.Match(
+                browseResult => Results.Ok(new BrowseSessionDirectoryResponse(
+                    browseResult.Entries.Select(e => new BrowseEntryDto(e.Name, e.RelativePath, e.IsDirectory)).ToList(),
+                    browseResult.CurrentPath)),
+                err => err.ToSessionApiResult());
+        })
+        .Produces<BrowseSessionDirectoryResponse>(200)
+        .Produces(404)
+        .Produces(400)
+        .WithName("BrowseSessionDirectory");
+
+        // GET /api/sessions/{id}/files/content?path= — read session file content
+        group.MapGet("/{id}/files/content", async (string id, string? path, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.ReadSessionFileAsync(id, path, ct);
+            return result.Match(
+                fileResult => Results.Ok(new ReadSessionFileResponse(
+                    fileResult.Path,
+                    fileResult.Content,
+                    fileResult.IsBinary,
+                    fileResult.IsTruncated)),
+                err => err.ToSessionApiResult());
+        })
+        .Produces<ReadSessionFileResponse>(200)
+        .Produces(404)
+        .Produces(400)
+        .WithName("ReadSessionFile");
+
         return app;
     }
 
@@ -1063,6 +1095,25 @@ internal sealed class ModelRefJsonConverter : JsonConverter<ModelRef>
         writer.WriteEndObject();
     }
 }
+
+// ── Browse directory response types ────────────────────────────────────────────
+
+internal sealed record BrowseSessionDirectoryResponse(
+    IReadOnlyList<BrowseEntryDto> Entries,
+    string CurrentPath);
+
+internal sealed record BrowseEntryDto(
+    string Name,
+    string RelativePath,
+    bool IsDirectory);
+
+// ── Read file response types ───────────────────────────────────────────────────
+
+internal sealed record ReadSessionFileResponse(
+    string Path,
+    string? Content,
+    bool IsBinary,
+    bool IsTruncated);
 
 // ── FleetError → IResult helper ─────────────────────────────────────────────
 

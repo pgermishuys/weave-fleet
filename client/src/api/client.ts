@@ -585,3 +585,9 @@ export interface ProjectResponse {
   createdAt: string;
   updatedAt: string;
 }
+
+// ─── Session File Browser Types (re-exported from generated schema) ────────
+
+export type BrowseDirectoryEntry = components["schemas"]["BrowseEntryDto"];
+export type BrowseDirectoryResponse = components["schemas"]["BrowseSessionDirectoryResponse"];
+export type FileContentResponse = components["schemas"]["ReadSessionFileResponse"];

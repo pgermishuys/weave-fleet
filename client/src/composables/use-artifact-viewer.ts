@@ -2,8 +2,7 @@ import { computed, ref, watch } from 'vue'
 import { useVisualPanel } from '@/composables/use-visual-panel'
 import { useSessionDiffsContext } from '@/composables/use-session-diffs-context'
 import type { VisualPayload } from '@/lib/visual-payload'
-
-const RENDERABLE_EXTENSIONS = ['.md', '.html']
+import { getFileExtension, isRenderableExtension, buildPayloadForFile } from '@/lib/file-payload'
 
 export function useArtifactViewer() {
   const { visualPayload, showVisual, clearVisual } = useVisualPanel()
@@ -20,50 +19,10 @@ export function useArtifactViewer() {
     return diffs
       .filter((diff) => {
         const ext = getFileExtension(diff.file)
-        return RENDERABLE_EXTENSIONS.includes(ext)
+        return isRenderableExtension(ext)
       })
       .map((diff) => diff.file)
   })
-
-  function getFileExtension(path: string): string {
-    const lastDot = path.lastIndexOf('.')
-    return lastDot === -1 ? '' : path.slice(lastDot)
-  }
-
-  function buildPayloadForFile(path: string, content: string): VisualPayload {
-    const ext = getFileExtension(path)
-
-    if (ext === '.md') {
-      return {
-        $type: 'markdown',
-        content,
-        sourceFilePath: path,
-        sourceText: content,
-        viewMode: 'rendered',
-      }
-    }
-
-    if (ext === '.html') {
-      return {
-        $type: 'html',
-        content,
-        sourceFilePath: path,
-        sourceText: content,
-        viewMode: 'rendered',
-      }
-    }
-
-    // Fallback: wrap in fenced code block
-    const lang = ext.slice(1) // remove leading dot
-    const fencedContent = `\`\`\`${lang}\n${content}\n\`\`\``
-    return {
-      $type: 'markdown',
-      content: fencedContent,
-      sourceFilePath: path,
-      sourceText: content,
-      viewMode: 'source',
-    }
-  }
 
   function buildSourcePayload(originalPayload: VisualPayload): VisualPayload {
     const ext = getFileExtension(originalPayload.sourceFilePath || '')
