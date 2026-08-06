@@ -2,31 +2,15 @@
 import { computed } from 'vue'
 import { ArrowLeft } from 'lucide-vue-next'
 import { useArtifactViewer } from '@/composables/use-artifact-viewer'
-import { useSessionDiffsContext } from '@/composables/use-session-diffs-context'
 import { Button } from '@/components/ui/button'
 
-const { activeFilePath, viewMode, openFile, closeViewer } = useArtifactViewer()
-const diffsContext = useSessionDiffsContext()
-
-const allFiles = computed(() => {
-  const diffs = diffsContext.value?.diffState.diffs.value
-  if (!diffs) return []
-  return diffs.map((diff) => diff.file)
-})
+const { activeFilePath, viewMode, closeViewer } = useArtifactViewer()
 
 const isRenderable = computed(() => {
   if (!activeFilePath.value) return false
   const ext = activeFilePath.value.slice(activeFilePath.value.lastIndexOf('.'))
   return ext === '.md' || ext === '.html'
 })
-
-function handleFileChange(event: Event): void {
-  const target = event.target as HTMLSelectElement
-  const path = target.value
-  if (path) {
-    openFile(path)
-  }
-}
 
 function handleViewModeChange(mode: 'rendered' | 'source'): void {
   viewMode.value = mode
@@ -43,30 +27,6 @@ function handleViewModeChange(mode: 'rendered' | 'source'): void {
     >
       <ArrowLeft aria-hidden="true" />
     </Button>
-
-    <span class="artifact-viewer-toolbar__divider" />
-
-    <select
-      :value="activeFilePath ?? ''"
-      class="artifact-viewer-toolbar__file-picker"
-      aria-label="Select file"
-      @change="handleFileChange"
-    >
-      <option
-        v-if="!activeFilePath"
-        value=""
-        disabled
-      >
-        Select a file
-      </option>
-      <option
-        v-for="file in allFiles"
-        :key="file"
-        :value="file"
-      >
-        {{ file }}
-      </option>
-    </select>
 
     <span
       v-if="isRenderable"
@@ -116,27 +76,6 @@ function handleViewModeChange(mode: 'rendered' | 'source'): void {
   height: 16px;
   margin-inline: 2px;
   background: var(--border);
-}
-
-.artifact-viewer-toolbar__file-picker {
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 0;
-  background: transparent;
-  color: var(--text);
-  font-size: 11px;
-  cursor: pointer;
-  transition: border-color var(--transition);
-  max-width: 300px;
-}
-
-.artifact-viewer-toolbar__file-picker:hover {
-  border-color: var(--accent);
-}
-
-.artifact-viewer-toolbar__file-picker:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 .artifact-viewer-toolbar__toggle {
