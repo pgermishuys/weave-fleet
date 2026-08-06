@@ -357,7 +357,7 @@ function handleExpandVisual(payload: VisualPayload): void {
   justify-content: center;
   border: 1px solid var(--border);
   border-radius: 0;
-  background: var(--surface, #fff);
+  background: var(--surface);
   color: var(--muted);
   cursor: pointer;
   opacity: 0;
@@ -370,7 +370,7 @@ function handleExpandVisual(payload: VisualPayload): void {
 }
 
 .msg-copy-btn:hover {
-  background: var(--bg, rgba(0, 0, 0, 0.04));
+  background: var(--bg);
 }
 
 .msg-copy-btn__icon {
