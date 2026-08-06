@@ -2,7 +2,6 @@
 import { computed, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { X } from "lucide-vue-next";
-import ArtifactsPanel from "@/components/session/ArtifactsPanel.vue";
 import ArtifactViewerToolbar from "@/components/session/ArtifactViewerToolbar.vue";
 import AnnotationPopover from "@/components/annotations/AnnotationPopover.vue";
 import CollapsedRightRail from "@/components/layout/CollapsedRightRail.vue";
@@ -111,8 +110,8 @@ watch(
 // Auto-expand and switch to Visual tab when visual payload is set.
 watch(
   visualPayload,
-  (next, prev) => {
-    if (next && !prev) {
+  (next) => {
+    if (next) {
       sidebarStore.setRightPanelCollapsed(false);
       activeTabId.value = "visual";
     }
@@ -123,10 +122,6 @@ watch(
 // --- Tabs ---
 const rightPanelTabs = computed(() => {
   const tabs = [
-    {
-      id: "artifacts",
-      label: "Artifacts",
-    },
     {
       id: "files",
       label: "Files",
@@ -150,9 +145,9 @@ const rightPanelTabs = computed(() => {
   return tabs;
 });
 
-type RightPanelTabId = "artifacts" | "files" | "info" | "visual";
+type RightPanelTabId = "files" | "info" | "visual";
 
-const activeTabId = shallowRef<RightPanelTabId>("artifacts");
+const activeTabId = shallowRef<RightPanelTabId>("files");
 
 const sessionTab = {
   id: "session",
@@ -179,7 +174,7 @@ const activeTab = computed(() => {
 });
 
 function handleTabSelect(tabId: string): void {
-  if (tabId === "artifacts" || tabId === "files" || tabId === "info" || tabId === "visual") {
+  if (tabId === "files" || tabId === "info" || tabId === "visual") {
     activeTabId.value = tabId;
   }
 }
@@ -220,7 +215,7 @@ const visualRenderer = computed(() => {
 
 function handleCloseVisual(): void {
   clearVisual();
-  activeTabId.value = "artifacts";
+  activeTabId.value = "files";
 }
 
 // --- Annotation flow ---
@@ -324,8 +319,6 @@ const isMarkdownRenderer = computed(() => {
             />
           </div>
         </section>
-
-        <ArtifactsPanel v-if="activeTabId === 'artifacts'" />
 
         <FileBrowserPanel v-if="activeTabId === 'files'" :session-id="activeSessionId ?? ''" />
 
