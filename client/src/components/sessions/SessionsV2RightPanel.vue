@@ -2,7 +2,6 @@
 import { computed, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { X } from "lucide-vue-next";
-import ArtifactViewerToolbar from "@/components/session/ArtifactViewerToolbar.vue";
 import AnnotationPopover from "@/components/annotations/AnnotationPopover.vue";
 import CollapsedRightRail from "@/components/layout/CollapsedRightRail.vue";
 import FileBrowserPanel from "@/components/session/FileBrowserPanel.vue";
@@ -297,8 +296,7 @@ const isMarkdownRenderer = computed(() => {
           v-if="activeTabId === 'visual' && visualPayload && visualRenderer"
           class="visual-panel"
         >
-          <ArtifactViewerToolbar v-if="visualPayload.sourceFilePath" />
-          <div v-else class="visual-panel__header">
+          <div v-if="!visualPayload.sourceFilePath" class="visual-panel__header">
             <h2 class="visual-panel__title">
               {{ visualPayload.title ?? 'Visual Content' }}
             </h2>

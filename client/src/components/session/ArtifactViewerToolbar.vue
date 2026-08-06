@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ArrowLeft } from 'lucide-vue-next'
 import { useArtifactViewer } from '@/composables/use-artifact-viewer'
-import { Button } from '@/components/ui/button'
 
-const { activeFilePath, viewMode, closeViewer } = useArtifactViewer()
+const { activeFilePath, viewMode } = useArtifactViewer()
 
 const isRenderable = computed(() => {
   if (!activeFilePath.value) return false
@@ -19,20 +17,6 @@ function handleViewModeChange(mode: 'rendered' | 'source'): void {
 
 <template>
   <div class="artifact-viewer-toolbar">
-    <Button
-      variant="toolbar-icon"
-      size="toolbar"
-      title="Back to Artifacts"
-      @click="closeViewer"
-    >
-      <ArrowLeft aria-hidden="true" />
-    </Button>
-
-    <span
-      v-if="isRenderable"
-      class="artifact-viewer-toolbar__divider"
-    />
-
     <div
       v-if="isRenderable"
       class="artifact-viewer-toolbar__toggle"
@@ -69,13 +53,6 @@ function handleViewModeChange(mode: 'rendered' | 'source'): void {
   padding: 8px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
-}
-
-.artifact-viewer-toolbar__divider {
-  width: 1px;
-  height: 16px;
-  margin-inline: 2px;
-  background: var(--border);
 }
 
 .artifact-viewer-toolbar__toggle {
