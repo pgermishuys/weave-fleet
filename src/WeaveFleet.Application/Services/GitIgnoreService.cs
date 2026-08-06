@@ -68,13 +68,21 @@ public sealed class GitIgnoreService
             using var process = new Process { StartInfo = psi };
             process.Start();
 
-            // Write all paths to stdin
-            await using (var stdin = process.StandardInput)
+            // Write all paths to stdin, ignoring broken pipe if git exits early
+            try
             {
-                foreach (var path in relativePaths)
+                await using (var stdin = process.StandardInput)
                 {
-                    await stdin.WriteLineAsync(path.AsMemory(), ct).ConfigureAwait(false);
+                    foreach (var path in relativePaths)
+                    {
+                        await stdin.WriteLineAsync(path.AsMemory(), ct).ConfigureAwait(false);
+                    }
                 }
+            }
+            catch (IOException)
+            {
+                // Git process exited before we finished writing (e.g., not a git repo).
+                // Continue to read whatever output is available.
             }
 
             // Read ignored paths from stdout
@@ -93,7 +101,7 @@ public sealed class GitIgnoreService
 
             return ignoredPaths;
         }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or OperationCanceledException)
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or OperationCanceledException or IOException)
         {
             // Git not found or command failed — fall back to no filtering
             return null;
