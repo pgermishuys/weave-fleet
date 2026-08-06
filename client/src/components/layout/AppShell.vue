@@ -6,7 +6,7 @@ Panel Vocabulary:
   content      — Right-side artifact viewer
 -->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, shallowRef, watch } from "vue";
 import { useLocation } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import CommandPalette from "@/components/CommandPalette.vue";
@@ -112,6 +112,39 @@ function onTouchEnd(e: TouchEvent): void {
 const rightPanelWidth = ref(360);
 const isGutterDragging = ref(false);
 
+// --- Left gutter (context panel ↔ conversation) ---
+const contextPanelRef = shallowRef<InstanceType<typeof ContextPanel> | null>(null);
+const isLeftGutterDragging = ref(false);
+
+function onLeftGutterPointerDown(e: PointerEvent): void {
+  const panel = contextPanelRef.value;
+  if (!panel) return;
+
+  isLeftGutterDragging.value = true;
+  panel.isResizing = true;
+  const startX = e.clientX;
+  const startWidth = panel.panelWidth;
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+
+  const onMove = (ev: PointerEvent) => {
+    const delta = ev.clientX - startX;
+    panel.panelWidth = Math.min(500, Math.max(200, startWidth + delta));
+  };
+
+  const onUp = () => {
+    isLeftGutterDragging.value = false;
+    panel.isResizing = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+  };
+
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
+}
+
 function onGutterPointerDown(e: PointerEvent): void {
   isGutterDragging.value = true;
   const startX = e.clientX;
@@ -183,7 +216,13 @@ function onGutterPointerDown(e: PointerEvent): void {
       <!-- Desktop: inline nav -->
       <template v-if="!isMobileNav">
         <IconRail />
-        <ContextPanel v-if="!panelCollapsed" />
+        <ContextPanel v-if="!panelCollapsed" ref="contextPanelRef" />
+        <div
+          v-if="!panelCollapsed"
+          class="resize-gutter"
+          :class="{ active: isLeftGutterDragging }"
+          @pointerdown.prevent="onLeftGutterPointerDown"
+        />
       </template>
 
       <CenterContent>
