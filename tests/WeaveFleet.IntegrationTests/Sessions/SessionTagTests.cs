@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -613,6 +614,7 @@ internal sealed class SessionTagTestServer : IAsyncDisposable
 
         protected override IHost CreateHost(IHostBuilder builder)
         {
+            // Build and start the real Kestrel host
             builder.ConfigureWebHost(wb => wb.UseKestrel());
             _host = builder.Build();
             _host.Start();
@@ -621,7 +623,12 @@ internal sealed class SessionTagTestServer : IAsyncDisposable
             var addresses = server.Features.Get<IServerAddressesFeature>()!;
             ServerUrl = addresses.Addresses.First();
 
-            return _host;
+            // Return a dummy host to satisfy WebApplicationFactory's base class.
+            // This prevents the base from creating a second TestServer host that
+            // would re-run Program.cs (including migrations) against the same DB.
+            return Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
+                .ConfigureWebHost(wb => wb.UseTestServer())
+                .Build();
         }
 
         private sealed class EmptyPoolHealth : IOpenCodePoolHealthCheck

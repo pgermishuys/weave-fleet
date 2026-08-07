@@ -14,6 +14,7 @@ public sealed partial class AutomationSchedulerService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AutomationSchedulerService> _logger;
     private readonly ConcurrentDictionary<string, int> _runningCounts = new();
+    private DateTimeOffset _lastPollTime = DateTimeOffset.MinValue;
 
     public AutomationSchedulerService(IServiceScopeFactory scopeFactory, ILogger<AutomationSchedulerService> logger)
     {
@@ -49,7 +50,10 @@ public sealed partial class AutomationSchedulerService : BackgroundService
         var automations = await repo.ListEnabledByTriggerTypeAsync("schedule");
 
         var now = DateTimeOffset.UtcNow;
-        var windowStart = now - PollInterval;
+        var windowStart = _lastPollTime == DateTimeOffset.MinValue
+            ? now - PollInterval - PollInterval // First poll: look back 60s to cover a full cron minute
+            : _lastPollTime;
+        _lastPollTime = now;
 
         foreach (var automation in automations)
         {
