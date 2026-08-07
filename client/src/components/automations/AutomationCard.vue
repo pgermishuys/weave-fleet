@@ -21,7 +21,9 @@ defineEmits<{
       <div class="flex-1 space-y-3">
         <!-- Title and badge -->
         <div class="flex items-center gap-3">
-          <h3 class="font-bold text-text">{{ automation.name }}</h3>
+          <h3 class="font-bold text-text">
+            {{ automation.name }}
+          </h3>
           <span
             v-if="automation.isEnabled"
             class="border border-green-600 px-2 py-0.5 text-xs font-medium text-green-600"
@@ -36,8 +38,8 @@ defineEmits<{
           </span>
           <Switch
             :model-value="automation.isEnabled"
-            @update:model-value="(enabled: boolean) => $emit('toggleEnabled', automation.id, enabled)"
             class="ml-2"
+            @update:model-value="(enabled: boolean) => $emit('toggleEnabled', automation.id, enabled)"
           />
         </div>
 
@@ -46,7 +48,9 @@ defineEmits<{
           <p class="text-xs font-semibold uppercase tracking-[0.12em] text-muted">
             Prompt
           </p>
-          <p class="text-sm text-text">{{ automation.prompt }}</p>
+          <p class="text-sm text-text">
+            {{ automation.prompt }}
+          </p>
         </div>
 
         <!-- Trigger -->

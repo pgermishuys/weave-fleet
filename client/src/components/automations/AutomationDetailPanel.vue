@@ -130,7 +130,10 @@ function formatTargetType(targetType: string | undefined): string {
     </div>
 
     <!-- Create mode -->
-    <div v-else-if="viewMode === 'create'" class="flex-1 overflow-y-auto p-6">
+    <div
+      v-else-if="viewMode === 'create'"
+      class="flex-1 overflow-y-auto p-6"
+    >
       <AutomationForm
         mode="create"
         @submit="handleCreate"
@@ -139,9 +142,15 @@ function formatTargetType(targetType: string | undefined): string {
     </div>
 
     <!-- Edit mode -->
-    <div v-else-if="viewMode === 'edit' && currentAutomation" class="flex h-full flex-col">
+    <div
+      v-else-if="viewMode === 'edit' && currentAutomation"
+      class="flex h-full flex-col"
+    >
       <!-- Inline editing form -->
-      <div v-if="isEditingInline" class="flex-1 overflow-y-auto p-6">
+      <div
+        v-if="isEditingInline"
+        class="flex-1 overflow-y-auto p-6"
+      >
         <AutomationForm
           mode="edit"
           :initial-values="currentAutomation"
@@ -151,12 +160,17 @@ function formatTargetType(targetType: string | undefined): string {
       </div>
 
       <!-- Detail view -->
-      <div v-else class="flex flex-1 flex-col overflow-y-auto">
+      <div
+        v-else
+        class="flex flex-1 flex-col overflow-y-auto"
+      >
         <!-- Header with actions -->
         <div class="border-b p-6">
           <div class="mb-4 flex items-start justify-between">
             <div class="flex-1">
-              <h2 class="text-2xl font-semibold">{{ currentAutomation.name }}</h2>
+              <h2 class="text-2xl font-semibold">
+                {{ currentAutomation.name }}
+              </h2>
               <div class="mt-2 flex items-center gap-2">
                 <Switch
                   :model-value="currentAutomation.isEnabled"
@@ -169,17 +183,27 @@ function formatTargetType(targetType: string | undefined): string {
               </div>
             </div>
             <div class="flex gap-2">
-              <Button variant="outline" size="icon" @click="handlePlay" title="Run now">
+              <Button
+                variant="outline"
+                size="icon"
+                title="Run now"
+                @click="handlePlay"
+              >
                 <Play class="h-4 w-4" />
               </Button>
-              <Button variant="outline" size="icon" @click="startEdit" title="Edit">
+              <Button
+                variant="outline"
+                size="icon"
+                title="Edit"
+                @click="startEdit"
+              >
                 <Edit class="h-4 w-4" />
               </Button>
               <Button
                 variant="outline"
                 size="icon"
-                @click="startDelete(currentAutomation.id)"
                 title="Delete"
+                @click="startDelete(currentAutomation.id)"
               >
                 <Trash2 class="h-4 w-4" />
               </Button>
@@ -191,13 +215,19 @@ function formatTargetType(targetType: string | undefined): string {
         <div class="flex-1 space-y-6 p-6">
           <!-- Prompt section -->
           <section>
-            <h3 class="mb-2 text-sm font-medium text-muted-foreground">Prompt</h3>
-            <p class="whitespace-pre-wrap text-sm">{{ currentAutomation.prompt }}</p>
+            <h3 class="mb-2 text-sm font-medium text-muted-foreground">
+              Prompt
+            </h3>
+            <p class="whitespace-pre-wrap text-sm">
+              {{ currentAutomation.prompt }}
+            </p>
           </section>
 
           <!-- Trigger section -->
           <section>
-            <h3 class="mb-2 text-sm font-medium text-muted-foreground">Trigger</h3>
+            <h3 class="mb-2 text-sm font-medium text-muted-foreground">
+              Trigger
+            </h3>
             <div class="space-y-2 text-sm">
               <div>
                 <span class="font-medium">Type:</span>
@@ -212,7 +242,9 @@ function formatTargetType(targetType: string | undefined): string {
 
           <!-- Target section -->
           <section>
-            <h3 class="mb-2 text-sm font-medium text-muted-foreground">Target</h3>
+            <h3 class="mb-2 text-sm font-medium text-muted-foreground">
+              Target
+            </h3>
             <div class="text-sm">
               <span class="font-medium">Target:</span>
               <span class="ml-2">{{ formatTargetType(currentAutomation.targetType) }}</span>
@@ -221,7 +253,9 @@ function formatTargetType(targetType: string | undefined): string {
 
           <!-- Policy section -->
           <section>
-            <h3 class="mb-2 text-sm font-medium text-muted-foreground">Policy</h3>
+            <h3 class="mb-2 text-sm font-medium text-muted-foreground">
+              Policy
+            </h3>
             <div class="space-y-1 text-sm">
               <div>
                 <span class="font-medium">Max concurrent runs:</span>
@@ -240,19 +274,34 @@ function formatTargetType(targetType: string | undefined): string {
 
           <!-- Metadata section -->
           <section>
-            <h3 class="mb-2 text-sm font-medium text-muted-foreground">Metadata</h3>
+            <h3 class="mb-2 text-sm font-medium text-muted-foreground">
+              Metadata
+            </h3>
             <div class="flex flex-wrap gap-2">
-              <Badge v-if="currentAutomation.workspaceId" variant="outline">
+              <Badge
+                v-if="currentAutomation.workspaceId"
+                variant="outline"
+              >
                 Workspace: {{ currentAutomation.workspaceId }}
               </Badge>
-              <Badge v-if="currentAutomation.model" variant="outline">
+              <Badge
+                v-if="currentAutomation.model"
+                variant="outline"
+              >
                 Model: {{ currentAutomation.model }}
               </Badge>
-              <Badge v-if="currentAutomation.agent" variant="outline">
+              <Badge
+                v-if="currentAutomation.agent"
+                variant="outline"
+              >
                 Agent: {{ currentAutomation.agent }}
               </Badge>
               <template v-if="currentAutomation.targetTags && currentAutomation.targetTags.length > 0">
-                <Badge v-for="tag in currentAutomation.targetTags" :key="tag" variant="outline">
+                <Badge
+                  v-for="tag in currentAutomation.targetTags"
+                  :key="tag"
+                  variant="outline"
+                >
                   Tag: {{ tag }}
                 </Badge>
               </template>
@@ -276,7 +325,9 @@ function formatTargetType(targetType: string | undefined): string {
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction @click="confirmDelete">Delete</AlertDialogAction>
+          <AlertDialogAction @click="confirmDelete">
+            Delete
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
