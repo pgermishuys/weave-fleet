@@ -1614,11 +1614,8 @@ public sealed partial class SessionOrchestrator(
             })
             .ToList();
 
-        // Filter out .git and .gitignored paths
-        var entryNames = entries.Select(e => e.Name).ToList();
-        var allowedNames = await GitIgnoreService.FilterIgnoredPathsAsync(targetDirectory, entryNames, ct).ConfigureAwait(false);
-        var allowedSet = new HashSet<string>(allowedNames, StringComparer.Ordinal);
-        var filteredEntries = entries.Where(e => allowedSet.Contains(e.Name)).ToList();
+        // Filter out .git directory
+        var filteredEntries = entries.Where(e => !string.Equals(e.Name, ".git", StringComparison.Ordinal)).ToList();
 
         // Sort: directories first, then files, both alphabetical
         var sortedEntries = filteredEntries
