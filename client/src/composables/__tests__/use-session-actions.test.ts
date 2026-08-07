@@ -92,12 +92,13 @@ describe("useSessionActions", () => {
       session: {
         id: "session-1",
         title: "My session",
-        time: { created: 1, updated: 2 },
-        tags: [],
-      },
-    };
-    const deferred = createDeferred<{ data: any; error: any; response: Response }>();
-    apiFetchMock.mockReturnValue(deferred.promise);
+      time: { created: 1, updated: 2 },
+      tags: [],
+    },
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const deferred = createDeferred<{ data: any; error: any; response: Response }>();
+  apiFetchMock.mockReturnValue(deferred.promise);
 
     const { result } = await mountComposable(() => useCreateSession());
     const createPromise = result.createSession("/tmp/project", {
@@ -115,14 +116,17 @@ describe("useSessionActions", () => {
         title: "My session",
         isolationStrategy: "clone",
         branch: "feature/tests",
-        source: undefined,
+        source: null,
         harnessType: "opencode",
+        initialPrompt: null,
+        onComplete: null,
         projectId: "project-1",
+        tags: null,
       },
     });
 
     deferred.resolve({
-      data: undefined,
+      data: responseBody,
       error: undefined,
       response: createJsonResponse(responseBody),
     });
@@ -135,6 +139,7 @@ describe("useSessionActions", () => {
   it("reports API errors for project deletion", async () => {
     apiFetchMock.mockResolvedValue({
       data: undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       error: { error: "Cannot delete project" } as any,
       response: createJsonResponse({ error: "Cannot delete project" }, 400),
     });
@@ -163,12 +168,13 @@ describe("useSessionActions", () => {
       session: {
         id: "session-2",
         title: "Forked",
-        time: { created: 10, updated: 11 },
-        tags: [],
-      },
-    };
-    const deferred = createDeferred<{ data: any; error: any; response: Response }>();
-    apiFetchMock.mockReturnValue(deferred.promise);
+      time: { created: 10, updated: 11 },
+      tags: [],
+    },
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const deferred = createDeferred<{ data: any; error: any; response: Response }>();
+  apiFetchMock.mockReturnValue(deferred.promise);
 
     const { result } = await mountComposable(() => useForkSession());
     const forkPromise = result.forkSession("session-1", { title: "Forked" });
@@ -177,7 +183,7 @@ describe("useSessionActions", () => {
     expect(result.forkingSessionId.value).toBe("session-1");
 
     deferred.resolve({
-      data: undefined,
+      data: responseBody,
       error: undefined,
       response: createJsonResponse(responseBody),
     });
@@ -230,6 +236,7 @@ describe("useSessionActions", () => {
   });
 
   it("turns resume conflicts into user-friendly errors", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const deferred = createDeferred<{ data: any; error: any; response: Response }>();
     apiFetchMock.mockReturnValue(deferred.promise);
 
@@ -241,6 +248,7 @@ describe("useSessionActions", () => {
 
     deferred.resolve({
       data: undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       error: { error: "conflict" } as any,
       response: createJsonResponse({ error: "conflict" }, 409),
     });

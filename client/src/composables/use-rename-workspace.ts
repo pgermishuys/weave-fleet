@@ -30,7 +30,7 @@ export function useRenameWorkspace(): UseRenameWorkspaceResult {
 
       if (apiError || !response.ok) {
         const payload = apiError as { error?: string } | undefined;
-        throw new Error((payload as any)?.error ?? `HTTP ${response.status}`);
+        throw new Error(payload?.error ?? `HTTP ${response.status}`);
       }
 
       onSuccess?.();

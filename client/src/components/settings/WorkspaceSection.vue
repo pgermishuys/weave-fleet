@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AddWorkspaceRootResponse, WorkspaceRootItem, WorkspaceRootsResponse } from "@/api/client";
+import type { WorkspaceRootItem, WorkspaceRootsResponse } from "@/api/client";
 import { onMounted, reactive, ref, shallowRef, watch } from "vue";
 import { AlertCircle, Folder, FolderGit2, LoaderCircle, Plus, RefreshCw, Trash2 } from "lucide-vue-next";
 import { api } from "@/api/client";

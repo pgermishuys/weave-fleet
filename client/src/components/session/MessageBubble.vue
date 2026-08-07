@@ -81,18 +81,6 @@ function makeDismissHandler(callId: string) {
 const markdownRenderer = createMarkdownRenderer();
 
 const bodyHtml = computed(() => markdownRenderer.render(props.body));
-const displayAuthor = computed(() => {
-  const author = props.author.trim();
-  if (!author) {
-    return author;
-  }
-
-  return author.charAt(0).toUpperCase() + author.slice(1);
-});
-
-const displayModelId = computed(() => {
-  return props.role === "assistant" ? props.modelId?.trim() ?? "" : "";
-});
 
 function copyMessage() {
   navigator.clipboard.writeText(props.body);

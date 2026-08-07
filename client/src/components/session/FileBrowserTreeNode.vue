@@ -12,7 +12,7 @@ interface Props {
 const props = defineProps<Props>()
 
 // Inject the file browser composable from parent
-const fileBrowser = inject<any>('fileBrowser')
+const fileBrowser = inject<ReturnType<typeof import('@/composables/use-file-browser').useFileBrowser>>('fileBrowser')
 
 if (!fileBrowser) {
   throw new Error('FileBrowserTreeNode must be used within a FileBrowserPanel')
@@ -23,18 +23,19 @@ const indentStyle = computed(() => ({
 }))
 
 const isExpanded = computed(() => 
-  fileBrowser.isExpanded(props.entry.relativePath)
+  fileBrowser?.isExpanded(props.entry.relativePath) ?? false
 )
 
 const isLoading = computed(() => 
-  fileBrowser.isLoading(props.entry.relativePath)
+  fileBrowser?.isLoading(props.entry.relativePath) ?? false
 )
 
 const children = computed(() => 
-  fileBrowser.expandedDirs.value.get(props.entry.relativePath) || []
+  fileBrowser?.expandedDirs.value.get(props.entry.relativePath) || []
 )
 
 async function toggleDirectory() {
+  if (!fileBrowser) return
   if (isExpanded.value) {
     fileBrowser.collapseDirectory(props.entry.relativePath)
   } else {
@@ -43,6 +44,7 @@ async function toggleDirectory() {
 }
 
 async function handleFileClick() {
+  if (!fileBrowser) return
   await fileBrowser.selectFile(props.entry.relativePath)
 }
 </script>

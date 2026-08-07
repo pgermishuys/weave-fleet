@@ -203,6 +203,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(SendCommandApiRequest))]
 [JsonSerializable(typeof(QuestionAnswerApiRequest))]
 [JsonSerializable(typeof(ModelRef))]
+[JsonSerializable(typeof(UpdateSessionTagsRequest))]
 // Workspace
 [JsonSerializable(typeof(AddWorkspaceRootRequest))]
 [JsonSerializable(typeof(RenameWorkspaceRequest))]
@@ -266,6 +267,9 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(GitHubReviewCommentDto))]
 [JsonSerializable(typeof(IReadOnlyList<GitHubReviewThreadDto>))]
 [JsonSerializable(typeof(GitHubReplyToCommentRequest))]
+// Automations
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.CreateAutomationRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.UpdateAutomationRequest))]
 // Analytics
 [JsonSerializable(typeof(WeaveFleet.Application.Analytics.AnalyticsSummary))]
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Analytics.DailyAnalytics>))]

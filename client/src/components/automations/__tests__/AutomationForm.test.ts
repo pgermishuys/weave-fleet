@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { nextTick } from 'vue'
 import AutomationForm from '../AutomationForm.vue'
 import type { Automation } from '@/composables/use-automations'
 
@@ -12,6 +11,7 @@ vi.mock('@/composables/use-automations', () => ({
 }))
 
 describe('AutomationForm - Dirty State Tracking', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const initialAutomation: Partial<Automation> = {
     id: 'test-id',
     name: 'Test Automation',

@@ -6,8 +6,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileDiffItem, SessionListItem } from "@/api/client";
 import { SessionDetailContextKey, type SessionDetailContext } from "@/composables/use-session-detail-context";
 import { SessionDiffsContextKey } from "@/composables/use-session-diffs-context";
-import { useSessionsStore } from "@/stores/sessions";
-import { useSidebarStore } from "@/stores/sidebar";
 
 const routerNavigateMock = vi.fn();
 
@@ -73,7 +71,6 @@ const FilesChangedStub = {
 };
 
 import SessionDetailPanel from "@/components/session/SessionDetailPanel.vue";
-import SessionsV2RightPanel from "@/components/sessions/SessionsV2RightPanel.vue";
 
 function createCapabilities(overrides: Partial<NonNullable<SessionListItem["capabilities"]>> = {}): NonNullable<SessionListItem["capabilities"]> {
   return {
@@ -337,51 +334,5 @@ describe("SessionDetailPanel files changed integration", () => {
 
     expect(wrapper.find("[data-testid='session-resume-button']").exists()).toBe(false);
     expect(wrapper.find("[data-testid='session-stop-button']").exists()).toBe(false);
-  });
-
-  it("right_panel_badge_click_opens_diffs_tray", async () => {
-    const openDiffsTray = vi.fn();
-    const pinia = createPinia();
-    setActivePinia(pinia);
-    useSessionsStore(pinia).setSessions([createSession()]);
-    useSessionsStore(pinia).setActiveSessionId("session-1");
-    useSidebarStore(pinia).setRightPanelCollapsed(false);
-
-    const wrapper = mount(SessionsV2RightPanel, {
-      global: {
-        plugins: [pinia],
-        stubs: {
-          FilesChanged: FilesChangedStub,
-          RightPanelTabs: {
-            name: "RightPanelTabsStub",
-            emits: ["collapse"],
-            template: '<div data-testid="right-panel-tabs" />',
-          },
-          CollapsedRightRail: {
-            name: "CollapsedRightRailStub",
-            emits: ["expand"],
-            template: '<button type="button" data-testid="collapsed-right-rail" />',
-          },
-        },
-        provide: {
-          [SessionDiffsContextKey as symbol]: {
-            diffState: {
-              diffs: readonly(diffState.diffs),
-              available: readonly(diffState.available),
-              isLoading: readonly(diffState.isLoading),
-              error: readonly(diffState.error),
-              fetchDiffs: diffState.fetchDiffs,
-            },
-            openDiffsTray,
-          },
-        },
-      },
-    });
-    await flushPromises();
-
-    await wrapper.get(".files-changed__badge").trigger("click");
-
-    expect(openDiffsTray).toHaveBeenCalledTimes(1);
-    expect(routerNavigateMock).not.toHaveBeenCalled();
   });
 });

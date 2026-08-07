@@ -22,7 +22,7 @@ export function useHarnesses(): UseHarnessesResult {
       const { data, error, response } = await api.GET("/api/harnesses");
       if (error || !response.ok) {
         const payload = error as { error?: string } | undefined;
-        throw new Error((payload as any)?.error ?? `HTTP ${response.status}`);
+        throw new Error(payload?.error ?? `HTTP ${response.status}`);
       }
 
       harnesses.value = data as unknown as HarnessInfo[];

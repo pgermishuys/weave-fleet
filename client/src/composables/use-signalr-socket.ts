@@ -88,17 +88,6 @@ function dispatchEventV2(topic: string, event: DomainEvent): void {
   }
 }
 
-function dispatchHistory(topic: string, page: SessionHistoryPage): void {
-  const callbacks = topicListenersV2.get(topic)
-  if (!callbacks) {
-    return
-  }
-
-  for (const callback of callbacks) {
-    callback.onHistory?.(page)
-  }
-}
-
 function notifyDisconnected(): void {
   for (const callback of disconnectCallbacks.values()) {
     callback()

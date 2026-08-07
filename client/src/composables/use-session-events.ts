@@ -11,7 +11,6 @@ import {
 } from "vue"
 import type {
   AccumulatedMessage,
-  CommittedSessionEvent,
   DelegationDto,
   WebSocketEvent,
 } from "@/lib/client-types"
@@ -20,7 +19,7 @@ import type { SessionStreamStatus } from "@/lib/domain-event-reducer"
 import { api } from "@/api/client"
 import { applyDelegationCreated, applyDelegationUpdated } from "@/lib/delegation-state"
 import { applyPartUpdate, applyTextDelta, ensureMessage, mergeMessageUpdate } from "@/lib/event-state"
-import { convertFleetMessageToAccumulated, prependMessages, type FleetMessage } from "@/lib/pagination-utils"
+import { prependMessages } from "@/lib/pagination-utils"
 import { sessionCache } from "@/lib/session-cache"
 import { addSessionSyncListener } from "@/lib/session-sync"
 import { useMessagePagination } from "@/composables/use-message-pagination"
@@ -145,83 +144,6 @@ export function useSessionEvents(
         return !disposed
           && activeSessionId === currentSessionId.value
           && activeInstanceId === currentInstanceId.value
-      }
-
-      async function loadAllMessages(loadSignal?: AbortSignal): Promise<void> {
-        if (!activeSessionId || !activeInstanceId) {
-          return
-        }
-
-        if (isActive()) {
-          cacheHit.value = false
-          initialScrollPosition.value = null
-        }
-
-        try {
-          const { data, error, response } = await api.GET("/api/sessions/{id}/messages", {
-            params: {
-              path: { id: activeSessionId },
-            },
-            signal: loadSignal,
-          });
-
-          if (error || !response.ok || loadSignal?.aborted || !isActive()) {
-            return
-          }
-
-          // Response body is not typed in schema, use data from openapi-fetch
-          const responseData = data as unknown as { messages?: FleetMessage[] }
-          if (!responseData.messages?.length || loadSignal?.aborted || !isActive()) {
-            return
-          }
-
-          messages.value = responseData.messages
-            .map(convertFleetMessageToAccumulated)
-            .slice(-MAX_MESSAGES)
-          pagination.resetPagination()
-        } catch (loadError) {
-          if (loadError instanceof DOMException && loadError.name === "AbortError") {
-            return
-          }
-        }
-      }
-
-      function applyCommittedEvents(events: CommittedSessionEvent[]): void {
-        if (events.length === 0) {
-          return
-        }
-
-        const orderedEvents = [...events].sort(compareByEventCursor)
-        const state: SessionEventState = {
-          messages,
-          delegations,
-          status,
-          sessionStatus,
-          explicitStatus,
-          retryMetadata,
-          error,
-          onAgentSwitch: onAgentSwitchRef,
-          lastEventId,
-          scheduleSafetyNetFallback,
-          clearSafetyNetFallback,
-          maybeResolveSafetyNetFallback,
-          syncSessionStore: (patch) => {
-            syncSessionStore(activeSessionId, patch)
-          },
-        }
-
-        for (const committedEvent of orderedEvents) {
-          const eventId = getEventIdWithCompatibilityFallback(committedEvent)
-          handleEvent(
-            {
-              type: committedEvent.type,
-              eventId,
-              properties: committedEvent.payload,
-            },
-            activeSessionId,
-            state,
-          )
-        }
       }
 
       async function loadInitialMessages(loadSignal?: AbortSignal): Promise<void> {
@@ -906,20 +828,6 @@ function isSessionActionCapabilities(value: unknown): value is SessionActionCapa
   })
 
   return hasBooleanCapabilities && hasDisabledReasons
-}
-
-function compareByEventCursor(
-  left: Pick<WebSocketEvent, "eventId" | "sequenceNumber">,
-  right: Pick<WebSocketEvent, "eventId" | "sequenceNumber">,
-): number {
-  const leftCursorId = getEventCursorId(left)
-  const rightCursorId = getEventCursorId(right)
-
-  if (!Number.isFinite(leftCursorId) || !Number.isFinite(rightCursorId)) {
-    return 0
-  }
-
-  return leftCursorId - rightCursorId
 }
 
 function getEventCursorId(event: Pick<WebSocketEvent, "eventId" | "sequenceNumber">): number {

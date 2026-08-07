@@ -202,12 +202,23 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task relay_internal_dedup_keys_are_not_frontend_session_stream_cursors()
     {
-        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var (broadcaster, sessionRepo, _, activityTracker, persister) = BuildDependencies();
         var tracker = new InstanceTracker();
         var channels = new InProcessChannels();
         var metrics = new InProcessMetrics();
         var sharedFleetSessionId = "fleet-shared-stream";
         var sharedTopic = $"session:{sharedFleetSessionId}";
+
+        // Create a custom scope factory that includes the tracker instance used by the test
+        var scopeFactory = TestServiceScopeFactory.Create(services =>
+        {
+            services.AddLogging();
+            services.AddSingleton<ISessionRepository>(sessionRepo);
+            services.AddSingleton(tracker);
+            services.AddSingleton(new SessionCapabilitiesResolver(tracker, activityTracker));
+            services.AddSingleton<IHarnessEventPersister>(persister);
+            services.AddTransient<DomainEventTranslator>();
+        });
 
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
         await using var _ = keeper;
@@ -252,6 +263,9 @@ public sealed class HarnessEventRelayTests
         tracker.Register(instanceA.InstanceId, instanceA);
         tracker.Register(instanceB.InstanceId, instanceB);
 
+        // Wait for relay pumps to start and resolve session metadata
+        await Task.Delay(1000);
+
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var emitA = Task.Run(async () =>
         {
@@ -283,7 +297,8 @@ public sealed class HarnessEventRelayTests
         release.SetResult();
         await Task.WhenAll(emitA, emitB);
 
-        for (int i = 0; i < 100 && broadcaster.Broadcasts.Count(b => b.Topic == sharedTopic) < 2; i++)
+        // Wait longer for events to flow through relay → publisher → fan-out → broadcaster
+        for (int i = 0; i < 200 && broadcaster.Broadcasts.Count(b => b.Topic == sharedTopic) < 2; i++)
             await Task.Delay(50);
 
         var sessionBroadcasts = broadcaster.Broadcasts

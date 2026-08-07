@@ -37,7 +37,7 @@ const emit = defineEmits<{
   promptSent: [];
 }>();
 
-const { agents, defaultAgentId } = useAgents(props.sessionId);
+const { agents } = useAgents(props.sessionId);
 const { abortSession, isAborting } = useAbortSession();
 const { models, defaultModelKey } = useModels(props.sessionId);
 const { draft, setText, setAgentId, setModelId } = useDraftState(props.sessionId, {
@@ -347,23 +347,6 @@ const selectedModelId = computed({
     setModelId(value);
   },
 });
-
-const busyAgentName = computed(() => {
-  const selectedAgent = agents.value.find((agent) => agent.id === draft.agentId);
-  const fallbackAgent = agents.value.find((agent) => agent.id === defaultAgentId.value);
-  return selectedAgent?.name ?? fallbackAgent?.name ?? "Assistant";
-});
-
-const busyStatusLabel = computed(() => {
-  if (sessionStatus.value === "waiting_input") {
-    return "Waiting for your input";
-  }
-  return statusIndicatorPhase.value === "responding"
-    ? `${busyAgentName.value} is responding`
-    : `${busyAgentName.value} is thinking`;
-});
-
-const busyStatusDots = computed(() => ".".repeat(statusIndicatorDotCount.value));
 
 function clearStatusIndicatorTimer(): void {
   if (statusIndicatorTimer === null) {

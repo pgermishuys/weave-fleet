@@ -19,13 +19,6 @@ import { api } from "@/api/client";
 
 const mockApi = vi.mocked(api);
 
-function createJsonResponse<T>(body: T, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
 function createCapabilities(overrides: Partial<NonNullable<SessionListItem["capabilities"]>> = {}): NonNullable<SessionListItem["capabilities"]> {
   return {
     canPrompt: true,
@@ -94,10 +87,11 @@ function configureApiFetch(): void {
         ],
         error: undefined,
         response: new Response(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any;
     }
 
-    if (url === "/api/models") {
+    if (url === "/api/sessions/{id}/models") {
       return {
         data: {
           providers: [
@@ -115,23 +109,11 @@ function configureApiFetch(): void {
         },
         error: undefined,
         response: new Response(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any;
     }
 
     if (url === "/api/sessions/{id}/commands") {
-      return {
-        data: undefined,
-        error: undefined,
-        response: new Response(JSON.stringify({
-          commands: [
-            { name: "help", description: "Show help" },
-            { name: "status", description: "Show status" },
-          ],
-        }), { headers: { "Content-Type": "application/json" } }),
-      } as any;
-    }
-
-    if (url === "/api/instances/{instanceId}/commands") {
       return {
         data: {
           commands: [
@@ -140,7 +122,24 @@ function configureApiFetch(): void {
           ],
         },
         error: undefined,
+        response: new Response(JSON.stringify({
+          commands: [
+            { name: "help", description: "Show help" },
+            { name: "status", description: "Show status" },
+          ],
+        }), { headers: { "Content-Type": "application/json" } }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
+    }
+
+    if (url === "/api/sessions/{id}/agents") {
+      return {
+        data: [
+          { name: "alpha", description: "Planner", mode: "primary", color: "#ff00aa" },
+        ],
+        error: undefined,
         response: new Response(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any;
     }
 
@@ -152,6 +151,7 @@ function configureApiFetch(): void {
         },
         error: undefined,
         response: new Response(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any;
     }
 
@@ -164,6 +164,7 @@ function configureApiFetch(): void {
         data: {},
         error: undefined,
         response: new Response(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any;
     }
 
@@ -172,6 +173,7 @@ function configureApiFetch(): void {
         data: {},
         error: undefined,
         response: new Response(null, { status: 202 }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any;
     }
 
@@ -180,6 +182,7 @@ function configureApiFetch(): void {
         data: {},
         error: undefined,
         response: new Response(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any;
     }
 
@@ -342,6 +345,7 @@ describe("Composer", () => {
     textarea.element.dispatchEvent(enterEvent);
     await flushPromises();
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const promptCall = (mockApi.POST.mock.calls as any[]).find(([url]) => url === "/api/sessions/{id}/prompt");
     expect(promptCall).toBeTruthy();
     const [, options] = promptCall!;

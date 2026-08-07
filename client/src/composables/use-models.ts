@@ -32,7 +32,7 @@ function toModelOptions(providers: readonly AvailableProvider[]): ModelOption[] 
 
 export function useModels(sessionId?: string) {
   const sessionsStore = useSessionsStore();
-  const { sessions, activeSessionId } = storeToRefs(sessionsStore);
+  const { activeSessionId } = storeToRefs(sessionsStore);
 
   const models = ref<ModelOption[]>([]);
   const modelsByKey = ref<Record<string, ModelOption>>({});
@@ -69,7 +69,7 @@ export function useModels(sessionId?: string) {
 
         if (error || !response.ok) {
           const payload = error as { error?: string } | undefined;
-          throw new Error((payload as any)?.error ?? `HTTP ${response.status}`);
+          throw new Error(payload?.error ?? `HTTP ${response.status}`);
         }
 
         const body = data as unknown as { providers?: AvailableProvider[] } | AvailableProvider[];

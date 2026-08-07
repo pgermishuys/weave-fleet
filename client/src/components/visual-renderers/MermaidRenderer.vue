@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import mermaid from 'mermaid'
 import svgPanZoom from 'svg-pan-zoom'
-import type { Instance } from 'svg-pan-zoom'
+import type SvgPanZoom from 'svg-pan-zoom'
 import { sanitizeHtml } from '@/lib/sanitize-html'
 
 const props = defineProps<{
@@ -17,7 +17,7 @@ const containerRef = ref<HTMLElement | null>(null)
 
 let mermaidInitialized = false
 let renderCounter = 0
-let panZoomInstance: Instance | null = null
+let panZoomInstance: SvgPanZoom.Instance | null = null
 
 function initializeMermaid() {
   if (!mermaidInitialized) {

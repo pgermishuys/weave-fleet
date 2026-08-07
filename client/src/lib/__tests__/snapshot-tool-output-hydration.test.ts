@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { applyPartUpdate } from "@/lib/event-state"
 import { toToolCardItem } from "@/components/session/activity-stream-tool-card"
-import type { AccumulatedMessage, AccumulatedToolPart } from "@/lib/client-types"
+import type { AccumulatedMessage } from "@/lib/client-types"
 
 describe("Snapshot tool output hydration", () => {
   it("hydrates completed tool state with output from snapshot payload", () => {
@@ -34,6 +34,8 @@ describe("Snapshot tool output hydration", () => {
     ]
 
     // Apply the tool part update (simulating snapshot hydration or message.part.updated event)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     messages = applyPartUpdate(messages, toolPartPayload as any)
 
     // Assert: the accumulated message has a tool part with state.output
@@ -96,6 +98,7 @@ describe("Snapshot tool output hydration", () => {
       },
     ]
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     messages = applyPartUpdate(messages, toolPartPayload as any)
 
     // Assert
@@ -140,6 +143,7 @@ describe("Snapshot tool output hydration", () => {
       },
     ]
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     messages = applyPartUpdate(messages, toolPartPayload as any)
 
     // Assert
@@ -183,6 +187,7 @@ describe("Snapshot tool output hydration", () => {
       },
     ]
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     messages = applyPartUpdate(messages, toolPartPayload as any)
 
     // Assert

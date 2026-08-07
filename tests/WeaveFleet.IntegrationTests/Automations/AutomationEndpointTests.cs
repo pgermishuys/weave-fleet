@@ -347,9 +347,9 @@ public sealed class AutomationEndpointTests : IAsyncLifetime, IDisposable
         var body = await response.Content.ReadFromJsonAsync<string[]>();
         body.ShouldNotBeNull();
         body.Length.ShouldBeGreaterThan(0);
-        body.ShouldContain("SessionStarted");
-        body.ShouldContain("SessionIdled");
-        body.ShouldContain("MessageCreated");
+        body.ShouldContain("session.created");
+        body.ShouldContain("session.idle");
+        body.ShouldContain("message.created");
     }
 }
 

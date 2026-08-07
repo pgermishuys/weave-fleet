@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { githubSmartLinkProvider } from '../providers/github-smart-link-provider'
 
 // Mock apiFetch
-const apiFetchMock = vi.fn()
+const { apiFetchMock } = vi.hoisted(() => ({
+  apiFetchMock: vi.fn(),
+}))
+
 vi.mock('@/lib/api-client', () => ({
   apiFetch: apiFetchMock,
 }))

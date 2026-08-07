@@ -10,11 +10,6 @@ interface ProviderPreset {
   kind: string;
 }
 
-interface UpdateCredentialRequest {
-  value: string;
-  metadata?: Record<string, string>;
-}
-
 const commonProviders: readonly ProviderPreset[] = [
   { label: "Anthropic", namespace: "anthropic", kind: "api-key" },
   { label: "OpenAI", namespace: "openai", kind: "api-key" },

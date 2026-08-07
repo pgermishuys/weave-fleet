@@ -205,6 +205,7 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
         console.log(`[mock-api] GET /api/sessions/${id}`);
         
         // Find the session from the fixture
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sessionItem = fixtures.sessions.find((s: any) => s.session.id === id);
         if (!sessionItem) {
           return new Response(JSON.stringify({ error: "Session not found" }), {

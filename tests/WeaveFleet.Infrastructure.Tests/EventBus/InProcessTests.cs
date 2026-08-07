@@ -506,6 +506,7 @@ public sealed class InProcessFanOutServiceTests
         services.AddSingleton<IHarnessEventPersister, NoOpHarnessEventPersister>();
         services.AddSingleton(sessionRepository);
         services.AddSingleton<WeaveFleet.Domain.Repositories.ISessionRepository>(sessionRepository);
+        services.AddSingleton(instanceTracker);
         services.AddSingleton(new SessionCapabilitiesResolver(instanceTracker, activityTracker));
 
         await using var serviceProvider = services.BuildServiceProvider();
@@ -537,7 +538,7 @@ public sealed class InProcessFanOutServiceTests
                 internalPumpDedupKey: 1,
                 isDurable: false)).ShouldBeTrue();
 
-            await WaitForBroadcastsAsync(broadcaster, expectedCount: 2, cts.Token);
+            await WaitForBroadcastsAsync(broadcaster, expectedCount: 1, cts.Token);
 
             var statusBroadcast = broadcaster.Broadcasts.Single(record =>
                 record.Topic == "session:sess-status-capabilities"

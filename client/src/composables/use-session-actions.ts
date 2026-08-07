@@ -211,7 +211,7 @@ function buildForkedSessionListItem(
   };
 }
 
-export function useCreateSession(endpoint?: string): UseCreateSessionResult {
+export function useCreateSession(): UseCreateSessionResult {
   const state = createMutationState();
 
   async function createSession(directory?: string, opts?: CreateSessionOptions): Promise<CreateSessionResponse> {

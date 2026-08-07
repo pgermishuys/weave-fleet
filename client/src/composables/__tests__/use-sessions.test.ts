@@ -56,10 +56,6 @@ function createSession(id: string, overrides: Partial<SessionListItem> = {}): Se
   };
 }
 
-function getSearchParams(path: string): URLSearchParams {
-  return new URL(path, "http://localhost").searchParams;
-}
-
 describe("useSessions", () => {
   beforeEach(() => {
     apiFetchMock.mockReset();

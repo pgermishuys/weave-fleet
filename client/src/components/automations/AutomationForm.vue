@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, shallowRef, watch } from "vue";
+import { computed, shallowRef, watch } from "vue";
 import { AlertCircle, LoaderCircle } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

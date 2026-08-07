@@ -104,7 +104,7 @@ const {
   createSession,
   isLoading: isCreating,
   error: createError,
-} = useCreateSession(props.createEndpoint);
+} = useCreateSession();
 const directoryBrowser = useDirectoryBrowser();
 const {
   worktrees,

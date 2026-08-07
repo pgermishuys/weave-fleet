@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useAutomationsNav } from '@/composables/use-automations-nav'
 import { useAutomations } from '@/composables/use-automations'
 import AutomationForm from '@/components/automations/AutomationForm.vue'
@@ -251,9 +251,11 @@ function formatTargetType(targetType: string | undefined): string {
               <Badge v-if="currentAutomation.agent" variant="outline">
                 Agent: {{ currentAutomation.agent }}
               </Badge>
-              <Badge v-if="currentAutomation.targetTags && currentAutomation.targetTags.length > 0" v-for="tag in currentAutomation.targetTags" :key="tag" variant="outline">
-                Tag: {{ tag }}
-              </Badge>
+              <template v-if="currentAutomation.targetTags && currentAutomation.targetTags.length > 0">
+                <Badge v-for="tag in currentAutomation.targetTags" :key="tag" variant="outline">
+                  Tag: {{ tag }}
+                </Badge>
+              </template>
               <Badge variant="outline">
                 Created: {{ new Date(currentAutomation.createdAt).toLocaleDateString() }}
               </Badge>
