@@ -1,5 +1,5 @@
 import { computed, readonly, shallowRef, type ComputedRef, type ShallowRef } from "vue"
-import type { AccumulatedMessage, AccumulatedPart } from "@/lib/api-types"
+import type { AccumulatedMessage, AccumulatedPart } from "@/lib/client-types"
 
 export type MessageTypeFilter = "user" | "assistant" | "tool"
 

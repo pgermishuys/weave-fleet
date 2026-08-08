@@ -4,8 +4,8 @@ import { useRouter } from "@tanstack/vue-router";
 import { FolderGit2, LoaderCircle, RefreshCw, Settings2, TriangleAlert } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { apiFetch } from "@/lib/api-client";
-import type { RepositoryScanResponse, ScannedRepository } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { RepositoryScanResponse, ScannedRepository } from "@/api/client";
 
 const router = useRouter();
 
@@ -42,22 +42,26 @@ async function loadRepositories(forceRefresh = false): Promise<void> {
 
   try {
     if (forceRefresh) {
-      const refreshResponse = await apiFetch("/api/repositories/refresh", { method: "POST" });
+      const { error: refreshError } = await api.POST("/api/repositories/refresh", {});
 
-      if (!refreshResponse.ok) {
-        throw new Error(`Refresh failed with HTTP ${refreshResponse.status}`);
+      if (refreshError) {
+        throw new Error(String(refreshError));
       }
     }
 
-    const response = await apiFetch("/api/repositories");
+    const { data, error: apiError } = await api.GET("/api/repositories", {});
 
-    if (!response.ok) {
-      throw new Error(`Unable to load repositories (HTTP ${response.status})`);
+    if (apiError) {
+      throw new Error(String(apiError));
     }
 
-    const data = (await response.json()) as RepositoryScanResponse;
-    repositories.value = data.repositories;
-    scannedAt.value = data.scannedAt;
+    if (!data) {
+      throw new Error("No data returned");
+    }
+
+    const responseData = data as RepositoryScanResponse;
+    repositories.value = responseData.repositories;
+    scannedAt.value = responseData.scannedAt;
   } catch (error) {
     repositories.value = [];
     scannedAt.value = null;
@@ -114,7 +118,7 @@ function goToSettings(): void {
 
     <div
       v-if="isLoading"
-      class="flex flex-1 items-center justify-center gap-3 rounded-xl border border-border bg-card p-8 text-sm text-muted-foreground"
+      class="flex flex-1 items-center justify-center gap-3 border border-border bg-card p-8 text-sm text-muted-foreground"
     >
       <LoaderCircle
         :size="18"
@@ -125,7 +129,7 @@ function goToSettings(): void {
 
     <div
       v-else-if="errorMessage"
-      class="flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200"
+      class="flex items-start gap-3 border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200"
       role="alert"
     >
       <TriangleAlert
@@ -142,7 +146,7 @@ function goToSettings(): void {
 
     <div
       v-else-if="sortedRepositories.length === 0"
-      class="flex flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border bg-card/40 p-8 text-center"
+      class="flex flex-1 flex-col items-center justify-center gap-4 border border-dashed border-border bg-card/40 p-8 text-center"
     >
       <FolderGit2
         :size="44"
@@ -177,7 +181,7 @@ function goToSettings(): void {
       >
         <CardHeader class="gap-2 px-5">
           <div class="flex items-start gap-3">
-            <div class="rounded-lg border border-border bg-muted/30 p-2 text-muted-foreground">
+            <div class="border border-border bg-muted/30 p-2 text-muted-foreground">
               <FolderGit2 :size="16" />
             </div>
             <div class="min-w-0 flex-1">

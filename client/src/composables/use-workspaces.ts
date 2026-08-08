@@ -1,5 +1,5 @@
 import { computed, toValue, type ComputedRef, type MaybeRefOrGetter } from "vue";
-import type { SessionListItem } from "@/lib/api-types";
+import type { SessionListItem } from "@/api/client";
 import { groupSessionsByWorkspace } from "@/lib/workspace-utils";
 import type { WorkspaceGroup } from "@/lib/workspace-utils";
 

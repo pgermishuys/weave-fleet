@@ -18,7 +18,7 @@ public static class SessionEndpoints
     {
         var group = app.MapGroup("/api/sessions").WithTags("Sessions");
 
-        // GET /api/sessions?limit=&offset=&status=&projectId=
+        // GET /api/sessions?limit=&offset=&status=&projectId=&tags=
         group.MapGet("/", async (
             SessionService sessionService,
             ISessionRepository sessionRepository,
@@ -30,13 +30,18 @@ public static class SessionEndpoints
             int offset = 0,
             string? status = null,
             string? retentionStatus = null,
-            string? projectId = null) =>
+            string? projectId = null,
+            string? tags = null) =>
         {
             IReadOnlyList<string>? statuses = status is not null
                 ? [status]
                 : null;
 
-            var result = await sessionService.ListSessionsAsync(limit, offset, statuses, projectId, retentionStatus);
+            IReadOnlyList<string>? tagsList = tags is not null
+                ? tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                : null;
+
+            var result = await sessionService.ListSessionsAsync(limit, offset, statuses, projectId, retentionStatus, tagsList);
             return await result.Match<Task<IResult>>(async sessions =>
                 {
                     var projectNamesById = (await projectRepository.ListAsync())
@@ -70,7 +75,7 @@ public static class SessionEndpoints
                 {
                     var workspace = await workspaceRepository.GetByIdAsync(session.WorkspaceId);
                     var primaryOrigin = await sessionSourceUsageRepository.GetPrimaryBySessionIdAsync(session.Id);
-                    var activityStatus = activityTracker.GetEffectiveActivityStatus(session.Id) ?? session.ActivityStatus;
+                    var activityStatus = activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle";
 
                     return Results.Ok(new GetSessionResponse(
                         Id: session.Id,
@@ -153,7 +158,8 @@ public static class SessionEndpoints
                 Source = req.Source,
                 OnCompleteTargetSessionId = req.OnComplete?.NotifySessionId,
                 OnCompleteTargetInstanceId = req.OnComplete?.NotifyInstanceId,
-                ProjectId = req.ProjectId
+                ProjectId = req.ProjectId,
+                Tags = req.Tags
             });
             return result.Match(
                 r => Results.Ok(new CreateSessionApiResponse(
@@ -316,29 +322,6 @@ public static class SessionEndpoints
         })
         .WithName("GetSessionMessages");
 
-        // GET /api/sessions/{id}/committed-events?afterEventId=N&limit=M
-        group.MapGet("/{id}/committed-events", async (
-            string id,
-            long? afterEventId,
-            long? afterSequenceNumber,
-            int? limit,
-            SessionOrchestrator orchestrator) =>
-        {
-            var cursor = afterEventId ?? afterSequenceNumber ?? 0;
-            var result = await orchestrator.GetCommittedEventsAsync(id, cursor, limit);
-            return result.Match(
-                events => Results.Ok(new GetCommittedEventsResponse(
-                    events.Select(evt => new CommittedEventItem(
-                        evt.EventId,
-                        evt.SequenceNumber,
-                        evt.Topic,
-                        evt.Type,
-                        JsonSerializer.Deserialize(evt.Payload, ApiJsonContext.Default.JsonElement),
-                        evt.Timestamp.ToUnixTimeMilliseconds())).ToList())),
-                err => err.ToSessionApiResult());
-        })
-        .WithName("GetCommittedSessionEvents");
-
         // GET /api/sessions/{id}/diffs
         group.MapGet("/{id}/diffs", async (
             string id,
@@ -387,13 +370,13 @@ public static class SessionEndpoints
         .WithName("GetSessionDiffs");
 
         // GET /api/sessions/{id}/status
-        group.MapGet("/{id}/status", async (string id, SessionService sessionService) =>
+        group.MapGet("/{id}/status", async (string id, SessionService sessionService, SessionActivityTracker activityTracker) =>
         {
             var result = await sessionService.GetSessionAsync(id);
             return result.Match(
                 session => Results.Ok(new GetSessionStatusResponse(
                     session.Status,
-                    session.ActivityStatus,
+                    activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle",
                     session.LifecycleStatus ?? "running",
                     session.RetentionStatus,
                     session.ArchivedAt)),
@@ -471,6 +454,113 @@ public static class SessionEndpoints
         })
         .WithName("MoveSessionToProject");
 
+        // PATCH /api/sessions/{id}/tags — replace session tags
+        group.MapPatch("/{id}/tags", async (string id, UpdateSessionTagsRequest req, SessionService sessionService) =>
+        {
+            var result = await sessionService.UpdateSessionTagsAsync(id, req.Tags);
+            return result.Match(
+                session => Results.Ok(session),
+                error => error.ToSessionApiResult());
+        })
+        .WithName("UpdateSessionTags");
+
+        // GET /api/sessions/{id}/models — session-scoped model list
+        group.MapGet("/{id}/models", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.GetSessionModelsAsync(id, ct);
+            return result.Match(
+                providers =>
+                {
+                    var items = providers.Select(p => new InstanceProviderItem(
+                        p.Id,
+                        p.Name ?? p.Id,
+                        p.Models.Select(m => new InstanceModelItem(m.Id, m.Name ?? m.Id)).ToList())).ToList();
+                    return Results.Ok(items);
+                },
+                err => err.ToSessionApiResult());
+        })
+        .WithName("GetSessionModels");
+
+        // GET /api/sessions/{id}/commands — session-scoped commands list
+        group.MapGet("/{id}/commands", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.GetSessionCommandsAsync(id, ct);
+            return result.Match(
+                commands =>
+                {
+                    var items = commands.Select(c => new InstanceCommandItem(c.Name, c.Description)).ToList();
+                    return Results.Ok(new InstanceCommandsResponse(id, items));
+                },
+                err => err.ToSessionApiResult());
+        })
+        .WithName("GetSessionCommands");
+
+        // GET /api/sessions/{id}/agents — session-scoped agents list
+        group.MapGet("/{id}/agents", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.GetSessionAgentsAsync(id, ct);
+            return result.Match(
+                agents =>
+                {
+                    var items = agents.Select(a => new InstanceAgentItem(
+                        a.Name,
+                        a.Description,
+                        a.Mode ?? "agent",
+                        a.Hidden,
+                        a.ModelProviderId is not null
+                            ? new InstanceAgentModelRef(a.ModelProviderId, a.ModelId ?? string.Empty)
+                            : null)).ToList();
+                    return Results.Ok(new InstanceAgentsResponse(id, items));
+                },
+                err => err.ToSessionApiResult());
+        })
+        .WithName("GetSessionAgents");
+
+        // GET /api/sessions/{id}/find/files?q= — session-scoped file search
+        group.MapGet("/{id}/find/files", async (string id, string? q, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(q))
+                return Results.Ok(new InstanceFilesResponse(id, Array.Empty<string>()));
+
+            var result = await orchestrator.FindSessionFilesAsync(id, q, ct);
+            return result.Match(
+                files => Results.Ok(new InstanceFilesResponse(id, files.ToArray())),
+                err => err.ToSessionApiResult());
+        })
+        .WithName("FindSessionFiles");
+
+        // GET /api/sessions/{id}/files/browse?path= — session directory browser
+        group.MapGet("/{id}/files/browse", async (string id, string? path, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.BrowseSessionDirectoryAsync(id, path, ct);
+            return result.Match(
+                browseResult => Results.Ok(new BrowseSessionDirectoryResponse(
+                    browseResult.Entries.Select(e => new BrowseEntryDto(e.Name, e.RelativePath, e.IsDirectory)).ToList(),
+                    browseResult.CurrentPath)),
+                err => err.ToSessionApiResult());
+        })
+        .Produces<BrowseSessionDirectoryResponse>(200)
+        .Produces(404)
+        .Produces(400)
+        .WithName("BrowseSessionDirectory");
+
+        // GET /api/sessions/{id}/files/content?path= — read session file content
+        group.MapGet("/{id}/files/content", async (string id, string? path, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.ReadSessionFileAsync(id, path, ct);
+            return result.Match(
+                fileResult => Results.Ok(new ReadSessionFileResponse(
+                    fileResult.Path,
+                    fileResult.Content,
+                    fileResult.IsBinary,
+                    fileResult.IsTruncated)),
+                err => err.ToSessionApiResult());
+        })
+        .Produces<ReadSessionFileResponse>(200)
+        .Produces(404)
+        .Produces(400)
+        .WithName("ReadSessionFile");
+
         return app;
     }
 
@@ -490,12 +580,12 @@ public static class SessionEndpoints
         var createdMs = TryParseUnixMs(s.CreatedAt);
         var updatedMs = createdMs; // Sessions don't have an updated_at; use created_at
 
-        var sessionStatus = DeriveAggregatedSessionStatus(s, parentIdsWithBusyChildren);
-        var lifecycleStatus = s.LifecycleStatus ?? "running";
-
         // Prefer the tracker's derived effective activity status (child busy → parent busy)
         // over the DB-persisted value, which may lag real-time state.
-        var activityStatus = activityTracker.GetEffectiveActivityStatus(s.Id) ?? s.ActivityStatus;
+        var activityStatus = activityTracker.GetEffectiveActivityStatus(s.Id) ?? "idle";
+        var sessionStatus = DeriveAggregatedSessionStatus(s, activityStatus, parentIdsWithBusyChildren);
+        var lifecycleStatus = s.LifecycleStatus ?? "running";
+
         var origin = originsBySessionId.TryGetValue(s.Id, out var sessionSourceUsage)
             ? ToOriginDto(sessionSourceUsage)
             : null;
@@ -510,7 +600,8 @@ public static class SessionEndpoints
             Session: new SessionFleetInfo(
                 Id: s.Id,
                 Title: s.Title,
-                Time: new SessionTime(createdMs, updatedMs)),
+                Time: new SessionTime(createdMs, updatedMs),
+                Tags: s.Tags ?? []),
             InstanceStatus: "running",        // enriched in Phase 4
             ParentSessionId: s.ParentSessionId,
             SourceDirectory: null,            // enriched in Phase 4
@@ -528,7 +619,8 @@ public static class SessionEndpoints
                 ? projectName
                 : null,
             HarnessType: s.HarnessType,
-            Capabilities: capabilitiesResolver.Resolve(s))
+            Capabilities: capabilitiesResolver.Resolve(s),
+            Tags: s.Tags ?? [])
         {
             Origin = origin
         };
@@ -572,20 +664,19 @@ public static class SessionEndpoints
         return Results.Conflict(new ErrorResponse(getDisabledReason(capabilities) ?? fallbackDisabledReason));
     }
 
-    private static string DeriveSessionStatus(Session s) =>
+    private static string DeriveSessionStatus(Session s, string activityStatus) =>
         s.Status switch
         {
             "stopped" => "stopped",
             "completed" => "completed",
-            _ => s.ActivityStatus switch
+            _ => activityStatus switch
             {
                 "idle" => "idle",
-                null => "idle",
                 _ => "active"
             }
         };
 
-    private static string DeriveAggregatedSessionStatus(Session session, HashSet<string> parentIdsWithBusyChildren)
+    private static string DeriveAggregatedSessionStatus(Session session, string activityStatus, HashSet<string> parentIdsWithBusyChildren)
     {
         if (session.Status is "stopped" or "completed" or "error" or "disconnected")
         {
@@ -594,7 +685,7 @@ public static class SessionEndpoints
 
         return parentIdsWithBusyChildren.Contains(session.Id)
             ? "active"
-            : DeriveSessionStatus(session);
+            : DeriveSessionStatus(session, activityStatus);
     }
 
     private static FileDiffSummary ToFileDiffSummary(WeaveFleet.Application.Services.FileDiffContent diff) =>
@@ -685,9 +776,9 @@ public static class SessionEndpoints
     {
         var createdMs = TryParseUnixMs(s.CreatedAt);
         var updatedMs = createdMs;
-        var sessionStatus = DeriveAggregatedSessionStatus(s, parentIdsWithBusyChildren);
+        var activityStatus = activityTracker.GetEffectiveActivityStatus(s.Id) ?? "idle";
+        var sessionStatus = DeriveAggregatedSessionStatus(s, activityStatus, parentIdsWithBusyChildren);
         var lifecycleStatus = s.LifecycleStatus ?? "running";
-        var activityStatus = activityTracker.GetEffectiveActivityStatus(s.Id) ?? s.ActivityStatus;
 
         return new SessionListResponse(
             InstanceId: s.InstanceId,
@@ -699,7 +790,8 @@ public static class SessionEndpoints
             Session: new SessionFleetInfo(
                 Id: s.Id,
                 Title: s.Title,
-                Time: new SessionTime(createdMs, updatedMs)),
+                Time: new SessionTime(createdMs, updatedMs),
+                Tags: s.Tags ?? []),
             InstanceStatus: "running",
             ParentSessionId: s.ParentSessionId,
             SourceDirectory: null,
@@ -717,7 +809,8 @@ public static class SessionEndpoints
                 ? projectName
                 : null,
             HarnessType: s.HarnessType,
-            Capabilities: capabilitiesResolver.Resolve(s));
+            Capabilities: capabilitiesResolver.Resolve(s),
+            Tags: s.Tags ?? []);
     }
 
     private static async Task<ModelResolutionResult> ResolveSessionModelAsync(
@@ -770,7 +863,8 @@ internal sealed record CreateSessionApiRequest(
     string? InitialPrompt,
     SessionSourceSelection? Source,
     OnCompleteInfo? OnComplete,
-    string? ProjectId);
+    string? ProjectId,
+    List<string>? Tags);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record OnCompleteInfo(string NotifySessionId, string NotifyInstanceId);
@@ -802,6 +896,9 @@ internal sealed record SendCommandApiRequest(
     ModelRef? Model);
 
 internal sealed record QuestionAnswerApiRequest(IReadOnlyList<IReadOnlyList<string>> Answers);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record UpdateSessionTagsRequest(List<string> Tags);
 
 internal sealed record SessionOriginRecordDto(
     string SourceType,
@@ -998,6 +1095,25 @@ internal sealed class ModelRefJsonConverter : JsonConverter<ModelRef>
         writer.WriteEndObject();
     }
 }
+
+// ── Browse directory response types ────────────────────────────────────────────
+
+internal sealed record BrowseSessionDirectoryResponse(
+    IReadOnlyList<BrowseEntryDto> Entries,
+    string CurrentPath);
+
+internal sealed record BrowseEntryDto(
+    string Name,
+    string RelativePath,
+    bool IsDirectory);
+
+// ── Read file response types ───────────────────────────────────────────────────
+
+internal sealed record ReadSessionFileResponse(
+    string Path,
+    string? Content,
+    bool IsBinary,
+    bool IsTruncated);
 
 // ── FleetError → IResult helper ─────────────────────────────────────────────
 

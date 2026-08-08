@@ -1,5 +1,5 @@
 import { readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import { api } from "@/api/client";
 
 export interface InstalledSkill {
   name: string;
@@ -27,12 +27,16 @@ export function useSkills(): UseSkillsResult {
       isLoading.value = true;
       error.value = undefined;
 
-      const response = await apiFetch("/api/skills");
-      if (!response.ok) {
-        throw new Error(`Failed to fetch skills: ${response.status}`);
+      const { data, error: apiError } = await api.GET("/api/skills");
+      if (apiError) {
+        throw new Error(apiError ? String(apiError) : "Failed to fetch skills");
       }
 
-      const json = (await response.json()) as { skills?: InstalledSkill[] };
+      if (!data) {
+        throw new Error("No data returned");
+      }
+
+      const json = data as { skills?: InstalledSkill[] };
       skills.value = json.skills ?? [];
     } catch (fetchError) {
       error.value = fetchError instanceof Error ? fetchError.message : "Unknown error";
@@ -49,20 +53,16 @@ export function useSkills(): UseSkillsResult {
     try {
       error.value = undefined;
 
-      const response = await apiFetch("/api/skills", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(options),
+      const { data, error: apiError } = await api.POST("/api/skills", {
+        body: options as never,
       });
 
-      if (!response.ok) {
-        const json = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(json.error ?? `Failed to install skill: ${response.status}`);
+      if (apiError) {
+        throw new Error(apiError ? String(apiError) : "Failed to install skill");
       }
 
-      const result = await response.json();
       await fetchSkills();
-      return result;
+      return data;
     } catch (installError) {
       error.value = installError instanceof Error ? installError.message : "Unknown error";
       throw installError;
@@ -73,13 +73,12 @@ export function useSkills(): UseSkillsResult {
     try {
       error.value = undefined;
 
-      const response = await apiFetch(`/api/skills/${encodeURIComponent(name)}`, {
-        method: "DELETE",
+      const { error: apiError } = await api.DELETE("/api/skills/{name}", {
+        params: { path: { name } },
       });
 
-      if (!response.ok) {
-        const json = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(json.error ?? `Failed to remove skill: ${response.status}`);
+      if (apiError) {
+        throw new Error(apiError ? String(apiError) : "Failed to remove skill");
       }
 
       await fetchSkills();

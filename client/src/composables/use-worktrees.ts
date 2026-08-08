@@ -1,6 +1,6 @@
 import { readonly, shallowRef, watch, type Ref, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
-import type { WorktreeInfo, RepositoryWorktreesResponse } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { WorktreeInfo, RepositoryWorktreesResponse } from "@/api/client";
 
 interface UseWorktreesOptions {
   /** Reactive repository path — worktrees are fetched when this changes. */
@@ -25,18 +25,20 @@ export function useWorktrees(options: UseWorktreesOptions): UseWorktreesResult {
     error.value = null;
 
     try {
-      const response = await apiFetch(
-        `/api/repositories/worktrees?path=${encodeURIComponent(path)}`,
-        { method: "GET" },
-      );
+      const { data, error: apiError } = await api.GET("/api/repositories/worktrees", {
+        params: { query: { path } },
+      });
 
-      if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? "Failed to load worktrees");
+      if (apiError) {
+        throw new Error(String(apiError));
       }
 
-      const data = (await response.json()) as RepositoryWorktreesResponse;
-      worktrees.value = data.worktrees;
+      if (!data) {
+        throw new Error("No data returned");
+      }
+
+      const responseData = data as RepositoryWorktreesResponse;
+      worktrees.value = responseData.worktrees;
     } catch (fetchError) {
       error.value = fetchError instanceof Error ? fetchError.message : "Unknown error";
       worktrees.value = [];

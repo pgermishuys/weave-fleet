@@ -12,14 +12,16 @@ namespace WeaveFleet.Application.Services;
 public sealed class SessionService(
     ISessionRepository sessionRepository,
     IProjectRepository projectRepository,
-    SessionOrchestrator sessionOrchestrator)
+    SessionOrchestrator sessionOrchestrator,
+    SessionActivityTracker activityTracker)
 {
     public async Task<Result<IReadOnlyList<Session>>> ListSessionsAsync(
         int limit = 100,
         int offset = 0,
         IReadOnlyList<string>? statuses = null,
         string? projectId = null,
-        string? retentionStatus = null)
+        string? retentionStatus = null,
+        IReadOnlyList<string>? tags = null)
     {
         IReadOnlyList<string>? retentionStatuses = retentionStatus switch
         {
@@ -28,7 +30,7 @@ public sealed class SessionService(
             _ => [retentionStatus]
         };
 
-        var sessions = await sessionRepository.ListAsync(limit, offset, statuses, projectId, retentionStatuses);
+        var sessions = await sessionRepository.ListAsync(limit, offset, statuses, projectId, retentionStatuses, tags);
 
         return Result.Success(sessions);
     }
@@ -84,6 +86,20 @@ public sealed class SessionService(
         return Unit.Value;
     }
 
+    public async Task<Result<Session>> UpdateSessionTagsAsync(string id, List<string> tags)
+    {
+        SetSessionTag(id);
+        var session = await sessionRepository.GetByIdAsync(id);
+        if (session is null)
+            return FleetError.NotFoundFor(nameof(Session), id);
+
+        await sessionRepository.UpdateTagsAsync(id, tags);
+        
+        // Fetch the updated session to return
+        var updatedSession = await sessionRepository.GetByIdAsync(id);
+        return updatedSession!;
+    }
+
     public async Task<Result<Unit>> MoveSessionToProjectAsync(string sessionId, string? projectId)
     {
         SetSessionTag(sessionId);
@@ -107,13 +123,26 @@ public sealed class SessionService(
 
     public async Task<Result<FleetSummary>> GetFleetSummaryAsync()
     {
-        var (active, idle) = await sessionRepository.GetStatusCountsAsync();
+        // Get all active sessions and compute counts from the tracker
+        var activeSessions = await sessionRepository.ListActiveAsync();
+        var activeCount = 0;
+        var idleCount = 0;
+
+        foreach (var session in activeSessions)
+        {
+            var effectiveStatus = activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle";
+            if (effectiveStatus == "busy")
+                activeCount++;
+            else
+                idleCount++;
+        }
+
         var (totalTokens, totalCost) = await sessionRepository.GetFleetTokenTotalsAsync();
 
         return Result.Success(new FleetSummary
         {
-            ActiveSessions = active,
-            IdleSessions = idle,
+            ActiveSessions = activeCount,
+            IdleSessions = idleCount,
             TotalTokens = totalTokens,
             TotalCost = totalCost,
             QueuedTasks = 0  // placeholder — Phase 5 will implement real task queue

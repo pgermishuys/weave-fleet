@@ -1,5 +1,5 @@
 import { readonly, shallowRef, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import { api } from "@/api/client";
 
 export type OpenTool = string;
 
@@ -18,15 +18,12 @@ export function useOpenDirectory(): UseOpenDirectoryResult {
     error.value = undefined;
 
     try {
-      const response = await apiFetch("/api/open-directory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ directory, tool }),
+      const { error: apiError } = await api.POST("/api/open-directory", {
+        body: { directory, tool } as never,
       });
 
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `HTTP ${response.status}`);
+      if (apiError) {
+        throw new Error(String(apiError));
       }
     } catch (openError) {
       error.value = openError instanceof Error ? openError.message : "Failed to open directory";

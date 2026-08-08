@@ -121,7 +121,7 @@ public sealed class SessionCapabilitiesResolverTests
     [Fact]
     public void resolve_session_throws_when_session_is_null()
     {
-        var sut = new SessionCapabilitiesResolver(new InstanceTracker());
+        var sut = new SessionCapabilitiesResolver(new InstanceTracker(), new SessionActivityTracker());
 
         Should.Throw<ArgumentNullException>(() => sut.Resolve(null!))
             .ParamName.ShouldBe("session");
@@ -131,6 +131,7 @@ public sealed class SessionCapabilitiesResolverTests
     public void resolve_session_uses_instance_tracker_to_determine_live_state()
     {
         var tracker = new InstanceTracker();
+        var activityTracker = new SessionActivityTracker();
         var session = new Session
         {
             Id = "session-1",
@@ -140,7 +141,11 @@ public sealed class SessionCapabilitiesResolverTests
             RetentionStatus = Active,
             ActivityStatus = Busy
         };
-        var sut = new SessionCapabilitiesResolver(tracker);
+        
+        // Seed the activity tracker with the session's activity status
+        activityTracker.Update("session-1", Busy, "test-user");
+        
+        var sut = new SessionCapabilitiesResolver(tracker, activityTracker);
 
         var withoutLiveInstance = sut.Resolve(session);
         tracker.Register("instance-1", new FakeHarnessSession("instance-1"));

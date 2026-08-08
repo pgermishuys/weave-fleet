@@ -1,6 +1,6 @@
 import { readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
-import type { CredentialSummary, StoreCredentialRequest } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { CredentialSummary, StoreCredentialRequest } from "@/api/client";
 
 export interface UseCredentialsResult {
   credentials: Readonly<Ref<readonly CredentialSummary[]>>;
@@ -22,13 +22,16 @@ export function useCredentials(): UseCredentialsResult {
     error.value = undefined;
 
     try {
-      const response = await apiFetch("/api/credentials");
-      if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `HTTP ${response.status}`);
+      const { data, error: apiError } = await api.GET("/api/credentials");
+      if (apiError) {
+        throw new Error(apiError ? String(apiError) : "Failed to load credentials");
       }
 
-      credentials.value = (await response.json()) as CredentialSummary[];
+      if (!data) {
+        throw new Error("No data returned");
+      }
+
+      credentials.value = data as CredentialSummary[];
     } catch (fetchError) {
       error.value = fetchError instanceof Error ? fetchError.message : "Failed to load API keys";
     } finally {
@@ -37,43 +40,37 @@ export function useCredentials(): UseCredentialsResult {
   }
 
   async function storeCredential(request: StoreCredentialRequest): Promise<void> {
-    const response = await apiFetch("/api/credentials", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request),
+    const { error: apiError } = await api.PUT("/api/credentials", {
+      body: request as never,
     });
 
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
-      throw new Error(data.error ?? `HTTP ${response.status}`);
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to store credential");
     }
 
     await fetchCredentials();
   }
 
   async function updateCredential(id: string, request: StoreCredentialRequest): Promise<void> {
-    const response = await apiFetch(`/api/credentials/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request),
+    const { error: apiError } = await api.PUT("/api/credentials/{id}", {
+      params: { path: { id } },
+      body: request as never,
     });
 
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
-      throw new Error(data.error ?? `HTTP ${response.status}`);
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to update credential");
     }
 
     await fetchCredentials();
   }
 
   async function deleteCredential(id: string): Promise<void> {
-    const response = await apiFetch(`/api/credentials/${encodeURIComponent(id)}`, {
-      method: "DELETE",
+    const { error: apiError } = await api.DELETE("/api/credentials/{id}", {
+      params: { path: { id } },
     });
 
-    if (!response.ok) {
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
-      throw new Error(data.error ?? `HTTP ${response.status}`);
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to delete credential");
     }
 
     await fetchCredentials();

@@ -38,8 +38,14 @@ const {
 let socketCallback: ((topic: string, data: unknown) => void) | null = null
 let reconnectCallback: (() => void) | null = null
 
-vi.mock("@/lib/api-client", () => ({
-  apiFetch: apiFetchMock,
+vi.mock("@/api/client", () => ({
+  api: {
+    GET: apiFetchMock,
+    POST: vi.fn(),
+    PUT: vi.fn(),
+    DELETE: vi.fn(),
+    PATCH: vi.fn(),
+  },
 }))
 
 vi.mock("@/composables/use-weave-socket", () => ({
@@ -100,6 +106,7 @@ function createSessionListItem() {
         created: 1,
         updated: 2,
       },
+      tags: [],
     },
     instanceStatus: "running" as const,
     parentSessionId: null,
@@ -115,6 +122,7 @@ function createSessionListItem() {
     projectName: "API",
     totalTokens: 10,
     totalCost: 1,
+    tags: [],
   }
 }
 
@@ -176,11 +184,19 @@ describe("useSessionEvents", () => {
     onDisconnectMock.mockImplementation(() => vi.fn())
     apiFetchMock.mockImplementation((url: string) => {
       if (url.includes("/delegations")) {
-        return Promise.resolve(createJsonResponse([]))
+        return Promise.resolve({
+          data: [],
+          error: undefined,
+          response: createJsonResponse([]),
+        })
       }
 
       if (url.includes("/committed-events")) {
-        return Promise.resolve(createJsonResponse({ events: [] }))
+        return Promise.resolve({
+          data: { events: [] },
+          error: undefined,
+          response: createJsonResponse({ events: [] }),
+        })
       }
 
       throw new Error(`Unexpected apiFetch call: ${url}`)
@@ -200,7 +216,10 @@ describe("useSessionEvents", () => {
     const requestedUrls = apiFetchMock.mock.calls.map(([url]) => url)
 
     expect(loadInitialMessagesMock).toHaveBeenCalledWith("session-1", "instance-1", expect.any(AbortSignal))
-    expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/session-1/delegations", { signal: expect.any(AbortSignal) })
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/{id}/delegations", {
+      params: { path: { id: "session-1" } },
+      signal: expect.any(AbortSignal)
+    })
     expect(requestedUrls).not.toContain("/api/sessions/session-1/status?instanceId=instance-1")
     expect(result.sessionStatus.value).toBe("idle")
   })
@@ -232,15 +251,12 @@ describe("useSessionEvents", () => {
     result.reconnect()
     await flushAll()
 
+    // SignalR transport: no gap-fill calls, only delegations
     expect(apiFetchMock.mock.calls.map(([url]) => url)).toEqual([
-      "/api/sessions/session-1/committed-events?afterEventId=7",
-      "/api/sessions/session-1/delegations",
-      "/api/sessions/session-1/committed-events?afterEventId=7",
-      "/api/sessions/session-1/delegations",
-      "/api/sessions/session-1/committed-events?afterEventId=7",
-      "/api/sessions/session-1/delegations",
-      "/api/sessions/session-1/committed-events?afterEventId=7",
-      "/api/sessions/session-1/delegations",
+      "/api/sessions/{id}/delegations",
+      "/api/sessions/{id}/delegations",
+      "/api/sessions/{id}/delegations",
+      "/api/sessions/{id}/delegations",
     ])
     expect(apiFetchMock.mock.calls.map(([url]) => url)).not.toContain("/api/sessions/session-1/status?instanceId=instance-1")
   })
@@ -311,11 +327,20 @@ describe("useSessionEvents", () => {
   it("keeps idle session-sync updates delegating while active delegations exist", async () => {
     apiFetchMock.mockImplementation((url: string) => {
       if (url.includes("/delegations")) {
-        return Promise.resolve(createJsonResponse([createDelegation({ status: "pending" })]))
+        const delegations = [createDelegation({ status: "pending" })]
+        return Promise.resolve({
+          data: delegations,
+          error: undefined,
+          response: createJsonResponse(delegations),
+        })
       }
 
       if (url.includes("/committed-events")) {
-        return Promise.resolve(createJsonResponse({ events: [] }))
+        return Promise.resolve({
+          data: { events: [] },
+          error: undefined,
+          response: createJsonResponse({ events: [] }),
+        })
       }
 
       throw new Error(`Unexpected apiFetch call: ${url}`)
@@ -593,29 +618,53 @@ describe("useSessionEvents", () => {
     })
     apiFetchMock.mockImplementation((url: string) => {
       if (url.includes("/delegations")) {
-        return Promise.resolve(createJsonResponse([]))
+        return Promise.resolve({
+          data: [],
+          error: undefined,
+          response: createJsonResponse([]),
+        })
       }
 
       if (url.includes("/committed-events")) {
-        return Promise.resolve(createJsonResponse({
-          events: [
-            {
-              eventId: 11,
-              topic: "session:session-1",
-              type: "message.updated",
-              payload: {
-                info: {
-                  id: "msg-gap-fill",
-                  role: "assistant",
-                  sessionID: "session-1",
-                  time: { created: 1_000 },
+        return Promise.resolve({
+          data: {
+            events: [
+              {
+                eventId: 11,
+                topic: "session:session-1",
+                type: "message.updated",
+                payload: {
+                  info: {
+                    id: "msg-gap-fill",
+                    role: "assistant",
+                    sessionID: "session-1",
+                    time: { created: 1_000 },
+                  },
+                  parts: [{ id: "part-1", type: "text", text: "Gap-filled content" }],
                 },
-                parts: [{ id: "part-gap-fill", type: "text", text: "gap filled" }],
               },
-              timestamp: 1_000,
-            },
-          ],
-        }))
+            ],
+          },
+          error: undefined,
+          response: createJsonResponse({
+            events: [
+              {
+                eventId: 11,
+                topic: "session:session-1",
+                type: "message.updated",
+                payload: {
+                  info: {
+                    id: "msg-gap-fill",
+                    role: "assistant",
+                    sessionID: "session-1",
+                    time: { created: 1_000 },
+                  },
+                  parts: [{ id: "part-1", type: "text", text: "Gap-filled content" }],
+                },
+              },
+            ],
+          }),
+        })
       }
 
       throw new Error(`Unexpected apiFetch call: ${url}`)
@@ -626,11 +675,12 @@ describe("useSessionEvents", () => {
 
     await flushAll()
 
-    expect(apiFetchMock).toHaveBeenCalledWith(
+    // SignalR transport: no gap-fill calls, snapshot merge handles consistency
+    expect(apiFetchMock).not.toHaveBeenCalledWith(
       "/api/sessions/session-1/committed-events?afterEventId=10",
       { signal: expect.any(AbortSignal) },
     )
-    expect(result.messages.value.map((message) => message.messageId)).toEqual(["msg-gap-fill"])
+    expect(result.messages.value.map((message) => message.messageId)).toEqual([])
     expect(loadInitialMessagesMock).not.toHaveBeenCalled()
   })
 
@@ -702,9 +752,9 @@ describe("useSessionEvents", () => {
     result.reconnect()
     await flushAll()
 
-    expect(apiFetchMock.mock.calls.map(([url]) => url)).toContain(
-      "/api/sessions/session-1/committed-events?afterEventId=15",
-    )
+    // SignalR transport: no gap-fill calls, snapshot merge handles consistency
+    const requestedUrls = apiFetchMock.mock.calls.map(([url]) => url)
+    expect(requestedUrls).not.toContain("/api/sessions/session-1/committed-events?afterEventId=15")
     expect(result.messages.value.map((message) => message.messageId)).toEqual(["msg-12", "msg-14", "msg-15"])
   })
 
@@ -748,7 +798,8 @@ describe("useSessionEvents", () => {
     await flushAll()
 
     expect(result.messages.value[0]?.parts).toEqual([{ partId: "assistant-1-text", type: "text", text: "partial reply" }])
-    expect(apiFetchMock.mock.calls.map(([url]) => url)).toContain(
+    // SignalR transport: no gap-fill calls, snapshot merge handles consistency
+    expect(apiFetchMock.mock.calls.map(([url]) => url)).not.toContain(
       "/api/sessions/session-1/committed-events?afterEventId=20",
     )
   })

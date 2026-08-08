@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
@@ -98,6 +99,8 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IBoardRepository, BoardRepository>();
         services.AddScoped<ISmartLinkRepository, SmartLinkRepository>();
+        services.AddScoped<IAutomationRepository, AutomationRepository>();
+        services.AddScoped<IAutomationEventLedgerRepository, AutomationEventLedgerRepository>();
 
         // Credential storage — user-scoped repositories and application services
         services.AddScoped<IUserPreferenceRepository, DapperUserPreferenceRepository>();
@@ -117,6 +120,9 @@ public static class DependencyInjection
         services.AddScoped<SessionCallbackService>();
         services.AddScoped<DelegationService>();
         services.AddScoped<SmartLinkService>();
+        services.AddScoped<AutomationService>();
+        services.AddScoped<AutomationExecutionService>();
+        services.AddScoped<EventTriggerMatcher>();
         services.AddScoped<SessionActivityWriteService>();
         services.AddScoped<ILegacySessionImporter, LegacySessionImporter>();
         services.AddScoped<UserService>();
@@ -124,6 +130,7 @@ public static class DependencyInjection
         services.AddScoped<ISessionSourceProvider, LocalDirectorySessionSourceProvider>();
         services.AddSingleton<ISessionSourceProvider, RepositorySessionSourceProvider>();
         services.AddScoped<ISessionSourceProvider, GitHubSessionSourceProvider>();
+        services.AddScoped<ISessionSourceProvider, AutomationSessionSourceProvider>();
         services.AddScoped<SystemUserContext>();
 
         // ConfigService — singleton, no DB dependency, file-based
@@ -178,6 +185,10 @@ public static class DependencyInjection
         // (InProcessFanOutService) survive across scoped persister invocations.
         services.AddSingleton<TextDeltaBuffer>();
 
+        // StreamingStateProvider — singleton, composes SessionActivityTracker + TextDeltaBuffer
+        // to provide unified snapshots for SignalR hubs.
+        services.AddSingleton<StreamingStateProvider>();
+
         // Harness event persister — scoped so message/session repositories flow through correctly.
         services.AddScoped<HarnessEventPersistenceService>();
         services.AddScoped<IHarnessEventPersister>(sp => sp.GetRequiredService<HarnessEventPersistenceService>());
@@ -198,6 +209,10 @@ public static class DependencyInjection
 
         services.AddHostedService<OutboxDispatchBackgroundService>();
         services.AddHostedService<OutboxCleanupBackgroundService>();
+
+        // Automation background services
+        services.AddHostedService<AutomationSchedulerService>();
+        services.AddHostedService<AutomationEventDispatcherService>();
 
         // ── Analytics ─────────────────────────────────────────────────────────
         if (options.AnalyticsEnabled)
@@ -241,7 +256,16 @@ public static class DependencyInjection
         // Register OpenCodeHarness (descriptor) and OpenCodeHarnessRuntime (provisioning) as separate singletons.
         services.AddSingleton<OpenCodeHarness>();
         services.AddSingleton<IHarness>(sp => sp.GetRequiredService<OpenCodeHarness>());
-        services.AddSingleton<OpenCodeHarnessRuntime>();
+        services.AddSingleton<OpenCodeHarnessRuntime>(sp => new OpenCodeHarnessRuntime(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            sp.GetRequiredService<PortAllocator>(),
+            sp.GetRequiredService<FleetOptions>(),
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            sp.GetRequiredService<ILogger<OpenCodeHarnessRuntime>>(),
+            sp.GetRequiredService<ILoggerFactory>(),
+            sp.GetService<IAnalyticsCollector>(),
+            sp.GetRequiredService<IEventBroadcaster>(),
+            sp.GetRequiredService<SessionActivityTracker>()));
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<OpenCodeHarnessRuntime>());
         services.AddSingleton<IOpenCodePoolHealthCheck, PoolHealthCheck>();
 

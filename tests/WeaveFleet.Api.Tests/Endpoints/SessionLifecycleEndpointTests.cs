@@ -143,7 +143,7 @@ public sealed class SessionLifecycleEndpointTests
             CreatedAt = DateTime.UtcNow.ToString("O")
         });
         var orchestrator = builder.Build();
-        return new SessionService(builder.SessionRepository, builder.ProjectRepository, orchestrator);
+        return new SessionService(builder.SessionRepository, builder.ProjectRepository, orchestrator, builder.ActivityTracker);
     }
 
     private static SessionService BuildSessionService(InMemorySessionRepository sessionRepository)
@@ -163,7 +163,7 @@ public sealed class SessionLifecycleEndpointTests
         });
         var orchestrator = builder.Build();
         // Return service using the passed-in sessionRepository so ListAsyncCalls are tracked there
-        return new SessionService(sessionRepository, builder.ProjectRepository, orchestrator);
+        return new SessionService(sessionRepository, builder.ProjectRepository, orchestrator, builder.ActivityTracker);
     }
 
     private static Session MakeSession(string id, string status, string retentionStatus)

@@ -9,7 +9,7 @@ import {
   useDeleteSession,
   useTerminateSession,
 } from "@/composables/use-session-actions";
-import type { SessionListItem } from "@/lib/api-types";
+import type { SessionListItem } from "@/api/client";
 import { sessionCache } from "@/lib/session-cache";
 import { dispatchSessionRemoved } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";

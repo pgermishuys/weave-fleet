@@ -72,8 +72,20 @@ public sealed class TestHarnessSession : IHarnessSession
     public HarnessSessionStatus Status => _status;
 
     /// <inheritdoc/>
+    public Task WaitForEventSubscriptionAsync(CancellationToken ct)
+    {
+        // The in-memory channel buffers events, so subscription is always ready.
+        ct.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct)
         => Task.FromResult(new HealthCheckResult(Healthy: true, Message: null));
+
+    /// <inheritdoc/>
+    public Task<string?> GetActivityStatusAsync(CancellationToken ct)
+        => Task.FromResult<string?>("idle");
 
     /// <inheritdoc/>
     public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)

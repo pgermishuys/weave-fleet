@@ -1,6 +1,6 @@
 import { readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
-import type { HarnessInfo } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { HarnessInfo } from "@/api/client";
 
 export interface UseHarnessesResult {
   harnesses: Readonly<Ref<readonly HarnessInfo[]>>;
@@ -19,13 +19,13 @@ export function useHarnesses(): UseHarnessesResult {
     error.value = undefined;
 
     try {
-      const response = await apiFetch("/api/harnesses");
-      if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `HTTP ${response.status}`);
+      const { data, error, response } = await api.GET("/api/harnesses");
+      if (error || !response.ok) {
+        const payload = error as { error?: string } | undefined;
+        throw new Error(payload?.error ?? `HTTP ${response.status}`);
       }
 
-      harnesses.value = (await response.json()) as HarnessInfo[];
+      harnesses.value = data as unknown as HarnessInfo[];
     } catch (fetchError) {
       error.value = fetchError instanceof Error ? fetchError.message : "Failed to fetch harnesses";
     } finally {

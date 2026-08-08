@@ -22,7 +22,7 @@ import {
 import { incrementPendingPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { provideSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { apiFetch } from "@/lib/api-client";
-import type { SessionActionCapabilities, SessionListItem, SessionOrigin } from "@/lib/api-types";
+import type { SessionActionCapabilities, SessionListItem, SessionOrigin } from "@/api/client";
 import type { SessionActivityStatus } from "@/lib/types";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
@@ -51,6 +51,7 @@ interface SessionDetailResponse {
   capabilities?: SessionActionCapabilities;
   origin?: SessionOrigin | null;
   harnessType?: string | null;
+  tags?: string[];
 }
 
 type ComposerInstance = ComponentPublicInstance & {
@@ -117,6 +118,7 @@ function normalizeSessionDetailResponse(payload: unknown): SessionDetailResponse
     capabilities: (value.capabilities ?? value.Capabilities) as SessionActionCapabilities | undefined,
     origin,
     harnessType: getStringField(value, "harnessType", "HarnessType"),
+    tags: Array.isArray(value.tags ?? value.Tags) ? (value.tags ?? value.Tags) as string[] : undefined,
   };
 }
 
@@ -266,6 +268,7 @@ const SessionDetailPage = defineComponent({
               id: nextRemoteSession.id ?? sessionId,
               title: nextRemoteSession.title ?? selectedSession.value?.session.title ?? "Untitled session",
               time: selectedSession.value?.session.time ?? { created: 0, updated: 0 },
+              tags: nextRemoteSession.tags ?? selectedSession.value?.session.tags ?? [],
             },
             instanceStatus: selectedSession.value?.instanceStatus ?? "running",
             parentSessionId: nextRemoteSession.parentSessionId ?? selectedSession.value?.parentSessionId ?? null,
@@ -284,6 +287,7 @@ const SessionDetailPage = defineComponent({
             capabilities: nextRemoteSession.capabilities ?? selectedSession.value?.capabilities,
             origin: nextRemoteSession.origin ?? selectedSession.value?.origin ?? null,
             harnessType: nextRemoteSession.harnessType ?? selectedSession.value?.harnessType ?? null,
+            tags: nextRemoteSession.tags ?? selectedSession.value?.tags ?? [],
           } satisfies SessionListItem;
 
           sessionsStore.upsertSession(nextSession);
@@ -331,7 +335,6 @@ const SessionDetailPage = defineComponent({
 
     const diffState = useDiffs(
       () => params.value.id,
-      () => instanceId.value,
     );
     function openDiffsTray(): void {
       if (viewMode.value !== "chat") {
@@ -340,7 +343,7 @@ const SessionDetailPage = defineComponent({
 
       isDiffsTrayOpen.value = true;
 
-      if (!diffState.isLoading.value && (diffState.isStale.value || diffState.diffs.value.length === 0) && params.value.id && instanceId.value) {
+      if (!diffState.isLoading.value && (diffState.isStale.value || diffState.diffs.value.length === 0) && params.value.id) {
         void diffState.fetchDiffs();
       }
     }
@@ -364,9 +367,9 @@ const SessionDetailPage = defineComponent({
     });
 
     watch(
-      [() => params.value.id, instanceId],
-      async ([sessionId, activeInstanceId]) => {
-        if (sessionId && activeInstanceId) {
+      () => params.value.id,
+      async (sessionId) => {
+        if (sessionId) {
           await diffState.fetchDiffs();
         }
       },
@@ -583,7 +586,7 @@ const SessionDetailPage = defineComponent({
       }
 
       try {
-        await abortSession(params.value.id, instanceId.value);
+        await abortSession(params.value.id);
         refreshRemoteSession();
       } catch {
         // Error is exposed inline by the action toolbar.
@@ -761,6 +764,7 @@ const SessionDetailPage = defineComponent({
             retentionStatus={optimisticSessionState.value?.retentionStatus ?? sessionStateOverride.value?.retentionStatus ?? selectedSession.value?.retentionStatus ?? remoteSession.value?.retentionStatus}
             totalTokens={selectedSession.value?.totalTokens ?? remoteSession.value?.totalTokens ?? null}
             totalCost={selectedSession.value?.totalCost ?? remoteSession.value?.totalCost ?? null}
+            tags={selectedSession.value?.tags ?? []}
             sessionStateChanged={handleSessionStateChanged}
           >
             {{
@@ -886,7 +890,7 @@ const SessionDetailPage = defineComponent({
               {search.value.parentSessionId || selectedSession.value?.parentSessionId ? (
                 <button
                   type="button"
-                  class="inline-flex h-8 items-center justify-center gap-2 rounded-md border bg-background px-3 text-sm font-medium shadow-xs transition-all hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50"
+                  class="inline-flex h-8 items-center justify-center gap-2 border bg-background px-3 text-sm font-medium shadow-xs transition-all hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50"
                   onClick={() => void handleBackToParent()}
                 >
                   <ArrowLeft class="h-4 w-4" />

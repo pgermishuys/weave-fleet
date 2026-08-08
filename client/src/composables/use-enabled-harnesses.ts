@@ -1,6 +1,6 @@
 import { computed, type ComputedRef } from "vue";
 import { useHarnesses } from "@/composables/use-harnesses";
-import type { HarnessInfo } from "@/lib/api-types";
+import type { HarnessInfo } from "@/api/client";
 import { usePreferencesStore } from "@/stores/preferences";
 
 const DEFAULT_HARNESS_TYPE = "opencode";

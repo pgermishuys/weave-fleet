@@ -1,4 +1,4 @@
-import type { AccumulatedToolPart } from "@/lib/api-types";
+import type { AccumulatedToolPart } from "@/lib/client-types";
 import { getToolLabel } from "@/lib/tool-labels";
 
 export interface DiffLine {
@@ -17,25 +17,61 @@ export interface ToolCardItem {
   output?: string;
   diffLines?: DiffLine[];
   initiallyCollapsed?: boolean;
+  preview?: string;
+  isPatternTool?: boolean;
 }
 
 const tool_output_keys = ["output", "result", "content", "error", "message", "stdout", "stderr"] as const;
 const fallback_excluded_keys = new Set(["input", "status", "summary", "diff", "diffLines", "patch"]);
 
+function buildPreview(output: string | undefined, summary: string | undefined): string | undefined {
+  if (output) {
+    const lines = output.split("\n");
+    const firstNonEmpty = lines.find((line) => line.trim());
+    
+    if (!firstNonEmpty) {
+      return summary ? `└ ${summary}` : undefined;
+    }
+
+    const truncated = firstNonEmpty.length > 80 
+      ? `${firstNonEmpty.slice(0, 77)}...` 
+      : firstNonEmpty;
+
+    const totalLines = lines.length;
+    
+    if (totalLines > 1) {
+      return `└ ${truncated} (${totalLines} lines)`;
+    }
+    
+    return `└ ${truncated}`;
+  }
+
+  if (summary) {
+    return `└ ${summary}`;
+  }
+
+  return undefined;
+}
+
+
 export function toToolCardItem(part: AccumulatedToolPart): ToolCardItem {
   const state = asRecord(part.state);
   const input = asRecord(state?.input);
   const title = getToolLabel(part.tool, input) || part.tool;
+  const output = getToolOutput(state);
+  const summary = getStringValue(state?.summary);
 
   return {
     id: part.partId,
     title,
     kind: part.tool,
     status: formatToolStatus(state?.status),
-    summary: getStringValue(state?.summary),
-    output: getToolOutput(state),
+    summary,
+    output,
     diffLines: getDiffLines(state),
     initiallyCollapsed: state?.status !== "error",
+    preview: buildPreview(output, summary),
+    isPatternTool: part.tool === "glob" || part.tool === "grep",
   };
 }
 

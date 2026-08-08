@@ -76,6 +76,21 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(DelegationCompletedPayload))]
 [JsonSerializable(typeof(SessionDeletedPayload))]
 [JsonSerializable(typeof(ErrorResponse))]
+// Message event parts (polymorphic hierarchy)
+[JsonSerializable(typeof(MessageEventPart))]
+[JsonSerializable(typeof(TextMessageEventPart))]
+[JsonSerializable(typeof(ReasoningMessageEventPart))]
+[JsonSerializable(typeof(ToolMessageEventPart))]
+[JsonSerializable(typeof(FileMessageEventPart))]
+[JsonSerializable(typeof(StepStartedMessageEventPart))]
+[JsonSerializable(typeof(StepFinishedMessageEventPart))]
+// Tool invocation states (polymorphic hierarchy)
+[JsonSerializable(typeof(ToolInvocationState))]
+[JsonSerializable(typeof(ToolPendingState))]
+[JsonSerializable(typeof(ToolRunningState))]
+[JsonSerializable(typeof(ToolCompletedState))]
+[JsonSerializable(typeof(ToolErrorState))]
+[JsonSerializable(typeof(ToolCancelledState))]
 // Shared
 [JsonSerializable(typeof(ApiErrorResponse))]
 // Fleet
@@ -129,8 +144,6 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(IReadOnlyList<HarnessMessage>))]
 [JsonSerializable(typeof(GetSessionMessagesApiResponse))]
 [JsonSerializable(typeof(SessionMessagesPagination))]
-[JsonSerializable(typeof(GetCommittedEventsResponse))]
-[JsonSerializable(typeof(CommittedEventItem))]
 [JsonSerializable(typeof(GetSessionDiffsResponse))]
 [JsonSerializable(typeof(FileDiffSummary))]
 [JsonSerializable(typeof(IReadOnlyList<FileDiffSummary>))]
@@ -190,6 +203,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(SendCommandApiRequest))]
 [JsonSerializable(typeof(QuestionAnswerApiRequest))]
 [JsonSerializable(typeof(ModelRef))]
+[JsonSerializable(typeof(UpdateSessionTagsRequest))]
 // Workspace
 [JsonSerializable(typeof(AddWorkspaceRootRequest))]
 [JsonSerializable(typeof(RenameWorkspaceRequest))]
@@ -253,6 +267,9 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(GitHubReviewCommentDto))]
 [JsonSerializable(typeof(IReadOnlyList<GitHubReviewThreadDto>))]
 [JsonSerializable(typeof(GitHubReplyToCommentRequest))]
+// Automations
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.CreateAutomationRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.UpdateAutomationRequest))]
 // Analytics
 [JsonSerializable(typeof(WeaveFleet.Application.Analytics.AnalyticsSummary))]
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Analytics.DailyAnalytics>))]

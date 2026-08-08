@@ -8,8 +8,8 @@ import {
   type Ref,
   type ShallowRef,
 } from "vue";
-import type { ProjectResponse } from "@/lib/api-types";
-import { apiFetch } from "@/lib/api-client";
+import type { ProjectResponse } from "@/api/client";
+import { api } from "@/api/client";
 
 export interface UseProjectsOptions {
   enabled?: MaybeRefOrGetter<boolean>;
@@ -51,17 +51,16 @@ export function useProjects(options: UseProjectsOptions = {}): UseProjectsResult
     }
 
     try {
-      const response = await apiFetch("/api/projects");
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data = (await response.json()) as ProjectResponse[];
+      const { data, error: apiError } = await api.GET("/api/projects");
       if (currentRequestId !== requestId) {
         return;
       }
 
-      projects.value = data;
+      if (apiError || !data) {
+        throw new Error(apiError ? String(apiError) : "No data returned");
+      }
+
+      projects.value = data as ProjectResponse[];
       error.value = undefined;
       hasLoadedOnce = true;
     } catch (fetchError) {

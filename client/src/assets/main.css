@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "./transitions.css";
+@import "./markdown.css";
 
 :root {
   --visual-vh: 100dvh;
@@ -12,6 +13,8 @@
   --border: #1e1e22;
   --text: #e4e4e7;
   --muted: #71717a;
+  --coral: #D95A3A;
+  --indigo: #6366f1;
   --accent: #6366f1;
   --primary: var(--accent);
   --primary-foreground: #ffffff;
@@ -21,30 +24,43 @@
   --complete: #3b82f6;
   --error: #ef4444;
   --queued: #8b5cf6;
-  --radius-card: 8px;
-  --radius-btn: 6px;
-  --radius-panel: 12px;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --radius-card: 0px;
+  --radius-btn: 0px;
+  --radius-panel: 0px;
+  --transition: 180ms ease-out;
+  --bg: var(--main-bg);
   --font-sans-stack: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
   --font-mono-stack: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
 }
 
 :root[data-theme="light"] {
-  --rail-bg: #f8fafc;
-  --panel-bg: #ffffff;
+  /* Prototype design tokens */
+  --bg: #FAF9F7;
+  --surface: #FFFFFF;
+  --coral: #D95A3A;
+  --indigo: #5B6EC7;
+  
+  /* Mapped to existing variables */
+  --rail-bg: #FFFFFF;
+  --panel-bg: #FFFFFF;
   --card-bg: #ffffff;
-  --main-bg: #f1f5f9;
-  --border: #dbe3ef;
-  --text: #0f172a;
-  --muted: #64748b;
-  --accent: #4f46e5;
+  --main-bg: #FAF9F7;
+  --border: #E8E6E3;
+  --text: #1A1918;
+  --muted: #6E6A65;
+  --accent: #5B6EC7;
   --primary: var(--accent);
   --primary-foreground: #ffffff;
-  --accent-dim: rgba(79, 70, 229, 0.12);
+  --accent-dim: rgba(91, 110, 199, 0.12);
   --running: #16a34a;
   --idle: #d97706;
   --complete: #2563eb;
   --error: #dc2626;
   --queued: #7c3aed;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
 }
 
 /* ─── Weave Classic (Dark Slate + Purple) ──────────────────────────────── */
@@ -65,6 +81,8 @@
   --complete: #3b82f6;
   --error: #ef4444;
   --queued: #8b5cf6;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
 }
 
 /* ─── Black (OLED) ─────────────────────────────────────────────────────── */
@@ -85,6 +103,8 @@
   --complete: #3b82f6;
   --error: #ef4444;
   --queued: #8b5cf6;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
 }
 
 /* ─── Nord ─────────────────────────────────────────────────────────────── */
@@ -105,6 +125,8 @@
   --complete: #81A1C1;
   --error: #BF616A;
   --queued: #B48EAD;
+  --destructive: #BF616A;
+  --destructive-foreground: #ECEFF4;
 }
 
 /* ─── Dracula ──────────────────────────────────────────────────────────── */
@@ -125,6 +147,8 @@
   --complete: #8BE9FD;
   --error: #FF5555;
   --queued: #FF79C6;
+  --destructive: #FF5555;
+  --destructive-foreground: #282A36;
 }
 
 /* ─── Solarized Dark ──────────────────────────────────────────────────── */
@@ -145,6 +169,8 @@
   --complete: #268BD2;
   --error: #DC322F;
   --queued: #6C71C4;
+  --destructive: #DC322F;
+  --destructive-foreground: #FDF6E3;
 }
 
 /* ─── Solarized Light ─────────────────────────────────────────────────── */
@@ -165,6 +191,8 @@
   --complete: #268BD2;
   --error: #DC322F;
   --queued: #6C71C4;
+  --destructive: #DC322F;
+  --destructive-foreground: #FDF6E3;
 }
 
 /* ─── Monokai ──────────────────────────────────────────────────────────── */
@@ -185,6 +213,8 @@
   --complete: #66D9EF;
   --error: #F92672;
   --queued: #AE81FF;
+  --destructive: #F92672;
+  --destructive-foreground: #F8F8F2;
 }
 
 /* ─── GitHub Dark ──────────────────────────────────────────────────────── */
@@ -205,6 +235,8 @@
   --complete: #58A6FF;
   --error: #F85149;
   --queued: #BC8CFF;
+  --destructive: #F85149;
+  --destructive-foreground: #E6EDF3;
 }
 
 @theme inline {
@@ -212,6 +244,7 @@
   --font-mono: var(--font-mono-stack);
   --color-background: var(--panel-bg);
   --color-foreground: var(--text);
+  --color-card: var(--card-bg);
   --color-popover: var(--card-bg);
   --color-popover-foreground: var(--text);
   --color-rail-bg: var(--rail-bg);
@@ -225,11 +258,16 @@
   --color-accent-dim: var(--accent-dim);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-coral: var(--coral);
+  --color-indigo: var(--indigo);
   --color-running: var(--running);
   --color-idle: var(--idle);
   --color-complete: var(--complete);
   --color-error: var(--error);
   --color-queued: var(--queued);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-surface: var(--panel-bg);
   --radius-card: var(--radius-card);
   --radius-btn: var(--radius-btn);
   --radius-panel: var(--radius-panel);
@@ -324,6 +362,41 @@
 
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* ─── Design System Interactive Utilities ───────────────────────────────── */
+@utility list-item-hover {
+  background: transparent;
+  transition: background var(--transition);
+
+  &:hover {
+    background: var(--bg);
+  }
+}
+
+@utility tab-hover {
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  transition: color var(--transition), border-color var(--transition);
+
+  &:hover {
+    color: var(--text);
+  }
+
+  &[data-active="true"],
+  &.active {
+    color: var(--text);
+    border-bottom-color: var(--indigo);
+  }
+}
+
+@utility interactive-icon {
+  color: var(--muted);
+  transition: color var(--transition);
+
+  &:hover {
+    color: var(--text);
   }
 }
 

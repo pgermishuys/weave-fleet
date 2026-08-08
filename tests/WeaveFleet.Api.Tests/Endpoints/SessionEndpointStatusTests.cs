@@ -66,7 +66,7 @@ public sealed class SessionEndpointStatusTests
 
         var result = method.Invoke(
             null,
-            [session, new HashSet<string>(parentIdsWithBusyChildren, StringComparer.Ordinal)]);
+            [session, session.ActivityStatus ?? "idle", new HashSet<string>(parentIdsWithBusyChildren, StringComparer.Ordinal)]);
 
         return result.ShouldBeOfType<string>();
     }

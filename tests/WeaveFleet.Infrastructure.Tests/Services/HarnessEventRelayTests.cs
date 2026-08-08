@@ -62,7 +62,7 @@ public sealed class HarnessEventRelayTests
             services.AddSingleton(deltaBuffer);
             services.AddSingleton(activityWriteService);
             services.AddSingleton<IHarnessEventPersister>(persister);
-            services.AddSingleton(new SessionCapabilitiesResolver(new InstanceTracker()));
+            services.AddSingleton(new SessionCapabilitiesResolver(new InstanceTracker(), activityTracker));
             services.AddTransient<DomainEventTranslator>();
         });
 
@@ -145,10 +145,12 @@ public sealed class HarnessEventRelayTests
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
         await using var _ = keeper;
         var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
+        var pipelineMetrics = new PipelineLatencyMetrics();
         var publisher = new InProcessEventPublisher(
             store,
             channels,
             metrics,
+            pipelineMetrics,
             NullLogger<InProcessEventPublisher>.Instance);
         var relay = new HarnessEventRelay(
             tracker,
@@ -200,25 +202,38 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task relay_internal_dedup_keys_are_not_frontend_session_stream_cursors()
     {
-        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var (broadcaster, sessionRepo, _, activityTracker, persister) = BuildDependencies();
         var tracker = new InstanceTracker();
         var channels = new InProcessChannels();
         var metrics = new InProcessMetrics();
         var sharedFleetSessionId = "fleet-shared-stream";
         var sharedTopic = $"session:{sharedFleetSessionId}";
 
+        // Create a custom scope factory that includes the tracker instance used by the test
+        var scopeFactory = TestServiceScopeFactory.Create(services =>
+        {
+            services.AddLogging();
+            services.AddSingleton<ISessionRepository>(sessionRepo);
+            services.AddSingleton(tracker);
+            services.AddSingleton(new SessionCapabilitiesResolver(tracker, activityTracker));
+            services.AddSingleton<IHarnessEventPersister>(persister);
+            services.AddTransient<DomainEventTranslator>();
+        });
+
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
         await using var _ = keeper;
         var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
+        var pipelineMetrics = new PipelineLatencyMetrics();
         var publisher = new InProcessEventPublisher(
             store,
             channels,
             metrics,
+            pipelineMetrics,
             NullLogger<InProcessEventPublisher>.Instance);
         var fanOut = new InProcessFanOutService(
             channels,
             broadcaster,
-            activityTracker,
+            new PipelineLatencyMetrics(),
             scopeFactory,
             NullLogger<InProcessFanOutService>.Instance);
         var relay = new HarnessEventRelay(
@@ -247,6 +262,9 @@ public sealed class HarnessEventRelayTests
         var instanceB = new FakeHarnessSession("instance-shared-b");
         tracker.Register(instanceA.InstanceId, instanceA);
         tracker.Register(instanceB.InstanceId, instanceB);
+
+        // Wait for relay pumps to start and resolve session metadata
+        await Task.Delay(1000);
 
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var emitA = Task.Run(async () =>
@@ -279,7 +297,8 @@ public sealed class HarnessEventRelayTests
         release.SetResult();
         await Task.WhenAll(emitA, emitB);
 
-        for (int i = 0; i < 100 && broadcaster.Broadcasts.Count(b => b.Topic == sharedTopic) < 2; i++)
+        // Wait longer for events to flow through relay → publisher → fan-out → broadcaster
+        for (int i = 0; i < 200 && broadcaster.Broadcasts.Count(b => b.Topic == sharedTopic) < 2; i++)
             await Task.Delay(50);
 
         var sessionBroadcasts = broadcaster.Broadcasts
@@ -686,7 +705,8 @@ public sealed class HarnessEventRelayTests
         services.AddSingleton<IHarnessEventPersister>(persister);
         services.AddScoped<IHarnessEventLogRepository>(_ => logRepository);
         services.AddScoped<MessagePersistenceProjection>();
-        services.AddSingleton(new SessionCapabilitiesResolver(new InstanceTracker()));
+        var activityTracker = new SessionActivityTracker();
+        services.AddSingleton(new SessionCapabilitiesResolver(new InstanceTracker(), activityTracker));
         services.AddTransient<DomainEventTranslator>();
         var serviceProvider = services.BuildServiceProvider();
 
@@ -694,17 +714,18 @@ public sealed class HarnessEventRelayTests
         var broadcaster = new FakeEventBroadcaster();
         var channels = new InProcessChannels();
         var metrics = new InProcessMetrics();
+        var pipelineMetrics = new PipelineLatencyMetrics();
         var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
         var publisher = new InProcessEventPublisher(
             store,
             channels,
             metrics,
+            pipelineMetrics,
             NullLogger<InProcessEventPublisher>.Instance);
-        var activityTracker = new SessionActivityTracker();
         var fanOut = new InProcessFanOutService(
             channels,
             broadcaster,
-            activityTracker,
+            pipelineMetrics,
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<InProcessFanOutService>.Instance);
         var projectionHost = new InProcessProjectionHost(
@@ -938,6 +959,211 @@ public sealed class HarnessEventRelayTests
         persisted.PartsJson.ShouldBe("[]");
         messageRepository.UpsertCalls.ShouldBeEmpty();
         deltaBuffer.SnapshotSession(fleetSessionId).Count.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Relay_resyncs_activity_status_on_pump_start_when_tracker_differs_from_harness()
+    {
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
+
+        var fleetSessionId = "fleet-resync";
+        var instanceId = "instance-resync";
+        sessionRepo.Seed(new Session
+        {
+            Id = fleetSessionId,
+            InstanceId = instanceId,
+            UserId = "user-resync",
+            ProjectId = "proj-resync",
+            HarnessType = "opencode",
+        });
+
+        // Simulate stale tracker state: session was left "busy" before disconnect
+        activityTracker.Update(fleetSessionId, "busy", "user-resync");
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        // Register a harness that reports "idle" (the true current state)
+        var instance = new FakeHarnessSession(instanceId)
+        {
+            GetActivityStatusBehavior = _ => Task.FromResult<string?>("idle")
+        };
+        tracker.Register(instanceId, instance);
+
+        // Wait for the pump to process the resync
+        for (int i = 0; i < 50 && broadcaster.Broadcasts.Count == 0; i++)
+            await Task.Delay(50);
+
+        // Assert: tracker should be corrected to "idle"
+        var snapshot = activityTracker.Get(fleetSessionId);
+        snapshot.ShouldNotBeNull();
+        snapshot.ActivityStatus.ShouldBe("idle");
+
+        // Assert: a correction broadcast should have been sent on the "sessions" topic
+        broadcaster.Broadcasts.ShouldContain(b =>
+            b.Topic == "sessions" && b.Type == "activity_status");
+
+        var activityBroadcast = broadcaster.Broadcasts.First(b =>
+            b.Topic == "sessions" && b.Type == "activity_status");
+        var payload = JsonSerializer.Deserialize<JsonElement>(activityBroadcast.Payload);
+        payload.GetProperty("sessionId").GetString().ShouldBe(fleetSessionId);
+        payload.GetProperty("activityStatus").GetString().ShouldBe("idle");
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Relay_resyncs_activity_status_on_pump_start_when_harness_reports_busy()
+    {
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
+
+        var fleetSessionId = "fleet-resync-busy";
+        var instanceId = "instance-resync-busy";
+        sessionRepo.Seed(new Session
+        {
+            Id = fleetSessionId,
+            InstanceId = instanceId,
+            UserId = "user-resync-busy",
+            ProjectId = "proj-resync-busy",
+            HarnessType = "opencode",
+        });
+
+        // Simulate stale tracker state: session was left "idle" before disconnect
+        activityTracker.Update(fleetSessionId, "idle", "user-resync-busy");
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        // Register a harness that reports "busy" (the true current state)
+        var instance = new FakeHarnessSession(instanceId)
+        {
+            GetActivityStatusBehavior = _ => Task.FromResult<string?>("busy")
+        };
+        tracker.Register(instanceId, instance);
+
+        // Wait for the pump to process the resync
+        for (int i = 0; i < 50 && broadcaster.Broadcasts.Count == 0; i++)
+            await Task.Delay(50);
+
+        // Assert: tracker should be corrected to "busy"
+        var snapshot = activityTracker.Get(fleetSessionId);
+        snapshot.ShouldNotBeNull();
+        snapshot.ActivityStatus.ShouldBe("busy");
+
+        // Assert: a correction broadcast should have been sent on the "sessions" topic
+        broadcaster.Broadcasts.ShouldContain(b =>
+            b.Topic == "sessions" && b.Type == "activity_status");
+
+        var activityBroadcast = broadcaster.Broadcasts.First(b =>
+            b.Topic == "sessions" && b.Type == "activity_status");
+        var payload = JsonSerializer.Deserialize<JsonElement>(activityBroadcast.Payload);
+        payload.GetProperty("sessionId").GetString().ShouldBe(fleetSessionId);
+        payload.GetProperty("activityStatus").GetString().ShouldBe("busy");
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Relay_skips_resync_when_tracker_matches_harness()
+    {
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
+
+        var fleetSessionId = "fleet-resync-match";
+        var instanceId = "instance-resync-match";
+        sessionRepo.Seed(new Session
+        {
+            Id = fleetSessionId,
+            InstanceId = instanceId,
+            UserId = "user-resync-match",
+            ProjectId = "proj-resync-match",
+            HarnessType = "opencode",
+        });
+
+        // Tracker already has the correct state
+        activityTracker.Update(fleetSessionId, "idle", "user-resync-match");
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        // Register a harness that reports "idle" (matches tracker)
+        var instance = new FakeHarnessSession(instanceId)
+        {
+            GetActivityStatusBehavior = _ => Task.FromResult<string?>("idle")
+        };
+        tracker.Register(instanceId, instance);
+
+        // Wait a bit to ensure no correction broadcast is sent
+        await Task.Delay(200);
+
+        // Assert: no activity_status broadcast should be sent (state already matches)
+        broadcaster.Broadcasts.ShouldNotContain(b =>
+            b.Topic == "sessions" && b.Type == "activity_status");
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Relay_skips_resync_when_harness_returns_null_activity_status()
+    {
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
+
+        var fleetSessionId = "fleet-resync-null";
+        var instanceId = "instance-resync-null";
+        sessionRepo.Seed(new Session
+        {
+            Id = fleetSessionId,
+            InstanceId = instanceId,
+            UserId = "user-resync-null",
+            ProjectId = "proj-resync-null",
+            HarnessType = "opencode",
+        });
+
+        // Tracker has stale state
+        activityTracker.Update(fleetSessionId, "busy", "user-resync-null");
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        // Register a harness that returns null (doesn't support activity status queries)
+        var instance = new FakeHarnessSession(instanceId)
+        {
+            GetActivityStatusBehavior = _ => Task.FromResult<string?>(null)
+        };
+        tracker.Register(instanceId, instance);
+
+        // Wait a bit to ensure no correction broadcast is sent
+        await Task.Delay(200);
+
+        // Assert: tracker should remain unchanged (no resync when harness returns null)
+        var snapshot = activityTracker.Get(fleetSessionId);
+        snapshot.ShouldNotBeNull();
+        snapshot.ActivityStatus.ShouldBe("busy");
+
+        // Assert: no activity_status broadcast should be sent
+        broadcaster.Broadcasts.ShouldNotContain(b =>
+            b.Topic == "sessions" && b.Type == "activity_status");
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
     }
 
     private static HarnessEvent CreateMessageLifecycleEvent(

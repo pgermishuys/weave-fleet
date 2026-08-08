@@ -3,7 +3,7 @@
  * These are pure functions with no React dependencies — safe to import anywhere.
  */
 
-import type { AccumulatedMessage } from "@/lib/api-types";
+import type { AccumulatedMessage } from "@/lib/client-types";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 

@@ -121,7 +121,7 @@ function handleSearchUpdate(value: string | number): void {
       side="bottom"
       :collision-padding="8"
       :avoid-collisions="true"
-      :class="[contentClass, 'p-0 border-border shadow-xl shadow-black/50 ring-1 ring-white/[0.08]']"
+      :class="[contentClass, 'p-0 border-border shadow-lg ring-1 ring-border']"
       :style="{ backgroundColor: 'color-mix(in srgb, var(--card-bg) 100%, white 4%)' }"
     >
       <!-- Breadcrumb navigation -->
@@ -190,7 +190,7 @@ function handleSearchUpdate(value: string | number): void {
           v-for="entry in filteredEntries"
           :key="entry.path"
           type="button"
-          class="group flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm font-mono hover:bg-white/[0.06]"
+          class="group flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left text-sm font-mono hover:bg-main-bg"
           @click="handleEntryClick(entry.path)"
         >
           <FolderGit2

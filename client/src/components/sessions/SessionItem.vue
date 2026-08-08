@@ -32,7 +32,7 @@ import {
   useTerminateSession,
 } from "@/composables/use-session-actions";
 import { useProjects } from "@/composables/use-projects";
-import type { SessionListItem } from "@/lib/api-types";
+import type { SessionListItem } from "@/api/client";
 import { sessionCache } from "@/lib/session-cache";
 import { dispatchSessionRemoved } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
@@ -566,16 +566,18 @@ function removeSessionFromStore(): void {
 .session-item {
   width: 100%;
   min-width: 0;
+  min-height: 40px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 12px 4px 32px;
+  gap: 10px;
+  padding: 0 12px;
   cursor: pointer;
   border: 0;
   border-left: 3px solid transparent;
   background: transparent;
   color: var(--text);
   text-align: left;
+  transition: background var(--transition);
 }
 
 .session-item--editing {
@@ -583,7 +585,7 @@ function removeSessionFromStore(): void {
 }
 
 .session-item:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg);
 }
 
 .session-item--editing:hover {

@@ -1,5 +1,12 @@
+<!--
+Panel Vocabulary:
+  rail         — Always-visible icon navigation (left edge)
+  session-list — List of sessions
+  conversation — Message/activity stream
+  content      — Right-side artifact viewer
+-->
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, ref, shallowRef, watch } from "vue";
 import { useLocation } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import CommandPalette from "@/components/CommandPalette.vue";
@@ -8,9 +15,11 @@ import BoardRightPanel from "@/components/board/BoardRightPanel.vue";
 import CenterContent from "@/components/layout/CenterContent.vue";
 import ContextPanel from "@/components/layout/ContextPanel.vue";
 import IconRail from "@/components/layout/IconRail.vue";
+import StatusBar from "@/components/layout/StatusBar.vue";
 import SessionsV2RightPanel from "@/components/sessions/SessionsV2RightPanel.vue";
 import { Menu } from "lucide-vue-next";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import { useCommands } from "@/composables/use-commands";
 import { useWeaveSocket } from "@/composables/use-weave-socket";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
@@ -50,6 +59,8 @@ const showSessionsV2Panel = computed(() =>
 const showBoardPanel = computed(() =>
   isBoardFeatureEnabled.value && !isSettingsRoute.value && activeRail.value === "board",
 );
+
+const showRightPanel = computed(() => showSessionsV2Panel.value || showBoardPanel.value);
 
 // Touch swipe support: swipe right from left edge to open drawer
 let touchStartX = 0;
@@ -96,6 +107,70 @@ function onTouchEnd(e: TouchEvent): void {
   touchStartX = -1;
   touchStartY = -1;
 }
+
+// --- Resize gutter logic ---
+const rightPanelWidth = ref(360);
+const isGutterDragging = ref(false);
+
+// --- Left gutter (context panel ↔ conversation) ---
+const contextPanelRef = shallowRef<InstanceType<typeof ContextPanel> | null>(null);
+const isLeftGutterDragging = ref(false);
+
+function onLeftGutterPointerDown(e: PointerEvent): void {
+  const panel = contextPanelRef.value;
+  if (!panel) return;
+
+  isLeftGutterDragging.value = true;
+  panel.isResizing = true;
+  const startX = e.clientX;
+  const startWidth = panel.panelWidth;
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+
+  const onMove = (ev: PointerEvent) => {
+    const delta = ev.clientX - startX;
+    panel.panelWidth = Math.min(500, Math.max(200, startWidth + delta));
+  };
+
+  const onUp = () => {
+    isLeftGutterDragging.value = false;
+    panel.isResizing = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+  };
+
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
+}
+
+function onGutterPointerDown(e: PointerEvent): void {
+  isGutterDragging.value = true;
+  const startX = e.clientX;
+  const startWidth = rightPanelWidth.value;
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+
+  const onMove = (e: PointerEvent) => {
+    const delta = startX - e.clientX;
+    const mainEl = document.querySelector(".main");
+    const appWidth = mainEl?.getBoundingClientRect().width ?? window.innerWidth;
+    const maxWidth = appWidth * 0.5;
+    rightPanelWidth.value = Math.max(200, Math.min(maxWidth, startWidth + delta));
+  };
+
+  const onUp = () => {
+    isGutterDragging.value = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+  };
+
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
+}
 </script>
 
 <template>
@@ -122,16 +197,17 @@ function onTouchEnd(e: TouchEvent): void {
     </Sheet>
 
     <!-- Mobile: hamburger menu button -->
-    <button
+    <Button
       v-if="isMobileNav"
-      type="button"
+      variant="toolbar-icon"
+      size="toolbar"
       class="mobile-menu-btn"
       :aria-label="mobileDrawerOpen ? 'Close menu' : 'Open menu'"
       :aria-expanded="mobileDrawerOpen"
       @click="openDrawer"
     >
       <Menu class="h-5 w-5" />
-    </button>
+    </Button>
 
     <div
       class="main"
@@ -140,16 +216,37 @@ function onTouchEnd(e: TouchEvent): void {
       <!-- Desktop: inline nav -->
       <template v-if="!isMobileNav">
         <IconRail />
-        <ContextPanel v-if="!panelCollapsed" />
+        <ContextPanel v-if="!panelCollapsed" ref="contextPanelRef" />
+        <div
+          v-if="!panelCollapsed"
+          class="resize-gutter"
+          :class="{ active: isLeftGutterDragging }"
+          @pointerdown.prevent="onLeftGutterPointerDown"
+        />
       </template>
 
       <CenterContent>
         <slot />
       </CenterContent>
 
-      <SessionsV2RightPanel v-if="showSessionsV2Panel" />
-      <BoardRightPanel v-else-if="showBoardPanel" />
+      <div
+        v-if="showRightPanel"
+        class="resize-gutter"
+        :class="{ active: isGutterDragging }"
+        @pointerdown.prevent="onGutterPointerDown"
+      />
+
+      <SessionsV2RightPanel
+        v-if="showSessionsV2Panel"
+        :width="rightPanelWidth"
+      />
+      <BoardRightPanel
+        v-else-if="showBoardPanel"
+        :width="rightPanelWidth"
+      />
     </div>
+
+    <StatusBar />
 
     <CommandPalette />
     <TauriUpdateDialog />
@@ -167,6 +264,9 @@ function onTouchEnd(e: TouchEvent): void {
   display: flex;
   flex: 1;
   overflow: hidden;
+  gap: 8px;
+  padding: 8px;
+  background: var(--main-bg);
 }
 
 .mobile-menu-btn {
@@ -174,25 +274,20 @@ function onTouchEnd(e: TouchEvent): void {
   top: 8px;
   left: 8px;
   z-index: 10;
-  display: inline-flex;
-  height: 36px;
-  width: 36px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--panel-bg);
-  color: var(--muted);
-  transition: background 0.15s, color 0.15s;
 }
 
-.mobile-menu-btn:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text);
+.resize-gutter {
+  width: 8px;
+  margin: 0 -4px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  transition: background var(--transition);
+  z-index: 5;
 }
 
-.mobile-menu-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.resize-gutter:hover,
+.resize-gutter.active {
+  background: rgba(91, 110, 199, 0.15);
 }
 </style>

@@ -1,6 +1,6 @@
 import { readonly, shallowRef, type ShallowRef } from "vue"
-import type { AccumulatedMessage } from "@/lib/api-types"
-import { apiFetch } from "@/lib/api-client"
+import type { AccumulatedMessage } from "@/lib/client-types"
+import { api } from "@/api/client"
 import { convertFleetMessageToAccumulated, sortAccumulatedMessagesChronologically, type FleetMessage } from "@/lib/pagination-utils"
 import type { PaginationSnapshot } from "@/lib/session-cache"
 
@@ -47,14 +47,24 @@ export function useMessagePagination(): UseMessagePaginationReturn {
     signal?: AbortSignal,
   ): Promise<AccumulatedMessage[]> {
     try {
-      const url = `/api/sessions/${encodeURIComponent(sessionId)}/messages?instanceId=${encodeURIComponent(instanceId)}&limit=${DEFAULT_PAGE_SIZE}`
-      const response = await apiFetch(url, signal ? { signal } : undefined)
-      if (!response.ok) {
-        loadError.value = "Failed to load initial messages"
-        return []
+      const { data, error, response } = await api.GET("/api/sessions/{id}/messages", {
+        params: {
+          path: { id: sessionId },
+          query: {
+            instanceId,
+            limit: DEFAULT_PAGE_SIZE,
+          },
+        },
+        signal,
+      });
+
+      if (error || !response.ok) {
+        loadError.value = "Failed to load initial messages";
+        return [];
       }
 
-      const data = (await response.json()) as {
+      // Response body is not typed in schema, use data from openapi-fetch
+      const responseData = data as unknown as {
         messages: FleetMessage[]
         pagination: {
           hasMore: boolean
@@ -63,12 +73,12 @@ export function useMessagePagination(): UseMessagePaginationReturn {
         }
       }
 
-      hasMore.value = data.pagination?.hasMore ?? false
-      oldestMessageId.value = data.pagination?.oldestMessageId ?? null
-      totalCount.value = data.pagination?.totalCount ?? data.messages?.length ?? null
+      hasMore.value = responseData.pagination?.hasMore ?? false
+      oldestMessageId.value = responseData.pagination?.oldestMessageId ?? null
+      totalCount.value = responseData.pagination?.totalCount ?? responseData.messages?.length ?? null
       loadError.value = null
 
-      return sortAccumulatedMessagesChronologically((data.messages ?? []).map(convertFleetMessageToAccumulated))
+      return sortAccumulatedMessagesChronologically((responseData.messages ?? []).map(convertFleetMessageToAccumulated))
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         return []
@@ -93,22 +103,24 @@ export function useMessagePagination(): UseMessagePaginationReturn {
     lastFetchTime = now
 
     try {
-      const params = new URLSearchParams({
-        instanceId,
-        limit: String(DEFAULT_PAGE_SIZE),
-      })
+      const { data, error, response } = await api.GET("/api/sessions/{id}/messages", {
+        params: {
+          path: { id: sessionId },
+          query: {
+            instanceId,
+            limit: DEFAULT_PAGE_SIZE,
+            ...(oldestMessageId.value ? { before: oldestMessageId.value } : {}),
+          },
+        },
+      });
 
-      if (oldestMessageId.value) {
-        params.set("before", oldestMessageId.value)
+      if (error || !response.ok) {
+        loadError.value = "Failed to load older messages";
+        return [];
       }
 
-      const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/messages?${params.toString()}`)
-      if (!response.ok) {
-        loadError.value = "Failed to load older messages"
-        return []
-      }
-
-      const data = (await response.json()) as {
+      // Response body is not typed in schema, use data from openapi-fetch
+      const responseData = data as unknown as {
         messages: FleetMessage[]
         pagination: {
           hasMore: boolean
@@ -117,12 +129,12 @@ export function useMessagePagination(): UseMessagePaginationReturn {
         }
       }
 
-      hasMore.value = data.pagination?.hasMore ?? false
-      oldestMessageId.value = data.pagination?.oldestMessageId ?? null
-      totalCount.value = data.pagination?.totalCount ?? data.messages?.length ?? null
+      hasMore.value = responseData.pagination?.hasMore ?? false
+      oldestMessageId.value = responseData.pagination?.oldestMessageId ?? null
+      totalCount.value = responseData.pagination?.totalCount ?? responseData.messages?.length ?? null
       loadError.value = null
 
-      return sortAccumulatedMessagesChronologically((data.messages ?? []).map(convertFleetMessageToAccumulated))
+      return sortAccumulatedMessagesChronologically((responseData.messages ?? []).map(convertFleetMessageToAccumulated))
     } catch {
       loadError.value = "Failed to load older messages"
       return []

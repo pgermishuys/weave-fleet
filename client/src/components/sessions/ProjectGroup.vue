@@ -15,7 +15,7 @@ import {
   useUpdateProject,
   type DeleteProjectMode,
 } from "@/composables/use-session-actions";
-import type { SessionListItem } from "@/lib/api-types";
+import type { SessionListItem } from "@/api/client";
 import ConfirmDeleteProjectDialog from "./ConfirmDeleteProjectDialog.vue";
 import InlineEdit from "./InlineEdit.vue";
 import SessionItem from "./SessionItem.vue";
@@ -193,7 +193,7 @@ async function handleRename(nextName: string): Promise<void> {
   }
 
   try {
-    await updateProject(props.project.projectId, { name: trimmedName });
+    await updateProject(props.project.projectId, { name: trimmedName, description: null });
     emit("projectChanged");
   } catch {
     // Errors are handled by the mutation composable state.
@@ -447,11 +447,11 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
   background: transparent;
   color: var(--text);
   text-align: left;
-  transition: background-color 0.25s ease;
+  transition: background var(--transition);
 }
 
 .project-header:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg);
 }
 
 .project-header--editing {

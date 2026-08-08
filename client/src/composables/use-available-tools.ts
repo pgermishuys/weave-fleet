@@ -1,5 +1,5 @@
 import { onMounted, readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import { api } from "@/api/client";
 
 export interface AvailableTool {
   id: string;
@@ -22,17 +22,21 @@ const sharedIsLoading = shallowRef(true);
 const sharedError = shallowRef<string | undefined>(undefined);
 
 async function fetchAvailableTools(): Promise<AvailableTool[]> {
-  const response = await apiFetch("/api/available-tools");
-  if (!response.ok) {
-    throw new Error(`Failed to fetch available tools: HTTP ${response.status}`);
+  const { data, error: apiError } = await api.GET("/api/available-tools");
+  if (apiError) {
+    throw new Error(apiError ? String(apiError) : "Failed to fetch available tools");
   }
 
-  const data = (await response.json()) as { tools?: AvailableTool[] } | AvailableTool[];
-  if (Array.isArray(data)) {
-    return data;
+  if (!data) {
+    throw new Error("No data returned");
   }
 
-  return Array.isArray(data.tools) ? data.tools : [];
+  const result = data as { tools?: AvailableTool[] } | AvailableTool[];
+  if (Array.isArray(result)) {
+    return result;
+  }
+
+  return Array.isArray(result.tools) ? result.tools : [];
 }
 
 async function loadTools(): Promise<void> {

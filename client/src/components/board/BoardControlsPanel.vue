@@ -7,6 +7,7 @@ import {
   boardStatusOptions,
   useBoardStore,
 } from "@/stores/board";
+import { Button } from "@/components/ui/button";
 
 const groupByOptions: readonly BoardGroupBy[] = ["status", "project", "agent"];
 
@@ -124,17 +125,19 @@ function handleGroupByChange(value: BoardGroupBy): void {
         role="radiogroup"
         aria-label="Group board cards by"
       >
-        <button
+        <Button
           v-for="option in groupByOptions"
           :key="option"
           type="button"
+          variant="filter"
+          size="sm"
           class="radio-pill"
           :class="{ active: groupBy === option }"
           :aria-pressed="groupBy === option"
           @click="handleGroupByChange(option)"
         >
           {{ option.charAt(0).toUpperCase() + option.slice(1) }}
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -242,17 +245,6 @@ function handleGroupByChange(value: BoardGroupBy): void {
 .radio-pills {
   display: flex;
   gap: 4px;
-}
-
-.radio-pill {
-  padding: 5px 12px;
-  font-size: 10px;
-  font-weight: 500;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
 }
 
 .radio-pill.active {

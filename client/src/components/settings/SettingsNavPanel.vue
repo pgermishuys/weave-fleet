@@ -138,11 +138,11 @@ function selectSection(sectionId: SettingsSectionId): void {
   font-size: 12px;
   font-weight: 500;
   text-align: left;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--transition), border-color var(--transition), color var(--transition);
 }
 
 .settings-nav__item:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg);
   color: var(--text);
 }
 

@@ -1,9 +1,10 @@
 import { storeToRefs } from "pinia";
 import { computed, readonly, shallowRef } from "vue";
+import type { components } from "@/api/generated/schema";
 import { useAgents } from "@/composables/use-agents";
 import { useDraftState } from "@/composables/use-draft-state";
 import { useModels } from "@/composables/use-models";
-import { apiFetch } from "@/lib/api-client";
+import { api } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
 
 interface BackendSendCommandRequest {
@@ -45,7 +46,7 @@ async function readCommandErrorMessage(response: Response): Promise<string> {
 export function useSendCommand(sessionId: string) {
   const sessionsStore = useSessionsStore();
   const { sessions } = storeToRefs(sessionsStore);
-  const { defaultAgentId, agentsById } = useAgents();
+  const { defaultAgentId, agentsById } = useAgents(sessionId);
   const { defaultModelKey, modelsByKey } = useModels(sessionId);
   const sendError = shallowRef<string | undefined>(undefined);
   const { draft, resetText } = useDraftState(sessionId, {
@@ -59,15 +60,14 @@ export function useSendCommand(sessionId: string) {
 
   async function postCommand(request: BackendSendCommandRequest): Promise<void> {
     try {
-      const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/command`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const { error, response } = await api.POST("/api/sessions/{id}/command", {
+        params: {
+          path: { id: sessionId },
         },
-        body: JSON.stringify(request),
+        body: request as components["schemas"]["SendCommandApiRequest"],
       });
 
-      if (!response.ok) {
+      if (error || !response.ok) {
         throw new Error(await readCommandErrorMessage(response));
       }
 

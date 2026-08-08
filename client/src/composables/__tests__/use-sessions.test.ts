@@ -1,15 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { shallowRef } from "vue";
 import { useSessions } from "@/composables/use-sessions";
-import type { SessionListItem } from "@/lib/api-types";
+import type { SessionListItem } from "@/api/client";
 import { flushAll, mountComposable } from "./test-utils";
 
 const { apiFetchMock } = vi.hoisted(() => ({
   apiFetchMock: vi.fn(),
 }));
 
-vi.mock("@/lib/api-client", () => ({
-  apiFetch: apiFetchMock,
+vi.mock("@/api/client", () => ({
+  api: {
+    GET: apiFetchMock,
+    POST: vi.fn(),
+    PUT: vi.fn(),
+    DELETE: vi.fn(),
+    PATCH: vi.fn(),
+  },
 }));
 
 function createJsonResponse<T>(body: T, status = 200): Response {
@@ -37,6 +43,7 @@ function createSession(id: string, overrides: Partial<SessionListItem> = {}): Se
         created: 1,
         updated: 2,
       },
+      tags: [],
     },
     activityStatus: "busy",
     lifecycleStatus: "running",
@@ -44,12 +51,9 @@ function createSession(id: string, overrides: Partial<SessionListItem> = {}): Se
     archivedAt: null,
     typedInstanceStatus: "running",
     isHidden: false,
+    tags: [],
     ...overrides,
   };
-}
-
-function getSearchParams(path: string): URLSearchParams {
-  return new URL(path, "http://localhost").searchParams;
 }
 
 describe("useSessions", () => {
@@ -64,7 +68,11 @@ describe("useSessions", () => {
   it("fetches sessions with pagination and retention filters", async () => {
     const retentionStatus = shallowRef<"active" | "archived" | "all">("archived");
     const sessions = [createSession("sess-1"), createSession("sess-2")];
-    apiFetchMock.mockResolvedValue(createJsonResponse(sessions));
+    apiFetchMock.mockResolvedValue({
+      data: sessions,
+      error: undefined,
+      response: createJsonResponse(sessions),
+    });
 
     const { result } = await mountComposable(() => useSessions({
       retentionStatus,
@@ -73,11 +81,10 @@ describe("useSessions", () => {
       pollIntervalMs: 0,
     }));
 
-    const firstCallPath = apiFetchMock.mock.calls[0]?.[0] as string;
-    const firstCallParams = getSearchParams(firstCallPath);
-    expect(firstCallParams.get("limit")).toBe("2");
-    expect(firstCallParams.get("offset")).toBe("2");
-    expect(firstCallParams.get("retentionStatus")).toBe("archived");
+    const firstCall = apiFetchMock.mock.calls[0];
+    expect(firstCall?.[1]?.params?.query?.limit).toBe(2);
+    expect(firstCall?.[1]?.params?.query?.offset).toBe(2);
+    expect(firstCall?.[1]?.params?.query?.retentionStatus).toBe("archived");
     expect(result.sessions.value).toEqual(sessions);
     expect(result.hasPreviousPage.value).toBe(true);
     expect(result.hasNextPage.value).toBe(true);
@@ -85,21 +92,24 @@ describe("useSessions", () => {
     result.nextPage();
     await flushAll();
 
-    const secondCallPath = apiFetchMock.mock.calls[1]?.[0] as string;
-    expect(getSearchParams(secondCallPath).get("offset")).toBe("4");
+    const secondCall = apiFetchMock.mock.calls[1];
+    expect(secondCall?.[1]?.params?.query?.offset).toBe(4);
 
     result.setPageSize(1);
     await flushAll();
 
-    const thirdCallPath = apiFetchMock.mock.calls[2]?.[0] as string;
-    const thirdCallParams = getSearchParams(thirdCallPath);
-    expect(thirdCallParams.get("limit")).toBe("1");
-    expect(thirdCallParams.get("offset")).toBe("0");
+    const thirdCall = apiFetchMock.mock.calls[2];
+    expect(thirdCall?.[1]?.params?.query?.limit).toBe(1);
+    expect(thirdCall?.[1]?.params?.query?.offset).toBe(0);
     expect(result.page.value).toBe(1);
   });
 
   it("refetches while hidden only when explicitly requested", async () => {
-    apiFetchMock.mockResolvedValue(createJsonResponse([createSession("sess-1")]));
+    apiFetchMock.mockResolvedValue({
+      data: [createSession("sess-1")],
+      error: undefined,
+      response: createJsonResponse([createSession("sess-1")]),
+    });
 
     const { result } = await mountComposable(() => useSessions({ pollIntervalMs: 0 }));
 
@@ -131,7 +141,11 @@ describe("useSessions", () => {
   });
 
   it("stores fetch failures as errors", async () => {
-    apiFetchMock.mockResolvedValue(createJsonResponse({ error: "boom" }, 503));
+    apiFetchMock.mockResolvedValue({
+      data: undefined,
+      error: "HTTP 503",
+      response: createJsonResponse({ error: "boom" }, 503),
+    });
 
     const { result } = await mountComposable(() => useSessions({ pollIntervalMs: 0 }));
 

@@ -166,10 +166,16 @@ public sealed class PiMapperTests
         Part(toolCallEnd.Single()).GetProperty("tool").GetString().ShouldBe("read");
         ToolStateStatus(callAStart.Single()).ShouldBe("running");
         Part(callAStart.Single()).GetProperty("id").GetString().ShouldBe("pi-session-1-assistant-4000-tool-call-a");
-        ToolStateStatus(callBEnd.Single()).ShouldBe("completed");
-        Part(callBEnd.Single()).GetProperty("callID").GetString().ShouldBe("call-b");
-        Part(callBEnd.Single()).GetProperty("id").GetString().ShouldBe("pi-session-1-assistant-4000-tool-call-b");
-        ToolState(callBEnd.Single()).GetProperty("output").GetProperty("ok").GetBoolean().ShouldBeTrue();
+        callBEnd.Count.ShouldBe(2);
+        ToolStateStatus(callBEnd[0]).ShouldBe("completed");
+        Part(callBEnd[0]).GetProperty("callID").GetString().ShouldBe("call-b");
+        Part(callBEnd[0]).GetProperty("id").GetString().ShouldBe("pi-session-1-assistant-4000-tool-call-b");
+        ToolState(callBEnd[0]).GetProperty("output").GetProperty("ok").GetBoolean().ShouldBeTrue();
+        // Tool result event is now wrapped in a "part" property
+        var toolResultPart = Payload(callBEnd[1]).GetProperty("part");
+        toolResultPart.GetProperty("type").GetString().ShouldBe("tool-result");
+        toolResultPart.GetProperty("callId").GetString().ShouldBe("call-b");
+        toolResultPart.GetProperty("content").GetString().ShouldBe("{\"ok\":true}");
     }
 
     [Fact]
@@ -195,9 +201,16 @@ public sealed class PiMapperTests
         ToolStateStatus(start.Single()).ShouldBe("running");
         ToolState(start.Single()).GetProperty("input").GetProperty("cmd").GetString().ShouldBe("bad");
         ToolStateStatus(update.Single()).ShouldBe("running");
-        ToolStateStatus(end.Single()).ShouldBe("error");
-        ToolState(end.Single()).GetProperty("input").GetProperty("cmd").GetString().ShouldBe("bad");
-        ToolState(end.Single()).GetProperty("output").GetString().ShouldBe("failed");
+        end.Count.ShouldBe(2);
+        ToolStateStatus(end[0]).ShouldBe("error");
+        ToolState(end[0]).GetProperty("input").GetProperty("cmd").GetString().ShouldBe("bad");
+        ToolState(end[0]).GetProperty("output").GetString().ShouldBe("failed");
+        // Tool result event is now wrapped in a "part" property
+        var toolResultPart = Payload(end[1]).GetProperty("part");
+        toolResultPart.GetProperty("type").GetString().ShouldBe("tool-result");
+        toolResultPart.GetProperty("callId").GetString().ShouldBe("call-error");
+        toolResultPart.GetProperty("content").GetString().ShouldBe("failed");
+        toolResultPart.GetProperty("isError").GetBoolean().ShouldBeTrue();
     }
 
     [Fact]

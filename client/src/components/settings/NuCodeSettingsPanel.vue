@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, shallowRef, watch } from "vue";
 import { AlertCircle, Check, Copy, ExternalLink, LoaderCircle, X } from "lucide-vue-next";
 import { usePreferencesStore } from "@/stores/preferences";
 import { useNuCodeProviders } from "@/composables/use-nucode-providers";
-import type { NuCodeProvider } from "@/lib/api-types";
+import type { NuCodeProvider } from "@/api/client";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 

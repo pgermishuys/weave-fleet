@@ -1,0 +1,3816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weave Fleet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #FAF9F7;
+  --surface: #FFFFFF;
+  --border: #E8E6E3;
+  --text: #1A1918;
+  --muted: #6E6A65;
+  --coral: #D95A3A;
+  --indigo: #5B6EC7;
+  --radius: 0px;
+  --transition: 180ms ease-out;
+  --font: 'Inter', -apple-system, sans-serif;
+  --mono: 'Courier New', monospace;
+}
+
+body {
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.5;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Layout */
+.app {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  gap: 8px;
+  background: var(--bg);
+}
+
+/* Icon Rail */
+.icon-rail {
+  width: 48px;
+  background: var(--surface);
+  border-right: none;
+  margin: 8px 0 8px 8px;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.icon-rail-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  font-size: 16px;
+}
+.icon-rail-btn:hover { background: var(--bg); border-color: var(--border); color: var(--text); }
+.icon-rail-btn.active { background: var(--bg); color: var(--coral); }
+
+/* Context Panel */
+.context-panel {
+  width: 260px;
+  background: var(--surface);
+  border-right: none;
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.context-header {
+  padding: 16px 16px 12px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+}
+.session-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+.tree-group { margin-bottom: 4px; }
+.tree-parent {
+  padding: 8px 12px;
+  font-weight: 500;
+  font-size: 13px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background var(--transition);
+}
+.tree-parent:hover { background: var(--bg); }
+.tree-parent .arrow { font-size: 10px; color: var(--muted); transition: transform var(--transition); }
+.tree-parent.expanded .arrow { transform: rotate(90deg); }
+.tree-children { padding-left: 24px; }
+.tree-child {
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--muted);
+  transition: background var(--transition), color var(--transition), margin var(--transition);
+}
+.tree-child:hover { background: var(--bg); color: var(--text); }
+.tree-child.active { background: var(--bg); color: var(--text); font-weight: 500; }
+
+/* Drag and Drop */
+.tree-child.dragging { opacity: 0.5; cursor: grabbing; }
+.tree-child.drop-before { margin-top: 10px; position: relative; }
+.tree-child.drop-before::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--indigo);
+  border-radius: 1px;
+}
+.tree-child.drop-after { margin-bottom: 10px; position: relative; }
+.tree-child.drop-after::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--indigo);
+  border-radius: 1px;
+}
+.tree-group.drag-over .tree-children {
+  background: rgba(91, 110, 199, 0.05);
+  border-radius: 0;
+  outline: 2px dashed rgba(91, 110, 199, 0.3);
+  outline-offset: 2px;
+}
+
+/* Center Content */
+.center-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  background: var(--surface);
+  margin: 8px 0 8px 0;
+  border: 1px solid var(--border);
+}
+
+/* Top Tabs */
+.top-bar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  display: flex;
+  align-items: stretch;
+  height: 44px;
+  flex-shrink: 0;
+}
+.top-tab {
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color var(--transition), border-color var(--transition);
+  display: flex;
+  align-items: center;
+}
+.top-tab:hover { color: var(--text); }
+.top-tab.active { color: var(--text); border-bottom-color: var(--coral); }
+.top-tab.new-session-btn {
+  height: 32px;
+  border: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface);
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), border-color var(--transition);
+}
+.top-tab.new-session-btn:hover { background: var(--bg); border-color: #D0CDC8; }
+
+/* Breadcrumb */
+.breadcrumb {
+  padding: 12px 24px;
+  font-size: 13px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.breadcrumb span { color: var(--text); font-weight: 500; }
+
+/* Views */
+.view { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+.view.active { display: flex; }
+
+/* Sessions Table */
+.sessions-table-wrap { flex: 1; overflow-y: auto; padding: 24px; }
+.sessions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.sessions-table th {
+  text-align: left;
+  padding: 8px 12px;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid var(--border);
+}
+.sessions-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.sessions-table tr:hover td { background: var(--bg); }
+
+/* Pill Badge */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 0;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid;
+}
+.pill-running { border-color: var(--indigo); color: var(--indigo); }
+.pill-idle { border-color: var(--border); color: var(--muted); }
+.pill-complete { border-color: #7BAF6E; color: #5A8A4E; }
+.pill-waiting { border-color: var(--coral); color: var(--coral); }
+
+/* Conversation View */
+.conversation-wrap { flex: 1; overflow-y: auto; padding: 0; display: flex; flex-direction: column; position: relative; }
+.msg {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  border-left: 3px solid transparent;
+  transition: background var(--transition), border-left-color var(--transition);
+}
+.msg-actions {
+  position: absolute;
+  top: 8px;
+  right: 40px;
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+.msg:hover .msg-actions { display: flex; }
+.msg:hover {
+  background: rgba(91, 110, 199, 0.03);
+  border-left-color: var(--indigo);
+}
+.msg-action-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  position: relative;
+}
+.msg-action-btn:hover {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--text);
+}
+.msg-action-btn .msg-action-tooltip {
+  display: none;
+  position: fixed;
+  background: var(--text);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 0;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 9999;
+  pointer-events: none;
+}
+.msg-action-btn .msg-action-tooltip kbd {
+  display: inline;
+  padding: 1px 4px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  margin-left: 6px;
+}
+.msg-action-btn:hover .msg-action-tooltip { /* controlled by JS */ }
+.msg-avatar {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  margin-top: 2px;
+}
+.msg-avatar.user { color: var(--text); }
+.msg-avatar.agent { color: var(--indigo); }
+.msg-avatar.thinking { color: var(--muted); }
+.msg-body { flex: 1; min-width: 0; }
+.msg-time {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 3px;
+  position: relative;
+  cursor: default;
+}
+.msg-time .msg-time-rel { display: inline; }
+.msg-time .msg-time-abs { display: none; position: absolute; right: 0; top: -28px; background: var(--text); color: white; padding: 4px 10px; font-size: 11px; font-weight: 500; white-space: nowrap; z-index: 100; pointer-events: none; }
+.msg-time:hover .msg-time-abs { display: block; }
+.msg-text { line-height: 1.6; }
+.msg-thinking { color: var(--muted); font-style: italic; font-size: 13px; }
+
+/* Tool Block */
+.tool-block {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: 8px;
+  overflow: hidden;
+}
+.tool-header {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--mono);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+.tool-header:hover { color: var(--text); }
+.tool-body {
+  display: none;
+  padding: 8px 12px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  white-space: pre-wrap;
+}
+.tool-block.open .tool-body { display: block; }
+
+/* Input Area */
+.input-area {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 16px 24px;
+  flex-shrink: 0;
+}
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.input-field {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font);
+  font-size: 14px;
+  outline: none;
+  transition: border-color var(--transition);
+}
+.input-field:focus { border-color: var(--indigo); }
+.send-btn {
+  height: 32px;
+  padding: 0 14px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), border-color var(--transition);
+}
+.send-btn:hover { background: var(--bg); border-color: #D0CDC8; }
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: #7BAF6E; }
+.status-badge {
+  padding: 1px 8px;
+  border-radius: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  position: relative;
+  transition: background var(--transition), border-color var(--transition);
+}
+.status-badge:hover { background: var(--surface); border-color: #D0CDC8; }
+
+/* Model Selector Dropdown */
+.model-selector {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 6px;
+  width: 200px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  z-index: 9999;
+  overflow: hidden;
+  flex-direction: column;
+}
+.model-selector.open { display: flex; }
+.model-selector-filter {
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font);
+  font-size: 12px;
+  outline: none;
+  background: var(--bg);
+}
+.model-selector-filter::placeholder { color: var(--muted); }
+.model-selector-list {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.model-selector-item {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  border-radius: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background var(--transition);
+}
+.model-selector-item:hover { background: var(--bg); }
+.model-selector-item.active { color: var(--indigo); }
+.model-selector-item.active::before {
+  content: '●';
+  font-size: 8px;
+  color: var(--indigo);
+}
+
+/* Right Panel — Split View */
+.right-panel {
+  width: 420px;
+  min-width: 200px;
+  max-width: 50%;
+  background: var(--surface);
+  border-left: none;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+  margin: 8px 8px 8px 0;
+  border: 1px solid var(--border);
+}
+
+/* Resize Handle — gap between panels */
+.resize-gutter {
+  width: 8px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  transition: background var(--transition);
+  margin: 8px 0;
+}
+.resize-gutter:hover,
+.resize-gutter.dragging {
+  background: rgba(91, 110, 199, 0.15);
+}
+.right-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+}
+.right-tab {
+  padding: 12px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color var(--transition);
+}
+.right-tab:hover { color: var(--text); }
+.right-tab.active { color: var(--text); border-bottom-color: var(--coral); }
+.right-content { flex: 1; overflow-y: auto; padding: 16px; }
+.right-view { display: none; }
+.right-view.active { display: block; }
+
+/* Artifacts */
+.artifact-stats {
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.artifact-stats .count { font-weight: 600; }
+.artifact-stats .count-new { color: #7BAF6E; }
+.artifact-stats .count-edit { color: var(--indigo); }
+.artifact-stats .count-src { color: var(--muted); }
+
+.artifact-list {
+  flex: 1;
+  overflow-y: auto;
+}
+.artifact-section { padding: 12px 16px 0; }
+.artifact-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.artifact-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: var(--mono);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.artifact-item:hover { background: var(--bg); }
+.artifact-item.selected { background: var(--bg); border: 1px solid var(--border); }
+.artifact-icon { font-size: 14px; color: var(--muted); flex-shrink: 0; }
+.artifact-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artifact-badge { font-size: 11px; color: var(--muted); font-family: var(--font); }
+.artifact-dot { width: 6px; height: 6px; border-radius: 50%; }
+.dot-new { background: #7BAF6E; }
+.dot-modified { background: var(--indigo); }
+.dot-source { background: var(--muted); }
+
+/* Viewer Toolbar */
+.viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.viewer-back {
+  width: 28px; height: 28px;
+  border-radius: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.viewer-back:hover { background: var(--bg); border-color: var(--border); color: var(--text); }
+.viewer-file-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+.viewer-file-select:hover { border-color: var(--indigo); }
+.viewer-shortcut {
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: 4px;
+}
+.viewer-filename {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.viewer-mode-toggle {
+  display: flex;
+  margin-left: auto;
+}
+.viewer-mode {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color var(--transition);
+}
+.viewer-mode.active { color: var(--text); }
+.viewer-mode:hover { color: var(--text); }
+.viewer-actions {
+  display: flex;
+  gap: 2px;
+}
+
+/* Viewer Content */
+.viewer-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  min-height: 0;
+}
+.rendered-markdown {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+}
+.rendered-markdown h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--coral);
+  margin: 16px 0 12px;
+}
+.rendered-markdown h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 20px 0 8px;
+}
+.rendered-markdown ol, .rendered-markdown ul {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+.rendered-markdown code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 0;
+  border: 1px solid var(--border);
+}
+.viewer-raw-content {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+  margin: 0;
+}
+.viewer-html-frame {
+  flex: 1;
+  min-height: 0;
+  background: white;
+}
+
+/* Inline Comments / Annotations */
+.rendered-markdown li {
+  position: relative;
+  cursor: pointer;
+  padding: 4px 6px;
+  margin-left: -6px;
+  border-radius: 0;
+  transition: background var(--transition);
+}
+.rendered-markdown li:hover {
+  background: rgba(91, 110, 199, 0.06);
+}
+.rendered-markdown li.has-comment {
+  background: rgba(212, 160, 50, 0.08);
+  border-left: 2px solid #D4A032;
+  padding-left: 10px;
+}
+.comment-badge {
+  position: absolute;
+  right: -4px;
+  top: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--coral);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+/* Comment popover */
+.comment-popover {
+  position: absolute;
+  right: 20px;
+  top: 0;
+  width: 260px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  z-index: 50;
+  padding: 12px;
+  display: none;
+}
+.comment-popover.open { display: block; }
+.comment-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.comment-popover-header span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.comment-popover-header .draft-label {
+  font-weight: 400;
+  color: var(--muted);
+  font-style: italic;
+}
+.comment-popover-close {
+  width: 20px; height: 20px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.comment-popover-close:hover { background: var(--bg); border-color: var(--border); color: var(--text); }
+.comment-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 8px 10px;
+  font-family: var(--font);
+  font-size: 13px;
+  resize: none;
+  outline: none;
+  min-height: 48px;
+  transition: border-color var(--transition);
+}
+.comment-input:focus { border-color: var(--indigo); }
+.comment-submit {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+.comment-submit button {
+  width: 24px; height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.comment-submit button:hover { color: var(--indigo); background: var(--bg); }
+
+/* Queued comments badge in conversation input */
+.queued-badge {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--coral);
+  cursor: pointer;
+  position: relative;
+  transition: background var(--transition), border-color var(--transition);
+}
+.queued-badge:hover { background: var(--bg); border-color: #D0CDC8; }
+.queued-badge i { width: 14px; height: 14px; }
+.queued-badge .queued-count { font-weight: 600; }
+
+/* Queued dropdown */
+.queued-dropdown {
+  display: none;
+  position: fixed;
+  width: 280px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  z-index: 9999;
+  overflow: hidden;
+}
+.queued-dropdown.open { display: block; }
+.queued-dropdown-header {
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+.queued-dropdown-list {
+  max-height: 160px;
+  overflow-y: auto;
+}
+.queued-dropdown-item {
+  padding: 8px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.queued-dropdown-item .q-file {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.queued-dropdown-item .q-text {
+  color: var(--text);
+}
+.queued-dropdown-actions {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.queued-dropdown-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-family: var(--font);
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: 0;
+  transition: background var(--transition), border-color var(--transition);
+  width: 100%;
+  text-align: left;
+}
+.queued-dropdown-action:hover { background: var(--bg); border-color: var(--border); }
+.queued-dropdown-action i { width: 14px; height: 14px; color: var(--muted); }
+
+/* Artifact Preview */
+.artifact-preview {
+  border-top: 1px solid var(--border);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.preview-header {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text);
+}
+.preview-header .file-path { font-family: var(--mono); color: var(--muted); }
+.preview-actions {
+  display: flex;
+  gap: 4px;
+}
+.preview-action {
+  width: 24px; height: 24px;
+  border-radius: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.preview-action:hover { background: var(--bg); border-color: var(--border); color: var(--text); }
+.preview-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text);
+  background: var(--bg);
+}
+.preview-body .line-num {
+  display: inline-block;
+  width: 28px;
+  text-align: right;
+  margin-right: 16px;
+  color: var(--border);
+  user-select: none;
+}
+.preview-body .keyword { color: var(--indigo); }
+.preview-body .string { color: #B07B23; }
+.preview-body .comment { color: var(--muted); font-style: italic; }
+.preview-body .type { color: var(--coral); }
+
+/* Todos */
+.todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.todo-check {
+  width: 16px;
+  height: 16px;
+  border-radius: 0;
+  border: 1.5px solid var(--border);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.todo-check.done { background: var(--indigo); border-color: var(--indigo); }
+
+/* Icon Toolbar */
+.icon-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.icon-toolbar-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  position: relative;
+}
+.icon-toolbar-btn:hover {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--indigo);
+}
+.icon-toolbar-btn .icon-default { display: flex; }
+.icon-toolbar-btn .icon-hover { display: none; }
+.icon-toolbar-btn:hover .icon-default { display: none; }
+.icon-toolbar-btn:hover .icon-hover { display: flex; }
+
+/* Tooltip */
+.icon-toolbar-btn .tooltip {
+  display: none;
+  position: absolute;
+  bottom: -32px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 0;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 100;
+  pointer-events: none;
+}
+.icon-toolbar-btn .tooltip kbd {
+  display: inline;
+  padding: 1px 4px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  margin-left: 6px;
+}
+.icon-toolbar-btn:hover .tooltip { display: block; }
+
+/* Artifact Pill */
+.artifact-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: default;
+  border: 1px solid var(--border);
+  position: relative;
+}
+.artifact-pill i {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+/* Artifact Pill Dropdown */
+.artifact-pill-dropdown {
+  display: none;
+  position: fixed;
+  width: 260px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  z-index: 9999;
+  overflow: hidden;
+  flex-direction: column;
+}
+.artifact-pill-dropdown.open {
+  display: flex;
+}
+.artifact-pill-dropdown-header {
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+}
+.artifact-pill-dropdown-section {
+  padding: 8px 12px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  background: var(--bg);
+}
+.artifact-pill-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--transition);
+  border-bottom: 1px solid transparent;
+}
+.artifact-pill-dropdown-item:hover {
+  background: var(--bg);
+}
+.artifact-pill-dropdown-item i {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.artifact-pill-dropdown-item .item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.artifact-pill-dropdown-item .item-version {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: var(--font);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.artifact-pill-dropdown-item .item-version i {
+  width: 10px;
+  height: 10px;
+}
+
+/* Message icons (Lucide-based) */
+.msg-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--muted);
+}
+.msg-icon.user { color: var(--text); }
+.msg-icon.agent { color: var(--indigo); }
+.msg-icon.thinking { color: var(--muted); }
+
+/* Settings View */
+.settings-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+.settings-nav {
+  width: 180px;
+  padding: 24px 16px;
+  border-right: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+.settings-nav-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--coral);
+  margin-bottom: 12px;
+}
+.settings-nav-section {
+  margin-bottom: 16px;
+}
+.settings-nav-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  margin-bottom: 6px;
+  margin-top: 16px;
+}
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 0;
+  cursor: pointer;
+  color: var(--text);
+  transition: background var(--transition);
+}
+.settings-nav-item:hover { background: var(--bg); }
+.settings-nav-item.active { color: var(--coral); font-weight: 500; background: var(--bg); }
+.settings-nav-item .nav-num {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 48px;
+}
+.settings-breadcrumb {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.settings-page-title {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 32px;
+}
+.settings-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+}
+.settings-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 20px;
+}
+.settings-field {
+  margin-bottom: 24px;
+}
+.settings-field-label {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.settings-field-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+.settings-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--transition);
+  background: var(--surface);
+}
+.settings-input:focus { border-color: var(--indigo); }
+.settings-select {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  font-family: var(--font);
+  font-size: 13px;
+  outline: none;
+  background: var(--surface);
+  cursor: pointer;
+  min-width: 140px;
+}
+.settings-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--border);
+  cursor: pointer;
+  transition: background var(--transition);
+  flex-shrink: 0;
+}
+.settings-toggle.on { background: var(--indigo); }
+.settings-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  transition: transform var(--transition);
+}
+.settings-toggle.on::after { transform: translateX(16px); }
+.settings-field-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.settings-field-row .settings-field-text { flex: 1; }
+.settings-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+.settings-slider {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border);
+  border-radius: 0;
+  outline: none;
+}
+.settings-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--indigo);
+  cursor: pointer;
+}
+.settings-slider-value {
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--muted);
+  min-width: 32px;
+  text-align: right;
+}
+
+/* New Session Form */
+.new-session-form {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 32px 48px;
+}
+.new-session-breadcrumb {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 24px;
+}
+.new-session-field {
+  margin-bottom: 24px;
+}
+.new-session-label {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.new-session-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.new-session-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--transition);
+  background: var(--surface);
+}
+.new-session-input:focus { border-color: var(--indigo); }
+.new-session-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  font-family: var(--font);
+  font-size: 13px;
+  outline: none;
+  resize: vertical;
+  min-height: 100px;
+  transition: border-color var(--transition);
+  background: var(--surface);
+}
+.new-session-textarea:focus { border-color: var(--indigo); }
+
+/* Source Toggle */
+.source-toggle {
+  display: flex;
+  gap: 0;
+  border-radius: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  width: fit-content;
+}
+.source-toggle-btn {
+  padding: 8px 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border: none;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+  border-right: 1px solid var(--border);
+}
+.source-toggle-btn:last-child { border-right: none; }
+.source-toggle-btn.active {
+  background: var(--indigo);
+  color: white;
+}
+.source-toggle-btn:hover:not(.active) {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Form Footer */
+.new-session-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+.btn-cancel {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--surface);
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background var(--transition), border-color var(--transition);
+}
+.btn-cancel:hover { background: var(--bg); border-color: #D0CDC8; }
+.btn-cancel kbd {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  padding: 1px 4px;
+  background: var(--bg);
+  border-radius: 0;
+}
+.btn-create {
+  padding: 8px 20px;
+  border: 1px solid var(--indigo);
+  border-radius: 0;
+  background: var(--indigo);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background var(--transition), border-color var(--transition);
+}
+.btn-create:hover { background: #4a5db6; border-color: #4a5db6; }
+.btn-create kbd {
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.7;
+  padding: 1px 4px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 0;
+}
+
+/* Rich Tool Calls */
+.tool-call {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: 8px;
+  padding: 10px 12px;
+}
+.tool-call-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.tool-call-header .tool-label {
+  font-weight: 600;
+  color: var(--text);
+}
+.tool-call-header .tool-detail {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-call-header .tool-action {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color var(--transition);
+}
+.tool-call-header .tool-action:hover { color: var(--text); }
+.tool-call-preview {
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.tool-call-code {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-x: auto;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.tool-call-code .line {
+  display: flex;
+  white-space: pre;
+}
+.tool-call-code .line-num {
+  width: 28px;
+  text-align: right;
+  color: var(--muted);
+  user-select: none;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+.tool-call-code .line-add {
+  color: #7BAF6E;
+}
+.tool-call-code .line-content {
+  color: var(--text);
+}
+.tool-call-pattern {
+  display: inline-block;
+  padding: 2px 10px;
+  background: rgba(91, 110, 199, 0.08);
+  border: 1px solid rgba(91, 110, 199, 0.25);
+  border-radius: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--indigo);
+}
+
+/* Mermaid Diagram */
+.tool-call-diagram {
+  margin-top: 8px;
+  position: relative;
+}
+.tool-call-diagram .diagram-expand {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition), border-color var(--transition);
+  z-index: 10;
+}
+.tool-call-diagram .diagram-expand:hover { color: var(--text); border-color: var(--text); }
+.tool-call-diagram .mermaid {
+  background: white;
+  padding: 16px;
+  border: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+/* Hotkey Bar */
+.hotkey-bar {
+  height: 32px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.hotkey-bar kbd {
+  display: inline-flex;
+  padding: 1px 5px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  margin-right: 4px;
+}
+
+/* File Picker */
+.file-picker-wrap {
+  position: relative;
+  width: 100%;
+}
+.file-picker-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  z-index: 9999;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.file-picker-dropdown.open { display: block; }
+.file-picker-section {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.file-picker-section:last-child { border-bottom: none; }
+.file-picker-section-label {
+  padding: 6px 12px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+.file-picker-item {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: background var(--transition);
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+}
+.file-picker-item:hover { background: var(--bg); }
+.file-picker-item-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.file-picker-item-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-picker-highlight {
+  color: var(--indigo);
+  font-weight: 600;
+}
+
+/* Automations View */
+.automations-wrap {
+  padding: 32px 48px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+.automations-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+}
+.automations-title {
+  font-size: 22px;
+  font-weight: 600;
+}
+.automation-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 20px;
+  margin-bottom: 12px;
+}
+.automation-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.automation-card-name {
+  font-weight: 600;
+  font-size: 14px;
+  flex: 1;
+}
+.automation-card-status {
+  margin-left: 12px;
+}
+.automation-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: 12px;
+}
+.automation-action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.automation-action-btn:hover {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
+}
+.automation-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.automation-detail-row {
+  display: flex;
+  align-items: flex-start;
+}
+.automation-detail-label {
+  font-weight: 500;
+  color: var(--muted);
+  min-width: 80px;
+  display: inline-block;
+}
+.automation-detail-value {
+  color: var(--text);
+  flex: 1;
+}
+.automation-detail-value code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 0;
+  border: 1px solid var(--border);
+}
+
+/* Automation Form */
+.automation-form { max-width: 600px; }
+.automation-form-title { font-size: 22px; font-weight: 600; margin-bottom: 32px; }
+.automation-form-group { margin-bottom: 24px; }
+.automation-form-label { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.automation-form-desc { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+.automation-form-input {
+  width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 0;
+  font-family: var(--font); font-size: 13px; outline: none; background: var(--surface);
+  transition: border-color var(--transition);
+}
+.automation-form-input:focus { border-color: var(--indigo); }
+.automation-form-input--mono { font-family: var(--mono); }
+.automation-form-textarea {
+  width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: 0;
+  font-family: var(--font); font-size: 13px; outline: none; resize: vertical; min-height: 80px;
+  background: var(--surface); transition: border-color var(--transition);
+}
+.automation-form-textarea:focus { border-color: var(--indigo); }
+.automation-form-select {
+  padding: 10px 14px; border: 1px solid var(--border); border-radius: 0;
+  font-family: var(--font); font-size: 13px; outline: none; background: var(--surface);
+  cursor: pointer; min-width: 180px;
+}
+.automation-form-section { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border); }
+.automation-form-section-title { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 20px; }
+.automation-form-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.automation-form-footer { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Icon Rail -->
+  <nav class="icon-rail">
+    <button class="icon-rail-btn active" title="Sessions" data-nav="sessions"><i data-lucide="messages-square" style="width:18px;height:18px;"></i></button>
+    <button class="icon-rail-btn" title="Board" data-nav="board"><i data-lucide="kanban" style="width:18px;height:18px;"></i></button>
+    <button class="icon-rail-btn" title="Analytics" data-nav="analytics"><i data-lucide="bar-chart-3" style="width:18px;height:18px;"></i></button>
+    <button class="icon-rail-btn" title="Automations" data-nav="automations"><i data-lucide="zap" style="width:18px;height:18px;"></i></button>
+    <button class="icon-rail-btn" title="Settings" style="margin-top:auto;" data-nav="settings"><i data-lucide="settings" style="width:18px;height:18px;"></i></button>
+  </nav>
+
+  <!-- Context Panel -->
+  <aside class="context-panel">
+    <div class="context-header">Sessions</div>
+    <div class="session-tree">
+      <div class="tree-group">
+        <div class="tree-parent expanded"><span class="arrow">&#9654;</span> Implement auth middleware</div>
+        <div class="tree-children">
+          <div class="tree-child active" draggable="true">shuttle / auth-layer</div>
+          <div class="tree-child" draggable="true">pattern / token-validation</div>
+        </div>
+      </div>
+      <div class="tree-group">
+        <div class="tree-parent expanded"><span class="arrow">&#9654;</span> Refactor database layer</div>
+        <div class="tree-children">
+          <div class="tree-child" draggable="true">shuttle / migration-runner</div>
+          <div class="tree-child" draggable="true">pattern / schema-diff</div>
+        </div>
+      </div>
+      <div class="tree-group">
+        <div class="tree-parent"><span class="arrow">&#9654;</span> Add WebSocket support</div>
+        <div class="tree-children">
+          <div class="tree-child" draggable="true">shuttle / ws-handler</div>
+        </div>
+      </div>
+      <div class="tree-group">
+        <div class="tree-parent"><span class="arrow">&#9654;</span> CLI error formatting</div>
+        <div class="tree-children">
+          <div class="tree-child" draggable="true">pattern / pretty-errors</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Center Content -->
+  <main class="center-content">
+    <!-- Top Tabs -->
+    <div class="top-bar">
+      <button class="top-tab active" data-view="conversation">Conversation</button>
+      <button class="top-tab" data-view="settings" style="display:none;">Settings</button>
+      <button class="top-tab" data-view="board" style="display:none;">Board</button>
+      <button class="top-tab" data-view="analytics" style="display:none;">Analytics</button>
+      <button class="top-tab" data-view="automations" style="display:none;">Automations</button>
+      <button class="top-tab new-session-btn" data-view="newsession" style="margin-left:auto;">+ New Session</button>
+    </div>
+
+    <!-- Sessions View -->
+    <div class="view" id="view-sessions">
+      <div class="sessions-table-wrap">
+        <table class="sessions-table">
+          <thead>
+            <tr><th>Name</th><th>Status</th><th>Agent</th><th>Created</th><th>Updated</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-weight:500">Implement auth middleware</td>
+              <td><span class="pill pill-running">running</span></td>
+              <td>shuttle</td>
+              <td>Jul 28, 10:04</td>
+              <td>2m ago</td>
+            </tr>
+            <tr>
+              <td style="font-weight:500">Refactor database layer</td>
+              <td><span class="pill pill-waiting">waiting</span></td>
+              <td>pattern</td>
+              <td>Jul 28, 09:32</td>
+              <td>14m ago</td>
+            </tr>
+            <tr>
+              <td style="font-weight:500">Add WebSocket support</td>
+              <td><span class="pill pill-running">running</span></td>
+              <td>shuttle</td>
+              <td>Jul 28, 08:55</td>
+              <td>5m ago</td>
+            </tr>
+            <tr>
+              <td style="font-weight:500">CLI error formatting</td>
+              <td><span class="pill pill-complete">complete</span></td>
+              <td>pattern</td>
+              <td>Jul 27, 16:20</td>
+              <td>18h ago</td>
+            </tr>
+            <tr>
+              <td style="font-weight:500">Token validation edge cases</td>
+              <td><span class="pill pill-idle">idle</span></td>
+              <td>shuttle</td>
+              <td>Jul 27, 14:10</td>
+              <td>20h ago</td>
+            </tr>
+            <tr>
+              <td style="font-weight:500">Rate limiter configuration</td>
+              <td><span class="pill pill-complete">complete</span></td>
+              <td>pattern</td>
+              <td>Jul 27, 11:48</td>
+              <td>22h ago</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Conversation View -->
+    <div class="view active" id="view-conversation">
+      <div class="breadcrumb" style="display:flex;align-items:center;justify-content:space-between;">
+        <div>Sessions &rsaquo; Implement auth middleware &rsaquo; <span>shuttle / auth-layer</span></div>
+        <div class="icon-toolbar">
+          <button class="icon-toolbar-btn">
+            <span class="icon-default"><i data-lucide="copy" style="width:16px;height:16px;"></i></span>
+            <span class="icon-hover"><i data-lucide="copy-check" style="width:16px;height:16px;"></i></span>
+            <span class="tooltip">Copy path</span>
+          </button>
+          <button class="icon-toolbar-btn">
+            <span class="icon-default"><i data-lucide="folder-closed" style="width:16px;height:16px;"></i></span>
+            <span class="icon-hover"><i data-lucide="folder-open" style="width:16px;height:16px;"></i></span>
+            <span class="tooltip">Open in explorer <kbd>&#8984;&#8679;O</kbd></span>
+          </button>
+          <button class="icon-toolbar-btn">
+            <span class="icon-default"><i data-lucide="columns-2" style="width:16px;height:16px;"></i></span>
+            <span class="icon-hover"><i data-lucide="columns-2" style="width:16px;height:16px;"></i></span>
+            <span class="tooltip">Split view</span>
+          </button>
+          <button class="icon-toolbar-btn">
+            <span class="icon-default"><i data-lucide="external-link" style="width:16px;height:16px;"></i></span>
+            <span class="icon-hover"><i data-lucide="external-link" style="width:16px;height:16px;"></i></span>
+            <span class="tooltip">Open in editor <kbd>&#8984;&#8679;O</kbd></span>
+          </button>
+          <span class="artifact-pill" id="artifact-pill">
+            <span id="artifact-pill-text">sample-prototype.html</span>
+          </span>
+        </div>
+      </div>
+      <div class="conversation-wrap">
+        <div class="msg">
+          <i data-lucide="user" class="msg-icon user"></i>
+          <div class="msg-body">
+            <div class="msg-text">Add JWT validation middleware that checks the Authorization header, validates the token signature, and extracts claims into the request context.</div>
+          </div>
+          <span class="msg-time"><span class="msg-time-rel">3m</span><span class="msg-time-abs">Jul 28 2026 10:04am</span></span>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="brain" class="msg-icon thinking"></i>
+          <div class="msg-body">
+            <div class="msg-thinking">Analyzing the existing middleware chain and authentication setup...</div>
+          </div>
+          <span class="msg-time"><span class="msg-time-rel">3m</span><span class="msg-time-abs">Jul 28 2026 10:04am</span></span>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="bot" class="msg-icon agent"></i>
+          <div class="msg-body">
+            <div class="msg-text">I'll create the JWT middleware. First, let me check what dependencies are already available for token verification.</div>
+            <div class="tool-block">
+              <div class="tool-header" onclick="this.parentElement.classList.toggle('open')">&#9654; grep &mdash; "jsonwebtoken" in package.json</div>
+              <div class="tool-body">Found: "jsonwebtoken": "^9.0.0" in dependencies
+Found: "@types/jsonwebtoken": "^9.0.5" in devDependencies</div>
+            </div>
+            <div class="tool-block">
+              <div class="tool-header" onclick="this.parentElement.classList.toggle('open')">&#9654; read &mdash; src/middleware/index.ts</div>
+              <div class="tool-body">export { rateLimiter } from './rate-limiter';
+export { requestLogger } from './logger';
+// auth middleware will slot in here</div>
+            </div>
+          </div>
+          <span class="msg-time"><span class="msg-time-rel">2m</span><span class="msg-time-abs">Jul 28 2026 10:05am</span></span>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="bot" class="msg-icon agent"></i>
+          <div class="msg-body">
+            <div class="msg-text">I've created the auth middleware at <code>src/middleware/auth.ts</code>. It validates the Bearer token, verifies the signature using the configured public key, and attaches decoded claims to <code>req.context.user</code>. The middleware gracefully returns 401 for missing tokens and 403 for invalid signatures.</div>
+          </div>
+          <span class="msg-time"><span class="msg-time-rel">1m</span><span class="msg-time-abs">Jul 28 2026 10:06am</span></span>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="bot" class="msg-icon agent"></i>
+          <div class="msg-body">
+            <div class="msg-text">Let me check the final answer template structure.</div>
+            <div class="tool-call">
+              <div class="tool-call-header">
+                <i data-lucide="file-text" style="width:16px;height:16px;color:var(--muted);"></i>
+                <span class="tool-label">Read</span>
+                <span class="tool-detail">.humanlayer/templates/final-answer.md</span>
+                <button class="tool-action"><i data-lucide="external-link" style="width:14px;height:14px;"></i></button>
+              </div>
+              <div class="tool-call-preview">└ 1 ### Next Steps ... (16 lines)</div>
+            </div>
+          </div>
+          <span class="msg-time"><span class="msg-time-rel">1m</span><span class="msg-time-abs">Jul 28 2026 10:06am</span></span>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="bot" class="msg-icon agent"></i>
+          <div class="msg-body">
+            <div class="msg-text">I'll use Glob to find all JavaScript files in the project.</div>
+            <div class="tool-call">
+              <div class="tool-call-header">
+                <i data-lucide="search" style="width:16px;height:16px;color:var(--muted);"></i>
+                <span class="tool-label">Glob</span>
+                <span class="tool-call-pattern">**/*.js</span>
+              </div>
+              <div class="tool-call-preview">└ 1 file: No files found</div>
+            </div>
+          </div>
+          <span class="msg-time"><span class="msg-time-rel">1m</span><span class="msg-time-abs">Jul 28 2026 10:06am</span></span>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="bot" class="msg-icon agent"></i>
+          <div class="msg-body">
+            <div class="msg-text">I need to load the dataviz skill for creating visual representations.</div>
+            <div class="tool-call">
+              <div class="tool-call-header">
+                <i data-lucide="layers" style="width:16px;height:16px;color:var(--muted);"></i>
+                <span class="tool-label">Skill</span>
+                <span class="tool-detail">skill: "dataviz"</span>
+              </div>
+              <div class="tool-call-preview">Launching skill: dataviz</div>
+            </div>
+          </div>
+          <span class="msg-time"><span class="msg-time-rel">&lt;1m</span><span class="msg-time-abs">Jul 28 2026 10:07am</span></span>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="bot" class="msg-icon agent"></i>
+          <div class="msg-body">
+            <div class="msg-text">Creating a sample prototype HTML file to demonstrate the dashboard layout.</div>
+            <div class="tool-call">
+              <div class="tool-call-header">
+                <i data-lucide="pencil" style="width:16px;height:16px;color:var(--muted);"></i>
+                <span class="tool-label">Write</span>
+                <span class="tool-detail">Create new file .humanlayer/tasks/sample-prototype.html</span>
+                <button class="tool-action"><i data-lucide="external-link" style="width:14px;height:14px;"></i></button>
+              </div>
+              <div class="tool-call-code">
+                <div class="line"><span class="line-num">1</span><span class="line-add">+</span><span class="line-content">&lt;!DOCTYPE html&gt;</span></div>
+                <div class="line"><span class="line-num">2</span><span class="line-add">+</span><span class="line-content">&lt;html lang="en"&gt;</span></div>
+                <div class="line"><span class="line-num">3</span><span class="line-add">+</span><span class="line-content">&lt;head&gt;</span></div>
+                <div class="line"><span class="line-num">4</span><span class="line-add">+</span><span class="line-content">  &lt;meta charset="UTF-8"&gt;</span></div>
+                <div class="line"><span class="line-num">5</span><span class="line-add">+</span><span class="line-content">  &lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;</span></div>
+                <div class="line"><span class="line-num">6</span><span class="line-add">+</span><span class="line-content">  &lt;title&gt;Dashboard Prototype&lt;/title&gt;</span></div>
+                <div class="line"><span class="line-num">7</span><span class="line-add">+</span><span class="line-content">  &lt;style&gt;</span></div>
+                <div class="line"><span class="line-num">8</span><span class="line-add">+</span><span class="line-content">    body { font-family: system-ui, sans-serif; margin: 0; padding: 24px; }</span></div>
+                <div class="line"><span class="line-num">9</span><span class="line-add">+</span><span class="line-content">    .card { background: white; border: 1px solid #e5e7eb; padding: 16px; }</span></div>
+                <div class="line"><span class="line-num">10</span><span class="line-add">+</span><span class="line-content">  &lt;/style&gt;</span></div>
+              </div>
+            </div>
+          </div>
+          <span class="msg-time"><span class="msg-time-rel">&lt;1m</span><span class="msg-time-abs">Jul 28 2026 10:08am</span></span>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="bot" class="msg-icon agent"></i>
+          <div class="msg-body">
+            <div class="msg-text">Here's a sequence diagram showing the e-commerce order flow:</div>
+            <div class="tool-call">
+              <div class="tool-call-diagram">
+                <button class="diagram-expand"><i data-lucide="maximize-2" style="width:14px;height:14px;"></i></button>
+                <div class="mermaid">
+sequenceDiagram
+    actor User
+    participant Browser as Web Browser
+    participant API as API Server
+    participant DB as Database
+    participant PG as Payment Gateway
+    participant Email as Email Service
+    User->>Browser: Click "Place Order"
+    Browser->>API: POST /orders (user_id, items)
+    API->>DB: Create order record
+    DB-->>API: order_id
+    API->>API: Calculate total
+    API->>PG: POST /charge (amount, card_token)
+    PG-->>API: payment_id, status: success
+    API->>DB: Update order status to "paid"
+    DB-->>API: ✓
+    API->>Email: Send confirmation (user_email, order_id)
+    Email-->>API: ✓
+    API-->>Browser: 200 OK (order_id, status)
+                </div>
+              </div>
+            </div>
+          </div>
+          <span class="msg-time"><span class="msg-time-rel">just now</span><span class="msg-time-abs">Jul 28 2026 10:09am</span></span>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
+        </div>
+
+        <div class="msg">
+          <i data-lucide="user" class="msg-icon user"></i>
+          <div class="msg-body">
+            <div class="msg-text">Looks good. Can you also add support for token refresh via a custom header?</div>
+          </div>
+          <span class="msg-time"><span class="msg-time-rel">just now</span><span class="msg-time-abs">Jul 28 2026 10:07am</span></span>
+          <div class="msg-actions">
+            <button class="msg-action-btn"><i data-lucide="copy" style="width:13px;height:13px;"></i><span class="msg-action-tooltip">Copy message <kbd>&#8984;C</kbd></span></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="input-area">
+        <div class="input-row">
+          <input class="input-field" type="text" placeholder="Send a message...">
+          <span class="queued-badge" id="queued-badge" title="1 queued comment — click to send to agent">
+            <i data-lucide="message-square" style="width:14px;height:14px;"></i>
+            <span class="queued-count">1</span>
+            <kbd style="font-family:var(--mono);font-size:10px;background:rgba(217,90,58,0.1);border:none;padding:1px 4px;border-radius: 0;">&#8679;C</kbd>
+            <!-- Dropdown -->
+            <div class="queued-dropdown" id="queued-dropdown">
+              <div class="queued-dropdown-header">Queued Comments</div>
+              <div class="queued-dropdown-list" id="queued-list">
+                <div class="queued-dropdown-item">
+                  <span class="q-file">01-research-questions.md #2</span>
+                  <span class="q-text">What is this?</span>
+                </div>
+              </div>
+              <div class="queued-dropdown-actions">
+                <button class="queued-dropdown-action" onclick="sendComments(false)">
+                  <i data-lucide="send" style="width:14px;height:14px;"></i>
+                  Send Comments to Agent
+                </button>
+                <button class="queued-dropdown-action" onclick="sendComments(true)">
+                  <i data-lucide="send" style="width:14px;height:14px;"></i>
+                  Send Comments to Agent &amp; Resolve
+                  <span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted);">&#10003;</span>
+                </button>
+              </div>
+            </div>
+          </span>
+          <button class="send-btn">Send</button>
+        </div>
+        <div class="status-bar">
+          <span class="status-dot"></span>
+          <span>IDLE</span>
+          <span class="status-badge" id="model-badge" onclick="toggleModelSelector(event)">claude-opus-4
+            <div class="model-selector" id="model-selector">
+              <input class="model-selector-filter" type="text" placeholder="Filter models..." oninput="filterModels(this.value)" onclick="event.stopPropagation()">
+              <div class="model-selector-list" id="model-list"></div>
+            </div>
+          </span>
+          <span>4,218 tokens</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Board View (placeholder) -->
+    <div class="view" id="view-board">
+      <div style="padding:48px 24px;color:var(--muted);text-align:center;">
+        <p style="font-size:16px;font-weight:500;margin-bottom:8px;">Board View</p>
+        <p>Kanban layout for session states. Coming soon.</p>
+      </div>
+    </div>
+
+    <!-- Analytics View (placeholder) -->
+    <div class="view" id="view-analytics">
+      <div style="padding:48px 24px;color:var(--muted);text-align:center;">
+        <p style="font-size:16px;font-weight:500;margin-bottom:8px;">Analytics</p>
+        <p>Token spend, session duration, agent utilization. Coming soon.</p>
+      </div>
+    </div>
+
+    <!-- Automations View -->
+    <div class="view" id="view-automations">
+      <div class="automations-wrap">
+        <div class="automations-header">
+          <div class="automations-title">Automations</div>
+          <button class="btn-create">New Automation</button>
+        </div>
+
+        <!-- Automation Card 1 -->
+        <div class="automation-card">
+          <div class="automation-card-header">
+            <div class="automation-card-name">Daily code review digest</div>
+            <div class="automation-card-status">
+              <span class="pill pill-complete">Enabled</span>
+            </div>
+            <div class="automation-actions">
+              <button class="automation-action-btn" title="Run now">
+                <i data-lucide="play" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Pause">
+                <i data-lucide="pause" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Edit">
+                <i data-lucide="pencil" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Delete">
+                <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+              </button>
+            </div>
+          </div>
+          <div class="automation-card-details">
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Prompt:</span>
+              <span class="automation-detail-value">Generate a summary of all code reviews from the past 24 hours and send to #engineering</span>
+            </div>
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Trigger:</span>
+              <span class="automation-detail-value">Schedule: <code>0 9 * * 1-5</code> (9 AM weekdays)</span>
+            </div>
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Policy:</span>
+              <span class="automation-detail-value">Max 1 concurrent, 5/hour, 30min timeout</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Automation Card 2 -->
+        <div class="automation-card">
+          <div class="automation-card-header">
+            <div class="automation-card-name">PR merge cleanup</div>
+            <div class="automation-card-status">
+              <span class="pill pill-complete">Enabled</span>
+            </div>
+            <div class="automation-actions">
+              <button class="automation-action-btn" title="Run now">
+                <i data-lucide="play" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Pause">
+                <i data-lucide="pause" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Edit">
+                <i data-lucide="pencil" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Delete">
+                <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+              </button>
+            </div>
+          </div>
+          <div class="automation-card-details">
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Prompt:</span>
+              <span class="automation-detail-value">Delete merged branch, update related issues, notify team in Slack</span>
+            </div>
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Trigger:</span>
+              <span class="automation-detail-value">Event: <code>pull_request.merged</code></span>
+            </div>
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Policy:</span>
+              <span class="automation-detail-value">Max 3 concurrent, 20/hour, 15min timeout</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Automation Card 3 -->
+        <div class="automation-card">
+          <div class="automation-card-header">
+            <div class="automation-card-name">Stale branch reminder</div>
+            <div class="automation-card-status">
+              <span class="pill pill-idle">Disabled</span>
+            </div>
+            <div class="automation-actions">
+              <button class="automation-action-btn" title="Run now">
+                <i data-lucide="play" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Enable">
+                <i data-lucide="play-circle" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Edit">
+                <i data-lucide="pencil" style="width:14px;height:14px;"></i>
+              </button>
+              <button class="automation-action-btn" title="Delete">
+                <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+              </button>
+            </div>
+          </div>
+          <div class="automation-card-details">
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Prompt:</span>
+              <span class="automation-detail-value">Find branches with no commits in 30+ days, notify owners, suggest archival</span>
+            </div>
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Trigger:</span>
+              <span class="automation-detail-value">Schedule: <code>0 8 * * 1</code> (8 AM Mondays)</span>
+            </div>
+            <div class="automation-detail-row">
+              <span class="automation-detail-label">Policy:</span>
+              <span class="automation-detail-value">Max 1 concurrent, 2/hour, 10min timeout</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- New Automation Form -->
+      <div class="automations-wrap automation-form" id="automation-form-state" style="display:none;">
+        <div class="automation-form-title">New Automation</div>
+
+        <div class="automation-form-group">
+          <div class="automation-form-label">Name</div>
+          <input class="automation-form-input" type="text" placeholder="e.g., Daily standup reminder">
+        </div>
+
+        <div class="automation-form-group">
+          <div class="automation-form-label">Prompt</div>
+          <textarea class="automation-form-textarea" placeholder="Describe what this automation should do when triggered..."></textarea>
+          <div class="automation-form-desc">The instruction given to the agent when this automation fires.</div>
+        </div>
+
+        <div class="automation-form-section">
+          <div class="automation-form-section-title">Trigger</div>
+
+          <div class="automation-form-group">
+            <div class="automation-form-label">Type</div>
+            <div class="source-toggle" id="trigger-type-toggle">
+              <button class="source-toggle-btn active">Schedule</button>
+              <button class="source-toggle-btn">Event</button>
+            </div>
+          </div>
+
+          <div id="trigger-schedule-fields">
+            <div class="automation-form-group">
+              <div class="automation-form-label">Cron Expression</div>
+              <input class="automation-form-input automation-form-input--mono" type="text" placeholder="0 9 * * 1-5">
+              <div class="automation-form-desc">Minute Hour Day Month Weekday — e.g., <code style="font-family:var(--mono);font-size:12px;background:var(--bg);padding:2px 6px;border:1px solid var(--border);">0 9 * * 1-5</code> runs at 9 AM on weekdays</div>
+            </div>
+          </div>
+
+          <div id="trigger-event-fields" style="display:none;">
+            <div class="automation-form-group">
+              <div class="automation-form-label">Event Name</div>
+              <select class="automation-form-select">
+                <option value="" disabled selected>Select an event...</option>
+                <option>pull_request.opened</option>
+                <option>pull_request.merged</option>
+                <option>push</option>
+                <option>issue.created</option>
+                <option>issue.closed</option>
+                <option>comment.created</option>
+                <option>deployment.completed</option>
+              </select>
+            </div>
+
+            <div class="automation-form-group">
+              <div class="automation-form-label">Target</div>
+              <div class="source-toggle">
+                <button class="source-toggle-btn active">Act on source</button>
+                <button class="source-toggle-btn">Create new item</button>
+              </div>
+              <div class="automation-form-desc">Whether to act on the item that triggered the event, or create a new work item.</div>
+            </div>
+
+            <div class="automation-form-group">
+              <div class="automation-form-label">Filter (optional)</div>
+              <input class="automation-form-input automation-form-input--mono" type="text" placeholder='e.g., { "label": "bug" }'>
+              <div class="automation-form-desc">JSON filter expression to narrow which events trigger this automation.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="automation-form-section">
+          <div class="automation-form-section-title">Run Policy</div>
+          <div class="automation-form-row">
+            <div class="automation-form-group">
+              <div class="automation-form-label">Max Concurrent</div>
+              <input class="automation-form-input" type="number" value="1" min="1">
+            </div>
+            <div class="automation-form-group">
+              <div class="automation-form-label">Max per Hour</div>
+              <input class="automation-form-input" type="number" value="10" min="1">
+            </div>
+            <div class="automation-form-group">
+              <div class="automation-form-label">Timeout (min)</div>
+              <input class="automation-form-input" type="number" value="30" min="1">
+            </div>
+          </div>
+        </div>
+
+        <div class="automation-form-footer">
+          <button class="btn-cancel" id="automation-form-cancel">Cancel <kbd>ESC</kbd></button>
+          <button class="btn-create" id="automation-form-submit">Create Automation <kbd>&#8984;&#8629;</kbd></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings View -->
+    <div class="view" id="view-settings">
+      <div class="settings-layout">
+        <nav class="settings-nav">
+          <div style="margin-bottom:16px;">
+            <button class="btn-cancel" id="settings-back" style="font-size:12px;padding:6px 12px;">
+              <i data-lucide="chevron-left" style="width:14px;height:14px;"></i> Back to app <kbd>ESC</kbd>
+            </button>
+          </div>
+          <div class="settings-nav-title">Settings</div>
+          <div class="settings-nav-section">
+            <div class="settings-nav-item active">General <span class="nav-num">1</span></div>
+            <div class="settings-nav-item">Agent <span class="nav-num">2</span></div>
+            <div class="settings-nav-item">Models <span class="nav-num">3</span></div>
+            <div class="settings-nav-item">Keybindings <span class="nav-num">4</span></div>
+          </div>
+          <div class="settings-nav-section-label">Account</div>
+          <div class="settings-nav-section">
+            <div class="settings-nav-item">Profile <span class="nav-num">5</span></div>
+            <div class="settings-nav-item">API Keys <span class="nav-num">6</span></div>
+          </div>
+          <div class="settings-nav-section-label">System</div>
+          <div class="settings-nav-section">
+            <div class="settings-nav-item">Connections <span class="nav-num">7</span></div>
+            <div class="settings-nav-item">Plugins <span class="nav-num">8</span></div>
+            <div class="settings-nav-item">Diagnostics <span class="nav-num">9</span></div>
+            <div class="settings-nav-item">Updates <span class="nav-num">10</span></div>
+          </div>
+        </nav>
+        <div class="settings-content">
+          <div class="settings-breadcrumb">Weave Fleet &rsaquo; Settings &rsaquo; General</div>
+          <div class="settings-page-title">General</div>
+          <div class="settings-columns">
+            <div class="settings-col">
+              <div class="settings-group-title">Defaults</div>
+
+              <div class="settings-field">
+                <div class="settings-field-label">Default Editor</div>
+                <div class="settings-field-desc">Set your default editor for opening session directories. Use &#8984;&#8997;O to quickly open the current session's directory.</div>
+                <select class="settings-select">
+                  <option>VS Code</option>
+                  <option>Cursor</option>
+                  <option>Zed</option>
+                  <option>Vim</option>
+                </select>
+              </div>
+
+              <div class="settings-field">
+                <div class="settings-field-label">Default Directory</div>
+                <div class="settings-field-desc">Default working directory for new tasks and one-off sessions.</div>
+                <div class="file-picker-wrap">
+                  <input class="settings-input" id="settings-directory-input" type="text" value="~/">
+                </div>
+              </div>
+
+              <div class="settings-field">
+                <div class="settings-field-label">Default Session View</div>
+                <div class="settings-field-desc">Choose whether default navigation opens the session list or the board view.</div>
+                <select class="settings-select">
+                  <option>Sessions</option>
+                  <option>Board</option>
+                  <option>Kanban</option>
+                </select>
+              </div>
+
+              <div class="settings-field">
+                <div class="settings-field-row">
+                  <div class="settings-field-text">
+                    <div class="settings-field-label">Batch Queue Delivery</div>
+                    <div class="settings-field-desc">Send all queued messages together as soon as the session is ready. Turn off to send them one at a time.</div>
+                  </div>
+                  <div class="settings-toggle on" onclick="this.classList.toggle('on')"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-col">
+              <div class="settings-group-title">Display &amp; Interaction</div>
+
+              <div class="settings-field">
+                <div class="settings-field-row">
+                  <div class="settings-field-text">
+                    <div class="settings-field-label">Show Agent Streaming</div>
+                    <div class="settings-field-desc">Show assistant output while it is still being generated. Turn off to only show completed messages.</div>
+                  </div>
+                  <div class="settings-toggle on" onclick="this.classList.toggle('on')"></div>
+                </div>
+              </div>
+
+              <div class="settings-field">
+                <div class="settings-field-row">
+                  <div class="settings-field-text">
+                    <div class="settings-field-label">Session Costs</div>
+                    <div class="settings-field-desc">Show session costs in the status bar next to the context gauge.</div>
+                  </div>
+                  <div class="settings-toggle" onclick="this.classList.toggle('on')"></div>
+                </div>
+              </div>
+
+              <div class="settings-field">
+                <div class="settings-field-row">
+                  <div class="settings-field-text">
+                    <div class="settings-field-label">Notification Sounds</div>
+                    <div class="settings-field-desc">Play a sound when a session needs your input or approval.</div>
+                  </div>
+                  <div class="settings-toggle on" onclick="this.classList.toggle('on')"></div>
+                </div>
+                <div class="settings-slider-row">
+                  <span style="font-size:12px;color:var(--muted);">Volume</span>
+                  <input type="range" class="settings-slider" min="0" max="100" value="20">
+                  <span class="settings-slider-value">20%</span>
+                </div>
+              </div>
+
+              <div class="settings-field">
+                <div class="settings-field-row">
+                  <div class="settings-field-text">
+                    <div class="settings-field-label">Split Diff View</div>
+                    <div class="settings-field-desc">Show code diffs in a side-by-side split view instead of inline.</div>
+                  </div>
+                  <div class="settings-toggle" onclick="this.classList.toggle('on')"></div>
+                </div>
+              </div>
+
+              <div class="settings-field">
+                <div class="settings-field-label">Zoom Level</div>
+                <div class="settings-field-desc">Adjust the interface zoom level.</div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <button style="width:28px;height:28px;border:1px solid var(--border);border-radius: 0;background:var(--surface);cursor:pointer;font-size:14px;">-</button>
+                  <span style="font-family:var(--mono);font-size:13px;min-width:36px;text-align:center;">100%</span>
+                  <button style="width:28px;height:28px;border:1px solid var(--border);border-radius: 0;background:var(--surface);cursor:pointer;font-size:14px;">+</button>
+                  <i data-lucide="lock" style="width:14px;height:14px;color:var(--muted);margin-left:4px;"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- New Session View -->
+    <div class="view" id="view-newsession">
+      <div class="new-session-form">
+        <div class="new-session-breadcrumb">Sessions &rsaquo; New</div>
+
+        <div class="new-session-field">
+          <div class="new-session-label">Directory</div>
+          <div class="file-picker-wrap">
+            <input class="new-session-input" id="newsession-directory-input" type="text" value="~/">
+          </div>
+          <div class="new-session-desc">The repository or directory you want to work out of for this session.</div>
+        </div>
+
+        <div class="new-session-field">
+          <div class="new-session-label">Project</div>
+          <div class="file-picker-wrap">
+            <input class="new-session-input" id="newsession-project-input" type="text" placeholder="Select or create a project...">
+          </div>
+          <div class="new-session-desc">Optional: associate this session with a project for organization and tracking.</div>
+        </div>
+
+        <div class="new-session-field">
+          <div class="new-session-label">Issue Source</div>
+          <div class="source-toggle">
+            <button class="source-toggle-btn active">Inline</button>
+            <button class="source-toggle-btn">Linear</button>
+            <button class="source-toggle-btn">Jira</button>
+            <button class="source-toggle-btn">GitHub</button>
+          </div>
+          <div class="new-session-desc">Describe the task directly</div>
+        </div>
+
+        <div class="new-session-field">
+          <textarea class="new-session-textarea" placeholder="Describe what you want to build..."></textarea>
+        </div>
+
+        <div class="new-session-field">
+          <div class="new-session-label">Name</div>
+          <input class="new-session-input" type="text" placeholder="Session name...">
+        </div>
+
+        <div class="new-session-field">
+          <div class="new-session-label">Agent</div>
+          <div class="source-toggle">
+            <button class="source-toggle-btn active">shuttle</button>
+            <button class="source-toggle-btn">pattern</button>
+            <button class="source-toggle-btn">thread</button>
+          </div>
+          <div class="new-session-desc">Choose which agent to assign this session to.</div>
+        </div>
+
+        <div class="new-session-field">
+          <div class="new-session-label">Model</div>
+          <select class="settings-select" style="width:100%;">
+            <option>claude-opus-4</option>
+            <option>claude-sonnet-4</option>
+            <option>claude-haiku-4</option>
+          </select>
+        </div>
+
+        <div class="new-session-footer">
+          <button class="btn-cancel">Cancel <kbd>ESC</kbd></button>
+          <button class="btn-create">Create Session <kbd>&#8984;&#8629;</kbd></button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Resize Gutter -->
+  <div class="resize-gutter" id="resize-gutter"></div>
+
+  <!-- Right Panel — Split View -->
+  <aside class="right-panel" id="right-panel">
+    <div class="right-tabs">
+      <button class="right-tab active" data-right="artifacts">Artifacts</button>
+      <button class="right-tab" data-right="info">Info</button>
+    </div>
+    <div class="right-content" style="display:flex;flex-direction:column;padding:0;">
+      <div class="right-view active" id="right-artifacts" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+        <!-- State 1: File list -->
+        <div class="artifacts-list-state" id="artifacts-list-state">
+          <!-- Stats row -->
+          <div class="artifact-stats">
+            <span class="count count-new">2</span> new &middot;
+            <span class="count count-edit">2</span> edit &middot;
+            <span class="count count-src">2</span> source
+          </div>
+          <!-- File list -->
+          <div class="artifact-list">
+            <div class="artifact-section">
+              <div class="artifact-label">New (2)</div>
+              <div class="artifact-item" data-file="auth" data-type="code">
+                <span class="artifact-dot dot-new"></span>
+                <i data-lucide="file-code" style="width:14px;height:14px;color:var(--muted);flex-shrink:0;"></i>
+                <span class="artifact-name">src/middleware/auth.ts</span>
+                <span class="artifact-badge">42 lines</span>
+              </div>
+              <div class="artifact-item" data-file="research" data-type="markdown">
+                <span class="artifact-dot dot-new"></span>
+                <i data-lucide="file-text" style="width:14px;height:14px;color:var(--muted);flex-shrink:0;"></i>
+                <span class="artifact-name">01-research-questions.md</span>
+                <span class="artifact-badge">16 lines</span>
+              </div>
+            </div>
+            <div class="artifact-section">
+              <div class="artifact-label">Modified (2)</div>
+              <div class="artifact-item" data-file="index" data-type="code">
+                <span class="artifact-dot dot-modified"></span>
+                <i data-lucide="file-code" style="width:14px;height:14px;color:var(--muted);flex-shrink:0;"></i>
+                <span class="artifact-name">src/middleware/index.ts</span>
+                <span class="artifact-badge">+1 -0</span>
+              </div>
+              <div class="artifact-item" data-file="types" data-type="code">
+                <span class="artifact-dot dot-modified"></span>
+                <i data-lucide="file-code" style="width:14px;height:14px;color:var(--muted);flex-shrink:0;"></i>
+                <span class="artifact-name">src/types/request.ts</span>
+                <span class="artifact-badge">+8 -1</span>
+              </div>
+            </div>
+            <div class="artifact-section">
+              <div class="artifact-label">Source (1)</div>
+              <div class="artifact-item" data-file="ticket" data-type="markdown">
+                <span class="artifact-dot dot-source"></span>
+                <i data-lucide="file-text" style="width:14px;height:14px;color:var(--muted);flex-shrink:0;"></i>
+                <span class="artifact-name">ticket.md</span>
+                <span class="artifact-badge">read</span>
+              </div>
+              <div class="artifact-item" data-file="dashboard" data-type="html">
+                <span class="artifact-dot dot-new"></span>
+                <i data-lucide="globe" style="width:14px;height:14px;color:var(--muted);flex-shrink:0;"></i>
+                <span class="artifact-name">sample-prototype.html</span>
+                <span class="artifact-badge">256 lines</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- State 2: Document viewer -->
+        <div class="artifacts-viewer-state" id="artifacts-viewer-state" style="display:none;flex:1;flex-direction:column;min-height:0;">
+          <!-- Viewer toolbar -->
+          <div class="viewer-toolbar">
+            <button class="viewer-back" id="viewer-back">
+              <i data-lucide="chevron-left" style="width:16px;height:16px;"></i>
+            </button>
+            <div class="viewer-file-select" id="viewer-file-select" style="position:relative;cursor:pointer;">
+              <i data-lucide="file-text" style="width:14px;height:14px;color:var(--muted);"></i>
+              <span class="viewer-filename" id="viewer-filename">01-research-quest...</span>
+              <span class="viewer-shortcut">&#8997;A</span>
+              <i data-lucide="chevron-down" style="width:12px;height:12px;color:var(--muted);"></i>
+              <div class="artifact-pill-dropdown" id="artifact-pill-dropdown">
+                <div class="artifact-pill-dropdown-header">1 src · 0 edit · 2 new</div>
+                <div class="artifact-pill-dropdown-section">NEW (2)</div>
+                <div class="artifact-pill-dropdown-item" data-artifact="dashboard">
+                  <i data-lucide="globe"></i>
+                  <span class="item-name">sample-prototype.html</span>
+                  <span class="item-version"><i data-lucide="layers"></i>0</span>
+                </div>
+                <div class="artifact-pill-dropdown-item" data-artifact="research">
+                  <i data-lucide="file-text"></i>
+                  <span class="item-name">01-research-questions-repos...</span>
+                  <span class="item-version"><i data-lucide="layers"></i>1</span>
+                </div>
+                <div class="artifact-pill-dropdown-section">SOURCE (1)</div>
+                <div class="artifact-pill-dropdown-item" data-artifact="ticket">
+                  <i data-lucide="file-text"></i>
+                  <span class="item-name">ticket.md</span>
+                  <span class="item-version"><i data-lucide="layers"></i>0</span>
+                </div>
+              </div>
+            </div>
+            <div class="viewer-mode-toggle">
+              <button class="viewer-mode active" data-mode="rendered">RENDERED</button>
+              <button class="viewer-mode" data-mode="raw">RAW</button>
+            </div>
+            <div class="viewer-actions">
+              <button class="preview-action"><i data-lucide="search" style="width:14px;height:14px;"></i></button>
+              <button class="preview-action"><i data-lucide="copy" style="width:14px;height:14px;"></i></button>
+              <button class="preview-action"><i data-lucide="columns-2" style="width:14px;height:14px;"></i></button>
+              <button class="preview-action"><i data-lucide="external-link" style="width:14px;height:14px;"></i></button>
+              <button class="preview-action"><i data-lucide="maximize-2" style="width:14px;height:14px;"></i></button>
+            </div>
+          </div>
+          <!-- Rendered view -->
+          <div class="viewer-content" id="viewer-rendered">
+            <div class="rendered-markdown">
+              <details>
+                <summary style="font-size:12px;color:var(--muted);cursor:pointer;">frontmatter (1)</summary>
+                <pre style="font-size:12px;color:var(--muted);padding:8px 0;">type: research-questions</pre>
+              </details>
+              <h1>Research Questions</h1>
+              <ol>
+                <li class="commentable">What is the overall purpose and intended use of this repository, and what problem does it solve or what capability does it provide?</li>
+                <li class="commentable has-comment">What are the complete project dependencies, external libraries, and NuGet packages currently referenced, and what does each one do?
+                  <span class="comment-badge">PG</span>
+                  <div class="comment-popover" id="comment-popover-1">
+                    <div class="comment-popover-header">
+                      <span>Pieter Germishuys <span class="draft-label">draft saved</span></span>
+                      <button class="comment-popover-close" onclick="this.closest('.comment-popover').classList.remove('open')">&times;</button>
+                    </div>
+                    <textarea class="comment-input" placeholder="Add comment...">What is this?</textarea>
+                    <div class="comment-submit">
+                      <button title="Send"><i data-lucide="send" style="width:14px;height:14px;"></i></button>
+                    </div>
+                  </div>
+                </li>
+                <li class="commentable">How is the .NET 10 console application configured, what are the build and runtime settings, and what platform targets are defined?</li>
+                <li class="commentable">What is the current state of the codebase in terms of source files, modules, and entry points, and what does each component do?</li>
+                <li class="commentable">What is the structure and organization of the repository directory hierarchy, including any test projects, configuration directories, or build artifacts?</li>
+                <li class="commentable">What version control setup exists (git history, remotes, branching strategy), and how is the project initialized?</li>
+                <li class="commentable">What documentation, README files, or inline code comments exist that explain how to build, run, and use this application?</li>
+              </ol>
+              <h2>Key Context Pointers</h2>
+              <ul>
+                <li class="commentable" style="color:var(--coral);">Filepath: <code>/Users/pgermishuys/source/research/agents/console-app/</code> — .NET console application directory <span class="comment-badge">PG</span></li>
+                <li class="commentable">Configuration file: <code>console-app/console-app.csproj</code> — MSBuild project configuration</li>
+                <li class="commentable">Entry point: <code>console-app/Program.cs</code> — main application file</li>
+                <li class="commentable">Technology: .NET 10, C#, console executable</li>
+              </ul>
+            </div>
+          </div>
+          <!-- Raw view -->
+          <div class="viewer-content" id="viewer-raw" style="display:none;">
+            <pre class="viewer-raw-content">---
+type: research-questions
+---
+
+# Research Questions
+
+1. What is the overall purpose and intended use of this repository, and what problem does it solve or what capability does it provide?
+2. What are the complete project dependencies, external libraries, and NuGet packages currently referenced, and what does each one do?
+3. How is the .NET 10 console application configured, what are the build and runtime settings, and what platform targets are defined?
+4. What is the current state of the codebase in terms of source files, modules, and entry points, and what does each component do?
+5. What is the structure and organization of the repository directory hierarchy, including any test projects, configuration directories, or build artifacts?
+6. What version control setup exists (git history, remotes, branching strategy), and how is the project initialized?
+7. What documentation, README files, or inline code comments exist that explain how to build, run, and use this application?
+
+## Key Context Pointers
+
+- Filepath: `/Users/pgermishuys/source/research/agents/console-app/` — .NET console application directory
+- Configuration file: `console-app/console-app.csproj` — MSBuild project configuration
+- Entry point: `console-app/Program.cs` — main application file
+- Technology: .NET 10, C#, console executable</pre>
+          </div>
+          <!-- HTML rendered view (iframe sandbox) -->
+          <div class="viewer-content viewer-html-frame" id="viewer-html" style="display:none;padding:0;">
+            <iframe id="html-preview-iframe" sandbox="allow-scripts" style="width:100%;height:100%;border:none;"></iframe>
+          </div>
+        </div>
+      </div>
+      <div class="right-view" id="right-info" style="padding:16px;">
+        <div style="font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:12px;">
+          <div><strong style="color:var(--text)">Session</strong><br>shuttle / auth-layer</div>
+          <div><strong style="color:var(--text)">Task</strong><br>Implement auth middleware</div>
+          <div><strong style="color:var(--text)">Agent</strong><br>shuttle</div>
+          <div><strong style="color:var(--text)">Model</strong><br>claude-opus-4</div>
+          <div><strong style="color:var(--text)">Started</strong><br>Jul 28, 10:04 AM</div>
+          <div><strong style="color:var(--text)">Tokens</strong><br>4,218 in / 1,842 out</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- Hotkey Bar -->
+<div class="hotkey-bar">
+  <span><kbd>Ctrl</kbd><kbd>N</kbd> New session</span>
+  <span><kbd>Ctrl</kbd><kbd>K</kbd> Command</span>
+  <span><kbd>Ctrl</kbd><kbd>Enter</kbd> Send</span>
+  <span><kbd>Ctrl</kbd><kbd>.</kbd> Approve</span>
+  <span><kbd>Esc</kbd> Cancel</span>
+</div>
+
+<script>
+// Top tab switching
+document.querySelectorAll('.top-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.top-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('view-' + tab.dataset.view).classList.add('active');
+
+    // Settings/new-session mode: hide context panel + right panel + gutter
+    const view = tab.dataset.view;
+    const contextPanel = document.querySelector('.context-panel');
+    const rightPanel = document.getElementById('right-panel');
+    const gutter = document.getElementById('resize-gutter');
+    const topBar = document.querySelector('.top-bar');
+
+    if (view === 'settings' || view === 'board' || view === 'analytics' || view === 'automations') {
+      contextPanel.style.display = 'none';
+      rightPanel.style.display = 'none';
+      gutter.style.display = 'none';
+      topBar.style.display = 'none';
+    } else {
+      contextPanel.style.display = '';
+      rightPanel.style.display = '';
+      gutter.style.display = '';
+      topBar.style.display = '';
+    }
+  });
+});
+
+// Right panel tab switching
+document.querySelectorAll('.right-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.right-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.right-view').forEach(v => v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('right-' + tab.dataset.right).classList.add('active');
+  });
+});
+
+// Tree toggle
+document.querySelectorAll('.tree-parent').forEach(parent => {
+  parent.addEventListener('click', () => {
+    parent.classList.toggle('expanded');
+    const children = parent.nextElementSibling;
+    if (children) children.style.display = parent.classList.contains('expanded') ? 'block' : 'none';
+  });
+});
+
+// Icon rail nav
+document.querySelectorAll('.icon-rail-btn[data-nav]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.icon-rail-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const view = btn.dataset.nav;
+    const tab = document.querySelector(`.top-tab[data-view="${view}"]`);
+    if (tab) tab.click();
+  });
+});
+
+// Artifact item selection — open viewer
+const sampleHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;background:#f8f9fa;padding:32px}
+h1{font-size:28px;margin-bottom:4px}p.sub{color:#666;margin-bottom:24px}
+.stats{display:flex;gap:16px;margin-bottom:24px}.stat{flex:1;background:white;border:1px solid #e5e7eb;border-radius: 0;padding:16px}
+.stat-label{font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.5px}.stat-value{font-size:28px;font-weight:700;margin-top:4px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card{background:white;border-radius: 0;overflow:hidden;border:1px solid #e5e7eb}
+.card-img{height:120px}.card-img:nth-child(1){background:linear-gradient(135deg,#a78bfa,#6366f1)}
+.card-body{padding:16px}.card-title{font-weight:600;margin-bottom:4px}.card-desc{font-size:13px;color:#666;margin-bottom:12px}
+.card-footer{display:flex;justify-content:space-between;align-items:center}.price{font-weight:700}
+.btn{background:#6366f1;color:white;border:none;padding:6px 12px;border-radius: 0;font-size:12px;cursor:pointer}
+footer{margin-top:24px;text-align:center;color:#888;font-size:13px;padding:16px;background:white;border-radius: 0;border:1px solid #e5e7eb}
+</style></head><body>
+<h1>Product Dashboard</h1><p class="sub">Browse and manage your product catalog</p>
+<div class="stats"><div class="stat"><div class="stat-label">Total Products</div><div class="stat-value">1,247</div></div>
+<div class="stat"><div class="stat-label">Active Orders</div><div class="stat-value">342</div></div>
+<div class="stat"><div class="stat-label">Revenue (Today)</div><div class="stat-value">$8,429</div></div></div>
+<div class="grid">
+<div class="card"><div class="card-img" style="background:linear-gradient(135deg,#a78bfa,#6366f1)"></div><div class="card-body"><div class="card-title">Wireless Headphones</div><div class="card-desc">Premium noise-cancelling audio experience with 30-hour battery life.</div><div class="card-footer"><span class="price">$199.99</span><button class="btn">Add to Cart</button></div></div></div>
+<div class="card"><div class="card-img" style="background:linear-gradient(135deg,#67e8f9,#06b6d4)"></div><div class="card-body"><div class="card-title">Smart Watch</div><div class="card-desc">Track your fitness and stay connected with advanced health monitoring.</div><div class="card-footer"><span class="price">$299.99</span><button class="btn">Add to Cart</button></div></div></div>
+<div class="card"><div class="card-img" style="background:linear-gradient(135deg,#86efac,#22c55e)"></div><div class="card-body"><div class="card-title">Portable Charger</div><div class="card-desc">Fast charging for all your devices with compact design. Up to 20,000 mAh.</div><div class="card-footer"><span class="price">$49.99</span><button class="btn">Add to Cart</button></div></div></div>
+</div>
+<footer>&copy; 2024 Product Dashboard. All rights reserved.</footer>
+</body></html>`;
+
+document.querySelectorAll('.artifact-item[data-file]').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.artifact-item').forEach(i => i.classList.remove('selected'));
+    item.classList.add('selected');
+    const name = item.querySelector('.artifact-name').textContent;
+    const type = item.dataset.type;
+    document.getElementById('viewer-filename').textContent = name;
+    document.getElementById('artifacts-list-state').style.display = 'none';
+    const viewer = document.getElementById('artifacts-viewer-state');
+    viewer.style.display = 'flex';
+
+    // Show appropriate content based on type
+    const rendered = document.getElementById('viewer-rendered');
+    const raw = document.getElementById('viewer-raw');
+    const html = document.getElementById('viewer-html');
+    rendered.style.display = 'none';
+    raw.style.display = 'none';
+    html.style.display = 'none';
+
+    // Reset mode toggle
+    document.querySelectorAll('.viewer-mode').forEach(b => b.classList.remove('active'));
+    document.querySelector('.viewer-mode[data-mode="rendered"]').classList.add('active');
+
+    if (type === 'html') {
+      html.style.display = 'block';
+      const iframe = document.getElementById('html-preview-iframe');
+      iframe.srcdoc = sampleHtml;
+    } else {
+      rendered.style.display = 'block';
+    }
+
+    lucide.createIcons();
+  });
+});
+
+// Viewer back button
+document.getElementById('viewer-back').addEventListener('click', () => {
+  document.getElementById('artifacts-viewer-state').style.display = 'none';
+  document.getElementById('artifacts-list-state').style.display = 'block';
+});
+
+// RENDERED / RAW toggle
+document.querySelectorAll('.viewer-mode').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.viewer-mode').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const mode = btn.dataset.mode;
+    const rendered = document.getElementById('viewer-rendered');
+    const raw = document.getElementById('viewer-raw');
+    const html = document.getElementById('viewer-html');
+
+    // Determine current artifact type
+    const selected = document.querySelector('.artifact-item.selected');
+    const type = selected ? selected.dataset.type : 'markdown';
+
+    rendered.style.display = 'none';
+    raw.style.display = 'none';
+    html.style.display = 'none';
+
+    if (mode === 'rendered') {
+      if (type === 'html') html.style.display = 'block';
+      else rendered.style.display = 'block';
+    } else {
+      raw.style.display = 'block';
+    }
+  });
+});
+
+// Resize gutter drag
+const gutter = document.getElementById('resize-gutter');
+const panel = document.getElementById('right-panel');
+let dragging = false;
+
+gutter.addEventListener('mousedown', (e) => {
+  dragging = true;
+  gutter.classList.add('dragging');
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  e.preventDefault();
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!dragging) return;
+  const app = document.querySelector('.app');
+  const appRect = app.getBoundingClientRect();
+  const newWidth = appRect.right - e.clientX - 8;
+  const maxWidth = appRect.width * 0.5;
+  const minWidth = 200;
+  panel.style.width = Math.max(minWidth, Math.min(maxWidth, newWidth)) + 'px';
+});
+
+document.addEventListener('mouseup', () => {
+  if (dragging) {
+    dragging = false;
+    gutter.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+});
+
+// Comment badge click — toggle popover
+document.querySelectorAll('.comment-badge').forEach(badge => {
+  badge.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const popover = badge.nextElementSibling;
+    if (popover && popover.classList.contains('comment-popover')) {
+      popover.classList.toggle('open');
+    }
+  });
+});
+
+// Commentable items — click to open inline comment box
+document.querySelectorAll('.commentable').forEach(item => {
+  item.addEventListener('click', (e) => {
+    // Don't trigger if clicking on badge or inside popover
+    if (e.target.closest('.comment-badge') || e.target.closest('.comment-popover')) return;
+
+    // Close any other open popovers
+    document.querySelectorAll('.comment-popover.open').forEach(p => p.classList.remove('open'));
+
+    // Check if this item already has a popover
+    let popover = item.querySelector('.comment-popover');
+    if (popover) {
+      popover.classList.toggle('open');
+    } else {
+      // Create a new comment popover
+      item.style.position = 'relative';
+      const newPopover = document.createElement('div');
+      newPopover.className = 'comment-popover open';
+      newPopover.innerHTML = `
+        <div class="comment-popover-header">
+          <span>Pieter Germishuys</span>
+          <button class="comment-popover-close" onclick="this.closest('.comment-popover').classList.remove('open')">&times;</button>
+        </div>
+        <textarea class="comment-input" placeholder="Add comment..."></textarea>
+        <div class="comment-submit">
+          <button title="Send" onclick="submitComment(this)"><i data-lucide="send" style="width:14px;height:14px;"></i></button>
+        </div>
+      `;
+      item.appendChild(newPopover);
+      newPopover.querySelector('.comment-input').focus();
+      lucide.createIcons();
+    }
+  });
+});
+
+// Submit comment — mark item, update queued count, add to queue list
+function submitComment(btn) {
+  const popover = btn.closest('.comment-popover');
+  const item = popover.closest('.commentable');
+  const text = popover.querySelector('.comment-input').value;
+  if (!text.trim()) return;
+
+  // Mark as having comment
+  item.classList.add('has-comment');
+  if (!item.querySelector('.comment-badge')) {
+    const badge = document.createElement('span');
+    badge.className = 'comment-badge';
+    badge.textContent = 'PG';
+    badge.addEventListener('click', (e) => {
+      e.stopPropagation();
+      popover.classList.toggle('open');
+    });
+    item.insertBefore(badge, popover);
+  }
+  const header = popover.querySelector('.comment-popover-header span');
+  header.innerHTML = 'Pieter Germishuys <span class="draft-label">draft saved</span>';
+  popover.classList.remove('open');
+
+  // Add to queued list
+  const list = document.getElementById('queued-list');
+  const filename = document.getElementById('viewer-filename').textContent;
+  const itemIndex = Array.from(item.closest('ol, ul').children).indexOf(item) + 1;
+  const entry = document.createElement('div');
+  entry.className = 'queued-dropdown-item';
+  entry.innerHTML = `<span class="q-file">${filename} #${itemIndex}</span><span class="q-text">${text}</span>`;
+  list.appendChild(entry);
+
+  // Update count
+  const count = list.children.length;
+  document.querySelector('.queued-count').textContent = count;
+}
+
+// Queued badge click — toggle dropdown
+document.getElementById('queued-badge').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const dropdown = document.getElementById('queued-dropdown');
+  dropdown.classList.toggle('open');
+  if (dropdown.classList.contains('open')) {
+    const rect = document.getElementById('queued-badge').getBoundingClientRect();
+    dropdown.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+    dropdown.style.left = rect.left + 'px';
+  }
+});
+
+// Close dropdown on outside click
+document.addEventListener('click', () => {
+  document.getElementById('queued-dropdown').classList.remove('open');
+});
+
+// Send comments action
+function sendComments(resolve) {
+  document.getElementById('queued-dropdown').classList.remove('open');
+  // In a real app this would send to the agent
+  alert(resolve ? 'Comments sent to agent & resolved' : 'Comments sent to agent');
+}
+
+// Model Selector
+const ALL_MODELS = [
+  'claude-opus-4', 'claude-opus-4.8', 'claude-opus-4.7', 'claude-opus-4.6', 'claude-opus-4.5',
+  'claude-sonnet-5', 'claude-sonnet-4.6', 'claude-sonnet-4',
+  'claude-haiku-4.5', 'claude-haiku-4',
+  'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo',
+  'gemini-2.5-pro', 'gemini-2.5-flash',
+  'deepseek-r1', 'deepseek-v3'
+];
+let currentModel = 'claude-opus-4';
+
+function renderModelList(filter = '') {
+  const list = document.getElementById('model-list');
+  const filtered = ALL_MODELS.filter(m => m.toLowerCase().includes(filter.toLowerCase()));
+  list.innerHTML = filtered.map(m =>
+    `<div class="model-selector-item${m === currentModel ? ' active' : ''}" onclick="selectModel('${m}', event)">${m}</div>`
+  ).join('');
+}
+
+function toggleModelSelector(e) {
+  e.stopPropagation();
+  const sel = document.getElementById('model-selector');
+  const isOpen = sel.classList.contains('open');
+  if (isOpen) {
+    sel.classList.remove('open');
+  } else {
+    renderModelList();
+    sel.classList.add('open');
+    sel.querySelector('.model-selector-filter').value = '';
+    sel.querySelector('.model-selector-filter').focus();
+  }
+}
+
+function filterModels(val) { renderModelList(val); }
+
+function selectModel(model, e) {
+  e.stopPropagation();
+  currentModel = model;
+  document.getElementById('model-badge').childNodes[0].textContent = model;
+  document.getElementById('model-selector').classList.remove('open');
+}
+
+document.addEventListener('click', () => {
+  document.getElementById('model-selector').classList.remove('open');
+});
+
+// Position tooltips with fixed positioning
+document.querySelectorAll('.msg-action-btn').forEach(btn => {
+  btn.addEventListener('mouseenter', () => {
+    const tooltip = btn.querySelector('.msg-action-tooltip');
+    if (!tooltip) return;
+    const rect = btn.getBoundingClientRect();
+    tooltip.style.display = 'block';
+    tooltip.style.top = (rect.top - tooltip.offsetHeight - 6) + 'px';
+    tooltip.style.left = (rect.left + rect.width / 2 - tooltip.offsetWidth / 2) + 'px';
+  });
+  btn.addEventListener('mouseleave', () => {
+    const tooltip = btn.querySelector('.msg-action-tooltip');
+    if (tooltip) tooltip.style.display = 'none';
+  });
+});
+
+// Settings back button
+document.getElementById('settings-back').addEventListener('click', () => {
+  document.querySelector('.top-tab[data-view="conversation"]').click();
+  document.querySelectorAll('.icon-rail-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.icon-rail-btn[data-nav="sessions"]').classList.add('active');
+});
+
+// Source toggle buttons
+document.querySelectorAll('.source-toggle').forEach(toggle => {
+  toggle.querySelectorAll('.source-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      toggle.querySelectorAll('.source-toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+});
+
+// Drag and Drop for Session Tree
+(function() {
+  let draggedElement = null;
+  let draggedData = null;
+  let expandTimeout = null;
+
+  // Helper: Clear all drag visual states
+  function clearDragStates() {
+    document.querySelectorAll('.tree-child').forEach(el => {
+      el.classList.remove('drop-before', 'drop-after');
+    });
+    document.querySelectorAll('.tree-group').forEach(el => {
+      el.classList.remove('drag-over');
+    });
+    if (expandTimeout) {
+      clearTimeout(expandTimeout);
+      expandTimeout = null;
+    }
+  }
+
+  // Dragstart: Store reference and set opacity
+  document.querySelectorAll('.tree-child').forEach(child => {
+    child.addEventListener('dragstart', (e) => {
+      draggedElement = child;
+      draggedData = {
+        text: child.textContent.trim(),
+        parentGroup: child.closest('.tree-group')
+      };
+      child.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', draggedData.text);
+    });
+
+    child.addEventListener('dragend', () => {
+      if (draggedElement) {
+        draggedElement.classList.remove('dragging');
+      }
+      clearDragStates();
+      draggedElement = null;
+      draggedData = null;
+    });
+  });
+
+  // Dragover on tree-child: Show insertion indicator
+  document.querySelectorAll('.tree-child').forEach(child => {
+    child.addEventListener('dragover', (e) => {
+      if (!draggedElement || draggedElement === child) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      // Clear previous indicators
+      clearDragStates();
+
+      // Calculate midpoint
+      const rect = child.getBoundingClientRect();
+      const midpoint = rect.top + rect.height / 2;
+      const dropPosition = e.clientY < midpoint ? 'before' : 'after';
+
+      // Apply indicator class
+      if (dropPosition === 'before') {
+        child.classList.add('drop-before');
+      } else {
+        child.classList.add('drop-after');
+      }
+    });
+
+    child.addEventListener('dragleave', (e) => {
+      // Only clear if we're actually leaving the element
+      if (!e.currentTarget.contains(e.relatedTarget)) {
+        child.classList.remove('drop-before', 'drop-after');
+      }
+    });
+
+    child.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (!draggedElement || draggedElement === child) return;
+
+      // Calculate drop position
+      const rect = child.getBoundingClientRect();
+      const midpoint = rect.top + rect.height / 2;
+      const dropPosition = e.clientY < midpoint ? 'before' : 'after';
+
+      // Insert the dragged element
+      if (dropPosition === 'before') {
+        child.parentNode.insertBefore(draggedElement, child);
+      } else {
+        child.parentNode.insertBefore(draggedElement, child.nextSibling);
+      }
+
+      clearDragStates();
+    });
+  });
+
+  // Dragover on tree-children container: Highlight group
+  document.querySelectorAll('.tree-children').forEach(container => {
+    container.addEventListener('dragover', (e) => {
+      if (!draggedElement) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      const group = container.closest('.tree-group');
+      if (group) {
+        group.classList.add('drag-over');
+      }
+    });
+
+    container.addEventListener('dragleave', (e) => {
+      if (!e.currentTarget.contains(e.relatedTarget)) {
+        const group = container.closest('.tree-group');
+        if (group) {
+          group.classList.remove('drag-over');
+        }
+      }
+    });
+
+    container.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (!draggedElement) return;
+
+      // If dropped on empty space in container, append to end
+      if (e.target === container || e.target.classList.contains('tree-children')) {
+        container.appendChild(draggedElement);
+      }
+
+      clearDragStates();
+    });
+  });
+
+  // Dragover on tree-parent: Highlight group and expand after delay
+  document.querySelectorAll('.tree-parent').forEach(parent => {
+    parent.addEventListener('dragover', (e) => {
+      if (!draggedElement) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      const group = parent.closest('.tree-group');
+      if (group) {
+        group.classList.add('drag-over');
+
+        // Auto-expand collapsed groups after 500ms hover
+        if (!parent.classList.contains('expanded')) {
+          if (!expandTimeout) {
+            expandTimeout = setTimeout(() => {
+              parent.classList.add('expanded');
+              const children = parent.nextElementSibling;
+              if (children) children.style.display = 'block';
+            }, 500);
+          }
+        }
+      }
+    });
+
+    parent.addEventListener('dragleave', (e) => {
+      if (!e.currentTarget.contains(e.relatedTarget)) {
+        const group = parent.closest('.tree-group');
+        if (group) {
+          group.classList.remove('drag-over');
+        }
+        if (expandTimeout) {
+          clearTimeout(expandTimeout);
+          expandTimeout = null;
+        }
+      }
+    });
+
+    parent.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (!draggedElement) return;
+
+      // Append to the group's children container
+      const children = parent.nextElementSibling;
+      if (children && children.classList.contains('tree-children')) {
+        children.appendChild(draggedElement);
+      }
+
+      clearDragStates();
+    });
+  });
+
+  // Dragover on tree-group: Highlight
+  document.querySelectorAll('.tree-group').forEach(group => {
+    group.addEventListener('dragover', (e) => {
+      if (!draggedElement) return;
+      e.preventDefault();
+    });
+  });
+})();
+
+// Initialize Lucide icons
+lucide.createIcons();
+
+// Initialize Mermaid
+mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+
+// Artifact file-select dropdown
+document.getElementById('viewer-file-select').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const dropdown = document.getElementById('artifact-pill-dropdown');
+  dropdown.classList.toggle('open');
+  if (dropdown.classList.contains('open')) {
+    const rect = document.getElementById('viewer-file-select').getBoundingClientRect();
+    dropdown.style.top = (rect.bottom + 6) + 'px';
+    dropdown.style.left = rect.left + 'px';
+    lucide.createIcons();
+  }
+});
+
+// Close artifact dropdown on outside click
+document.addEventListener('click', (e) => {
+  const dropdown = document.getElementById('artifact-pill-dropdown');
+  if (dropdown && !e.target.closest('#viewer-file-select')) {
+    dropdown.classList.remove('open');
+  }
+});
+
+// Artifact dropdown item click: open artifact in viewer
+document.querySelectorAll('.artifact-pill-dropdown-item').forEach(item => {
+  item.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const artifactId = item.dataset.artifact;
+    const artifactName = item.querySelector('.item-name').textContent;
+    
+    // Update the breadcrumb pill label
+    document.getElementById('artifact-pill-text').textContent = artifactName;
+    
+    // Close dropdown
+    document.getElementById('artifact-pill-dropdown').classList.remove('open');
+    
+    // Find and click the corresponding artifact item in the right panel
+    const artifactItem = document.querySelector(`.artifact-item[data-file="${artifactId}"]`);
+    if (artifactItem) {
+      artifactItem.click();
+    }
+  });
+});
+
+// Automations: New form toggle
+(function() {
+  const listState = document.querySelector('#view-automations .automations-wrap:not(.automation-form)');
+  const formState = document.getElementById('automation-form-state');
+  const newBtn = document.querySelector('#view-automations .btn-create:not(#automation-form-submit)');
+  const cancelBtn = document.getElementById('automation-form-cancel');
+  const submitBtn = document.getElementById('automation-form-submit');
+
+  if (newBtn) {
+    newBtn.addEventListener('click', () => {
+      listState.style.display = 'none';
+      formState.style.display = 'block';
+    });
+  }
+
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      formState.style.display = 'none';
+      listState.style.display = 'block';
+    });
+  }
+
+  if (submitBtn) {
+    submitBtn.addEventListener('click', () => {
+      // Simulate creation — just go back to list
+      formState.style.display = 'none';
+      listState.style.display = 'block';
+    });
+  }
+
+  // Trigger type toggle: show/hide schedule vs event fields
+  const triggerToggle = document.getElementById('trigger-type-toggle');
+  if (triggerToggle) {
+    triggerToggle.querySelectorAll('.source-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const isSchedule = btn.textContent.trim() === 'Schedule';
+        document.getElementById('trigger-schedule-fields').style.display = isSchedule ? 'block' : 'none';
+        document.getElementById('trigger-event-fields').style.display = isSchedule ? 'none' : 'block';
+      });
+    });
+  }
+})();
+
+// File Picker Component
+(function() {
+  // Mock data for directories
+  const RECENT_DIRECTORIES = [
+    '/Users/pgermishuys/source/weave-fleet',
+    '/Users/pgermishuys/source/research',
+    '/Users/pgermishuys/source/weave',
+    '/Users/pgermishuys/source/poolumi',
+    '/Users/pgermishuys/source/labs'
+  ];
+
+  const AVAILABLE_PATHS = [
+    '/Users/pgermishuys/source/weave-fleet',
+    '/Users/pgermishuys/source/research',
+    '/Users/pgermishuys/source/weave',
+    '/Users/pgermishuys/source/poolumi',
+    '/Users/pgermishuys/source/labs',
+    '/Users/pgermishuys/source/dotnet-core',
+    '/Users/pgermishuys/source/experiments',
+    '/Users/pgermishuys/Documents',
+    '/Users/pgermishuys/Desktop',
+    '~/'
+  ];
+
+  function initFilePicker(inputEl, options = {}) {
+    const wrap = inputEl.closest('.file-picker-wrap');
+    if (!wrap) {
+      console.error('Input must be wrapped in .file-picker-wrap');
+      return;
+    }
+
+    // Create dropdown
+    const dropdown = document.createElement('div');
+    dropdown.className = 'file-picker-dropdown';
+    wrap.appendChild(dropdown);
+
+    // Render dropdown content
+    function renderDropdown(filterText = '') {
+      const filter = filterText.toLowerCase().trim();
+      
+      // Filter recent directories
+      const filteredRecent = RECENT_DIRECTORIES.filter(path => 
+        path.toLowerCase().includes(filter)
+      );
+
+      // Filter available paths
+      const filteredPaths = AVAILABLE_PATHS.filter(path => 
+        path.toLowerCase().includes(filter) && !RECENT_DIRECTORIES.includes(path)
+      );
+
+      let html = '';
+
+      // Recent Directories section
+      if (filteredRecent.length > 0) {
+        html += '<div class="file-picker-section">';
+        html += '<div class="file-picker-section-label">Recent Directories</div>';
+        filteredRecent.forEach(path => {
+          const highlighted = highlightMatch(path, filter);
+          html += `
+            <div class="file-picker-item" data-path="${path}">
+              <i data-lucide="clock" class="file-picker-item-icon"></i>
+              <span class="file-picker-item-text">${highlighted}</span>
+            </div>
+          `;
+        });
+        html += '</div>';
+      }
+
+      // Paths section
+      if (filteredPaths.length > 0) {
+        html += '<div class="file-picker-section">';
+        html += '<div class="file-picker-section-label">Paths</div>';
+        filteredPaths.forEach(path => {
+          const highlighted = highlightMatch(path, filter);
+          html += `
+            <div class="file-picker-item" data-path="${path}">
+              <i data-lucide="folder" class="file-picker-item-icon"></i>
+              <span class="file-picker-item-text">${highlighted}</span>
+            </div>
+          `;
+        });
+        html += '</div>';
+      }
+
+      // No results
+      if (filteredRecent.length === 0 && filteredPaths.length === 0 && filter) {
+        html += '<div class="file-picker-section">';
+        html += '<div class="file-picker-item" style="color:var(--muted);cursor:default;">No matching paths</div>';
+        html += '</div>';
+      }
+
+      dropdown.innerHTML = html;
+      lucide.createIcons();
+
+      // Attach click handlers to items
+      dropdown.querySelectorAll('.file-picker-item[data-path]').forEach(item => {
+        item.addEventListener('click', () => {
+          inputEl.value = item.dataset.path;
+          closeDropdown();
+          inputEl.focus();
+        });
+      });
+    }
+
+    // Highlight matching text
+    function highlightMatch(text, filter) {
+      if (!filter) return text;
+      const index = text.toLowerCase().indexOf(filter);
+      if (index === -1) return text;
+      
+      const before = text.substring(0, index);
+      const match = text.substring(index, index + filter.length);
+      const after = text.substring(index + filter.length);
+      
+      return `${before}<span class="file-picker-highlight">${match}</span>${after}`;
+    }
+
+    function openDropdown() {
+      renderDropdown(inputEl.value);
+      dropdown.classList.add('open');
+    }
+
+    function closeDropdown() {
+      dropdown.classList.remove('open');
+    }
+
+    // Event listeners
+    inputEl.addEventListener('focus', () => {
+      openDropdown();
+    });
+
+    inputEl.addEventListener('input', () => {
+      renderDropdown(inputEl.value);
+      if (!dropdown.classList.contains('open')) {
+        dropdown.classList.add('open');
+      }
+    });
+
+    inputEl.addEventListener('blur', (e) => {
+      // Delay to allow click on dropdown item
+      setTimeout(() => {
+        if (!dropdown.contains(document.activeElement)) {
+          closeDropdown();
+        }
+      }, 200);
+    });
+
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeDropdown();
+      }
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+      if (!wrap.contains(e.target)) {
+        closeDropdown();
+      }
+    });
+  }
+
+  // Initialize file pickers
+  const newsessionInput = document.getElementById('newsession-directory-input');
+  const settingsInput = document.getElementById('settings-directory-input');
+
+  if (newsessionInput) {
+    initFilePicker(newsessionInput);
+  }
+
+  if (settingsInput) {
+    initFilePicker(settingsInput);
+  }
+})();
+
+// Project Picker Component
+(function() {
+  // Mock data for projects
+  const EXISTING_PROJECTS = [
+    'weave-fleet',
+    'foundry',
+    'explain-ai',
+    'duende-identity'
+  ];
+
+  function initProjectPicker(inputEl) {
+    const wrap = inputEl.closest('.file-picker-wrap');
+    if (!wrap) {
+      console.error('Input must be wrapped in .file-picker-wrap');
+      return;
+    }
+
+    // Create dropdown
+    const dropdown = document.createElement('div');
+    dropdown.className = 'file-picker-dropdown';
+    wrap.appendChild(dropdown);
+
+    // Render dropdown content
+    function renderDropdown(filterText = '') {
+      const filter = filterText.toLowerCase().trim();
+      
+      // Filter existing projects
+      const filteredProjects = EXISTING_PROJECTS.filter(project => 
+        project.toLowerCase().includes(filter)
+      );
+
+      // Check if input exactly matches an existing project
+      const exactMatch = EXISTING_PROJECTS.some(project => 
+        project.toLowerCase() === filter
+      );
+
+      let html = '';
+
+      // Existing Projects section
+      if (filteredProjects.length > 0) {
+        html += '<div class="file-picker-section">';
+        html += '<div class="file-picker-section-label">Existing Projects</div>';
+        filteredProjects.forEach(project => {
+          const highlighted = highlightMatch(project, filter);
+          html += `
+            <div class="file-picker-item" data-project="${project}">
+              <i data-lucide="folder" class="file-picker-item-icon"></i>
+              <span class="file-picker-item-text">${highlighted}</span>
+            </div>
+          `;
+        });
+        html += '</div>';
+      }
+
+      // Show "Create [text]" option if there's input and no exact match
+      if (filter && !exactMatch) {
+        html += '<div class="file-picker-section">';
+        html += `
+          <div class="file-picker-item" data-project="${filterText}" data-create="true">
+            <i data-lucide="plus-circle" class="file-picker-item-icon"></i>
+            <span class="file-picker-item-text">Create <strong>${filterText}</strong></span>
+          </div>
+        `;
+        html += '</div>';
+      }
+
+      // No results
+      if (filteredProjects.length === 0 && !filter) {
+        html += '<div class="file-picker-section">';
+        html += '<div class="file-picker-item" style="color:var(--muted);cursor:default;">Start typing to filter or create a project</div>';
+        html += '</div>';
+      }
+
+      dropdown.innerHTML = html;
+      lucide.createIcons();
+
+      // Attach click handlers to items
+      dropdown.querySelectorAll('.file-picker-item[data-project]').forEach(item => {
+        item.addEventListener('click', () => {
+          inputEl.value = item.dataset.project;
+          closeDropdown();
+          inputEl.focus();
+        });
+      });
+    }
+
+    // Highlight matching text
+    function highlightMatch(text, filter) {
+      if (!filter) return text;
+      const index = text.toLowerCase().indexOf(filter);
+      if (index === -1) return text;
+      
+      const before = text.substring(0, index);
+      const match = text.substring(index, index + filter.length);
+      const after = text.substring(index + filter.length);
+      
+      return `${before}<span class="file-picker-highlight">${match}</span>${after}`;
+    }
+
+    function openDropdown() {
+      renderDropdown(inputEl.value);
+      dropdown.classList.add('open');
+    }
+
+    function closeDropdown() {
+      dropdown.classList.remove('open');
+    }
+
+    // Event listeners
+    inputEl.addEventListener('focus', () => {
+      openDropdown();
+    });
+
+    inputEl.addEventListener('input', () => {
+      renderDropdown(inputEl.value);
+      if (!dropdown.classList.contains('open')) {
+        dropdown.classList.add('open');
+      }
+    });
+
+    inputEl.addEventListener('blur', (e) => {
+      // Delay to allow click on dropdown item
+      setTimeout(() => {
+        if (!dropdown.contains(document.activeElement)) {
+          closeDropdown();
+        }
+      }, 200);
+    });
+
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeDropdown();
+      }
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+      if (!wrap.contains(e.target)) {
+        closeDropdown();
+      }
+    });
+  }
+
+  // Initialize project picker
+  const projectInput = document.getElementById('newsession-project-input');
+
+  if (projectInput) {
+    initProjectPicker(projectInput);
+  }
+})();
+
+</script>
+</body>
+</html>

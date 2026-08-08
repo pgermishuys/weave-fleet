@@ -50,7 +50,7 @@ function cycleEffort(): void {
   gap: 8px;
   padding: 4px 8px;
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: 0;
   background: transparent;
   color: var(--muted);
   cursor: pointer;

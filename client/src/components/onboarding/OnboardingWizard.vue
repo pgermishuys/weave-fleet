@@ -12,8 +12,8 @@ import {
   Sparkles,
 } from "lucide-vue-next";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { apiFetch } from "@/lib/api-client";
-import type { StoreCredentialRequest } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { StoreCredentialRequest } from "@/api/client";
 
 type WizardStep = "welcome" | "credentials" | "ready";
 
@@ -87,17 +87,15 @@ async function saveCredential(): Promise<void> {
       namespace: selectedProvider.value.namespace,
       kind: selectedProvider.value.kind,
       value: credentialValue.value.trim(),
+      metadata: null,
     };
 
-    const response = await apiFetch("/api/credentials", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody),
+    const { error: apiError } = await api.PUT("/api/credentials", {
+      body: requestBody as never,
     });
 
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({})) as { error?: string };
-      throw new Error(payload.error ?? `HTTP ${response.status}`);
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to save credential");
     }
 
     isCredentialSaved.value = true;
@@ -118,7 +116,7 @@ async function finishOnboarding(): Promise<void> {
   isFinishing.value = true;
 
   try {
-    await apiFetch("/api/user/me/complete-onboarding", { method: "POST" });
+    await api.POST("/api/user/me/complete-onboarding");
   } catch {
     // Best-effort only — keep the user moving.
   } finally {

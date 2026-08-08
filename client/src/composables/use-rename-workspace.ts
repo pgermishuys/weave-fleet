@@ -1,5 +1,6 @@
 import { readonly, shallowRef, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import type { components } from "@/api/generated/schema";
+import { api } from "@/api/client";
 
 export interface UseRenameWorkspaceResult {
   renameWorkspace: (workspaceId: string, displayName: string, onSuccess?: () => void) => Promise<void>;
@@ -20,15 +21,16 @@ export function useRenameWorkspace(): UseRenameWorkspaceResult {
     error.value = undefined;
 
     try {
-      const response = await apiFetch(`/api/workspaces/${encodeURIComponent(workspaceId)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName }),
+      const { error: apiError, response } = await api.PATCH("/api/workspaces/{id}", {
+        params: {
+          path: { id: workspaceId },
+        },
+        body: { displayName } as components["schemas"]["RenameWorkspaceRequest"],
       });
 
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `HTTP ${response.status}`);
+      if (apiError || !response.ok) {
+        const payload = apiError as { error?: string } | undefined;
+        throw new Error(payload?.error ?? `HTTP ${response.status}`);
       }
 
       onSuccess?.();

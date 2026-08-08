@@ -3,7 +3,7 @@ using WeaveFleet.Domain.Entities;
 
 namespace WeaveFleet.Application.Services;
 
-public sealed class SessionCapabilitiesResolver(InstanceTracker instanceTracker)
+public sealed class SessionCapabilitiesResolver(InstanceTracker instanceTracker, SessionActivityTracker activityTracker)
 {
     public SessionActionCapabilities Resolve(Session session)
     {
@@ -13,7 +13,7 @@ public sealed class SessionCapabilitiesResolver(InstanceTracker instanceTracker)
             session.RuntimeMode,
             session.LifecycleStatus,
             session.RetentionStatus,
-            session.ActivityStatus,
+            activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle",
             instanceTracker.Get(session.InstanceId) is not null);
     }
 

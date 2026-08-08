@@ -16,7 +16,7 @@ import {
 } from "lucide-vue-next";
 import { useHarnesses } from "@/composables/use-harnesses";
 import { usePreferencesStore } from "@/stores/preferences";
-import type { HarnessInfo } from "@/lib/api-types";
+import type { HarnessInfo } from "@/api/client";
 import NuCodeSettingsPanel from "@/components/settings/NuCodeSettingsPanel.vue";
 
 type HarnessStatus = "ready" | "missing-credentials" | "not-configured" | "disabled";

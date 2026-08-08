@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AccumulatedToolPart } from "@/lib/api-types";
+import type { AccumulatedToolPart } from "@/lib/client-types";
 import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
 
 function create_tool_part(state: unknown, tool = "bash"): AccumulatedToolPart {

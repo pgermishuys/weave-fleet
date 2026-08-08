@@ -1,6 +1,6 @@
 import { computed, onMounted, onUnmounted, shallowRef, toValue, type ComputedRef, type MaybeRefOrGetter, type ShallowRef } from "vue";
-import type { ModelAnalytics } from "@/lib/api-types";
-import { apiFetch } from "@/lib/api-client";
+import type { ModelAnalytics } from "@/api/client";
+import { api } from "@/api/client";
 
 export interface UseAnalyticsModelsParams {
   from?: MaybeRefOrGetter<string | undefined>;
@@ -56,17 +56,18 @@ export function useAnalyticsModels(
     const currentRequestId = ++requestId;
 
     try {
-      const response = await apiFetch(`/api/analytics/models${queryString.value ? `?${queryString.value}` : ""}`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      const { data, error: apiError } = await api.GET("/api/analytics/models", {
+        params: { query: Object.fromEntries(new URLSearchParams(queryString.value)) },
+      });
+      if (apiError) {
+        throw new Error("Failed to fetch model analytics");
       }
 
-      const data = (await response.json()) as ModelAnalytics[];
       if (currentRequestId !== requestId) {
         return;
       }
 
-      models.value = data;
+      models.value = data as ModelAnalytics[];
       error.value = undefined;
     } catch (fetchError) {
       if (currentRequestId !== requestId) {

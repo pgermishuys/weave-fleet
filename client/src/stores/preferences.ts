@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref, shallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import { api } from "@/api/client";
 
 export const usePreferencesStore = defineStore("preferences", () => {
   const preferences = ref<Record<string, string>>({});
@@ -11,12 +11,16 @@ export const usePreferencesStore = defineStore("preferences", () => {
     isLoading.value = true;
 
     try {
-      const response = await apiFetch("/api/preferences");
-      if (!response.ok) {
+      const { data, error: apiError } = await api.GET("/api/preferences");
+      if (apiError) {
         return;
       }
 
-      preferences.value = (await response.json()) as Record<string, string>;
+      if (!data) {
+        return;
+      }
+
+      preferences.value = data as Record<string, string>;
     } catch {
       // Silently fail — will use fallbacks
     } finally {
@@ -33,10 +37,9 @@ export const usePreferencesStore = defineStore("preferences", () => {
     preferences.value = { ...preferences.value, [key]: value };
 
     try {
-      await apiFetch(`/api/preferences/${encodeURIComponent(key)}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value }),
+      await api.PUT("/api/preferences/{key}", {
+        params: { path: { key } },
+        body: { value } as never,
       });
     } catch {
       // Revert on failure

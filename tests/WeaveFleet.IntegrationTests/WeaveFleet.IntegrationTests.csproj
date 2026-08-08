@@ -6,6 +6,8 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Shouldly" />
     <PackageReference Include="xunit" />
@@ -18,7 +20,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\WeaveFleet.Api\WeaveFleet.Api.csproj" />
     <ProjectReference Include="..\..\src\WeaveFleet.Infrastructure\WeaveFleet.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\WeaveFleet.TestHarness\WeaveFleet.TestHarness.csproj" />
     <ProjectReference Include="..\WeaveFleet.Testing\WeaveFleet.Testing.csproj" />
   </ItemGroup>
 

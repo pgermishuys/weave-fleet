@@ -1,6 +1,6 @@
 import { computed, onUnmounted, readonly, ref, shallowRef, type ComputedRef, type Ref, type ShallowRef } from "vue";
-import type { DirectoryEntry, DirectoryListResponse } from "@/lib/api-types";
-import { apiFetch } from "@/lib/api-client";
+import type { DirectoryEntry, DirectoryListResponse } from "@/api/client";
+import { api } from "@/api/client";
 
 export interface UseDirectoryBrowserResult {
   currentPath: Readonly<ShallowRef<string | null>>;
@@ -56,39 +56,43 @@ export function useDirectoryBrowser(enabled = false, options: UseDirectoryBrowse
     isLoading.value = true;
     error.value = undefined;
 
-    const params = new URLSearchParams();
+    const queryParams: Record<string, string> = {};
     if (currentPath.value !== null) {
-      params.set("path", currentPath.value);
+      queryParams.path = currentPath.value;
     }
 
     const trimmedSearch = search.value.trim();
     if (trimmedSearch) {
-      params.set("search", trimmedSearch);
+      queryParams.search = trimmedSearch;
     }
 
     if (options.unconstrained) {
-      params.set("unconstrained", "true");
+      queryParams.unconstrained = "true";
     }
 
-    const queryString = params.toString();
-    const fetchUrl = `/api/directories${queryString ? `?${queryString}` : ""}`;
-
     try {
-      const response = await apiFetch(fetchUrl, { signal: controller.signal });
-      if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `HTTP ${response.status}`);
+      const { data, error: apiError } = await api.GET("/api/directories", {
+        params: { query: queryParams },
+        signal: controller.signal,
+      });
+
+      if (apiError) {
+        throw new Error(String(apiError));
       }
 
-      const data = (await response.json()) as DirectoryListResponse;
+      if (!data) {
+        throw new Error("No data returned");
+      }
+
+      const responseData = data as DirectoryListResponse;
       if (requestRefreshToken !== refreshToken) {
         return;
       }
 
-      currentPath.value = data.currentPath ?? null;
-      entries.value = data.entries ?? [];
-      roots.value = data.roots ?? [];
-      parentPath.value = data.parentPath ?? null;
+      currentPath.value = responseData.currentPath ?? null;
+      entries.value = responseData.entries ?? [];
+      roots.value = responseData.roots ?? [];
+      parentPath.value = responseData.parentPath ?? null;
     } catch (fetchError) {
       if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
         return;

@@ -1,5 +1,8 @@
+using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Events;
+using WeaveFleet.Infrastructure.Services;
+
 namespace WeaveFleet.Infrastructure.EventBus;
 
 /// <summary>
@@ -19,11 +22,17 @@ public static class InProcessServiceCollectionExtensions
         configure(builder);
         services.AddSingleton(new ProjectionRegistry(builder.Entries));
 
-        // Shared channel holder (projection wakeup + fan-out).
-        services.AddSingleton<InProcessChannels>();
+        // Shared channel holder (projection wakeup + fan-out + automation events).
+        var channels = new InProcessChannels();
+        services.AddSingleton(channels);
+
+        // Expose automation event channel for AutomationEventDispatcherService
+        services.AddSingleton(channels.AutomationEvents);
 
         services.AddSingleton<InProcessEventStore>();
+        services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<InProcessEventStore>());
         services.AddSingleton<InProcessMetrics>();
+        services.AddSingleton<PipelineLatencyMetrics>();
         services.AddSingleton<IEventPublisher, InProcessEventPublisher>();
 
         // BackgroundServices — order matters: projection host must drain startup backlog before

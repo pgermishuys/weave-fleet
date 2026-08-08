@@ -2,8 +2,13 @@ using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Diagnostics;
+using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 
@@ -157,6 +162,10 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
     private readonly TimeSpan _idleTtl;
     private readonly ILogger<PooledOpenCodeInstanceRegistry> _logger;
     private readonly Guid _metricRegistryId = Guid.NewGuid();
+    private readonly PoolDemuxBindingTable? _bindingTable;
+    private readonly IEventBroadcaster? _broadcaster;
+    private readonly SessionActivityTracker? _activityTracker;
+    private readonly IServiceScopeFactory? _scopeFactory;
     private int _disposed;
 
     public PooledOpenCodeInstanceRegistry(
@@ -190,6 +199,18 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
         Func<string, string, IReadOnlyDictionary<string, string>, CancellationToken, Task<PooledOpenCodeInstance>> instanceFactory,
         TimeSpan idleTtl,
         ILogger<PooledOpenCodeInstanceRegistry> logger)
+        : this(instanceFactory, idleTtl, logger, null, null, null, null)
+    {
+    }
+
+    public PooledOpenCodeInstanceRegistry(
+        Func<string, string, IReadOnlyDictionary<string, string>, CancellationToken, Task<PooledOpenCodeInstance>> instanceFactory,
+        TimeSpan idleTtl,
+        ILogger<PooledOpenCodeInstanceRegistry> logger,
+        PoolDemuxBindingTable? bindingTable,
+        IEventBroadcaster? broadcaster,
+        SessionActivityTracker? activityTracker,
+        IServiceScopeFactory? scopeFactory)
     {
         ArgumentNullException.ThrowIfNull(instanceFactory);
         ArgumentOutOfRangeException.ThrowIfLessThan(idleTtl, TimeSpan.Zero);
@@ -197,6 +218,10 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
         _instanceFactory = instanceFactory;
         _idleTtl = idleTtl;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _bindingTable = bindingTable;
+        _broadcaster = broadcaster;
+        _activityTracker = activityTracker;
+        _scopeFactory = scopeFactory;
         MetricRegistries[_metricRegistryId] = this;
     }
 
@@ -500,6 +525,10 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
 
             entry.CancelIdleShutdown();
             LogProcessKill(_logger, keyFingerprint, KillReasonCrashRecovery, null);
+
+            // Broadcast synthetic idle for all sessions bound to this crashed instance
+            await BroadcastIdleForCrashedInstanceAsync(crashedInstance).ConfigureAwait(false);
+
             await crashedInstance.DisposeAsync().ConfigureAwait(false);
             entry.Instance = null;
 
@@ -607,6 +636,57 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
         {
             entry.Gate.Release();
         }
+    }
+
+    private async Task BroadcastIdleForCrashedInstanceAsync(PooledOpenCodeInstance crashedInstance)
+    {
+        // If dependencies are not provided, skip the broadcast (backward compatibility)
+        if (_bindingTable is null || _broadcaster is null || _activityTracker is null || _scopeFactory is null)
+        {
+            return;
+        }
+
+        var bindings = _bindingTable.GetBindingsForInstance(crashedInstance);
+        foreach (var binding in bindings)
+        {
+            // Clear activity state and broadcast idle so the UI doesn't show sessions stuck
+            // on "busy" after a crash. This mirrors the non-pooled HarnessEventRelay finally block.
+            _activityTracker.Remove(binding.FleetSessionId);
+            _activityTracker.ClearPromptTraceContext(binding.FleetSessionId);
+
+            try
+            {
+                var payload = await BuildActivityStatusPayloadAsync(binding.FleetSessionId, "idle").ConfigureAwait(false);
+                await _broadcaster.BroadcastAsync(
+                    "sessions",
+                    "activity_status",
+                    payload,
+                    binding.UserId,
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // Best-effort broadcast — never crash the crash handler
+            }
+        }
+    }
+
+    private async Task<JsonElement> BuildActivityStatusPayloadAsync(string sessionId, string activityStatus)
+    {
+        using var scope = _scopeFactory!.CreateScope();
+        var sessionRepository = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
+        var capabilitiesResolver = scope.ServiceProvider.GetRequiredService<SessionCapabilitiesResolver>();
+        var session = await sessionRepository.GetByIdAsync(sessionId).ConfigureAwait(false);
+        if (session is not null)
+        {
+            session.ActivityStatus = activityStatus;
+        }
+
+        var capabilities = session is not null
+            ? capabilitiesResolver.Resolve(session)
+            : SessionCapabilitiesResolver.Resolve(null, null, null, activityStatus, isLive: false);
+
+        return InfrastructureJsonContext.SerializeActivityStatus(sessionId, activityStatus, capabilities);
     }
 
     private async Task<PooledOpenCodeInstance> SpawnAsync(

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { X } from "lucide-vue-next";
+import { X, User, Bot, Copy } from "lucide-vue-next";
 import ToolCard from "@/components/session/ToolCard.vue";
 import QuestionCard from "@/components/session/QuestionCard.vue";
-import type { AccumulatedToolPart } from "@/lib/api-types";
+import type { AccumulatedToolPart } from "@/lib/client-types";
+import type { VisualPayload } from "@/lib/visual-payload";
 import { useQuestionAnswer } from "@/composables/use-question-answer";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { formatRelativeTime, formatAbsoluteTimestamp } from "@/lib/format-utils";
@@ -26,6 +27,8 @@ interface ToolCardItem {
   output?: string;
   diffLines?: ToolCardDiffLine[];
   initiallyCollapsed?: boolean;
+  preview?: string;
+  isPatternTool?: boolean;
 }
 
 interface ImageAttachmentDisplay {
@@ -47,7 +50,12 @@ const props = defineProps<{
   clusterPosition: "single" | "first" | "middle" | "last";
 }>();
 
+const emit = defineEmits<{
+  "expand-visual": [payload: VisualPayload];
+}>();
+
 const lightboxUrl = ref<string | null>(null);
+const copied = ref(false);
 
 const now = useRelativeTime();
 const relativeTime = computed(() => props.createdAt ? formatRelativeTime(props.createdAt, now.value) : "");
@@ -73,18 +81,18 @@ function makeDismissHandler(callId: string) {
 const markdownRenderer = createMarkdownRenderer();
 
 const bodyHtml = computed(() => markdownRenderer.render(props.body));
-const displayAuthor = computed(() => {
-  const author = props.author.trim();
-  if (!author) {
-    return author;
-  }
 
-  return author.charAt(0).toUpperCase() + author.slice(1);
-});
+function copyMessage() {
+  navigator.clipboard.writeText(props.body);
+  copied.value = true;
+  setTimeout(() => {
+    copied.value = false;
+  }, 1500);
+}
 
-const displayModelId = computed(() => {
-  return props.role === "assistant" ? props.modelId?.trim() ?? "" : "";
-});
+function handleExpandVisual(payload: VisualPayload): void {
+  emit("expand-visual", payload);
+}
 </script>
 
 <template>
@@ -98,24 +106,118 @@ const displayModelId = computed(() => {
     data-testid="message-item"
     :data-role="role"
   >
-    <div
-      v-if="showIdentity || createdAt"
-      class="msg-header"
+    <button
+      type="button"
+      class="msg-copy-btn"
+      :title="copied ? 'Copied' : 'Copy message'"
+      @click="copyMessage"
     >
+      <Copy
+        v-if="!copied"
+        class="msg-copy-btn__icon"
+        aria-hidden="true"
+      />
       <span
-        v-if="showIdentity"
-        class="msg-author"
-        data-testid="message-sender-name"
-      >
-        {{ displayAuthor }}
-      </span>
-      <span
-        v-if="showIdentity && displayModelId"
-        class="msg-model"
-        data-testid="message-model-id"
-      >
-        · {{ displayModelId }}
-      </span>
+        v-else
+        class="msg-copy-btn__text"
+      >Copied</span>
+    </button>
+    
+    <div class="msg-layout">
+      <div class="msg-icon">
+        <User
+          v-if="role === 'user'"
+          class="msg-icon__svg"
+          aria-hidden="true"
+        />
+        <Bot
+          v-else
+          class="msg-icon__svg"
+          aria-hidden="true"
+        />
+      </div>
+      
+      <div class="msg-content">
+        <div class="msg-body">
+          <!-- eslint-disable-next-line vue/no-v-html -->
+          <div
+            v-if="body"
+            class="msg-body__content md-content"
+            v-html="bodyHtml"
+          />
+
+          <div
+            v-if="images && images.length > 0"
+            class="msg-images"
+          >
+            <button
+              v-for="(img, idx) in images"
+              :key="idx"
+              type="button"
+              class="msg-image-thumb"
+              :title="img.filename"
+              @click="lightboxUrl = img.url"
+            >
+              <img
+                :src="img.url"
+                :alt="img.filename"
+                class="msg-image-thumb__img"
+              >
+            </button>
+          </div>
+
+          <Teleport to="body">
+            <div
+              v-if="lightboxUrl"
+              class="lightbox-overlay"
+              @click="lightboxUrl = null"
+            >
+              <img
+                :src="lightboxUrl"
+                alt="Image preview"
+                class="lightbox-image"
+                @click.stop
+              >
+              <button
+                type="button"
+                class="lightbox-close"
+                @click="lightboxUrl = null"
+              >
+                <X
+                  class="lightbox-close__icon"
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
+          </Teleport>
+
+          <ToolCard
+            v-for="tool in tools ?? []"
+            :id="tool.id"
+            :key="tool.id"
+            :title="tool.title"
+            :kind="tool.kind"
+            :status="tool.status"
+            :summary="tool.summary"
+            :output="tool.output"
+            :diff-lines="tool.diffLines"
+            :initially-collapsed="tool.initiallyCollapsed"
+            :preview="tool.preview"
+            :is-pattern-tool="tool.isPatternTool"
+            @expand-visual="handleExpandVisual"
+          />
+
+          <QuestionCard
+            v-for="qpart in questionParts ?? []"
+            :key="qpart.partId"
+            :part="qpart"
+            :session-id="sessionId ?? ''"
+            :on-submit="makeSubmitHandler(qpart.callId)"
+            :on-dismiss="makeDismissHandler(qpart.callId)"
+          />
+        </div>
+      </div>
+
       <TooltipProvider v-if="createdAt">
         <Tooltip>
           <TooltipTrigger as-child>
@@ -127,269 +229,79 @@ const displayModelId = computed(() => {
         </Tooltip>
       </TooltipProvider>
     </div>
-
-    <div class="msg-body">
-      <!-- eslint-disable-next-line vue/no-v-html -->
-      <div
-        v-if="body"
-        class="msg-body__content"
-        v-html="bodyHtml"
-      />
-
-      <div
-        v-if="images && images.length > 0"
-        class="msg-images"
-      >
-        <button
-          v-for="(img, idx) in images"
-          :key="idx"
-          type="button"
-          class="msg-image-thumb"
-          :title="img.filename"
-          @click="lightboxUrl = img.url"
-        >
-          <img
-            :src="img.url"
-            :alt="img.filename"
-            class="msg-image-thumb__img"
-          >
-        </button>
-      </div>
-
-      <Teleport to="body">
-        <div
-          v-if="lightboxUrl"
-          class="lightbox-overlay"
-          @click="lightboxUrl = null"
-        >
-          <img
-            :src="lightboxUrl"
-            alt="Image preview"
-            class="lightbox-image"
-            @click.stop
-          >
-          <button
-            type="button"
-            class="lightbox-close"
-            @click="lightboxUrl = null"
-          >
-            <X
-              class="lightbox-close__icon"
-              aria-hidden="true"
-            />
-          </button>
-        </div>
-      </Teleport>
-
-      <ToolCard
-        v-for="tool in tools ?? []"
-        :id="tool.id"
-        :key="tool.id"
-        :title="tool.title"
-        :kind="tool.kind"
-        :status="tool.status"
-        :summary="tool.summary"
-        :output="tool.output"
-        :diff-lines="tool.diffLines"
-        :initially-collapsed="tool.initiallyCollapsed"
-      />
-
-      <QuestionCard
-        v-for="qpart in questionParts ?? []"
-        :key="qpart.partId"
-        :part="qpart"
-        :session-id="sessionId ?? ''"
-        :on-submit="makeSubmitHandler(qpart.callId)"
-        :on-dismiss="makeDismissHandler(qpart.callId)"
-      />
-    </div>
   </article>
 </template>
 
 <style scoped>
-@import "highlight.js/styles/github-dark.css";
-
 .message {
   width: var(--activity-bubble-width, 100%);
   box-sizing: border-box;
-  padding: 8px 10px 10px;
-  border: 1px solid transparent;
-  border-radius: 18px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  position: relative;
   background: transparent;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02);
-  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  transition: background var(--transition), border-left-color var(--transition);
 }
 
-.message[data-role="user"] {
-  border-color: rgba(161, 161, 170, 0.24);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.025));
+.message:hover {
+  border-left-color: var(--indigo);
+  background: rgba(91, 110, 199, 0.03);
 }
 
-.message[data-role="assistant"] {
-  border-color: rgba(99, 102, 241, 0.18);
-  background: rgba(99, 102, 241, 0.06);
+.msg-layout {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
 }
 
-.message--user {
-  border-top-right-radius: 6px;
-}
-
-.message--assistant {
-  border-top-left-radius: 6px;
-}
-
-.message--first.message--user,
-.message--middle.message--user {
-  border-bottom-right-radius: 10px;
-}
-
-.message--last.message--user,
-.message--middle.message--user {
-  border-top-right-radius: 10px;
-}
-
-.message--first.message--assistant,
-.message--middle.message--assistant {
-  border-bottom-left-radius: 10px;
-}
-
-.message--last.message--assistant,
-.message--middle.message--assistant {
-  border-top-left-radius: 10px;
-}
-
-.msg-header {
+.msg-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-  width: 100%;
+  justify-content: center;
+  margin-top: 2px;
 }
 
-.message--user .msg-header {
-  justify-content: flex-start;
-  margin-bottom: 4px;
-}
-
-.msg-author {
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-
-.msg-model {
+.msg-icon__svg {
+  width: 16px;
+  height: 16px;
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 500;
+}
+
+.message--user .msg-icon__svg {
+  color: var(--text);
+}
+
+.message--assistant .msg-icon__svg {
+  color: var(--indigo);
+}
+
+.msg-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .msg-timestamp {
   color: var(--muted);
-  font-size: 10px;
-  margin-left: auto;
+  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 3px;
+  cursor: default;
 }
 
 .msg-body {
-  font-size: 12px;
-  line-height: 1.45;
-  color: #d4d4d8;
-}
-
-.message--user .msg-body {
-  color: #f4f4f5;
-}
-
-.message--identity-hidden .msg-header {
-  margin-bottom: 1px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
 }
 
 .message--user .msg-body__content {
   text-align: left;
-}
-
-.msg-body__content :deep(*) {
-  max-width: 100%;
-}
-
-.msg-body__content :deep(p),
-.msg-body__content :deep(ul),
-.msg-body__content :deep(ol),
-.msg-body__content :deep(pre),
-.msg-body__content :deep(blockquote) {
-  margin: 0 0 8px;
-}
-
-.msg-body__content :deep(*:last-child) {
-  margin-bottom: 0;
-}
-
-.msg-body__content :deep(ul) {
-  padding-left: 16px;
-  list-style-type: disc;
-}
-
-.msg-body__content :deep(ol) {
-  padding-left: 16px;
-  list-style-type: decimal;
-}
-
-.msg-body__content :deep(li + li) {
-  margin-top: 2px;
-}
-
-.msg-body__content :deep(a) {
-  color: #818cf8;
-}
-
-.msg-body__content :deep(code:not(pre code)) {
-  padding: 0.12rem 0.35rem;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #f4f4f5;
-  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 0.88em;
-}
-
-.msg-body__content :deep(pre) {
-  overflow-x: auto;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-card);
-}
-
-.msg-body__content :deep(pre code) {
-  display: block;
-  padding: 10px 12px;
-  font-size: 10px;
-}
-
-.msg-body__content :deep(blockquote) {
-  padding-left: 10px;
-  border-left: 2px solid rgba(255, 255, 255, 0.12);
-  color: #c4c4cc;
-}
-
-.msg-body__content :deep(table) {
-  width: auto;
-  margin: 0 0 8px;
-  border-collapse: collapse;
-  font-size: 0.92em;
-}
-
-.msg-body__content :deep(th),
-.msg-body__content :deep(td) {
-  padding: 4px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  text-align: left;
-}
-
-.msg-body__content :deep(th) {
-  font-weight: 600;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.msg-body__content :deep(tr:nth-child(even)) {
-  background: rgba(255, 255, 255, 0.03);
 }
 
 .msg-images {
@@ -403,11 +315,11 @@ const displayModelId = computed(() => {
   display: block;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
+  border-radius: 0;
   background: transparent;
   cursor: pointer;
   overflow: hidden;
-  transition: border-color 140ms ease;
+  transition: border-color var(--transition);
 }
 
 .msg-image-thumb:hover {
@@ -419,6 +331,44 @@ const displayModelId = computed(() => {
   max-width: 180px;
   max-height: 120px;
   object-fit: cover;
-  border-radius: 5px;
+  border-radius: 0;
+}
+
+.msg-copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition);
+  padding: 0;
+}
+
+.message:hover .msg-copy-btn {
+  opacity: 1;
+}
+
+.msg-copy-btn:hover {
+  background: var(--bg);
+}
+
+.msg-copy-btn__icon {
+  width: 13px;
+  height: 13px;
+}
+
+.msg-copy-btn__text {
+  font-size: 9px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 </style>

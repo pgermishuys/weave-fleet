@@ -2,11 +2,16 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { nextTick } from "vue"
 import { useDraftState } from "@/composables/use-draft-state"
 import { useSendPrompt, useSentPrompts, confirmSentPrompt } from "@/composables/use-send-prompt"
-import { apiFetch } from "@/lib/api-client"
-import type { DelegationDto } from "@/lib/api-types"
+import type { DelegationDto } from "@/lib/client-types"
 
-vi.mock("@/lib/api-client", () => ({
-  apiFetch: vi.fn(),
+vi.mock("@/api/client", () => ({
+  api: {
+    GET: vi.fn(),
+    POST: vi.fn(),
+    PUT: vi.fn(),
+    DELETE: vi.fn(),
+    PATCH: vi.fn(),
+  },
 }))
 
 vi.mock("@/composables/use-agents", async () => {
@@ -44,8 +49,12 @@ vi.mock("@/composables/use-models", async () => {
   }
 })
 
+import { api } from "@/api/client"
+
+const mockApi = vi.mocked(api)
+
 afterEach(() => {
-  vi.mocked(apiFetch).mockReset()
+  mockApi.POST.mockReset()
   vi.restoreAllMocks()
 })
 import { applyDomainEvent, createSessionStreamState, type SessionStreamState } from "@/lib/domain-event-reducer"
@@ -211,9 +220,9 @@ function createJsonResponse<T>(body: T, status = 200): Response {
   })
 }
 
-function deferResponse(): { promise: Promise<Response>; resolve: (value: Response) => void } {
-  let resolve!: (value: Response) => void
-  const promise = new Promise<Response>((resolvePromise) => {
+function deferResponse(): { promise: Promise<{ data: unknown; error: undefined; response: Response }>; resolve: (value: { data: unknown; error: undefined; response: Response }) => void } {
+  let resolve!: (value: { data: unknown; error: undefined; response: Response }) => void
+  const promise = new Promise<{ data: unknown; error: undefined; response: Response }>((resolvePromise) => {
     resolve = resolvePromise
   })
 
@@ -538,7 +547,7 @@ describe("domain-event-reducer", () => {
     const sessionId = "session-prompt-reconcile"
     const { sentPrompts, hasPendingPrompts } = useSentPrompts(sessionId)
     const promptRequest = deferResponse()
-    vi.mocked(apiFetch).mockReturnValueOnce(promptRequest.promise)
+    mockApi.POST.mockReturnValueOnce(promptRequest.promise)
     vi.spyOn(crypto, "randomUUID")
       .mockReturnValueOnce("optimistic-id" as `${string}-${string}-${string}-${string}-${string}`)
       .mockReturnValueOnce("corr-reconcile" as `${string}-${string}-${string}-${string}-${string}`)
@@ -580,14 +589,18 @@ describe("domain-event-reducer", () => {
     })
     expect(hasPendingPrompts.value).toBe(false)
 
-    promptRequest.resolve(createJsonResponse({ eventId: 31, correlationId: "prompt-corrreconcile" }))
+    promptRequest.resolve({
+      data: { eventId: 31, correlationId: "prompt-corrreconcile" },
+      error: undefined,
+      response: createJsonResponse({ eventId: 31, correlationId: "prompt-corrreconcile" }),
+    })
   })
 
   it("confirming_same_correlation_id_twice_is_idempotent", async () => {
     const sessionId = "session-prompt-idempotent"
     const { sentPrompts, hasPendingPrompts } = useSentPrompts(sessionId)
     const promptRequest = deferResponse()
-    vi.mocked(apiFetch).mockReturnValueOnce(promptRequest.promise)
+    mockApi.POST.mockReturnValueOnce(promptRequest.promise)
     vi.spyOn(crypto, "randomUUID")
       .mockReturnValueOnce("optimistic-id" as `${string}-${string}-${string}-${string}-${string}`)
       .mockReturnValueOnce("corr-idempotent" as `${string}-${string}-${string}-${string}-${string}`)
@@ -616,7 +629,11 @@ describe("domain-event-reducer", () => {
     })
     expect(hasPendingPrompts.value).toBe(false)
 
-    promptRequest.resolve(createJsonResponse({ eventId: 31, correlationId: "prompt-corridempotent" }))
+    promptRequest.resolve({
+      data: { eventId: 31, correlationId: "prompt-corridempotent" },
+      error: undefined,
+      response: createJsonResponse({ eventId: 31, correlationId: "prompt-corridempotent" }),
+    })
   })
 
   it("derives delegating status from idle snapshots with active delegations", () => {

@@ -173,7 +173,7 @@ internal sealed class PoolDemuxBindingTable : IOpenCodeSseEventBindingResolver
         return _bindings.TryRemove(new BindingKey(instance, openCodeSessionId), out _);
     }
 
-    public int RemoveForLease(
+    public IReadOnlyList<string> RemoveForLease(
         PooledOpenCodeInstance instance,
         Guid consumerId,
         string fleetSessionId,
@@ -188,7 +188,7 @@ internal sealed class PoolDemuxBindingTable : IOpenCodeSseEventBindingResolver
             throw new ArgumentOutOfRangeException(nameof(leaseGeneration), leaseGeneration, "Lease generation must be non-negative.");
         }
 
-        var removed = 0;
+        var removedSessionIds = new List<string>();
         foreach (var pair in _bindings.ToArray())
         {
             var binding = pair.Value;
@@ -203,11 +203,28 @@ internal sealed class PoolDemuxBindingTable : IOpenCodeSseEventBindingResolver
 
             if (_bindings.TryRemove(pair))
             {
-                removed++;
+                removedSessionIds.Add(binding.OpenCodeSessionId);
             }
         }
 
-        return removed;
+        return removedSessionIds;
+    }
+
+    public IReadOnlyList<PoolDemuxBinding> GetBindingsForInstance(PooledOpenCodeInstance instance)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+
+        var bindings = new List<PoolDemuxBinding>();
+        foreach (var pair in _bindings.ToArray())
+        {
+            var binding = pair.Value;
+            if (ReferenceEquals(binding.Instance, instance))
+            {
+                bindings.Add(binding);
+            }
+        }
+
+        return bindings;
     }
 
     public void MoveBindings(

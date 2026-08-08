@@ -41,7 +41,7 @@ const upcomingTemplateCapabilities = [
           <li
             v-for="capability in upcomingTemplateCapabilities"
             :key="capability"
-            class="rounded-lg border border-border bg-muted/30 px-3 py-2"
+            class="border border-border bg-muted/30 px-3 py-2"
           >
             {{ capability }}
           </li>

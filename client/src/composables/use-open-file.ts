@@ -1,5 +1,5 @@
 import { readonly, shallowRef, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import { api } from "@/api/client";
 
 export interface UseOpenFileResult {
   openFile: (filePath: string, tool: string) => Promise<void>;
@@ -16,15 +16,12 @@ export function useOpenFile(): UseOpenFileResult {
     error.value = undefined;
 
     try {
-      const response = await apiFetch("/api/open-file", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filePath, tool }),
+      const { error: apiError } = await api.POST("/api/open-file", {
+        body: { filePath, tool } as never,
       });
 
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `HTTP ${response.status}`);
+      if (apiError) {
+        throw new Error(String(apiError));
       }
     } catch (openError) {
       error.value = openError instanceof Error ? openError.message : "Failed to open file";

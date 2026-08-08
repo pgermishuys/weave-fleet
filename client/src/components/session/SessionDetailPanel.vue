@@ -12,7 +12,7 @@ import { useSessionDetailContext } from "@/composables/use-session-detail-contex
 import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { apiFetch } from "@/lib/api-client";
 import { trackAction } from "@/lib/track-action";
-import type { SessionActionCapabilities, SessionListItem } from "@/lib/api-types";
+import type { SessionActionCapabilities, SessionListItem } from "@/api/client";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { secondsUntilRefresh, isRefreshing, refreshNow, POLL_INTERVAL_SECONDS } from "@/plugins/builtin/smart-links/composables/use-smart-links";
 
@@ -217,7 +217,7 @@ async function handleAbort(): Promise<void> {
   }
 
   try {
-    await abortSession(sessionId.value, resolvedInstanceId.value);
+    await abortSession(sessionId.value);
     refreshPanelData();
   } catch {
     // Error is exposed inline by the composable.

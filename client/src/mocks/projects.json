@@ -1,0 +1,22 @@
+[
+  {
+    "id": "mock-project-1",
+    "name": "Fleet Core",
+    "description": "Core Fleet development work",
+    "type": "user",
+    "position": 0,
+    "sessionCount": 1,
+    "createdAt": "2026-07-01T10:00:00Z",
+    "updatedAt": "2026-07-29T14:00:00Z"
+  },
+  {
+    "id": "mock-project-2",
+    "name": "Documentation",
+    "description": "Documentation updates and improvements",
+    "type": "user",
+    "position": 1,
+    "sessionCount": 1,
+    "createdAt": "2026-07-15T09:00:00Z",
+    "updatedAt": "2026-07-28T16:30:00Z"
+  }
+]

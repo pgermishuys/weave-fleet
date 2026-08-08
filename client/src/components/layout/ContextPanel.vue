@@ -7,7 +7,9 @@ import { storeToRefs } from "pinia";
 import BoardControlsPanel from "@/components/board/BoardControlsPanel.vue";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
 import SettingsNavPanel from "@/components/settings/SettingsNavPanel.vue";
+import AutomationsNavPanel from "@/components/automations/AutomationsNavPanel.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
+import { useAutomationsNav } from "@/composables/use-automations-nav";
 import { getSidebarPanels } from "@/plugins/slots";
 import { useSidebarStore } from "@/stores/sidebar";
 
@@ -32,6 +34,20 @@ const SettingsContextPanel = defineComponent({
       h(SettingsNavPanel, {
         modelValue: activeSection.value,
         "onUpdate:modelValue": setActiveSection,
+      });
+  },
+});
+
+const AutomationsContextPanel = defineComponent({
+  name: "AutomationsContextPanel",
+  setup() {
+    const { activeAutomationId, setActiveAutomation, startCreate } = useAutomationsNav();
+
+    return () =>
+      h(AutomationsNavPanel, {
+        modelValue: activeAutomationId.value,
+        "onUpdate:modelValue": setActiveAutomation,
+        onCreate: startCreate,
       });
   },
 });
@@ -88,6 +104,7 @@ const panelComponents = computed<Record<ContextPanelKey, Component>>(() => ({
   sessions: SessionsPanel,
   board: BoardControlsPanel,
   analytics: SessionsPanel,
+  automations: AutomationsContextPanel,
   ...registeredPluginPanels.value,
 }));
 
@@ -119,27 +136,11 @@ const MAX_WIDTH = 500;
 const panelWidth = shallowRef(280);
 const isResizing = shallowRef(false);
 
-function onResizeStart(event: PointerEvent): void {
-  const target = event.currentTarget as HTMLElement;
-  target.setPointerCapture(event.pointerId);
-  isResizing.value = true;
-  const startX = event.clientX;
-  const startWidth = panelWidth.value;
-
-  function onMove(e: PointerEvent): void {
-    const delta = e.clientX - startX;
-    panelWidth.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth + delta));
-  }
-
-  function onUp(): void {
-    isResizing.value = false;
-    target.removeEventListener("pointermove", onMove);
-    target.removeEventListener("pointerup", onUp);
-  }
-
-  target.addEventListener("pointermove", onMove);
-  target.addEventListener("pointerup", onUp);
+function resizeBy(delta: number): void {
+  panelWidth.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, panelWidth.value + delta));
 }
+
+defineExpose({ panelWidth, isResizing, resizeBy });
 </script>
 
 <template>
@@ -152,11 +153,6 @@ function onResizeStart(event: PointerEvent): void {
       :is="activePanel"
       :key="activePanelKey"
     />
-    <div
-      class="resize-handle"
-      :class="{ 'resize-handle--active': isResizing }"
-      @pointerdown.prevent="onResizeStart"
-    />
   </aside>
 </template>
 
@@ -164,26 +160,11 @@ function onResizeStart(event: PointerEvent): void {
 .context-panel {
   position: relative;
   background: var(--panel-bg);
-  border-right: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.resize-handle {
-  position: absolute;
-  top: 0;
-  right: -3px;
-  width: 6px;
-  height: 100%;
-  cursor: col-resize;
-  z-index: 20;
-}
-
-.resize-handle:hover,
-.resize-handle--active {
-  background: var(--accent);
-  opacity: 0.4;
 }
 
 .context-panel :deep(.context-panel__content) {

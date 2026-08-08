@@ -1,6 +1,6 @@
 import { computed, onMounted, onUnmounted, shallowRef, toValue, type ComputedRef, type MaybeRefOrGetter, type ShallowRef } from "vue";
-import type { AnalyticsSummary } from "@/lib/api-types";
-import { apiFetch } from "@/lib/api-client";
+import type { AnalyticsSummary } from "@/api/client";
+import { api } from "@/api/client";
 
 export interface UseAnalyticsSummaryParams {
   from?: MaybeRefOrGetter<string | undefined>;
@@ -56,17 +56,18 @@ export function useAnalyticsSummary(
     const currentRequestId = ++requestId;
 
     try {
-      const response = await apiFetch(`/api/analytics/summary${queryString.value ? `?${queryString.value}` : ""}`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      const { data, error: apiError } = await api.GET("/api/analytics/summary", {
+        params: { query: Object.fromEntries(new URLSearchParams(queryString.value)) },
+      });
+      if (apiError) {
+        throw new Error("Failed to fetch analytics summary");
       }
 
-      const data = (await response.json()) as AnalyticsSummary;
       if (currentRequestId !== requestId) {
         return;
       }
 
-      summary.value = data;
+      summary.value = data as AnalyticsSummary;
       error.value = undefined;
     } catch (fetchError) {
       if (currentRequestId !== requestId) {

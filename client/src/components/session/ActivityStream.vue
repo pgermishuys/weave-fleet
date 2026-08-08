@@ -10,12 +10,14 @@ import { useSmartLinks } from "@/plugins/builtin/smart-links"
 import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { CommandEventName } from "@/lib/command-events";
-import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart } from "@/lib/api-types";
+import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart } from "@/lib/client-types";
+import type { VisualPayload } from "@/lib/visual-payload";
 import { isQuestionPart } from "@/lib/question-types";
 import { diagLog } from "@/lib/message-diagnostics";
 import { sortAccumulatedMessagesChronologically } from "@/lib/pagination-utils";
 import { useSessionsStore } from "@/stores/sessions";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
+import { useVisualPanel } from "@/composables/use-visual-panel";
 
 interface ImageAttachmentDisplay {
   url: string;
@@ -55,6 +57,7 @@ const props = defineProps<{
 const router = useRouter();
 const sessionsStore = useSessionsStore();
 const { sessions } = storeToRefs(sessionsStore);
+const { showVisual } = useVisualPanel();
 
 const selectedSession = computed(() => {
   return sessions.value.find((session) => session.session.id === props.sessionId) ?? null;
@@ -62,7 +65,7 @@ const selectedSession = computed(() => {
 
 const resolvedInstanceId = computed(() => props.instanceId ?? selectedSession.value?.instanceId ?? "");
 
-const { messages: sessionMessages, delegations, forceIdle, hasMoreMessages, isLoadingOlder, loadOlderMessages } = useSessionEventsSwitch(
+const { messages: sessionMessages, delegations, sessionStatus, forceIdle, hasMoreMessages, isLoadingOlder, loadOlderMessages } = useSessionEventsSwitch(
   computed(() => props.sessionId),
   resolvedInstanceId,
 );
@@ -232,6 +235,8 @@ const messages = computed<ActivityMessage[]>(() => {
     } satisfies ActivityMessage;
   });
 });
+
+const isStreaming = computed(() => sessionStatus.value === "busy");
 
 function isNearBottom(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
@@ -639,6 +644,10 @@ function formatToolStatus(value: unknown): string {
 function getStringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
+
+function handleExpandVisual(payload: VisualPayload): void {
+  showVisual(payload);
+}
 </script>
 
 <template>
@@ -696,6 +705,7 @@ function getStringValue(value: unknown): string | undefined {
           :session-id="props.sessionId"
           :show-identity="message.showIdentity"
           :cluster-position="message.clusterPosition"
+          @expand-visual="handleExpandVisual"
         />
         <div
           v-if="message.optimisticStatus === 'needs_retry'"
@@ -745,6 +755,21 @@ function getStringValue(value: unknown): string | undefined {
           </a>
         </div>
       </div>
+
+      <!-- Streaming indicator -->
+      <div
+        v-if="isStreaming"
+        class="streaming-indicator"
+      >
+        <div class="streaming-indicator__layout">
+          <div class="streaming-indicator__icon">
+            <Bot class="streaming-indicator__icon-svg" aria-hidden="true" />
+          </div>
+          <div class="streaming-indicator__dots">
+            <span class="streaming-dots-loader" aria-hidden="true" />
+          </div>
+        </div>
+      </div>
     </section>
   </div>
 </template>
@@ -779,7 +804,7 @@ function getStringValue(value: unknown): string | undefined {
   display: inline-flex;
   padding: 8px 12px;
   border: 1px solid rgba(129, 140, 248, 0.35);
-  border-radius: 999px;
+  border-radius: 0;
   background: rgba(24, 24, 27, 0.92);
   color: #e4e4e7;
   font-size: 0.875rem;
@@ -809,7 +834,7 @@ function getStringValue(value: unknown): string | undefined {
   background: none;
   cursor: pointer;
   opacity: 0.7;
-  transition: opacity 0.15s;
+  transition: opacity var(--transition);
 }
 
 .load-older-button:hover {
@@ -852,8 +877,8 @@ function getStringValue(value: unknown): string | undefined {
   display: flex;
   flex-direction: column;
   width: 100%;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: 0px;
+  margin-bottom: 0px;
 }
 
 .activity-message--assistant {
@@ -862,12 +887,88 @@ function getStringValue(value: unknown): string | undefined {
 
 .activity-message--user {
   align-items: flex-start;
-  padding-left: 32px;
 }
 
 .activity-message--first,
 .activity-message--middle {
-  margin-bottom: 2px;
+  margin-bottom: 0px;
+}
+
+.streaming-indicator {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 4px 12px;
+  margin-bottom: 12px;
+  border-left: 3px solid transparent;
+  box-sizing: border-box;
+}
+
+.streaming-indicator__layout {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.streaming-indicator__icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.streaming-indicator__icon-svg {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+
+.streaming-indicator__dots {
+  display: flex;
+  align-items: center;
+  height: 20px;
+  padding-left: calc(32 * 0.45px);
+}
+
+.streaming-dots-loader {
+  --color-1: var(--muted);
+  --color-2: color-mix(in srgb, var(--muted) 20%, transparent);
+  --size: 0.45px;
+
+  display: inline-block;
+  width: calc(16 * var(--size));
+  height: calc(16 * var(--size));
+  border-radius: 50%;
+  background-color: var(--color-1);
+  box-shadow:
+    calc(32 * var(--size)) 0 var(--color-1),
+    calc(-32 * var(--size)) 0 var(--color-1);
+  position: relative;
+  animation: streaming-dots-flash 0.5s ease-out infinite alternate;
+}
+
+@keyframes streaming-dots-flash {
+  0% {
+    background-color: var(--color-2);
+    box-shadow:
+      calc(32 * var(--size)) 0 var(--color-2),
+      calc(-32 * var(--size)) 0 var(--color-1);
+  }
+  50% {
+    background-color: var(--color-1);
+    box-shadow:
+      calc(32 * var(--size)) 0 var(--color-2),
+      calc(-32 * var(--size)) 0 var(--color-2);
+  }
+  100% {
+    background-color: var(--color-2);
+    box-shadow:
+      calc(32 * var(--size)) 0 var(--color-1),
+      calc(-32 * var(--size)) 0 var(--color-2);
+  }
 }
 
 .delegation-links {
@@ -897,8 +998,8 @@ function getStringValue(value: unknown): string | undefined {
   color: inherit;
   text-decoration: none;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03);
-  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease,
-    transform 140ms ease;
+  transition: border-color var(--transition) ease, background-color var(--transition) ease, box-shadow var(--transition) ease,
+    transform var(--transition) ease;
 }
 
 .delegation-link:hover {

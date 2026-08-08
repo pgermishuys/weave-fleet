@@ -13,7 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateProject } from "@/composables/use-session-actions";
-import type { ProjectResponse } from "@/lib/api-types";
+import type { ProjectResponse } from "@/api/client";
 
 const open = defineModel<boolean>("open", { default: false });
 
@@ -133,7 +133,7 @@ watch(open, async (isOpen) => {
 
         <div
           v-if="errorMessage"
-          class="flex items-start gap-3 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          class="flex items-start gap-3 border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
           role="alert"
         >
           <AlertCircle class="mt-0.5 h-4 w-4 shrink-0" />

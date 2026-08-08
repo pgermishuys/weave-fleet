@@ -1,5 +1,5 @@
 import { onMounted, onUnmounted, readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import { api } from "@/api/client";
 
 export type UpdateStatusKind = "unknown" | "uptodate" | "available" | "downloading" | "staged" | "error";
 
@@ -39,18 +39,20 @@ let subscriberCount = 0;
 async function fetchStatus(): Promise<void> {
   const currentRequestId = ++requestId;
   try {
-    const response = await apiFetch("/api/update/status");
-    if (!response.ok) return;
+    const { data, error: apiError } = await api.GET("/api/update/status");
+    if (apiError) return;
 
-    const data = (await response.json()) as UpdateStatus;
+    if (!data) return;
+
+    const result = data as UpdateStatus;
     if (currentRequestId !== requestId) return;
 
-    updateStatus.value = data;
-    isUpdateAvailable.value = data.status === "available" || data.status === "downloading";
-    isUpdateStaged.value = data.status === "staged";
+    updateStatus.value = result;
+    isUpdateAvailable.value = result.status === "available" || result.status === "downloading";
+    isUpdateStaged.value = result.status === "staged";
 
     // Poll while downloading.
-    if (data.status === "downloading") {
+    if (result.status === "downloading") {
       schedulePolling(POLL_INTERVAL_DOWNLOADING_MS);
     } else {
       stopPolling();
@@ -65,12 +67,12 @@ async function fetchStatus(): Promise<void> {
 }
 
 async function checkForUpdate(): Promise<void> {
-  await apiFetch("/api/update/check", { method: "POST" });
+  await api.POST("/api/update/check");
   await fetchStatus();
 }
 
 async function downloadUpdate(): Promise<void> {
-  await apiFetch("/api/update/download", { method: "POST" });
+  await api.POST("/api/update/download");
   // Endpoint returns immediately; start polling for progress.
   schedulePolling(POLL_INTERVAL_DOWNLOADING_MS);
   await fetchStatus();

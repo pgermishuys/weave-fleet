@@ -1,6 +1,6 @@
 import { computed, onMounted, onUnmounted, shallowRef, toValue, type ComputedRef, type MaybeRefOrGetter, type ShallowRef } from "vue";
-import type { DailyAnalytics } from "@/lib/api-types";
-import { apiFetch } from "@/lib/api-client";
+import type { DailyAnalytics } from "@/api/client";
+import { api } from "@/api/client";
 
 export interface UseAnalyticsDailyParams {
   from?: MaybeRefOrGetter<string | undefined>;
@@ -57,17 +57,18 @@ export function useAnalyticsDaily(
     const currentRequestId = ++requestId;
 
     try {
-      const response = await apiFetch(`/api/analytics/daily${queryString.value ? `?${queryString.value}` : ""}`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      const { data, error: apiError } = await api.GET("/api/analytics/daily", {
+        params: { query: Object.fromEntries(new URLSearchParams(queryString.value)) },
+      });
+      if (apiError) {
+        throw new Error("Failed to fetch daily analytics");
       }
 
-      const data = (await response.json()) as DailyAnalytics[];
       if (currentRequestId !== requestId) {
         return;
       }
 
-      daily.value = data;
+      daily.value = data as DailyAnalytics[];
       error.value = undefined;
     } catch (fetchError) {
       if (currentRequestId !== requestId) {

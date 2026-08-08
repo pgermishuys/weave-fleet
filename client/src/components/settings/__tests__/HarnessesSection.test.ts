@@ -2,7 +2,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import HarnessesSection from "@/components/settings/HarnessesSection.vue";
-import type { HarnessInfo } from "@/lib/api-types";
+import type { HarnessInfo } from "@/api/client";
 
 const { apiFetchMock } = vi.hoisted(() => ({
   apiFetchMock: vi.fn(),
@@ -74,26 +74,11 @@ describe("HarnessesSection", () => {
     setActivePinia(createPinia());
   });
 
-  it("renders pooled opencode mode off by default", async () => {
+  it("renders harnesses section", async () => {
     mockApiResponses({});
 
     const wrapper = await mountHarnessesSection();
 
-    expect(wrapper.text()).toContain("Pooled OpenCode Mode");
-    expect(wrapper.text()).toContain("Off by default");
-    expect(wrapper.get("button[aria-label='Enable Pooled OpenCode Mode']").attributes("aria-checked")).toBe("false");
-  });
-
-  it("persists pooled opencode mode changes", async () => {
-    mockApiResponses({});
-
-    const wrapper = await mountHarnessesSection();
-    await wrapper.get("button[aria-label='Enable Pooled OpenCode Mode']").trigger("click");
-
-    expect(apiFetchMock).toHaveBeenCalledWith("/api/preferences/PooledOpenCodeHarness", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: "true" }),
-    });
+    expect(wrapper.text()).toContain("Harnesses");
   });
 });

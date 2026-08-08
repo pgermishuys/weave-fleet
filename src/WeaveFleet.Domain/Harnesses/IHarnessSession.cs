@@ -53,8 +53,22 @@ public interface IHarnessSession : IAsyncDisposable
     /// <summary>Subscribe to a real-time stream of harness events.</summary>
     IAsyncEnumerable<HarnessEvent> SubscribeAsync(CancellationToken ct);
 
+    /// <summary>
+    /// Wait until the event subscription stream is established and ready to receive events.
+    /// This ensures that events emitted immediately after activation/resume are not lost.
+    /// Completes when the underlying transport (SSE, WebSocket, etc.) is connected and consuming.
+    /// </summary>
+    Task WaitForEventSubscriptionAsync(CancellationToken ct);
+
     /// <summary>Check whether this instance is still healthy.</summary>
     Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Query the current activity status of the harness session (busy/idle).
+    /// Returns null if the harness does not support activity status queries.
+    /// Used for resync on SSE reconnect to correct missed state transitions.
+    /// </summary>
+    Task<string?> GetActivityStatusAsync(CancellationToken ct);
 
     /// <summary>List available agents for this instance.</summary>
     Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct);

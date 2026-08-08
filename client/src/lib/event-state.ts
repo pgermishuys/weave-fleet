@@ -9,7 +9,7 @@ import type {
   AccumulatedTextPart,
   AccumulatedToolPart,
   AccumulatedFilePart,
-} from "@/lib/api-types";
+} from "@/lib/client-types";
 import { sortAccumulatedMessagesChronologically } from "@/lib/pagination-utils";
 
 function sortMessagesChronologically(messages: AccumulatedMessage[]): AccumulatedMessage[] {

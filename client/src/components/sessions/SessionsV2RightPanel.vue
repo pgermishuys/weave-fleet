@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
+import { X } from "lucide-vue-next";
+import AnnotationPopover from "@/components/annotations/AnnotationPopover.vue";
 import CollapsedRightRail from "@/components/layout/CollapsedRightRail.vue";
+import FileBrowserPanel from "@/components/session/FileBrowserPanel.vue";
 import RightPanelTabs from "@/components/layout/RightPanelTabs.vue";
 import SessionDetailPanel from "@/components/session/SessionDetailPanel.vue";
 import {
@@ -15,12 +18,29 @@ import {
 import { provideSessionDetailContext } from "@/composables/use-session-detail-context";
 import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { useSessionTodos } from "@/composables/use-session-todos";
+import { useVisualPanel } from "@/composables/use-visual-panel";
+import { useAnnotation } from "@/composables/use-annotation";
+import { useSendPrompt } from "@/composables/use-send-prompt";
+import { useDraftState } from "@/composables/use-draft-state";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
+import { getVisualRenderer } from "@/lib/visual-renderer-registry";
+import { formatAnnotationPrompt } from "@/lib/format-annotation-prompt";
+import { extractAnchorText } from "@/lib/annotation-types";
+import type { AnnotationAnchor } from "@/lib/annotation-types";
+
+interface Props {
+  width?: number;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  width: 360,
+});
 
 const sidebarStore = useSidebarStore();
 const sessionsStore = useSessionsStore();
 const sessionDiffsContext = useSessionDiffsContext();
+const { visualPayload, clearVisual } = useVisualPanel();
 
 const { rightPanelCollapsed } = storeToRefs(sidebarStore);
 const { sessions, activeSessionId } = storeToRefs(sessionsStore);
@@ -86,7 +106,48 @@ watch(
   { flush: "post", immediate: true },
 );
 
+// Auto-expand and switch to Visual tab when visual payload is set.
+watch(
+  visualPayload,
+  (next) => {
+    if (next) {
+      sidebarStore.setRightPanelCollapsed(false);
+      activeTabId.value = "visual";
+    }
+  },
+  { flush: "post" },
+);
+
 // --- Tabs ---
+const rightPanelTabs = computed(() => {
+  const tabs = [
+    {
+      id: "files",
+      label: "Files",
+    },
+    {
+      id: "info",
+      label: "Info",
+    },
+  ] as const;
+
+  if (visualPayload.value) {
+    return [
+      {
+        id: "visual",
+        label: "Visual",
+      },
+      ...tabs,
+    ] as const;
+  }
+
+  return tabs;
+});
+
+type RightPanelTabId = "files" | "info" | "visual";
+
+const activeTabId = shallowRef<RightPanelTabId>("files");
+
 const sessionTab = {
   id: "session",
   label: "Session",
@@ -110,6 +171,12 @@ const activeTab = computed(() => {
     description: `${statusLabel} session in ${projectLabel}. Details and quick actions for the selected session appear here.`,
   };
 });
+
+function handleTabSelect(tabId: string): void {
+  if (tabId === "files" || tabId === "info" || tabId === "visual") {
+    activeTabId.value = tabId;
+  }
+}
 
 function getStatusLabel(status: string): string {
   switch (status) {
@@ -140,6 +207,67 @@ function openDiffsTray(): void {
   context.openDiffsTray();
 }
 
+const visualRenderer = computed(() => {
+  if (!visualPayload.value) return null;
+  return getVisualRenderer(visualPayload.value.$type);
+});
+
+function handleCloseVisual(): void {
+  clearVisual();
+  activeTabId.value = "files";
+}
+
+// --- Annotation flow ---
+// We need to initialize these composables with the active session ID
+// Since the session ID can change, we'll handle the case where there's no active session
+const currentSessionId = computed(() => activeSessionId.value ?? "");
+
+const {
+  activeAnchor,
+  isPopoverOpen,
+  popoverPosition,
+  openAnnotation,
+  closeAnnotation,
+  submitAnnotation,
+} = useAnnotation({
+  onSubmit: (formattedText: string) => {
+    const sessionId = currentSessionId.value;
+    if (!sessionId) return;
+    
+    // Get the composables for the current session
+    const { sendPrompt } = useSendPrompt(sessionId);
+    const { setText } = useDraftState(sessionId, {
+      agentId: "",
+      modelId: "",
+    });
+    
+    // Format the annotation prompt with file path if available
+    const filePath = visualPayload.value?.sourceFilePath ?? "";
+    const anchorText = activeAnchor.value ? extractAnchorText(activeAnchor.value) : "";
+    const prompt = formatAnnotationPrompt(filePath, anchorText, formattedText);
+    
+    // Set the draft text and send
+    setText(prompt);
+    sendPrompt();
+  },
+});
+
+function handleAnnotate(anchor: AnnotationAnchor, position: { x: number; y: number }): void {
+  openAnnotation(anchor, position);
+}
+
+function handleAnnotationSend(text: string): void {
+  submitAnnotation(text);
+}
+
+function handleAnnotationCancel(): void {
+  closeAnnotation();
+}
+
+// Check if the current visual renderer is the MarkdownRenderer
+const isMarkdownRenderer = computed(() => {
+  return visualPayload.value?.$type === "markdown";
+});
 </script>
 
 <template>
@@ -152,48 +280,92 @@ function openDiffsTray(): void {
   <aside
     v-else
     class="right-panel"
+    :style="{ width: `${props.width}px`, minWidth: '280px' }"
     aria-label="Right panel"
   >
     <RightPanelTabs
-      :tabs="[sessionTab]"
-      :active-tab="sessionTab.id"
+      :tabs="rightPanelTabs"
+      :active-tab="activeTabId"
+      @select="handleTabSelect"
       @collapse="handleCollapse"
     />
 
-    <div class="right-content">
+    <div class="right-content" :class="{ 'right-content--visual': activeTabId === 'visual' && visualPayload && visualRenderer }">
       <div class="right-content__panel">
         <section
-          v-if="!selectedSession"
-          class="right-section"
+          v-if="activeTabId === 'visual' && visualPayload && visualRenderer"
+          class="visual-panel"
         >
-          <p class="right-section__eyebrow">
-            {{ activeTab.eyebrow }}
-          </p>
-          <h2 class="right-section__title">
-            {{ activeTab.title }}
-          </h2>
-          <p class="right-section__description">
-            {{ activeTab.description }}
-          </p>
+          <div v-if="!visualPayload.sourceFilePath" class="visual-panel__header">
+            <h2 class="visual-panel__title">
+              {{ visualPayload.title ?? 'Visual Content' }}
+            </h2>
+            <button
+              class="visual-panel__close"
+              data-testid="visual-panel-close"
+              @click="handleCloseVisual"
+            >
+              <X class="visual-panel__close-icon" />
+            </button>
+          </div>
+          <div class="visual-panel__content">
+            <component
+              :is="visualRenderer"
+              :content="visualPayload.content"
+              :annotatable="isMarkdownRenderer"
+              @annotate="handleAnnotate"
+            />
+          </div>
         </section>
 
-        <SessionDetailPanel
-          v-else
-          :session="selectedSession"
-          :open-diffs-tray="openDiffsTray"
-        />
+        <FileBrowserPanel v-if="activeTabId === 'files'" :session-id="activeSessionId ?? ''" />
+
+        <template v-else-if="activeTabId === 'info'">
+          <section
+            v-if="!selectedSession"
+            class="right-section"
+          >
+            <p class="right-section__eyebrow">
+              {{ activeTab.eyebrow }}
+            </p>
+            <h2 class="right-section__title">
+              {{ activeTab.title }}
+            </h2>
+            <p class="right-section__description">
+              {{ activeTab.description }}
+            </p>
+          </section>
+
+          <SessionDetailPanel
+            v-else
+            :session="selectedSession"
+            :open-diffs-tray="openDiffsTray"
+          />
+        </template>
       </div>
     </div>
+
+    <!-- Annotation Popover -->
+    <Teleport to="body">
+      <AnnotationPopover
+        v-if="isPopoverOpen && activeAnchor"
+        :x="popoverPosition.x"
+        :y="popoverPosition.y"
+        :anchor-text="extractAnchorText(activeAnchor)"
+        @send="handleAnnotationSend"
+        @cancel="handleAnnotationCancel"
+      />
+    </Teleport>
   </aside>
 </template>
 
 <style scoped>
 .right-panel {
-  width: 280px;
-  min-width: 280px;
+  position: relative;
   min-height: 0;
   background: var(--panel-bg);
-  border-left: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -204,12 +376,19 @@ function openDiffsTray(): void {
   min-height: 0;
   overflow-y: auto;
   padding: 10px 10px 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.right-content--visual {
+  overflow: hidden;
 }
 
 .right-content__panel {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 .right-section {
@@ -240,5 +419,59 @@ function openDiffsTray(): void {
   font-size: 11px;
   line-height: 1.4;
   color: var(--muted);
+}
+
+.visual-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+}
+
+.visual-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.visual-panel__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.visual-panel__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--surface, #fff);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.visual-panel__close:hover {
+  background: var(--bg, rgba(0, 0, 0, 0.04));
+  color: var(--text);
+}
+
+.visual-panel__close-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.visual-panel__content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 </style>

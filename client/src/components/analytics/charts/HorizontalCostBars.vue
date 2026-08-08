@@ -60,7 +60,7 @@ function formatCurrency(amount: number): string {
 
 <template>
   <section
-    class="rounded-xl border border-border/80 bg-card/70 p-5 shadow-sm backdrop-blur-sm"
+    class="border border-border/80 bg-card/70 p-5 shadow-sm backdrop-blur-sm"
     aria-label="Cost ranking"
   >
     <ol

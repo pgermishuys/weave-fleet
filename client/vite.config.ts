@@ -5,6 +5,7 @@ import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import packageJson from "./package.json";
+import { mockApiPlugin } from "./vite-plugin-mock-api";
 
 function getGitCommitSha(): string {
   try {
@@ -22,8 +23,10 @@ function getAppVersion(): string {
   return packageJson.version;
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
+    // Mock API plugin - only active when mode=mock or MOCK_API=true
+    mockApiPlugin({ mode }),
     TanStackRouterVite({
       target: "vue",
       autoCodeSplitting: true,
@@ -61,5 +64,6 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    chunkSizeWarningLimit: 700,
   },
-});
+}));

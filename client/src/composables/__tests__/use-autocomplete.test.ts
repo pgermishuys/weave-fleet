@@ -3,10 +3,21 @@ import { shallowRef, type Ref } from "vue";
 import { useAutocomplete } from "@/composables/use-autocomplete";
 import { flushAll, mountComposable } from "./test-utils";
 
-const { apiFetchMock } = vi.hoisted(() => ({
-  apiFetchMock: vi.fn(),
+const { mockApi } = vi.hoisted(() => ({
+  mockApi: {
+    GET: vi.fn(),
+    POST: vi.fn(),
+    PUT: vi.fn(),
+    DELETE: vi.fn(),
+    PATCH: vi.fn(),
+  },
 }));
 
+vi.mock("@/api/client", () => ({
+  api: mockApi,
+}));
+
+const apiFetchMock = vi.fn();
 vi.mock("@/lib/api-client", () => ({
   apiFetch: apiFetchMock,
 }));
@@ -27,27 +38,67 @@ function createKeyboardEvent(key: string): KeyboardEvent {
 }
 
 function configureApiFetch(): void {
-  apiFetchMock.mockImplementation(async (url: string) => {
-    if (url.endsWith("/commands")) {
-      return createJsonResponse({
-        commands: [
-          { name: "help", description: "Show help" },
-          { name: "hello", description: "Say hello" },
-          { name: "status", description: "Show status" },
+  // Mock api.GET for commands and agents
+  mockApi.GET.mockImplementation(async (url: string) => {
+    if (url === "/api/sessions/{id}/commands") {
+      return {
+        data: {
+          commands: [
+            { name: "help", description: "Show help" },
+            { name: "hello", description: "Say hello" },
+            { name: "status", description: "Show status" },
+          ],
+        },
+        error: undefined,
+        response: createJsonResponse({
+          commands: [
+            { name: "help", description: "Show help" },
+            { name: "hello", description: "Say hello" },
+            { name: "status", description: "Show status" },
+          ],
+        }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
+    }
+
+    if (url === "/api/sessions/{id}/agents") {
+      return {
+        data: [
+          { name: "alpha", description: "Planner", mode: "primary", color: "#ff00aa" },
+          { name: "beta", description: "Reviewer", mode: "secondary", color: "#00aaff" },
         ],
-      });
+        error: undefined,
+        response: createJsonResponse([
+          { name: "alpha", description: "Planner", mode: "primary", color: "#ff00aa" },
+          { name: "beta", description: "Reviewer", mode: "secondary", color: "#00aaff" },
+        ]),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
     }
 
-    if (url.endsWith("/agents")) {
-      return createJsonResponse([
-        { name: "alpha", description: "Planner", mode: "primary", color: "#ff00aa" },
-        { name: "beta", description: "Reviewer", mode: "secondary", color: "#00aaff" },
-      ]);
+    if (url === "/api/sessions/{id}/find/files") {
+      return {
+        data: {
+          sessionId: "instance-1",
+          files: ["src/alpha.ts", "src/components/"],
+        },
+        error: undefined,
+        response: createJsonResponse({
+          sessionId: "instance-1",
+          files: ["src/alpha.ts", "src/components/"],
+        }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
     }
 
+    throw new Error(`Unhandled GET call: ${url}`);
+  });
+
+  // Mock apiFetch for file search
+  apiFetchMock.mockImplementation(async (url: string) => {
     if (url.includes("/find/files?q=")) {
       return createJsonResponse({
-        instanceId: "instance-1",
+        sessionId: "instance-1",
         files: ["src/alpha.ts", "src/components/"],
       });
     }
@@ -56,7 +107,7 @@ function configureApiFetch(): void {
   });
 }
 
-async function mountAutocomplete(initialValue: string, cursor: number, instanceId: Ref<string> | string = "instance-1") {
+async function mountAutocomplete(initialValue: string, cursor: number, sessionId: Ref<string> | string = "instance-1") {
   const value = shallowRef(initialValue);
   const cursorPosition = shallowRef(cursor);
   const input = document.createElement("textarea");
@@ -69,7 +120,7 @@ async function mountAutocomplete(initialValue: string, cursor: number, instanceI
       value.value = nextValue;
       input.value = nextValue;
     },
-    instanceId,
+    sessionId,
     inputRef,
     cursorPosition,
   }));
@@ -85,6 +136,7 @@ async function mountAutocomplete(initialValue: string, cursor: number, instanceI
 describe("useAutocomplete", () => {
   beforeEach(() => {
     apiFetchMock.mockReset();
+    mockApi.GET.mockReset();
     configureApiFetch();
   });
 
@@ -129,15 +181,19 @@ describe("useAutocomplete", () => {
     cursorPosition.value = value.value.length;
     await flushAll();
 
-    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/find/files?q="))).toBe(false);
+    expect(mockApi.GET).not.toHaveBeenCalledWith("/api/sessions/{id}/find/files", expect.anything());
 
     await vi.advanceTimersByTimeAsync(299);
-    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/find/files?q="))).toBe(false);
+    expect(mockApi.GET).not.toHaveBeenCalledWith("/api/sessions/{id}/find/files", expect.anything());
 
     await vi.advanceTimersByTimeAsync(1);
     await flushAll();
 
-    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/find/files?q=al"))).toBe(true);
+    expect(mockApi.GET).toHaveBeenCalledWith("/api/sessions/{id}/find/files", expect.objectContaining({
+      params: expect.objectContaining({
+        query: { q: "al" },
+      }),
+    }));
     expect(result.items.value.map((item) => item.label)).toEqual(["@alpha", "src/alpha.ts", "src/components/"]);
 
     value.value = "hello@al";
@@ -185,18 +241,24 @@ describe("useAutocomplete", () => {
     expect(value.value).toBe("/help ");
   });
 
-  it("reloads instance-scoped suggestions when the instance id changes", async () => {
-    const instanceId = shallowRef("instance-1");
+  it("reloads session-scoped suggestions when the session id changes", async () => {
+    const sessionId = shallowRef("instance-1");
 
-    await mountAutocomplete("/", 1, instanceId);
+    await mountAutocomplete("/", 1, sessionId);
     await flushAll();
 
-    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/api/instances/instance-1/commands"))).toBe(true);
+    expect(mockApi.GET).toHaveBeenCalledWith("/api/sessions/{id}/commands", expect.objectContaining({
+      params: { path: { id: "instance-1" } },
+    }));
 
-    instanceId.value = "instance-2";
+    sessionId.value = "instance-2";
     await flushAll();
 
-    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/api/instances/instance-2/commands"))).toBe(true);
-    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/api/instances/instance-2/agents"))).toBe(true);
+    expect(mockApi.GET).toHaveBeenCalledWith("/api/sessions/{id}/commands", expect.objectContaining({
+      params: { path: { id: "instance-2" } },
+    }));
+    expect(mockApi.GET).toHaveBeenCalledWith("/api/sessions/{id}/agents", expect.objectContaining({
+      params: { path: { id: "instance-2" } },
+    }));
   });
 });

@@ -555,4 +555,141 @@ public sealed class SessionRepositoryTests
 
         sessions.ShouldBeEmpty();
     }
+
+    [Fact]
+    public async Task insert_and_get_by_id_serializes_and_deserializes_tags()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var (ws, inst) = await InsertDependenciesAsync(factory);
+        var session = new Session
+        {
+            Id = Guid.NewGuid().ToString(),
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-tags",
+            Title = "Tagged Session",
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId,
+            Tags = ["foo", "bar", "baz"]
+        };
+
+        await repo.InsertAsync(session);
+        var retrieved = await repo.GetByIdAsync(session.Id);
+
+        retrieved.ShouldNotBeNull();
+        retrieved.Tags.ShouldNotBeNull();
+        retrieved.Tags.Count.ShouldBe(3);
+        retrieved.Tags.ShouldContain("foo");
+        retrieved.Tags.ShouldContain("bar");
+        retrieved.Tags.ShouldContain("baz");
+    }
+
+    [Fact]
+    public async Task insert_with_empty_tags_returns_empty_list()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var (ws, inst) = await InsertDependenciesAsync(factory);
+        var session = new Session
+        {
+            Id = Guid.NewGuid().ToString(),
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-no-tags",
+            Title = "Untagged Session",
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId,
+            Tags = []
+        };
+
+        await repo.InsertAsync(session);
+        var retrieved = await repo.GetByIdAsync(session.Id);
+
+        retrieved.ShouldNotBeNull();
+        retrieved.Tags.ShouldNotBeNull();
+        retrieved.Tags.Count.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task list_with_tags_filter_returns_matching_sessions()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var (ws, inst) = await InsertDependenciesAsync(factory);
+
+        var session1 = new Session
+        {
+            Id = Guid.NewGuid().ToString(),
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-tag-1",
+            Title = "Session 1",
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId,
+            Tags = ["urgent", "bug"]
+        };
+
+        var session2 = new Session
+        {
+            Id = Guid.NewGuid().ToString(),
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-tag-2",
+            Title = "Session 2",
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.AddSeconds(-1).ToString("O"),
+            UserId = TestUserContext.DefaultUserId,
+            Tags = ["feature", "enhancement"]
+        };
+
+        var session3 = new Session
+        {
+            Id = Guid.NewGuid().ToString(),
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-tag-3",
+            Title = "Session 3",
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.AddSeconds(-2).ToString("O"),
+            UserId = TestUserContext.DefaultUserId,
+            Tags = ["urgent", "feature"]
+        };
+
+        await repo.InsertAsync(session1);
+        await repo.InsertAsync(session2);
+        await repo.InsertAsync(session3);
+
+        // Filter by "urgent" - should return session1 and session3
+        var urgentSessions = await repo.ListAsync(100, 0, null, null, null, ["urgent"]);
+        urgentSessions.Count.ShouldBe(2);
+        urgentSessions.ShouldContain(s => s.Id == session1.Id);
+        urgentSessions.ShouldContain(s => s.Id == session3.Id);
+
+        // Filter by "feature" - should return session2 and session3
+        var featureSessions = await repo.ListAsync(100, 0, null, null, null, ["feature"]);
+        featureSessions.Count.ShouldBe(2);
+        featureSessions.ShouldContain(s => s.Id == session2.Id);
+        featureSessions.ShouldContain(s => s.Id == session3.Id);
+
+        // Filter by "bug" - should return only session1
+        var bugSessions = await repo.ListAsync(100, 0, null, null, null, ["bug"]);
+        bugSessions.Count.ShouldBe(1);
+        bugSessions[0].Id.ShouldBe(session1.Id);
+
+        // Filter by multiple tags (OR logic) - should return all sessions
+        var multiTagSessions = await repo.ListAsync(100, 0, null, null, null, ["urgent", "enhancement"]);
+        multiTagSessions.Count.ShouldBe(3);
+    }
 }

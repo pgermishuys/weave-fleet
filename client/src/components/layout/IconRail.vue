@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import type { Component } from "vue";
 import type { SidebarRail } from "@/stores/sidebar";
-import type { PluginConnectionStatus } from "@/plugins/types";
+import type { PluginConnectionStatus, FleetPluginStatus } from "@/plugins/types";
 import { computed, onMounted, onUnmounted, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
-import { BarChart3, LayoutGrid, MessageSquare, Puzzle, Settings } from "lucide-vue-next";
+import { BarChart3, LayoutGrid, MessageSquare, Puzzle, Settings, Zap } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import weaveLogo from "@/assets/weave_logo.png";
-import { apiFetch } from "@/lib/api-client";
-import type { PluginCatalogResponse } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { PluginCatalogResponse } from "@/api/client";
 import { usePluginRuntime } from "@/plugins/composable";
 import { getSidebarViews } from "@/plugins/slots";
 import { useBoardFeature } from "@/composables/use-board-feature";
@@ -32,6 +32,7 @@ const ALL_TOP_ITEMS: readonly RailItem[] = [
 
 const bottomItems: readonly RailItem[] = [
   { id: "marketplace", label: "Plugins", icon: Puzzle },
+  { id: "automations", label: "Automations", icon: Zap, to: "/automations" },
   { id: "analytics", label: "Analytics", icon: BarChart3, to: "/analytics" },
   { id: "settings", label: "Settings", icon: Settings, to: "/settings" },
 ];
@@ -78,6 +79,10 @@ const currentRouteRail = computed<RailItemId | null>(() => {
 
   if (pathname.value === "/analytics" || pathname.value.startsWith("/analytics/")) {
     return "analytics";
+  }
+
+  if (pathname.value === "/automations" || pathname.value.startsWith("/automations/")) {
+    return "automations";
   }
 
   if (pathname.value === "/settings") {
@@ -141,21 +146,20 @@ function getStatusBadgeCount(count: number): number | undefined {
 }
 
 function isSidebarRail(value: RailItemId): value is SidebarRail {
-  return ["board", "sessions", "analytics", "github", "marketplace", "settings"].includes(value);
+  return ["board", "sessions", "analytics", "automations", "github", "marketplace", "settings"].includes(value);
 }
 
 async function loadPluginStatuses(): Promise<void> {
   pluginRuntime.setLoading(true);
 
   try {
-    const response = await apiFetch("/api/plugins");
+    const { data, error: apiError, response } = await api.GET("/api/plugins");
 
-    if (!response.ok) {
+    if (apiError || !data) {
       throw new Error(`HTTP ${response.status}`);
     }
 
-    const data = (await response.json()) as PluginCatalogResponse;
-    pluginRuntime.setStatuses(data.statuses);
+    pluginRuntime.setStatuses((data as PluginCatalogResponse).statuses as unknown as FleetPluginStatus[]);
     pluginRuntime.setError(undefined);
   } catch (error) {
     pluginRuntime.setError(error instanceof Error ? error.message : String(error));
@@ -266,8 +270,9 @@ function handleSelect(item: RailItem): void {
 .rail {
   width: 48px;
   min-width: 48px;
-  background: var(--rail-bg);
-  border-right: 1px solid var(--border);
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -293,22 +298,25 @@ function handleSelect(item: RailItem): void {
   cursor: pointer;
   position: relative;
   font-size: 15px;
-  transition: color 0.25s ease, background-color 0.25s ease;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
   margin-bottom: 2px;
-  border: 0;
+  border: 1px solid transparent;
   border-left: 3px solid transparent;
   background: transparent;
   padding: 0;
 }
 
 .rail-item:hover {
-  color: #a1a1aa;
+  background: var(--bg);
+  border-color: var(--border);
+  border-left-color: transparent;
+  color: var(--text);
 }
 
 .rail-item.active {
-  color: #fff;
-  border-left-color: var(--accent);
-  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border-left-color: var(--indigo);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 
 .rail-logo {
@@ -353,7 +361,7 @@ function handleSelect(item: RailItem): void {
   font-weight: 700;
   min-width: 14px;
   height: 14px;
-  border-radius: 7px;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -366,15 +374,15 @@ function handleSelect(item: RailItem): void {
   left: 52px;
   top: 50%;
   transform: translate(0, -50%);
-  background: #27272a;
-  color: var(--text);
+  background: var(--color-popover);
+  color: var(--color-popover-foreground);
   font-size: 11px;
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: 0;
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition: opacity var(--transition), transform var(--transition);
   z-index: 100;
 }
 

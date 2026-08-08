@@ -15,7 +15,7 @@ export type ThemeId =
 
 export type ThemeSelection = ThemeId | "system";
 
-export type FontFamily = "inter" | "dm-sans";
+export type FontFamily = "inter";
 
 export type FontSize = "s" | "m" | "l" | "xl";
 
@@ -43,7 +43,7 @@ export interface ThemeDefinition {
 
 export const themes: readonly ThemeDefinition[] = [
   { id: "dark", label: "Default Dark", colorScheme: "dark", swatches: ["#0a0a0b", "#141416", "#6366f1", "#e4e4e7"] },
-  { id: "light", label: "Light", colorScheme: "light", swatches: ["#f1f5f9", "#ffffff", "#4f46e5", "#0f172a"] },
+  { id: "light", label: "Light", colorScheme: "light", swatches: ["#FAF9F7", "#ffffff", "#5B6EC7", "#1A1918"] },
   { id: "weave-classic", label: "Weave Classic", colorScheme: "dark", swatches: ["#0F172A", "#1E293B", "#A855F7", "#F8FAFC"] },
   { id: "black", label: "Black (OLED)", colorScheme: "dark", swatches: ["#000000", "#0A0A0A", "#A855F7", "#FAFAFA"] },
   { id: "nord", label: "Nord", colorScheme: "dark", swatches: ["#2E3440", "#3B4252", "#88C0D0", "#ECEFF4"] },
@@ -60,7 +60,6 @@ const fontSizeStorageKey = "weave:font-size";
 
 const fontStacks: Record<FontFamily, string> = {
   inter: '"Inter Variable", "Inter", system-ui, -apple-system, sans-serif',
-  "dm-sans": '"DM Sans Variable", "DM Sans", system-ui, -apple-system, sans-serif',
 };
 
 function isValidThemeId(value: string): value is ThemeId {
@@ -68,7 +67,7 @@ function isValidThemeId(value: string): value is ThemeId {
 }
 
 function isValidFontFamily(value: string): value is FontFamily {
-  return value === "inter" || value === "dm-sans";
+  return value === "inter";
 }
 
 function isValidFontSize(value: string): value is FontSize {
@@ -98,14 +97,14 @@ function readStoredTheme(): ThemeSelection {
 
 function readStoredFontFamily(): FontFamily {
   if (typeof window === "undefined") {
-    return "dm-sans";
+    return "inter";
   }
 
   try {
     const raw = window.localStorage.getItem(fontFamilyStorageKey);
-    return raw && isValidFontFamily(raw) ? raw : "dm-sans";
+    return raw && isValidFontFamily(raw) ? raw : "inter";
   } catch {
-    return "dm-sans";
+    return "inter";
   }
 }
 

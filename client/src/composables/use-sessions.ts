@@ -11,8 +11,8 @@ import {
   type Ref,
   type ShallowRef,
 } from "vue";
-import type { SessionListItem } from "@/lib/api-types";
-import { apiFetch } from "@/lib/api-client";
+import type { SessionListItem } from "@/api/client";
+import { api } from "@/api/client";
 import { sessionsChanged } from "@/lib/session-utils";
 import { useSessionsStore } from "@/stores/sessions";
 
@@ -97,27 +97,30 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
     }
 
     try {
-      const params = new URLSearchParams({
-        limit: String(pageSize.value),
-        offset: String(offset.value),
+      const { data, error: apiError } = await api.GET("/api/sessions", {
+        params: {
+          query: {
+            limit: pageSize.value,
+            offset: offset.value,
+            ...(retentionStatus.value !== "active" ? { retentionStatus: retentionStatus.value } : {}),
+          },
+        },
       });
 
-      if (retentionStatus.value !== "active") {
-        params.set("retentionStatus", retentionStatus.value);
-      }
-
-      const response = await apiFetch(`/api/sessions?${params.toString()}`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data = (await response.json()) as SessionListItem[];
       if (disposed || currentRequestId !== requestId) {
         return;
       }
 
-      if (sessionsChanged(sessionsStore.sessions, data)) {
-        sessionsStore.setSessions(data);
+      if (apiError) {
+        throw new Error(apiError ? String(apiError) : "Failed to fetch sessions");
+      }
+
+      if (!data) {
+        throw new Error("No data returned");
+      }
+
+      if (sessionsChanged(sessionsStore.sessions, data as SessionListItem[])) {
+        sessionsStore.setSessions(data as SessionListItem[]);
       }
 
       error.value = undefined;

@@ -59,7 +59,6 @@ public static class EndpointExtensions
         apiScope.MapWorkspaceRootEndpoints();
         apiScope.MapWorkspaceEndpoints();
         apiScope.MapSessionEventEndpoints();
-        apiScope.MapWebSocketEndpoints();
         apiScope.MapAnalyticsEndpoints();
         apiScope.MapUserEndpoints();
         apiScope.MapCredentialEndpoints();
@@ -68,8 +67,12 @@ public static class EndpointExtensions
         apiScope.MapClientConfigEndpoints(fleetOptions);
         apiScope.MapBackendPluginEndpoints();
         apiScope.MapSmartLinkEndpoints();
+        apiScope.MapAutomationEndpoints();
         apiScope.MapTelemetryEndpoints();
         apiScope.MapAdminEndpoints();
+
+        // SignalR hub
+        apiScope.MapHub<WeaveFleet.Api.Hubs.SessionEventsHub>("/hubs/session-events");
 
         return app;
     }

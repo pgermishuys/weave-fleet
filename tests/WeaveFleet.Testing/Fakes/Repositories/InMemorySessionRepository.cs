@@ -77,17 +77,12 @@ public sealed class InMemorySessionRepository : ISessionRepository
     }
 
     public Task<IReadOnlyList<Session>> ListAsync(int limit = 100, int offset = 0, IReadOnlyList<string>? statuses = null, string? projectId = null)
-    {
-        var query = _store.Values.AsEnumerable();
-        if (statuses is { Count: > 0 })
-            query = query.Where(s => statuses.Contains(s.Status));
-        if (projectId is not null)
-            query = query.Where(s => s.ProjectId == projectId);
-        IReadOnlyList<Session> result = [.. query.Skip(offset).Take(limit)];
-        return Task.FromResult(result);
-    }
+        => ListAsync(limit, offset, statuses, projectId, retentionStatuses: null, tags: null);
 
     public Task<IReadOnlyList<Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses)
+        => ListAsync(limit, offset, statuses, projectId, retentionStatuses, tags: null);
+
+    public Task<IReadOnlyList<Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses, IReadOnlyList<string>? tags)
     {
         ListAsyncCalls.Add((limit, offset, statuses, projectId, retentionStatuses));
         var query = _store.Values.AsEnumerable();
@@ -97,6 +92,8 @@ public sealed class InMemorySessionRepository : ISessionRepository
             query = query.Where(s => s.ProjectId == projectId);
         if (retentionStatuses is { Count: > 0 })
             query = query.Where(s => retentionStatuses.Contains(s.RetentionStatus));
+        if (tags is { Count: > 0 })
+            query = query.Where(s => s.Tags.Any(t => tags.Contains(t)));
         query = query.Where(s => s.ParentSessionId is null);
         IReadOnlyList<Session> result = [.. query.Skip(offset).Take(limit)];
         return Task.FromResult(result);
@@ -334,6 +331,13 @@ public sealed class InMemorySessionRepository : ISessionRepository
             session.SelectedProviderId = providerId;
             session.SelectedModelId = modelId;
         }
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateTagsAsync(string id, List<string> tags)
+    {
+        if (_store.TryGetValue(id, out var session))
+            session.Tags = tags;
         return Task.CompletedTask;
     }
 }

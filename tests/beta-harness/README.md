@@ -71,6 +71,26 @@ Curated fixtures currently cover slow streaming, out-of-order part/lifecycle eve
 suppression, and snapshot-race-friendly durable bursts. `materialise-scenarios` may also write
 playbook-derived JSON into this same directory during ad-hoc beta runs.
 
+## Visual comparison (prototype vs app)
+
+Used during UI implementation to compare the static prototype against the running app.
+
+```powershell
+# 1. Start the Vite dev server (in a separate terminal or backgrounded)
+cd client
+bun run dev:mock   # http://localhost:3002, mock API data, no .NET needed
+
+# 2. Run the comparison script
+cd tests/beta-harness
+bun run tsx visual-compare.ts              # Both prototype + app
+bun run tsx visual-compare.ts --prototype-only   # Prototype only (no server needed)
+bun run tsx visual-compare.ts --app-only         # App only (dev server must be running)
+```
+
+Screenshots land in `findings/visual-compare/` (gitignored). Agents read the PNGs with the
+Read tool to assess visual fidelity. See `.weave/prototype/VISUAL_COMPARE_WORKFLOW.md` for the
+full agent workflow.
+
 ## Findings
 
 Every run records a finding under `findings/`. Stable repros graduate to C# E2E tests in `tests/WeaveFleet.E2E/Tests/`.

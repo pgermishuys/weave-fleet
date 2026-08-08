@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
-import type { SessionListItem } from "@/lib/api-types";
+import type { SessionListItem } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
 
 function createSessionListItem(): SessionListItem {
@@ -18,6 +18,7 @@ function createSessionListItem(): SessionListItem {
         created: 1,
         updated: 2,
       },
+      tags: [],
     },
     instanceStatus: "running",
     parentSessionId: null,
@@ -33,6 +34,7 @@ function createSessionListItem(): SessionListItem {
     projectName: "Api",
     totalTokens: 123,
     totalCost: 4.56,
+    tags: [],
   };
 }
 

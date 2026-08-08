@@ -10,7 +10,7 @@ import {
   type MaybeRefOrGetter,
   type ShallowRef,
 } from "vue"
-import type { AccumulatedMessage, DelegationDto } from "@/lib/api-types"
+import type { AccumulatedMessage, DelegationDto } from "@/lib/client-types"
 import type { DomainEvent } from "@/lib/domain-events"
 import {
   applyDomainEvent,

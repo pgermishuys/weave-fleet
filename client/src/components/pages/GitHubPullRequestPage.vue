@@ -365,7 +365,7 @@ const commentSummary = computed(() => {
   <section class="flex h-full flex-col gap-6 overflow-auto p-6">
     <div
       v-if="isLoadingPullRequest && !effectivePullRequest"
-      class="flex flex-1 items-center justify-center gap-3 rounded-xl border border-border bg-card p-8 text-sm text-muted-foreground"
+      class="flex flex-1 items-center justify-center gap-3 border border-border bg-card p-8 text-sm text-muted-foreground"
     >
       <LoaderCircle
         :size="18"
@@ -376,7 +376,7 @@ const commentSummary = computed(() => {
 
     <div
       v-else-if="pullRequestError && !effectivePullRequest"
-      class="flex flex-1 flex-col items-start gap-4 rounded-xl border border-red-500/30 bg-red-500/10 p-6 text-sm text-red-200"
+      class="flex flex-1 flex-col items-start gap-4 border border-red-500/30 bg-red-500/10 p-6 text-sm text-red-200"
       role="alert"
     >
       <div
@@ -409,7 +409,7 @@ const commentSummary = computed(() => {
 
     <div
       v-else-if="!effectivePullRequest"
-      class="flex flex-1 items-center justify-center rounded-xl border border-dashed border-border bg-card/40 p-8 text-center text-sm text-muted-foreground"
+      class="flex flex-1 items-center justify-center border border-dashed border-border bg-card/40 p-8 text-center text-sm text-muted-foreground"
     >
       Select a pull request to view its details.
     </div>
@@ -519,7 +519,7 @@ const commentSummary = computed(() => {
         <CardContent class="space-y-4">
           <div
             v-if="commentsError"
-            class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200"
+            class="flex flex-wrap items-center justify-between gap-3 border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200"
             role="alert"
           >
             <span>{{ commentsError }}</span>
@@ -552,7 +552,7 @@ const commentSummary = computed(() => {
             <li
               v-for="comment in renderedComments"
               :key="comment.key"
-              class="rounded-xl border border-border bg-background/50 p-4"
+              class="border border-border bg-background/50 p-4"
             >
               <div
                 class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"

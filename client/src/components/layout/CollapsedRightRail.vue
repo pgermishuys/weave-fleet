@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ChevronLeft, ListTodo } from "lucide-vue-next";
+import { Button } from "@/components/ui/button";
 import type { TodoItem } from "@/lib/todo-utils";
 
 const props = defineProps<{
@@ -33,8 +34,9 @@ function handleExpand(): void {
     class="collapsed-rail"
     aria-label="Expand right panel"
   >
-    <button
-      type="button"
+    <Button
+      variant="toolbar-icon"
+      size="toolbar"
       class="collapsed-rail__button"
       @click="handleExpand"
     >
@@ -80,7 +82,7 @@ function handleExpand(): void {
           <span>{{ pendingCount }}</span>
         </span>
       </span>
-    </button>
+    </Button>
   </aside>
 </template>
 
@@ -89,7 +91,8 @@ function handleExpand(): void {
   width: 48px;
   min-width: 48px;
   min-height: 0;
-  border-left: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
   background: var(--panel-bg);
   display: flex;
 }
@@ -97,25 +100,11 @@ function handleExpand(): void {
 .collapsed-rail__button {
   width: 100%;
   min-height: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 18px;
   padding: 12px 8px;
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.collapsed-rail__button:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.collapsed-rail__button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
 }
 
 .collapsed-rail__top,

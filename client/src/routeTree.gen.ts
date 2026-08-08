@@ -14,10 +14,10 @@ import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RepositoriesRouteImport } from './routes/repositories'
 import { Route as QueueRouteImport } from './routes/queue'
-import { Route as PipelinesRouteImport } from './routes/pipelines'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as GithubRouteImport } from './routes/github'
 import { Route as BoardRouteImport } from './routes/board'
+import { Route as AutomationsRouteImport } from './routes/automations'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as GithubIndexRouteImport } from './routes/github.index'
@@ -53,11 +53,6 @@ const QueueRoute = QueueRouteImport.update({
   path: '/queue',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PipelinesRoute = PipelinesRouteImport.update({
-  id: '/pipelines',
-  path: '/pipelines',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -71,6 +66,11 @@ const GithubRoute = GithubRouteImport.update({
 const BoardRoute = BoardRouteImport.update({
   id: '/board',
   path: '/board',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AutomationsRoute = AutomationsRouteImport.update({
+  id: '/automations',
+  path: '/automations',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AnalyticsRoute = AnalyticsRouteImport.update({
@@ -124,10 +124,10 @@ const GithubOwnerRepoIssuesNumberRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
+  '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
   '/github': typeof GithubRouteWithChildren
   '/login': typeof LoginRoute
-  '/pipelines': typeof PipelinesRoute
   '/queue': typeof QueueRoute
   '/repositories': typeof RepositoriesRoute
   '/settings': typeof SettingsRoute
@@ -144,9 +144,9 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
+  '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
   '/login': typeof LoginRoute
-  '/pipelines': typeof PipelinesRoute
   '/queue': typeof QueueRoute
   '/repositories': typeof RepositoriesRoute
   '/settings': typeof SettingsRoute
@@ -163,10 +163,10 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/analytics': typeof AnalyticsRoute
+  '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
   '/github': typeof GithubRouteWithChildren
   '/login': typeof LoginRoute
-  '/pipelines': typeof PipelinesRoute
   '/queue': typeof QueueRoute
   '/repositories': typeof RepositoriesRoute
   '/settings': typeof SettingsRoute
@@ -185,10 +185,10 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/analytics'
+    | '/automations'
     | '/board'
     | '/github'
     | '/login'
-    | '/pipelines'
     | '/queue'
     | '/repositories'
     | '/settings'
@@ -205,9 +205,9 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/analytics'
+    | '/automations'
     | '/board'
     | '/login'
-    | '/pipelines'
     | '/queue'
     | '/repositories'
     | '/settings'
@@ -223,10 +223,10 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/analytics'
+    | '/automations'
     | '/board'
     | '/github'
     | '/login'
-    | '/pipelines'
     | '/queue'
     | '/repositories'
     | '/settings'
@@ -244,10 +244,10 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnalyticsRoute: typeof AnalyticsRoute
+  AutomationsRoute: typeof AutomationsRoute
   BoardRoute: typeof BoardRoute
   GithubRoute: typeof GithubRouteWithChildren
   LoginRoute: typeof LoginRoute
-  PipelinesRoute: typeof PipelinesRoute
   QueueRoute: typeof QueueRoute
   RepositoriesRoute: typeof RepositoriesRoute
   SettingsRoute: typeof SettingsRoute
@@ -294,13 +294,6 @@ declare module '@tanstack/vue-router' {
       preLoaderRoute: typeof QueueRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/pipelines': {
-      id: '/pipelines'
-      path: '/pipelines'
-      fullPath: '/pipelines'
-      preLoaderRoute: typeof PipelinesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -320,6 +313,13 @@ declare module '@tanstack/vue-router' {
       path: '/board'
       fullPath: '/board'
       preLoaderRoute: typeof BoardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/automations': {
+      id: '/automations'
+      path: '/automations'
+      fullPath: '/automations'
+      preLoaderRoute: typeof AutomationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/analytics': {
@@ -420,10 +420,10 @@ const GithubRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalyticsRoute: AnalyticsRoute,
+  AutomationsRoute: AutomationsRoute,
   BoardRoute: BoardRoute,
   GithubRoute: GithubRouteWithChildren,
   LoginRoute: LoginRoute,
-  PipelinesRoute: PipelinesRoute,
   QueueRoute: QueueRoute,
   RepositoriesRoute: RepositoriesRoute,
   SettingsRoute: SettingsRoute,

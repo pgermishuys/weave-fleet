@@ -53,7 +53,7 @@ public sealed class UserAuthEndpointTests
     }
 
     [Fact]
-    public async Task WebSocketHandshake_WhenUnauthenticated_ReturnsUnauthorized()
+    public async Task SignalRHubHandshake_WhenUnauthenticated_ReturnsUnauthorized()
     {
         await using var factory = new ApiWebApplicationFactory(authEnabled: true);
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
@@ -71,7 +71,7 @@ public sealed class UserAuthEndpointTests
     }
 
     [Fact]
-    public async Task WebSocketHandshake_WhenAuthenticatedWithDisallowedOrigin_ReturnsForbidden()
+    public async Task SignalRHubHandshake_WhenAuthenticatedWithDisallowedOrigin_ReturnsForbidden()
     {
         await using var factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
@@ -404,7 +404,7 @@ public sealed class UserAuthEndpointTests
 
     private static HttpRequestMessage CreateWebSocketHandshakeRequest(string origin)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, "/ws");
+        var request = new HttpRequestMessage(HttpMethod.Get, "/hubs/session-events");
         request.Headers.Add("Connection", "Upgrade");
         request.Headers.Add("Upgrade", "websocket");
         request.Headers.Add("Sec-WebSocket-Version", "13");

@@ -350,6 +350,11 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 TryCacheQuestionMapping(harnessEvent);
 
             yield return harnessEvent;
+
+            // Emit synthetic tool-result event if this is a completed tool part with output
+            var toolResultEvent = TryBuildToolResultEvent(sseEvt, harnessEvent);
+            if (toolResultEvent is not null)
+                yield return toolResultEvent;
         }
     }
 
@@ -573,8 +578,60 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc />
+    public async Task<string?> GetActivityStatusAsync(CancellationToken ct)
+    {
+        if (!_instanceHandle.IsRunning)
+        {
+            return null;
+        }
+
+        try
+        {
+            var statusDict = await _instanceHandle.HttpClient.GetSessionStatusAsync(_workingDirectory, ct).ConfigureAwait(false);
+            
+            // For non-pooled sessions, there should only be one session in the directory
+            foreach (var (_, status) in statusDict)
+            {
+                return status switch
+                {
+                    OpenCodeIdleStatus => "idle",
+                    OpenCodeBusyStatus => "busy",
+                    OpenCodeRetryStatus => "busy", // Treat retry as busy
+                    _ => "idle" // Default to idle for unknown status types
+                };
+            }
+
+            // No status found, default to idle
+            return "idle";
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            // Best-effort query — return null on failure
+            return null;
+        }
+    }
+
+    /// <inheritdoc />
+    public Task WaitForEventSubscriptionAsync(CancellationToken ct)
+    {
+        // Delegate to the instance handle, which signals readiness when the SSE stream is connected.
+        // For owned instances, this waits for the SSE response headers to be received.
+        // For pooled instances, this waits for the demultiplexer subscription to be established.
+        var openCodeSessionId = _openCodeSessionId;
+        if (string.IsNullOrWhiteSpace(openCodeSessionId))
+        {
+            // No session ID yet — return completed task since subscription will be established
+            // when SubscribeAsync is called (which happens before any prompts are sent).
+            return Task.CompletedTask;
+        }
+
+        return _instanceHandle.WaitForEventSubscriptionAsync(openCodeSessionId, ct);
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct)
     {
+        await EnsureConnectedAsync(ct).ConfigureAwait(false);
         var commands = await _instanceHandle.HttpClient.GetCommandsAsync(_workingDirectory, ct).ConfigureAwait(false);
         return commands.Select(c => new CommandInfo
         {
@@ -586,6 +643,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public async Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
     {
+        await EnsureConnectedAsync(ct).ConfigureAwait(false);
         var agents = await _instanceHandle.HttpClient.GetAgentsAsync(_workingDirectory, ct).ConfigureAwait(false);
         return agents.Select(a => new AgentInfo
         {
@@ -601,6 +659,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// <inheritdoc />
     public async Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
     {
+        await EnsureConnectedAsync(ct).ConfigureAwait(false);
         var response = await _instanceHandle.HttpClient.GetProvidersAsync(_workingDirectory, ct).ConfigureAwait(false);
         // Only return connected providers (ones where credentials are configured).
         var connectedSet = response.Connected?.ToHashSet(StringComparer.Ordinal)
@@ -940,5 +999,95 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         {
             LogDelegationFailed(_logger, _fleetSessionId, ex);
         }
+    }
+
+    /// <summary>
+    /// Attempts to build a synthetic tool-result event from a completed tool part.
+    /// Returns <c>null</c> if the event is not a completed tool part with output.
+    /// </summary>
+    private HarnessEvent? TryBuildToolResultEvent(OpenCodeSseEvent sseEvt, HarnessEvent harnessEvent)
+    {
+        // Only process message.part.updated events
+        if (sseEvt.Type != EventTypes.MessagePartUpdated)
+            return null;
+
+        // Extract the part object from properties
+        if (sseEvt.Properties.ValueKind != JsonValueKind.Object)
+            return null;
+
+        if (!sseEvt.Properties.TryGetProperty("part", out var partEl) || partEl.ValueKind != JsonValueKind.Object)
+            return null;
+
+        // Check part.type == "tool"
+        if (!partEl.TryGetProperty("type", out var typeEl) || typeEl.ValueKind != JsonValueKind.String)
+            return null;
+
+        var partType = typeEl.GetString();
+        if (!string.Equals(partType, "tool", StringComparison.Ordinal))
+            return null;
+
+        // Check part.state.status == "completed" or "error"
+        if (!partEl.TryGetProperty("state", out var stateEl) || stateEl.ValueKind != JsonValueKind.Object)
+            return null;
+
+        if (!stateEl.TryGetProperty("status", out var statusEl) || statusEl.ValueKind != JsonValueKind.String)
+            return null;
+
+        var status = statusEl.GetString();
+        if (status is not ("completed" or "error"))
+            return null;
+
+        // Extract state.output
+        if (!stateEl.TryGetProperty("output", out var outputEl))
+            return null;
+
+        // Serialize output to string
+        string? content = outputEl.ValueKind == JsonValueKind.String
+            ? outputEl.GetString()
+            : outputEl.GetRawText();
+
+        // Extract callId (try both "callId" and "callID")
+        string? callId = null;
+        if (partEl.TryGetProperty("callId", out var callIdEl) && callIdEl.ValueKind == JsonValueKind.String)
+            callId = callIdEl.GetString();
+        else if (partEl.TryGetProperty("callID", out callIdEl) && callIdEl.ValueKind == JsonValueKind.String)
+            callId = callIdEl.GetString();
+
+        // Fallback to part.id if callId is not found
+        if (string.IsNullOrWhiteSpace(callId))
+        {
+            if (partEl.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.String)
+                callId = idEl.GetString();
+        }
+
+        if (string.IsNullOrWhiteSpace(callId))
+            return null;
+
+        // Extract messageId
+        string? messageId = null;
+        if (partEl.TryGetProperty("messageId", out var messageIdEl) && messageIdEl.ValueKind == JsonValueKind.String)
+            messageId = messageIdEl.GetString();
+        else if (partEl.TryGetProperty("messageID", out messageIdEl) && messageIdEl.ValueKind == JsonValueKind.String)
+            messageId = messageIdEl.GetString();
+
+        if (string.IsNullOrWhiteSpace(messageId))
+            return null;
+
+        // Resolve session ID (use routed fleet session ID if available, otherwise use fleet session ID)
+        var sessionId = harnessEvent.FleetSessionId ?? _fleetSessionId;
+
+        // Build payload
+        var isError = string.Equals(status, "error", StringComparison.Ordinal);
+        var payload = ToolResultEventBuilder.BuildPayload(messageId, sessionId, callId, content, isError);
+
+        // Return synthetic event
+        return new HarnessEvent
+        {
+            Type = EventTypes.MessagePartUpdated,
+            SessionId = harnessEvent.SessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = payload,
+            FleetSessionId = harnessEvent.FleetSessionId
+        };
     }
 }

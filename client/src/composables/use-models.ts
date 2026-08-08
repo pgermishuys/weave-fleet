@@ -1,7 +1,7 @@
 import { storeToRefs } from "pinia";
 import { computed, readonly, ref, shallowRef, watch } from "vue";
-import { apiFetch } from "@/lib/api-client";
-import type { AvailableProvider } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { AvailableProvider } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
 
 export interface ModelOption {
@@ -32,7 +32,7 @@ function toModelOptions(providers: readonly AvailableProvider[]): ModelOption[] 
 
 export function useModels(sessionId?: string) {
   const sessionsStore = useSessionsStore();
-  const { sessions, activeSessionId } = storeToRefs(sessionsStore);
+  const { activeSessionId } = storeToRefs(sessionsStore);
 
   const models = ref<ModelOption[]>([]);
   const modelsByKey = ref<Record<string, ModelOption>>({});
@@ -40,15 +40,12 @@ export function useModels(sessionId?: string) {
   const error = shallowRef<string | undefined>(undefined);
 
   const resolvedSessionId = computed(() => sessionId ?? activeSessionId.value ?? "");
-  const instanceId = computed(() => {
-    return sessions.value.find((session) => session.session.id === resolvedSessionId.value)?.instanceId ?? "";
-  });
   const defaultModelKey = computed(() => models.value[0]?.selectionKey ?? "");
 
   watch(
-    instanceId,
-    async (nextInstanceId, _previous, onCleanup) => {
-        if (!nextInstanceId) {
+    resolvedSessionId,
+    async (nextSessionId, _previous, onCleanup) => {
+        if (!nextSessionId) {
           models.value = [];
           modelsByKey.value = {};
           isLoading.value = false;
@@ -65,16 +62,17 @@ export function useModels(sessionId?: string) {
       error.value = undefined;
 
       try {
-        const response = await apiFetch(`/api/instances/${encodeURIComponent(nextInstanceId)}/models`, {
+        const { data, error, response } = await api.GET("/api/sessions/{id}/models", {
+          params: { path: { id: nextSessionId } },
           signal: controller.signal,
         });
 
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => ({}))) as { error?: string };
-          throw new Error(payload.error ?? `HTTP ${response.status}`);
+        if (error || !response.ok) {
+          const payload = error as { error?: string } | undefined;
+          throw new Error(payload?.error ?? `HTTP ${response.status}`);
         }
 
-        const body = (await response.json()) as { providers?: AvailableProvider[] } | AvailableProvider[];
+        const body = data as unknown as { providers?: AvailableProvider[] } | AvailableProvider[];
         const providers = Array.isArray(body) ? body : body.providers ?? [];
         const nextModels = toModelOptions(providers);
 

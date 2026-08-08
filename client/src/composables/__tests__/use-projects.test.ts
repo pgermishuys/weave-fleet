@@ -1,15 +1,21 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { shallowRef } from "vue";
 import { useProjects } from "@/composables/use-projects";
-import type { ProjectResponse } from "@/lib/api-types";
+import type { ProjectResponse } from "@/api/client";
 import { flushAll, mountComposable } from "./test-utils";
 
 const { apiFetchMock } = vi.hoisted(() => ({
   apiFetchMock: vi.fn(),
 }));
 
-vi.mock("@/lib/api-client", () => ({
-  apiFetch: apiFetchMock,
+vi.mock("@/api/client", () => ({
+  api: {
+    GET: apiFetchMock,
+    POST: vi.fn(),
+    PUT: vi.fn(),
+    DELETE: vi.fn(),
+    PATCH: vi.fn(),
+  },
 }));
 
 function createJsonResponse<T>(body: T, status = 200): Response {
@@ -51,7 +57,11 @@ describe("useProjects", () => {
 
   it("fetches projects immediately when enabled", async () => {
     const projects = [createProject(), createProject({ id: "project-2", name: "Beta" })];
-    apiFetchMock.mockResolvedValue(createJsonResponse(projects));
+    apiFetchMock.mockResolvedValue({
+      data: projects,
+      error: undefined,
+      response: createJsonResponse(projects),
+    });
 
     const { result } = await mountComposable(() => useProjects());
 
@@ -65,7 +75,11 @@ describe("useProjects", () => {
   it("waits for enabled to become true before fetching", async () => {
     const enabled = shallowRef(false);
     const projects = [createProject()];
-    apiFetchMock.mockResolvedValue(createJsonResponse(projects));
+    apiFetchMock.mockResolvedValue({
+      data: projects,
+      error: undefined,
+      response: createJsonResponse(projects),
+    });
 
     const { result } = await mountComposable(() => useProjects({ enabled }));
 
@@ -80,16 +94,24 @@ describe("useProjects", () => {
   });
 
   it("uses refreshing state on refetch after the initial load", async () => {
-    apiFetchMock.mockResolvedValueOnce(createJsonResponse([createProject()]));
+    apiFetchMock.mockResolvedValueOnce({
+      data: [createProject()],
+      error: undefined,
+      response: createJsonResponse([createProject()]),
+    });
 
     const { result } = await mountComposable(() => useProjects());
-    const deferred = createDeferred<Response>();
+    const deferred = createDeferred<{ data: unknown; error: undefined; response: Response }>();
     apiFetchMock.mockReturnValueOnce(deferred.promise);
 
     const refetchPromise = result.refetch();
 
     expect(result.isRefreshing.value).toBe(true);
-    deferred.resolve(createJsonResponse([createProject({ name: "Updated" })]));
+    deferred.resolve({
+      data: [createProject({ name: "Updated" })],
+      error: undefined,
+      response: createJsonResponse([createProject({ name: "Updated" })]),
+    });
 
     await refetchPromise;
     await flushAll();
@@ -99,7 +121,11 @@ describe("useProjects", () => {
   });
 
   it("captures HTTP failures as composable errors", async () => {
-    apiFetchMock.mockResolvedValue(createJsonResponse({ error: "nope" }, 500));
+    apiFetchMock.mockResolvedValue({
+      data: undefined,
+      error: "HTTP 500",
+      response: createJsonResponse({ error: "nope" }, 500),
+    });
 
     const { result } = await mountComposable(() => useProjects());
 

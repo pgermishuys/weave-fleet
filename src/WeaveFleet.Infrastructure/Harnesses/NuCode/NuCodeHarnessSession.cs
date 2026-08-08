@@ -308,6 +308,22 @@ public sealed partial class NuCodeHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc />
+    public Task<string?> GetActivityStatusAsync(CancellationToken ct)
+    {
+        // NuCode doesn't have a status query endpoint, so we return null
+        return Task.FromResult<string?>(null);
+    }
+
+    /// <inheritdoc />
+    public Task WaitForEventSubscriptionAsync(CancellationToken ct)
+    {
+        // NuCode uses in-process event streams which are synchronously available.
+        // No async subscription establishment is needed.
+        ct.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
     public Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
     {
         using var scope = _nuCodeProvider.CreateScope();

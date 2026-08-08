@@ -3,6 +3,7 @@ import { ref } from "vue";
 import { Tag, Check, Loader2 } from "lucide-vue-next";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Button } from "@/components/ui/button";
 import type { GitHubLabel } from "../../composables/github-types";
 
 defineProps<{
@@ -21,14 +22,14 @@ const open = ref(false);
 <template>
   <Popover v-model:open="open">
     <PopoverTrigger as-child>
-      <button class="filter-btn">
+      <Button variant="filter" size="sm">
         <Tag :size="12" />
         <span>Label</span>
         <span
           v-if="selected.length > 0"
           class="filter-badge"
         >{{ selected.length }}</span>
-      </button>
+      </Button>
     </PopoverTrigger>
     <PopoverContent
       class="filter-popover-content"
@@ -78,24 +79,6 @@ const open = ref(false);
 </template>
 
 <style scoped>
-.filter-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  height: 28px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.filter-btn:hover {
-  background: var(--sidebar-item-hover);
-}
-
 .filter-badge {
   display: inline-flex;
   align-items: center;
@@ -103,7 +86,7 @@ const open = ref(false);
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--accent-muted, rgba(99, 102, 241, 0.2));
   color: var(--accent);
   font-size: 10px;

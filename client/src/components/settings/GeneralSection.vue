@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { WorkspaceRootItem, WorkspaceRootsResponse } from "@/lib/api-types";
+import type { WorkspaceRootItem, WorkspaceRootsResponse } from "@/api/client";
 import { onMounted, reactive, ref, shallowRef, watch } from "vue";
 import { AlertCircle, LoaderCircle } from "lucide-vue-next";
-import { apiFetch } from "@/lib/api-client";
+import { api } from "@/api/client";
 import {
   readWorkspacePreferences,
   writeWorkspacePreferences,
@@ -37,12 +37,16 @@ async function loadWorkspaceRoots(): Promise<void> {
   workspaceRootsError.value = null;
 
   try {
-    const response = await apiFetch("/api/workspace-roots");
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    const { data, error: apiError } = await api.GET("/api/workspace-roots");
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to load workspace roots");
     }
 
-    const payload = await response.json() as WorkspaceRootsResponse;
+    if (!data) {
+      throw new Error("No data returned");
+    }
+
+    const payload = data as WorkspaceRootsResponse;
     workspaceRoots.value = payload.roots;
 
     const preferredRootStillExists = payload.roots.some((root) => root.path === workspacePreferences.preferredRootPath);

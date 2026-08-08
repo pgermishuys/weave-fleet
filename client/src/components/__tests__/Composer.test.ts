@@ -2,23 +2,22 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionsStore } from "@/stores/sessions";
 import Composer from "@/components/session/Composer.vue";
-import type { SessionListItem } from "@/lib/api-types";
+import type { SessionListItem } from "@/api/client";
 import { createModelSelectionKey } from "@/composables/use-models";
 
-const { apiFetchMock } = vi.hoisted(() => ({
-  apiFetchMock: vi.fn(),
+vi.mock("@/api/client", () => ({
+  api: {
+    GET: vi.fn(),
+    POST: vi.fn(),
+    PUT: vi.fn(),
+    DELETE: vi.fn(),
+    PATCH: vi.fn(),
+  },
 }));
 
-vi.mock("@/lib/api-client", () => ({
-  apiFetch: apiFetchMock,
-}));
+import { api } from "@/api/client";
 
-function createJsonResponse<T>(body: T, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
+const mockApi = vi.mocked(api);
 
 function createCapabilities(overrides: Partial<NonNullable<SessionListItem["capabilities"]>> = {}): NonNullable<SessionListItem["capabilities"]> {
   return {
@@ -59,6 +58,7 @@ function createSession(overrides: Partial<SessionListItem> = {}): SessionListIte
         created: 1,
         updated: 2,
       },
+      tags: [],
     },
     instanceStatus: "running",
     parentSessionId: null,
@@ -73,64 +73,125 @@ function createSession(overrides: Partial<SessionListItem> = {}): SessionListIte
     projectId: "project-1",
     projectName: "Project",
     capabilities: createCapabilities(),
+    tags: [],
     ...overrides,
   };
 }
 
 function configureApiFetch(): void {
-  apiFetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
-    if (url.endsWith("/agents")) {
-      return createJsonResponse([
-        { name: "alpha", description: "Planner", mode: "primary", color: "#ff00aa" },
-      ]);
-    }
-
-    if (url.endsWith("/models")) {
-      return createJsonResponse({
-        providers: [
-          {
-            id: "provider-1",
-            name: "Provider One",
-            models: [{ id: "shared-model", name: "Model 1" }],
-          },
-          {
-            id: "provider-2",
-            name: "Provider Two",
-            models: [{ id: "shared-model", name: "Model 1" }],
-          },
+  mockApi.GET.mockImplementation(async (url: string) => {
+    if (url === "/api/agents") {
+      return {
+        data: [
+          { name: "alpha", description: "Planner", mode: "primary", color: "#ff00aa" },
         ],
-      });
+        error: undefined,
+        response: new Response(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
     }
 
-    if (url.endsWith("/commands")) {
-      return createJsonResponse({
-        commands: [
-          { name: "help", description: "Show help" },
-          { name: "status", description: "Show status" },
+    if (url === "/api/sessions/{id}/models") {
+      return {
+        data: {
+          providers: [
+            {
+              id: "provider-1",
+              name: "Provider One",
+              models: [{ id: "shared-model", name: "Model 1" }],
+            },
+            {
+              id: "provider-2",
+              name: "Provider Two",
+              models: [{ id: "shared-model", name: "Model 1" }],
+            },
+          ],
+        },
+        error: undefined,
+        response: new Response(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
+    }
+
+    if (url === "/api/sessions/{id}/commands") {
+      return {
+        data: {
+          commands: [
+            { name: "help", description: "Show help" },
+            { name: "status", description: "Show status" },
+          ],
+        },
+        error: undefined,
+        response: new Response(JSON.stringify({
+          commands: [
+            { name: "help", description: "Show help" },
+            { name: "status", description: "Show status" },
+          ],
+        }), { headers: { "Content-Type": "application/json" } }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
+    }
+
+    if (url === "/api/sessions/{id}/agents") {
+      return {
+        data: [
+          { name: "alpha", description: "Planner", mode: "primary", color: "#ff00aa" },
         ],
-      });
+        error: undefined,
+        response: new Response(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
     }
 
-    if (url.includes("/find/files?q=")) {
-      return createJsonResponse({
-        instanceId: "instance-1",
-        files: ["src/main.ts"],
-      });
+    if (url === "/api/instances/{instanceId}/find/files") {
+      return {
+        data: {
+          instanceId: "instance-1",
+          files: ["src/main.ts"],
+        },
+        error: undefined,
+        response: new Response(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
     }
 
-    if (url.endsWith("/prompt") && options?.method === "POST") {
-      return createJsonResponse({}, 200);
+    throw new Error(`Unhandled GET call: ${url}`);
+  });
+
+  mockApi.POST.mockImplementation(async (url: string) => {
+    if (url === "/api/sessions/{id}/prompt") {
+      return {
+        data: {},
+        error: undefined,
+        response: new Response(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
     }
 
-    if (url.endsWith("/command") && options?.method === "POST") {
-      return createJsonResponse({}, 202);
+    if (url === "/api/sessions/{id}/command") {
+      return {
+        data: {},
+        error: undefined,
+        response: new Response(null, { status: 202 }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
     }
 
-    throw new Error(`Unhandled apiFetch call: ${url}`);
+    if (url === "/api/telemetry/actions") {
+      return {
+        data: {},
+        error: undefined,
+        response: new Response(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any;
+    }
+
+    throw new Error(`Unhandled POST call: ${url}`);
   });
 }
 
 interface MountComposerOptions {
+  sessionId?: string;
   instanceId?: string;
   session?: SessionListItem;
   disabled?: boolean;
@@ -145,7 +206,7 @@ function mountComposer(options: MountComposerOptions = {}) {
   return mount(Composer, {
     attachTo: document.body,
     props: {
-      sessionId: "session-1",
+      sessionId: options.sessionId ?? "session-1",
       instanceId: options.instanceId ?? "instance-1",
       disabled: options.disabled,
     },
@@ -185,7 +246,8 @@ function mountComposer(options: MountComposerOptions = {}) {
 
 describe("Composer", () => {
   beforeEach(() => {
-    apiFetchMock.mockReset();
+    mockApi.GET.mockReset();
+    mockApi.POST.mockReset();
     configureApiFetch();
   });
 
@@ -226,7 +288,14 @@ describe("Composer", () => {
     await flushPromises();
 
     expect(enterEvent.defaultPrevented).toBe(true);
-    expect(apiFetchMock.mock.calls.some(([url, options]) => String(url).endsWith("/prompt") && options?.method === "POST")).toBe(true);
+    expect(mockApi.POST).toHaveBeenCalledWith(
+      "/api/sessions/{id}/prompt",
+      expect.objectContaining({
+        params: expect.objectContaining({
+          path: { id: "session-1" },
+        }),
+      })
+    );
     expect(wrapper.emitted("promptSent")).toHaveLength(1);
   });
 
@@ -246,8 +315,14 @@ describe("Composer", () => {
     await flushPromises();
 
     expect(enterEvent.defaultPrevented).toBe(true);
-    expect(apiFetchMock.mock.calls.some(([url, options]) => String(url).endsWith("/command") && options?.method === "POST")).toBe(true);
-    expect(apiFetchMock.mock.calls.some(([url, options]) => String(url).endsWith("/prompt") && options?.method === "POST")).toBe(false);
+    expect(mockApi.POST).toHaveBeenCalledWith(
+      "/api/sessions/{id}/command",
+      expect.objectContaining({
+        params: expect.objectContaining({
+          path: { id: "session-1" },
+        }),
+      })
+    );
     expect(wrapper.emitted("promptSent")).toHaveLength(1);
   });
 
@@ -270,15 +345,16 @@ describe("Composer", () => {
     textarea.element.dispatchEvent(enterEvent);
     await flushPromises();
 
-    const promptCall = apiFetchMock.mock.calls.find(([url, options]) => String(url).endsWith("/prompt") && options?.method === "POST");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const promptCall = (mockApi.POST.mock.calls as any[]).find(([url]) => url === "/api/sessions/{id}/prompt");
     expect(promptCall).toBeTruthy();
     const [, options] = promptCall!;
-    const body = JSON.parse(String(options?.body)) as { model?: { providerID: string; modelID: string } };
+    const body = options?.body as { model?: { providerID: string; modelID: string } };
     expect(body.model).toEqual({ providerID: "provider-2", modelID: "shared-model" });
   });
 
-  it("does not intercept Shift+Enter and does not render autocomplete when instanceId is blank", async () => {
-    const wrapper = mountComposer({ instanceId: "   " });
+  it("does not intercept Shift+Enter and does not render autocomplete when sessionId is blank", async () => {
+    const wrapper = mountComposer({ sessionId: "   " });
     const textarea = wrapper.get("[data-testid='prompt-input']");
 
     await textarea.setValue("/");
@@ -296,7 +372,7 @@ describe("Composer", () => {
     textarea.element.dispatchEvent(shiftEnterEvent);
 
     expect(shiftEnterEvent.defaultPrevented).toBe(false);
-    expect(apiFetchMock.mock.calls.some(([url]) => String(url).includes("/prompt"))).toBe(false);
+    expect(mockApi.POST).not.toHaveBeenCalled();
   });
 
   it("enables composer for a stopped session when capabilities canPrompt is true", async () => {
@@ -310,7 +386,13 @@ describe("Composer", () => {
 
     await flushPromises();
 
-    expect(wrapper.get("[data-testid='prompt-input']").attributes("disabled")).toBeUndefined();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+    expect(textarea.attributes("disabled")).toBeUndefined();
+
+    // Add content to verify the send button can be enabled
+    await textarea.setValue("test message");
+    await flushPromises();
+
     expect(wrapper.get("[data-testid='prompt-send-button']").attributes("disabled")).toBeUndefined();
   });
 

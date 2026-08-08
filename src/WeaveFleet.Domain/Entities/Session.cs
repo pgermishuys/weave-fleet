@@ -28,6 +28,7 @@ public sealed class Session
     public string? HarnessResumeToken { get; set; }
     public string? GitBaselineRef { get; set; }
     public string? GitRepoRoot { get; set; }
+    public string? SourceReference { get; set; }
     /// <summary>Owner's user identifier.</summary>
     public string UserId { get; set; } = string.Empty;
 
@@ -39,4 +40,6 @@ public sealed class Session
     public string? SelectedProviderId { get; set; }
     /// <inheritdoc cref="SelectedProviderId" />
     public string? SelectedModelId { get; set; }
+
+    public List<string> Tags { get; set; } = [];
 }

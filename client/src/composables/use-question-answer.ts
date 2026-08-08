@@ -1,5 +1,6 @@
 import { shallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import type { components } from "@/api/generated/schema";
+import { api } from "@/api/client";
 
 /**
  * Composable for answering or rejecting question tool requests.
@@ -13,15 +14,14 @@ export function useQuestionAnswer(sessionId: string) {
     loading.value = true;
     error.value = null;
     try {
-      const response = await apiFetch(
-        `/api/sessions/${encodeURIComponent(sessionId)}/questions/${encodeURIComponent(requestId)}/answer`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ answers }),
+      const { error: apiError, response } = await api.POST("/api/sessions/{id}/questions/{requestId}/answer", {
+        params: {
+          path: { id: sessionId, requestId },
         },
-      );
-      if (!response.ok) {
+        body: { answers } as components["schemas"]["QuestionAnswerApiRequest"],
+      });
+
+      if (apiError || !response.ok) {
         throw new Error(`Failed to answer question: ${response.statusText}`);
       }
     } finally {
@@ -33,11 +33,13 @@ export function useQuestionAnswer(sessionId: string) {
     loading.value = true;
     error.value = null;
     try {
-      const response = await apiFetch(
-        `/api/sessions/${encodeURIComponent(sessionId)}/questions/${encodeURIComponent(requestId)}/reject`,
-        { method: "POST" },
-      );
-      if (!response.ok) {
+      const { error: apiError, response } = await api.POST("/api/sessions/{id}/questions/{requestId}/reject", {
+        params: {
+          path: { id: sessionId, requestId },
+        },
+      });
+
+      if (apiError || !response.ok) {
         throw new Error(`Failed to reject question: ${response.statusText}`);
       }
     } finally {

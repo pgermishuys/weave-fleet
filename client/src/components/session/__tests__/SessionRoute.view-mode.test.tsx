@@ -3,7 +3,7 @@ import type { DefineComponent } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { clearPendingPrompts, clearSentPrompts } from "@/composables/use-send-prompt";
-import type { FileDiffItem } from "@/lib/api-types";
+import type { FileDiffItem } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
 
 const { navigateMock, params, search, diffState, apiFetchMock } = vi.hoisted(() => ({
@@ -208,6 +208,7 @@ describe("session route files view close", () => {
           created: 0,
           updated: 0,
         },
+        tags: [],
       },
       instanceStatus: "running",
       sourceDirectory: null,
@@ -218,6 +219,7 @@ describe("session route files view close", () => {
       archivedAt: null,
       typedInstanceStatus: "running",
       isHidden: false,
+      tags: [],
     }]);
     diffState.diffs.value = [{
       file: "src/changed.ts",

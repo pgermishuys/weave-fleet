@@ -291,14 +291,14 @@ onUnmounted(() => {
 
         <div
           v-if="isReady"
-          class="rounded-md bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-400"
+          class="bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-400"
         >
           Update downloaded. Restart the app to switch to v{{ version }}.
         </div>
 
         <div
           v-if="isError && errorMessage"
-          class="rounded-md bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400"
+          class="bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400"
         >
           {{ errorMessage }}
         </div>

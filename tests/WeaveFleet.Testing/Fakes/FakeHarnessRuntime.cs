@@ -26,7 +26,7 @@ public sealed class FakeHarnessRuntime : IHarnessRuntime
     /// <summary>
     /// Default session returned by <see cref="SpawnAsync"/> and <see cref="ResumeAsync"/> when no behavior is configured.
     /// </summary>
-    public FakeHarnessSession DefaultSession { get; set; } = new("inst-1");
+    public IHarnessSession DefaultSession { get; set; } = new FakeHarnessSession("inst-1");
 
     // ── Configurable behaviors ───────────────────────────────────────────────
 

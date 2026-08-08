@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.OpenApi;
 using WeaveFleet.Api;
 using WeaveFleet.Api.Auth;
 using WeaveFleet.Api.Endpoints;
@@ -137,6 +138,13 @@ builder.Services.AddSingleton(_ => WeaveFleet.Application.Services.KeyFileConfig
 builder.Services.AddSingleton<WeaveFleet.Application.Services.KeyFileScanner>();
 #pragma warning restore IL2026
 builder.Services.AddHealthChecks();
+
+// ── SignalR ──────────────────────────────────────────────────────────────────
+builder.Services.AddSignalR()
+    .AddJsonProtocol(options =>
+    {
+        options.PayloadSerializerOptions.TypeInfoResolverChain.Insert(0, ApiJsonContext.Default);
+    });
 
 // ── Data Protection ───────────────────────────────────────────────────────────
 var dataProtectionBuilder = builder.Services.AddDataProtection()
@@ -375,6 +383,16 @@ JsonSerializationSetup.ConfigureHttpJson(builder.Services);
 // with the source-generated context.
 builder.Services.AddProblemDetails();
 
+builder.Services.AddOpenApi(options =>
+{
+    options.AddDocumentTransformer((document, context, ct) =>
+    {
+        document.Info.Title = "Weave Fleet API";
+        document.Info.Version = "v1";
+        return Task.CompletedTask;
+    });
+});
+
 // Use Fleet.Host/Port as the listen URL (overrides the "Urls" config key)
 builder.WebHost.UseUrls(fleetOptions.ListenUrl);
 
@@ -534,8 +552,23 @@ app.Use(async (context, next) =>
 app.UseAuthentication();
 app.UseAuthorization();
 
-// WebSocket support (for /ws real-time events endpoint)
-app.UseWebSockets();
+if (app.Environment.IsDevelopment())
+    app.MapOpenApi();
+
+// Origin validation for SignalR hubs
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/hubs"))
+    {
+        if (!IsHubOriginAllowed(context, fleetOptions))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+    }
+
+    await next();
+});
 
 // Health checks (registered before SPA fallback)
 app.MapHealthChecks("/healthz");
@@ -561,7 +594,7 @@ app.MapFallbackToFile("index.html")
 await app.RunAsync();
 
 static bool IsApiOrWebSocketRequest(PathString path)
-    => path.StartsWithSegments("/api") || path.StartsWithSegments("/ws");
+    => path.StartsWithSegments("/api") || path.StartsWithSegments("/hubs");
 
 static bool IsLocalhostRequest(HttpContext context)
 {
@@ -576,6 +609,21 @@ static bool HasBearerAuthorizationHeader(HttpRequest request)
 
     var authorizationHeader = authorizationHeaderValues.ToString();
     return authorizationHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase);
+}
+
+static bool IsHubOriginAllowed(HttpContext context, FleetOptions fleetOptions)
+{
+    if (!fleetOptions.Auth.Enabled)
+        return true;
+
+    var origin = context.Request.Headers.Origin.ToString();
+    if (string.IsNullOrWhiteSpace(origin))
+        return false;
+
+    if (fleetOptions.Auth.AllowedOrigins.Length == 0)
+        return false;
+
+    return fleetOptions.Auth.AllowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
 }
 
 static async Task RunLegacySessionImportAsync(

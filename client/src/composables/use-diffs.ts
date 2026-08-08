@@ -1,6 +1,6 @@
 import { computed, readonly, ref, shallowRef, toValue, watch, type MaybeRefOrGetter, type Ref, type ShallowRef } from "vue";
-import type { FileDiffItem, SessionDiffsResponse } from "@/lib/api-types";
-import { apiFetch } from "@/lib/api-client";
+import type { FileDiffItem, SessionDiffsResponse } from "@/api/client";
+import { api } from "@/api/client";
 import { useWeaveSocket } from "@/composables/use-weave-socket";
 import type { DomainEvent } from "@/lib/domain-events";
 
@@ -16,7 +16,6 @@ export interface UseDiffsResult {
 
 export function useDiffs(
   sessionId: MaybeRefOrGetter<string | null | undefined>,
-  instanceId: MaybeRefOrGetter<string | null | undefined>,
 ): UseDiffsResult {
   const diffs = ref<FileDiffItem[]>([]);
   const available = shallowRef(false);
@@ -24,16 +23,14 @@ export function useDiffs(
   const isStale = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);
   const currentSessionId = computed(() => toValue(sessionId) ?? "");
-  const currentInstanceId = computed(() => toValue(instanceId) ?? "");
   const { subscribeV2 } = useWeaveSocket();
 
   let requestId = 0;
 
   async function fetchDiffs(): Promise<void> {
     const activeSessionId = currentSessionId.value;
-    const activeInstanceId = currentInstanceId.value;
 
-    if (!activeSessionId || !activeInstanceId) {
+    if (!activeSessionId) {
       requestId += 1;
       diffs.value = [];
       available.value = false;
@@ -48,21 +45,27 @@ export function useDiffs(
     error.value = undefined;
 
     try {
-      const url = `/api/sessions/${encodeURIComponent(activeSessionId)}/diffs?instanceId=${encodeURIComponent(activeInstanceId)}`;
-      const response = await apiFetch(url);
-      if (!response.ok) {
+      const { data, error: apiError, response } = await api.GET("/api/sessions/{id}/diffs", {
+        params: {
+          path: { id: activeSessionId },
+        },
+      });
+
+      if (apiError || !response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      const data = await response.json() as SessionDiffsResponse | FileDiffItem[] | undefined;
       if (currentRequestId !== requestId) {
         return;
       }
 
+      // Response body is not typed in schema, use data from openapi-fetch
+      const responseData = data as unknown as SessionDiffsResponse | FileDiffItem[] | undefined;
+
       // API returns { diffs: [...], available: boolean } wrapper object.
-      const items = Array.isArray(data) ? data : Array.isArray(data?.diffs) ? data.diffs : [];
+      const items = Array.isArray(responseData) ? responseData : Array.isArray(responseData?.diffs) ? responseData.diffs : [];
       diffs.value = items as FileDiffItem[];
-      available.value = Array.isArray(data) || typeof data?.available !== "boolean" ? true : data.available;
+      available.value = Array.isArray(responseData) || typeof responseData?.available !== "boolean" ? true : responseData.available;
       isStale.value = false;
       error.value = undefined;
     } catch (fetchError) {
@@ -80,7 +83,7 @@ export function useDiffs(
   }
 
   function markStale(): void {
-    if (!currentSessionId.value || !currentInstanceId.value) {
+    if (!currentSessionId.value) {
       return;
     }
 
@@ -88,7 +91,7 @@ export function useDiffs(
   }
 
   watch(
-    [currentSessionId, currentInstanceId],
+    currentSessionId,
     () => {
       requestId += 1;
       diffs.value = [];

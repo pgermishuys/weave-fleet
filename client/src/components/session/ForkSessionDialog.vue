@@ -42,7 +42,7 @@ function handleOpenChange(value: boolean): void {
 async function handleSubmit(): Promise<void> {
   try {
     const response = await forkSession(props.sessionId, {
-      title: title.value.trim() || undefined,
+      title: title.value.trim() || null,
     });
 
     emit("update:open", false);
@@ -125,7 +125,7 @@ watch(
 
         <p
           v-if="error"
-          class="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          class="border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
           role="alert"
         >
           {{ error }}

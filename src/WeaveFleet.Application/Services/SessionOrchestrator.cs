@@ -44,6 +44,7 @@ public sealed partial class SessionOrchestrator(
     IUserContext userContext,
     FleetOptions options,
     ISmartLinkRepository smartLinkRepository,
+    SessionActivityTracker sessionActivityTracker,
     ILogger<SessionOrchestrator> logger,
     SessionActivityWriteService? sessionActivityWriteService = null,
     GitDiffService? gitDiffService = null)
@@ -134,6 +135,7 @@ public sealed partial class SessionOrchestrator(
             userContext,
             options,
             smartLinkRepository,
+            new SessionActivityTracker(),
             logger,
             sessionActivityWriteService: null)
     {
@@ -181,6 +183,7 @@ public sealed partial class SessionOrchestrator(
             userContext,
             options,
             smartLinkRepository,
+            new SessionActivityTracker(),
             logger,
             sessionActivityWriteService: null)
     {
@@ -328,10 +331,10 @@ public sealed partial class SessionOrchestrator(
             return instanceResult.Error;
         }
 
-        // Track in-memory handle
-        instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
-
         // 4. Persist session
+        // NOTE: the session row must be persisted BEFORE the instance is registered with the
+        // tracker, because registration starts the HarnessEventRelay pump which resolves the
+        // Fleet session id via the DB. Registering first races the pump against the insert.
         // For pooled/automatic sessions, HarnessResumeToken is set here from the eagerly-created
         // OpenCode session ID (available because SpawnAsync returns after OC session creation).
         // For non-pooled sessions, ResumeToken is null at spawn time and is updated later via
@@ -353,6 +356,8 @@ public sealed partial class SessionOrchestrator(
             GitRepoRoot = gitBaseline?.RepoRoot,
             UserId = userContext.UserId,
             HarnessResumeToken = harnessInstance.ResumeToken,
+            SourceReference = request.SourceReference,
+            Tags = request.Tags ?? []
         };
 
         var createdAt = DateTime.UtcNow.ToString("O");
@@ -367,11 +372,17 @@ public sealed partial class SessionOrchestrator(
             {
                 // Rollback: best-effort delete of the OC session (releases lease, removes binding
                 // table entry, and issues OC-level DELETE). The resume token must not be logged or
-                // persisted when this path is taken. Deregister the in-memory handle too.
-                instanceTracker.Remove(harnessInstance.InstanceId);
+                // persisted when this path is taken.
                 await SafeDeleteAsync(harnessInstance, ct);
                 throw;
             }
+
+            // Track in-memory handle immediately after successful persistence (and before the
+            // non-transactional broadcast) so the relay pump started by registration can resolve
+            // the Fleet session id from the DB, and a broadcast failure cannot leave a persisted
+            // session with an untracked instance.
+            instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
+
             await eventBroadcaster.BroadcastAsync("sessions", "session_created",
                 JsonSerializer.SerializeToElement(new SessionCreatedOutboxPayload
                 {
@@ -413,11 +424,13 @@ public sealed partial class SessionOrchestrator(
             {
                 // Rollback: best-effort delete of the OC session (releases lease, removes binding
                 // table entry, and issues OC-level DELETE). The resume token must not be logged or
-                // persisted when this path is taken. Deregister the in-memory handle too.
-                instanceTracker.Remove(harnessInstance.InstanceId);
+                // persisted when this path is taken.
                 await SafeDeleteAsync(harnessInstance, ct);
                 throw;
             }
+
+            // Track in-memory handle immediately after successful persistence (see comment above).
+            instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
         }
 
         await sessionSourceUsageRepository.InsertAsync(new SessionSourceUsage
@@ -572,8 +585,10 @@ public sealed partial class SessionOrchestrator(
             directory: workspaceResult.Value,
             url: string.Empty);
 
-        instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
+        // Update the DB mapping BEFORE registering: registration starts the relay pump, which
+        // resolves the Fleet session id by instance id from the DB.
         await sessionRepository.UpdateForResumeAsync(session.Id, harnessInstance.InstanceId);
+        instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
 
         session.InstanceId = harnessInstance.InstanceId;
         return session;
@@ -796,6 +811,15 @@ public sealed partial class SessionOrchestrator(
         string? correlationId,
         CancellationToken ct)
     {
+        using var promptActivity = FleetInstrumentation.ActivitySource.StartActivity(
+            "fleet.prompt_session",
+            ActivityKind.Internal);
+        promptActivity?.SetTag(FleetInstrumentation.SessionIdTag, id);
+
+        // Store trace context so the async relay pump can link response events back to this prompt.
+        if (promptActivity is not null)
+            sessionActivityTracker.SetPromptTraceContext(id, promptActivity.Context);
+
         using var _ = BeginSessionScope(id);
         var sessionResult = await GetSessionAsync(id);
         if (sessionResult.IsFailure)
@@ -835,6 +859,10 @@ public sealed partial class SessionOrchestrator(
                 return new PromptSessionResult(publishResult.EventId, effectiveCorrelationId);
 
             await messageRepository.UpsertAsync(persisted);
+
+            // Ensure the event subscription is established before sending the prompt.
+            // This prevents early events from being lost during activation/resume.
+            await EnsureEventSubscriptionReadyAsync(instanceResult.Value, id, ct).ConfigureAwait(false);
 
             await instanceResult.Value.SendPromptAsync(text, options, ct);
 
@@ -1076,40 +1104,6 @@ public sealed partial class SessionOrchestrator(
         return await GetPersistedMessagesAsync(id, query, ct);
     }
 
-    public async Task<Result<IReadOnlyList<CommittedEvent>>> GetCommittedEventsAsync(
-        string sessionId,
-        long afterEventId,
-        int? limit,
-        CancellationToken ct = default)
-    {
-        using var _scope = BeginSessionScope(sessionId);
-        _ = ct;
-
-        var session = await sessionRepository.GetByIdAsync(sessionId);
-        if (session is null)
-            return FleetError.NotFoundFor(nameof(Session), sessionId);
-
-        // Harness events live in the harness_events log. Gap-fill uses the log/store event id
-        // as the durable cursor so pump sequence resets on harness restarts cannot create
-        // duplicate or skipped replay windows.
-        var topic = $"session:{sessionId}";
-        var rows = await harnessEventLogRepository.GetBySessionAfterEventIdAsync(
-            sessionId,
-            Math.Max(0, afterEventId),
-            Math.Max(1, limit ?? options.Outbox.DispatchBatchSize));
-
-        var events = rows
-            .Select(row => new CommittedEvent(
-                row.EventId,
-                topic,
-                row.Type,
-                row.Payload,
-                DateTimeOffset.Parse(row.CreatedAt, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind)))
-            .ToList();
-
-        return Result.Success<IReadOnlyList<CommittedEvent>>(events);
-    }
-
     private async Task<Result<MessagePage>> GetPersistedMessagesAsync(
         string sessionId,
         MessageQuery? query,
@@ -1172,6 +1166,7 @@ public sealed partial class SessionOrchestrator(
                 InternalPumpDedupKey: 0)
             {
                 CorrelationId = correlationId,
+                TraceContext = Activity.Current?.Context,
             },
             ct).ConfigureAwait(false);
 
@@ -1496,10 +1491,211 @@ public sealed partial class SessionOrchestrator(
         return Unit.Value;
     }
 
+    // ── Session-scoped capabilities ────────────────────────────────────────────
+
+    public async Task<Result<IReadOnlyList<ProviderInfo>>> GetSessionModelsAsync(
+        string sessionId,
+        CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(sessionId);
+        var sessionResult = await GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
+        if (instanceResult.IsFailure)
+            return instanceResult.Error;
+
+        var providers = await instanceResult.Value.GetProvidersAsync(ct);
+        return Result.Success(providers);
+    }
+
+    public async Task<Result<IReadOnlyList<CommandInfo>>> GetSessionCommandsAsync(
+        string sessionId,
+        CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(sessionId);
+        var sessionResult = await GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
+        if (instanceResult.IsFailure)
+            return instanceResult.Error;
+
+        var commands = await instanceResult.Value.GetCommandsAsync(ct);
+        return Result.Success(commands);
+    }
+
+    public async Task<Result<IReadOnlyList<AgentInfo>>> GetSessionAgentsAsync(
+        string sessionId,
+        CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(sessionId);
+        var sessionResult = await GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
+        if (instanceResult.IsFailure)
+            return instanceResult.Error;
+
+        var agents = await instanceResult.Value.GetAgentsAsync(ct);
+        return Result.Success(agents);
+    }
+
+    public async Task<Result<IReadOnlyList<string>>> FindSessionFilesAsync(
+        string sessionId,
+        string query,
+        CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(sessionId);
+        var sessionResult = await GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
+        if (instanceResult.IsFailure)
+            return instanceResult.Error;
+
+        if (string.IsNullOrWhiteSpace(query) || !Directory.Exists(sessionResult.Value.Directory))
+            return Result.Success<IReadOnlyList<string>>(Array.Empty<string>());
+
+        // Normalize query separators to the OS path separator for consistent matching
+        var normalizedQuery = query.Replace('/', Path.DirectorySeparatorChar)
+                                   .Replace('\\', Path.DirectorySeparatorChar);
+
+        var files = Directory
+            .EnumerateFiles(sessionResult.Value.Directory, "*", SearchOption.AllDirectories)
+            .Select(f => f[sessionResult.Value.Directory.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+            .Where(relative => relative.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase))
+            .Take(50)
+            .ToArray();
+
+        return Result.Success<IReadOnlyList<string>>(files);
+    }
+
+    public async Task<Result<BrowseDirectoryResult>> BrowseSessionDirectoryAsync(
+        string sessionId,
+        string? path,
+        CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(sessionId);
+        var sessionResult = await GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var sessionDirectory = sessionResult.Value.Directory;
+        if (!Directory.Exists(sessionDirectory))
+            return FleetError.ValidationError("Session.Directory", "Session directory does not exist.");
+
+        // Resolve target directory with path traversal protection
+        var targetDirectory = string.IsNullOrWhiteSpace(path)
+            ? sessionDirectory
+            : Path.GetFullPath(Path.Combine(sessionDirectory, path));
+
+        var sessionDirectoryFullPath = Path.GetFullPath(sessionDirectory);
+        if (!IsSameOrChildPath(targetDirectory, sessionDirectoryFullPath))
+            return FleetError.ValidationError("Session.Directory", "Path traversal is not allowed.");
+
+        if (!Directory.Exists(targetDirectory))
+            return FleetError.ValidationError("Session.Directory", "Directory does not exist.");
+
+        // Enumerate entries
+        var entries = Directory.EnumerateFileSystemEntries(targetDirectory, "*", SearchOption.TopDirectoryOnly)
+            .Select(fullPath =>
+            {
+                var name = Path.GetFileName(fullPath);
+                var isDirectory = Directory.Exists(fullPath);
+                var relativePath = Path.GetRelativePath(sessionDirectoryFullPath, fullPath)
+                    .Replace(Path.DirectorySeparatorChar, '/')
+                    .Replace(Path.AltDirectorySeparatorChar, '/');
+                return new BrowseEntry(name, relativePath, isDirectory);
+            })
+            .ToList();
+
+        // Filter out .git directory
+        var filteredEntries = entries.Where(e => !string.Equals(e.Name, ".git", StringComparison.Ordinal)).ToList();
+
+        // Sort: directories first, then files, both alphabetical
+        var sortedEntries = filteredEntries
+            .OrderByDescending(e => e.IsDirectory)
+            .ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var currentPath = string.IsNullOrWhiteSpace(path)
+            ? string.Empty
+            : path.Replace(Path.DirectorySeparatorChar, '/').Replace(Path.AltDirectorySeparatorChar, '/').Trim('/');
+
+        return new BrowseDirectoryResult(sortedEntries, currentPath);
+    }
+
+    public async Task<Result<ReadFileResult>> ReadSessionFileAsync(
+        string sessionId,
+        string? path,
+        CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(sessionId);
+        if (string.IsNullOrWhiteSpace(path))
+            return FleetError.ValidationError("Session.File", "Path parameter is required.");
+
+        var sessionResult = await GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var sessionDirectory = sessionResult.Value.Directory;
+        if (!Directory.Exists(sessionDirectory))
+            return FleetError.ValidationError("Session.Directory", "Session directory does not exist.");
+
+        // Resolve target file with path traversal protection
+        var targetFilePath = Path.GetFullPath(Path.Combine(sessionDirectory, path));
+        var sessionDirectoryFullPath = Path.GetFullPath(sessionDirectory);
+        if (!IsSameOrChildPath(targetFilePath, sessionDirectoryFullPath))
+            return FleetError.ValidationError("Session.File", "Path traversal is not allowed.");
+
+        if (!File.Exists(targetFilePath))
+            return FleetError.NotFoundFor("File", path);
+
+        try
+        {
+            var fileInfo = new FileInfo(targetFilePath);
+            const int maxFileContentBytes = 512 * 1024;
+            if (fileInfo.Length > maxFileContentBytes)
+            {
+                return new ReadFileResult(path, Content: null, IsBinary: false, IsTruncated: true);
+            }
+
+            var bytes = await File.ReadAllBytesAsync(targetFilePath, ct).ConfigureAwait(false);
+            if (bytes.Contains((byte)0))
+            {
+                return new ReadFileResult(path, Content: null, IsBinary: true, IsTruncated: false);
+            }
+
+            try
+            {
+                var content = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
+                return new ReadFileResult(path, content, IsBinary: false, IsTruncated: false);
+            }
+            catch (System.Text.DecoderFallbackException)
+            {
+                return new ReadFileResult(path, Content: null, IsBinary: true, IsTruncated: false);
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
+        {
+            return FleetError.NotFoundFor("File", path);
+        }
+    }
+
     // ── Private helpers ────────────────────────────────────────────────────────
 
     private async Task<Result<IHarnessSession>> GetOrActivateInstanceAsync(Session session, CancellationToken ct)
     {
+        using var activateActivity = FleetInstrumentation.ActivitySource.StartActivity(
+            "fleet.activate_instance",
+            ActivityKind.Internal);
+        activateActivity?.SetTag(FleetInstrumentation.SessionIdTag, session.Id);
+
         var instance = instanceTracker.Get(session.InstanceId);
         if (instance is not null)
             return Result.Success<IHarnessSession>(instance);
@@ -1607,8 +1803,10 @@ public sealed partial class SessionOrchestrator(
             return instanceResult.Error;
         }
 
-        instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
+        // Update the DB mapping BEFORE registering: registration starts the relay pump, which
+        // resolves the Fleet session id by instance id from the DB.
         await sessionRepository.UpdateForResumeAsync(session.Id, harnessInstance.InstanceId).ConfigureAwait(false);
+        instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
         session.InstanceId = harnessInstance.InstanceId;
         session.Status = "active";
         session.LifecycleStatus = _lifecycleStatusRunning;
@@ -1746,6 +1944,45 @@ public sealed partial class SessionOrchestrator(
         Message = "Unexpected failure sending prompt to session {SessionId}")]
     private partial void LogPromptUnexpectedFailure(Exception ex, string sessionId);
 
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Event subscription readiness timed out for session {SessionId} after {TimeoutMs}ms — proceeding with prompt")]
+    private partial void LogSubscriptionReadinessTimeout(string sessionId, int timeoutMs);
+
+    /// <summary>
+    /// Waits for the harness event subscription to be established before proceeding.
+    /// This ensures events emitted immediately after activation/resume are not lost.
+    /// Times out after 5 seconds and proceeds with a warning rather than failing the operation.
+    /// </summary>
+    private async Task EnsureEventSubscriptionReadyAsync(
+        IHarnessSession instance,
+        string sessionId,
+        CancellationToken ct)
+    {
+        const int timeoutMs = 5000;
+
+        using var subActivity = FleetInstrumentation.ActivitySource.StartActivity(
+            "fleet.ensure_subscription",
+            ActivityKind.Internal);
+        subActivity?.SetTag(FleetInstrumentation.SessionIdTag, sessionId);
+
+        try
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(timeoutMs);
+            await instance.WaitForEventSubscriptionAsync(timeoutCts.Token).ConfigureAwait(false);
+
+            subActivity?.SetTag("subscription.ready", true);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Timeout — log warning and proceed rather than failing the prompt.
+            subActivity?.SetTag("subscription.ready", false);
+            subActivity?.SetTag("subscription.timeout_ms", timeoutMs);
+
+            LogSubscriptionReadinessTimeout(sessionId, timeoutMs);
+        }
+    }
+
     private async Task<string?> ResolveProjectNameAsync(string? projectId)
     {
         if (projectId is null)
@@ -1777,6 +2014,33 @@ public sealed partial class SessionOrchestrator(
         Activity.Current?.SetTag(FleetInstrumentation.SessionIdTag, sessionId);
         return logger.BeginScope(new Dictionary<string, object> { [FleetInstrumentation.SessionIdTag] = sessionId });
     }
+
+    private static bool IsSameOrChildPath(string candidatePath, string rootPath)
+    {
+        var root = TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
+        var candidate = TrimEndingDirectorySeparator(Path.GetFullPath(candidatePath));
+        if (PathsEqual(candidate, root))
+            return true;
+
+        return candidate.StartsWith(EnsureEndingDirectorySeparator(root), PathStringComparison);
+    }
+
+    private static bool PathsEqual(string left, string right) =>
+        string.Equals(
+            TrimEndingDirectorySeparator(left),
+            TrimEndingDirectorySeparator(right),
+            PathStringComparison);
+
+    private static string EnsureEndingDirectorySeparator(string path) =>
+        Path.EndsInDirectorySeparator(path) ? path : path + Path.DirectorySeparatorChar;
+
+    private static string TrimEndingDirectorySeparator(string path) =>
+        Path.GetPathRoot(path) == path
+            ? path
+            : path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+    private static StringComparison PathStringComparison =>
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 }
 
 // ── Request / Result DTOs ──────────────────────────────────────────────────────
@@ -1806,17 +2070,24 @@ public sealed record CreateSessionRequest
     /// and directory-path validation is bypassed. Must not be set from external API requests.
     /// </summary>
     internal bool IsInternalRequest { get; init; }
+    /// <summary>
+    /// Optional automation reference. When set, links this session to an automation execution.
+    /// </summary>
+    public string? SourceReference { get; init; }
+    /// <summary>
+    /// Optional tags for categorizing and filtering sessions.
+    /// </summary>
+    public List<string>? Tags { get; init; }
 }
 
 /// <summary>Result of a successful <see cref="SessionOrchestrator.CreateSessionAsync"/> call.</summary>
 public sealed record CreateSessionResult(Session Session, string InstanceId, string WorkspaceId);
 
-public sealed record CommittedEvent(
-    long EventId,
-    string Topic,
-    string Type,
-    string Payload,
-    DateTimeOffset Timestamp)
-{
-    public long SequenceNumber => EventId;
-}
+/// <summary>Result of browsing a session directory.</summary>
+public sealed record BrowseDirectoryResult(IReadOnlyList<BrowseEntry> Entries, string CurrentPath);
+
+/// <summary>Represents a file or directory entry in a browsed directory.</summary>
+public sealed record BrowseEntry(string Name, string RelativePath, bool IsDirectory);
+
+/// <summary>Result of reading a session file.</summary>
+public sealed record ReadFileResult(string Path, string? Content, bool IsBinary, bool IsTruncated);

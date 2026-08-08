@@ -1097,41 +1097,6 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         _builder.MessageRepository.GetBySessionCalls.ShouldContain(c => c.SessionId == "s3" && c.Limit == 11);
     }
 
-    [Fact]
-    public async Task GetCommittedEvents_ReturnsHarnessEventLogRowsAsCommittedEvents()
-    {
-        var session = MakeSession("s-committed", "inst-1");
-        _builder.SessionRepository.Seed(session);
-        await _builder.HarnessEventLogRepository.AppendAsync(new HarnessEventLogEntry
-        {
-            SessionId = "s-committed",
-            EventId = 42,
-            SequenceNumber = 6,
-            Type = "message.updated",
-            Payload = "{\"info\":{\"id\":\"msg-1\"}}",
-            CreatedAt = "2026-01-01T00:00:00.0000000+00:00",
-            UserId = "user-1"
-        });
-
-        var result = await _sut.GetCommittedEventsAsync("s-committed", 41, 20);
-
-        result.IsSuccess.ShouldBeTrue();
-        result.Value.Count.ShouldBe(1);
-        result.Value[0].EventId.ShouldBe(42);
-        result.Value[0].SequenceNumber.ShouldBe(42);
-        result.Value[0].Topic.ShouldBe("session:s-committed");
-        result.Value[0].Type.ShouldBe("message.updated");
-    }
-
-    [Fact]
-    public async Task GetCommittedEvents_SessionNotFound_ReturnsNotFound()
-    {
-        var result = await _sut.GetCommittedEventsAsync("ghost", 0, 10);
-
-        result.IsFailure.ShouldBeTrue();
-        result.Error.Description.ShouldContain("Session");
-    }
-
     // ── Harness type tracking ─────────────────────────────────────────────────
 
     [Fact]
@@ -1599,8 +1564,10 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
             userContext,
             options,
             _builder.SmartLinkRepository,
+            new SessionActivityTracker(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance,
-            sessionActivityWriteService: null);
+            sessionActivityWriteService: null,
+            gitDiffService: null);
     }
 
     private static SessionOrchestratorBuilder CreateBuilderWithGitDiffService(GitDiffService gitDiffService)
@@ -1662,4 +1629,48 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     private sealed record GitCall(string WorkingDirectory, IReadOnlyList<string> Arguments);
+
+    // ── Event Subscription Readiness ───────────────────────────────────────────
+
+    [Fact]
+    public async Task prompt_waits_for_event_subscription_readiness_before_sending()
+    {
+        // Arrange: use a subscription-gated harness session that tracks ordering
+        var gatedSession = new SubscriptionGatedHarnessSession("inst-gated");
+        var runtime = _builder.RegisterHarness("opencode", "OpenCode");
+        runtime.DefaultSession = gatedSession;
+
+        _builder.ProjectRepository.Seed(new Project
+        {
+            Id = "scratch-1",
+            Name = "Scratch",
+            Type = "scratch",
+            Position = 0,
+            CreatedAt = "2026-01-01",
+            UpdatedAt = "2026-01-01"
+        });
+
+        using var tempDirectory = new TempDirectory();
+
+        // Act: create session and prompt immediately
+        var createResult = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            Title = "Gated Session"
+        });
+        createResult.IsSuccess.ShouldBeTrue();
+
+        var promptResult = await _sut.PromptSessionAsync(
+            createResult.Value.Session.Id,
+            "Hello world");
+
+        // Assert: orchestrator should have waited for subscription readiness before sending prompt
+        promptResult.IsSuccess.ShouldBeTrue();
+        gatedSession.SendPromptCalls.Count.ShouldBe(1, "Prompt should have been sent");
+        gatedSession.SendPromptCalls[0].Text.ShouldBe("Hello world");
+        
+        // Verify that WaitForEventSubscriptionAsync was called before SendPromptAsync
+        gatedSession.WasReadinessAwaitedBeforeSendPrompt.ShouldBeTrue(
+            "Orchestrator must await WaitForEventSubscriptionAsync before calling SendPromptAsync");
+    }
 }

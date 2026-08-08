@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 
 namespace WeaveFleet.Application.Services;
 
@@ -9,7 +10,10 @@ public sealed record SessionActivitySnapshot(
     string FleetSessionId,
     string ActivityStatus,
     string? UserId,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    int? RetryAttempt = null,
+    string? RetryMessage = null,
+    DateTimeOffset? RetryNext = null);
 
 /// <summary>
 /// Thread-safe in-memory tracker for per-session activity status (busy/idle).
@@ -36,13 +40,16 @@ public sealed class SessionActivityTracker
     /// <summary>
     /// Update (or insert) the activity status for a fleet session.
     /// </summary>
-    public void Update(string fleetSessionId, string activityStatus, string? userId)
+    public void Update(string fleetSessionId, string activityStatus, string? userId, int? retryAttempt = null, string? retryMessage = null, DateTimeOffset? retryNext = null)
     {
         _state[fleetSessionId] = new SessionActivitySnapshot(
             fleetSessionId,
             activityStatus,
             userId,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            RetryAttempt: retryAttempt,
+            RetryMessage: retryMessage,
+            RetryNext: retryNext);
     }
 
     /// <summary>
@@ -68,6 +75,11 @@ public sealed class SessionActivityTracker
     /// Register a parent-child delegation relationship so that parent busy state
     /// can be derived from child activity.
     /// </summary>
+    /// <remarks>
+    /// This propagation handles Fleet DelegationService delegations (separate opencode sessions).
+    /// For opencode task-tool delegations, the parent stays busy server-side and no client-side
+    /// propagation is needed.
+    /// </remarks>
     public void RegisterChild(string childSessionId, string parentSessionId)
     {
         _childToParent[childSessionId] = parentSessionId;
@@ -101,6 +113,12 @@ public sealed class SessionActivityTracker
     /// Returns <c>"busy"</c> if the session itself is busy <em>or</em> any registered
     /// child session is busy. Returns <c>null</c> if the session is not tracked.
     /// </summary>
+    /// <remarks>
+    /// This parent-child propagation applies to Fleet DelegationService delegations (separate
+    /// opencode sessions where the parent doesn't stay busy server-side). For opencode task-tool
+    /// delegations, the parent remains busy server-side while the child runs, so no propagation
+    /// is needed.
+    /// </remarks>
     public string? GetEffectiveActivityStatus(string sessionId)
     {
         var own = Get(sessionId);
@@ -131,4 +149,28 @@ public sealed class SessionActivityTracker
     /// </summary>
     public SessionActivitySnapshot? Get(string fleetSessionId)
         => _state.TryGetValue(fleetSessionId, out var snapshot) ? snapshot : null;
+
+    // ── Prompt trace context correlation ──────────────────────────────────────
+
+    private readonly ConcurrentDictionary<string, ActivityContext> _promptTraceContexts = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Stores the trace context of the current prompt operation so that async relay
+    /// events can link back to the originating prompt trace.
+    /// </summary>
+    public void SetPromptTraceContext(string fleetSessionId, ActivityContext context)
+        => _promptTraceContexts[fleetSessionId] = context;
+
+    /// <summary>
+    /// Retrieves the trace context of the most recent prompt for a session, or <c>null</c>
+    /// if no prompt context is stored.
+    /// </summary>
+    public ActivityContext? GetPromptTraceContext(string fleetSessionId)
+        => _promptTraceContexts.TryGetValue(fleetSessionId, out var ctx) ? ctx : null;
+
+    /// <summary>
+    /// Clears the stored prompt trace context for a session (e.g. when the session goes idle).
+    /// </summary>
+    public void ClearPromptTraceContext(string fleetSessionId)
+        => _promptTraceContexts.TryRemove(fleetSessionId, out _);
 }

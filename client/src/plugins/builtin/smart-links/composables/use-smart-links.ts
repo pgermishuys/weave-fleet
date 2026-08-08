@@ -1,5 +1,5 @@
 import { onUnmounted, ref, watch, type Ref } from 'vue'
-import type { AccumulatedMessage } from '@/lib/api-types'
+import type { AccumulatedMessage } from '@/lib/client-types'
 import { apiFetch } from '@/lib/api-client'
 import { useSmartLinksStore } from '@/stores/smart-links'
 import { extractUrls } from '../utils/extract-urls'

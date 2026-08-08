@@ -88,7 +88,7 @@ internal static class ClaudeCodeMapper
 
     /// <summary>
     /// Creates a <c>message.part.updated</c> event for a single message part.
-    /// Returns <c>null</c> for unrecognised part types (e.g. tool results).
+    /// Returns <c>null</c> for unrecognised part types.
     /// </summary>
     internal static HarnessEvent? CreatePartUpdatedEvent(
         string messageId, string sessionId, MessagePart part, int partIndex)
@@ -111,6 +111,12 @@ internal static class ClaudeCodeMapper
             ToolUsePart tool => JsonSerializer.SerializeToElement(
                 BuildToolPartPayload(messageId, sessionId, tool, partIndex),
                 InfrastructureJsonContext.Default.ClaudeCodeToolPartPayload),
+            ToolResultPart toolResult => ToolResultEventBuilder.BuildPayload(
+                messageId,
+                sessionId,
+                toolResult.ToolCallId,
+                toolResult.Content,
+                toolResult.IsError),
             _ => null,
         };
 

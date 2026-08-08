@@ -12,6 +12,7 @@ internal sealed class InstanceLease : IAsyncDisposable
     private readonly TaskCompletionSource<InstanceLease> _replacement =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _released;
+    private IReadOnlyList<string>? _openCodeSessionIdsToCleanup;
 
     internal InstanceLease(PooledOpenCodeInstance instance, Func<InstanceLease, InstanceLeaseReleaseMode, ValueTask> releaseAsync)
     {
@@ -30,11 +31,18 @@ internal sealed class InstanceLease : IAsyncDisposable
 
     public bool IsReleased => Volatile.Read(ref _released) != 0;
 
+    internal IReadOnlyList<string>? OpenCodeSessionIdsToCleanup => _openCodeSessionIdsToCleanup;
+
     public ValueTask DisposeAsync() => _releaseAsync(this, InstanceLeaseReleaseMode.IdleTtl);
 
     public ValueTask StopAsync() => _releaseAsync(this, InstanceLeaseReleaseMode.Immediate);
 
     internal bool TryMarkReleased() => Interlocked.Exchange(ref _released, 1) == 0;
+
+    internal void SetOpenCodeSessionIdsToCleanup(IReadOnlyList<string> sessionIds)
+    {
+        _openCodeSessionIdsToCleanup = sessionIds;
+    }
 
     internal void NotifyFaulted(Exception exception) => _faulted.TrySetResult(exception);
 

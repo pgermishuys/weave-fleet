@@ -2,16 +2,17 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
-vi.mock('@/lib/api-client', () => ({
-  apiFetch: vi.fn(),
+const { apiFetchMock } = vi.hoisted(() => ({
+  apiFetchMock: vi.fn(),
 }))
 
-import { apiFetch } from '@/lib/api-client'
+vi.mock('@/lib/api-client', () => ({
+  apiFetch: apiFetchMock,
+}))
+
 import { useSmartLinksStore } from '@/stores/smart-links'
 import { useSessionsStore } from '@/stores/sessions'
 import SmartLinksPanel from '../SmartLinksPanel.vue'
-
-const mockApiFetch = vi.mocked(apiFetch)
 
 describe('SmartLinksPanel', () => {
   beforeEach(() => {
@@ -124,15 +125,17 @@ describe('SmartLinksPanel', () => {
       },
     ])
 
-    mockApiFetch.mockResolvedValue({ ok: true } as Response)
+    apiFetchMock.mockResolvedValue(new Response(null, { status: 204 }))
 
     const wrapper = mount(SmartLinksPanel, { global: { plugins: [pinia] } })
     await wrapper.find('.smart-link-dismiss').trigger('click')
     await flushPromises()
 
-    expect(mockApiFetch).toHaveBeenCalledWith(
+    expect(apiFetchMock).toHaveBeenCalledWith(
       '/api/sessions/session-1/smart-links/link-1/dismiss',
-      { method: 'PATCH' },
+      {
+        method: 'PATCH',
+      },
     )
     expect(smartLinksStore.isUrlDismissed('session-1', 'https://github.com/owner/repo/pull/1')).toBe(true)
   })

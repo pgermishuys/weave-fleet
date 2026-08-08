@@ -212,7 +212,34 @@ internal sealed class LeasedInstanceHandle : IOpenCodeInstanceHandle
 
         if (!_bindingTable.TryGetBinding(lease.Instance, _workingDirectory, openCodeSessionId, leaseGeneration, out var binding))
         {
-            throw new InvalidOperationException("Cannot bind pooled OpenCode session to the active lease.");
+            // Self-heal: if an existing binding exists at a higher generation, accept it rather than
+            // failing. This covers two scenarios:
+            //   1. Same consumer, higher generation — a reconnect moved bindings forward.
+            //   2. Different consumer, same fleet session, higher generation — the session was
+            //      reactivated with a new handle (e.g. after stop/restart or fault recovery) and
+            //      this handle is now stale.
+            if (_bindingTable.TryGetBinding(lease.Instance, _workingDirectory, openCodeSessionId, out var existingBinding)
+                && existingBinding.LeaseGeneration > leaseGeneration
+                && (existingBinding.ConsumerId == _consumerId
+                    || string.Equals(existingBinding.FleetSessionId, _fleetSessionId, StringComparison.Ordinal)))
+            {
+                binding = existingBinding;
+            }
+            else
+            {
+                var available = lease.Instance.IsAvailable;
+                var faulted = lease.Instance.IsFaulted;
+                var disposed = lease.Instance.IsDisposed;
+                var hasAny = _bindingTable.TryGetBinding(lease.Instance, _workingDirectory, openCodeSessionId, out var diagBinding);
+                throw new InvalidOperationException(
+                    $"Cannot bind pooled OpenCode session to the active lease. " +
+                    $"Instance available={available}, faulted={faulted}, disposed={disposed}, " +
+                    $"leaseGeneration={leaseGeneration}, existingBindingGeneration={diagBinding.LeaseGeneration}, " +
+                    $"existingConsumerId={diagBinding.ConsumerId}, thisConsumerId={_consumerId}, " +
+                    $"existingFleetSessionId={diagBinding.FleetSessionId}, thisFleetSessionId={_fleetSessionId}, " +
+                    $"hasBindingIgnoringGeneration={hasAny}, " +
+                    $"openCodeSessionId={openCodeSessionId}, directory={_workingDirectory}");
+            }
         }
 
         await _demultiplexer.WaitForActiveStreamAsync(lease.Instance, _workingDirectory, ct).ConfigureAwait(false);
@@ -319,19 +346,24 @@ internal sealed class LeasedInstanceHandle : IOpenCodeInstanceHandle
             return;
         }
 
-        _bindingTable.RemoveForLease(
+        var removedSessionIds = _bindingTable.RemoveForLease(
             CurrentLease.Instance,
             _consumerId,
             _fleetSessionId,
             _workingDirectory,
             CurrentLeaseGeneration);
+        
+        // Attach the removed sessionIds to the lease so RemoveLease can clean up the readiness trackers.
+        var leaseToRelease = ResolveLeaseForRelease();
+        leaseToRelease.SetOpenCodeSessionIdsToCleanup(removedSessionIds);
+        
         if (releaseMode == InstanceLeaseReleaseMode.Immediate)
         {
-            await ResolveLeaseForRelease().StopAsync().ConfigureAwait(false);
+            await leaseToRelease.StopAsync().ConfigureAwait(false);
         }
         else
         {
-            await ResolveLeaseForRelease().DisposeAsync().ConfigureAwait(false);
+            await leaseToRelease.DisposeAsync().ConfigureAwait(false);
         }
     }
 

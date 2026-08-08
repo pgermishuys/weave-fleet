@@ -48,7 +48,8 @@ function mountColumn(overrides: Partial<InstanceType<typeof KanbanColumn>["$prop
   });
 }
 
-function getButtonByText(wrapper: VueWrapper, label: string) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getButtonByText(wrapper: VueWrapper<any>, label: string) {
   const button = wrapper.findAll("button").find((candidate) => candidate.text() === label);
   if (!button) {
     throw new Error(`Unable to find button with label: ${label}`);

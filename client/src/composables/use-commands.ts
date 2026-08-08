@@ -31,8 +31,8 @@ import type { Command } from "@/lib/command-registry";
 import { dispatchCommandEvent } from "@/lib/command-events";
 import { matchesKeyboardShortcut, useKeyboardShortcut } from "@/composables/use-keyboard-shortcut";
 import { useAbortSession, useForkSession } from "@/composables/use-session-actions";
-import type { SessionListItem } from "@/lib/api-types";
-import { apiFetch } from "@/lib/api-client";
+import type { SessionListItem } from "@/api/client";
+import { api } from "@/api/client";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useCommandStore } from "@/stores/commands";
 import { useKeybindingsStore } from "@/stores/keybindings";
@@ -131,15 +131,18 @@ export function useCommands() {
       params.set("retentionStatus", retentionStatus.value);
     }
 
-    const url = params.size > 0 ? `/api/sessions?${params.toString()}` : "/api/sessions";
-    const response = await apiFetch(url);
+    const { data, error, response } = await api.GET("/api/sessions", {
+      params: {
+        query: retentionStatus.value !== "active" ? { retentionStatus: retentionStatus.value } : {},
+      },
+    });
 
-    if (!response.ok) {
+    if (error || !response.ok) {
       return;
     }
 
-    const data = await response.json() as SessionListItem[];
-    sessionsStore.setSessions(data);
+    const sessionData = data as unknown as SessionListItem[];
+    sessionsStore.setSessions(sessionData);
   }
 
   async function interruptCurrentSession(): Promise<void> {
@@ -149,7 +152,7 @@ export function useCommands() {
       return;
     }
 
-    await abortSession(currentSession.session.id, currentSession.instanceId);
+    await abortSession(currentSession.session.id);
     sessionsStore.patchSession(currentSession.session.id, {
       activityStatus: "idle",
       sessionStatus: "idle",

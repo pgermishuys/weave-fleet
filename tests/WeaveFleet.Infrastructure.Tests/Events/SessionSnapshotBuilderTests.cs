@@ -1,13 +1,19 @@
+using System.Data;
 using System.Text.Json;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using WeaveFleet.Application;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Data.Repositories;
 using WeaveFleet.Infrastructure.Events;
+using WeaveFleet.Infrastructure.Harnesses;
+using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.Tests.Data;
+using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Infrastructure.Tests.Events;
 
@@ -121,6 +127,80 @@ public sealed class SessionSnapshotBuilderTests
         thirdPage.Messages[^1].Info.Id.ShouldBe("msg-00049");
         thirdPage.HasMore.ShouldBeFalse();
         thirdPage.Cursor.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Should_include_tool_result_output_in_snapshot()
+    {
+        var (keeper, builder, factory, tracker) = await CreateAsync();
+        using var _ = keeper;
+
+        var sessionId = await SeedSessionAsync(factory);
+        await SeedMessageWithToolResultAsync(factory, sessionId);
+        tracker.Update(sessionId, "idle", TestUserContext.DefaultUserId);
+
+        var snapshot = await builder.BuildAsync(sessionId);
+
+        snapshot.Messages.Count.ShouldBe(1);
+        var message = snapshot.Messages[0];
+        message.Parts.Count.ShouldBe(1); // Only ToolUsePart, ToolResultPart is not a separate part
+
+        var toolPart = message.Parts[0].ShouldBeOfType<ToolMessageEventPart>();
+        toolPart.ToolName.ShouldBe("test_tool");
+        toolPart.CallId.ShouldBe("call-123");
+
+        var completedState = toolPart.State.ShouldBeOfType<ToolCompletedState>();
+        completedState.Input.ShouldNotBeNull();
+        completedState.Input.Value.GetProperty("param").GetString().ShouldBe("value");
+        completedState.Output.ShouldNotBeNull();
+        completedState.Output.Value.GetProperty("result").GetString().ShouldBe("success");
+    }
+
+    [Fact]
+    public async Task Should_include_tool_error_output_in_snapshot()
+    {
+        var (keeper, builder, factory, tracker) = await CreateAsync();
+        using var _ = keeper;
+
+        var sessionId = await SeedSessionAsync(factory);
+        await SeedMessageWithToolErrorAsync(factory, sessionId);
+        tracker.Update(sessionId, "idle", TestUserContext.DefaultUserId);
+
+        var snapshot = await builder.BuildAsync(sessionId);
+
+        snapshot.Messages.Count.ShouldBe(1);
+        var message = snapshot.Messages[0];
+        message.Parts.Count.ShouldBe(1); // Only ToolUsePart, ToolResultPart is not a separate part
+
+        var toolPart = message.Parts[0].ShouldBeOfType<ToolMessageEventPart>();
+        toolPart.ToolName.ShouldBe("failing_tool");
+        toolPart.CallId.ShouldBe("call-456");
+
+        var errorState = toolPart.State.ShouldBeOfType<ToolErrorState>();
+        errorState.Input.ShouldNotBeNull();
+        errorState.Output.ShouldNotBeNull();
+        errorState.Output.Value.GetProperty("error").GetString().ShouldBe("Tool execution failed");
+    }
+
+    [Fact]
+    public async Task Should_wrap_non_json_tool_result_as_string()
+    {
+        var (keeper, builder, factory, tracker) = await CreateAsync();
+        using var _ = keeper;
+
+        var sessionId = await SeedSessionAsync(factory);
+        await SeedMessageWithPlainTextToolResultAsync(factory, sessionId);
+        tracker.Update(sessionId, "idle", TestUserContext.DefaultUserId);
+
+        var snapshot = await builder.BuildAsync(sessionId);
+
+        snapshot.Messages.Count.ShouldBe(1);
+        var message = snapshot.Messages[0];
+        var toolPart = message.Parts[0].ShouldBeOfType<ToolMessageEventPart>();
+
+        var completedState = toolPart.State.ShouldBeOfType<ToolCompletedState>();
+        completedState.Output.ShouldNotBeNull();
+        completedState.Output.Value.GetString().ShouldBe("Plain text result");
     }
 
     private static async Task<(SqliteConnection Keeper, SessionSnapshotBuilder Builder, IDbConnectionFactory Factory, SessionActivityTracker Tracker)> CreateAsync()
@@ -238,5 +318,137 @@ public sealed class SessionSnapshotBuilderTests
         }
 
         return JsonSerializer.Serialize(parts);
+    }
+
+    private static async Task SeedMessageWithToolResultAsync(IDbConnectionFactory factory, string sessionId)
+    {
+        var baseTimestamp = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var partsJson = JsonSerializer.Serialize(new object[]
+        {
+            new
+            {
+                type = "tool",
+                toolName = "test_tool",
+                toolCallId = "call-123",
+                arguments = JsonDocument.Parse("{\"param\":\"value\"}").RootElement,
+                state = 2 // ToolUseState.Completed
+            },
+            new
+            {
+                type = "tool-result",
+                toolCallId = "call-123",
+                content = "{\"result\":\"success\"}",
+                isError = false
+            }
+        });
+
+        using var connection = factory.CreateConnection();
+        using var transaction = connection.BeginTransaction();
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO messages (id, session_id, role, parts_json, timestamp, created_at, agent_name, model_id)
+            VALUES (@Id, @SessionId, @Role, @PartsJson, @Timestamp, @CreatedAt, @AgentName, @ModelId)
+            """,
+            new
+            {
+                Id = "msg-tool-result",
+                SessionId = sessionId,
+                Role = "assistant",
+                PartsJson = partsJson,
+                Timestamp = baseTimestamp.ToString("O"),
+                CreatedAt = baseTimestamp.AddHours(1).ToString("O"),
+                AgentName = "loom",
+                ModelId = "claude-sonnet-4"
+            },
+            transaction);
+        transaction.Commit();
+    }
+
+    private static async Task SeedMessageWithToolErrorAsync(IDbConnectionFactory factory, string sessionId)
+    {
+        var baseTimestamp = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var partsJson = JsonSerializer.Serialize(new object[]
+        {
+            new
+            {
+                type = "tool",
+                toolName = "failing_tool",
+                toolCallId = "call-456",
+                arguments = JsonDocument.Parse("{\"param\":\"value\"}").RootElement,
+                state = 3 // ToolUseState.Error
+            },
+            new
+            {
+                type = "tool-result",
+                toolCallId = "call-456",
+                content = "{\"error\":\"Tool execution failed\"}",
+                isError = true
+            }
+        });
+
+        using var connection = factory.CreateConnection();
+        using var transaction = connection.BeginTransaction();
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO messages (id, session_id, role, parts_json, timestamp, created_at, agent_name, model_id)
+            VALUES (@Id, @SessionId, @Role, @PartsJson, @Timestamp, @CreatedAt, @AgentName, @ModelId)
+            """,
+            new
+            {
+                Id = "msg-tool-error",
+                SessionId = sessionId,
+                Role = "assistant",
+                PartsJson = partsJson,
+                Timestamp = baseTimestamp.ToString("O"),
+                CreatedAt = baseTimestamp.AddHours(1).ToString("O"),
+                AgentName = "loom",
+                ModelId = "claude-sonnet-4"
+            },
+            transaction);
+        transaction.Commit();
+    }
+
+    private static async Task SeedMessageWithPlainTextToolResultAsync(IDbConnectionFactory factory, string sessionId)
+    {
+        var baseTimestamp = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var partsJson = JsonSerializer.Serialize(new object[]
+        {
+            new
+            {
+                type = "tool",
+                toolName = "text_tool",
+                toolCallId = "call-789",
+                arguments = JsonDocument.Parse("{}").RootElement,
+                state = 2 // ToolUseState.Completed
+            },
+            new
+            {
+                type = "tool-result",
+                toolCallId = "call-789",
+                content = "Plain text result",
+                isError = false
+            }
+        });
+
+        using var connection = factory.CreateConnection();
+        using var transaction = connection.BeginTransaction();
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO messages (id, session_id, role, parts_json, timestamp, created_at, agent_name, model_id)
+            VALUES (@Id, @SessionId, @Role, @PartsJson, @Timestamp, @CreatedAt, @AgentName, @ModelId)
+            """,
+            new
+            {
+                Id = "msg-plain-text",
+                SessionId = sessionId,
+                Role = "assistant",
+                PartsJson = partsJson,
+                Timestamp = baseTimestamp.ToString("O"),
+                CreatedAt = baseTimestamp.AddHours(1).ToString("O"),
+                AgentName = "loom",
+                ModelId = "claude-sonnet-4"
+            },
+            transaction);
+        transaction.Commit();
     }
 }

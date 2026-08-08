@@ -48,6 +48,12 @@ public sealed class FakeHarnessSession : IHarnessSession
     /// </summary>
     public Func<CancellationToken, Task>? DeleteBehavior { get; set; }
 
+    /// <summary>
+    /// Optional override for <see cref="IHarnessSession.GetActivityStatusAsync"/>. Allows tests to
+    /// control the activity status returned by the harness (for resync testing).
+    /// </summary>
+    public Func<CancellationToken, Task<string?>>? GetActivityStatusBehavior { get; set; }
+
     // ── Event emission (for streaming tests) ─────────────────────────────────
 
     public void Emit(HarnessEvent evt) => _channel.Writer.TryWrite(evt);
@@ -104,6 +110,17 @@ public sealed class FakeHarnessSession : IHarnessSession
 
     public Task<HealthCheckResult> CheckHealthAsync(CancellationToken ct)
         => Task.FromResult(new HealthCheckResult(true, null));
+
+    public Task<string?> GetActivityStatusAsync(CancellationToken ct)
+        => GetActivityStatusBehavior?.Invoke(ct) ?? Task.FromResult<string?>("idle");
+
+    public Task WaitForEventSubscriptionAsync(CancellationToken ct)
+    {
+        // Fake harness session uses an unbounded channel which is immediately ready.
+        // Tests that need to verify subscription timing should use SubscriptionGatedHarnessSession.
+        ct.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
 
     public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
         => Task.FromResult<IReadOnlyList<AgentInfo>>([]);

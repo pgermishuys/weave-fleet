@@ -2,13 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { githubSmartLinkProvider } from '../providers/github-smart-link-provider'
 
 // Mock apiFetch
-vi.mock('@/lib/api-client', () => ({
-  apiFetch: vi.fn(),
+const { apiFetchMock } = vi.hoisted(() => ({
+  apiFetchMock: vi.fn(),
 }))
 
-import { apiFetch } from '@/lib/api-client'
-
-const mockApiFetch = vi.mocked(apiFetch)
+vi.mock('@/lib/api-client', () => ({
+  apiFetch: apiFetchMock,
+}))
 
 describe('githubSmartLinkProvider', () => {
   beforeEach(() => {
@@ -43,10 +43,9 @@ describe('githubSmartLinkProvider', () => {
 
   describe('resolve - pull requests', () => {
     it('resolves an open PR correctly', async () => {
-      mockApiFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ number: 123, title: 'My PR', state: 'open', merged: false, draft: false, html_url: '' }),
-      } as Response)
+      apiFetchMock.mockResolvedValue(new Response(JSON.stringify({
+        number: 123, title: 'My PR', state: 'open', merged: false, draft: false, html_url: '', labels: []
+      }), { status: 200 }))
 
       const result = await githubSmartLinkProvider.resolve('https://github.com/owner/repo/pull/123')
 
@@ -62,10 +61,9 @@ describe('githubSmartLinkProvider', () => {
     })
 
     it('resolves a merged PR as terminal', async () => {
-      mockApiFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ number: 123, title: 'Merged PR', state: 'closed', merged: true, draft: false, html_url: '' }),
-      } as Response)
+      apiFetchMock.mockResolvedValue(new Response(JSON.stringify({
+        number: 123, title: 'Merged PR', state: 'closed', merged: true, draft: false, html_url: '', labels: []
+      }), { status: 200 }))
 
       const result = await githubSmartLinkProvider.resolve('https://github.com/owner/repo/pull/123')
 
@@ -75,10 +73,9 @@ describe('githubSmartLinkProvider', () => {
     })
 
     it('resolves a closed (not merged) PR as terminal', async () => {
-      mockApiFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ number: 123, title: 'Closed PR', state: 'closed', merged: false, draft: false, html_url: '' }),
-      } as Response)
+      apiFetchMock.mockResolvedValue(new Response(JSON.stringify({
+        number: 123, title: 'Closed PR', state: 'closed', merged: false, draft: false, html_url: '', labels: []
+      }), { status: 200 }))
 
       const result = await githubSmartLinkProvider.resolve('https://github.com/owner/repo/pull/123')
 
@@ -87,10 +84,9 @@ describe('githubSmartLinkProvider', () => {
     })
 
     it('resolves a draft PR as non-terminal', async () => {
-      mockApiFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ number: 123, title: 'Draft PR', state: 'open', merged: false, draft: true, html_url: '' }),
-      } as Response)
+      apiFetchMock.mockResolvedValue(new Response(JSON.stringify({
+        number: 123, title: 'Draft PR', state: 'open', merged: false, draft: true, html_url: '', labels: []
+      }), { status: 200 }))
 
       const result = await githubSmartLinkProvider.resolve('https://github.com/owner/repo/pull/123')
 
@@ -99,7 +95,7 @@ describe('githubSmartLinkProvider', () => {
     })
 
     it('returns null when API call fails', async () => {
-      mockApiFetch.mockResolvedValue({ ok: false } as Response)
+      apiFetchMock.mockResolvedValue(new Response(null, { status: 404 }))
 
       const result = await githubSmartLinkProvider.resolve('https://github.com/owner/repo/pull/123')
 
@@ -107,7 +103,7 @@ describe('githubSmartLinkProvider', () => {
     })
 
     it('returns null when fetch throws', async () => {
-      mockApiFetch.mockRejectedValue(new Error('Network error'))
+      apiFetchMock.mockRejectedValue(new Error('Network error'))
 
       const result = await githubSmartLinkProvider.resolve('https://github.com/owner/repo/pull/123')
 
@@ -117,10 +113,9 @@ describe('githubSmartLinkProvider', () => {
 
   describe('resolve - issues', () => {
     it('resolves an open issue correctly', async () => {
-      mockApiFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ number: 42, title: 'Bug report', state: 'open', html_url: '' }),
-      } as Response)
+      apiFetchMock.mockResolvedValue(new Response(JSON.stringify({
+        number: 42, title: 'Bug report', state: 'open', html_url: '', labels: []
+      }), { status: 200 }))
 
       const result = await githubSmartLinkProvider.resolve('https://github.com/owner/repo/issues/42')
 
@@ -135,10 +130,9 @@ describe('githubSmartLinkProvider', () => {
     })
 
     it('resolves a closed issue as terminal', async () => {
-      mockApiFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ number: 42, title: 'Fixed bug', state: 'closed', html_url: '' }),
-      } as Response)
+      apiFetchMock.mockResolvedValue(new Response(JSON.stringify({
+        number: 42, title: 'Fixed bug', state: 'closed', html_url: '', labels: []
+      }), { status: 200 }))
 
       const result = await githubSmartLinkProvider.resolve('https://github.com/owner/repo/issues/42')
 
@@ -147,14 +141,13 @@ describe('githubSmartLinkProvider', () => {
     })
 
     it('calls correct API endpoint for issues', async () => {
-      mockApiFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ number: 7, title: 'Issue', state: 'open', html_url: '' }),
-      } as Response)
+      apiFetchMock.mockResolvedValue(new Response(JSON.stringify({
+        number: 7, title: 'Issue', state: 'open', html_url: '', labels: []
+      }), { status: 200 }))
 
       await githubSmartLinkProvider.resolve('https://github.com/acme/widget/issues/7')
 
-      expect(mockApiFetch).toHaveBeenCalledWith(
+      expect(apiFetchMock).toHaveBeenCalledWith(
         '/api/integrations/github/repos/acme/widget/issues/7',
       )
     })

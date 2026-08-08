@@ -187,6 +187,109 @@ public sealed class OpenCodeMapperTests
         toolPart.Arguments.ToString().ShouldNotContain("file.txt");
     }
 
+    // ---------------------------------------------------------------------------
+    // ToHarnessMessage — ToolResultPart maps to ToolResultPart
+    // ---------------------------------------------------------------------------
+
+    [Fact]
+    public void ToHarnessMessage_ToolResultPart_MapsToToolResultPart()
+    {
+        var msg = new OpenCodeMessageWithParts
+        {
+            Info = new OpenCodeAssistantMessage
+            {
+                Id = "msg-tool-result-1",
+                SessionId = "sess-1",
+                Time = new OpenCodeMessageTime { Created = 0L },
+            },
+            Parts =
+            [
+                new OpenCodeToolResultPart
+                {
+                    Id = "part-1",
+                    MessageId = "msg-tool-result-1",
+                    SessionId = "sess-1",
+                    CallId = "call-123",
+                    Content = "Tool execution successful",
+                    IsError = false,
+                },
+            ],
+        };
+
+        var result = OpenCodeMapper.ToHarnessMessage(msg);
+
+        result.Parts.Count.ShouldBe(1);
+        var toolResultPart = result.Parts[0].ShouldBeOfType<ToolResultPart>();
+        toolResultPart.ToolCallId.ShouldBe("call-123");
+        toolResultPart.Content.ShouldBe("Tool execution successful");
+        toolResultPart.IsError.ShouldBe(false);
+    }
+
+    [Fact]
+    public void ToHarnessMessage_ToolResultPart_WithError_MapsCorrectly()
+    {
+        var msg = new OpenCodeMessageWithParts
+        {
+            Info = new OpenCodeAssistantMessage
+            {
+                Id = "msg-tool-result-error",
+                SessionId = "sess-1",
+                Time = new OpenCodeMessageTime { Created = 0L },
+            },
+            Parts =
+            [
+                new OpenCodeToolResultPart
+                {
+                    Id = "part-error",
+                    MessageId = "msg-tool-result-error",
+                    SessionId = "sess-1",
+                    CallId = "call-error",
+                    Content = "Tool execution failed",
+                    IsError = true,
+                },
+            ],
+        };
+
+        var result = OpenCodeMapper.ToHarnessMessage(msg);
+
+        result.Parts.Count.ShouldBe(1);
+        var toolResultPart = result.Parts[0].ShouldBeOfType<ToolResultPart>();
+        toolResultPart.ToolCallId.ShouldBe("call-error");
+        toolResultPart.Content.ShouldBe("Tool execution failed");
+        toolResultPart.IsError.ShouldBe(true);
+    }
+
+    [Fact]
+    public void ToHarnessMessage_ToolResultPart_FallsBackToIdWhenCallIdMissing()
+    {
+        var msg = new OpenCodeMessageWithParts
+        {
+            Info = new OpenCodeAssistantMessage
+            {
+                Id = "msg-tool-result-fallback",
+                SessionId = "sess-1",
+                Time = new OpenCodeMessageTime { Created = 0L },
+            },
+            Parts =
+            [
+                new OpenCodeToolResultPart
+                {
+                    Id = "part-fallback",
+                    MessageId = "msg-tool-result-fallback",
+                    SessionId = "sess-1",
+                    CallId = null,
+                    Content = "Result",
+                    IsError = false,
+                },
+            ],
+        };
+
+        var result = OpenCodeMapper.ToHarnessMessage(msg);
+
+        var toolResultPart = result.Parts[0].ShouldBeOfType<ToolResultPart>();
+        toolResultPart.ToolCallId.ShouldBe("part-fallback");
+    }
+
     [Fact]
     public void ToHarnessMessage_FilePart_MapsToFilePart()
     {

@@ -1,6 +1,6 @@
 import { onMounted, onUnmounted, readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
-import type { IntegrationStatusInfo, PluginCatalogResponse } from "@/lib/api-types";
+import { api } from "@/api/client";
+import type { IntegrationStatusInfo, PluginCatalogResponse } from "@/api/client";
 import type {
   FleetPluginDescriptor,
   FleetPluginStatus,
@@ -63,19 +63,23 @@ export function useIntegrations(): UseIntegrationsResult {
     const currentRequestId = ++requestId;
 
     try {
-      const response = await apiFetch("/api/plugins");
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      const { data, error: apiError } = await api.GET("/api/plugins");
+      if (apiError) {
+        throw new Error(apiError ? String(apiError) : "Failed to fetch plugins");
       }
 
-      const data = (await response.json()) as PluginCatalogResponse;
+      if (!data) {
+        throw new Error("No data returned");
+      }
+
+      const result = data as PluginCatalogResponse;
       if (currentRequestId !== requestId) {
         return;
       }
 
-      pluginDescriptors.value = data.plugins;
-      pluginStatuses.value = data.statuses;
-      integrations.value = toIntegrationStatuses(data.plugins, data.statuses);
+      pluginDescriptors.value = result.plugins as unknown as FleetPluginDescriptor[];
+      pluginStatuses.value = result.statuses as unknown as FleetPluginStatus[];
+      integrations.value = toIntegrationStatuses(result.plugins as unknown as FleetPluginDescriptor[], result.statuses as unknown as FleetPluginStatus[]);
       error.value = undefined;
     } catch (fetchError) {
       if (currentRequestId !== requestId) {
@@ -96,15 +100,14 @@ export function useIntegrations(): UseIntegrationsResult {
       throw new Error(`No connect action available for plugin '${id}'.`);
     }
 
-    const response = await apiFetch(action.href, {
-      method: action.method ?? "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(config),
-    });
+    const method = (action.method ?? "POST").toUpperCase();
+    // Plugin action hrefs are dynamic and not in the schema, so we use type assertions
+    const { error: apiError } = await (method === "POST"
+      ? (api.POST as (url: string, init?: { body?: unknown }) => Promise<{ data?: unknown; error?: unknown }>)(action.href, { body: config })
+      : (api.PUT as (url: string, init?: { body?: unknown }) => Promise<{ data?: unknown; error?: unknown }>)(action.href, { body: config }));
 
-    if (!response.ok) {
-      const data = (await response.json()) as { error?: string };
-      throw new Error(data.error ?? `HTTP ${response.status}`);
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to connect plugin");
     }
 
     await fetchIntegrations();
@@ -116,13 +119,11 @@ export function useIntegrations(): UseIntegrationsResult {
       throw new Error(`No disconnect action available for plugin '${id}'.`);
     }
 
-    const response = await apiFetch(action.href, {
-      method: action.method ?? "DELETE",
-    });
+    // Plugin action hrefs are dynamic and not in the schema, so we use type assertions
+    const { error: apiError } = await (api.DELETE as (url: string) => Promise<{ data?: unknown; error?: unknown }>)(action.href);
 
-    if (!response.ok) {
-      const data = (await response.json()) as { error?: string };
-      throw new Error(data.error ?? `HTTP ${response.status}`);
+    if (apiError) {
+      throw new Error(apiError ? String(apiError) : "Failed to disconnect plugin");
     }
 
     await fetchIntegrations();

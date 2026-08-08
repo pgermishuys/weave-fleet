@@ -17,6 +17,9 @@ internal sealed record ActivityStatusPayload
     [JsonPropertyName("sessionId")] public required string SessionId { get; init; }
     [JsonPropertyName("activityStatus")] public required string ActivityStatus { get; init; }
     [JsonPropertyName("capabilities")] public required SessionActionCapabilities Capabilities { get; init; }
+    [JsonPropertyName("attempt")] public int? Attempt { get; init; }
+    [JsonPropertyName("message")] public string? Message { get; init; }
+    [JsonPropertyName("next")] public string? Next { get; init; }
 }
 
 // ── Named types for ClaudeCodeMapper (replace anonymous types) ────────────────────────────────────
@@ -110,6 +113,15 @@ internal sealed record GitHubSourceInput
     [JsonPropertyName("branch")] public string? Branch { get; init; }
 }
 
+/// <summary>Input payload for the automation session source provider.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed record AutomationSourceInput
+{
+    [JsonPropertyName("automationId")] public string? AutomationId { get; init; }
+    [JsonPropertyName("automationName")] public string? AutomationName { get; init; }
+    [JsonPropertyName("trigger")] public string? Trigger { get; init; }
+}
+
 // ── Source-generated contexts ─────────────────────────────────────────────────────────────────────
 
 /// <summary>Default (PascalCase) options for NATS HarnessEvent serialization.
@@ -151,6 +163,7 @@ internal sealed partial class HarnessEventJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(OpenCodePatchPart))]
 [JsonSerializable(typeof(OpenCodeRetryPart))]
 [JsonSerializable(typeof(OpenCodeCompactionPart))]
+[JsonSerializable(typeof(OpenCodeToolResultPart))]
 [JsonSerializable(typeof(OpenCodeToolState))]
 [JsonSerializable(typeof(OpenCodeToolPending))]
 [JsonSerializable(typeof(OpenCodeToolRunning))]
@@ -246,17 +259,27 @@ internal sealed record NuCodeStatusPayload
 [JsonSerializable(typeof(List<string>))]
 [JsonSerializable(typeof(RepositorySourceInput))]
 [JsonSerializable(typeof(GitHubSourceInput))]
+[JsonSerializable(typeof(AutomationSourceInput))]
 [JsonSerializable(typeof(DeviceCodeResponse))]
 internal sealed partial class InfrastructureJsonContext : JsonSerializerContext
 {
     /// <summary>Returns a serialized activity-status payload.</summary>
-    internal static JsonElement SerializeActivityStatus(string sessionId, string activityStatus, SessionActionCapabilities capabilities)
+    internal static JsonElement SerializeActivityStatus(
+        string sessionId,
+        string activityStatus,
+        SessionActionCapabilities capabilities,
+        int? retryAttempt = null,
+        string? retryMessage = null,
+        DateTimeOffset? retryNext = null)
         => JsonSerializer.SerializeToElement(
             new ActivityStatusPayload
             {
                 SessionId = sessionId,
                 ActivityStatus = activityStatus,
-                Capabilities = capabilities
+                Capabilities = capabilities,
+                Attempt = retryAttempt,
+                Message = retryMessage,
+                Next = retryNext?.ToString("O")
             },
             Default.ActivityStatusPayload);
 

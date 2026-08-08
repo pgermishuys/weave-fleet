@@ -2,7 +2,7 @@
 import { computed } from "vue"
 import HorizontalCostBars from "@/components/analytics/charts/HorizontalCostBars.vue"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import type { ModelAnalytics } from "@/lib/api-types"
+import type { ModelAnalytics } from "@/api/client"
 import { formatAnalyticsCost } from "@/lib/format-utils"
 
 interface CostBarItem {

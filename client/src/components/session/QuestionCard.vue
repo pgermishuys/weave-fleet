@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef } from "vue";
-import type { AccumulatedToolPart } from "@/lib/api-types";
+import type { AccumulatedToolPart } from "@/lib/client-types";
 import {
   getQuestionInput,
   getQuestionAnswers,
@@ -334,7 +334,7 @@ async function dismiss() {
 .qcard__badge {
   font-size: 10px;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: 0;
 }
 
 .qcard__badge--answered {
@@ -397,12 +397,12 @@ async function dismiss() {
 .qcard__pill {
   padding: 5px 12px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 0;
   background: transparent;
   color: var(--text);
   font-size: 12px;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: background-color var(--transition), border-color var(--transition);
 }
 
 .qcard__pill:hover:not(:disabled) {
@@ -480,7 +480,7 @@ async function dismiss() {
   font-size: 13px;
   outline: none;
   box-sizing: border-box;
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition);
 }
 
 .qcard__custom-input:focus {
@@ -510,10 +510,10 @@ async function dismiss() {
 .qcard__btn {
   padding: 5px 14px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 0;
   font-size: 12px;
   cursor: pointer;
-  transition: opacity 0.15s ease, background-color 0.15s ease;
+  transition: opacity var(--transition), background-color var(--transition);
 }
 
 .qcard__btn:disabled {

@@ -157,7 +157,9 @@ public sealed class PoolDemuxBindingTableTests
             "/repo/one",
             leaseGeneration: 3);
 
-        removed.ShouldBe(2);
+        removed.Count.ShouldBe(2);
+        removed.ShouldContain("oc-session-1");
+        removed.ShouldContain("oc-session-2");
         table.TryGetBinding(instance, "/repo/one", "oc-session-1", 3, out _).ShouldBeFalse();
         table.TryGetBinding(instance, "/repo/one", "oc-session-2", 3, out _).ShouldBeFalse();
         table.TryGetBinding(instance, "/repo/one", "other-consumer", 3, out _).ShouldBeTrue();

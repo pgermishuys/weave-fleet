@@ -7,7 +7,7 @@ import {
   type MaybeRefOrGetter,
   type ShallowRef,
 } from "vue"
-import type { AccumulatedMessage, DelegationDto } from "@/lib/api-types"
+import type { AccumulatedMessage, DelegationDto } from "@/lib/client-types"
 import type { SessionStreamStatus } from "@/lib/domain-event-reducer"
 import { useSessionEvents, type SessionConnectionStatus, type UseSessionEventsResult } from "@/composables/use-session-events"
 import { useSessionStream } from "@/composables/use-session-stream"
@@ -84,6 +84,7 @@ export function useSessionEventsSwitch(
   const v2Status = computed<SessionConnectionStatus>(() => (v2.isLoading.value ? "connecting" : "connected"))
   const v2Error = shallowRef<string | undefined>(undefined)
   const v2ReconnectAttempt = shallowRef(0)
+  const v2RetryMetadata = shallowRef<{ attempt: number; message?: string; next?: string } | undefined>(undefined)
   const v2TotalMessageCount = shallowRef<number | null>(null)
   const v2LoadOlderError = shallowRef<string | null>(null)
   const v2CacheHit = shallowRef(false)
@@ -94,6 +95,7 @@ export function useSessionEventsSwitch(
   const delegations = computed<readonly DelegationDto[]>(() => useStreamProtocolV2.value ? v2.delegations.value : v1.delegations.value)
   const status = computed<SessionConnectionStatus>(() => useStreamProtocolV2.value ? v2Status.value : v1.status.value)
   const sessionStatus = computed<SessionStreamStatus>(() => useStreamProtocolV2.value ? v2.sessionStatus.value : v1.sessionStatus.value)
+  const retryMetadata = computed<{ attempt: number; message?: string; next?: string } | undefined>(() => useStreamProtocolV2.value ? v2RetryMetadata.value : v1.retryMetadata.value)
   const error = computed<string | undefined>(() => useStreamProtocolV2.value ? v2Error.value : v1.error.value)
   const reconnectAttempt = computed<number>(() => useStreamProtocolV2.value ? v2ReconnectAttempt.value : v1.reconnectAttempt.value)
   const hasMoreMessages = computed<boolean>(() => useStreamProtocolV2.value ? v2.hasMore.value : v1.hasMoreMessages.value)
@@ -139,6 +141,7 @@ export function useSessionEventsSwitch(
     delegations,
     status,
     sessionStatus,
+    retryMetadata,
     error,
     forceBusy,
     forceIdle,

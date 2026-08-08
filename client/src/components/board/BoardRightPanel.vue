@@ -6,6 +6,14 @@ import BoardSummaryPanel from "@/components/board/BoardSummaryPanel.vue";
 import RightPanelTabs from "@/components/layout/RightPanelTabs.vue";
 import { useSidebarStore } from "@/stores/sidebar";
 
+interface Props {
+  width?: number;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  width: 360,
+});
+
 const sidebarStore = useSidebarStore();
 const { rightPanelCollapsed } = storeToRefs(sidebarStore);
 
@@ -39,6 +47,7 @@ function handleCollapse(): void {
   <aside
     v-if="!rightPanelCollapsed"
     class="right-panel"
+    :style="{ width: `${props.width}px`, minWidth: '280px' }"
     aria-label="Right panel"
   >
     <RightPanelTabs
@@ -59,11 +68,10 @@ function handleCollapse(): void {
 
 <style scoped>
 .right-panel {
-  width: 280px;
-  min-width: 280px;
   min-height: 0;
   background: var(--panel-bg);
-  border-left: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
   display: flex;
   flex-direction: column;
   overflow: hidden;

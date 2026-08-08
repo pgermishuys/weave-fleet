@@ -1,9 +1,11 @@
 #pragma warning disable CA1848, CA1873 // Temporary diagnostic logging
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -16,32 +18,30 @@ namespace WeaveFleet.Infrastructure.EventBus;
 /// channel and handles WebSocket broadcast duties:
 /// <list type="bullet">
 ///   <item>Broadcasts to <see cref="IEventBroadcaster"/> on the per-session topic.</item>
-///   <item>Updates <see cref="SessionActivityTracker"/> for activity events and broadcasts on
-///     the global <c>sessions</c> topic.</item>
 ///   <item>Buffers <c>message.part.delta</c> fragments via
 ///     <see cref="IHarnessEventPersister.BufferTextDelta"/>.</item>
-///   <item>Propagates derived parent-session activity state.</item>
 /// </list>
-/// Uses <see cref="SessionPropagation"/> to propagate parent-session activity state.
+/// Activity-status events (tracker update + global "sessions" topic broadcast) are handled
+/// directly in <see cref="HarnessEventRelay"/> to avoid lossy channel drops.
 /// </summary>
 internal sealed partial class InProcessFanOutService : BackgroundService
 {
     private readonly InProcessChannels _channels;
     private readonly IEventBroadcaster _broadcaster;
-    private readonly SessionActivityTracker _activityTracker;
+    private readonly PipelineLatencyMetrics _pipelineMetrics;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<InProcessFanOutService> _logger;
 
     public InProcessFanOutService(
         InProcessChannels channels,
         IEventBroadcaster broadcaster,
-        SessionActivityTracker activityTracker,
+        PipelineLatencyMetrics pipelineMetrics,
         IServiceScopeFactory scopeFactory,
         ILogger<InProcessFanOutService> logger)
     {
         _channels = channels;
         _broadcaster = broadcaster;
-        _activityTracker = activityTracker;
+        _pipelineMetrics = pipelineMetrics;
         _scopeFactory = scopeFactory;
         _logger = logger;
     }
@@ -63,12 +63,21 @@ internal sealed partial class InProcessFanOutService : BackgroundService
 
     private async Task ForwardAsync(InProcessEnvelope envelope, CancellationToken ct)
     {
+        using var activity = FleetInstrumentation.ActivitySource.StartActivity(
+            "fleet.fanout",
+            ActivityKind.Internal,
+            envelope.TraceContext ?? default);
+
+        var fanoutStart = Stopwatch.GetTimestamp();
         var sessionId = envelope.SessionId;
         var eventType = envelope.EventType;
         var userId    = envelope.UserId;
         var evt       = envelope.Event;
         var domainEvent = envelope.DomainEvent;
         var classification = EventTypeMetadata.Classify(eventType);
+
+        activity?.SetTag(FleetInstrumentation.SessionIdTag, sessionId);
+        activity?.SetTag("event.type", eventType);
 
         _logger.LogDebug("[FanOut] type={Type} session={Session} user={User} isDurable={IsDurable}",
             eventType, sessionId, userId, envelope.IsDurable);
@@ -103,24 +112,10 @@ internal sealed partial class InProcessFanOutService : BackgroundService
             $"session:{sessionId}", eventType, payload, classification.IsAdvisory ? null : envelope.EventId, domainEvent, userId, ct)
             .ConfigureAwait(false);
 
+        _pipelineMetrics.RecordFanoutHop(Stopwatch.GetElapsedTime(fanoutStart).TotalMilliseconds, eventType);
+
         _logger.LogDebug("[FanOut] Broadcast topic=session:{Session} type={Type} advisory={Advisory}",
             sessionId, eventType, classification.IsAdvisory);
-
-        // Activity-status side-channel for the global "sessions" topic.
-        if (activityStatus is not null)
-        {
-            _activityTracker.Update(sessionId, activityStatus, userId);
-            await _broadcaster.BroadcastAsync(
-                "sessions",
-                "activity_status",
-                await BuildSessionActivityStatusPayloadAsync(sessionId, activityStatus, ct).ConfigureAwait(false),
-                userId,
-                ct).ConfigureAwait(false);
-
-            await SessionPropagation.PropagateToParentAsync(
-                sessionId, userId, _activityTracker, _broadcaster, _scopeFactory, ct)
-                .ConfigureAwait(false);
-        }
     }
 
     private async Task<JsonElement> EnrichSessionStatusPayloadAsync(
@@ -160,28 +155,25 @@ internal sealed partial class InProcessFanOutService : BackgroundService
     {
         using var scope = _scopeFactory.CreateScope();
         var sessionRepository = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
-        var capabilitiesResolver = scope.ServiceProvider.GetRequiredService<SessionCapabilitiesResolver>();
+        var instanceTracker = scope.ServiceProvider.GetRequiredService<InstanceTracker>();
         var session = await sessionRepository.GetByIdAsync(sessionId).ConfigureAwait(false);
-        if (session is not null && activityStatus is not null)
-        {
-            session.ActivityStatus = activityStatus;
-        }
 
         ct.ThrowIfCancellationRequested();
 
-        return session is not null
-            ? capabilitiesResolver.Resolve(session)
-            : SessionCapabilitiesResolver.Resolve(null, null, null, activityStatus, isLive: false);
-    }
+        if (session is null)
+        {
+            return SessionCapabilitiesResolver.Resolve(null, null, null, activityStatus, isLive: false);
+        }
 
-    private async Task<JsonElement> BuildSessionActivityStatusPayloadAsync(
-        string sessionId,
-        string activityStatus,
-        CancellationToken ct)
-    {
-        var capabilities = await ResolveCapabilitiesAsync(sessionId, activityStatus, ct).ConfigureAwait(false);
-
-        return InfrastructureJsonContext.SerializeActivityStatus(sessionId, activityStatus, capabilities);
+        // Use the parsed activityStatus from the event (not the tracker) to compute capabilities
+        // for this specific broadcast. The tracker may not yet reflect this status change.
+        var isLive = instanceTracker.Get(session.InstanceId) is not null;
+        return SessionCapabilitiesResolver.Resolve(
+            session.RuntimeMode,
+            session.LifecycleStatus,
+            session.RetentionStatus,
+            activityStatus ?? "idle",
+            isLive);
     }
 
     private static string? ParseActivityStatus(string eventType, JsonElement? payload)
