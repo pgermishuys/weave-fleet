@@ -298,7 +298,7 @@ public class SessionEventsHub : Hub
                 Type = evt.Type,
                 EventId = evt.EventId,
                 Properties = sanitizedPayload.Value
-            });
+            }, ApiJsonContext.Default.ClientEvent);
 
             // Send event to the caller via IHubContext (safe to use outside hub method scope)
             try
