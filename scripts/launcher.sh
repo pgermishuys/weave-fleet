@@ -24,17 +24,17 @@ apply_staged_update() {
   fi
 
   # Parse version and asset filename from the JSON manifest using basic shell tools.
+  # NOTE: The JSON is typically minified (single line), so we must check each field
+  # independently rather than using a case statement (which only matches the first pattern).
   UPDATE_VERSION=""
   ASSET_FILE=""
   while IFS= read -r line; do
-    case "$line" in
-      *'"version"'*)
-        UPDATE_VERSION="$(printf '%s' "$line" | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
-        ;;
-      *'"assetFileName"'*)
-        ASSET_FILE="$(printf '%s' "$line" | sed 's/.*"assetFileName"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
-        ;;
-    esac
+    case "$line" in *'"version"'*)
+      UPDATE_VERSION="$(printf '%s' "$line" | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+    ;; esac
+    case "$line" in *'"assetFileName"'*)
+      ASSET_FILE="$(printf '%s' "$line" | sed 's/.*"assetFileName"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+    ;; esac
   done < "$MANIFEST"
 
   if [ -z "$UPDATE_VERSION" ] || [ -z "$ASSET_FILE" ]; then
