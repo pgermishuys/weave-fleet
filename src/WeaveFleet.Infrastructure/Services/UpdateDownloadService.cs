@@ -241,7 +241,7 @@ public sealed record UpdateManifest(
     [property: JsonPropertyName("downloadedAt")] DateTimeOffset DownloadedAt);
 
 [JsonSerializable(typeof(UpdateManifest))]
-[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, WriteIndented = true)]
 internal sealed partial class UpdateManifestJsonContext : JsonSerializerContext
 {
 }
