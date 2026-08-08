@@ -121,14 +121,20 @@ $workDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid()
 $packageRoot = Join-Path $workDir $assetBaseName
 $packageBinDir = Join-Path $packageRoot 'bin'
 $packageAppDir = Join-Path $packageRoot 'app'
+$packageLaunchersDir = Join-Path $packageAppDir 'launchers'
 
 try {
     $null = New-Item -ItemType Directory -Path $packageBinDir -Force
     $null = New-Item -ItemType Directory -Path $packageAppDir -Force
+    $null = New-Item -ItemType Directory -Path $packageLaunchersDir -Force
 
     $launcherSourcePath = Get-LauncherSourcePath -RuntimeIdentifier $Rid
     $launcherTargetName = Get-LauncherTargetName -RuntimeIdentifier $Rid
     Copy-Item -LiteralPath $launcherSourcePath -Destination (Join-Path $packageBinDir $launcherTargetName) -Force
+
+    # Copy launcher scripts to app/launchers/ for self-heal on startup
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'launcher.sh') -Destination (Join-Path $packageLaunchersDir 'fleet') -Force
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'launcher.cmd') -Destination (Join-Path $packageLaunchersDir 'fleet.cmd') -Force
 
     foreach ($item in $publishItems) {
         Copy-Item -LiteralPath $item.FullName -Destination $packageAppDir -Recurse -Force

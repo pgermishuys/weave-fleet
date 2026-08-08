@@ -76,6 +76,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "};" ^
   "Remove-Item $appDir -Recurse -Force;" ^
   "Copy-Item ($extracted.FullName + '\app') $appDir -Recurse;" ^
+  "$binDir = '%ROOT_DIR%\bin';" ^
+  "if (Test-Path ($extracted.FullName + '\bin')) {" ^
+  "  if (Test-Path $binDir) { Remove-Item $binDir -Recurse -Force };" ^
+  "  Copy-Item ($extracted.FullName + '\bin') $binDir -Recurse" ^
+  "};" ^
   "Set-Content -Path '%ROOT_DIR%\VERSION' -Value $v;" ^
   "Remove-Item $appBak -Recurse -Force -ErrorAction SilentlyContinue;" ^
   "Remove-Item '%UPDATE_DIR%' -Recurse -Force -ErrorAction SilentlyContinue;" ^

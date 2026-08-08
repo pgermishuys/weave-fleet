@@ -92,6 +92,7 @@ builder.Services.Configure<FleetOptions>(
     builder.Configuration.GetSection(FleetOptions.SectionName));
 if (!builder.Environment.IsEnvironment("Testing"))
 {
+    builder.Services.AddLauncherPatchStartupService();
     builder.Services.AddLegacySessionImportStartupService();
     builder.Services.AddOpenCodeWarmupStartupService();
 }

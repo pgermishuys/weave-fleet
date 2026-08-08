@@ -99,6 +99,13 @@ apply_staged_update() {
   rm -rf "$ROOT_DIR/app"
   cp -a "${EXTRACTED_ROOT}app" "$ROOT_DIR/app"
 
+  # Replace bin dir (updates the launcher itself).
+  if [ -d "${EXTRACTED_ROOT}bin" ]; then
+    rm -rf "$ROOT_DIR/bin"
+    cp -a "${EXTRACTED_ROOT}bin" "$ROOT_DIR/bin"
+    chmod +x "$ROOT_DIR/bin/"* 2>/dev/null || true
+  fi
+
   # Update VERSION file.
   printf '%s\n' "$UPDATE_VERSION" > "$ROOT_DIR/VERSION"
 

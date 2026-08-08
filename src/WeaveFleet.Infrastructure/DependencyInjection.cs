@@ -54,6 +54,16 @@ public static class DependencyInjection
     }
 
     /// <summary>
+    /// Adds the startup service that self-heals the launcher script if running in installed layout.
+    /// Must run before OpenCode warmup so the launcher is patched before any child processes spawn.
+    /// </summary>
+    public static IServiceCollection AddLauncherPatchStartupService(this IServiceCollection services)
+    {
+        services.AddHostedService<LauncherPatchService>();
+        return services;
+    }
+
+    /// <summary>
     /// Adds the best-effort startup warmup service for the pooled OpenCode harness.
     /// In auth-enabled mode the service no-ops immediately; in local mode it pre-warms
     /// one pooled process using the deterministic <c>"local-user"</c> owner identity.
