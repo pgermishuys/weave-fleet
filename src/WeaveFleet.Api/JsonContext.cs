@@ -279,6 +279,23 @@ internal sealed record ErrorResponse(string Error);
 // ProblemDetails (used by Results.Problem())
 [JsonSerializable(typeof(Microsoft.AspNetCore.Http.HttpValidationProblemDetails))]
 [JsonSerializable(typeof(Microsoft.AspNetCore.Mvc.ProblemDetails))]
+// Session file browser
+[JsonSerializable(typeof(BrowseSessionDirectoryResponse))]
+[JsonSerializable(typeof(BrowseEntryDto))]
+[JsonSerializable(typeof(IReadOnlyList<BrowseEntryDto>))]
+[JsonSerializable(typeof(List<BrowseEntryDto>))]
+[JsonSerializable(typeof(ReadSessionFileResponse))]
+// Session prompts
+[JsonSerializable(typeof(SendPromptApiResponse))]
+// Automations
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.AutomationResponse))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.AutomationListResponse))]
+[JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Api.Contracts.AutomationResponse>))]
+[JsonSerializable(typeof(string[]))]
+// Open directory/file
+[JsonSerializable(typeof(OkBoolResponse))]
+// Config paths
+[JsonSerializable(typeof(ConfigPathsResponse))]
 // Harnesses
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Harnesses.HarnessInfo>))]
 [JsonSerializable(typeof(List<WeaveFleet.Application.Harnesses.HarnessInfo>))]
@@ -316,6 +333,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(NuCodeDevicePollRequest))]
 [JsonSerializable(typeof(NuCodeDevicePollResponse))]
 [JsonSerializable(typeof(Hubs.ClientEvent))]
+[JsonSerializable(typeof(Hubs.HistoryPage))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 internal sealed partial class ApiJsonContext : JsonSerializerContext
 {

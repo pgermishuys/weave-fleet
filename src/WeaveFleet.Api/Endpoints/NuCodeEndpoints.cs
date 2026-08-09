@@ -154,7 +154,7 @@ public static class NuCodeEndpoints
 
             if (provider.AuthMechanism != AuthMechanism.OAuthDevice)
             {
-                return Results.BadRequest(new { error = $"Provider '{id}' does not use OAuth device flow." });
+                return Results.BadRequest(new ApiErrorResponse($"Provider '{id}' does not use OAuth device flow."));
             }
 
             var flow = new OAuthDeviceFlow(httpClient);
@@ -170,7 +170,7 @@ public static class NuCodeEndpoints
             }
             catch (Exception ex)
             {
-                return Results.BadRequest(new { error = $"Failed to initiate device flow: {ex.Message}" });
+                return Results.BadRequest(new ApiErrorResponse($"Failed to initiate device flow: {ex.Message}"));
             }
         })
         .Produces<NuCodeDeviceCodeResponse>(StatusCodes.Status200OK)
@@ -193,7 +193,7 @@ public static class NuCodeEndpoints
 
             if (provider.AuthMechanism != AuthMechanism.OAuthDevice)
             {
-                return Results.BadRequest(new { error = $"Provider '{id}' does not use OAuth device flow." });
+                return Results.BadRequest(new ApiErrorResponse($"Provider '{id}' does not use OAuth device flow."));
             }
 
             // Poll GitHub directly — matching the proven GitHubService pattern

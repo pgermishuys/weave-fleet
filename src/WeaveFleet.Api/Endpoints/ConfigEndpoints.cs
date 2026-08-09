@@ -51,11 +51,7 @@ public static class ConfigEndpoints
         group.MapGet("/config/paths", (ConfigService configService) =>
         {
             var paths = configService.GetConfigPaths();
-            return Results.Ok(new
-            {
-                configDirectory = paths.ConfigDirectory,
-                userConfigPath = paths.UserConfigPath
-            });
+            return Results.Ok(new ConfigPathsResponse(paths.ConfigDirectory, paths.UserConfigPath));
         })
         .WithName("GetConfigPaths");
 
@@ -111,4 +107,6 @@ internal sealed record ClientConfigResponse(
     bool AuthEnabled,
     bool TokenAuthEnabled,
     IReadOnlyList<string> AvailableHarnesses);
+
+internal sealed record ConfigPathsResponse(string ConfigDirectory, string UserConfigPath);
 #pragma warning restore IL2026

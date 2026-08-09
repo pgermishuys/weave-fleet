@@ -45,7 +45,7 @@ public static class OpenDirectoryEndpoints
                     OpenInFileManager(normalised);
                 }
 
-                return Results.Ok(new { ok = true });
+                return Results.Ok(new OkBoolResponse(true));
             }
             catch (Exception ex)
             {
@@ -76,7 +76,7 @@ public static class OpenDirectoryEndpoints
                 var proc = Process.Start(psi);
                 proc?.Dispose();
 
-                return Results.Ok(new { ok = true });
+                return Results.Ok(new OkBoolResponse(true));
             }
             catch (Exception ex)
             {
@@ -121,4 +121,5 @@ public static class OpenDirectoryEndpoints
 
 internal sealed record OpenDirectoryRequest(string? Directory = null, string? Tool = null, string? Path = null);
 internal sealed record OpenFileRequest(string FilePath, string Tool);
+internal sealed record OkBoolResponse(bool Ok);
 #pragma warning restore IL2026
