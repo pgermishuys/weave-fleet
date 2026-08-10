@@ -114,6 +114,8 @@ describe("useSignalRSocket subscription ordering (race regression)", () => {
     // User navigates away: unsubscribe starts but its invoke stays in flight
     unsubscribe()
     await flushAll()
+    // With elision: if we immediately resubscribe, the unsubscribe is skipped
+    // But in this test, we DON'T immediately resubscribe, so it should be called
     expect(invokeLog).toEqual(["SubscribeToSessionAsync", "UnsubscribeFromSessionAsync"])
     expect(resolveUnsubscribe).not.toBeNull()
 
@@ -168,24 +170,29 @@ describe("useSignalRSocket subscription ordering (race regression)", () => {
       await flushAll()
     }
 
-    // Only the first subscribe and the first (still pending) unsubscribe
-    // should have hit the wire; everything else is queued behind it.
-    expect(invokeLog).toEqual(["SubscribeToSessionAsync", "UnsubscribeFromSessionAsync"])
+    // With elision: all subscribes execute immediately because the unsubscribes
+    // are elided (they don't call invoke, so they don't create blocking promises).
+    // We get 4 subscribes: initial + 3 resubscribes.
+    expect(invokeLog).toEqual([
+      "SubscribeToSessionAsync",
+      "SubscribeToSessionAsync",
+      "SubscribeToSessionAsync",
+      "SubscribeToSessionAsync",
+    ])
 
     // Drain the queue by resolving unsubscribes as they are issued
+    // (even though they're elided, the queue still processes them)
     while (pendingUnsubscribes.length > 0) {
       pendingUnsubscribes.shift()!()
       await flushAll()
     }
 
-    // Strict alternation, ending on a subscribe (user is on session A)
+    // With elision: we get 4 subscribes (initial + 3 resubscribes), no unsubscribes
+    // because each unsubscribe was immediately followed by a resubscribe
     expect(invokeLog).toEqual([
       "SubscribeToSessionAsync",
-      "UnsubscribeFromSessionAsync",
       "SubscribeToSessionAsync",
-      "UnsubscribeFromSessionAsync",
       "SubscribeToSessionAsync",
-      "UnsubscribeFromSessionAsync",
       "SubscribeToSessionAsync",
     ])
   })

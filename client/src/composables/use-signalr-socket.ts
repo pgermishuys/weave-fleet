@@ -47,6 +47,8 @@ const disconnectCallbacks = new Map<string, () => void>()
 
 // Per-topic operation queue to ensure subscribe/unsubscribe operations are sequenced
 const topicOperationQueues = new Map<string, Promise<void>>()
+// Per-topic subscription epoch to detect stale snapshots
+const topicSubscriptionEpochs = new Map<string, number>()
 
 let reconnectCallbackNextId = 0
 let disconnectCallbackNextId = 0
@@ -255,6 +257,10 @@ function addTopicListenerV2(
   }
   listeners.add(callback)
 
+  // Increment epoch for this topic to mark a new subscription generation
+  const currentEpoch = (topicSubscriptionEpochs.get(topic) ?? 0) + 1
+  topicSubscriptionEpochs.set(topic, currentEpoch)
+
   // If we already have a snapshot cached, deliver it immediately
   const lastSnapshot = lastSnapshotsV2.get(topic)
   if (lastSnapshot) {
@@ -267,7 +273,10 @@ function addTopicListenerV2(
     const sessionId = topic.startsWith("session:") ? topic.slice(8) : topic
     queueTopicOperation(topic, async () => {
       const snapshot = await connection!.invoke<SessionSnapshot>("SubscribeToSessionAsync", sessionId)
-      dispatchSnapshot(topic, snapshot)
+      // Only dispatch if this is still the current epoch (not stale)
+      if (topicSubscriptionEpochs.get(topic) === currentEpoch) {
+        dispatchSnapshot(topic, snapshot)
+      }
     }).catch((error) => {
       console.error(`Failed to subscribe to session ${topic}:`, error)
     })
@@ -289,6 +298,10 @@ function addTopicListenerV2(
         const sessionId = topic.startsWith("session:") ? topic.slice(8) : topic
         // Queue the unsubscribe to ensure it happens after any pending subscribe
         queueTopicOperation(topic, async () => {
+          // Skip unsubscribe if new listeners were added (immediate resubscribe)
+          if (topicListenersV2.has(topic) && (topicListenersV2.get(topic)?.size ?? 0) > 0) {
+            return
+          }
           await connection!.invoke("UnsubscribeFromSessionAsync", sessionId)
         }).catch((error) => {
           console.error(`Failed to unsubscribe from session ${topic}:`, error)
@@ -329,6 +342,7 @@ export function _resetForTesting(): void {
   reconnectCallbacks.clear()
   disconnectCallbacks.clear()
   topicOperationQueues.clear()
+  topicSubscriptionEpochs.clear()
   syncTestApi()
 }
 
