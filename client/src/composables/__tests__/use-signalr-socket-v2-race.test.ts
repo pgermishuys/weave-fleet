@@ -65,8 +65,10 @@ vi.mock("@microsoft/signalr", () => {
 
 // Store event handlers registered via hub.on()
 let eventHandler: ((topic: string, eventId: number | null, data: unknown) => void) | null = null
-let reconnectedHandler: (() => void) | null = null
-let closeHandler: (() => void) | null = null
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+let _reconnectedHandler: (() => void) | null = null
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+let _closeHandler: (() => void) | null = null
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void
@@ -115,8 +117,8 @@ describe("useSignalRSocket V2 — desired behavior after rapid session switching
   beforeEach(() => {
     vi.clearAllMocks()
     eventHandler = null
-    reconnectedHandler = null
-    closeHandler = null
+    _reconnectedHandler = null
+    _closeHandler = null
 
     mockHubConnection.state = HubConnectionState.Disconnected
     mockHubConnection.start.mockImplementation(async () => {
@@ -132,10 +134,10 @@ describe("useSignalRSocket V2 — desired behavior after rapid session switching
       }
     })
     mockHubConnection.onreconnected.mockImplementation((handler: () => void) => {
-      reconnectedHandler = handler
+      _reconnectedHandler = handler
     })
     mockHubConnection.onclose.mockImplementation((handler: () => void) => {
-      closeHandler = handler
+      _closeHandler = handler
     })
   })
 
@@ -302,7 +304,8 @@ describe("useSignalRSocket V2 — desired behavior after rapid session switching
     }
 
     let subscribeS1Count = 0
-    let subscribeS2Count = 0
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    let _subscribeS2Count = 0
     mockHubConnection.invoke.mockImplementation((method: string, sessionId: string) => {
       if (method === "SubscribeToSessionAsync") {
         if (sessionId === "session-1") {
@@ -310,7 +313,7 @@ describe("useSignalRSocket V2 — desired behavior after rapid session switching
           return subscribeS1Count === 1 ? deferreds.subscribeS1_1.promise : deferreds.subscribeS1_2.promise
         }
         if (sessionId === "session-2") {
-          subscribeS2Count++
+          _subscribeS2Count++
           return deferreds.subscribeS2.promise
         }
       }

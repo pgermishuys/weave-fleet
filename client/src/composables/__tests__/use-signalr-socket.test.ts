@@ -626,7 +626,8 @@ describe("useSignalRSocket", () => {
       await flushAll()
 
       expect(mockHubConnection.invoke).toHaveBeenCalledWith("SubscribeToSessionAsync", "session-1")
-      const initialCallCount = mockHubConnection.invoke.mock.calls.length
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const _initialCallCount = mockHubConnection.invoke.mock.calls.length
       mockHubConnection.invoke.mockClear()
 
       // Rapidly unsubscribe and resubscribe
