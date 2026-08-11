@@ -272,8 +272,8 @@ describe("useSignalRSocket V2 — desired behavior after rapid session switching
 
     // Now events arrive (agent still streaming)
     const streamEvent: DomainEvent = {
-      type: "message.part.delta",
-      payload: { sessionId: "session-1", messageId: "msg-2", partId: "part-2", delta: "more text" },
+      type: "message.part.delta.streamed",
+      payload: { sessionID: "session-1", messageID: "msg-2", partID: "part-2", field: "text", delta: "more text" },
       eventId: 11,
     }
     eventHandler?.("session-1", 11, streamEvent)
@@ -378,8 +378,8 @@ describe("useSignalRSocket V2 — desired behavior after rapid session switching
 
     // Events arrive for the topic after unsubscribe
     const event: DomainEvent = {
-      type: "session.status",
-      payload: { status: "busy" },
+      type: "session.idled",
+      payload: { sessionId: "session-1" },
       eventId: 10,
     }
     eventHandler?.("session-1", 10, event)
