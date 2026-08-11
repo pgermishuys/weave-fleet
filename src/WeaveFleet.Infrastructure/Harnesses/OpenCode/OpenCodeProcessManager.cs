@@ -116,9 +116,9 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
         psi.Environment["OPENCODE_SERVER_PASSWORD"] = options.Password;
         psi.Environment["OPENCODE_SERVER_USERNAME"] = options.Username;
 
-        // Inline config: allow the question tool so the agent can ask structured
-        // questions that are surfaced as interactive forms in the Fleet UI.
-        psi.Environment["OPENCODE_CONFIG_CONTENT"] = """{"permission":{"question":"allow"}}""";
+        // Inline config: auto-allow all permissions so the agent never blocks waiting
+        // for approval in a headless Fleet context.
+        psi.Environment["OPENCODE_CONFIG_CONTENT"] = """{"permission":{"*":"allow"}}""";
 
         // Additional caller-supplied env vars
         foreach (var (key, value) in options.EnvironmentVariables)
