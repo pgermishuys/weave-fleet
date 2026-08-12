@@ -588,16 +588,30 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         try
         {
             var statusDict = await _instanceHandle.HttpClient.GetSessionStatusAsync(_workingDirectory, ct).ConfigureAwait(false);
-            
-            // For non-pooled sessions, there should only be one session in the directory
+
+            // Look up the specific OpenCode session to avoid returning another session's status
+            // (e.g., when a forked session shares the same directory as its parent).
+            var openCodeSessionId = _openCodeSessionId;
+            if (!string.IsNullOrWhiteSpace(openCodeSessionId) && statusDict.TryGetValue(openCodeSessionId, out var targetStatus))
+            {
+                return targetStatus switch
+                {
+                    OpenCodeIdleStatus => "idle",
+                    OpenCodeBusyStatus => "busy",
+                    OpenCodeRetryStatus => "busy", // Treat retry as busy
+                    _ => "idle" // Default to idle for unknown status types
+                };
+            }
+
+            // Fallback: no session ID yet or not found in dict — take first entry (legacy behaviour)
             foreach (var (_, status) in statusDict)
             {
                 return status switch
                 {
                     OpenCodeIdleStatus => "idle",
                     OpenCodeBusyStatus => "busy",
-                    OpenCodeRetryStatus => "busy", // Treat retry as busy
-                    _ => "idle" // Default to idle for unknown status types
+                    OpenCodeRetryStatus => "busy",
+                    _ => "idle"
                 };
             }
 
