@@ -586,7 +586,24 @@ app.MapFleetEndpoints();
 
 // Static file serving (SPA)
 app.UseDefaultFiles(); // Serves index.html for "/"
-app.UseStaticFiles(); // Serves files from wwwroot/
+
+// Hashed assets (e.g. /assets/index-abc123.js) get immutable long-lived cache.
+// Everything else (index.html) gets no-cache so browsers always fetch the latest entry point.
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        var path = ctx.Context.Request.Path.Value ?? string.Empty;
+        if (path.StartsWith("/assets/", StringComparison.OrdinalIgnoreCase))
+        {
+            ctx.Context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+        }
+        else
+        {
+            ctx.Context.Response.Headers.CacheControl = "no-cache";
+        }
+    },
+});
 
 // SPA fallback — any unmatched route serves index.html for client-side routing
 app.MapFallbackToFile("index.html")
