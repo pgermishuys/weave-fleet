@@ -862,15 +862,13 @@ internal sealed class SignalRTestServer : IAsyncDisposable
 
             builder.UseUrls("http://127.0.0.1:0");
             builder.UseSetting("Urls", "http://127.0.0.1:0");
+            builder.UseSetting("Fleet:DatabasePath", _dbPath);
+            builder.UseSetting("Fleet:AnalyticsDatabasePath", _analyticsDbPath);
+            builder.UseSetting("Fleet:AnalyticsEnabled", "false");
+            builder.UseSetting("Fleet:Port", "0");
+            builder.UseSetting("Fleet:Host", "127.0.0.1");
             builder.UseSetting("Fleet:Auth:Enabled", "false");
             builder.UseSetting("Fleet:Auth:TokenAuthEnabled", "false");
-            builder.ConfigureAppConfiguration(config =>
-            {
-                config.AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["Urls"] = "http://127.0.0.1:0"
-                });
-            });
         }
 
         protected override IHost CreateHost(IHostBuilder builder)
