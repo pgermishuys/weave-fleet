@@ -493,6 +493,13 @@ internal sealed class AutomationTestServer : IAsyncDisposable
                 var connFactory = services.Where(d => d.ServiceType == typeof(IDbConnectionFactory)).ToList();
                 foreach (var d in connFactory) services.Remove(d);
 
+                // Remove analytics infrastructure to prevent migration runner from using default DB path
+                var analyticsFactory = services.Where(d => d.ServiceType == typeof(IAnalyticsDbConnectionFactory)).ToList();
+                foreach (var d in analyticsFactory) services.Remove(d);
+
+                var analyticsMigration = services.Where(d => d.ServiceType == typeof(AnalyticsMigrationRunner)).ToList();
+                foreach (var d in analyticsMigration) services.Remove(d);
+
                 var portAlloc = services.Where(d => d.ServiceType.Name == "PortAllocator").ToList();
                 foreach (var d in portAlloc) services.Remove(d);
 
@@ -517,6 +524,7 @@ internal sealed class AutomationTestServer : IAsyncDisposable
             builder.UseSetting("Urls", "http://127.0.0.1:0");
             builder.UseSetting("Fleet:Auth:Enabled", "false");
             builder.UseSetting("Fleet:Auth:TokenAuthEnabled", "false");
+            builder.UseSetting("Fleet:AnalyticsEnabled", "false");
             builder.ConfigureAppConfiguration(config =>
             {
                 config.AddInMemoryCollection(new Dictionary<string, string?>
