@@ -603,16 +603,11 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 };
             }
 
-            // Fallback: no session ID yet or not found in dict — take first entry (legacy behaviour)
-            foreach (var (_, status) in statusDict)
+            // No openCodeSessionId yet (e.g., freshly forked session) — return idle to avoid
+            // leaking another session's busy status from the shared directory.
+            if (string.IsNullOrWhiteSpace(openCodeSessionId))
             {
-                return status switch
-                {
-                    OpenCodeIdleStatus => "idle",
-                    OpenCodeBusyStatus => "busy",
-                    OpenCodeRetryStatus => "busy",
-                    _ => "idle"
-                };
+                return "idle";
             }
 
             // No status found, default to idle
