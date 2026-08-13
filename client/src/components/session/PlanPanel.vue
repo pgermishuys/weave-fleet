@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { storeToRefs } from "pinia";
 import TodoListView from "@/components/session/TodoListView.vue";
 import { useSessionTodos } from "@/composables/use-session-todos";
-import { useSessionsStore } from "@/stores/sessions";
 
 const props = defineProps<{
   sessionId?: string | null;
@@ -11,19 +9,7 @@ const props = defineProps<{
   sessionTitle?: string;
 }>();
 
-const sessionsStore = useSessionsStore();
-const { sessions } = storeToRefs(sessionsStore);
-
-const selectedSession = computed(() => {
-  if (!props.sessionId) {
-    return null;
-  }
-
-  return sessions.value.find((session) => session.session.id === props.sessionId) ?? null;
-});
-
 const resolvedSessionId = computed(() => props.sessionId ?? "");
-const resolvedInstanceId = computed(() => props.instanceId ?? selectedSession.value?.instanceId ?? "");
 
 const { todos } = useSessionTodos(resolvedSessionId);
 

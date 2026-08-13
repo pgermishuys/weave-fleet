@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, reactive, shallowRef, watch } from "vue";
+import { computed, reactive, shallowRef, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
 import { LoaderCircle, Plus, Search } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
@@ -86,20 +86,6 @@ const newSessionDialogModel = computed({
     workspaceUiStore.setNewSessionDialogOpen(open);
   },
 });
-
-const sessionActivityEvents = [
-  "session.created",
-  "session.updated",
-  "session.deleted",
-  "session_archived",
-  "session_unarchived",
-  "session_deleted",
-] as const;
-
-interface ActivityStatusPayload {
-  sessionId?: string;
-  activityStatus?: string;
-}
 
 watch(
   [pathname, sessions],

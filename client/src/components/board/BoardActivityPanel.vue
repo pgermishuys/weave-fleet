@@ -5,7 +5,6 @@ import type { SessionListItem } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
 
 type BoardActivityTone = "running" | "complete" | "error" | "queued" | "muted";
-type BoardActivityEventType = "session_started" | "session_completed" | "session_failed" | "session_queued" | "session_updated";
 
 interface BoardActivityEntry {
   id: string;
@@ -29,13 +28,6 @@ interface MockActivitySeed {
 const MAX_VISIBLE_EVENTS = 40;
 const INITIAL_VISIBLE_COUNT = 4;
 const MOCK_EVENT_INTERVAL_MS = 2_500;
-const WEBSOCKET_EVENT_TYPES: readonly BoardActivityEventType[] = [
-  "session_started",
-  "session_completed",
-  "session_failed",
-  "session_queued",
-  "session_updated",
-];
 
 const fallbackSessions: readonly SessionListItem[] = [
   createFallbackSession("sess-auth", "JWT Auth Module", "API Platform", "active"),
@@ -179,104 +171,6 @@ function stopMockStream(): void {
   clearInterval(mockTimer);
   mockTimer = null;
 }
-
-function normalizeTimestamp(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = Date.parse(value);
-    if (!Number.isNaN(parsed)) {
-      return parsed;
-    }
-  }
-
-  return Date.now();
-}
-
-function getTone(eventType: string, payload: Record<string, unknown>): BoardActivityTone {
-  const status = typeof payload.status === "string" ? payload.status : "";
-
-  if (eventType === "session_failed" || status === "failed") {
-    return "error";
-  }
-
-  if (eventType === "session_completed" || status === "completed") {
-    return "complete";
-  }
-
-  if (eventType === "session_queued" || status === "queued") {
-    return "queued";
-  }
-
-  if (eventType === "session_started") {
-    return "running";
-  }
-
-  return "muted";
-}
-
-function getActionLabel(eventType: string, payload: Record<string, unknown>): string {
-  if (typeof payload.action === "string" && payload.action.length > 0) {
-    return payload.action;
-  }
-
-  if (typeof payload.message === "string" && payload.message.length > 0) {
-    return payload.message;
-  }
-
-  switch (eventType) {
-    case "session_started":
-      return "session started";
-    case "session_completed":
-      return "session completed";
-    case "session_failed":
-      return "session failed";
-    case "session_queued":
-      return "session queued";
-    case "session_updated":
-    default:
-      return "session updated";
-  }
-}
-
-function normalizeActivityEntry(eventType: string, payload: unknown): BoardActivityEntry | null {
-  if (!payload || typeof payload !== "object") {
-    return null;
-  }
-
-  const record = payload as Record<string, unknown>;
-  const sessionId = typeof record.sessionId === "string" ? record.sessionId : "unknown";
-  const session = sessionIndex.value.get(sessionId);
-  const occurredAt = normalizeTimestamp(record.timestamp);
-
-  return {
-    id: typeof record.id === "string" ? record.id : `${eventType}-${sessionId}-${occurredAt}`,
-    sessionId,
-    sessionTitle: typeof record.sessionTitle === "string" ? record.sessionTitle : session?.session.title ?? `Session ${sessionId}`,
-    projectName: typeof record.projectName === "string" ? record.projectName : session?.projectName ?? null,
-    action: getActionLabel(eventType, record),
-    occurredAt,
-    timestampLabel: formatTimestamp(occurredAt),
-    tone: getTone(eventType, record),
-  };
-}
-
-function createWebSocketHandler(eventType: BoardActivityEventType): (payload: unknown) => void {
-  return (payload: unknown) => {
-    const normalizedEntry = normalizeActivityEntry(eventType, payload);
-    if (!normalizedEntry) {
-      return;
-    }
-
-    pushEntry(normalizedEntry);
-  };
-}
-
-const websocketHandlers = new Map(
-  WEBSOCKET_EVENT_TYPES.map((eventType) => [eventType, createWebSocketHandler(eventType)]),
-);
 
 onMounted(() => {
   const timeline = createMockTimeline();

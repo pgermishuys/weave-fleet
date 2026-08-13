@@ -92,7 +92,6 @@ const smartLinkPRs = computed(() => activeSmartLinks.value.filter(l => l.resourc
 const smartLinkIssues = computed(() => activeSmartLinks.value.filter(l => l.resourceType !== "pull_request"));
 const resolvedInstanceId = computed(() => normalizeString(props.session?.instanceId) ?? normalizeString(remoteSessionDetail.value?.instanceId));
 const todoSessionId = computed(() => sessionId.value ?? "");
-const todoInstanceId = computed(() => resolvedInstanceId.value ?? "");
 const sessionTitle = computed(() => normalizeString(props.session?.session.title) ?? normalizeString(remoteSessionDetail.value?.title) ?? "Untitled session");
 const effectiveSessionStatus = computed(() => props.session?.sessionStatus
   ?? remoteSessionDetail.value?.lifecycleStatus

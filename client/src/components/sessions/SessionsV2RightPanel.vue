@@ -72,7 +72,6 @@ provideSessionDetailContext({
 });
 
 // --- Collapsed rail: todos ---
-const activeInstanceId = computed(() => selectedSession.value?.instanceId ?? "");
 const { todos } = useSessionTodos(
   computed(() => activeSessionId.value ?? ""),
 );
