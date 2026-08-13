@@ -31,6 +31,9 @@ public class SessionEventsHub : Hub
     // Per-connection state: pump cancellation
     private static readonly ConcurrentDictionary<string, CancellationTokenSource> ConnectionCancellations = new();
 
+    // Maps parent topic to set of child topics auto-subscribed via delegation
+    private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> ParentChildTopics = new();
+
     // LoggerMessage delegates for high-performance logging
     private static readonly Action<ILogger, string, Exception?> LogPumpCancelled =
         LoggerMessage.Define<string>(LogLevel.Debug, new EventId(1, "HubPumpCancelled"),
@@ -51,6 +54,10 @@ public class SessionEventsHub : Hub
     private static readonly Action<ILogger, string, Exception> LogSendFailed =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(5, "HubSendFailed"),
             "Failed to send event to connection {ConnectionId}");
+
+    private static readonly Action<ILogger, string, string, Exception?> LogAutoSubscribed =
+        LoggerMessage.Define<string, string>(LogLevel.Debug, new EventId(6, "HubAutoSubscribed"),
+            "Auto-subscribed connection {ConnectionId} to child session {ChildTopic} after delegation");
 
     public SessionEventsHub(
         IEventBroadcaster broadcaster,
@@ -120,6 +127,16 @@ public class SessionEventsHub : Hub
             cts.Dispose();
         }
 
+        // Clean up parent-child topic mappings for this connection's topics
+        if (ConnectionTopics.TryGetValue(connectionId, out var topics))
+        {
+            foreach (var topic in topics.Keys)
+            {
+                // Remove parent-child mappings where this topic is a parent
+                ParentChildTopics.TryRemove(topic, out _);
+            }
+        }
+
         // Remove topic filter set
         ConnectionTopics.TryRemove(connectionId, out _);
 
@@ -137,14 +154,8 @@ public class SessionEventsHub : Hub
         var connectionId = Context.ConnectionId;
         var topic = $"session:{sessionId}";
 
-        // Add connection to SignalR group (events start flowing immediately)
-        await Groups.AddToGroupAsync(connectionId, topic);
-
-        // Add topic to connection's filter set
-        if (ConnectionTopics.TryGetValue(connectionId, out var topics))
-        {
-            topics[topic] = 0;
-        }
+        // Add connection to SignalR group and topic filter
+        await AddTopicSubscriptionAsync(connectionId, topic, CancellationToken.None);
 
         if (_logger.IsEnabled(LogLevel.Debug))
             LogSubscribed(_logger, connectionId, topic, null);
@@ -152,6 +163,21 @@ public class SessionEventsHub : Hub
         // Build atomic snapshot: persisted messages + in-flight state
         var snapshot = await BuildAtomicSnapshotAsync(sessionId);
         return snapshot;
+    }
+
+    /// <summary>
+    /// Adds a topic subscription for a connection by updating the filter set and SignalR group.
+    /// </summary>
+    private async Task AddTopicSubscriptionAsync(string connectionId, string topic, CancellationToken ct)
+    {
+        // Add connection to SignalR group (events start flowing immediately)
+        await _hubContext.Groups.AddToGroupAsync(connectionId, topic, ct);
+
+        // Add topic to connection's filter set
+        if (ConnectionTopics.TryGetValue(connectionId, out var topics))
+        {
+            topics[topic] = 0;
+        }
     }
 
     /// <summary>
@@ -227,6 +253,7 @@ public class SessionEventsHub : Hub
 
     /// <summary>
     /// Unsubscribe from a session topic. Removes the connection from the SignalR group and updates the topic filter.
+    /// Also cleans up any child topics that were auto-subscribed via delegation.
     /// This method is idempotent and safe to call multiple times.
     /// </summary>
     /// <param name="sessionId">The session identifier.</param>
@@ -242,6 +269,25 @@ public class SessionEventsHub : Hub
         if (ConnectionTopics.TryGetValue(connectionId, out var topics))
         {
             topics.TryRemove(topic, out _);
+        }
+
+        // Clean up any child topics that were auto-subscribed via delegation
+        if (ParentChildTopics.TryGetValue(topic, out var childTopics))
+        {
+            foreach (var childTopic in childTopics.Keys)
+            {
+                // Remove child topic from SignalR group
+                await Groups.RemoveFromGroupAsync(connectionId, childTopic);
+
+                // Remove child topic from connection's filter set
+                if (topics is not null)
+                {
+                    topics.TryRemove(childTopic, out _);
+                }
+
+                if (_logger.IsEnabled(LogLevel.Debug))
+                    LogUnsubscribed(_logger, connectionId, childTopic, null);
+            }
         }
 
         if (_logger.IsEnabled(LogLevel.Debug))
@@ -284,6 +330,27 @@ public class SessionEventsHub : Hub
 
             if (!topics.ContainsKey(evt.Topic))
                 continue; // Not subscribed to this topic
+
+            // Auto-subscribe to child session when delegation occurs
+            if (evt.Type == "delegation.updated" && evt.Payload.TryGetProperty("childSessionId", out var childSessionIdProp))
+            {
+                var childSessionId = childSessionIdProp.GetString();
+                if (!string.IsNullOrEmpty(childSessionId))
+                {
+                    var childTopic = $"session:{childSessionId}";
+                    var parentTopic = evt.Topic;
+                    
+                    // Add child topic subscription
+                    await AddTopicSubscriptionAsync(connectionId, childTopic, ct);
+                    
+                    // Track parent-child relationship for cleanup
+                    var childTopics = ParentChildTopics.GetOrAdd(parentTopic, _ => new ConcurrentDictionary<string, byte>(StringComparer.Ordinal));
+                    childTopics[childTopic] = 0;
+                    
+                    if (_logger.IsEnabled(LogLevel.Debug))
+                        LogAutoSubscribed(_logger, connectionId, childTopic, null);
+                }
+            }
 
             // Sanitize the payload before sending to client
             var sanitizedPayload = ClientPayloadSanitizer.SanitizeEventPayload(evt.Type, evt.Payload);

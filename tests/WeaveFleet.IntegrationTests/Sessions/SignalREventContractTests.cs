@@ -406,6 +406,221 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
         result.GetString().ShouldBe("test output");
     }
 
+    [Fact]
+    public async Task Hub_auto_subscribes_to_child_session_events_after_delegation()
+    {
+        // Arrange: create parent and child sessions
+        var parentSessionId = await CreateSessionAsync();
+        var childSessionId = await CreateSessionAsync();
+        var parentTopic = $"session:{parentSessionId}";
+        var childTopic = $"session:{childSessionId}";
+
+        // Subscribe to parent session only
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", parentSessionId);
+
+        // Wait for the hub pump to be subscribed to the broadcaster
+        await WaitForBroadcasterSubscriberAsync();
+
+        var broadcaster = _server.Services.GetRequiredService<IEventBroadcaster>();
+
+        // Clear any events received during subscription
+        var initialCount = _receivedEvents.Count;
+
+        // Act: broadcast a delegation.updated event to the parent session with childSessionId
+        var delegationPayload = JsonSerializer.SerializeToElement(new
+        {
+            childSessionId = childSessionId,
+            status = "active"
+        });
+
+        await broadcaster.BroadcastAsync(
+            parentTopic,
+            "delegation.updated",
+            delegationPayload,
+            eventId: 200,
+            domainEvent: null,
+            userId: "local-user",
+            ct: CancellationToken.None);
+
+        // Wait for the delegation event to be processed
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (_receivedEvents.Count < initialCount + 1 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(50);
+        }
+
+        // Now broadcast a message.updated event to the CHILD session
+        var childMessagePayload = JsonSerializer.SerializeToElement(new
+        {
+            info = new
+            {
+                id = "msg-child-1",
+                role = "assistant",
+                sessionID = childSessionId,
+                time = new { created = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }
+            },
+            parts = new[]
+            {
+                new { type = "text", id = "part-child-1", sessionID = childSessionId, messageID = "msg-child-1", text = "Child response" }
+            }
+        });
+
+        await broadcaster.BroadcastAsync(
+            childTopic,
+            "message.updated",
+            childMessagePayload,
+            eventId: 201,
+            domainEvent: null,
+            userId: "local-user",
+            ct: CancellationToken.None);
+
+        // Assert: the client should receive the child session event
+        deadline = DateTime.UtcNow.AddSeconds(5);
+        while (_receivedEvents.Count < initialCount + 2 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(50);
+        }
+
+        var newEvents = _receivedEvents.Skip(initialCount).ToList();
+        newEvents.Count.ShouldBe(2, 
+            $"Expected 2 events (delegation + child message) but received {newEvents.Count}. " +
+            $"Events: {string.Join(", ", newEvents.Select(e => $"[{e.EventId}:{e.Data.GetProperty("type").GetString()}@{e.Topic}]"))}");
+
+        // Verify delegation event
+        var delegationEvent = newEvents[0];
+        delegationEvent.Topic.ShouldBe(parentTopic);
+        delegationEvent.EventId.ShouldBe(200);
+        delegationEvent.Data.GetProperty("type").GetString().ShouldBe("delegation.updated");
+
+        // Verify child message event
+        var childEvent = newEvents[1];
+        childEvent.Topic.ShouldBe(childTopic, 
+            "Child session event should be delivered on child topic after auto-subscription");
+        childEvent.EventId.ShouldBe(201);
+        childEvent.Data.GetProperty("type").GetString().ShouldBe("message.updated");
+        childEvent.Data.GetProperty("properties").GetProperty("info").GetProperty("id").GetString()
+            .ShouldBe("msg-child-1");
+    }
+
+    [Fact]
+    public async Task Hub_cleans_up_child_subscriptions_on_parent_unsubscribe()
+    {
+        // Arrange: create parent and child sessions
+        var parentSessionId = await CreateSessionAsync();
+        var childSessionId = await CreateSessionAsync();
+        var parentTopic = $"session:{parentSessionId}";
+        var childTopic = $"session:{childSessionId}";
+
+        // Subscribe to parent session only
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", parentSessionId);
+
+        // Wait for the hub pump to be subscribed to the broadcaster
+        await WaitForBroadcasterSubscriberAsync();
+
+        var broadcaster = _server.Services.GetRequiredService<IEventBroadcaster>();
+
+        // Clear any events received during subscription
+        var initialCount = _receivedEvents.Count;
+
+        // Broadcast delegation.updated to trigger auto-subscription to child
+        var delegationPayload = JsonSerializer.SerializeToElement(new
+        {
+            childSessionId = childSessionId,
+            status = "active"
+        });
+
+        await broadcaster.BroadcastAsync(
+            parentTopic,
+            "delegation.updated",
+            delegationPayload,
+            eventId: 300,
+            domainEvent: null,
+            userId: "local-user",
+            ct: CancellationToken.None);
+
+        // Wait for delegation event to be processed
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (_receivedEvents.Count < initialCount + 1 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(50);
+        }
+
+        // Sanity check: verify child events arrive before unsubscribe
+        var childMessagePayload1 = JsonSerializer.SerializeToElement(new
+        {
+            info = new
+            {
+                id = "msg-child-before",
+                role = "assistant",
+                sessionID = childSessionId,
+                time = new { created = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }
+            },
+            parts = new[]
+            {
+                new { type = "text", id = "part-child-before", sessionID = childSessionId, messageID = "msg-child-before", text = "Before unsubscribe" }
+            }
+        });
+
+        await broadcaster.BroadcastAsync(
+            childTopic,
+            "message.updated",
+            childMessagePayload1,
+            eventId: 301,
+            domainEvent: null,
+            userId: "local-user",
+            ct: CancellationToken.None);
+
+        deadline = DateTime.UtcNow.AddSeconds(5);
+        while (_receivedEvents.Count < initialCount + 2 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(50);
+        }
+
+        _receivedEvents.Skip(initialCount).Count().ShouldBe(2, "Should receive delegation + child message before unsubscribe");
+
+        // Act: unsubscribe from parent
+        await _hub.InvokeAsync("UnsubscribeFromSessionAsync", parentSessionId);
+
+        // Give the hub time to process the unsubscribe
+        await Task.Delay(200);
+
+        // Clear received events to isolate post-unsubscribe behavior
+        var countBeforeTest = _receivedEvents.Count;
+
+        // Broadcast another event to child topic
+        var childMessagePayload2 = JsonSerializer.SerializeToElement(new
+        {
+            info = new
+            {
+                id = "msg-child-after",
+                role = "assistant",
+                sessionID = childSessionId,
+                time = new { created = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }
+            },
+            parts = new[]
+            {
+                new { type = "text", id = "part-child-after", sessionID = childSessionId, messageID = "msg-child-after", text = "After unsubscribe" }
+            }
+        });
+
+        await broadcaster.BroadcastAsync(
+            childTopic,
+            "message.updated",
+            childMessagePayload2,
+            eventId: 302,
+            domainEvent: null,
+            userId: "local-user",
+            ct: CancellationToken.None);
+
+        // Assert: the child event should NOT be received (use a short timeout)
+        await Task.Delay(1000);
+
+        var eventsAfterUnsubscribe = _receivedEvents.Skip(countBeforeTest).ToList();
+        eventsAfterUnsubscribe.Count.ShouldBe(0, 
+            $"Expected no events after unsubscribing from parent, but received {eventsAfterUnsubscribe.Count}. " +
+            $"Events: {string.Join(", ", eventsAfterUnsubscribe.Select(e => $"[{e.EventId}:{e.Data.GetProperty("type").GetString()}@{e.Topic}]"))}");
+    }
+
     private async Task PersistMessageWithCompletedToolAsync(string sessionId)
     {
         var messageRepo = _server.Services.GetRequiredService<IMessageRepository>();
