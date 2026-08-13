@@ -347,6 +347,171 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task Hub_sends_domain_event_type_when_DomainEvent_is_attached()
+    {
+        // Arrange: when the event pipeline translates a raw harness event (e.g. "session.status")
+        // into a domain event (e.g. TurnStarted), the hub must send the domain event type on the wire
+        // so that the client reducer can match on "turn.started" rather than "session.status".
+        var sessionId = await CreateSessionAsync();
+        var topic = $"session:{sessionId}";
+
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        await WaitForBroadcasterSubscriberAsync();
+
+        var broadcaster = _server.Services.GetRequiredService<IEventBroadcaster>();
+
+        // Simulate what InProcessFanOutService does: broadcast raw type "session.status"
+        // but attach a TurnStarted domain event.
+        var rawPayload = JsonSerializer.SerializeToElement(new { status = "busy" });
+        var domainEvent = new WeaveFleet.Domain.Events.TurnStarted
+        {
+            Payload = new WeaveFleet.Domain.Events.TurnStartedPayload
+            {
+                SessionId = sessionId,
+                MessageId = "msg-1",
+                Index = 0,
+                Agent = "default",
+            }
+        };
+
+        await broadcaster.BroadcastAsync(
+            topic,
+            "session.status",   // raw harness type
+            rawPayload,
+            eventId: null,
+            domainEvent: domainEvent,
+            userId: "local-user",
+            ct: CancellationToken.None);
+
+        // Assert: the client must receive "turn.started", NOT "session.status"
+        var received = await WaitForEventAsync(TimeSpan.FromSeconds(5));
+        received.ShouldNotBeNull("No event received");
+
+        var wireType = received.Data.GetProperty("type").GetString();
+        wireType.ShouldBe("turn.started",
+            $"Hub sent raw harness type '{wireType}' instead of domain event type 'turn.started'. " +
+            $"The client reducer handles 'turn.started' — sending 'session.status' means the dots never appear. " +
+            $"Full event: {received.Data.GetRawText()}");
+    }
+
+    [Fact]
+    public async Task Hub_sends_domain_event_type_for_session_idled()
+    {
+        // session.idle (raw) → session.idled (domain)
+        var sessionId = await CreateSessionAsync();
+        var topic = $"session:{sessionId}";
+
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        await WaitForBroadcasterSubscriberAsync();
+
+        var broadcaster = _server.Services.GetRequiredService<IEventBroadcaster>();
+
+        var rawPayload = JsonSerializer.SerializeToElement(new { status = "idle" });
+        var domainEvent = new WeaveFleet.Domain.Events.SessionIdled
+        {
+            Payload = new WeaveFleet.Domain.Events.SessionIdledPayload
+            {
+                SessionId = sessionId,
+            }
+        };
+
+        await broadcaster.BroadcastAsync(
+            topic,
+            "session.idle",
+            rawPayload,
+            eventId: null,
+            domainEvent: domainEvent,
+            userId: "local-user",
+            ct: CancellationToken.None);
+
+        var received = await WaitForEventAsync(TimeSpan.FromSeconds(5));
+        received.ShouldNotBeNull("No event received");
+
+        var wireType = received.Data.GetProperty("type").GetString();
+        wireType.ShouldBe("session.idled",
+            $"Hub sent raw type '{wireType}' instead of domain type 'session.idled'. " +
+            $"Full event: {received.Data.GetRawText()}");
+    }
+
+    [Fact]
+    public async Task Hub_sends_domain_event_type_for_message_part_delta_streamed()
+    {
+        // message.part.delta (raw) → message.part.delta.streamed (domain)
+        var sessionId = await CreateSessionAsync();
+        var topic = $"session:{sessionId}";
+
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        await WaitForBroadcasterSubscriberAsync();
+
+        var broadcaster = _server.Services.GetRequiredService<IEventBroadcaster>();
+
+        var rawPayload = JsonSerializer.SerializeToElement(new
+        {
+            sessionID = sessionId,
+            messageID = "msg-1",
+            partID = "part-1",
+            field = "text",
+            delta = "Hello "
+        });
+        var domainEvent = new WeaveFleet.Domain.Events.MessagePartDeltaStreamed
+        {
+            Payload = new WeaveFleet.Domain.Events.MessagePartDeltaStreamedPayload
+            {
+                SessionId = sessionId,
+                MessageId = "msg-1",
+                PartId = "part-1",
+                Field = "text",
+                Delta = "Hello "
+            }
+        };
+
+        await broadcaster.BroadcastAsync(
+            topic,
+            "message.part.delta",
+            rawPayload,
+            eventId: null,
+            domainEvent: domainEvent,
+            userId: "local-user",
+            ct: CancellationToken.None);
+
+        var received = await WaitForEventAsync(TimeSpan.FromSeconds(5));
+        received.ShouldNotBeNull("No event received");
+
+        var wireType = received.Data.GetProperty("type").GetString();
+        wireType.ShouldBe("message.part.delta.streamed",
+            $"Hub sent raw type '{wireType}' instead of domain type 'message.part.delta.streamed'. " +
+            $"Full event: {received.Data.GetRawText()}");
+    }
+
+    [Fact]
+    public async Task Hub_preserves_raw_type_when_no_DomainEvent_is_attached()
+    {
+        // When no DomainEvent is attached, the hub should send the raw type as-is.
+        var sessionId = await CreateSessionAsync();
+        var topic = $"session:{sessionId}";
+
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        await WaitForBroadcasterSubscriberAsync();
+
+        var broadcaster = _server.Services.GetRequiredService<IEventBroadcaster>();
+
+        var payload = JsonSerializer.SerializeToElement(new { activityStatus = "busy" });
+        await broadcaster.BroadcastAsync(
+            topic,
+            "activity_status",
+            payload,
+            eventId: 10,
+            domainEvent: null,
+            userId: "local-user",
+            ct: CancellationToken.None);
+
+        var received = await WaitForEventAsync(TimeSpan.FromSeconds(5));
+        received.ShouldNotBeNull("No event received");
+
+        received.Data.GetProperty("type").GetString().ShouldBe("activity_status");
+    }
+
+    [Fact]
     public async Task Snapshot_returns_messages_on_subscribe()
     {
         var sessionId = await CreateSessionAsync();

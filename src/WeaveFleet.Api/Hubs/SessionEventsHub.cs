@@ -352,8 +352,15 @@ public class SessionEventsHub : Hub
                 }
             }
 
+            // When a DomainEvent is attached, prefer its discriminator type over the raw harness type.
+            // Raw harness types (e.g. "session.status") differ from domain event types (e.g. "turn.started")
+            // and the client reducer only handles domain event types.
+            var wireType = evt.DomainEvent is not null
+                ? ResolveDomainEventType(evt.DomainEvent)
+                : evt.Type;
+
             // Sanitize the payload before sending to client
-            var sanitizedPayload = ClientPayloadSanitizer.SanitizeEventPayload(evt.Type, evt.Payload);
+            var sanitizedPayload = ClientPayloadSanitizer.SanitizeEventPayload(wireType, evt.Payload);
             if (!sanitizedPayload.HasValue)
                 continue;
 
@@ -362,7 +369,7 @@ public class SessionEventsHub : Hub
             // Serialize as raw JSON to avoid type-system mismatch with SignalR's JSON serializer.
             var clientEventJson = JsonSerializer.SerializeToElement(new ClientEvent
             {
-                Type = evt.Type,
+                Type = wireType,
                 EventId = evt.EventId,
                 Properties = sanitizedPayload.Value
             }, ApiJsonContext.Default.ClientEvent);
@@ -384,6 +391,29 @@ public class SessionEventsHub : Hub
             }
         }
     }
+
+    /// <summary>
+    /// Maps a <see cref="DomainEvent"/> instance to its JSON type discriminator string.
+    /// This is the value used in <c>[JsonDerivedType(typeof(T), "...")]</c> on <see cref="DomainEvent"/>.
+    /// </summary>
+    private static string ResolveDomainEventType(DomainEvent domainEvent) => domainEvent switch
+    {
+        SessionStarted          => "session.started",
+        SessionIdled            => "session.idled",
+        SessionStopped          => "session.stopped",
+        SessionDeleted          => "session.deleted",
+        SessionArchived         => "session.archived",
+        TurnStarted             => "turn.started",
+        TurnEnded               => "turn.ended",
+        MessageCreated          => "message.created",
+        MessageUpdated          => "message.updated",
+        MessagePartUpdated      => "message.part.updated",
+        MessagePartDeltaStreamed => "message.part.delta.streamed",
+        DelegationCreated       => "delegation.created",
+        DelegationUpdated       => "delegation.updated",
+        DelegationCompleted     => "delegation.completed",
+        _ => domainEvent.GetType().Name,
+    };
 }
 
 /// <summary>
