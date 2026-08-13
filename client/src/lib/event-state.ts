@@ -1,6 +1,6 @@
 /**
  * Pure state update helpers for accumulating SSE events into renderable messages.
- * Extracted from useSessionEvents for testability — no React dependencies.
+ * Shared utility for domain event reduction — no framework dependencies.
  */
 
 import type {

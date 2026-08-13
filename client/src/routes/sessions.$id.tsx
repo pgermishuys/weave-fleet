@@ -902,7 +902,7 @@ const SessionDetailPage = defineComponent({
         </div>
         {viewMode.value === "chat" ? (
           <>
-            <ActivityStream key={`${params.value.id}-${instanceId.value}`} sessionId={params.value.id} instanceId={instanceId.value} />
+            <ActivityStream key={`${params.value.id}-${instanceId.value}`} sessionId={params.value.id} />
             <Composer
               ref={composerRef}
               sessionId={params.value.id}

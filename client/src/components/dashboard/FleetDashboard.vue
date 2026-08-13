@@ -4,7 +4,6 @@ import { storeToRefs } from "pinia";
 import { useRouter } from "@tanstack/vue-router";
 import { LoaderCircle, Plus } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
-import { useActivityStream } from "@/composables/use-activity-stream";
 import { useSessions } from "@/composables/use-sessions";
 import type { SessionListItem } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
@@ -16,7 +15,6 @@ import SummaryBar from "./SummaryBar.vue";
 const router = useRouter();
 const sessionsStore = useSessionsStore();
 const workspaceUiStore = useWorkspaceUiStore();
-const activityStream = useActivityStream();
 const { retentionStatus, sessions: storeSessions } = storeToRefs(sessionsStore);
 
 const {
@@ -36,29 +34,6 @@ const sessions = computed(() => {
 });
 
 const isEmpty = computed(() => !isLoading.value && sessions.value.length === 0);
-
-const sessionActivityEvents = [
-  "session.created",
-  "session.updated",
-  "session.deleted",
-  "session_archived",
-  "session_unarchived",
-  "session_deleted",
-] as const;
-
-function handleSessionActivity(): void {
-  void refetch();
-}
-
-for (const eventType of sessionActivityEvents) {
-  activityStream.on(eventType, handleSessionActivity);
-}
-
-onUnmounted(() => {
-  for (const eventType of sessionActivityEvents) {
-    activityStream.off(eventType, handleSessionActivity);
-  }
-});
 
 function handleSessionSelect(session: SessionListItem): void {
   void router.navigate({

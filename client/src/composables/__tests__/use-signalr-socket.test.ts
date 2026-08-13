@@ -414,44 +414,6 @@ describe("useSignalRSocket", () => {
     })
   })
 
-  describe("v1 compatibility", () => {
-    it("dispatches v1 events to v1 subscribers", async () => {
-      const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
-
-      const { result } = await mountComposable(() => useWeaveSocket())
-
-      const callback = vi.fn()
-      result.subscribe(["session:session-1"], callback)
-
-      const eventData = { type: "session.status", properties: { status: "busy" } }
-      eventHandler?.("session:session-1", 10, eventData)
-
-      expect(callback).toHaveBeenCalledWith("session:session-1", eventData)
-    })
-
-    it("dispatches to both v1 and v2 subscribers", async () => {
-      const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
-      const snapshot = createSessionSnapshot("session-1")
-
-      mockHubConnection.invoke.mockResolvedValueOnce(snapshot)
-
-      const { result } = await mountComposable(() => useWeaveSocket())
-
-      const v1Callback = vi.fn()
-      const v2Callback = vi.fn()
-
-      result.subscribe(["session-1"], v1Callback)
-      result.subscribeV2("session-1", vi.fn(), v2Callback)
-      await flushAll()
-
-      const eventData = createDomainEvent("session.started", 10)
-      eventHandler?.("session-1", 10, eventData)
-
-      expect(v1Callback).toHaveBeenCalledWith("session-1", eventData)
-      expect(v2Callback).toHaveBeenCalledWith({ ...eventData, eventId: 10 })
-    })
-  })
-
   describe("unsubscription", () => {
     it("unsubscribes from session when last subscriber leaves", async () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")

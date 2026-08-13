@@ -1344,8 +1344,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                         parts[i] = tool with { State = ToolUseState.Error };
                         modified = true;
 
-                        // Broadcast using toolCallId as the part ID — this matches
-                        // the v1 client which sets partId = toolCallId in convertFleetMessageToAccumulated.
+                        // Broadcast using toolCallId as the part ID
                         var partPayload = new MessagePartUpdatedPayload
                         {
                             SessionId = fleetSessionId,

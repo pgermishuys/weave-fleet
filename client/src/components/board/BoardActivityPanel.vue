@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { storeToRefs } from "pinia";
-import { useActivityStream } from "@/composables/use-activity-stream";
 import type { SessionListItem } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
 
@@ -59,7 +58,6 @@ const mockActivitySeeds: readonly MockActivitySeed[] = [
 const sessionsStore = useSessionsStore();
 const { sessions } = storeToRefs(sessionsStore);
 
-const activityStream = useActivityStream();
 const activityEntries = ref<BoardActivityEntry[]>([]);
 const pendingMockEntries = ref<BoardActivityEntry[]>([]);
 
@@ -285,13 +283,6 @@ onMounted(() => {
   activityEntries.value = timeline.slice(-INITIAL_VISIBLE_COUNT).reverse();
   pendingMockEntries.value = timeline.slice(0, -INITIAL_VISIBLE_COUNT);
 
-  for (const eventType of WEBSOCKET_EVENT_TYPES) {
-    const handler = websocketHandlers.get(eventType);
-    if (handler) {
-      activityStream.on(eventType, handler);
-    }
-  }
-
   if (pendingMockEntries.value.length > 0) {
     startMockStream();
   }
@@ -299,13 +290,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopMockStream();
-
-  for (const eventType of WEBSOCKET_EVENT_TYPES) {
-    const handler = websocketHandlers.get(eventType);
-    if (handler) {
-      activityStream.off(eventType, handler);
-    }
-  }
 });
 </script>
 

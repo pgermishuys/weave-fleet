@@ -57,9 +57,8 @@ vi.mock("@/components/session/ActivityStream.vue", () => ({
     name: "ActivityStreamStub",
     props: {
       sessionId: { type: String, required: true },
-      instanceId: { type: String, required: false },
     },
-    template: '<section data-testid="activity-stream">{{ sessionId }}:{{ instanceId }}</section>',
+    template: '<section data-testid="activity-stream">{{ sessionId }}</section>',
   },
 }));
 
@@ -141,7 +140,7 @@ describe("session route files view close", () => {
 
     const activityStream = wrapper.get('[data-testid="activity-stream"]');
     const composer = wrapper.get('[data-testid="composer"]');
-    expect(activityStream.text()).toBe("session-1:instance-1");
+    expect(activityStream.text()).toBe("session-1");
     expect(composer.text()).toBe("session-1:instance-1");
     expect((composer.element as HTMLButtonElement).disabled).toBe(false);
 

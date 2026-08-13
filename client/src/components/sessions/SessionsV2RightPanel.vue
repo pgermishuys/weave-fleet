@@ -75,7 +75,6 @@ provideSessionDetailContext({
 const activeInstanceId = computed(() => selectedSession.value?.instanceId ?? "");
 const { todos } = useSessionTodos(
   computed(() => activeSessionId.value ?? ""),
-  activeInstanceId,
 );
 
 // Auto-expand when a session is first selected.

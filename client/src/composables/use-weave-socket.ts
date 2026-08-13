@@ -1,6 +1,5 @@
 // Re-export everything from the SignalR implementation
 export type {
-  TopicCallback,
   Unsubscribe,
   SnapshotCallback,
   DomainEventCallback,

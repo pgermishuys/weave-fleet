@@ -98,7 +98,7 @@ const effectiveSessionStatus = computed(() => props.session?.sessionStatus
   ?? remoteSessionDetail.value?.lifecycleStatus
   ?? remoteSessionDetail.value?.status
   ?? null);
-const { todos } = useSessionTodos(todoSessionId, todoInstanceId);
+const { todos } = useSessionTodos(todoSessionId);
 const diffState = computed(() => sessionDiffsContext.value?.diffState ?? null);
 const fileDiffs = computed(() => diffState.value?.diffs.value ?? []);
 const filesChanged = computed<ChangedFile[]>(() => fileDiffs.value.map((diff) => ({

@@ -4,7 +4,7 @@ import { ArrowUpRight, Bot } from "lucide-vue-next";
 import { useRouter } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
-import { useSessionEventsSwitch } from "@/composables/use-session-events-switch";
+import { useSessionStream } from "@/composables/use-session-stream";
 import { clearSentPrompts, reconcileSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { useSmartLinks } from "@/plugins/builtin/smart-links"
 import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
@@ -51,7 +51,6 @@ interface DelegationLink {
 
 const props = defineProps<{
   sessionId: string;
-  instanceId?: string;
 }>();
 
 const router = useRouter();
@@ -63,11 +62,8 @@ const selectedSession = computed(() => {
   return sessions.value.find((session) => session.session.id === props.sessionId) ?? null;
 });
 
-const resolvedInstanceId = computed(() => props.instanceId ?? selectedSession.value?.instanceId ?? "");
-
-const { messages: sessionMessages, delegations, sessionStatus, forceIdle, hasMoreMessages, isLoadingOlder, loadOlderMessages } = useSessionEventsSwitch(
+const { messages: sessionMessages, delegations, sessionStatus, hasMore, isLoadingOlder, loadOlder } = useSessionStream(
   computed(() => props.sessionId),
-  resolvedInstanceId,
 );
 useSmartLinks({
   sessionId: computed(() => props.sessionId),
@@ -152,7 +148,6 @@ watch(
           sentPromptsCount: sentPrompts.value.length,
         });
         clearSentPrompts(props.sessionId);
-        forceIdle();
       } else {
         diagLog("stream.clearPrompts", `new assistant content detected but some user messages lack text or images – deferring to reconciliation`, {
           sessionId: props.sessionId,
@@ -252,8 +247,8 @@ function updatePinnedState(): void {
   showJumpToLatest.value = !keepPinnedToBottom;
 
   // Trigger loading older messages when scrolled near the top
-  if (!isRestoringScroll && element.scrollTop <= SCROLL_TOP_THRESHOLD && hasMoreMessages.value && !isLoadingOlder.value) {
-    loadOlderMessages();
+  if (!isRestoringScroll && element.scrollTop <= SCROLL_TOP_THRESHOLD && hasMore.value && !isLoadingOlder.value) {
+    loadOlder();
   }
 }
 
@@ -676,10 +671,10 @@ function handleExpandVisual(payload: VisualPayload): void {
         Loading older messages…
       </div>
       <button
-        v-else-if="hasMoreMessages"
+        v-else-if="hasMore"
         type="button"
         class="load-older-button"
-        @click="loadOlderMessages"
+        @click="loadOlder"
       >
         Load older messages
       </button>

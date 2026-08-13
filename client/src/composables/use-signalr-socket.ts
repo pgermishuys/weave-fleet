@@ -3,7 +3,6 @@ import { HubConnection, HubConnectionBuilder, HubConnectionState } from "@micros
 import type { DomainEvent } from "@/lib/domain-events"
 import type { SessionHistoryPage, SessionSnapshot } from "@/lib/session-snapshot"
 
-export type TopicCallback = (topic: string, data: unknown) => void
 export type Unsubscribe = () => void
 export type SnapshotCallback = (snapshot: SessionSnapshot) => void
 export type DomainEventCallback = (event: DomainEvent) => void
@@ -16,7 +15,6 @@ interface TopicV2Callback {
 }
 
 export interface WeaveSocketAPI {
-  subscribe: (topics: string[], callback: TopicCallback) => Unsubscribe
   subscribeV2: (topic: string, onSnapshot: SnapshotCallback, onEvent: DomainEventCallback, onHistory?: HistoryCallback) => Unsubscribe
   sendV2: (message: unknown) => boolean
 }
@@ -39,7 +37,6 @@ declare global {
 
 const HUB_PATH = "/hubs/session-events"
 
-const topicListeners = new Map<string, Set<TopicCallback>>()
 const topicListenersV2 = new Map<string, Set<TopicV2Callback>>()
 const lastSnapshotsV2 = new Map<string, SessionSnapshot>()
 const reconnectCallbacks = new Map<string, () => void>()
@@ -55,17 +52,6 @@ let disconnectCallbackNextId = 0
 let connection: HubConnection | null = null
 let subscriberCount = 0
 let suspendConnectionsForTesting = false
-
-function dispatch(topic: string, data: unknown): void {
-  const callbacks = topicListeners.get(topic)
-  if (!callbacks) {
-    return
-  }
-
-  for (const callback of callbacks) {
-    callback(topic, data)
-  }
-}
 
 function dispatchSnapshot(topic: string, snapshot: SessionSnapshot): void {
   lastSnapshotsV2.set(topic, snapshot)
@@ -133,11 +119,6 @@ async function connect(): Promise<void> {
 
   // Register event handler for incoming events
   hubConnection.on("Event", (topic: string, eventId: number | null, data: unknown) => {
-    // Check if this is a v1 event or v2 event based on listeners
-    if (topicListeners.has(topic)) {
-      dispatch(topic, data)
-    }
-    
     if (topicListenersV2.has(topic)) {
       const domainEvent = data as DomainEvent
       dispatchEventV2(topic, eventId === null ? domainEvent : { ...domainEvent, eventId })
@@ -184,7 +165,7 @@ async function disconnect(): Promise<void> {
 }
 
 function hasListenersForTopic(topic: string): boolean {
-  return (topicListeners.get(topic)?.size ?? 0) > 0 || (topicListenersV2.get(topic)?.size ?? 0) > 0
+  return (topicListenersV2.get(topic)?.size ?? 0) > 0
 }
 
 /**
@@ -207,34 +188,6 @@ function queueTopicOperation<T>(topic: string, operation: () => Promise<T>): Pro
   topicOperationQueues.set(topic, voidQueue)
   
   return newQueue
-}
-
-function addTopicListeners(topics: string[], callback: TopicCallback): Unsubscribe {
-  for (const topic of topics) {
-    let listeners = topicListeners.get(topic)
-    if (!listeners) {
-      listeners = new Set<TopicCallback>()
-      topicListeners.set(topic, listeners)
-    }
-
-    listeners.add(callback)
-  }
-
-  return () => {
-    for (const topic of topics) {
-      const listeners = topicListeners.get(topic)
-      if (!listeners) {
-        continue
-      }
-
-      listeners.delete(callback)
-      if (listeners.size === 0 && !hasListenersForTopic(topic)) {
-        topicListeners.delete(topic)
-      } else if (listeners.size === 0) {
-        topicListeners.delete(topic)
-      }
-    }
-  }
 }
 
 function addTopicListenerV2(
@@ -351,7 +304,6 @@ export function _resetForTesting(): void {
   void disconnect()
   subscriberCount = 0
   suspendConnectionsForTesting = false
-  topicListeners.clear()
   topicListenersV2.clear()
   lastSnapshotsV2.clear()
   reconnectCallbacks.clear()
@@ -390,9 +342,6 @@ export function onDisconnect(callback: () => void): () => void {
     disconnectCallbacks.delete(id)
   }
 }
-
-const stableSubscribe = (topics: string[], callback: TopicCallback): Unsubscribe =>
-  addTopicListeners(topics, callback)
 
 const stableSubscribeV2 = (
   topic: string,
@@ -465,7 +414,6 @@ export function useWeaveSocket(): WeaveSocketAPI {
   })
 
   return {
-    subscribe: stableSubscribe,
     subscribeV2: stableSubscribeV2,
     sendV2: sendV2Message,
   }

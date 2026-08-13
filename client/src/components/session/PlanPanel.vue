@@ -25,7 +25,7 @@ const selectedSession = computed(() => {
 const resolvedSessionId = computed(() => props.sessionId ?? "");
 const resolvedInstanceId = computed(() => props.instanceId ?? selectedSession.value?.instanceId ?? "");
 
-const { todos } = useSessionTodos(resolvedSessionId, resolvedInstanceId);
+const { todos } = useSessionTodos(resolvedSessionId);
 
 const panelTitle = computed(() => props.sessionTitle ? `${props.sessionTitle} Plan` : "Execution Plan");
 </script>

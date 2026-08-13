@@ -4,7 +4,6 @@ import { useLocation, useRouter } from "@tanstack/vue-router";
 import { LoaderCircle, Plus, Search } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import type { CreateSessionResponse, SessionListItem } from "@/api/client";
-import { useActivityStream } from "@/composables/use-activity-stream";
 import { useProjects } from "@/composables/use-projects";
 import { useSessions } from "@/composables/use-sessions";
 import { useMoveSession } from "@/composables/use-session-actions";
@@ -43,7 +42,6 @@ interface ActiveSessionDrag {
 const sessionsStore = useSessionsStore();
 const sidebarStore = useSidebarStore();
 const workspaceUiStore = useWorkspaceUiStore();
-const activityStream = useActivityStream();
 const router = useRouter();
 const pathname = useLocation({
   select: (location) => location.pathname,
@@ -102,64 +100,6 @@ interface ActivityStatusPayload {
   sessionId?: string;
   activityStatus?: string;
 }
-
-function handleSessionActivity(): void {
-  void refetchSessions();
-}
-
-function handleActivityStatus(payload: unknown): void {
-  const data = payload as { properties?: ActivityStatusPayload } | null;
-  const sessionId = data?.properties?.sessionId;
-  const activityStatus = data?.properties?.activityStatus;
-
-  if (!sessionId) {
-    return;
-  }
-
-  switch (activityStatus) {
-    case "busy":
-    case "working":
-      sessionsStore.patchSession(sessionId, {
-        activityStatus: "busy",
-        lifecycleStatus: "running",
-        sessionStatus: "active",
-      });
-      break;
-    case "delegating":
-      sessionsStore.patchSession(sessionId, {
-        activityStatus: "delegating",
-        lifecycleStatus: "running",
-        sessionStatus: "active",
-      });
-      break;
-    case "retry":
-      sessionsStore.patchSession(sessionId, {
-        activityStatus: "retry",
-        lifecycleStatus: "running",
-        sessionStatus: "active",
-      });
-      break;
-    case "idle":
-      sessionsStore.patchSession(sessionId, {
-        activityStatus: "idle",
-        lifecycleStatus: "running",
-        sessionStatus: "idle",
-      });
-      break;
-  }
-}
-
-for (const eventType of sessionActivityEvents) {
-  activityStream.on(eventType, handleSessionActivity);
-}
-activityStream.on("activity_status", handleActivityStatus);
-
-onUnmounted(() => {
-  for (const eventType of sessionActivityEvents) {
-    activityStream.off(eventType, handleSessionActivity);
-  }
-  activityStream.off("activity_status", handleActivityStatus);
-});
 
 watch(
   [pathname, sessions],
