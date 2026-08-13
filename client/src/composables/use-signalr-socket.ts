@@ -244,6 +244,7 @@ function addTopicListenerV2(
   onHistory?: HistoryCallback,
 ): Unsubscribe {
   let listeners = topicListenersV2.get(topic)
+  const isFirstSubscriber = !listeners || listeners.size === 0
 
   if (!listeners) {
     listeners = new Set<TopicV2Callback>()
@@ -257,19 +258,25 @@ function addTopicListenerV2(
   }
   listeners.add(callback)
 
-  // Increment epoch for this topic to mark a new subscription generation
-  const currentEpoch = (topicSubscriptionEpochs.get(topic) ?? 0) + 1
-  topicSubscriptionEpochs.set(topic, currentEpoch)
-
-  // If we already have a snapshot cached, deliver it immediately
-  const lastSnapshot = lastSnapshotsV2.get(topic)
-  if (lastSnapshot) {
-    onSnapshot(lastSnapshot)
+  // Only increment epoch when starting a NEW subscription generation (first subscriber)
+  // This prevents multiple concurrent subscribers from invalidating each other
+  let currentEpoch: number
+  if (isFirstSubscriber) {
+    currentEpoch = (topicSubscriptionEpochs.get(topic) ?? 0) + 1
+    topicSubscriptionEpochs.set(topic, currentEpoch)
+  } else {
+    // Adding to existing subscription generation
+    currentEpoch = topicSubscriptionEpochs.get(topic) ?? 1
+    // Deliver cached snapshot immediately to additional subscribers
+    const lastSnapshot = lastSnapshotsV2.get(topic)
+    if (lastSnapshot) {
+      onSnapshot(lastSnapshot)
+    }
   }
 
   // Subscribe to the session via SignalR, queued to ensure ordering
   // The hub expects just the session ID (not the "session:" prefixed topic)
-  if (connection?.state === HubConnectionState.Connected) {
+  if (connection?.state === HubConnectionState.Connected && isFirstSubscriber) {
     const sessionId = topic.startsWith("session:") ? topic.slice(8) : topic
     queueTopicOperation(topic, async () => {
       const snapshot = await connection!.invoke<SessionSnapshot>("SubscribeToSessionAsync", sessionId)
@@ -291,6 +298,14 @@ function addTopicListenerV2(
     currentListeners.delete(callback)
 
     if (currentListeners.size === 0 && !hasListenersForTopic(topic)) {
+      // Check if the epoch has changed since we subscribed
+      // If it has, a new subscribe has already occurred, so skip unsubscribe
+      const latestEpoch = topicSubscriptionEpochs.get(topic) ?? 0
+      if (latestEpoch !== currentEpoch) {
+        // A new subscription has occurred; don't unsubscribe
+        return
+      }
+
       topicListenersV2.delete(topic)
       lastSnapshotsV2.delete(topic)
       
@@ -298,7 +313,7 @@ function addTopicListenerV2(
         const sessionId = topic.startsWith("session:") ? topic.slice(8) : topic
         // Queue the unsubscribe to ensure it happens after any pending subscribe
         queueTopicOperation(topic, async () => {
-          // Skip unsubscribe if new listeners were added (immediate resubscribe)
+          // Double-check: skip unsubscribe if new listeners were added (immediate resubscribe)
           if (topicListenersV2.has(topic) && (topicListenersV2.get(topic)?.size ?? 0) > 0) {
             return
           }
