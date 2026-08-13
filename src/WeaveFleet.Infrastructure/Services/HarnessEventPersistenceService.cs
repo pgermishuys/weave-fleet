@@ -167,7 +167,6 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
                 {
                     merged = MessagePersistenceService.MergeTextDeltaAndMetadata(merged, entry.Value, merged.Role, merged.AgentName);
                 }
-                _deltaBuffer.ClearMessage(fleetSessionId, messageId);
 
                 await _sessionActivityWriteService.WriteAsync(
                     new SessionActivityWriteRequest
@@ -175,6 +174,7 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
                         MessagesToUpsert = [merged],
                     },
                     ct).ConfigureAwait(false);
+                _deltaBuffer.ClearMessage(fleetSessionId, messageId);
             }
             catch (Exception)
             {
@@ -260,6 +260,7 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
                 // deltas that arrived ahead of this snapshot.
                 var stub = ApplyBufferedTextDeltaIfPresent(fleetSessionId, persisted, persisted.Id, persisted.Role, persisted.AgentName);
                 await WriteDurableEventAsync(fleetSessionId, ownerUserId, evt, stub).ConfigureAwait(false);
+                _deltaBuffer.ClearMessage(fleetSessionId, persisted.Id);
                 return true;
             }
 
@@ -295,8 +296,10 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
                     || modelIdChanged)
                 {
                     await WriteDurableEventAsync(fleetSessionId, ownerUserId, evt, merged).ConfigureAwait(false);
+                    _deltaBuffer.ClearMessage(fleetSessionId, persisted.Id);
                     return true;
                 }
+                _deltaBuffer.ClearMessage(fleetSessionId, persisted.Id);
                 return false;
             }
 
@@ -487,6 +490,12 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
             CancellationToken.None).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Merges buffered text deltas into the persisted message without clearing the buffer.
+    /// Callers must call <see cref="TextDeltaBuffer.ClearMessage"/> after the merged message
+    /// has been durably written, ensuring the snapshot builder always has at least one source
+    /// of truth (either the delta buffer or the persisted row).
+    /// </summary>
     private PersistedMessage ApplyBufferedTextDeltaIfPresent(
         string fleetSessionId,
         PersistedMessage existing,
@@ -506,7 +515,6 @@ public sealed class HarnessEventPersistenceService : IHarnessEventPersister
         {
             merged = MessagePersistenceService.MergeTextDeltaAndMetadata(merged, entry.Value, role, agentName);
         }
-        _deltaBuffer.ClearMessage(fleetSessionId, messageId);
         return merged;
     }
 

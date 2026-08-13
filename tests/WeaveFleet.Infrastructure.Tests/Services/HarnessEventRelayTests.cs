@@ -918,7 +918,7 @@ public sealed class HarnessEventRelayTests
     }
 
     [Fact]
-    public async Task buffered_deltas_should_be_lost_when_flush_write_fails_after_buffer_clear_current_behavior()
+    public async Task buffered_deltas_should_survive_when_flush_write_fails()
     {
         const string fleetSessionId = "fleet-delta-disconnect-failure";
         const string userId = TestUserContext.DefaultUserId;
@@ -954,11 +954,16 @@ public sealed class HarnessEventRelayTests
 
         await persister.FlushBufferedDeltasAsync(fleetSessionId, userId, CancellationToken.None);
 
+        // Write failed (ThrowingDbConnectionFactory), so persisted message is unchanged
         var persisted = await messageRepository.GetByIdAsync(messageId, fleetSessionId);
         persisted.ShouldNotBeNull();
         persisted.PartsJson.ShouldBe("[]");
         messageRepository.UpsertCalls.ShouldBeEmpty();
-        deltaBuffer.SnapshotSession(fleetSessionId).Count.ShouldBe(0);
+
+        // Deltas survive the failed write so a future retry or snapshot can still read them
+        deltaBuffer.SnapshotSession(fleetSessionId).Count.ShouldBe(1,
+            "Deltas should be preserved when flush write fails, ensuring the snapshot " +
+            "builder can still merge them into the response");
     }
 
     [Fact]
