@@ -183,7 +183,13 @@ internal sealed class DomainEventTranslator
                 return null;
 
             _activityStatus = IdleStatus;
-            return new TurnEnded { Payload = CreateTurnEndedPayload(evt, signal) };
+            return new SessionIdled
+            {
+                Payload = new SessionIdledPayload
+                {
+                    SessionId = ResolveSessionId(evt),
+                },
+            };
         }
 
         if (string.Equals(signal.Status, BusyStatus, StringComparison.OrdinalIgnoreCase)
@@ -213,13 +219,19 @@ internal sealed class DomainEventTranslator
         return null;
     }
 
-    private TurnEnded? TranslateSessionIdle(HarnessEvent evt)
+    private SessionIdled? TranslateSessionIdle(HarnessEvent evt)
     {
         if (string.Equals(_activityStatus, IdleStatus, StringComparison.OrdinalIgnoreCase))
             return null;
 
         _activityStatus = IdleStatus;
-        return new TurnEnded { Payload = CreateTurnEndedPayload(evt, ReadTurnSignal(evt)) };
+        return new SessionIdled
+        {
+            Payload = new SessionIdledPayload
+            {
+                SessionId = ResolveSessionId(evt),
+            },
+        };
     }
 
     private static DelegationCreated? TranslateDelegationCreated(HarnessEvent evt)

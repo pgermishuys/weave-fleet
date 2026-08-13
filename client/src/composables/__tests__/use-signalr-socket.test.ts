@@ -77,7 +77,25 @@ function createSessionSnapshot(sessionId: string): SessionSnapshot {
   }
 }
 
-function createDomainEvent(type: DomainEvent["type"], eventId?: number): SessionStarted {
+/** Creates a wire-format event as the server would send it (with `properties`, not `payload`). */
+function createWireEvent(type: DomainEvent["type"], eventId?: number) {
+  return {
+    type: "session.started",
+    properties: { 
+      sessionId: "test-session", 
+      instanceId: null,
+      workspaceId: null,
+      title: "Test Session",
+      projectId: null,
+      parentSessionId: null,
+      isHidden: false,
+    },
+    ...(eventId !== undefined ? { eventId } : {}),
+  }
+}
+
+/** The expected DomainEvent shape after the socket maps properties → payload. */
+function expectedDomainEvent(type: DomainEvent["type"], eventId?: number): SessionStarted {
   const event: SessionStarted = {
     type: "session.started",
     payload: { 
@@ -342,10 +360,10 @@ describe("useSignalRSocket", () => {
       result.subscribeV2("session-1", onSnapshot, onEvent)
       await flushAll()
 
-      const eventData = { type: "session.status", properties: { status: "busy" } }
-      eventHandler?.("session-1", 10, eventData)
+      const wireEvent = { type: "session.status", properties: { status: "busy" } }
+      eventHandler?.("session-1", 10, wireEvent)
 
-      expect(onEvent).toHaveBeenCalledWith({ ...eventData, eventId: 10 })
+      expect(onEvent).toHaveBeenCalledWith({ type: "session.status", payload: { status: "busy" }, eventId: 10 })
     })
 
     it("dispatches events without eventId", async () => {
@@ -362,10 +380,10 @@ describe("useSignalRSocket", () => {
       result.subscribeV2("session-1", onSnapshot, onEvent)
       await flushAll()
 
-      const eventData = { type: "message.part.delta", properties: { delta: "text" } }
-      eventHandler?.("session-1", null, eventData)
+      const wireEvent = { type: "message.part.delta", properties: { delta: "text" } }
+      eventHandler?.("session-1", null, wireEvent)
 
-      expect(onEvent).toHaveBeenCalledWith(eventData)
+      expect(onEvent).toHaveBeenCalledWith({ type: "message.part.delta", payload: { delta: "text" } })
     })
 
     it("dispatches events to multiple subscribers", async () => {
@@ -383,11 +401,11 @@ describe("useSignalRSocket", () => {
       result.subscribeV2("session-1", vi.fn(), onEvent2)
       await flushAll()
 
-      const eventData = createDomainEvent("session.started", 10)
-      eventHandler?.("session-1", 10, eventData)
+      const wireData = createWireEvent("session.started", 10)
+      eventHandler?.("session-1", 10, wireData)
 
-      expect(onEvent1).toHaveBeenCalledWith({ ...eventData, eventId: 10 })
-      expect(onEvent2).toHaveBeenCalledWith({ ...eventData, eventId: 10 })
+      expect(onEvent1).toHaveBeenCalledWith(expectedDomainEvent("session.started", 10))
+      expect(onEvent2).toHaveBeenCalledWith(expectedDomainEvent("session.started", 10))
     })
 
     it("does not dispatch events to unrelated topics", async () => {
@@ -406,8 +424,8 @@ describe("useSignalRSocket", () => {
       result.subscribeV2("session-2", vi.fn(), onEvent2)
       await flushAll()
 
-      const eventData = createDomainEvent("session.started", 10)
-      eventHandler?.("session-1", 10, eventData)
+      const wireData = createWireEvent("session.started", 10)
+      eventHandler?.("session-1", 10, wireData)
 
       expect(onEvent1).toHaveBeenCalled()
       expect(onEvent2).not.toHaveBeenCalled()
@@ -609,9 +627,9 @@ describe("useSignalRSocket", () => {
       expect(lastCall[0]).toBe("SubscribeToSessionAsync")
 
       // Events should be received
-      const eventData = createDomainEvent("session.started", 10)
-      eventHandler?.("session-1", 10, eventData)
-      expect(onEvent2).toHaveBeenCalledWith({ ...eventData, eventId: 10 })
+      const wireData = createWireEvent("session.started", 10)
+      eventHandler?.("session-1", 10, wireData)
+      expect(onEvent2).toHaveBeenCalledWith(expectedDomainEvent("session.started", 10))
     })
 
     it("does not send unnecessary unsubscribe when resubscribing immediately", async () => {
@@ -719,9 +737,9 @@ describe("useSignalRSocket", () => {
       expect(subscribes.length).toBeGreaterThan(0)
 
       // Events should be received
-      const eventData = createDomainEvent("session.started", 10)
-      eventHandler?.("session-1", 10, eventData)
-      expect(onEvent1Final).toHaveBeenCalledWith({ ...eventData, eventId: 10 })
+      const wireData = createWireEvent("session.started", 10)
+      eventHandler?.("session-1", 10, wireData)
+      expect(onEvent1Final).toHaveBeenCalledWith(expectedDomainEvent("session.started", 10))
     })
 
     it("handles overlapping subscriptions to the same session", async () => {
@@ -751,11 +769,11 @@ describe("useSignalRSocket", () => {
       expect(mockHubConnection.invoke).not.toHaveBeenCalledWith("UnsubscribeFromSessionAsync", "session-1")
 
       // Events should still be received by second subscription
-      const eventData = createDomainEvent("session.started", 10)
-      eventHandler?.("session-1", 10, eventData)
+      const wireData = createWireEvent("session.started", 10)
+      eventHandler?.("session-1", 10, wireData)
       
       expect(onEvent1).not.toHaveBeenCalled() // First subscription is gone
-      expect(onEvent2).toHaveBeenCalledWith({ ...eventData, eventId: 10 }) // Second still active
+      expect(onEvent2).toHaveBeenCalledWith(expectedDomainEvent("session.started", 10)) // Second still active
 
       // Now unsubscribe the second one
       unsub2()

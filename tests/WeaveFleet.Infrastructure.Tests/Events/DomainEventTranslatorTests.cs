@@ -366,7 +366,7 @@ public sealed class DomainEventTranslatorTests
     }
 
     [Fact]
-    public void Should_emit_turn_ended_when_session_idle_signal_arrives()
+    public void Should_emit_session_idled_when_session_idle_signal_arrives()
     {
         var translator = CreateTranslator();
 
@@ -379,28 +379,6 @@ public sealed class DomainEventTranslatorTests
             Payload = JsonSerializer.SerializeToElement(new { status = new { type = "busy" } })
         });
 
-        _ = translator.Translate(new HarnessEvent
-        {
-            Type = EventTypes.MessageUpdated,
-            SessionId = "harness-1",
-            FleetSessionId = "fleet-1",
-            Timestamp = DateTimeOffset.UtcNow,
-            Payload = JsonSerializer.SerializeToElement(new
-            {
-                info = new
-                {
-                    id = "msg-11",
-                    role = "assistant",
-                    sessionID = "harness-1",
-                    agent = "loom",
-                    modelID = "anthropic/claude-sonnet-4-5",
-                    time = new { created = 1_700_000_010_000L, completed = 1_700_000_010_999L },
-                    cost = 0.7,
-                    tokens = new { input = 12, output = 24, reasoning = 6 }
-                }
-            })
-        });
-
         var result = translator.Translate(new HarnessEvent
         {
             Type = EventTypes.SessionIdle,
@@ -409,17 +387,12 @@ public sealed class DomainEventTranslatorTests
             Timestamp = DateTimeOffset.UtcNow
         });
 
-        var ended = result.ShouldBeOfType<TurnEnded>();
-        ended.Payload.SessionId.ShouldBe("fleet-1");
-        ended.Payload.MessageId.ShouldBe("msg-11");
-        ended.Payload.Cost.ShouldBe(0.7);
-        ended.Payload.Tokens.ShouldNotBeNull();
-        ended.Payload.Tokens.Output.ShouldBe(24);
-        ended.Payload.CompletedAt.ShouldBe(1_700_000_010_999L);
+        var idled = result.ShouldBeOfType<SessionIdled>();
+        idled.Payload.SessionId.ShouldBe("fleet-1");
     }
 
     [Fact]
-    public void Should_emit_turn_ended_when_session_status_idle_arrives()
+    public void Should_emit_session_idled_when_session_status_idle_arrives()
     {
         var translator = CreateTranslator();
 
@@ -453,17 +426,12 @@ public sealed class DomainEventTranslatorTests
             })
         });
 
-        var ended = result.ShouldBeOfType<TurnEnded>();
-        ended.Payload.MessageId.ShouldBe("msg-12");
-        ended.Payload.Index.ShouldBe(3);
-        ended.Payload.Reason.ShouldBe("completed");
-        ended.Payload.Cost.ShouldBe(1.2);
-        ended.Payload.Tokens.ShouldNotBeNull();
-        ended.Payload.Tokens.Input.ShouldBe(5);
+        var idled = result.ShouldBeOfType<SessionIdled>();
+        idled.Payload.SessionId.ShouldBe("fleet-1");
     }
 
     [Fact]
-    public void should_emit_exactly_one_turn_ended_for_no_tool_turn_when_both_idle_signals_arrive()
+    public void should_emit_exactly_one_session_idled_when_both_idle_signals_arrive()
     {
         var translator = CreateTranslator();
 
@@ -502,18 +470,16 @@ public sealed class DomainEventTranslatorTests
         });
 
         started.ShouldBeOfType<TurnStarted>();
-        var endedEvents = new[] { statusIdle, sessionIdle }
-            .OfType<TurnEnded>()
+        var idledEvents = new[] { statusIdle, sessionIdle }
+            .OfType<SessionIdled>()
             .ToArray();
 
-        endedEvents.Length.ShouldBe(1);
-        endedEvents[0].Payload.SessionId.ShouldBe("fleet-1");
-        endedEvents[0].Payload.MessageId.ShouldBe("msg-no-tool");
-        endedEvents[0].Payload.Index.ShouldBe(4);
+        idledEvents.Length.ShouldBe(1);
+        idledEvents[0].Payload.SessionId.ShouldBe("fleet-1");
     }
 
     [Fact]
-    public void should_not_emit_turn_ended_for_idle_signal_without_active_turn()
+    public void should_not_emit_session_idled_for_idle_signal_when_already_idle()
     {
         var translator = CreateTranslator();
 

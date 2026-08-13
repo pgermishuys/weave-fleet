@@ -271,15 +271,19 @@ describe("useSignalRSocket V2 — desired behavior after rapid session switching
     await flushAll()
 
     // Now events arrive (agent still streaming)
-    const streamEvent: DomainEvent = {
+    const wireEvent = {
+      type: "message.part.delta.streamed",
+      properties: { sessionID: "session-1", messageID: "msg-2", partID: "part-2", field: "text", delta: "more text" },
+      eventId: 11,
+    }
+    eventHandler?.("session-1", 11, wireEvent)
+    await flushAll()
+
+    expect(onEvent_C).toHaveBeenCalledWith({
       type: "message.part.delta.streamed",
       payload: { sessionID: "session-1", messageID: "msg-2", partID: "part-2", field: "text", delta: "more text" },
       eventId: 11,
-    }
-    eventHandler?.("session-1", 11, streamEvent)
-    await flushAll()
-
-    expect(onEvent_C).toHaveBeenCalledWith({ ...streamEvent, eventId: 11 })
+    })
 
     // Now the STALE first subscribe resolves (late arrival)
     const staleSnapshot = createSessionSnapshot("session-1", "")
@@ -377,12 +381,12 @@ describe("useSignalRSocket V2 — desired behavior after rapid session switching
     await flushAll()
 
     // Events arrive for the topic after unsubscribe
-    const event: DomainEvent = {
+    const wireEvent = {
       type: "session.idled",
-      payload: { sessionId: "session-1" },
+      properties: { sessionId: "session-1" },
       eventId: 10,
     }
-    eventHandler?.("session-1", 10, event)
+    eventHandler?.("session-1", 10, wireEvent)
 
     // CORRECT BEHAVIOR: The old callback should NOT be called after unsubscribe
     expect(onEvent_old).not.toHaveBeenCalled()

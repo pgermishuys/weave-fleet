@@ -120,8 +120,14 @@ async function connect(): Promise<void> {
   // Register event handler for incoming events
   hubConnection.on("Event", (topic: string, eventId: number | null, data: unknown) => {
     if (topicListenersV2.has(topic)) {
-      const domainEvent = data as DomainEvent
-      dispatchEventV2(topic, eventId === null ? domainEvent : { ...domainEvent, eventId })
+      // Wire format uses "properties" but DomainEvent uses "payload" — map the field
+      const wireEvent = data as { type: string; eventId?: number | null; properties?: unknown }
+      const domainEvent = {
+        type: wireEvent.type,
+        payload: wireEvent.properties,
+        ...(eventId !== null ? { eventId } : {}),
+      } as DomainEvent
+      dispatchEventV2(topic, domainEvent)
     }
   })
 
