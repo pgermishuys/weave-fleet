@@ -23,7 +23,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { HubConnectionState } from "@microsoft/signalr"
 import type { SessionSnapshot } from "@/lib/session-snapshot"
-import type { DomainEvent } from "@/lib/domain-events"
 import { flushAll, mountComposable } from "./test-utils"
 
 // Mock HubConnection
