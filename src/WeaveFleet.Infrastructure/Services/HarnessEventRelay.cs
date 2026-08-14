@@ -114,7 +114,7 @@ public sealed class HarnessEventRelay : BackgroundService
             if (tasks.Length > 0)
             {
                 var allPumps = Task.WhenAll(tasks);
-                var winner = await Task.WhenAny(allPumps, Task.Delay(TimeSpan.FromSeconds(10), CancellationToken.None))
+                var winner = await Task.WhenAny(allPumps, Task.Delay(TimeSpan.FromSeconds(3), CancellationToken.None))
                     .ConfigureAwait(false);
 
                 if (winner != allPumps)

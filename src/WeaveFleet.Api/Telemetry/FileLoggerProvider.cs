@@ -8,7 +8,7 @@ namespace WeaveFleet.Api.Telemetry;
 /// An <see cref="ILoggerProvider"/> that writes log entries to daily rolling plain-text files.
 /// Fully AOT/trimming compatible — no reflection, no dynamic code.
 /// </summary>
-internal sealed class FileLoggerProvider : ILoggerProvider
+internal sealed class FileLoggerProvider : ILoggerProvider, IAsyncDisposable
 {
     private readonly string _logDirectory;
     private readonly string _filePrefix;
@@ -109,9 +109,27 @@ internal sealed class FileLoggerProvider : ILoggerProvider
 
         _cts.Cancel();
         _channel.Writer.TryComplete();
+        _cts.Dispose();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        _cts.Cancel();
+        _channel.Writer.TryComplete();
 
         // Wait (with timeout) for the drain task to finish flushing.
-        _drainTask.Wait(TimeSpan.FromSeconds(5));
+        try
+        {
+            await _drainTask.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        catch (TimeoutException)
+        {
+            // Drain task didn't complete within timeout — proceed with shutdown.
+        }
+
         _cts.Dispose();
     }
 }
