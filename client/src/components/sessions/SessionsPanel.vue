@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { computed, reactive, shallowRef, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
-import { LoaderCircle, Plus, Search } from "lucide-vue-next";
+import { Check, LoaderCircle, Plus, Search } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import type { CreateSessionResponse, SessionListItem } from "@/api/client";
 import { useProjects } from "@/composables/use-projects";
 import { useSessions } from "@/composables/use-sessions";
-import { useMoveSession } from "@/composables/use-session-actions";
+import { useArchiveSession, useMoveSession } from "@/composables/use-session-actions";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { Button } from "@/components/ui/button";
+import ConfirmCompleteSessionDialog from "./ConfirmCompleteSessionDialog.vue";
 import NewProjectDialog from "./NewProjectDialog.vue";
 import NewSessionDialog from "./NewSessionDialog.vue";
 import ProjectGroup from "./ProjectGroup.vue";
@@ -48,6 +49,7 @@ const pathname = useLocation({
 });
 
 const { moveSession } = useMoveSession();
+const { archiveSession, isArchiving } = useArchiveSession();
 
 const { activeSessionId, retentionStatus } = storeToRefs(sessionsStore);
 const {
@@ -347,6 +349,9 @@ function handleSessionSelect(session: SessionListItem): void {
 const dragAnnouncement = shallowRef("");
 const isDragMovePending = shallowRef(false);
 const activeSessionDrag = shallowRef<ActiveSessionDrag | null>(null);
+const isCompleteDropZoneHovered = shallowRef(false);
+const pendingCompleteSessionId = shallowRef<string | null>(null);
+const isCompleteDialogOpen = shallowRef(false);
 
 function handleSessionDragStart(sessionId: string, projectId: string | null): void {
   const sessionExists = sessionsStore.sessions.some((session) => session.session.id === sessionId);
@@ -425,6 +430,107 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
   }
 }
 
+function handleCompleteDropZoneDragOver(event: DragEvent): void {
+  if (!activeSessionDrag.value) {
+    return;
+  }
+
+  event.preventDefault();
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = "move";
+  }
+}
+
+function handleCompleteDropZoneDragEnter(): void {
+  if (activeSessionDrag.value) {
+    isCompleteDropZoneHovered.value = true;
+  }
+}
+
+function handleCompleteDropZoneDragLeave(): void {
+  if (activeSessionDrag.value) {
+    isCompleteDropZoneHovered.value = false;
+  }
+}
+
+function handleCompleteDropZoneDrop(event: DragEvent): void {
+  isCompleteDropZoneHovered.value = false;
+
+  if (!activeSessionDrag.value) {
+    return;
+  }
+
+  event.preventDefault();
+
+  const sessionId = activeSessionDrag.value.sessionId;
+  const session = sessionsStore.sessions.find((s) => s.session.id === sessionId);
+
+  if (!session) {
+    activeSessionDrag.value = null;
+    return;
+  }
+
+  // Open the confirmation dialog
+  pendingCompleteSessionId.value = sessionId;
+  isCompleteDialogOpen.value = true;
+
+  // Clear drag state
+  activeSessionDrag.value = null;
+}
+
+async function handleCompleteConfirm(deleteWorktree: boolean): Promise<void> {
+  const sessionId = pendingCompleteSessionId.value;
+  if (!sessionId) {
+    return;
+  }
+
+  const session = sessionsStore.sessions.find((s) => s.session.id === sessionId);
+  if (!session) {
+    isCompleteDialogOpen.value = false;
+    pendingCompleteSessionId.value = null;
+    return;
+  }
+
+  try {
+    await archiveSession(sessionId);
+    sessionsStore.patchSession(sessionId, { retentionStatus: "archived" });
+
+    const sessionTitle = session.session.title ?? "Session";
+    dragAnnouncement.value = `Completed ${sessionTitle}`;
+
+    // Navigate away if the completed session was active
+    if (activeSessionId.value === sessionId) {
+      const remainingSessions = sessions.value.filter((s) => s.session.id !== sessionId);
+      if (remainingSessions.length > 0) {
+        void router.navigate({
+          to: "/sessions/$id",
+          params: { id: remainingSessions[0].session.id },
+          search: {
+            instanceId: remainingSessions[0].instanceId,
+            parentSessionId: undefined,
+          },
+        });
+      } else {
+        void router.navigate({ to: "/" });
+      }
+    }
+
+    // TODO: if deleteWorktree, call backend to remove the worktree
+    void deleteWorktree;
+
+    isCompleteDialogOpen.value = false;
+    pendingCompleteSessionId.value = null;
+  } catch {
+    // Errors are handled by the mutation composable state
+    dragAnnouncement.value = "Failed to complete session";
+  }
+}
+
+function handleCompleteCancel(): void {
+  isCompleteDialogOpen.value = false;
+  pendingCompleteSessionId.value = null;
+}
+
 </script>
 
 <template>
@@ -437,6 +543,15 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
   <NewProjectDialog
     v-model:open="isNewProjectDialogOpen"
     @created="handleProjectCreated"
+  />
+  <ConfirmCompleteSessionDialog
+    v-model:open="isCompleteDialogOpen"
+    :session-id="pendingCompleteSessionId ?? ''"
+    :session-title="sessionsStore.sessions.find((s) => s.session.id === pendingCompleteSessionId)?.session.title ?? 'Session'"
+    :has-worktree="sessionsStore.sessions.find((s) => s.session.id === pendingCompleteSessionId)?.isolationStrategy === 'worktree'"
+    :is-archiving="isArchiving"
+    @confirm="handleCompleteConfirm"
+    @cancel="handleCompleteCancel"
   />
 
   <section
@@ -571,6 +686,28 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
           Try a different search term or clear the filter.
         </p>
       </div>
+
+      <!-- Complete drop zone -->
+      <Transition name="complete-drop-zone">
+        <div
+          v-if="activeSessionDrag"
+          class="complete-drop-zone"
+          :class="{ 'complete-drop-zone--hovered': isCompleteDropZoneHovered }"
+          role="button"
+          aria-label="Drop session here to complete and archive it"
+          :aria-dropeffect="isCompleteDropZoneHovered ? 'move' : 'none'"
+          @dragover="handleCompleteDropZoneDragOver"
+          @dragenter="handleCompleteDropZoneDragEnter"
+          @dragleave="handleCompleteDropZoneDragLeave"
+          @drop="handleCompleteDropZoneDrop"
+        >
+          <Check
+            class="complete-drop-zone__icon"
+            aria-hidden="true"
+          />
+          <span class="complete-drop-zone__label">Complete</span>
+        </div>
+      </Transition>
     </div>
 
     <!-- Screen reader live region for drag-and-drop announcements -->
@@ -818,5 +955,52 @@ async function handleMoveSession(sessionId: string, targetProjectId: string | nu
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+.complete-drop-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 16px;
+  border: 2px dashed var(--muted);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.complete-drop-zone__icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.complete-drop-zone__label {
+  user-select: none;
+}
+
+.complete-drop-zone--hovered {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.08);
+  color: var(--accent);
+}
+
+.complete-drop-zone-enter-active,
+.complete-drop-zone-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.complete-drop-zone-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.complete-drop-zone-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 </style>
