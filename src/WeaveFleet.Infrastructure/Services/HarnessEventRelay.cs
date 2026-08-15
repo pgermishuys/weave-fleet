@@ -32,11 +32,9 @@ internal sealed record ParsedActivityStatus(
 ///     classification requires it, so unsanitized reasoning never reaches event bus subscribers.</item>
 ///   <item>Publishes every <see cref="HarnessEvent"/> via <see cref="IEventPublisher"/>
 ///     with an internal per-pump monotonic dedup key.</item>
-///   <item>On disconnect: flushes any buffered text deltas through the persister and emits a
-///     final idle broadcast on the global <c>sessions</c> topic.</item>
+///   <item>On disconnect: emits a final idle broadcast on the global <c>sessions</c> topic.</item>
 /// </list>
-/// The relay is publish-only — durable persistence is handled downstream by
-/// <c>MessagePersistenceProjection</c>, and WebSocket fan-out for every event is handled by
+/// The relay is publish-only — WebSocket fan-out for every event is handled by
 /// <c>InProcessFanOutService</c>.
 /// </summary>
 public sealed class HarnessEventRelay : BackgroundService
@@ -231,7 +229,7 @@ public sealed class HarnessEventRelay : BackgroundService
                 HarnessEvent eventToPublish = evt;
                 if (classification.RequiresReasoningFilter)
                 {
-                    var filteredPayload = MessagePersistenceService.SanitizeDurableEventPayload(evt.Type, evt.Payload);
+                    var filteredPayload = ReasoningFilter.SanitizeEventPayload(evt.Type, evt.Payload);
                     if (filteredPayload is null)
                         continue;
                     eventToPublish = evt with { Payload = filteredPayload };
@@ -333,23 +331,6 @@ public sealed class HarnessEventRelay : BackgroundService
             {
                 cts.Cancel();
                 cts.Dispose();
-            }
-
-            // Flush buffered text deltas through the persister so partial streaming content
-            // is not lost when the harness disconnects or crashes.
-            if (sessionUserId is not null)
-            {
-                try
-                {
-                    using var scope = _scopeFactory.CreateScope();
-                    var persister = scope.ServiceProvider.GetRequiredService<IHarnessEventPersister>();
-                    await persister.FlushBufferedDeltasAsync(fleetSessionId, sessionUserId, CancellationToken.None)
-                        .ConfigureAwait(false);
-                }
-                catch (Exception)
-                {
-                    // Best-effort flush — never crash the pump cleanup
-                }
             }
 
             // Clear activity state and broadcast idle so the UI doesn't show a session stuck

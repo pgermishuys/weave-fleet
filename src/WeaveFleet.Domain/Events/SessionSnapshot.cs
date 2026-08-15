@@ -57,6 +57,12 @@ public sealed record SessionSnapshot
     /// When present, this should identify the oldest included message.
     /// </summary>
     public string? Cursor { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether this snapshot is partial due to unavailability of the live harness.
+    /// When <c>true</c>, messages may be incomplete or stale, and the client should show a degraded state indicator.
+    /// </summary>
+    public bool IsPartial { get; init; }
 }
 
 /// <summary>

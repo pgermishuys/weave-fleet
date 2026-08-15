@@ -51,13 +51,13 @@ public sealed class SessionSnapshotBuilder(
             throw new InvalidOperationException($"Session '{sessionId}' was not found.");
 
         var beforeMessageId = DecodeCursor(cursor);
-        string? cursorCreatedAt = null;
+        string? cursorTimestamp = null;
 
         if (beforeMessageId is not null)
         {
-            cursorCreatedAt = await connection.ExecuteScalarAsync<string>(
+            cursorTimestamp = await connection.ExecuteScalarAsync<string>(
                 """
-                SELECT m.created_at
+                SELECT m.timestamp
                 FROM messages m
                 INNER JOIN sessions s ON s.id = m.session_id
                 WHERE m.session_id = @SessionId
@@ -73,7 +73,7 @@ public sealed class SessionSnapshotBuilder(
                 },
                 transaction).ConfigureAwait(false);
 
-            if (cursorCreatedAt is null)
+            if (cursorTimestamp is null)
                 throw new ArgumentException("Cursor is invalid or expired.", nameof(cursor));
         }
 
@@ -85,18 +85,18 @@ public sealed class SessionSnapshotBuilder(
             WHERE m.session_id = @SessionId
               AND s.user_id = @UserId
               AND (
-                    @CursorCreatedAt IS NULL
-                    OR m.created_at < @CursorCreatedAt
-                    OR (m.created_at = @CursorCreatedAt AND m.id < @CursorId)
+                    @CursorTimestamp IS NULL
+                    OR m.timestamp < @CursorTimestamp
+                    OR (m.timestamp = @CursorTimestamp AND m.id < @CursorId)
                   )
-            ORDER BY m.created_at DESC, m.id DESC
+            ORDER BY m.id DESC
             LIMIT @Limit
             """,
             cmd =>
             {
                 cmd.AddParameter("SessionId", sessionId);
                 cmd.AddParameter("UserId", userContext.UserId);
-                cmd.AddParameter("CursorCreatedAt", cursorCreatedAt);
+                cmd.AddParameter("CursorTimestamp", cursorTimestamp);
                 cmd.AddParameter("CursorId", beforeMessageId);
                 cmd.AddParameter("Limit", checked(pageSize + 1));
             },
@@ -163,6 +163,7 @@ public sealed class SessionSnapshotBuilder(
             LastEventId = lastEventId,
             HasMore = hasMore,
             Cursor = hasMore && messageRows.Count > 0 ? EncodeCursor(messageRows[0].Id) : null,
+            IsPartial = false, // Database snapshot is complete
         };
     }
 
@@ -271,7 +272,7 @@ public sealed class SessionSnapshotBuilder(
                 ModelId = message.ModelId,
                 Time = new MessageEventTime
                 {
-                    Created = ParseUnixTimeMilliseconds(message.CreatedAt),
+                    Created = ParseUnixTimeMilliseconds(message.Timestamp),
                     Completed = completedAt,
                 },
                 Cost = totalCost > 0 ? totalCost : null,

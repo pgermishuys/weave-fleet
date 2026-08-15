@@ -207,6 +207,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             Parts = parts,
             Agent = options?.Agent,
             Model = modelRef,
+            MessageId = options?.MessageId,
         };
 
         LogSendPrompt(_logger, InstanceId, null);

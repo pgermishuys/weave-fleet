@@ -457,6 +457,8 @@ internal sealed record OpenCodePromptRequest
     [JsonPropertyName("format")] public string? Format { get; init; }
     [JsonPropertyName("system")] public string? System { get; init; }
     [JsonPropertyName("variant")] public string? Variant { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonPropertyName("messageID")] public string? MessageId { get; init; }
 }
 
 /// <summary>Polymorphic prompt part (discriminated by "type").</summary>
