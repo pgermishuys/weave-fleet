@@ -14,6 +14,7 @@ using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Identity;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Services;
@@ -34,10 +35,8 @@ public sealed partial class SessionOrchestrator(
     IDelegationRepository delegationRepository,
     IProjectRepository projectRepository,
     IEventBroadcaster eventBroadcaster,
-    IEventPublisher eventPublisher,
     IAnalyticsCollector analyticsCollector,
-    IMessageRepository messageRepository,
-    IHarnessEventLogRepository harnessEventLogRepository,
+    ISessionMessageProxy sessionMessageProxy,
     DelegationService delegationService,
     ICredentialStore credentialStore,
     IUserPreferenceRepository userPreferenceRepository,
@@ -47,25 +46,11 @@ public sealed partial class SessionOrchestrator(
     SessionActivityTracker sessionActivityTracker,
     ILogger<SessionOrchestrator> logger,
     SessionActivityWriteService? sessionActivityWriteService = null,
-    GitDiffService? gitDiffService = null)
+    GitDiffService? gitDiffService = null) : ISessionActivator
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _activationLocks = new();
-
-    private sealed class NoOpHarnessEventLogRepository : IHarnessEventLogRepository
-    {
-        public Task<long> AppendAsync(System.Data.IDbConnection connection, System.Data.IDbTransaction? transaction, HarnessEventLogEntry entry)
-            => Task.FromResult(0L);
-
-        public Task<long> AppendAsync(HarnessEventLogEntry entry) => Task.FromResult(0L);
-
-        public Task<IReadOnlyList<HarnessEventLogEntry>> GetBySessionAfterEventIdAsync(string sessionId, long afterEventId, int limit)
-            => Task.FromResult<IReadOnlyList<HarnessEventLogEntry>>([]);
-
-        public Task<IReadOnlyList<HarnessEventLogEntry>> GetBySessionAfterAsync(string sessionId, long afterSequenceNumber, int limit)
-            => Task.FromResult<IReadOnlyList<HarnessEventLogEntry>>([]);
-    }
 
     private sealed class NoOpUserPreferenceRepository : IUserPreferenceRepository
     {
@@ -75,21 +60,6 @@ public sealed partial class SessionOrchestrator(
             => Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>());
 
         public Task SetAsync(string key, string value) => Task.CompletedTask;
-    }
-
-    private sealed class PromptEventPublisherFallback(IEventBroadcaster broadcaster) : IEventPublisher
-    {
-        public async Task<PublishResult> PublishAsync(HarnessEvent evt, EventPublishContext context, CancellationToken ct)
-        {
-            await broadcaster.BroadcastAsync(
-                $"session:{context.FleetSessionId}",
-                evt.Type,
-                evt.Payload ?? JsonDocument.Parse("{}").RootElement.Clone(),
-                context.UserId,
-                ct).ConfigureAwait(false);
-
-            return new PublishResult(EventId: null, IsDuplicate: false);
-        }
     }
 
     public SessionOrchestrator(
@@ -105,7 +75,7 @@ public sealed partial class SessionOrchestrator(
         IProjectRepository projectRepository,
         IEventBroadcaster eventBroadcaster,
         IAnalyticsCollector analyticsCollector,
-        IMessageRepository messageRepository,
+        ISessionMessageProxy sessionMessageProxy,
         DelegationService delegationService,
         ICredentialStore credentialStore,
         IUserPreferenceRepository userPreferenceRepository,
@@ -125,10 +95,8 @@ public sealed partial class SessionOrchestrator(
             delegationRepository,
             projectRepository,
             eventBroadcaster,
-            new PromptEventPublisherFallback(eventBroadcaster),
             analyticsCollector,
-            messageRepository,
-            new NoOpHarnessEventLogRepository(),
+            sessionMessageProxy,
             delegationService,
             credentialStore,
             userPreferenceRepository,
@@ -154,7 +122,7 @@ public sealed partial class SessionOrchestrator(
         IProjectRepository projectRepository,
         IEventBroadcaster eventBroadcaster,
         IAnalyticsCollector analyticsCollector,
-        IMessageRepository messageRepository,
+        ISessionMessageProxy sessionMessageProxy,
         DelegationService delegationService,
         ICredentialStore credentialStore,
         IUserContext userContext,
@@ -173,10 +141,8 @@ public sealed partial class SessionOrchestrator(
             delegationRepository,
             projectRepository,
             eventBroadcaster,
-            new PromptEventPublisherFallback(eventBroadcaster),
             analyticsCollector,
-            messageRepository,
-            new NoOpHarnessEventLogRepository(),
+            sessionMessageProxy,
             delegationService,
             credentialStore,
             new NoOpUserPreferenceRepository(),
@@ -449,14 +415,12 @@ public sealed partial class SessionOrchestrator(
         });
         LogSessionCreated(session.Id, workspace.Id, harnessInstance.InstanceId);
 
-        // Persist initial prompt as a user message (server-authoritative).
+        // Broadcast initial prompt for optimistic UI update.
         // The harness runtime calls SendPromptAsync directly, bypassing PromptSessionAsync.
         if (initialPrompt is not null)
         {
             var userMsg = MessagePersistenceService.CreateUserPromptMessage(initialPrompt, DateTimeOffset.UtcNow);
-            var persistedMsg = MessagePersistenceService.ToPersistedMessage(sessionId, userMsg);
-            await messageRepository.UpsertAsync(persistedMsg);
-            await BroadcastPersistedUserMessageAsync(sessionId, persistedMsg, ct).ConfigureAwait(false);
+            await BroadcastUserMessageAsync(sessionId, userMsg, ct).ConfigureAwait(false);
         }
 
         // Emit analytics snapshot for the new session
@@ -834,7 +798,10 @@ public sealed partial class SessionOrchestrator(
 
         try
         {
-            // Persist user message at send time (server-authoritative).
+            // Generate ascending message ID for the user prompt.
+            var generatedMessageId = AscendingMessageId.New();
+            
+            // Broadcast user message for optimistic UI update.
             // The harness echo is suppressed in HarnessEventPersistenceService to avoid duplicates.
             var effectiveCorrelationId = string.IsNullOrWhiteSpace(correlationId)
                 ? Guid.NewGuid().ToString()
@@ -843,28 +810,21 @@ public sealed partial class SessionOrchestrator(
                 text,
                 DateTimeOffset.UtcNow,
                 options?.Agent,
-                string.IsNullOrWhiteSpace(userMessageId) ? effectiveCorrelationId : userMessageId,
+                generatedMessageId,
                 options?.Attachments);
-            var persisted = MessagePersistenceService.ToPersistedMessage(id, userMsg);
 
-            var publishResult = await PublishUserPromptEventAsync(
-                id,
-                sessionResult.Value.ProjectId,
-                sessionResult.Value.HarnessType,
-                persisted,
-                effectiveCorrelationId,
-                ct).ConfigureAwait(false);
-
-            if (publishResult.IsDuplicate)
-                return new PromptSessionResult(publishResult.EventId, effectiveCorrelationId);
-
-            await messageRepository.UpsertAsync(persisted);
+            await BroadcastUserMessageAsync(id, userMsg, effectiveCorrelationId, ct).ConfigureAwait(false);
 
             // Ensure the event subscription is established before sending the prompt.
             // This prevents early events from being lost during activation/resume.
             await EnsureEventSubscriptionReadyAsync(instanceResult.Value, id, ct).ConfigureAwait(false);
 
-            await instanceResult.Value.SendPromptAsync(text, options, ct);
+            // Pass the generated message ID through to the harness.
+            var promptOptionsWithMessageId = options is null
+                ? new PromptOptions { MessageId = generatedMessageId }
+                : options with { MessageId = generatedMessageId };
+
+            await instanceResult.Value.SendPromptAsync(text, promptOptionsWithMessageId, ct);
 
             // Persist the model selection so a SPA refresh (which loses local state) can
             // fall back to it on the next prompt instead of silently using the harness
@@ -876,7 +836,7 @@ public sealed partial class SessionOrchestrator(
                 await sessionRepository.UpdateSelectedModelAsync(id, providerId, modelId);
             }
 
-            return new PromptSessionResult(publishResult.EventId, effectiveCorrelationId);
+            return new PromptSessionResult(EventId: null, effectiveCorrelationId);
         }
         catch (InvalidOperationException ex)
         {
@@ -1078,11 +1038,9 @@ public sealed partial class SessionOrchestrator(
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 
-        // Persist user command message at send time (server-authoritative).
+        // Broadcast user command message for optimistic UI update.
         var userMsg = MessagePersistenceService.CreateUserCommandMessage(options, DateTimeOffset.UtcNow);
-        var persisted = MessagePersistenceService.ToPersistedMessage(id, userMsg);
-        await messageRepository.UpsertAsync(persisted);
-        await BroadcastPersistedUserMessageAsync(id, persisted, ct).ConfigureAwait(false);
+        await BroadcastUserMessageAsync(id, userMsg, ct).ConfigureAwait(false);
 
         await instanceResult.Value.SendCommandAsync(options, ct);
         return Unit.Value;
@@ -1109,82 +1067,101 @@ public sealed partial class SessionOrchestrator(
         MessageQuery? query,
         CancellationToken ct)
     {
-        _ = ct; // cancellation supported by caller; DB ops are fast
         var limit = query?.Limit ?? options.HistoryMessagePageSize;
+        var before = query?.Before;
 
-        // Request limit + 1 to determine hasMore
-        var rows = await messageRepository.GetBySessionAsync(sessionId, limit + 1, query?.Before);
-
-        var hasMore = rows.Count > limit;
-        var pageRows = hasMore ? rows.Skip(rows.Count - limit).ToList() : (IReadOnlyList<PersistedMessage>)rows;
-
-        var messages = MessagePersistenceService.ToHarnessMessages(pageRows);
-        return Result.Success(new MessagePage(messages, hasMore));
+        try
+        {
+            // Delegate to the proxy, which will fetch from opencode if available,
+            // or fall back to persisted messages if the harness is unavailable.
+            return await sessionMessageProxy.GetMessagesAsync(sessionId, limit, before, ct);
+        }
+        catch (Exception ex)
+        {
+            LogProxyMessageFetchFailed(ex, sessionId);
+            // Return empty result on failure (503-equivalent behavior)
+            return Result.Success(new MessagePage([], false));
+        }
     }
 
-    private async Task BroadcastPersistedUserMessageAsync(
+    private async Task BroadcastUserMessageAsync(
         string sessionId,
-        PersistedMessage persisted,
+        HarnessMessage message,
         CancellationToken ct)
     {
-        if (persisted.Role is not "user")
+        if (message.Role is not "user")
             return;
+
+        var parts = new List<JsonElement>(message.Parts.Count);
+        for (var index = 0; index < message.Parts.Count; index++)
+        {
+            var partPayload = MessagePersistenceService.BuildCommittedMessagePartPayload(
+                message.Id,
+                sessionId,
+                message.Parts[index],
+                index);
+            if (partPayload.HasValue)
+                parts.Add(partPayload.Value);
+        }
+
+        var payload = JsonSerializer.SerializeToElement(new CommittedMessage(
+            new CommittedMessageInfo(
+                message.Id,
+                message.Role,
+                sessionId,
+                message.Agent,
+                message.ModelId,
+                new CommittedMessageTime(message.Timestamp.ToUnixTimeMilliseconds())),
+            parts),
+            ApplicationJsonContext.Default.CommittedMessage);
 
         await eventBroadcaster.BroadcastAsync(
             $"session:{sessionId}",
             EventTypes.MessageUpdated,
-            MessagePersistenceService.BuildCommittedMessagePayload(persisted),
+            payload,
             userContext.UserId,
             ct).ConfigureAwait(false);
     }
 
-    private async Task<PublishResult> PublishUserPromptEventAsync(
+    private async Task BroadcastUserMessageAsync(
         string sessionId,
-        string? projectId,
-        string? harnessType,
-        PersistedMessage persisted,
+        HarnessMessage message,
         string correlationId,
         CancellationToken ct)
     {
-        var payload = MessagePersistenceService.BuildCommittedMessagePayload(persisted, correlationId);
-        var evt = new HarnessEvent
-        {
-            Type = EventTypes.UserPromptCommitted,
-            SessionId = sessionId,
-            FleetSessionId = sessionId,
-            Timestamp = DateTimeOffset.UtcNow,
-            Payload = payload,
-        };
+        if (message.Role is not "user")
+            return;
 
-        var result = await eventPublisher.PublishAsync(
-            evt,
-            new EventPublishContext(
+        var parts = new List<JsonElement>(message.Parts.Count);
+        for (var index = 0; index < message.Parts.Count; index++)
+        {
+            var partPayload = MessagePersistenceService.BuildCommittedMessagePartPayload(
+                message.Id,
                 sessionId,
-                projectId,
-                userContext.UserId,
-                harnessType,
-                InternalPumpDedupKey: 0)
-            {
-                CorrelationId = correlationId,
-                TraceContext = Activity.Current?.Context,
-            },
-            ct).ConfigureAwait(false);
-
-        if (result.EventId is { } eventId)
-        {
-            await harnessEventLogRepository.AppendAsync(new HarnessEventLogEntry
-            {
-                SessionId = sessionId,
-                EventId = eventId,
-                SequenceNumber = eventId,
-                Type = EventTypes.UserPromptCommitted,
-                Payload = payload.GetRawText(),
-                UserId = userContext.UserId,
-                CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
-            }).ConfigureAwait(false);
+                message.Parts[index],
+                index);
+            if (partPayload.HasValue)
+                parts.Add(partPayload.Value);
         }
 
-        return result;
+        var payload = JsonSerializer.SerializeToElement(new CommittedUserPromptMessage(
+            new CommittedMessageInfo(
+                message.Id,
+                message.Role,
+                sessionId,
+                message.Agent,
+                message.ModelId,
+                new CommittedMessageTime(message.Timestamp.ToUnixTimeMilliseconds())),
+            parts,
+            correlationId),
+            ApplicationJsonContext.Default.CommittedUserPromptMessage);
+
+        await eventBroadcaster.BroadcastAsync(
+            $"session:{sessionId}",
+            EventTypes.MessageUpdated,
+            payload,
+            userContext.UserId,
+            ct).ConfigureAwait(false);
     }
 
     private static string? BuildCreateSessionInitialPrompt(string? initialPrompt, ContextEnvelope? contextEnvelope)
@@ -1687,6 +1664,19 @@ public sealed partial class SessionOrchestrator(
         }
     }
 
+    // ── ISessionActivator ──────────────────────────────────────────────────────
+
+    /// <inheritdoc />
+    public async Task<Result<IHarnessSession>> ActivateSessionAsync(string sessionId, CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(sessionId);
+        var sessionResult = await GetSessionAsync(sessionId).ConfigureAwait(false);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        return await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
+    }
+
     // ── Private helpers ────────────────────────────────────────────────────────
 
     private async Task<Result<IHarnessSession>> GetOrActivateInstanceAsync(Session session, CancellationToken ct)
@@ -1700,7 +1690,7 @@ public sealed partial class SessionOrchestrator(
         if (instance is not null)
             return Result.Success<IHarnessSession>(instance);
 
-        if (!string.Equals(session.RuntimeMode, _runtimeModeAutomatic, StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(session.HarnessResumeToken))
             return FleetError.NotFoundFor("Instance", session.InstanceId);
 
         var activationLock = _activationLocks.GetOrAdd(session.Id, static _ => new SemaphoreSlim(1, 1));
@@ -1711,14 +1701,14 @@ public sealed partial class SessionOrchestrator(
             if (currentSession is null)
                 return FleetError.NotFoundFor(nameof(Session), session.Id);
 
-            if (!string.Equals(currentSession.RuntimeMode, _runtimeModeAutomatic, StringComparison.Ordinal))
+            if (string.IsNullOrWhiteSpace(currentSession.HarnessResumeToken))
                 return FleetError.NotFoundFor("Instance", currentSession.InstanceId);
 
             instance = instanceTracker.Get(currentSession.InstanceId);
             if (instance is not null)
                 return Result.Success<IHarnessSession>(instance);
 
-            var activatedResult = await ActivateAutomaticSessionAsync(currentSession, ct).ConfigureAwait(false);
+            var activatedResult = await ActivateSessionAsync(currentSession, ct).ConfigureAwait(false);
             return activatedResult;
         }
         finally
@@ -1727,7 +1717,7 @@ public sealed partial class SessionOrchestrator(
         }
     }
 
-    private async Task<Result<IHarnessSession>> ActivateAutomaticSessionAsync(Session session, CancellationToken ct)
+    private async Task<Result<IHarnessSession>> ActivateSessionAsync(Session session, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(session.HarnessResumeToken))
             return FleetError.NotFoundFor("Instance", session.InstanceId);
@@ -1947,6 +1937,10 @@ public sealed partial class SessionOrchestrator(
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Event subscription readiness timed out for session {SessionId} after {TimeoutMs}ms — proceeding with prompt")]
     private partial void LogSubscriptionReadinessTimeout(string sessionId, int timeoutMs);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Failed to fetch messages for session {SessionId} via proxy — returning empty result")]
+    private partial void LogProxyMessageFetchFailed(Exception ex, string sessionId);
 
     /// <summary>
     /// Waits for the harness event subscription to be established before proceeding.
