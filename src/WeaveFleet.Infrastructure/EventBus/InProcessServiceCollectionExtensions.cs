@@ -1,6 +1,7 @@
 using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Events;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.EventBus;
@@ -25,6 +26,7 @@ public static class InProcessServiceCollectionExtensions
         services.AddSingleton<InProcessMetrics>();
         services.AddSingleton<PipelineLatencyMetrics>();
         services.AddSingleton<IEventPublisher, InProcessEventPublisher>();
+        services.AddSingleton<IAutomationEventNotifier, InProcessAutomationEventNotifier>();
 
         // BackgroundServices
         services.AddHostedService<InProcessFanOutService>();
