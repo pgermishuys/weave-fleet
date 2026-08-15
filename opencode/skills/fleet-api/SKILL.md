@@ -27,30 +27,21 @@ Use this skill when an agent needs to:
 
 ### Authentication
 
-The Fleet API requires authentication by default. Token auth (`Auth.TokenAuthEnabled`) defaults to `true`, so local Fleet always requires auth unless explicitly disabled.
+**Localhost requests require no authentication.** When the Fleet API is running in local mode (default) and the request originates from localhost (127.0.0.1 or ::1), authentication is automatically bypassed. This means the script works out of the box with no token configuration needed.
 
-**How Fleet generates the token:**
+**For remote access** (non-localhost), a Bearer token is required:
 - The server reads the `WEAVE_FLEET_AUTH_TOKEN` environment variable at startup
-- If set (and ≥16 characters), it uses that token
-- Otherwise, it auto-generates a random token
+- If set (and ≥16 characters), it uses that token; otherwise it auto-generates one
 - The token is printed at startup: `http://localhost:{port}/login?token={token}`
-
-**How to authenticate:**
-1. **Copy the token from startup logs** — Fleet prints the full login URL with token when it starts
-2. **Set via environment variable** — `export FLEET_API_TOKEN=your-token`
-3. **Pass via CLI flag** — `--token your-token` (or `-t`)
-
-**Alternative: Cookie-based auth**
-- There's also a `POST /auth/token-login` endpoint that accepts `{"token": "..."}` and returns a session cookie
-- The skill's script uses Bearer token auth, which is simpler for agents
+- Pass via CLI flag: `--token your-token` (or `-t`)
+- Or set via environment: `export FLEET_API_TOKEN=your-token`
 
 ```bash
-# Via environment
-export FLEET_API_TOKEN="your-token"
+# Localhost — no token needed
 fleet-api.sh list-sessions
 
-# Via flag
-fleet-api.sh list-sessions --token "your-token"
+# Remote access — token required
+fleet-api.sh list-sessions --base-url http://remote-host:5001 --token "your-token"
 ```
 
 ## Available Actions
@@ -401,6 +392,7 @@ Tags are comma-separated strings:
 ### Global Options
 
 - `-b, --base-url <url>` — Override API base URL (default: http://localhost:5001)
+- `-t, --token <token>` — Bearer token for remote access (not needed for localhost)
 - `-h, --help` — Show help
 
 ### Common Options

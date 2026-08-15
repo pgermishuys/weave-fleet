@@ -67,6 +67,17 @@ public sealed class TokenLoginEndpointTests
     }
 
     [Fact]
+    public async Task Should_return_ok_when_request_is_from_localhost_without_bearer_token()
+    {
+        await using var factory = CreateFactory(simulateLocalhostRequest: true);
+        using var client = CreateClient(factory);
+
+        var response = await client.GetAsync("/api/user/me");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task Should_clear_auth_cookie_and_reject_protected_requests_after_logout()
     {
         await using var factory = CreateFactory();
@@ -93,10 +104,11 @@ public sealed class TokenLoginEndpointTests
         postLogoutResponse.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
-    private static ApiWebApplicationFactory CreateFactory()
+    private static ApiWebApplicationFactory CreateFactory(bool simulateLocalhostRequest = false)
         => new(
             authEnabled: false,
             tokenAuthEnabled: true,
+            simulateLocalhostRequest: simulateLocalhostRequest,
             configureTestServices: services =>
                 services.AddSingleton<ILocalTokenAuthService>(new TestLocalTokenAuthService(ValidToken)));
 

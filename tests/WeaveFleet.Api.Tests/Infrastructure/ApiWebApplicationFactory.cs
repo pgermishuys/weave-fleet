@@ -1,6 +1,8 @@
+using System.Net;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -16,6 +18,7 @@ public sealed class ApiWebApplicationFactory(
     bool tokenAuthEnabled = false,
     bool useTestAuthentication = false,
     bool testUserIsAdmin = false,
+    bool simulateLocalhostRequest = false,
     Action<IServiceCollection>? configureTestServices = null) : WebApplicationFactory<Program>
 {
     private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-{Guid.NewGuid():N}.db");
@@ -70,6 +73,15 @@ public sealed class ApiWebApplicationFactory(
         if (configureTestServices is not null)
         {
             builder.ConfigureTestServices(configureTestServices);
+        }
+
+        // Configure test server to set loopback IP for localhost bypass tests
+        if (simulateLocalhostRequest)
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddSingleton<IStartupFilter, SetLoopbackIpStartupFilter>();
+            });
         }
     }
 
@@ -154,6 +166,24 @@ public sealed class ApiWebApplicationFactory(
         {
             Response.StatusCode = StatusCodes.Status401Unauthorized;
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class SetLoopbackIpStartupFilter : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
+        {
+            return app =>
+            {
+                app.Use(async (context, next) =>
+                {
+                    // Set RemoteIpAddress to loopback for localhost bypass tests
+                    context.Connection.RemoteIpAddress = IPAddress.Loopback;
+                    await next();
+                });
+
+                next(app);
+            };
         }
     }
 }

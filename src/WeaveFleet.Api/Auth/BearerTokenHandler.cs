@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
@@ -22,25 +23,63 @@ public sealed class BearerTokenHandler(
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        if (!Request.Headers.TryGetValue(HeaderNames.Authorization, out var authorizationHeaderValues))
+        // Check if request has Authorization header
+        var hasAuthorizationHeader = Request.Headers.TryGetValue(HeaderNames.Authorization, out var authorizationHeaderValues);
+        
+        // If no Authorization header and request is from loopback, auto-authenticate
+        if (!hasAuthorizationHeader)
+        {
+            if (IsLocalhostRequest())
+            {
+                return Task.FromResult(CreateSuccessResult());
+            }
+            
             return Task.FromResult(AuthenticateResult.NoResult());
+        }
 
         var authorizationHeader = authorizationHeaderValues.ToString();
         if (string.IsNullOrWhiteSpace(authorizationHeader))
+        {
+            if (IsLocalhostRequest())
+            {
+                return Task.FromResult(CreateSuccessResult());
+            }
+            
             return Task.FromResult(AuthenticateResult.NoResult());
+        }
 
         if (!AuthenticationHeaderValue.TryParse(authorizationHeader, out var headerValue))
+        {
             return Task.FromResult(AuthenticateResult.NoResult());
+        }
 
         if (!string.Equals(headerValue.Scheme, "Bearer", StringComparison.OrdinalIgnoreCase))
+        {
             return Task.FromResult(AuthenticateResult.NoResult());
+        }
 
         if (string.IsNullOrWhiteSpace(headerValue.Parameter))
+        {
             return Task.FromResult(AuthenticateResult.NoResult());
+        }
 
+        // Validate the token
         if (!localTokenAuthService.ValidateToken(headerValue.Parameter))
+        {
             return Task.FromResult(AuthenticateResult.NoResult());
+        }
 
+        return Task.FromResult(CreateSuccessResult());
+    }
+
+    private bool IsLocalhostRequest()
+    {
+        var remoteIp = Context.Connection.RemoteIpAddress;
+        return remoteIp is not null && IPAddress.IsLoopback(remoteIp);
+    }
+
+    private AuthenticateResult CreateSuccessResult()
+    {
         var claims = new[]
         {
             new Claim(ClaimTypes.Name, "local"),
@@ -52,6 +91,6 @@ public sealed class BearerTokenHandler(
         var principal = new ClaimsPrincipal(identity);
         var ticket = new AuthenticationTicket(principal, Scheme.Name);
 
-        return Task.FromResult(AuthenticateResult.Success(ticket));
+        return AuthenticateResult.Success(ticket);
     }
 }

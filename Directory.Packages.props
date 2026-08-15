@@ -4,6 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Build -->
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.4" />
     <PackageVersion Include="MinVer" Version="6.0.0" />
     <!-- Core -->
     <PackageVersion Include="Duende.IdentityServer" Version="7.4.7" />
@@ -60,7 +61,6 @@
     <!-- Aspire -->
     <PackageVersion Include="Aspire.Hosting.JavaScript" Version="13.4.6" />
   </ItemGroup>
-
   <!-- NuGet audit suppressions for transitive vulnerabilities with no patched version available -->
   <ItemGroup>
     <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-2m69-gcr7-jv3q" />

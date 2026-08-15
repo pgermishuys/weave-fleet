@@ -6,6 +6,8 @@ set -euo pipefail
 
 # Default configuration
 FLEET_API_BASE_URL="${FLEET_API_BASE_URL:-http://localhost:5001}"
+# Token is optional for localhost requests (auto-authenticated by the server).
+# Only needed when connecting to a remote Fleet instance.
 FLEET_API_TOKEN="${FLEET_API_TOKEN:-}"
 
 # Colors for output (if terminal supports it)
@@ -31,7 +33,7 @@ USAGE:
 
 GLOBAL OPTIONS:
     -b, --base-url <url>    Override API base URL (default: http://localhost:5001)
-    -t, --token <token>     Bearer token for authentication (or set FLEET_API_TOKEN)
+    -t, --token <token>     Bearer token for remote access (not needed for localhost)
     -h, --help              Show this help
 
 ACTIONS:
