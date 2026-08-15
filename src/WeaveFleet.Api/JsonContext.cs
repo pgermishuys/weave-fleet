@@ -333,7 +333,6 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(NuCodeDevicePollRequest))]
 [JsonSerializable(typeof(NuCodeDevicePollResponse))]
 [JsonSerializable(typeof(Hubs.ClientEvent))]
-[JsonSerializable(typeof(Hubs.HistoryPage))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 internal sealed partial class ApiJsonContext : JsonSerializerContext
 {

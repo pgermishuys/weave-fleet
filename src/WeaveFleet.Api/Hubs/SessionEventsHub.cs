@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading.Channels;
 using Microsoft.AspNetCore.SignalR;
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Application.Events;
@@ -20,9 +19,7 @@ public class SessionEventsHub : Hub
     private readonly IEventBroadcaster _broadcaster;
     private readonly IUserContext _userContext;
     private readonly ILogger<SessionEventsHub> _logger;
-    private readonly ISessionSnapshotBuilder _snapshotBuilder;
-    private readonly StreamingStateProvider _streamingStateProvider;
-    private readonly IEventStore _eventStore;
+    private readonly ISessionMessageProxy _proxy;
     private readonly IHubContext<SessionEventsHub> _hubContext;
 
     // Per-connection state: subscribed topics
@@ -63,17 +60,13 @@ public class SessionEventsHub : Hub
         IEventBroadcaster broadcaster,
         IUserContext userContext,
         ILogger<SessionEventsHub> logger,
-        ISessionSnapshotBuilder snapshotBuilder,
-        StreamingStateProvider streamingStateProvider,
-        IEventStore eventStore,
+        ISessionMessageProxy proxy,
         IHubContext<SessionEventsHub> hubContext)
     {
         _broadcaster = broadcaster;
         _userContext = userContext;
         _logger = logger;
-        _snapshotBuilder = snapshotBuilder;
-        _streamingStateProvider = streamingStateProvider;
-        _eventStore = eventStore;
+        _proxy = proxy;
         _hubContext = hubContext;
     }
 
@@ -162,6 +155,24 @@ public class SessionEventsHub : Hub
 
         // Build atomic snapshot: persisted messages + in-flight state
         var snapshot = await BuildAtomicSnapshotAsync(sessionId);
+
+        // Restore child topic subscriptions from active delegations
+        foreach (var delegation in snapshot.Delegations)
+        {
+            if (delegation.ChildSessionId is not null
+                && (delegation.Status == "running" || delegation.Status == "pending"))
+            {
+                var childTopic = $"session:{delegation.ChildSessionId}";
+                await AddTopicSubscriptionAsync(connectionId, childTopic, CancellationToken.None);
+
+                var childTopics = ParentChildTopics.GetOrAdd(topic, _ => new ConcurrentDictionary<string, byte>(StringComparer.Ordinal));
+                childTopics[childTopic] = 0;
+
+                if (_logger.IsEnabled(LogLevel.Debug))
+                    LogAutoSubscribed(_logger, connectionId, childTopic, null);
+            }
+        }
+
         return snapshot;
     }
 
@@ -181,74 +192,55 @@ public class SessionEventsHub : Hub
     }
 
     /// <summary>
-    /// Builds an atomic snapshot by merging persisted messages with in-flight streaming state.
+    /// Builds an atomic snapshot by delegating to the proxy.
+    /// The proxy handles fetching messages from opencode's API (if available) or persisted storage,
+    /// along with delegations and activity status.
     /// </summary>
     private async Task<SessionSnapshot> BuildAtomicSnapshotAsync(string sessionId)
     {
-        // 1. Load persisted messages from the database
-        var persistedSnapshot = await _snapshotBuilder.BuildAsync(sessionId, pageSize: 100, cursor: null);
+        // Delegate to proxy: fetches messages from opencode API or persisted storage,
+        // merges delegations from Fleet's database, and includes activity status
+        var snapshot = await _proxy.GetSnapshotAsync(sessionId, pageSize: 100, cursor: null);
 
-        // 2. Read in-flight streaming state (activity status + buffered text deltas)
-        var streamingState = _streamingStateProvider.GetStreamingState(sessionId);
-
-        // 3. Get the highest event ID for this session from inproc_events (dedup watermark)
-        var lastEventId = _eventStore.GetLastEventId(sessionId);
-
-        // 4. Merge: apply in-flight text deltas to persisted messages
-        var mergedMessages = ApplyStreamingDeltas(persistedSnapshot.Messages, streamingState.BufferedDeltas);
-
-        // 5. Use in-flight activity status if available, otherwise fall back to "idle"
-        var activityStatus = streamingState.ActivitySnapshot?.ActivityStatus ?? "idle";
-
-        return persistedSnapshot with
-        {
-            Messages = mergedMessages,
-            ActivityStatus = activityStatus,
-            LastEventId = lastEventId > 0 ? lastEventId : null
-        };
+        // Remove lastEventId from snapshot (client dedup watermark no longer needed)
+        return snapshot with { LastEventId = null };
     }
 
     /// <summary>
-    /// Applies in-flight text deltas to persisted messages.
-    /// For each message with buffered deltas, updates the corresponding text parts.
+    /// Subscribe to the global "sessions" topic to receive activity_status events for all sessions.
+    /// This is used by the session list to update activity badges in real-time.
     /// </summary>
-    private static IReadOnlyList<MessageLifecyclePayload> ApplyStreamingDeltas(
-        IReadOnlyList<MessageLifecyclePayload> persistedMessages,
-        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> bufferedDeltas)
+    public async Task SubscribeToSessionsTopicAsync()
     {
-        if (bufferedDeltas.Count == 0)
-            return persistedMessages;
+        var connectionId = Context.ConnectionId;
+        const string topic = "sessions";
 
-        var result = new List<MessageLifecyclePayload>(persistedMessages.Count);
+        // Add connection to SignalR group and topic filter
+        await AddTopicSubscriptionAsync(connectionId, topic, CancellationToken.None);
 
-        foreach (var message in persistedMessages)
+        if (_logger.IsEnabled(LogLevel.Debug))
+            LogSubscribed(_logger, connectionId, topic, null);
+    }
+
+    /// <summary>
+    /// Unsubscribe from the global "sessions" topic.
+    /// </summary>
+    public async Task UnsubscribeFromSessionsTopicAsync()
+    {
+        var connectionId = Context.ConnectionId;
+        const string topic = "sessions";
+
+        // Remove connection from SignalR group (idempotent)
+        await Groups.RemoveFromGroupAsync(connectionId, topic);
+
+        // Remove topic from connection's filter set (idempotent)
+        if (ConnectionTopics.TryGetValue(connectionId, out var topics))
         {
-            // Check if this message has in-flight deltas
-            if (!bufferedDeltas.TryGetValue(message.Info.Id, out var deltas))
-            {
-                result.Add(message);
-                continue;
-            }
-
-            // Apply deltas to message parts
-            var updatedParts = new List<MessageEventPart>(message.Parts.Count);
-            foreach (var part in message.Parts)
-            {
-                if (part is TextMessageEventPart textPart && deltas.TryGetValue(part.Id, out var deltaText))
-                {
-                    // Replace text with in-flight delta
-                    updatedParts.Add(textPart with { Text = deltaText });
-                }
-                else
-                {
-                    updatedParts.Add(part);
-                }
-            }
-
-            result.Add(message with { Parts = updatedParts });
+            topics.TryRemove(topic, out _);
         }
 
-        return result;
+        if (_logger.IsEnabled(LogLevel.Debug))
+            LogUnsubscribed(_logger, connectionId, topic, null);
     }
 
     /// <summary>
@@ -292,25 +284,6 @@ public class SessionEventsHub : Hub
 
         if (_logger.IsEnabled(LogLevel.Debug))
             LogUnsubscribed(_logger, connectionId, topic, null);
-    }
-
-    /// <summary>
-    /// Load paginated history for a session.
-    /// </summary>
-    /// <param name="sessionId">The session identifier.</param>
-    /// <param name="cursor">Optional cursor for pagination.</param>
-    /// <returns>A history page (placeholder for now).</returns>
-    public Task<HistoryPage> LoadHistoryAsync(string sessionId, string? cursor)
-    {
-        // Placeholder implementation (history loading is a separate task)
-        var page = new HistoryPage
-        {
-            Messages = [],
-            Cursor = cursor,
-            HasMore = false
-        };
-
-        return Task.FromResult(page);
     }
 
     /// <summary>
@@ -430,14 +403,4 @@ internal sealed record ClientEvent
 
     [JsonPropertyName("properties")]
     public required JsonElement Properties { get; init; }
-}
-
-/// <summary>
-/// Represents a paginated history page.
-/// </summary>
-public sealed record HistoryPage
-{
-    public required IReadOnlyList<MessageLifecyclePayload> Messages { get; init; }
-    public required string? Cursor { get; init; }
-    public required bool HasMore { get; init; }
 }

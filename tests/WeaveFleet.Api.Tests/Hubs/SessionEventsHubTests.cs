@@ -29,8 +29,8 @@ public sealed class SessionEventsHubTests : IAsyncLifetime
             authEnabled: false,
             configureTestServices: services =>
             {
-                // Register a fake snapshot builder that returns empty snapshots
-                services.AddSingleton<ISessionSnapshotBuilder>(new FakeSessionSnapshotBuilder());
+                // Register a fake message proxy that returns empty snapshots
+                services.AddSingleton<ISessionMessageProxy>(new FakeSessionMessageProxy());
             });
         await Task.CompletedTask;
     }
@@ -101,7 +101,7 @@ public sealed class SessionEventsHubTests : IAsyncLifetime
             authEnabled: false,
             configureTestServices: services =>
             {
-                services.AddSingleton<ISessionSnapshotBuilder>(new FakeSessionSnapshotBuilder());
+                services.AddSingleton<ISessionMessageProxy>(new FakeSessionMessageProxy());
                 services.AddSingleton<IEventBroadcaster>(broadcaster);
             });
 
@@ -138,7 +138,7 @@ public sealed class SessionEventsHubTests : IAsyncLifetime
             authEnabled: false,
             configureTestServices: services =>
             {
-                services.AddSingleton<ISessionSnapshotBuilder>(new FakeSessionSnapshotBuilder());
+                services.AddSingleton<ISessionMessageProxy>(new FakeSessionMessageProxy());
                 services.AddSingleton<IEventBroadcaster>(broadcaster);
             });
 
@@ -175,7 +175,7 @@ public sealed class SessionEventsHubTests : IAsyncLifetime
             authEnabled: false,
             configureTestServices: services =>
             {
-                services.AddSingleton<ISessionSnapshotBuilder>(new FakeSessionSnapshotBuilder());
+                services.AddSingleton<ISessionMessageProxy>(new FakeSessionMessageProxy());
                 services.AddSingleton<IEventBroadcaster>(broadcaster);
             });
 
@@ -241,23 +241,4 @@ public sealed class SessionEventsHubTests : IAsyncLifetime
     }
 
     // ── Fake Implementations ────────────────────────────────────────────────────────
-
-    private sealed class FakeSessionSnapshotBuilder : ISessionSnapshotBuilder
-    {
-        public Task<SessionSnapshot> BuildAsync(string sessionId, int pageSize = 100, string? cursor = null)
-        {
-            return Task.FromResult(new SessionSnapshot
-            {
-                Session = new SessionSnapshotSession
-                {
-                    Id = sessionId,
-                    Title = "Test Session",
-                    Status = "active"
-                },
-                Messages = [],
-                ActivityStatus = "idle",
-                LastEventId = null
-            });
-        }
-    }
 }
