@@ -109,6 +109,7 @@ function createSessionSnapshot(sessionId: string, messageText: string = "Hello f
     lastEventId: 5,
     hasMore: false,
     cursor: null,
+    isPartial: false,
   }
 }
 

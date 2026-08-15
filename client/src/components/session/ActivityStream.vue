@@ -14,10 +14,10 @@ import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, Accumula
 import type { VisualPayload } from "@/lib/visual-payload";
 import { isQuestionPart } from "@/lib/question-types";
 import { diagLog } from "@/lib/message-diagnostics";
-import { sortAccumulatedMessagesChronologically } from "@/lib/pagination-utils";
 import { useSessionsStore } from "@/stores/sessions";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useVisualPanel } from "@/composables/use-visual-panel";
+import { mergeMessagesByTimestamp } from "@/lib/merge-messages";
 
 interface ImageAttachmentDisplay {
   url: string;
@@ -62,7 +62,7 @@ const selectedSession = computed(() => {
   return sessions.value.find((session) => session.session.id === props.sessionId) ?? null;
 });
 
-const { messages: sessionMessages, delegations, sessionStatus, hasMore, isLoadingOlder, loadOlder } = useSessionStream(
+const { messages: sessionMessages, delegations, sessionStatus, hasMore, isLoadingOlder, isPartial, loadOlder } = useSessionStream(
   computed(() => props.sessionId),
 );
 useSmartLinks({
@@ -160,7 +160,8 @@ watch(
 );
 
 const deliveredMessages = computed<ActivityMessage[]>(() => {
-  return sortAccumulatedMessagesChronologically(sessionMessages.value)
+  // Preserve upstream order from sessionMessages (snapshot + live events)
+  return sessionMessages.value
     .map((message) => {
       const author = getDisplayAuthor(message);
 
@@ -215,7 +216,12 @@ const messages = computed<ActivityMessage[]>(() => {
       : message.id;
     return !deliveredIds.has(deliveredId);
   });
-  const baseMessages = [...deliveredMessages.value, ...pendingOptimisticMessages];
+  
+  // Stable merge by createdAt timestamp
+  const baseMessages = mergeMessagesByTimestamp(
+    deliveredMessages.value,
+    pendingOptimisticMessages,
+  );
 
   return baseMessages.map((message, index) => {
     const previousMessage = baseMessages[index - 1];
@@ -231,7 +237,7 @@ const messages = computed<ActivityMessage[]>(() => {
   });
 });
 
-const isStreaming = computed(() => sessionStatus.value === "busy");
+const isStreaming = computed(() => sessionStatus.value === "busy" || sessionStatus.value === "delegating");
 
 function isNearBottom(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
@@ -662,6 +668,17 @@ function handleExpandVisual(payload: VisualPayload): void {
       data-testid="activity-stream"
       @scroll.passive="updatePinnedState"
     >
+      <!-- Partial snapshot indicator -->
+      <div
+        v-if="isPartial"
+        class="partial-snapshot-banner"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="partial-snapshot-icon">⚠️</span>
+        <span>Connection to live session is temporarily unavailable. Showing cached data.</span>
+      </div>
+
       <!-- Load older messages indicator -->
       <div
         v-if="isLoadingOlder"
@@ -844,6 +861,25 @@ function handleExpandVisual(payload: VisualPayload): void {
   border-top-color: rgba(129, 140, 248, 0.8);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
+}
+
+.partial-snapshot-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 6px;
+  color: #fbbf24;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.partial-snapshot-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
 }
 
 .optimistic-retry {

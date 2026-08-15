@@ -26,6 +26,8 @@ export interface SessionSnapshot {
   lastSequenceNumber?: number | null;
   hasMore: boolean;
   cursor: string | null;
+  /** Indicates whether this snapshot is partial due to unavailability of the live harness. */
+  isPartial: boolean;
 }
 
 export interface SessionHistoryPage {

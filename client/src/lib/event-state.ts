@@ -10,13 +10,52 @@ import type {
   AccumulatedToolPart,
   AccumulatedFilePart,
 } from "@/lib/client-types";
-import { sortAccumulatedMessagesChronologically } from "@/lib/pagination-utils";
 
-function sortMessagesChronologically(messages: AccumulatedMessage[]): AccumulatedMessage[] {
-  return sortAccumulatedMessagesChronologically(messages);
+
+/**
+ * Insert a message into the array in stable sorted position by message ID (ascending).
+ * Message IDs with `msg_` prefix contain hex-encoded timestamps that sort lexicographically
+ * in chronological order. Uses binary search for O(log n) insertion.
+ * Messages without proper `msg_` prefix are appended to the end (defensive fallback).
+ */
+function insertMessageSorted(
+  messages: AccumulatedMessage[],
+  newMsg: AccumulatedMessage
+): AccumulatedMessage[] {
+  const newId = newMsg.messageId;
+
+  // Defensive: messages without proper msg_ prefix go to the end
+  if (!newId.startsWith("msg_")) {
+    return [...messages, newMsg];
+  }
+
+  // Binary search to find insertion index
+  let left = 0;
+  let right = messages.length;
+
+  while (left < right) {
+    const mid = Math.floor((left + right) / 2);
+    const midId = messages[mid]!.messageId;
+
+    // Messages without msg_ prefix are at the end, so insert before them
+    if (!midId.startsWith("msg_")) {
+      right = mid;
+      continue;
+    }
+
+    // Compare IDs lexicographically
+    if (midId < newId) {
+      left = mid + 1;
+    } else {
+      right = mid;
+    }
+  }
+
+  const result = messages.slice();
+  result.splice(left, 0, newMsg);
+  return result;
 }
 
- 
 export function ensureMessage(
   prev: AccumulatedMessage[],
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -42,13 +81,13 @@ export function ensureMessage(
     modelID,
     parentID: info.parentID,
   };
-  return sortMessagesChronologically([...prev, newMsg]);
+  
+  return insertMessageSorted(prev, newMsg);
 }
 
 /**
  * Merges completion data into an existing message.
- * Isolated from ensureMessage() for easy revert if needed.
- * Only updates fields that were previously unset (null-safe merge).
+ * Updates fields in place and re-sorts if createdAt is backfilled.
  */
 export function mergeMessageUpdate(
   prev: AccumulatedMessage[],
@@ -104,7 +143,7 @@ export function mergeMessageUpdate(
   }
 
   const updated = prev.slice();
-  updated[index] = {
+  const updatedMessage = {
     ...existing,
     ...(hasSnapshotParts ? { parts: mergedSnapshotParts } : {}),
     ...(hasNewCreatedAt ? { createdAt } : {}),
@@ -113,7 +152,10 @@ export function mergeMessageUpdate(
     tokens: mergedTokens,
     cost: mergedCost,
   };
-  return sortMessagesChronologically(updated);
+  
+  // No need to re-sort: message IDs don't change, so position is stable
+  updated[index] = updatedMessage;
+  return updated;
 }
 
 function mapCommittedSnapshotPart(
@@ -186,7 +228,6 @@ export function applyPartUpdate(
   const messageId: string = part.messageID;
   const sessionId: string = part.sessionID;
 
-  // Ensure the message exists
   let msgs = prev;
   if (!msgs.find((m) => m.messageId === messageId)) {
     const newMsg: AccumulatedMessage = {
@@ -195,7 +236,7 @@ export function applyPartUpdate(
       role: "assistant",
       parts: [],
     };
-    msgs = sortMessagesChronologically([...prev, newMsg]);
+    msgs = insertMessageSorted(prev, newMsg);
   }
 
   return msgs.map((msg) => {
@@ -313,14 +354,13 @@ export function applyTextDelta(
   const msgIndex = prev.findIndex((m) => m.messageId === messageId);
 
   if (msgIndex === -1) {
-    // Message doesn't exist — append new message with the delta as first part
     const newMsg: AccumulatedMessage = {
       messageId,
       sessionId,
       role: "assistant",
       parts: [{ partId, type: "text", text: delta }],
     };
-    return sortMessagesChronologically([...prev, newMsg]);
+    return insertMessageSorted(prev, newMsg);
   }
 
   const msg = prev[msgIndex];

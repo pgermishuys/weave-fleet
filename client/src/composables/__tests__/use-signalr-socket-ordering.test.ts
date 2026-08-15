@@ -48,6 +48,7 @@ function createSessionSnapshot(sessionId: string): SessionSnapshot {
     lastEventId: 1,
     hasMore: false,
     cursor: null,
+    isPartial: false,
   }
 }
 
@@ -95,6 +96,9 @@ describe("useSignalRSocket subscription ordering (race regression)", () => {
 
     mockHubConnection.invoke.mockImplementation((method: string, sessionId: string) => {
       invokeLog.push(method)
+      if (method === "SubscribeToSessionsTopicAsync") {
+        return Promise.resolve(undefined)
+      }
       if (method === "UnsubscribeFromSessionAsync") {
         // Simulate a slow in-flight unsubscribe (the race window)
         return new Promise<void>((resolve) => {
@@ -109,14 +113,14 @@ describe("useSignalRSocket subscription ordering (race regression)", () => {
     // Initial subscribe (user opens session A)
     const unsubscribe = result.subscribeV2("session-1", vi.fn(), vi.fn())
     await flushAll()
-    expect(invokeLog).toEqual(["SubscribeToSessionAsync"])
+    expect(invokeLog).toEqual(["SubscribeToSessionsTopicAsync", "SubscribeToSessionAsync"])
 
     // User navigates away: unsubscribe starts but its invoke stays in flight
     unsubscribe()
     await flushAll()
     // With elision: if we immediately resubscribe, the unsubscribe is skipped
     // But in this test, we DON'T immediately resubscribe, so it should be called
-    expect(invokeLog).toEqual(["SubscribeToSessionAsync", "UnsubscribeFromSessionAsync"])
+    expect(invokeLog).toEqual(["SubscribeToSessionsTopicAsync", "SubscribeToSessionAsync", "UnsubscribeFromSessionAsync"])
     expect(resolveUnsubscribe).not.toBeNull()
 
     // User navigates back while the unsubscribe is still pending
@@ -127,12 +131,13 @@ describe("useSignalRSocket subscription ordering (race regression)", () => {
     // The critical assertion: the re-subscribe must NOT have been sent yet.
     // Without the per-topic queue, a second SubscribeToSessionAsync appears
     // here, and the still-pending unsubscribe can land after it server-side.
-    expect(invokeLog).toEqual(["SubscribeToSessionAsync", "UnsubscribeFromSessionAsync"])
+    expect(invokeLog).toEqual(["SubscribeToSessionsTopicAsync", "SubscribeToSessionAsync", "UnsubscribeFromSessionAsync"])
 
     // Once the unsubscribe resolves, the queued re-subscribe goes out
     resolveUnsubscribe!()
     await flushAll()
     expect(invokeLog).toEqual([
+      "SubscribeToSessionsTopicAsync",
       "SubscribeToSessionAsync",
       "UnsubscribeFromSessionAsync",
       "SubscribeToSessionAsync",
@@ -150,6 +155,9 @@ describe("useSignalRSocket subscription ordering (race regression)", () => {
 
     mockHubConnection.invoke.mockImplementation((method: string, sessionId: string) => {
       invokeLog.push(method)
+      if (method === "SubscribeToSessionsTopicAsync") {
+        return Promise.resolve(undefined)
+      }
       if (method === "UnsubscribeFromSessionAsync") {
         return new Promise<void>((resolve) => {
           pendingUnsubscribes.push(resolve)
@@ -172,8 +180,9 @@ describe("useSignalRSocket subscription ordering (race regression)", () => {
 
     // With elision: all subscribes execute immediately because the unsubscribes
     // are elided (they don't call invoke, so they don't create blocking promises).
-    // We get 4 subscribes: initial + 3 resubscribes.
+    // We get 1 SubscribeToSessionsTopicAsync + 4 SubscribeToSessionAsync: initial + 3 resubscribes.
     expect(invokeLog).toEqual([
+      "SubscribeToSessionsTopicAsync",
       "SubscribeToSessionAsync",
       "SubscribeToSessionAsync",
       "SubscribeToSessionAsync",
@@ -187,9 +196,10 @@ describe("useSignalRSocket subscription ordering (race regression)", () => {
       await flushAll()
     }
 
-    // With elision: we get 4 subscribes (initial + 3 resubscribes), no unsubscribes
+    // With elision: we get 1 SubscribeToSessionsTopicAsync + 4 SubscribeToSessionAsync (initial + 3 resubscribes), no unsubscribes
     // because each unsubscribe was immediately followed by a resubscribe
     expect(invokeLog).toEqual([
+      "SubscribeToSessionsTopicAsync",
       "SubscribeToSessionAsync",
       "SubscribeToSessionAsync",
       "SubscribeToSessionAsync",

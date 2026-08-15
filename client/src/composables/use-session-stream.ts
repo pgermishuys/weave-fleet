@@ -18,7 +18,7 @@ import {
   type SessionStreamState,
   type SessionStreamStatus,
 } from "@/lib/domain-event-reducer"
-import { ensureMessage, mergeMessageUpdate } from "@/lib/event-state"
+import { prependHistoryPage } from "@/lib/history-merge"
 import type { SessionHistoryPage } from "@/lib/session-snapshot"
 import { useWeaveSocket, type Unsubscribe } from "@/composables/use-weave-socket"
 
@@ -29,6 +29,7 @@ export interface UseSessionStreamResult {
   isLoading: Readonly<ShallowRef<boolean>>
   hasMore: Readonly<ShallowRef<boolean>>
   isLoadingOlder: Readonly<ShallowRef<boolean>>
+  isPartial: Readonly<ShallowRef<boolean>>
   loadOlder: () => void
 }
 
@@ -54,6 +55,7 @@ export function useSessionStream(
   const hasMore = shallowRef(false)
   const cursor = shallowRef<string | null>(null)
   const isLoadingOlder = shallowRef(false)
+  const isPartial = shallowRef(false)
   const isMounted = shallowRef(false)
   const pendingEvents: DomainEvent[] = []
   let unsubscribe: Unsubscribe | null = null
@@ -68,6 +70,7 @@ export function useSessionStream(
     hasMore.value = false
     cursor.value = null
     isLoadingOlder.value = false
+    isPartial.value = false
   }
 
   function cleanupSubscription(): void {
@@ -78,24 +81,9 @@ export function useSessionStream(
   }
 
   function applyHistoryPage(page: SessionHistoryPage): void {
-    let nextMessages = streamState.value.messages
-
-    for (const message of page.messages) {
-      nextMessages = mergeMessageUpdate(ensureMessage(nextMessages, message.info), {
-        ...message.info,
-        time: {
-          created: message.info.time.created,
-          completed: message.info.time.completed ?? undefined,
-        },
-        cost: message.info.cost ?? undefined,
-        tokens: message.info.tokens ?? undefined,
-        parts: message.parts.map((part) => ({ ...part } as Record<string, unknown>)),
-      })
-    }
-
     streamState.value = {
       ...streamState.value,
-      messages: nextMessages,
+      messages: prependHistoryPage(streamState.value.messages, page.messages),
     }
 
     cursor.value = page.cursor
@@ -159,6 +147,7 @@ export function useSessionStream(
           streamState.value = nextState
           hasMore.value = snapshot.hasMore
           cursor.value = snapshot.cursor
+          isPartial.value = snapshot.isPartial
           isLoading.value = false
         },
         (event) => {
@@ -196,6 +185,7 @@ export function useSessionStream(
     isLoading: readonly(isLoading),
     hasMore: readonly(hasMore),
     isLoadingOlder: readonly(isLoadingOlder),
+    isPartial: readonly(isPartial),
     loadOlder,
   }
 }

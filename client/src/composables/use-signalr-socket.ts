@@ -47,6 +47,10 @@ const topicOperationQueues = new Map<string, Promise<void>>()
 // Per-topic subscription epoch to detect stale snapshots
 const topicSubscriptionEpochs = new Map<string, number>()
 
+// Global event handlers for non-session-specific events (e.g., activity_status on "sessions" topic)
+type GlobalEventHandler = (event: DomainEvent) => void
+const globalEventHandlers = new Map<string, Set<GlobalEventHandler>>()
+
 let reconnectCallbackNextId = 0
 let disconnectCallbackNextId = 0
 let connection: HubConnection | null = null
@@ -73,6 +77,17 @@ function dispatchEventV2(topic: string, event: DomainEvent): void {
 
   for (const callback of callbacks) {
     callback.onEvent(event)
+  }
+}
+
+function dispatchGlobalEvent(topic: string, event: DomainEvent): void {
+  const handlers = globalEventHandlers.get(topic)
+  if (!handlers) {
+    return
+  }
+
+  for (const handler of handlers) {
+    handler(event)
   }
 }
 
@@ -119,21 +134,31 @@ async function connect(): Promise<void> {
 
   // Register event handler for incoming events
   hubConnection.on("Event", (topic: string, eventId: number | null, data: unknown) => {
+    // Wire format uses "properties" but DomainEvent uses "payload" — map the field
+    const wireEvent = data as { type: string; eventId?: number | null; properties?: unknown }
+    const domainEvent = {
+      type: wireEvent.type,
+      payload: wireEvent.properties,
+      ...(eventId !== null ? { eventId } : {}),
+    } as DomainEvent
+
+    // Dispatch to per-session topic listeners
     if (topicListenersV2.has(topic)) {
-      // Wire format uses "properties" but DomainEvent uses "payload" — map the field
-      const wireEvent = data as { type: string; eventId?: number | null; properties?: unknown }
-      const domainEvent = {
-        type: wireEvent.type,
-        payload: wireEvent.properties,
-        ...(eventId !== null ? { eventId } : {}),
-      } as DomainEvent
       dispatchEventV2(topic, domainEvent)
+    }
+
+    // Dispatch to global topic handlers (e.g., "sessions" topic for activity_status)
+    if (globalEventHandlers.has(topic)) {
+      dispatchGlobalEvent(topic, domainEvent)
     }
   })
 
   // Handle reconnection
   hubConnection.onreconnected(async () => {
     await resubscribeAll()
+    
+    // Re-subscribe to global topics
+    await subscribeToGlobalTopics()
     
     for (const callback of reconnectCallbacks.values()) {
       callback()
@@ -153,9 +178,23 @@ async function connect(): Promise<void> {
     await hubConnection.start()
     // Subscribe any topics that were registered before the connection was ready
     await resubscribeAll()
+    // Subscribe to global topics (e.g., "sessions" for activity_status events)
+    await subscribeToGlobalTopics()
   } catch (error) {
     console.error("Failed to start SignalR connection:", error)
     connection = null
+  }
+}
+
+async function subscribeToGlobalTopics(): Promise<void> {
+  if (!connection || connection.state !== HubConnectionState.Connected) {
+    return
+  }
+
+  try {
+    await connection.invoke("SubscribeToSessionsTopicAsync")
+  } catch (error) {
+    console.error("Failed to subscribe to global sessions topic:", error)
   }
 }
 
@@ -316,6 +355,7 @@ export function _resetForTesting(): void {
   disconnectCallbacks.clear()
   topicOperationQueues.clear()
   topicSubscriptionEpochs.clear()
+  globalEventHandlers.clear()
   syncTestApi()
 }
 
@@ -346,6 +386,29 @@ export function onDisconnect(callback: () => void): () => void {
 
   return () => {
     disconnectCallbacks.delete(id)
+  }
+}
+
+export function onGlobalEvent(topic: string, handler: GlobalEventHandler): () => void {
+  let handlers = globalEventHandlers.get(topic)
+  if (!handlers) {
+    handlers = new Set<GlobalEventHandler>()
+    globalEventHandlers.set(topic, handlers)
+  }
+
+  handlers.add(handler)
+
+  return () => {
+    const currentHandlers = globalEventHandlers.get(topic)
+    if (!currentHandlers) {
+      return
+    }
+
+    currentHandlers.delete(handler)
+
+    if (currentHandlers.size === 0) {
+      globalEventHandlers.delete(topic)
+    }
   }
 }
 

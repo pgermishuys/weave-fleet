@@ -154,6 +154,7 @@ function createSnapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapsh
     lastEventId: 1,
     hasMore: false,
     cursor: null,
+    isPartial: false,
     ...overrides,
   }
 }

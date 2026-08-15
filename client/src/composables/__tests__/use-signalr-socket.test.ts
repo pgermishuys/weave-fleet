@@ -74,6 +74,7 @@ function createSessionSnapshot(sessionId: string): SessionSnapshot {
     lastEventId: 5,
     hasMore: false,
     cursor: null,
+    isPartial: false,
   }
 }
 
@@ -114,6 +115,22 @@ function expectedDomainEvent(type: DomainEvent["type"], eventId?: number): Sessi
   return event
 }
 
+/** Helper to mock hub invoke with proper handling of SubscribeToSessionsTopicAsync */
+function mockInvokeWithSnapshot(snapshot: SessionSnapshot | ((sessionId: string) => SessionSnapshot)) {
+  mockHubConnection.invoke.mockImplementation(async (method: string, ...args: unknown[]) => {
+    if (method === "SubscribeToSessionsTopicAsync") {
+      return undefined
+    }
+    if (method === "SubscribeToSessionAsync") {
+      if (typeof snapshot === "function") {
+        return snapshot(args[0] as string)
+      }
+      return snapshot
+    }
+    return undefined
+  })
+}
+
 describe("useSignalRSocket", () => {
   beforeEach(() => {
     // Reset all mocks
@@ -130,7 +147,13 @@ describe("useSignalRSocket", () => {
     mockHubConnection.stop.mockImplementation(async () => {
       mockHubConnection.state = HubConnectionState.Disconnected
     })
-    mockHubConnection.invoke.mockResolvedValue(undefined)
+    // Default: return undefined for SubscribeToSessionsTopicAsync, specific mocks override for SubscribeToSessionAsync
+    mockHubConnection.invoke.mockImplementation(async (method: string) => {
+      if (method === "SubscribeToSessionsTopicAsync") {
+        return undefined
+      }
+      return undefined
+    })
     mockHubConnection.on.mockImplementation((eventName: string, handler: (...args: unknown[]) => void) => {
       if (eventName === "Event") {
         eventHandler = handler as (topic: string, eventId: number | null, data: unknown) => void
@@ -207,11 +230,16 @@ describe("useSignalRSocket", () => {
       const snapshot1 = createSessionSnapshot("session-1")
       const snapshot2 = createSessionSnapshot("session-2")
 
-      mockHubConnection.invoke
-        .mockResolvedValueOnce(snapshot1)
-        .mockResolvedValueOnce(snapshot2)
-        .mockResolvedValueOnce(snapshot1)
-        .mockResolvedValueOnce(snapshot2)
+      mockHubConnection.invoke.mockImplementation(async (method: string, ...args: unknown[]) => {
+        if (method === "SubscribeToSessionsTopicAsync") {
+          return undefined
+        }
+        if (method === "SubscribeToSessionAsync") {
+          const sessionId = args[0] as string
+          return sessionId === "session-1" ? snapshot1 : snapshot2
+        }
+        return undefined
+      })
 
       const { result } = await mountComposable(() => useWeaveSocket())
 
@@ -232,7 +260,8 @@ describe("useSignalRSocket", () => {
       await reconnectedHandler?.()
       await flushAll()
 
-      expect(mockHubConnection.invoke).toHaveBeenCalledTimes(4)
+      // Should have: 1 SubscribeToSessionsTopicAsync + 2 SubscribeToSessionAsync (initial) + 1 SubscribeToSessionsTopicAsync + 2 SubscribeToSessionAsync (reconnect) = 6 total
+      expect(mockHubConnection.invoke).toHaveBeenCalledTimes(6)
       expect(onSnapshot1).toHaveBeenCalledWith(snapshot1)
       expect(onSnapshot2).toHaveBeenCalledWith(snapshot2)
     })
@@ -287,7 +316,15 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockResolvedValueOnce(snapshot)
+      mockHubConnection.invoke.mockImplementation(async (method: string, ...args: unknown[]) => {
+        if (method === "SubscribeToSessionsTopicAsync") {
+          return undefined
+        }
+        if (method === "SubscribeToSessionAsync") {
+          return snapshot
+        }
+        return undefined
+      })
 
       const { result } = await mountComposable(() => useWeaveSocket())
 
@@ -306,7 +343,15 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockResolvedValueOnce(snapshot)
+      mockHubConnection.invoke.mockImplementation(async (method: string, ...args: unknown[]) => {
+        if (method === "SubscribeToSessionsTopicAsync") {
+          return undefined
+        }
+        if (method === "SubscribeToSessionAsync") {
+          return snapshot
+        }
+        return undefined
+      })
 
       const { result } = await mountComposable(() => useWeaveSocket())
 
@@ -330,7 +375,15 @@ describe("useSignalRSocket", () => {
     it("handles subscription errors gracefully", async () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
 
-      mockHubConnection.invoke.mockRejectedValueOnce(new Error("Subscription failed"))
+      mockHubConnection.invoke.mockImplementation(async (method: string) => {
+        if (method === "SubscribeToSessionsTopicAsync") {
+          return undefined
+        }
+        if (method === "SubscribeToSessionAsync") {
+          throw new Error("Subscription failed")
+        }
+        return undefined
+      })
 
       const { result } = await mountComposable(() => useWeaveSocket())
 
@@ -350,7 +403,7 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockResolvedValueOnce(snapshot)
+      mockInvokeWithSnapshot(snapshot)
 
       const { result } = await mountComposable(() => useWeaveSocket())
 
@@ -370,7 +423,7 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockResolvedValueOnce(snapshot)
+      mockInvokeWithSnapshot(snapshot)
 
       const { result } = await mountComposable(() => useWeaveSocket())
 
@@ -390,7 +443,7 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockResolvedValue(snapshot)
+      mockInvokeWithSnapshot(snapshot)
 
       const { result } = await mountComposable(() => useWeaveSocket())
 
@@ -413,7 +466,7 @@ describe("useSignalRSocket", () => {
       const snapshot1 = createSessionSnapshot("session-1")
       const snapshot2 = createSessionSnapshot("session-2")
 
-      mockHubConnection.invoke.mockResolvedValueOnce(snapshot1).mockResolvedValueOnce(snapshot2)
+      mockInvokeWithSnapshot((sessionId: string) => sessionId === "session-1" ? snapshot1 : snapshot2)
 
       const { result } = await mountComposable(() => useWeaveSocket())
 
@@ -437,7 +490,7 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockResolvedValueOnce(snapshot)
+      mockInvokeWithSnapshot(snapshot)
 
       const { result } = await mountComposable(() => useWeaveSocket())
 
@@ -456,7 +509,7 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockResolvedValue(snapshot)
+      mockInvokeWithSnapshot(snapshot)
 
       const { result } = await mountComposable(() => useWeaveSocket())
 
@@ -476,7 +529,7 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockResolvedValue(snapshot)
+      mockInvokeWithSnapshot(snapshot)
 
       const { result } = await mountComposable(() => useWeaveSocket())
 
@@ -563,7 +616,7 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockResolvedValueOnce(snapshot)
+      mockInvokeWithSnapshot(snapshot)
 
       const { result } = await mountComposable(() => useWeaveSocket())
 
@@ -580,7 +633,15 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockResolvedValueOnce(snapshot)
+      mockHubConnection.invoke.mockImplementation(async (method: string, ...args: unknown[]) => {
+        if (method === "SubscribeToSessionsTopicAsync") {
+          return undefined
+        }
+        if (method === "SubscribeToSessionAsync") {
+          return snapshot
+        }
+        return undefined
+      })
 
       const { result } = await mountComposable(() => useWeaveSocket())
 
@@ -597,7 +658,7 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockResolvedValue(snapshot)
+      mockInvokeWithSnapshot(snapshot)
 
       const { result } = await mountComposable(() => useWeaveSocket())
 
@@ -636,7 +697,7 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockResolvedValue(snapshot)
+      mockInvokeWithSnapshot(snapshot)
 
       const { result } = await mountComposable(() => useWeaveSocket())
 
@@ -669,7 +730,7 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockResolvedValue(snapshot)
+      mockInvokeWithSnapshot(snapshot)
 
       const { result } = await mountComposable(() => useWeaveSocket())
 
@@ -705,14 +766,13 @@ describe("useSignalRSocket", () => {
       const { result } = await mountComposable(() => useWeaveSocket())
 
       // Subscribe to session-1
-      mockHubConnection.invoke.mockResolvedValue(snapshot1)
+      mockInvokeWithSnapshot((sessionId: string) => sessionId === "session-1" ? snapshot1 : snapshot2)
       const unsub1 = result.subscribeV2("session-1", vi.fn(), vi.fn())
       await flushAll()
 
       mockHubConnection.invoke.mockClear()
 
       // Switch to session-2
-      mockHubConnection.invoke.mockResolvedValue(snapshot2)
       unsub1()
       const unsub2 = result.subscribeV2("session-2", vi.fn(), vi.fn())
       await flushAll()
@@ -720,7 +780,6 @@ describe("useSignalRSocket", () => {
       mockHubConnection.invoke.mockClear()
 
       // Switch back to session-1
-      mockHubConnection.invoke.mockResolvedValue(snapshot1)
       unsub2()
       const onEvent1Final = vi.fn()
       result.subscribeV2("session-1", vi.fn(), onEvent1Final)
@@ -746,7 +805,7 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockResolvedValue(snapshot)
+      mockInvokeWithSnapshot(snapshot)
 
       const { result } = await mountComposable(() => useWeaveSocket())
 

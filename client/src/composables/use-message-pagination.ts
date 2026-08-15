@@ -1,7 +1,7 @@
 import { readonly, shallowRef, type ShallowRef } from "vue"
 import type { AccumulatedMessage } from "@/lib/client-types"
 import { api } from "@/api/client"
-import { convertFleetMessageToAccumulated, sortAccumulatedMessagesChronologically, type FleetMessage } from "@/lib/pagination-utils"
+import { convertFleetMessageToAccumulated, type FleetMessage } from "@/lib/pagination-utils"
 import type { PaginationSnapshot } from "@/lib/session-cache"
 
 export type { PaginationSnapshot } from "@/lib/session-cache"
@@ -78,7 +78,8 @@ export function useMessagePagination(): UseMessagePaginationReturn {
       totalCount.value = responseData.pagination?.totalCount ?? responseData.messages?.length ?? null
       loadError.value = null
 
-      return sortAccumulatedMessagesChronologically((responseData.messages ?? []).map(convertFleetMessageToAccumulated))
+      // Preserve OpenCode response order (oldest-first)
+      return (responseData.messages ?? []).map(convertFleetMessageToAccumulated)
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         return []
@@ -134,7 +135,8 @@ export function useMessagePagination(): UseMessagePaginationReturn {
       totalCount.value = responseData.pagination?.totalCount ?? responseData.messages?.length ?? null
       loadError.value = null
 
-      return sortAccumulatedMessagesChronologically((responseData.messages ?? []).map(convertFleetMessageToAccumulated))
+      // Preserve OpenCode response order (oldest-first)
+      return (responseData.messages ?? []).map(convertFleetMessageToAccumulated)
     } catch {
       loadError.value = "Failed to load older messages"
       return []

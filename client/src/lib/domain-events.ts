@@ -227,6 +227,22 @@ export interface DelegationCompletedPayload {
   completedAt: string;
 }
 
+export interface SessionActionCapabilities {
+  canSend: boolean;
+  canAbort: boolean;
+  canArchive: boolean;
+  canDelete: boolean;
+}
+
+export interface ActivityStatusPayload {
+  sessionId: string;
+  activityStatus: string;
+  capabilities: SessionActionCapabilities;
+  attempt?: number | null;
+  message?: string | null;
+  next?: string | null;
+}
+
 export interface SessionStarted extends EventCursorMetadata {
   type: "session.started";
   payload: SessionStartedPayload;
@@ -302,6 +318,11 @@ export interface DelegationCompleted extends EventCursorMetadata {
   payload: DelegationCompletedPayload;
 }
 
+export interface ActivityStatus extends EventCursorMetadata {
+  type: "activity_status";
+  payload: ActivityStatusPayload;
+}
+
 export type DomainEvent =
   | SessionStarted
   | SessionIdled
@@ -317,4 +338,5 @@ export type DomainEvent =
   | MessagePartDeltaStreamed
   | DelegationCreated
   | DelegationUpdated
-  | DelegationCompleted;
+  | DelegationCompleted
+  | ActivityStatus;
