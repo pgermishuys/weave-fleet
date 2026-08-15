@@ -15,12 +15,7 @@ namespace WeaveFleet.Infrastructure.EventBus;
 
 /// <summary>
 /// Background service that reads every event (durable + ephemeral) from the in-process fan-out
-/// channel and handles WebSocket broadcast duties:
-/// <list type="bullet">
-///   <item>Broadcasts to <see cref="IEventBroadcaster"/> on the per-session topic.</item>
-///   <item>Buffers <c>message.part.delta</c> fragments via
-///     <see cref="IHarnessEventPersister.BufferTextDelta"/>.</item>
-/// </list>
+/// channel and broadcasts to <see cref="IEventBroadcaster"/> on the per-session topic.
 /// Activity-status events (tracker update + global "sessions" topic broadcast) are handled
 /// directly in <see cref="HarnessEventRelay"/> to avoid lossy channel drops.
 /// </summary>
@@ -42,7 +37,7 @@ internal sealed partial class InProcessFanOutService : BackgroundService
         _channels = channels;
         _broadcaster = broadcaster;
         _pipelineMetrics = pipelineMetrics;
-        _scopeFactory = scopeFactory;
+        _scopeFactory = scopeFactory; // Still needed for EnrichSessionStatusPayloadAsync
         _logger = logger;
     }
 
@@ -86,14 +81,6 @@ internal sealed partial class InProcessFanOutService : BackgroundService
         {
             _logger.LogDebug("[FanOut] Skipped user message echo type={Type}", eventType);
             return;
-        }
-
-        // Buffer message.part.delta text for the durable merge on next message.updated.
-        if (evt.Type == EventTypes.MessagePartDelta && userId is not null)
-        {
-            using var scope = _scopeFactory.CreateScope();
-            var persister = scope.ServiceProvider.GetRequiredService<IHarnessEventPersister>();
-            persister.BufferTextDelta(sessionId, evt);
         }
 
         var activityStatus = ParseActivityStatus(evt.Type, evt.Payload);

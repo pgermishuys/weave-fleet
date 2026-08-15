@@ -104,8 +104,8 @@ public static class DependencyInjection
         services.AddScoped<IWorkspaceRootRepository, WorkspaceRootRepository>();
         services.AddScoped<IMessageRepository, MessageRepository>();
         services.AddScoped<IOutboxRepository, OutboxRepository>();
-        services.AddScoped<IHarnessEventLogRepository, HarnessEventLogRepository>();
         services.AddScoped<ISessionSnapshotBuilder, SessionSnapshotBuilder>();
+        services.AddScoped<ISessionMessageProxy, OpenCodeSessionMessageProxy>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IBoardRepository, BoardRepository>();
         services.AddScoped<ISmartLinkRepository, SmartLinkRepository>();
@@ -127,6 +127,7 @@ public static class DependencyInjection
         services.AddScoped<SessionSourceResolutionService>();
         services.AddScoped<GitDiffService>();
         services.AddScoped<SessionOrchestrator>();
+        services.AddScoped<ISessionActivator>(sp => sp.GetRequiredService<SessionOrchestrator>());
         services.AddScoped<SessionCallbackService>();
         services.AddScoped<DelegationService>();
         services.AddScoped<SmartLinkService>();
@@ -191,23 +192,9 @@ public static class DependencyInjection
         services.AddSingleton<InProcessOutboxDispatcher>();
         services.AddSingleton<IOutboxDispatcher>(sp => sp.GetRequiredService<InProcessOutboxDispatcher>());
 
-        // Shared text-delta buffer — singleton so fragments buffered by the fan-out service
-        // (InProcessFanOutService) survive across scoped persister invocations.
-        services.AddSingleton<TextDeltaBuffer>();
-
-        // StreamingStateProvider — singleton, composes SessionActivityTracker + TextDeltaBuffer
-        // to provide unified snapshots for SignalR hubs.
-        services.AddSingleton<StreamingStateProvider>();
-
-        // Harness event persister — scoped so message/session repositories flow through correctly.
-        services.AddScoped<HarnessEventPersistenceService>();
-        services.AddScoped<IHarnessEventPersister>(sp => sp.GetRequiredService<HarnessEventPersistenceService>());
-
         // In-process event bus — pure .NET, no child process.
-        services.AddInProcessEventBus(bus =>
-        {
-            bus.AddProjection<WeaveFleet.Application.Projections.MessagePersistenceProjection>(ConsumerScope.Cluster);
-        });
+        services.AddInProcessEventBus();
+
 
         // HarnessEventRelay is transport-agnostic (depends on IEventPublisher only).
         services.AddHostedService<HarnessEventRelay>();

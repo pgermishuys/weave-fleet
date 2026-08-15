@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
-using WeaveFleet.Application.Projections;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
@@ -13,469 +12,101 @@ using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.EventBus;
 
-public sealed class InProcessEventStoreTests
-{
-    [Fact]
-    public async Task append_returns_positive_id_for_new_message()
-    {
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using (keeper)
-        {
-            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-            var env = MakeEnvelope("msg-1");
-            var id = store.Append(env);
-            id.ShouldBeGreaterThan(0L);
-        }
-    }
-
-    [Fact]
-    public async Task append_returns_zero_for_duplicate_message_id()
-    {
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using (keeper)
-        {
-            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-            var env = MakeEnvelope("msg-dup");
-            var id1 = store.Append(env);
-            var id2 = store.Append(env);
-            id1.ShouldBeGreaterThan(0L);
-            id2.ShouldBe(0L);
-        }
-    }
-
-    [Fact]
-    public async Task read_pending_returns_inserted_row()
-    {
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using (keeper)
-        {
-            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-            var env = MakeEnvelope("msg-read");
-            var id = store.Append(env);
-
-            var rows = store.ReadPending(0);
-            rows.Count.ShouldBe(1);
-            rows[0].Id.ShouldBe(id);
-            rows[0].Envelope.MessageId.ShouldBe("msg-read");
-            rows[0].Envelope.EventType.ShouldBe(EventTypes.MessageCreated);
-            rows[0].Envelope.EventId.ShouldBeNull();
-        }
-    }
-
-    [Fact]
-    public async Task mark_dispatched_removes_row_from_pending()
-    {
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using (keeper)
-        {
-            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-            var id = store.Append(MakeEnvelope("msg-dispatch"));
-
-            store.MarkDispatched(id);
-
-            var rows = store.ReadPending(0);
-            rows.Count.ShouldBe(0);
-        }
-    }
-
-    [Fact]
-    public async Task read_pending_respects_after_id()
-    {
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using (keeper)
-        {
-            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-            var id1 = store.Append(MakeEnvelope("msg-a"));
-            var id2 = store.Append(MakeEnvelope("msg-b"));
-
-            var rows = store.ReadPending(id1);
-            rows.Count.ShouldBe(1);
-            rows[0].Id.ShouldBe(id2);
-        }
-    }
-
-    [Fact]
-    public async Task read_pending_tolerates_event_id_gaps()
-    {
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using (keeper)
-        {
-            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-            var id1 = store.Append(MakeEnvelope("msg-gap-a"));
-            var id2 = store.Append(MakeEnvelope("msg-gap-b"));
-            var id3 = store.Append(MakeEnvelope("msg-gap-c"));
-            store.MarkDispatched(id2);
-
-            var rows = store.ReadPending(id1);
-
-            rows.Count.ShouldBe(1);
-            rows[0].Id.ShouldBe(id3);
-        }
-    }
-
-    [Fact]
-    public async Task read_pending_after_event_id_returns_only_later_events()
-    {
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using (keeper)
-        {
-            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-            _ = store.Append(MakeEnvelope("msg-before-cursor"));
-            var cursor = store.Append(MakeEnvelope("msg-at-cursor"));
-            var afterCursor = store.Append(MakeEnvelope("msg-after-cursor"));
-
-            var rows = store.ReadPending(cursor);
-
-            rows.Count.ShouldBe(1);
-            rows[0].Id.ShouldBe(afterCursor);
-            rows.ShouldAllBe(row => row.Id > cursor);
-        }
-    }
-
-    [Fact]
-    public async Task get_last_event_id_returns_max_id_for_session()
-    {
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using (keeper)
-        {
-            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-            var id1 = store.Append(MakeEnvelope("msg-1", "sess-a"));
-            var id2 = store.Append(MakeEnvelope("msg-2", "sess-a"));
-            var id3 = store.Append(MakeEnvelope("msg-3", "sess-b"));
-
-            var lastIdA = store.GetLastEventId("sess-a");
-            var lastIdB = store.GetLastEventId("sess-b");
-
-            lastIdA.ShouldBe(id2);
-            lastIdB.ShouldBe(id3);
-        }
-    }
-
-    [Fact]
-    public async Task get_last_event_id_returns_zero_when_no_events_exist()
-    {
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using (keeper)
-        {
-            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-
-            var lastId = store.GetLastEventId("sess-nonexistent");
-
-            lastId.ShouldBe(0L);
-        }
-    }
-
-    [Fact]
-    public async Task get_last_event_id_ignores_other_sessions()
-    {
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using (keeper)
-        {
-            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-            var id1 = store.Append(MakeEnvelope("msg-1", "sess-x"));
-            var id2 = store.Append(MakeEnvelope("msg-2", "sess-y"));
-            var id3 = store.Append(MakeEnvelope("msg-3", "sess-x"));
-
-            var lastIdX = store.GetLastEventId("sess-x");
-
-            lastIdX.ShouldBe(id3);
-            lastIdX.ShouldBeGreaterThan(id1);
-        }
-    }
-
-    private static InProcessEnvelope MakeEnvelope(string messageId) => MakeEnvelope(messageId, "sess-1");
-
-    private static InProcessEnvelope MakeEnvelope(string messageId, string sessionId) => new(
-        @event: new HarnessEvent
-        {
-            Type      = EventTypes.MessageCreated,
-            SessionId = sessionId,
-            Timestamp = DateTimeOffset.UtcNow,
-        },
-        messageId:            messageId,
-        tenant:               "tenant.default",
-        projectId:            "proj-1",
-        sessionId:            sessionId,
-        eventType:            EventTypes.MessageCreated,
-        userId:               "user-1",
-        harnessType:          "opencode",
-        internalPumpDedupKey: 1,
-        isDurable:            true);
-}
-
 public sealed class InProcessEventPublisherTests
 {
     [Fact]
-    public async Task durable_event_is_persisted_and_signals_projection_wakeup()
+    public async Task durable_event_goes_to_fanout_with_provisional_negative_id()
     {
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using (keeper)
+        var channels = new InProcessChannels();
+        var metrics  = new InProcessMetrics();
+        var pipelineMetrics = new PipelineLatencyMetrics();
+        var publisher = new InProcessEventPublisher(
+            channels, metrics, pipelineMetrics,
+            NullLogger<InProcessEventPublisher>.Instance);
+
+        var evt = new HarnessEvent
         {
-            var store    = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-            var channels = new InProcessChannels();
-            var metrics  = new InProcessMetrics();
-            var pipelineMetrics = new PipelineLatencyMetrics();
-            var publisher = new InProcessEventPublisher(
-                store, channels, metrics, pipelineMetrics,
-                NullLogger<InProcessEventPublisher>.Instance);
+            Type = EventTypes.MessageCreated,
+            SessionId = "sess-pub",
+            Timestamp = DateTimeOffset.UtcNow,
+        };
+        _ = await publisher.PublishAsync(
+            evt,
+            new WeaveFleet.Application.Events.EventPublishContext("sess-pub", "proj-1", "user-1", "opencode", InternalPumpDedupKey: 42),
+            CancellationToken.None);
 
-            var evt = new HarnessEvent
-            {
-                Type = EventTypes.MessageCreated,
-                SessionId = "sess-pub",
-                Timestamp = DateTimeOffset.UtcNow,
-            };
-            _ = await publisher.PublishAsync(
-                evt,
-                new WeaveFleet.Application.Events.EventPublishContext("sess-pub", "proj-1", "user-1", "opencode", InternalPumpDedupKey: 42),
-                CancellationToken.None);
-
-            // Store should have the event.
-            var rows = store.ReadPending(0);
-            rows.Count.ShouldBe(1);
-            rows[0].Envelope.MessageId.ShouldBe("sess-pub:42");
-
-            // Projection wakeup channel should have a signal.
-            channels.ProjectionWakeUp.Reader.TryRead(out _).ShouldBeTrue();
-
-            // Fan-out channel should have the envelope with a provisional negative ID.
-            // Clients receive events immediately with provisional IDs for lower latency.
-            channels.FanOut.Reader.TryRead(out var fanOutEnv).ShouldBeTrue();
-            fanOutEnv!.EventType.ShouldBe(EventTypes.MessageCreated);
-            fanOutEnv.EventId.ShouldNotBeNull();
-            fanOutEnv.EventId!.Value.ShouldBeLessThan(0);  // Provisional negative ID
-        }
+        // Fan-out channel should have the envelope with a provisional negative ID.
+        // Clients receive events immediately with provisional IDs for lower latency.
+        channels.FanOut.Reader.TryRead(out var fanOutEnv).ShouldBeTrue();
+        fanOutEnv!.EventType.ShouldBe(EventTypes.MessageCreated);
+        fanOutEnv.EventId.ShouldNotBeNull();
+        fanOutEnv.EventId!.Value.ShouldBeLessThan(0);  // Provisional negative ID
     }
 
     [Fact]
-    public async Task ephemeral_event_only_goes_to_fanout_not_store()
+    public async Task ephemeral_event_goes_to_fanout_without_event_id()
     {
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using (keeper)
+        var channels = new InProcessChannels();
+        var metrics  = new InProcessMetrics();
+        var pipelineMetrics = new PipelineLatencyMetrics();
+        var publisher = new InProcessEventPublisher(
+            channels, metrics, pipelineMetrics,
+            NullLogger<InProcessEventPublisher>.Instance);
+
+        var evt = new HarnessEvent
         {
-            var store    = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-            var channels = new InProcessChannels();
-            var metrics  = new InProcessMetrics();
-            var pipelineMetrics = new PipelineLatencyMetrics();
-            var publisher = new InProcessEventPublisher(
-                store, channels, metrics, pipelineMetrics,
-                NullLogger<InProcessEventPublisher>.Instance);
+            Type = EventTypes.SessionStatus,
+            SessionId = "sess-eph",
+            Timestamp = DateTimeOffset.UtcNow,
+        };
+        _ = await publisher.PublishAsync(
+            evt,
+            new WeaveFleet.Application.Events.EventPublishContext("sess-eph", "proj-1", "user-1", null, InternalPumpDedupKey: 1),
+            CancellationToken.None);
 
-            var evt = new HarnessEvent
-            {
-                Type = EventTypes.SessionStatus,
-                SessionId = "sess-eph",
-                Timestamp = DateTimeOffset.UtcNow,
-            };
-            _ = await publisher.PublishAsync(
-                evt,
-                new WeaveFleet.Application.Events.EventPublishContext("sess-eph", "proj-1", "user-1", null, InternalPumpDedupKey: 1),
-                CancellationToken.None);
-
-            // Store must be empty for ephemeral events.
-            store.ReadPending(0).Count.ShouldBe(0);
-
-            // Wakeup channel must be empty.
-            channels.ProjectionWakeUp.Reader.TryRead(out _).ShouldBeFalse();
-
-            // Fan-out must have the event.
-            channels.FanOut.Reader.TryRead(out var env).ShouldBeTrue();
-            env!.EventType.ShouldBe(EventTypes.SessionStatus);
-            env.EventId.ShouldBeNull();
-        }
+        // Fan-out must have the event.
+        channels.FanOut.Reader.TryRead(out var env).ShouldBeTrue();
+        env!.EventType.ShouldBe(EventTypes.SessionStatus);
+        env.EventId.ShouldBeNull();
     }
 
     [Fact]
     public async Task Should_carry_domain_event_to_fanout_channel_when_published()
     {
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using (keeper)
-        {
-            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-            var channels = new InProcessChannels();
-            var metrics = new InProcessMetrics();
-            var pipelineMetrics = new PipelineLatencyMetrics();
-            var publisher = new InProcessEventPublisher(
-                store, channels, metrics, pipelineMetrics,
-                NullLogger<InProcessEventPublisher>.Instance);
+        var channels = new InProcessChannels();
+        var metrics = new InProcessMetrics();
+        var pipelineMetrics = new PipelineLatencyMetrics();
+        var publisher = new InProcessEventPublisher(
+            channels, metrics, pipelineMetrics,
+            NullLogger<InProcessEventPublisher>.Instance);
 
-            var evt = new HarnessEvent
+        var evt = new HarnessEvent
+        {
+            Type = EventTypes.SessionStatus,
+            SessionId = "sess-domain",
+            Timestamp = DateTimeOffset.UtcNow,
+        };
+
+        var domainEvent = new TurnStarted
+        {
+            Payload = new TurnStartedPayload
             {
-                Type = EventTypes.SessionStatus,
                 SessionId = "sess-domain",
-                Timestamp = DateTimeOffset.UtcNow,
-            };
+                MessageId = "msg-1",
+                Index = 0
+            }
+        };
 
-            var domainEvent = new TurnStarted
+        _ = await publisher.PublishAsync(
+            evt,
+            new WeaveFleet.Application.Events.EventPublishContext("sess-domain", "proj-1", "user-1", null, InternalPumpDedupKey: 3)
             {
-                Payload = new TurnStartedPayload
-                {
-                    SessionId = "sess-domain",
-                    MessageId = "msg-1",
-                    Index = 0
-                }
-            };
+                DomainEvent = domainEvent
+            },
+            CancellationToken.None);
 
-            _ = await publisher.PublishAsync(
-                evt,
-                new WeaveFleet.Application.Events.EventPublishContext("sess-domain", "proj-1", "user-1", null, InternalPumpDedupKey: 3)
-                {
-                    DomainEvent = domainEvent
-                },
-                CancellationToken.None);
-
-            channels.FanOut.Reader.TryRead(out var env).ShouldBeTrue();
-            env!.DomainEvent.ShouldBe(domainEvent);
-        }
-    }
-
-    [Fact]
-    public async Task duplicate_durable_event_is_dropped_silently()
-    {
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using (keeper)
-        {
-            var store    = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-            var channels = new InProcessChannels();
-            var metrics  = new InProcessMetrics();
-            var pipelineMetrics = new PipelineLatencyMetrics();
-            var publisher = new InProcessEventPublisher(
-                store, channels, metrics, pipelineMetrics,
-                NullLogger<InProcessEventPublisher>.Instance);
-
-            var ctx = new WeaveFleet.Application.Events.EventPublishContext("sess-dd", "proj-1", null, null, InternalPumpDedupKey: 7);
-            var evt = new HarnessEvent { Type = EventTypes.MessageCreated, SessionId = "sess-dd", Timestamp = DateTimeOffset.UtcNow };
-
-            _ = await publisher.PublishAsync(evt, ctx, CancellationToken.None);
-            _ = await publisher.PublishAsync(evt, ctx, CancellationToken.None); // duplicate
-
-            store.ReadPending(0).Count.ShouldBe(1); // only one row
-        }
-    }
-
-    [Fact]
-    public async Task duplicate_correlation_id_is_idempotent()
-    {
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using (keeper)
-        {
-            var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-            var channels = new InProcessChannels();
-            var metrics = new InProcessMetrics();
-            var pipelineMetrics = new PipelineLatencyMetrics();
-            var publisher = new InProcessEventPublisher(
-                store, channels, metrics, pipelineMetrics,
-                NullLogger<InProcessEventPublisher>.Instance);
-
-            var evt = new HarnessEvent { Type = EventTypes.UserPromptCommitted, SessionId = "sess-corr", Timestamp = DateTimeOffset.UtcNow };
-            var first = await publisher.PublishAsync(
-                evt,
-                new WeaveFleet.Application.Events.EventPublishContext("sess-corr", "proj-1", "user-1", "opencode", InternalPumpDedupKey: 0)
-                {
-                    CorrelationId = "corr-duplicate"
-                },
-                CancellationToken.None);
-            var second = await publisher.PublishAsync(
-                evt,
-                new WeaveFleet.Application.Events.EventPublishContext("sess-corr", "proj-1", "user-1", "opencode", InternalPumpDedupKey: 0)
-                {
-                    CorrelationId = "corr-duplicate"
-                },
-                CancellationToken.None);
-
-            first.IsDuplicate.ShouldBeFalse();
-            second.IsDuplicate.ShouldBeTrue();
-            second.EventId.ShouldBe(first.EventId);  // Returns the real SQLite ID
-            store.ReadPending(0).Count.ShouldBe(1);
-            
-            // Both events are broadcast (with provisional negative IDs for immediate delivery).
-            // Clients receive events faster but may see duplicates with different provisional IDs.
-            channels.FanOut.Reader.TryRead(out var firstEnvelope).ShouldBeTrue();
-            channels.FanOut.Reader.TryRead(out var secondEnvelope).ShouldBeTrue();
-            
-            // Both envelopes have provisional negative IDs (assigned before persistence)
-            firstEnvelope!.EventId.ShouldNotBeNull();
-            secondEnvelope!.EventId.ShouldNotBeNull();
-            firstEnvelope.EventId!.Value.ShouldBeLessThan(0);
-            secondEnvelope.EventId!.Value.ShouldBeLessThan(0);
-            firstEnvelope.EventId.ShouldNotBe(secondEnvelope.EventId);  // Different provisional IDs
-        }
-    }
-}
-
-public sealed class InProcessProjectionHostTests
-{
-    [Fact]
-    public async Task dispatches_pending_events_to_projections()
-    {
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using (keeper)
-        {
-            var store    = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-            var channels = new InProcessChannels();
-
-            var env = new InProcessEnvelope(
-                @event: new HarnessEvent
-                {
-                    Type = EventTypes.MessageCreated,
-                    SessionId = "sess-ph",
-                    Timestamp = DateTimeOffset.UtcNow,
-                },
-                messageId:            "sess-ph:1",
-                tenant:               "tenant.default",
-                projectId:            "proj-1",
-                sessionId:            "sess-ph",
-                eventType:            EventTypes.MessageCreated,
-                userId:               "user-1",
-                harnessType:          "opencode",
-                internalPumpDedupKey: 1,
-                isDurable:            true);
-            store.Append(env);
-
-            var projection = new RecordingProjection();
-            var services = new ServiceCollection();
-            services.AddScoped<RecordingProjection>(_ => projection);
-            var sp = services.BuildServiceProvider();
-
-            var registry = new WeaveFleet.Infrastructure.EventBus.ProjectionRegistry(
-                [new WeaveFleet.Infrastructure.EventBus.ProjectionRegistryEntry(typeof(RecordingProjection), WeaveFleet.Infrastructure.EventBus.ConsumerScope.Cluster)]);
-
-            var host = new InProcessProjectionHost(
-                store, channels, registry,
-                new InProcessMetrics(), sp,
-                NullLogger<InProcessProjectionHost>.Instance);
-
-            // Signal wake-up so the host doesn't block waiting.
-            channels.ProjectionWakeUp.Writer.TryWrite(null!);
-
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            // Run host in background; wait until projection fires, then cancel.
-            var runTask = host.StartAsync(cts.Token);
-            await projection.ReceivedOne.WaitAsync(cts.Token);
-            // Allow DispatchAsync to finish MarkDispatched after projection returns.
-            await Task.Delay(50, CancellationToken.None);
-            cts.Cancel();
-            try { await runTask; } catch (OperationCanceledException) { }
-
-            projection.Received.Count.ShouldBe(1);
-            projection.Received[0].evt.Type.ShouldBe(EventTypes.MessageCreated);
-
-            // Event should be marked dispatched.
-            store.ReadPending(0).Count.ShouldBe(0);
-        }
-    }
-
-    private sealed class RecordingProjection : IProjection<HarnessEvent>
-    {
-        public string Name => "recording";
-        public List<(HarnessEvent evt, ProjectionContext ctx)> Received { get; } = new();
-        public SemaphoreSlim ReceivedOne { get; } = new(0, 1);
-        public Task HandleAsync(HarnessEvent evt, ProjectionContext ctx, CancellationToken ct)
-        {
-            Received.Add((evt, ctx));
-            ReceivedOne.Release();
-            return Task.CompletedTask;
-        }
+        channels.FanOut.Reader.TryRead(out var env).ShouldBeTrue();
+        env!.DomainEvent.ShouldBe(domainEvent);
     }
 }
 
@@ -503,7 +134,6 @@ public sealed class InProcessFanOutServiceTests
         instanceTracker.Register("inst-status-capabilities", liveSession);
         var activityTracker = new SessionActivityTracker();
         var services = new ServiceCollection();
-        services.AddSingleton<IHarnessEventPersister, NoOpHarnessEventPersister>();
         services.AddSingleton(sessionRepository);
         services.AddSingleton<WeaveFleet.Domain.Repositories.ISessionRepository>(sessionRepository);
         services.AddSingleton(instanceTracker);
@@ -575,7 +205,6 @@ public sealed class InProcessFanOutServiceTests
         instanceTracker.Register("inst-activity-capabilities", liveSession);
         var activityTracker = new SessionActivityTracker();
         var services = new ServiceCollection();
-        services.AddSingleton<IHarnessEventPersister, NoOpHarnessEventPersister>();
         services.AddSingleton(sessionRepository);
         services.AddSingleton<WeaveFleet.Domain.Repositories.ISessionRepository>(sessionRepository);
         services.AddSingleton(instanceTracker);
@@ -650,7 +279,6 @@ public sealed class InProcessFanOutServiceTests
             await Task.Delay(10, cts.Token);
 
         var services = new ServiceCollection();
-        services.AddSingleton<IHarnessEventPersister, NoOpHarnessEventPersister>();
 
         await using var serviceProvider = services.BuildServiceProvider();
         var service = new InProcessFanOutService(
@@ -710,18 +338,4 @@ public sealed class InProcessFanOutServiceTests
             await Task.Delay(10, ct);
         }
     }
-
-    private sealed class NoOpHarnessEventPersister : IHarnessEventPersister
-    {
-        public Task HandleAsync(string fleetSessionId, string ownerUserId, HarnessEvent evt, CancellationToken ct)
-            => Task.CompletedTask;
-
-        public Task FlushBufferedDeltasAsync(string fleetSessionId, string ownerUserId, CancellationToken ct)
-            => Task.CompletedTask;
-
-        public void BufferTextDelta(string fleetSessionId, HarnessEvent delta)
-        {
-        }
-    }
-
 }

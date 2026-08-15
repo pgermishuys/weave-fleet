@@ -12,9 +12,8 @@ namespace WeaveFleet.Infrastructure.EventBus;
 /// <summary>
 /// In-process implementation of <see cref="IEventPublisher"/>.
 /// <list type="bullet">
-///   <item><b>Durable events</b> — persisted to <c>inproc_events</c> via
-///     <see cref="InProcessEventStore"/>, then written to both the projection wake-up channel
-///     and the fan-out channel. Duplicate <c>message_id</c> values are silently dropped.</item>
+///   <item><b>Durable events</b> — assigned a provisional negative ID and broadcast immediately
+///     to the fan-out channel and automation channel. No persistence or duplicate detection.</item>
 ///   <item><b>Ephemeral events</b> — written to the fan-out channel only (no persistence).</item>
 ///   <item><b>Unknown events</b> — logged and counted as "dropped"; no channel write.</item>
 /// </list>
@@ -25,7 +24,6 @@ internal sealed class InProcessEventPublisher : IEventPublisher
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(1, "InProcPublishUnknownEventType"),
             "Publish dropped for unclassified event type {EventType} — neither durable nor ephemeral-relay.");
 
-    private readonly InProcessEventStore _store;
     private readonly InProcessChannels _channels;
     private readonly InProcessMetrics _metrics;
     private readonly PipelineLatencyMetrics _pipelineMetrics;
@@ -38,13 +36,11 @@ internal sealed class InProcessEventPublisher : IEventPublisher
     private long _nextProvisionalId = -1;
 
     public InProcessEventPublisher(
-        InProcessEventStore store,
         InProcessChannels channels,
         InProcessMetrics metrics,
         PipelineLatencyMetrics pipelineMetrics,
         ILogger<InProcessEventPublisher> logger)
     {
-        _store = store;
         _channels = channels;
         _metrics = metrics;
         _pipelineMetrics = pipelineMetrics;
@@ -122,34 +118,14 @@ internal sealed class InProcessEventPublisher : IEventPublisher
             _channels.FanOut.Writer.TryWrite(envelope);
             var broadcastEnd = sw.Elapsed.TotalMilliseconds;
 
-            // 2b. Send to automation dispatcher
+            // 3. Send to automation dispatcher
             WriteToAutomationChannel(envelope);
 
-            // 3. Persist to SQLite (blocking, but AFTER broadcast)
-            var persistStart = sw.Elapsed.TotalMilliseconds;
-            var appendResult = _store.AppendIdempotent(envelope);
-            var persistEnd = sw.Elapsed.TotalMilliseconds;
-
-            if (appendResult.IsDuplicate)
-            {
-                result = "duplicate";
-                _metrics.RecordPublish(routing: "durable", eventType: evt.Type, result: result);
-                _logger.LogDebug(
-                    "[Publisher:Durable] type={Type} broadcast={BroadcastMs:F1}ms persist={PersistMs:F1}ms total={TotalMs:F1}ms result=duplicate provisionalId={ProvisionalId} realId={RealId}",
-                    evt.Type, broadcastEnd - broadcastStart, persistEnd - persistStart, sw.Elapsed.TotalMilliseconds, provisionalId, appendResult.EventId);
-                // Duplicate was already broadcast with provisional ID; client will deduplicate if needed
-                return new PublishResult(appendResult.EventId, IsDuplicate: true);
-            }
-
-            // 4. Wake up the projection host to process this event
-            //    (projection host reads from store, so it gets the real ID)
-            _channels.ProjectionWakeUp.Writer.TryWrite(null!);
-
             _logger.LogDebug(
-                "[Publisher:Durable] type={Type} broadcast={BroadcastMs:F1}ms persist={PersistMs:F1}ms total={TotalMs:F1}ms provisionalId={ProvisionalId} realId={RealId}",
-                evt.Type, broadcastEnd - broadcastStart, persistEnd - persistStart, sw.Elapsed.TotalMilliseconds, provisionalId, appendResult.EventId);
+                "[Publisher:Durable] type={Type} broadcast={BroadcastMs:F1}ms total={TotalMs:F1}ms provisionalId={ProvisionalId}",
+                evt.Type, broadcastEnd - broadcastStart, sw.Elapsed.TotalMilliseconds, provisionalId);
 
-            return new PublishResult(appendResult.EventId, IsDuplicate: false);
+            return new PublishResult(provisionalId, IsDuplicate: false);
         }
         catch
         {

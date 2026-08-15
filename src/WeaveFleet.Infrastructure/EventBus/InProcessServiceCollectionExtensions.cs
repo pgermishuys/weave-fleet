@@ -11,33 +11,22 @@ namespace WeaveFleet.Infrastructure.EventBus;
 public static class InProcessServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers the in-process event bus: event store, channels, publisher, projection host,
-    /// and fan-out service. Projections are declared via the <paramref name="configure"/> callback.
+    /// Registers the in-process event bus: channels, publisher, and fan-out service.
     /// </summary>
-    public static IServiceCollection AddInProcessEventBus(
-        this IServiceCollection services,
-        Action<InProcessEventBusBuilder> configure)
+    public static IServiceCollection AddInProcessEventBus(this IServiceCollection services)
     {
-        var builder = new InProcessEventBusBuilder(services);
-        configure(builder);
-        services.AddSingleton(new ProjectionRegistry(builder.Entries));
-
-        // Shared channel holder (projection wakeup + fan-out + automation events).
+        // Shared channel holder (fan-out + automation events).
         var channels = new InProcessChannels();
         services.AddSingleton(channels);
 
         // Expose automation event channel for AutomationEventDispatcherService
         services.AddSingleton(channels.AutomationEvents);
 
-        services.AddSingleton<InProcessEventStore>();
-        services.AddSingleton<IEventStore>(sp => sp.GetRequiredService<InProcessEventStore>());
         services.AddSingleton<InProcessMetrics>();
         services.AddSingleton<PipelineLatencyMetrics>();
         services.AddSingleton<IEventPublisher, InProcessEventPublisher>();
 
-        // BackgroundServices — order matters: projection host must drain startup backlog before
-        // the app accepts requests (though in practice both start concurrently).
-        services.AddHostedService<InProcessProjectionHost>();
+        // BackgroundServices
         services.AddHostedService<InProcessFanOutService>();
 
         return services;

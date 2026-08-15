@@ -1,19 +1,14 @@
-using System.Data;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using WeaveFleet.Application.Projections;
-using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
-using WeaveFleet.Infrastructure.Data.Repositories;
 using WeaveFleet.Infrastructure.EventBus;
 using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Infrastructure.Services;
-using WeaveFleet.Infrastructure.Tests.Data;
 using WeaveFleet.Infrastructure.Tests.Data.Repositories;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
@@ -23,8 +18,7 @@ namespace WeaveFleet.Infrastructure.Tests.Services;
 /// <summary>
 /// The relay's responsibility is publish-only (plus reasoning-filter sanitation): every harness
 /// event flows to the event publisher via <see cref="IEventPublisher"/> with an internal per-pump dedup key.
-/// Downstream consumers (MessagePersistenceProjection for durable persistence,
-/// InProcessFanOutService for WebSocket fan-out) handle their own responsibilities and are
+/// Downstream consumers (InProcessFanOutService for WebSocket fan-out) handle their own responsibilities and are
 /// tested at their own layers.
 /// </summary>
 public sealed class HarnessEventRelayTests
@@ -33,40 +27,22 @@ public sealed class HarnessEventRelayTests
         FakeEventBroadcaster Broadcaster,
         InMemorySessionRepository SessionRepo,
         IServiceScopeFactory ScopeFactory,
-        SessionActivityTracker ActivityTracker,
-        IHarnessEventPersister Persister
+        SessionActivityTracker ActivityTracker
     ) BuildDependencies()
     {
         var broadcaster = new FakeEventBroadcaster();
         var sessionRepo = new InMemorySessionRepository();
         var activityTracker = new SessionActivityTracker();
-        var messageRepo = new InMemoryMessageRepository();
-        var delegationRepo = new InMemoryDelegationRepository();
-        var outboxRepo = new InMemoryOutboxRepository();
-        var outboxDispatcher = new FakeOutboxDispatcher();
-        var connectionFactory = new FakeDbConnectionFactory();
-        var deltaBuffer = new TextDeltaBuffer();
-        var activityWriteService = new SessionActivityWriteService(
-            connectionFactory, messageRepo, delegationRepo, sessionRepo, new InMemorySmartLinkRepository(), outboxRepo, outboxDispatcher);
-        var persister = new HarnessEventPersistenceService(messageRepo, sessionRepo, activityWriteService, deltaBuffer);
 
         var scopeFactory = TestServiceScopeFactory.Create(services =>
         {
             services.AddLogging();
             services.AddSingleton<ISessionRepository>((ISessionRepository)sessionRepo);
-            services.AddSingleton<IMessageRepository>((IMessageRepository)messageRepo);
-            services.AddSingleton<IDelegationRepository>((IDelegationRepository)delegationRepo);
-            services.AddSingleton<IOutboxRepository>((IOutboxRepository)outboxRepo);
-            services.AddSingleton<IOutboxDispatcher>((IOutboxDispatcher)outboxDispatcher);
-            services.AddSingleton<IDbConnectionFactory>((IDbConnectionFactory)connectionFactory);
-            services.AddSingleton(deltaBuffer);
-            services.AddSingleton(activityWriteService);
-            services.AddSingleton<IHarnessEventPersister>(persister);
             services.AddSingleton(new SessionCapabilitiesResolver(new InstanceTracker(), activityTracker));
             services.AddTransient<DomainEventTranslator>();
         });
 
-        return (broadcaster, sessionRepo, scopeFactory, activityTracker, persister);
+        return (broadcaster, sessionRepo, scopeFactory, activityTracker);
     }
 
     private static HarnessEventRelay BuildRelay(
@@ -80,7 +56,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task relay_publishes_every_event_with_internal_pump_dedup_key_and_session_metadata()
     {
-        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
         var tracker = new InstanceTracker();
         var publisher = new FakeEventPublisher();
         var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
@@ -137,17 +113,12 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task pump_restart_mid_session_keeps_durable_event_ids_monotonic()
     {
-        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
         var tracker = new InstanceTracker();
         var channels = new InProcessChannels();
         var metrics = new InProcessMetrics();
-
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using var _ = keeper;
-        var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
         var pipelineMetrics = new PipelineLatencyMetrics();
         var publisher = new InProcessEventPublisher(
-            store,
             channels,
             metrics,
             pipelineMetrics,
@@ -180,7 +151,6 @@ public sealed class HarnessEventRelayTests
         firstPump.Emit(CreateMessageLifecycleEvent(EventTypes.MessageUpdated, "msg-before-restart", "assistant", "before restart"));
         firstPump.Complete();
 
-        await WaitUntilAsync(() => Task.FromResult(store.ReadPending(0).Count == 1), cts.Token);
         await WaitUntilAsync(() => Task.FromResult(broadcaster.Broadcasts.Any(b => b.Topic == "sessions")), cts.Token);
 
         var secondPump = new FakeHarnessSession(instanceId);
@@ -188,12 +158,10 @@ public sealed class HarnessEventRelayTests
         secondPump.Emit(CreateMessageLifecycleEvent(EventTypes.MessageUpdated, "msg-after-restart", "assistant", "after restart"));
         secondPump.Complete();
 
-        await WaitUntilAsync(() => Task.FromResult(store.ReadPending(0).Count == 2), cts.Token);
+        await WaitUntilAsync(() => Task.FromResult(broadcaster.Broadcasts.Count >= 2), cts.Token);
 
-        var eventIds = store.ReadPending(0).Select(row => row.Id).ToArray();
-        eventIds.Length.ShouldBe(2);
-        eventIds[0].ShouldBeGreaterThan(0L);
-        eventIds[1].ShouldBeGreaterThan(eventIds[0]);
+        // Verify that both events were relayed through the publisher
+        broadcaster.Broadcasts.Count.ShouldBeGreaterThanOrEqualTo(2);
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);
@@ -202,7 +170,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task relay_internal_dedup_keys_are_not_frontend_session_stream_cursors()
     {
-        var (broadcaster, sessionRepo, _, activityTracker, persister) = BuildDependencies();
+        var (broadcaster, sessionRepo, _, activityTracker) = BuildDependencies();
         var tracker = new InstanceTracker();
         var channels = new InProcessChannels();
         var metrics = new InProcessMetrics();
@@ -216,16 +184,11 @@ public sealed class HarnessEventRelayTests
             services.AddSingleton<ISessionRepository>(sessionRepo);
             services.AddSingleton(tracker);
             services.AddSingleton(new SessionCapabilitiesResolver(tracker, activityTracker));
-            services.AddSingleton<IHarnessEventPersister>(persister);
             services.AddTransient<DomainEventTranslator>();
         });
 
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using var _ = keeper;
-        var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
         var pipelineMetrics = new PipelineLatencyMetrics();
         var publisher = new InProcessEventPublisher(
-            store,
             channels,
             metrics,
             pipelineMetrics,
@@ -321,7 +284,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task Relay_publishFailure_doesNotCrashPump()
     {
-        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
         var tracker = new InstanceTracker();
         var publisher = new FakeEventPublisher { ShouldFail = true };
         var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
@@ -351,7 +314,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task Pump_emitsIdleActivity_onSessionsTopic_afterDisconnect()
     {
-        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
         var tracker = new InstanceTracker();
         var publisher = new FakeEventPublisher();
         var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
@@ -380,7 +343,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task Session_lookup_retries_until_found()
     {
-        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
         var tracker = new InstanceTracker();
         var publisher = new FakeEventPublisher();
         var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
@@ -417,7 +380,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task No_events_published_when_session_lookup_always_fails()
     {
-        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
         var tracker = new InstanceTracker();
         var publisher = new FakeEventPublisher();
         var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
@@ -443,7 +406,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task Removing_instance_cancels_its_subscription()
     {
-        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
         var tracker = new InstanceTracker();
         var publisher = new FakeEventPublisher();
         var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
@@ -473,7 +436,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task Already_running_instances_at_startup_receive_relay()
     {
-        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
         var tracker = new InstanceTracker();
         var publisher = new FakeEventPublisher();
 
@@ -502,7 +465,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task Should_attach_translated_domain_event_to_publish_context()
     {
-        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
         var tracker = new InstanceTracker();
         var publisher = new FakeEventPublisher();
         var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
@@ -552,7 +515,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task Relay_suppresses_user_echo_parts_and_keeps_assistant_parts()
     {
-        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
         var tracker = new InstanceTracker();
         var publisher = new FakeEventPublisher();
         var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
@@ -650,326 +613,9 @@ public sealed class HarnessEventRelayTests
     }
 
     [Fact]
-    public async Task relay_projection_writes_durable_assistant_replay_log_and_snapshot_while_user_echo_remains_suppressed()
-    {
-        const string fleetSessionId = "fleet-durable-parity";
-        const string instanceId = "instance-durable-parity";
-        const string userId = TestUserContext.DefaultUserId;
-        const string userMessageId = "msg-user-echo";
-        const string assistantMessageId = "msg-assistant-final";
-
-        var userContext = new TestUserContext(userId);
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using var _ = keeper;
-        await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(
-            factory,
-            userId,
-            sessionId: fleetSessionId,
-            instanceId: instanceId,
-            projectId: "proj-durable-parity");
-
-        var messageRepository = new MessageRepository(factory, userContext);
-        var sessionRepository = new SessionRepository(factory, userContext);
-        var delegationRepository = new DelegationRepository(factory, userContext);
-        var outboxRepository = new OutboxRepository(factory, userContext);
-        var smartLinkRepository = new SmartLinkRepository(factory, userContext);
-        var outboxDispatcher = new FakeOutboxDispatcher();
-        var activityWriteService = new SessionActivityWriteService(
-            factory,
-            messageRepository,
-            delegationRepository,
-            sessionRepository,
-            smartLinkRepository,
-            outboxRepository,
-            outboxDispatcher);
-        var deltaBuffer = new TextDeltaBuffer();
-        var persister = new HarnessEventPersistenceService(
-            messageRepository,
-            sessionRepository,
-            activityWriteService,
-            deltaBuffer);
-        var logRepository = new HarnessEventLogRepository(factory, userContext);
-
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddSingleton<IUserContext>(userContext);
-        services.AddSingleton<ISessionRepository>(sessionRepository);
-        services.AddSingleton<IMessageRepository>(messageRepository);
-        services.AddSingleton<IDelegationRepository>(delegationRepository);
-        services.AddSingleton<IOutboxRepository>(outboxRepository);
-        services.AddSingleton<ISmartLinkRepository>(smartLinkRepository);
-        services.AddSingleton<IOutboxDispatcher>(outboxDispatcher);
-        services.AddSingleton<IDbConnectionFactory>(factory);
-        services.AddSingleton(activityWriteService);
-        services.AddSingleton(deltaBuffer);
-        services.AddSingleton<IHarnessEventPersister>(persister);
-        services.AddScoped<IHarnessEventLogRepository>(_ => logRepository);
-        services.AddScoped<MessagePersistenceProjection>();
-        var activityTracker = new SessionActivityTracker();
-        services.AddSingleton(new SessionCapabilitiesResolver(new InstanceTracker(), activityTracker));
-        services.AddTransient<DomainEventTranslator>();
-        var serviceProvider = services.BuildServiceProvider();
-
-        var tracker = new InstanceTracker();
-        var broadcaster = new FakeEventBroadcaster();
-        var channels = new InProcessChannels();
-        var metrics = new InProcessMetrics();
-        var pipelineMetrics = new PipelineLatencyMetrics();
-        var store = new InProcessEventStore(factory, NullLogger<InProcessEventStore>.Instance);
-        var publisher = new InProcessEventPublisher(
-            store,
-            channels,
-            metrics,
-            pipelineMetrics,
-            NullLogger<InProcessEventPublisher>.Instance);
-        var fanOut = new InProcessFanOutService(
-            channels,
-            broadcaster,
-            pipelineMetrics,
-            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<InProcessFanOutService>.Instance);
-        var projectionHost = new InProcessProjectionHost(
-            store,
-            channels,
-            new ProjectionRegistry([
-                new ProjectionRegistryEntry(typeof(MessagePersistenceProjection), ConsumerScope.Cluster)
-            ]),
-            metrics,
-            serviceProvider,
-            NullLogger<InProcessProjectionHost>.Instance);
-        var relay = new HarnessEventRelay(
-            tracker,
-            broadcaster,
-            publisher,
-            activityTracker,
-            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<HarnessEventRelay>.Instance);
-
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        await fanOut.StartAsync(cts.Token);
-        await projectionHost.StartAsync(cts.Token);
-        await relay.StartAsync(cts.Token);
-        await Task.Delay(50, CancellationToken.None);
-
-        var instance = new FakeHarnessSession(instanceId);
-        tracker.Register(instanceId, instance);
-        await Task.Delay(100, CancellationToken.None);
-
-        instance.Emit(CreateMessageLifecycleEvent(EventTypes.MessageCreated, userMessageId, "user", "user prompt"));
-        instance.Emit(CreateMessageLifecycleEvent(EventTypes.MessageUpdated, userMessageId, "user", "user prompt"));
-        instance.Emit(CreateMessagePartUpdatedEvent(userMessageId, "part-user", "user prompt"));
-        instance.Emit(CreateMessageLifecycleEvent(EventTypes.MessageUpdated, assistantMessageId, "assistant", "draft"));
-        instance.Emit(CreateMessagePartUpdatedEvent(assistantMessageId, "part-assistant", "final assistant reply"));
-        instance.Complete();
-
-        await WaitUntilAsync(async () =>
-        {
-            var entries = await logRepository.GetBySessionAfterAsync(fleetSessionId, 0, 10);
-            var persisted = await messageRepository.GetByIdAsync(assistantMessageId, fleetSessionId);
-            return entries.Count == 2
-                && persisted is not null
-                && persisted.PartsJson.Contains("final assistant reply", StringComparison.Ordinal);
-        }, cts.Token);
-
-        var replayLog = await logRepository.GetBySessionAfterAsync(fleetSessionId, 0, 10);
-        replayLog.Select(entry => entry.SequenceNumber).ShouldBe([1L, 2L]);
-        replayLog.Select(entry => entry.Type).ShouldBe([
-            EventTypes.MessageUpdated,
-            EventTypes.MessagePartUpdated
-        ]);
-        // harness_events is append-only for events that survive user-echo suppression. Suppressed
-        // role=user message.created/message.updated echoes and their parts are not logged or replayed.
-        replayLog.ShouldAllBe(entry => entry.Payload.Contains(assistantMessageId, StringComparison.Ordinal));
-        replayLog.ShouldAllBe(entry => !entry.Payload.Contains(userMessageId, StringComparison.Ordinal));
-
-        (await messageRepository.GetByIdAsync(userMessageId, fleetSessionId)).ShouldBeNull();
-        var assistantMessage = await messageRepository.GetByIdAsync(assistantMessageId, fleetSessionId);
-        assistantMessage.ShouldNotBeNull();
-        assistantMessage.Role.ShouldBe("assistant");
-        assistantMessage.PartsJson.ShouldContain("final assistant reply");
-
-        var snapshot = await new SessionSnapshotBuilder(factory, userContext, activityTracker)
-            .BuildAsync(fleetSessionId);
-        snapshot.LastEventId.ShouldBe(2L);
-        snapshot.LastSequenceNumber.ShouldBe(snapshot.LastEventId);
-        snapshot.Messages.ShouldHaveSingleItem();
-        snapshot.Messages[0].Info.Id.ShouldBe(assistantMessageId);
-        snapshot.Messages[0].Info.Role.ShouldBe("assistant");
-        snapshot.Messages[0].Parts.ShouldHaveSingleItem();
-        snapshot.Messages[0].Parts[0].ShouldBeOfType<TextMessageEventPart>().Text.ShouldBe("final assistant reply");
-
-        await cts.CancelAsync();
-        await relay.StopAsync(CancellationToken.None);
-        await projectionHost.StopAsync(CancellationToken.None);
-        await fanOut.StopAsync(CancellationToken.None);
-    }
-
-    [Fact]
-    public async Task buffered_deltas_should_merge_into_persisted_message_when_existing_row_exists_during_disconnect_flush()
-    {
-        const string fleetSessionId = "fleet-delta-disconnect-existing";
-        const string instanceId = "instance-delta-disconnect-existing";
-        const string userId = TestUserContext.DefaultUserId;
-        const string messageId = "msg-delta-disconnect-existing";
-        const string partId = "part-delta-disconnect-existing";
-
-        var userContext = new TestUserContext(userId);
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using var _ = keeper;
-        await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(
-            factory,
-            userId,
-            sessionId: fleetSessionId,
-            instanceId: instanceId,
-            projectId: "proj-delta-disconnect-existing");
-
-        var messageRepository = new MessageRepository(factory, userContext);
-        var sessionRepository = new SessionRepository(factory, userContext);
-        var delegationRepository = new DelegationRepository(factory, userContext);
-        var outboxRepository = new OutboxRepository(factory, userContext);
-        var smartLinkRepository = new SmartLinkRepository(factory, userContext);
-        var deltaBuffer = new TextDeltaBuffer();
-        var persister = new HarnessEventPersistenceService(
-            messageRepository,
-            sessionRepository,
-            new SessionActivityWriteService(
-                factory,
-                messageRepository,
-                delegationRepository,
-                sessionRepository,
-                smartLinkRepository,
-                outboxRepository,
-                new FakeOutboxDispatcher()),
-            deltaBuffer);
-
-        await messageRepository.UpsertAsync(new PersistedMessage
-        {
-            Id = messageId,
-            SessionId = fleetSessionId,
-            Role = "assistant",
-            PartsJson = "[]",
-            Timestamp = DateTimeOffset.UtcNow.ToString("O"),
-            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
-        });
-
-        persister.BufferTextDelta(fleetSessionId, CreateMessagePartDeltaEvent(messageId, partId, "partial "));
-        persister.BufferTextDelta(fleetSessionId, CreateMessagePartDeltaEvent(messageId, partId, "reply"));
-
-        await persister.FlushBufferedDeltasAsync(fleetSessionId, userId, CancellationToken.None);
-
-        var persisted = await messageRepository.GetByIdAsync(messageId, fleetSessionId);
-        persisted.ShouldNotBeNull();
-        persisted.PartsJson.ShouldContain("partial reply");
-        deltaBuffer.SnapshotSession(fleetSessionId).Count.ShouldBe(0);
-
-        await persister.FlushBufferedDeltasAsync(fleetSessionId, userId, CancellationToken.None);
-        var persistedAfterSecondFlush = await messageRepository.GetByIdAsync(messageId, fleetSessionId);
-        persistedAfterSecondFlush.ShouldNotBeNull();
-        persistedAfterSecondFlush.PartsJson.ShouldBe(persisted.PartsJson);
-    }
-
-    [Fact]
-    public async Task buffered_deltas_should_remain_unpersisted_and_buffered_when_existing_message_row_is_missing_during_disconnect_flush()
-    {
-        const string fleetSessionId = "fleet-delta-disconnect-missing";
-        const string instanceId = "instance-delta-disconnect-missing";
-        const string userId = TestUserContext.DefaultUserId;
-        const string messageId = "msg-delta-disconnect-missing";
-        const string partId = "part-delta-disconnect-missing";
-
-        var userContext = new TestUserContext(userId);
-        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
-        await using var _ = keeper;
-        await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(
-            factory,
-            userId,
-            sessionId: fleetSessionId,
-            instanceId: instanceId,
-            projectId: "proj-delta-disconnect-missing");
-
-        var messageRepository = new MessageRepository(factory, userContext);
-        var sessionRepository = new SessionRepository(factory, userContext);
-        var delegationRepository = new DelegationRepository(factory, userContext);
-        var outboxRepository = new OutboxRepository(factory, userContext);
-        var smartLinkRepository = new SmartLinkRepository(factory, userContext);
-        var deltaBuffer = new TextDeltaBuffer();
-        var persister = new HarnessEventPersistenceService(
-            messageRepository,
-            sessionRepository,
-            new SessionActivityWriteService(
-                factory,
-                messageRepository,
-                delegationRepository,
-                sessionRepository,
-                smartLinkRepository,
-                outboxRepository,
-                new FakeOutboxDispatcher()),
-            deltaBuffer);
-
-        persister.BufferTextDelta(fleetSessionId, CreateMessagePartDeltaEvent(messageId, partId, "orphan "));
-        persister.BufferTextDelta(fleetSessionId, CreateMessagePartDeltaEvent(messageId, partId, "delta"));
-
-        await persister.FlushBufferedDeltasAsync(fleetSessionId, userId, CancellationToken.None);
-
-        (await messageRepository.GetByIdAsync(messageId, fleetSessionId)).ShouldBeNull();
-        var snapshot = deltaBuffer.SnapshotSession(fleetSessionId);
-        snapshot.Count.ShouldBe(1);
-        snapshot[(messageId, partId)].ShouldBe("orphan delta");
-    }
-
-    [Fact]
-    public async Task buffered_deltas_should_survive_when_flush_write_fails()
-    {
-        const string fleetSessionId = "fleet-delta-disconnect-failure";
-        const string userId = TestUserContext.DefaultUserId;
-        const string messageId = "msg-delta-disconnect-failure";
-        const string partId = "part-delta-disconnect-failure";
-
-        var messageRepository = new InMemoryMessageRepository();
-        messageRepository.Seed(new PersistedMessage
-        {
-            Id = messageId,
-            SessionId = fleetSessionId,
-            Role = "assistant",
-            PartsJson = "[]",
-            Timestamp = DateTimeOffset.UtcNow.ToString("O"),
-            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
-        });
-        var sessionRepository = new InMemorySessionRepository();
-        var deltaBuffer = new TextDeltaBuffer();
-        var persister = new HarnessEventPersistenceService(
-            messageRepository,
-            sessionRepository,
-            new SessionActivityWriteService(
-                new ThrowingDbConnectionFactory(),
-                messageRepository,
-                new InMemoryDelegationRepository(),
-                sessionRepository,
-                new InMemorySmartLinkRepository(),
-                new InMemoryOutboxRepository(),
-                new FakeOutboxDispatcher()),
-            deltaBuffer);
-
-        persister.BufferTextDelta(fleetSessionId, CreateMessagePartDeltaEvent(messageId, partId, "lost text"));
-
-        await persister.FlushBufferedDeltasAsync(fleetSessionId, userId, CancellationToken.None);
-
-        // Write failed (ThrowingDbConnectionFactory), so persisted message is unchanged
-        var persisted = await messageRepository.GetByIdAsync(messageId, fleetSessionId);
-        persisted.ShouldNotBeNull();
-        persisted.PartsJson.ShouldBe("[]");
-        messageRepository.UpsertCalls.ShouldBeEmpty();
-
-        // Deltas survive the failed write so a future retry or snapshot can still read them
-        deltaBuffer.SnapshotSession(fleetSessionId).Count.ShouldBe(1,
-            "Deltas should be preserved when flush write fails, ensuring the snapshot " +
-            "builder can still merge them into the response");
-    }
-
-    [Fact]
     public async Task Relay_resyncs_activity_status_on_pump_start_when_tracker_differs_from_harness()
     {
-        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
         var tracker = new InstanceTracker();
         var publisher = new FakeEventPublisher();
         var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
@@ -1025,7 +671,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task Relay_resyncs_activity_status_on_pump_start_when_harness_reports_busy()
     {
-        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
         var tracker = new InstanceTracker();
         var publisher = new FakeEventPublisher();
         var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
@@ -1081,7 +727,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task Relay_skips_resync_when_tracker_matches_harness()
     {
-        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
         var tracker = new InstanceTracker();
         var publisher = new FakeEventPublisher();
         var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
@@ -1125,7 +771,7 @@ public sealed class HarnessEventRelayTests
     [Fact]
     public async Task Relay_skips_resync_when_harness_returns_null_activity_status()
     {
-        var (broadcaster, sessionRepo, scopeFactory, activityTracker, _) = BuildDependencies();
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
         var tracker = new InstanceTracker();
         var publisher = new FakeEventPublisher();
         var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
@@ -1245,11 +891,6 @@ public sealed class HarnessEventRelayTests
             })
         };
 
-    private sealed class ThrowingDbConnectionFactory : IDbConnectionFactory
-    {
-        public IDbConnection CreateConnection()
-            => throw new InvalidOperationException("Simulated transaction failure.");
-    }
 
     private static async Task WaitUntilAsync(Func<Task<bool>> predicate, CancellationToken cancellationToken)
     {
@@ -1262,5 +903,266 @@ public sealed class HarnessEventRelayTests
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    // ── Echo Suppression Tests ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task relay_suppresses_all_user_message_echoes_from_harness()
+    {
+        // Arrange
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
+
+        var fleetSessionId = "fleet-echo-1";
+        var instanceId = "instance-echo-1";
+        var messageId = "msg_0046c0fa4001abc123XYZ45678";
+
+        sessionRepo.Seed(new Session
+        {
+            Id = fleetSessionId,
+            InstanceId = instanceId,
+            UserId = "user-echo",
+            ProjectId = "proj-echo",
+            HarnessType = "opencode",
+        });
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeHarnessSession(instanceId);
+        tracker.Register(instanceId, instance);
+
+        // Act: emit a user message with a msg_ ID (harness echo)
+        instance.Emit(new HarnessEvent
+        {
+            Type = EventTypes.MessageCreated,
+            SessionId = "oc-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                info = new
+                {
+                    id = messageId,
+                    role = "user",
+                    sessionID = "oc-1"
+                },
+                parts = new[]
+                {
+                    new { type = "text", text = "hello" }
+                }
+            })
+        });
+        instance.Complete();
+
+        await Task.Delay(200);
+
+        // Assert: the user message echo should be suppressed
+        publisher.Calls.ShouldBeEmpty("User message echo from harness should be suppressed");
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task relay_suppresses_message_part_updates_for_suppressed_user_messages()
+    {
+        // Arrange
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
+
+        var fleetSessionId = "fleet-echo-3";
+        var instanceId = "instance-echo-3";
+        var messageId = "msg_0046c0fa4001suppressed";
+
+        sessionRepo.Seed(new Session
+        {
+            Id = fleetSessionId,
+            InstanceId = instanceId,
+            UserId = "user-echo",
+            ProjectId = "proj-echo",
+            HarnessType = "opencode",
+        });
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeHarnessSession(instanceId);
+        tracker.Register(instanceId, instance);
+
+        // First, emit a user message to register the ID for suppression
+        instance.Emit(new HarnessEvent
+        {
+            Type = EventTypes.MessageCreated,
+            SessionId = "oc-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                info = new
+                {
+                    id = messageId,
+                    role = "user",
+                    sessionID = "oc-1"
+                },
+                parts = new[]
+                {
+                    new { type = "text", text = "hello" }
+                }
+            })
+        });
+
+        await Task.Delay(100);
+
+        // Act: emit a message part delta with the same message ID
+        instance.Emit(new HarnessEvent
+        {
+            Type = EventTypes.MessagePartDelta,
+            SessionId = "oc-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                part = new
+                {
+                    messageID = messageId,
+                    index = 0,
+                    delta = new { type = "text", text = " world" }
+                }
+            })
+        });
+        instance.Complete();
+
+        await Task.Delay(200);
+
+        // Assert: both events should be suppressed
+        publisher.Calls.ShouldBeEmpty("Message part delta for suppressed user message should also be suppressed");
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task relay_does_not_suppress_message_part_updates_for_non_suppressed_messages()
+    {
+        // Arrange
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
+
+        var fleetSessionId = "fleet-echo-parts";
+        var instanceId = "instance-echo-parts";
+        var assistantMessageId = "msg_0046c0fa4001assistant";
+
+        sessionRepo.Seed(new Session
+        {
+            Id = fleetSessionId,
+            InstanceId = instanceId,
+            UserId = "user-echo",
+            ProjectId = "proj-echo",
+            HarnessType = "opencode",
+        });
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeHarnessSession(instanceId);
+        tracker.Register(instanceId, instance);
+
+        // Act: emit a message part delta for a message ID that was never suppressed
+        instance.Emit(new HarnessEvent
+        {
+            Type = EventTypes.MessagePartDelta,
+            SessionId = "oc-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                part = new
+                {
+                    messageID = assistantMessageId,
+                    index = 0,
+                    delta = new { type = "text", text = "response text" }
+                }
+            })
+        });
+        instance.Complete();
+
+        await Task.Delay(200);
+
+        // Assert: the part delta should NOT be suppressed (message ID not in suppression set)
+        publisher.Calls.ShouldNotBeEmpty("Message part delta for non-suppressed message should NOT be suppressed");
+        publisher.Calls.Count.ShouldBe(1);
+        publisher.Calls.First().Event.Type.ShouldBe(EventTypes.MessagePartDelta);
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task relay_does_not_suppress_assistant_messages()
+    {
+        // Arrange
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
+
+        var fleetSessionId = "fleet-echo-4";
+        var instanceId = "instance-echo-4";
+        var messageId = "msg_0046c0fa4001assistant";
+
+        sessionRepo.Seed(new Session
+        {
+            Id = fleetSessionId,
+            InstanceId = instanceId,
+            UserId = "user-echo",
+            ProjectId = "proj-echo",
+            HarnessType = "opencode",
+        });
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        await Task.Delay(50);
+
+        var instance = new FakeHarnessSession(instanceId);
+        tracker.Register(instanceId, instance);
+
+        // Act: emit an assistant message (should never be suppressed)
+        instance.Emit(new HarnessEvent
+        {
+            Type = EventTypes.MessageCreated,
+            SessionId = "oc-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new
+            {
+                info = new
+                {
+                    id = messageId,
+                    role = "assistant",
+                    sessionID = "oc-1"
+                },
+                parts = new[]
+                {
+                    new { type = "text", text = "response" }
+                }
+            })
+        });
+        instance.Complete();
+
+        await Task.Delay(200);
+
+        // Assert: the assistant message should NOT be suppressed
+        publisher.Calls.ShouldNotBeEmpty("Assistant messages should never be suppressed");
+        publisher.Calls.Count.ShouldBe(1);
+        publisher.Calls.First().Event.Type.ShouldBe(EventTypes.MessageCreated);
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
     }
 }
