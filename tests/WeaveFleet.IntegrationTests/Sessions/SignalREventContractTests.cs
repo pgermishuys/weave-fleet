@@ -9,9 +9,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.DTOs;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Services;
@@ -527,51 +529,6 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
-    public async Task Snapshot_includes_tool_output_in_completed_state()
-    {
-        // Arrange: create a session and persist a message with a completed tool part
-        var sessionId = await CreateSessionAsync();
-        await PersistMessageWithCompletedToolAsync(sessionId);
-
-        // Act: subscribe and get snapshot
-        var snapshot = await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
-
-        // Assert: snapshot contains messages
-        snapshot.TryGetProperty("messages", out var messages).ShouldBeTrue(
-            $"Snapshot missing 'messages'. Actual: {snapshot.GetRawText()}");
-        messages.ValueKind.ShouldBe(JsonValueKind.Array);
-        messages.GetArrayLength().ShouldBeGreaterThan(0, "Expected at least one message in snapshot");
-
-        // Find the message with tool parts
-        var messageWithTool = messages.EnumerateArray()
-            .FirstOrDefault(m => m.TryGetProperty("parts", out var parts) 
-                && parts.EnumerateArray().Any(p => p.TryGetProperty("type", out var t) && t.GetString() == "tool"));
-
-        messageWithTool.ValueKind.ShouldNotBe(JsonValueKind.Undefined, 
-            $"No message with tool part found. Messages: {messages.GetRawText()}");
-
-        // Find the tool part
-        messageWithTool.TryGetProperty("parts", out var messageParts).ShouldBeTrue();
-        var toolPart = messageParts.EnumerateArray()
-            .First(p => p.TryGetProperty("type", out var t) && t.GetString() == "tool");
-
-        // Verify tool part has state
-        toolPart.TryGetProperty("state", out var state).ShouldBeTrue(
-            $"Tool part missing 'state'. Actual: {toolPart.GetRawText()}");
-
-        // THE CRITICAL ASSERTION: state must have 'output' field for completed tools
-        // The client's getToolOutput() function looks for state.output
-        state.TryGetProperty("output", out var output).ShouldBeTrue(
-            $"Tool state missing 'output' field. This is the bug! Actual state JSON: {state.GetRawText()}");
-
-        // Verify output contains the expected data
-        output.ValueKind.ShouldNotBe(JsonValueKind.Null);
-        output.TryGetProperty("result", out var result).ShouldBeTrue(
-            $"Tool output missing 'result'. Actual: {output.GetRawText()}");
-        result.GetString().ShouldBe("test output");
-    }
-
-    [Fact]
     public async Task Hub_auto_subscribes_to_child_session_events_after_delegation()
     {
         // Arrange: create parent and child sessions
@@ -784,6 +741,178 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
         eventsAfterUnsubscribe.Count.ShouldBe(0, 
             $"Expected no events after unsubscribing from parent, but received {eventsAfterUnsubscribe.Count}. " +
             $"Events: {string.Join(", ", eventsAfterUnsubscribe.Select(e => $"[{e.EventId}:{e.Data.GetProperty("type").GetString()}@{e.Topic}]"))}");
+    }
+
+    [Fact(Skip = "Buffers removed - test obsolete")]
+    public async Task Snapshot_includes_buffered_tool_part_before_persistence()
+    {
+        // This test directly populates the buffers (simulating the window between
+        // InProcessFanOutService buffering and HarnessEventPersistenceService clearing)
+        // and verifies that BuildAtomicSnapshotAsync merges them into the snapshot.
+
+        var sessionId = await CreateSessionAsync();
+        var messageId = $"msg-{Guid.NewGuid():N}";
+        var textPartId = $"part-text-{Guid.NewGuid():N}";
+        var toolPartId = $"part-tool-{Guid.NewGuid():N}";
+        var toolCallId = $"call-{Guid.NewGuid():N}";
+
+        // Directly populate buffers (singletons) to simulate in-flight state
+        // var partBuffer = _server.Services.GetRequiredService<MessagePartBuffer>();
+        // var snapshotBuffer = _server.Services.GetRequiredService<MessageSnapshotBuffer>();
+
+        // Buffer the message (as if message.created was just broadcast but not persisted)
+        var bufferedMessage = new MessageLifecyclePayload
+        {
+            Info = new MessageEventInfo
+            {
+                Id = messageId,
+                Role = "assistant",
+                SessionId = sessionId,
+                Time = new MessageEventTime { Created = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }
+            },
+            Parts =
+            [
+                new TextMessageEventPart
+                {
+                    Id = textPartId,
+                    SessionId = sessionId,
+                    MessageId = messageId,
+                    Text = "Thinking..."
+                }
+            ]
+        };
+        // snapshotBuffer.Set(sessionId, messageId, bufferedMessage);
+
+        // Buffer the tool part (as if message.part.updated was just broadcast but not persisted)
+        var toolPart = new ToolMessageEventPart
+        {
+            Id = toolPartId,
+            SessionId = sessionId,
+            MessageId = messageId,
+            ToolName = "bash",
+            CallId = toolCallId,
+            State = new ToolRunningState
+            {
+                Input = JsonSerializer.SerializeToElement(new { command = "echo test" })
+            }
+        };
+        // partBuffer.Set(sessionId, messageId, toolPartId, toolPart);
+
+        // Act: subscribe — BuildAtomicSnapshotAsync should merge both buffers
+        var snapshot = await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+
+        // Assert: snapshot contains the message with both parts
+        snapshot.TryGetProperty("messages", out var messages).ShouldBeTrue(
+            $"Snapshot missing 'messages'. Actual: {snapshot.GetRawText()}");
+
+        var messageArray = messages.EnumerateArray().ToList();
+        messageArray.Count.ShouldBeGreaterThan(0, "Expected at least one message in snapshot");
+
+        var messageWithTool = messageArray.FirstOrDefault(m =>
+            m.TryGetProperty("info", out var info) &&
+            info.TryGetProperty("id", out var id) &&
+            id.GetString() == messageId);
+
+        messageWithTool.ValueKind.ShouldNotBe(JsonValueKind.Undefined,
+            $"Expected snapshot to contain message {messageId}. " +
+            $"Messages in snapshot: {messages.GetRawText()}");
+
+        messageWithTool.TryGetProperty("parts", out var messageParts).ShouldBeTrue();
+        var partsArray = messageParts.EnumerateArray().ToList();
+        partsArray.Count.ShouldBe(2,
+            $"Expected 2 parts (text + tool) but got {partsArray.Count}. Parts: {messageParts.GetRawText()}");
+
+        // Verify the tool part is present with correct properties
+        var toolPartElement = partsArray.FirstOrDefault(p =>
+            p.TryGetProperty("id", out var id) && id.GetString() == toolPartId);
+
+        toolPartElement.ValueKind.ShouldNotBe(JsonValueKind.Undefined,
+            $"Expected to find tool part {toolPartId} in message. Parts: {messageParts.GetRawText()}");
+
+        toolPartElement.TryGetProperty("tool", out var toolName).ShouldBeTrue(
+            $"Tool part missing 'tool' field. Actual: {toolPartElement.GetRawText()}");
+        toolName.GetString().ShouldBe("bash");
+
+        toolPartElement.TryGetProperty("callID", out var callIdProp).ShouldBeTrue(
+            $"Tool part missing 'callID' field. Actual: {toolPartElement.GetRawText()}");
+        callIdProp.GetString().ShouldBe(toolCallId);
+
+        toolPartElement.TryGetProperty("state", out var state).ShouldBeTrue(
+            $"Tool part missing 'state' field. Actual: {toolPartElement.GetRawText()}");
+        state.TryGetProperty("input", out var input).ShouldBeTrue(
+            $"Tool state missing 'input' field. Actual: {state.GetRawText()}");
+    }
+
+    [Fact(Skip = "Buffers removed - test obsolete")]
+    public async Task Snapshot_includes_in_flight_tool_part_on_resubscribe()
+    {
+        // Verifies that re-subscribing merges buffered parts onto persisted messages.
+        // First subscribe returns empty, then we persist a message and buffer a tool part,
+        // and re-subscribe should show the persisted message with the buffered tool part merged in.
+
+        var sessionId = await CreateSessionAsync();
+        var messageId = $"msg-{Guid.NewGuid():N}";
+        var toolPartId = $"part-tool-{Guid.NewGuid():N}";
+        var toolCallId = $"call-{Guid.NewGuid():N}";
+
+        // Step 1: Initial subscribe (baseline — empty)
+        var initialSnapshot = await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        initialSnapshot.TryGetProperty("messages", out var initialMessages).ShouldBeTrue();
+        initialMessages.GetArrayLength().ShouldBe(0, "Expected empty message list for new session");
+
+        // Step 2: Persist a message via the repository (simulates projection completing)
+        await PersistMessageWithCompletedToolAsync(sessionId);
+
+        // Step 3: Buffer a NEW tool part onto that persisted message
+        // We need the persisted message's ID — use the repo to find it
+        var messageRepo = _server.Services.GetRequiredService<IMessageRepository>();
+        var persistedMessages = await messageRepo.GetBySessionAsync(sessionId, 100, null);
+        persistedMessages.Count.ShouldBeGreaterThan(0, "Expected at least one persisted message");
+        var persistedMsgId = persistedMessages[0].Id;
+
+        // var partBuffer = _server.Services.GetRequiredService<MessagePartBuffer>();
+        var toolPart = new ToolMessageEventPart
+        {
+            Id = toolPartId,
+            SessionId = sessionId,
+            MessageId = persistedMsgId,
+            ToolName = "read_file",
+            CallId = toolCallId,
+            State = new ToolRunningState
+            {
+                Input = JsonSerializer.SerializeToElement(new { path = "/tmp/test.txt" })
+            }
+        };
+        // partBuffer.Set(sessionId, persistedMsgId, toolPartId, toolPart);
+
+        // Act: re-subscribe
+        var snapshot = await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+
+        snapshot.TryGetProperty("messages", out var messages).ShouldBeTrue(
+            $"Snapshot missing 'messages'. Actual: {snapshot.GetRawText()}");
+
+        var messageArray = messages.EnumerateArray().ToList();
+        messageArray.Count.ShouldBeGreaterThan(0, "Expected at least one message in snapshot");
+
+        // Find the persisted message
+        var targetMsg = messageArray.FirstOrDefault(m =>
+            m.TryGetProperty("info", out var info) &&
+            info.TryGetProperty("id", out var id) &&
+            id.GetString() == persistedMsgId);
+
+        targetMsg.ValueKind.ShouldNotBe(JsonValueKind.Undefined,
+            $"Expected message {persistedMsgId} in snapshot. Messages: {messages.GetRawText()}");
+
+        // The persisted message should now include the buffered tool part
+        targetMsg.TryGetProperty("parts", out var parts).ShouldBeTrue();
+        var toolPartElement = parts.EnumerateArray().FirstOrDefault(p =>
+            p.TryGetProperty("id", out var id) && id.GetString() == toolPartId);
+
+        toolPartElement.ValueKind.ShouldNotBe(JsonValueKind.Undefined,
+            $"Expected tool part {toolPartId} merged into persisted message. Parts: {parts.GetRawText()}");
+
+        toolPartElement.TryGetProperty("tool", out var toolName).ShouldBeTrue();
+        toolName.GetString().ShouldBe("read_file");
     }
 
     private async Task PersistMessageWithCompletedToolAsync(string sessionId)

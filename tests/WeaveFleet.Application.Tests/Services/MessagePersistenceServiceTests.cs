@@ -130,7 +130,7 @@ public sealed class MessagePersistenceServiceTests
         message.Role.ShouldBe("user");
         message.Timestamp.ShouldBe(timestamp);
         message.Agent.ShouldBe("loom");
-        message.Id.ShouldStartWith("user-");
+        message.Id.ShouldStartWith("msg_");
         message.Parts.Count.ShouldBe(1);
         message.Parts[0].ShouldBeOfType<TextPart>().Text.ShouldBe("Hello from prompt");
     }
@@ -235,7 +235,7 @@ public sealed class MessagePersistenceServiceTests
             }
         });
 
-        var sanitized = MessagePersistenceService.SanitizeDurableEventPayload("message.part.updated", payload);
+        var sanitized = ReasoningFilter.SanitizeEventPayload("message.part.updated", payload);
 
         sanitized.HasValue.ShouldBeFalse();
     }
@@ -255,7 +255,7 @@ public sealed class MessagePersistenceServiceTests
             }
         });
 
-        var sanitized = MessagePersistenceService.SanitizeDurableEventPayload("message.part.updated", payload);
+        var sanitized = ReasoningFilter.SanitizeEventPayload("message.part.updated", payload);
 
         sanitized.HasValue.ShouldBeTrue();
         sanitized.Value.GetProperty("part").GetProperty("type").GetString().ShouldBe("text");
@@ -657,11 +657,11 @@ public sealed class MessagePersistenceServiceTests
     // ── Architectural observation: buffering and persistence race ────────
     //
     // InProcessFanOutService buffers deltas (thread A).
-    // InProcessProjectionHost persists durable events and reads the buffer
-    // (thread B). PublishDurable wakes the projection host BEFORE writing
-    // to the fan-out channel, so the projection can read the buffer before
-    // all deltas are buffered. Not yet proven as the cause of the reported
-    // symptom; would need a concurrent integration test to demonstrate.
+    // The persistence service reads durable events and the buffer (thread B).
+    // PublishDurable wakes the persistence service BEFORE writing to the
+    // fan-out channel, so persistence can read the buffer before all deltas
+    // are buffered. Not yet proven as the cause of the reported symptom;
+    // would need a concurrent integration test to demonstrate.
 
     [Fact]
     public void MergeMissingSnapshotParts_AddsTextToEmptyExistingRow()

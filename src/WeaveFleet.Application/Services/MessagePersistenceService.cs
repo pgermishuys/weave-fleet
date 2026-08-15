@@ -51,7 +51,7 @@ public sealed class MessagePersistenceService
     /// Creates a synthetic user message for durable prompt history.
     /// </summary>
     public static HarnessMessage CreateUserPromptMessage(string prompt, DateTimeOffset timestamp, string? agentName)
-        => CreateUserPromptMessage(prompt, timestamp, agentName, userMessageId: null);
+        => CreateUserPromptMessage(prompt, timestamp, agentName, userMessageId: $"msg_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds():D19}");
 
     /// <summary>
     /// Creates a synthetic user message for durable prompt history.
@@ -60,9 +60,11 @@ public sealed class MessagePersistenceService
         string prompt,
         DateTimeOffset timestamp,
         string? agentName,
-        string? userMessageId,
+        string userMessageId,
         IReadOnlyList<HarnessAttachment>? attachments = null)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(userMessageId);
+
         var parts = new List<MessagePart> { new TextPart(prompt) };
 
         if (attachments is { Count: > 0 })
@@ -77,7 +79,7 @@ public sealed class MessagePersistenceService
 
         return new HarnessMessage
         {
-            Id = string.IsNullOrWhiteSpace(userMessageId) ? $"user-{Guid.NewGuid():N}" : userMessageId,
+            Id = userMessageId,
             Role = "user",
             Parts = parts,
             Timestamp = timestamp,
@@ -141,30 +143,6 @@ public sealed class MessagePersistenceService
         => JsonSerializer.Serialize(payload, SerializerOptions);
 
     /// <summary>
-    /// Removes reasoning-only durable event payload content before outbox storage.
-    /// </summary>
-    public static JsonElement? SanitizeDurableEventPayload(string eventType, JsonElement? payload)
-    {
-        if (!payload.HasValue)
-            return JsonDocument.Parse("{}").RootElement.Clone();
-
-        if (!EventTypeMetadata.Classify(eventType).RequiresReasoningFilter)
-            return payload.Value.Clone();
-
-        if (eventType is EventTypes.MessageCreated or EventTypes.MessageUpdated)
-            return ReasoningFilter.FilterMessageEventPayload(payload.Value);
-
-        // message.part.updated — suppress reasoning parts entirely
-        var payloadValue = payload.Value;
-        if (payloadValue.ValueKind != JsonValueKind.Object)
-            return payloadValue.Clone();
-
-        return ReasoningFilter.IsReasoningPartEvent(payloadValue)
-            ? null
-            : payloadValue.Clone();
-    }
-
-    /// <summary>
     /// Builds a committed message payload from the persisted snapshot so reconnect replay
     /// can consume the same final text content as durable history.
     /// </summary>
@@ -214,7 +192,7 @@ public sealed class MessagePersistenceService
             message.ModelId,
             new CommittedMessageTime(
                 DateTimeOffset.Parse(
-                    persisted.CreatedAt,
+                    persisted.Timestamp,
                     System.Globalization.CultureInfo.InvariantCulture,
                     System.Globalization.DateTimeStyles.RoundtripKind).ToUnixTimeMilliseconds())),
             parts);
@@ -342,7 +320,7 @@ public sealed class MessagePersistenceService
         };
     }
 
-    private static JsonElement? BuildCommittedMessagePartPayload(
+    public static JsonElement? BuildCommittedMessagePartPayload(
         string messageId,
         string sessionId,
         MessagePart part,

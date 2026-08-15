@@ -2,7 +2,6 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Events;
-using WeaveFleet.Application.Projections;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Entities;
@@ -25,7 +24,7 @@ public sealed class AutoActivationTests
         var builder = CreateBuilder();
         var runtime = builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = true });
         var tracker = new InstanceTracker();
-        var publisher = new ProjectingEventPublisher(builder);
+        var publisher = new ProjectingEventPublisher();
         var sut = CreateOrchestrator(builder, tracker, publisher, pooledOpenCodeHarness: true);
         var initialHarness = new FakeHarnessSession("inst-initial") { ResumeToken = "oc-auto-resume" };
         runtime.DefaultSession = initialHarness;
@@ -56,15 +55,12 @@ public sealed class AutoActivationTests
         resumedHarness.SendPromptCalls[0].Text.ShouldBe("hello after restart");
         tracker.Get("inst-resumed").ShouldBeSameAs(resumedHarness);
 
-        await publisher.ProjectAsync(
+        await ProjectingEventPublisher.ProjectAsync(
             sessionId,
             createResult.Value.Session.UserId,
             CreateAssistantResponseEvent("oc-auto-resume", "auto-response", "response arrived"),
             CancellationToken.None);
 
-        var messages = await builder.MessageRepository.GetBySessionAsync(sessionId, 10, null);
-        messages.ShouldContain(message => message.Role == "user" && message.PartsJson.Contains("hello after restart", StringComparison.Ordinal));
-        messages.ShouldContain(message => message.Role == "assistant" && message.PartsJson.Contains("response arrived", StringComparison.Ordinal));
         var stored = await builder.SessionRepository.GetByIdAsync(sessionId);
         stored.ShouldNotBeNull();
         stored.InstanceId.ShouldBe("inst-resumed");
@@ -79,7 +75,7 @@ public sealed class AutoActivationTests
         var builder = CreateBuilder();
         var runtime = builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = true });
         var initialTracker = new InstanceTracker();
-        var publisher = new ProjectingEventPublisher(builder);
+        var publisher = new ProjectingEventPublisher();
         var initialOrchestrator = CreateOrchestrator(builder, initialTracker, publisher, pooledOpenCodeHarness: true);
         var initialHarness = new FakeHarnessSession("inst-restart-initial") { ResumeToken = "oc-restart-resume" };
         runtime.DefaultSession = initialHarness;
@@ -130,8 +126,6 @@ public sealed class AutoActivationTests
         restartedTracker.Get("inst-restart-resumed").ShouldBeSameAs(resumedHarness);
         initialTracker.Get("inst-restart-initial").ShouldBeSameAs(initialHarness);
 
-        var messages = await builder.MessageRepository.GetBySessionAsync(sessionId, 10, null);
-        messages.ShouldContain(message => message.Role == "user" && message.PartsJson.Contains("hello after fleet restart", StringComparison.Ordinal));
         var stored = await builder.SessionRepository.GetByIdAsync(sessionId);
         stored.ShouldNotBeNull();
         stored.InstanceId.ShouldBe("inst-restart-resumed");
@@ -418,10 +412,8 @@ public sealed class AutoActivationTests
             builder.DelegationRepository,
             builder.ProjectRepository,
             builder.EventBroadcaster,
-            eventPublisher,
             builder.AnalyticsCollector,
-            builder.MessageRepository,
-            builder.HarnessEventLogRepository,
+            builder.SessionMessageProxy,
             delegationService,
             builder.CredentialStore,
             builder.UserPreferenceRepository,
@@ -464,7 +456,7 @@ public sealed class AutoActivationTests
             })
         };
 
-    private sealed class ProjectingEventPublisher(SessionOrchestratorBuilder builder) : IEventPublisher
+    private sealed class ProjectingEventPublisher : IEventPublisher
     {
         private long _nextEventId;
 
@@ -473,63 +465,17 @@ public sealed class AutoActivationTests
             var eventId = Interlocked.Increment(ref _nextEventId);
             if (context.UserId is not null && evt.Type != EventTypes.UserPromptCommitted)
             {
-                await ProjectAsync(context.FleetSessionId, context.UserId, evt, ct).ConfigureAwait(false);
+                await ProjectingEventPublisher.ProjectAsync(context.FleetSessionId, context.UserId, evt, ct).ConfigureAwait(false);
             }
 
             return new PublishResult(eventId, IsDuplicate: false);
         }
 
-        public async Task ProjectAsync(string sessionId, string userId, HarnessEvent evt, CancellationToken ct)
+        public static Task ProjectAsync(string sessionId, string userId, HarnessEvent evt, CancellationToken ct)
         {
-            var persister = new RecordingHarnessEventPersister(builder.MessageRepository);
-            var projection = new MessagePersistenceProjection(persister, builder.HarnessEventLogRepository);
-            await projection.HandleAsync(evt, new ProjectionContext(
-                Tenant: "tenant.default",
-                ProjectId: "scratch",
-                FleetSessionId: sessionId,
-                EventType: evt.Type,
-                UserId: userId,
-                HarnessType: "opencode",
-                StreamSequence: Interlocked.Increment(ref _nextEventId),
-                InternalPumpDedupKey: 0), ct).ConfigureAwait(false);
+            // Persistence removed - auto-activation tests don't need it
+            return Task.CompletedTask;
         }
-    }
-
-    private sealed class RecordingHarnessEventPersister(InMemoryMessageRepository messageRepository) : IHarnessEventPersister
-    {
-        public Task HandleAsync(string fleetSessionId, string ownerUserId, HarnessEvent evt, CancellationToken ct)
-        {
-            if (evt.Type != EventTypes.MessageUpdated || !evt.Payload.HasValue)
-            {
-                return Task.CompletedTask;
-            }
-
-            var payload = evt.Payload.Value;
-            var info = payload.GetProperty("info");
-            if (info.GetProperty("role").GetString() != "assistant")
-            {
-                return Task.CompletedTask;
-            }
-
-            var messageId = info.GetProperty("id").GetString() ?? throw new InvalidOperationException("Assistant response id missing.");
-            var partsJson = payload.GetProperty("parts").GetRawText();
-            return messageRepository.UpsertAsync(new PersistedMessage
-            {
-                Id = messageId,
-                SessionId = fleetSessionId,
-                Role = "assistant",
-                PartsJson = partsJson,
-                Timestamp = DateTimeOffset.UtcNow.ToString("O"),
-                CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
-            });
-        }
-
-        public void BufferTextDelta(string fleetSessionId, HarnessEvent evt)
-        {
-        }
-
-        public Task FlushBufferedDeltasAsync(string fleetSessionId, string ownerUserId, CancellationToken ct)
-            => Task.CompletedTask;
     }
 
     private sealed class TempDirectory : IDisposable

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
@@ -28,7 +29,6 @@ public sealed class SessionOrchestratorBuilder
     public InMemoryInstanceRepository InstanceRepository { get; } = new();
     public InMemoryMessageRepository MessageRepository { get; } = new();
     public InMemoryOutboxRepository OutboxRepository { get; } = new();
-    public InMemoryHarnessEventLogRepository HarnessEventLogRepository { get; } = new();
     public InMemorySmartLinkRepository SmartLinkRepository { get; } = new();
     public FakeEventBroadcaster EventBroadcaster { get; } = new();
     public FakeAnalyticsCollector AnalyticsCollector { get; } = new();
@@ -37,6 +37,7 @@ public sealed class SessionOrchestratorBuilder
     public InMemoryUserPreferenceRepository UserPreferenceRepository { get; } = new();
     public InstanceTracker InstanceTracker { get; } = new();
     public SessionActivityTracker ActivityTracker { get; } = new();
+    public FakeSessionMessageProxy SessionMessageProxy { get; } = new();
 
     // ── Overridable dependencies ─────────────────────────────────────────────
 
@@ -92,6 +93,17 @@ public sealed class SessionOrchestratorBuilder
 
         var delegationService = new DelegationService(DelegationRepository, EventBroadcaster, _userContext);
 
+        // Wire up the fake proxy to use the message repository for fallback behavior
+        SessionMessageProxy.GetMessagesBehavior ??= async (sessionId, limit, before, ct) =>
+        {
+            var effectiveLimit = limit ?? 100;
+            var rows = await MessageRepository.GetBySessionAsync(sessionId, effectiveLimit + 1, before);
+            var hasMore = rows.Count > effectiveLimit;
+            var pageRows = hasMore ? rows.Skip(rows.Count - effectiveLimit).ToList() : rows;
+            var messages = MessagePersistenceService.ToHarnessMessages(pageRows);
+            return new MessagePage(messages, hasMore);
+        };
+
         return new SessionOrchestrator(
             workspaceService,
             instanceService,
@@ -104,10 +116,8 @@ public sealed class SessionOrchestratorBuilder
             DelegationRepository,
             ProjectRepository,
             EventBroadcaster,
-            new FakeEventPublisher(),
             AnalyticsCollector,
-            MessageRepository,
-            HarnessEventLogRepository,
+            SessionMessageProxy,
             delegationService,
             CredentialStore,
             UserPreferenceRepository,

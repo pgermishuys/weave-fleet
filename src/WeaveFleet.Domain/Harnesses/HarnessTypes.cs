@@ -157,6 +157,7 @@ public sealed record PromptOptions
     public string? ProviderId { get; init; }
     public string? ModelId { get; init; }
     public IReadOnlyList<HarnessAttachment>? Attachments { get; init; }
+    public string? MessageId { get; init; }
 }
 
 /// <summary>Options for executing a slash command on an agent.</summary>

@@ -98,7 +98,7 @@ public sealed class MessageRepository : IMessageRepository
                 FROM messages m
                 INNER JOIN sessions s ON s.id = m.session_id
                 WHERE m.session_id = @SessionId AND s.user_id = @UserId
-                ORDER BY m.created_at DESC, m.id DESC
+                ORDER BY m.timestamp DESC, m.id DESC
                 LIMIT @Limit
                 """,
                 cmd =>
@@ -111,9 +111,9 @@ public sealed class MessageRepository : IMessageRepository
         }
         else
         {
-            var cursorCreatedAt = await conn.ExecuteScalarAsync<string>(
+            var cursorTimestamp = await conn.ExecuteScalarAsync<string>(
                 """
-                SELECT m.created_at
+                SELECT m.timestamp
                 FROM messages m
                 INNER JOIN sessions s ON s.id = m.session_id
                 WHERE m.session_id = @SessionId AND m.id = @Id AND s.user_id = @UserId
@@ -125,7 +125,7 @@ public sealed class MessageRepository : IMessageRepository
                     cmd.AddParameter("UserId", _userContext.UserId);
                 });
 
-            if (cursorCreatedAt is null)
+            if (cursorTimestamp is null)
             {
                 results = await conn.QueryAsync(
                     """
@@ -133,7 +133,7 @@ public sealed class MessageRepository : IMessageRepository
                     FROM messages m
                     INNER JOIN sessions s ON s.id = m.session_id
                     WHERE m.session_id = @SessionId AND s.user_id = @UserId
-                    ORDER BY m.created_at DESC, m.id DESC
+                    ORDER BY m.timestamp DESC, m.id DESC
                     LIMIT @Limit
                     """,
                     cmd =>
@@ -153,15 +153,15 @@ public sealed class MessageRepository : IMessageRepository
                     INNER JOIN sessions s ON s.id = m.session_id
                     WHERE m.session_id = @SessionId
                       AND s.user_id = @UserId
-                      AND (m.created_at < @CursorCreatedAt
-                           OR (m.created_at = @CursorCreatedAt AND m.id < @CursorId))
-                    ORDER BY m.created_at DESC, m.id DESC
+                      AND (m.timestamp < @CursorTimestamp
+                           OR (m.timestamp = @CursorTimestamp AND m.id < @CursorId))
+                    ORDER BY m.timestamp DESC, m.id DESC
                     LIMIT @Limit
                     """,
                     cmd =>
                     {
                         cmd.AddParameter("SessionId", sessionId);
-                        cmd.AddParameter("CursorCreatedAt", cursorCreatedAt);
+                        cmd.AddParameter("CursorTimestamp", cursorTimestamp);
                         cmd.AddParameter("CursorId", beforeMessageId);
                         cmd.AddParameter("Limit", limit);
                         cmd.AddParameter("UserId", _userContext.UserId);

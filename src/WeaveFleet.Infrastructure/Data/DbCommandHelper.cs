@@ -210,7 +210,7 @@ internal static class DbCommandHelper
         return ConvertScalar<T>(result);
     }
 
-    // ── Synchronous variants (for InProcessEventStore which must be sync) ──────
+    // ── Synchronous variants ──────
 
     /// <summary>Synchronously executes a scalar command and returns the first column of the first row.</summary>
     internal static T? ExecuteScalar<T>(
