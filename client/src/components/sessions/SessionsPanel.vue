@@ -284,7 +284,13 @@ function handleToggleProject(projectId: string): void {
 
 function openNewSessionDialog(projectId: string | null): void {
   sidebarStore.setActiveRail("sessions");
-  workspaceUiStore.openNewSessionDialog(projectId);
+  void router.navigate({
+    to: "/sessions/new",
+    search: {
+      projectId: projectId ?? undefined,
+      source: undefined,
+    },
+  });
 }
 
 function handleNewSession(): void {
@@ -534,12 +540,15 @@ function handleCompleteCancel(): void {
 </script>
 
 <template>
+  <!-- NewSessionDialog disconnected - now using /sessions/new route -->
+  <!--
   <NewSessionDialog
     v-model:open="newSessionDialogModel"
     :initial-project-id="newSessionDialogProjectId"
     :initial-source="newSessionDialogInitialSource"
     @created="handleSessionCreated"
   />
+  -->
   <NewProjectDialog
     v-model:open="isNewProjectDialogOpen"
     @created="handleProjectCreated"

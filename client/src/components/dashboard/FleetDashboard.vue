@@ -7,14 +7,12 @@ import { Button } from "@/components/ui/button";
 import { useSessions } from "@/composables/use-sessions";
 import type { SessionListItem } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
-import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import RetentionFilter from "./RetentionFilter.vue";
 import SessionCard from "./SessionCard.vue";
 import SummaryBar from "./SummaryBar.vue";
 
 const router = useRouter();
 const sessionsStore = useSessionsStore();
-const workspaceUiStore = useWorkspaceUiStore();
 const { retentionStatus, sessions: storeSessions } = storeToRefs(sessionsStore);
 
 const {
@@ -50,6 +48,16 @@ function handleSessionChanged(): void {
   void refetch();
 }
 
+function handleNewSession(): void {
+  void router.navigate({
+    to: "/sessions/new",
+    search: {
+      projectId: undefined,
+      source: undefined,
+    },
+  });
+}
+
 </script>
 
 <template>
@@ -71,7 +79,7 @@ function handleSessionChanged(): void {
 
         <Button
           data-testid="new-session-button"
-          @click="workspaceUiStore.openNewSessionDialog(null)"
+          @click="handleNewSession"
         >
           <Plus class="h-4 w-4" />
           New Session

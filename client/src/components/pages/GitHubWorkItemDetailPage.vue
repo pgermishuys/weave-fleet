@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, shallowRef, watch } from "vue";
+import { useRouter } from "@tanstack/vue-router";
 import {
   CheckCircle2,
   CircleDot,
@@ -42,6 +43,7 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+const router = useRouter();
 const sidebarStore = useSidebarStore();
 const workspaceUiStore = useWorkspaceUiStore();
 
@@ -245,7 +247,18 @@ async function handleCreateSession(): Promise<void> {
   sidebarStore.setPanelCollapsed(false);
   sidebarStore.setActiveRail("sessions");
   await nextTick();
-  workspaceUiStore.openNewSessionDialog(null, createSessionPreset.value);
+  
+  // Set the preset in the store so the form can read it
+  workspaceUiStore.setNewSessionInitialSource(createSessionPreset.value);
+  
+  // Navigate to the new session form
+  void router.navigate({
+    to: "/sessions/new",
+    search: {
+      projectId: undefined,
+      source: undefined,
+    },
+  });
 }
 </script>
 

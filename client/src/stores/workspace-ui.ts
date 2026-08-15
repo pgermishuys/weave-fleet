@@ -35,6 +35,10 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
     }
   }
 
+  function setNewSessionInitialSource(source: GitHubSessionSourcePreset | null): void {
+    newSessionDialogInitialSource.value = source;
+  }
+
   return {
     inlineToolDiffs,
     newSessionDialogOpen,
@@ -45,5 +49,6 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
     openNewSessionDialog,
     closeNewSessionDialog,
     setNewSessionDialogOpen,
+    setNewSessionInitialSource,
   };
 });

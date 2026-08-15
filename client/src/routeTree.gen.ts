@@ -21,6 +21,7 @@ import { Route as AutomationsRouteImport } from './routes/automations'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as GithubIndexRouteImport } from './routes/github.index'
+import { Route as SessionsNewRouteImport } from './routes/sessions.new'
 import { Route as SessionsIdRouteImport } from './routes/sessions.$id'
 import { Route as SettingsPluginsPluginIdRouteImport } from './routes/settings_.plugins.$pluginId'
 import { Route as GithubOwnerRepoRouteImport } from './routes/github.$owner.$repo'
@@ -88,6 +89,11 @@ const GithubIndexRoute = GithubIndexRouteImport.update({
   path: '/',
   getParentRoute: () => GithubRoute,
 } as any)
+const SessionsNewRoute = SessionsNewRouteImport.update({
+  id: '/sessions/new',
+  path: '/sessions/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SessionsIdRoute = SessionsIdRouteImport.update({
   id: '/sessions/$id',
   path: '/sessions/$id',
@@ -134,6 +140,7 @@ export interface FileRoutesByFullPath {
   '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
   '/sessions/$id': typeof SessionsIdRoute
+  '/sessions/new': typeof SessionsNewRoute
   '/github/': typeof GithubIndexRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
@@ -153,6 +160,7 @@ export interface FileRoutesByTo {
   '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
   '/sessions/$id': typeof SessionsIdRoute
+  '/sessions/new': typeof SessionsNewRoute
   '/github': typeof GithubIndexRoute
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoIndexRoute
@@ -173,6 +181,7 @@ export interface FileRoutesById {
   '/templates': typeof TemplatesRoute
   '/welcome': typeof WelcomeRoute
   '/sessions/$id': typeof SessionsIdRoute
+  '/sessions/new': typeof SessionsNewRoute
   '/github/': typeof GithubIndexRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
   '/settings_/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
@@ -195,6 +204,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/welcome'
     | '/sessions/$id'
+    | '/sessions/new'
     | '/github/'
     | '/github/$owner/$repo'
     | '/settings/plugins/$pluginId'
@@ -214,6 +224,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/welcome'
     | '/sessions/$id'
+    | '/sessions/new'
     | '/github'
     | '/settings/plugins/$pluginId'
     | '/github/$owner/$repo'
@@ -233,6 +244,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/welcome'
     | '/sessions/$id'
+    | '/sessions/new'
     | '/github/'
     | '/github/$owner/$repo'
     | '/settings_/plugins/$pluginId'
@@ -254,6 +266,7 @@ export interface RootRouteChildren {
   TemplatesRoute: typeof TemplatesRoute
   WelcomeRoute: typeof WelcomeRoute
   SessionsIdRoute: typeof SessionsIdRoute
+  SessionsNewRoute: typeof SessionsNewRoute
   SettingsPluginsPluginIdRoute: typeof SettingsPluginsPluginIdRoute
 }
 
@@ -343,6 +356,13 @@ declare module '@tanstack/vue-router' {
       preLoaderRoute: typeof GithubIndexRouteImport
       parentRoute: typeof GithubRoute
     }
+    '/sessions/new': {
+      id: '/sessions/new'
+      path: '/sessions/new'
+      fullPath: '/sessions/new'
+      preLoaderRoute: typeof SessionsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sessions/$id': {
       id: '/sessions/$id'
       path: '/sessions/$id'
@@ -430,6 +450,7 @@ const rootRouteChildren: RootRouteChildren = {
   TemplatesRoute: TemplatesRoute,
   WelcomeRoute: WelcomeRoute,
   SessionsIdRoute: SessionsIdRoute,
+  SessionsNewRoute: SessionsNewRoute,
   SettingsPluginsPluginIdRoute: SettingsPluginsPluginIdRoute,
 }
 export const routeTree = rootRouteImport
