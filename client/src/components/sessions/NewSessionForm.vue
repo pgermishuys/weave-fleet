@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, shallowRef, watch } from "vue";
 import { useNavigate, useSearch } from "@tanstack/vue-router";
-import { AlertCircle, Check, ChevronDown, ExternalLink, Folder, FolderGit2, LoaderCircle, X } from "lucide-vue-next";
+import { AlertCircle, Check, ChevronDown, ExternalLink, Folder, LoaderCircle } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

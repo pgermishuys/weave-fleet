@@ -1721,6 +1721,11 @@ public sealed partial class SessionOrchestrator(
         if (string.IsNullOrWhiteSpace(session.HarnessResumeToken))
             return FleetError.NotFoundFor("Instance", session.InstanceId);
 
+        // Do not auto-activate manual sessions that were explicitly stopped or completed.
+        // Automatic sessions (pooled mode) should auto-activate even when stopped.
+        if (session.RuntimeMode is "manual" && session.Status is "stopped" or "completed" or "error")
+            return FleetError.NotFoundFor("Instance", session.InstanceId);
+
         var activationLock = _activationLocks.GetOrAdd(session.Id, static _ => new SemaphoreSlim(1, 1));
         await activationLock.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -1730,6 +1735,10 @@ public sealed partial class SessionOrchestrator(
                 return FleetError.NotFoundFor(nameof(Session), session.Id);
 
             if (string.IsNullOrWhiteSpace(currentSession.HarnessResumeToken))
+                return FleetError.NotFoundFor("Instance", currentSession.InstanceId);
+
+            // Re-check status under lock — session may have been stopped concurrently.
+            if (currentSession.RuntimeMode is "manual" && currentSession.Status is "stopped" or "completed" or "error")
                 return FleetError.NotFoundFor("Instance", currentSession.InstanceId);
 
             instance = instanceTracker.Get(currentSession.InstanceId);

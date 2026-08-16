@@ -3,17 +3,17 @@ import { computed, reactive, shallowRef, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
 import { Check, LoaderCircle, Plus, Search } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
-import type { CreateSessionResponse, SessionListItem } from "@/api/client";
+import type { SessionListItem } from "@/api/client";
 import { useProjects } from "@/composables/use-projects";
 import { useSessions } from "@/composables/use-sessions";
 import { useArchiveSession, useMoveSession } from "@/composables/use-session-actions";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
-import { useWorkspaceUiStore } from "@/stores/workspace-ui";
+
 import { Button } from "@/components/ui/button";
 import ConfirmCompleteSessionDialog from "./ConfirmCompleteSessionDialog.vue";
 import NewProjectDialog from "./NewProjectDialog.vue";
-import NewSessionDialog from "./NewSessionDialog.vue";
+
 import ProjectGroup from "./ProjectGroup.vue";
 
 interface ProjectReorderTarget {
@@ -42,7 +42,6 @@ interface ActiveSessionDrag {
 
 const sessionsStore = useSessionsStore();
 const sidebarStore = useSidebarStore();
-const workspaceUiStore = useWorkspaceUiStore();
 const router = useRouter();
 const pathname = useLocation({
   select: (location) => location.pathname,
@@ -81,13 +80,7 @@ const sessions = computed(() => {
 const searchQuery = shallowRef("");
 const expandedProjects = reactive<Record<string, boolean>>({});
 const isNewProjectDialogOpen = shallowRef(false);
-const { newSessionDialogOpen, newSessionDialogProjectId, newSessionDialogInitialSource } = storeToRefs(workspaceUiStore);
-const newSessionDialogModel = computed({
-  get: () => newSessionDialogOpen.value,
-  set: (open: boolean) => {
-    workspaceUiStore.setNewSessionDialogOpen(open);
-  },
-});
+
 
 watch(
   [pathname, sessions],
@@ -308,24 +301,6 @@ function handleNewProject(): void {
 
 async function handleRetry(): Promise<void> {
   await Promise.all([refetchSessions(), refetchProjects()]);
-}
-
-async function handleSessionCreated(response: CreateSessionResponse): Promise<void> {
-  activeSessionId.value = response.session.id;
-  sidebarStore.setActiveRail("sessions");
-
-  try {
-    await refetchSessions();
-  } finally {
-    void router.navigate({
-      to: "/sessions/$id",
-      params: { id: response.session.id },
-      search: {
-        instanceId: response.instanceId,
-        parentSessionId: undefined,
-      },
-    });
-  }
 }
 
 async function handleProjectCreated(): Promise<void> {
