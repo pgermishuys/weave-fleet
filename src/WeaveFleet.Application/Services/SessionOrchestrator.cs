@@ -199,7 +199,8 @@ public sealed partial class SessionOrchestrator(
 
         var initialPrompt = BuildCreateSessionInitialPrompt(
             request.InitialPrompt,
-            sourceResolutionResult.Value.Input.ContextEnvelope);
+            sourceResolutionResult.Value.Input.ContextEnvelope,
+            sourceResolutionResult.Value.Input.Provenance);
 
         // Resolve harness
         var harnessType = await ResolveHarnessTypeAsync(request);
@@ -1164,7 +1165,10 @@ public sealed partial class SessionOrchestrator(
             ct).ConfigureAwait(false);
     }
 
-    private static string? BuildCreateSessionInitialPrompt(string? initialPrompt, ContextEnvelope? contextEnvelope)
+    private static string? BuildCreateSessionInitialPrompt(
+        string? initialPrompt,
+        ContextEnvelope? contextEnvelope,
+        ProvenanceRecord provenance)
     {
         var normalizedInitialPrompt = string.IsNullOrWhiteSpace(initialPrompt)
             ? null
@@ -1175,13 +1179,37 @@ public sealed partial class SessionOrchestrator(
             return normalizedInitialPrompt;
         }
 
-        var sourcePrompt = $"[Source: {contextEnvelope.OriginLabel}]\n\n{contextEnvelope.Content}";
+        var sourcePrompt = BuildSourcePrompt(contextEnvelope, provenance);
         if (normalizedInitialPrompt is null)
         {
             return sourcePrompt;
         }
 
         return $"{sourcePrompt}\n\n{normalizedInitialPrompt}";
+    }
+
+    private static string BuildSourcePrompt(ContextEnvelope contextEnvelope, ProvenanceRecord provenance)
+    {
+        var builder = new System.Text.StringBuilder();
+        builder.Append("[Source: ").Append(contextEnvelope.OriginLabel).Append(']');
+
+        if (!string.IsNullOrWhiteSpace(provenance.ResourceId))
+        {
+            builder.Append("\n[Resource: ").Append(provenance.ResourceId).Append(']');
+        }
+
+        if (!string.IsNullOrWhiteSpace(provenance.ResourceUrl))
+        {
+            builder.Append("\n[URL: ").Append(provenance.ResourceUrl).Append(']');
+        }
+
+        if (!string.IsNullOrWhiteSpace(provenance.SourceType))
+        {
+            builder.Append("\n[Type: ").Append(provenance.SourceType).Append(']');
+        }
+
+        builder.Append("\n\n").Append(contextEnvelope.Content);
+        return builder.ToString();
     }
 
     private async Task<string> ResolveHarnessTypeAsync(CreateSessionRequest request)
