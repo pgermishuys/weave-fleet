@@ -4,7 +4,7 @@ import type { components } from "@/api/client";
 import { flushAll, mountComposable } from "./test-utils";
 
 type SkillManifestEntry = components["schemas"]["SkillManifestEntry"];
-type SkillManifestResponse = components["schemas"]["SkillManifestResponse"];
+type SkillManifest = components["schemas"]["SkillManifest"];
 type UpdateCheckResponse = components["schemas"]["UpdateCheckResponse"];
 type UpdateSkillResponse = components["schemas"]["UpdateSkillResponse"];
 type InstallSkillResponse = components["schemas"]["InstallSkillResponse"];
@@ -27,7 +27,7 @@ function createSkillEntry(
 ): SkillManifestEntry {
   return {
     name,
-    source: "GitHub",
+    source: 1,
     repoUrl: `https://github.com/example/${name}`,
     ref: "main",
     localPath: null,
@@ -47,11 +47,11 @@ describe("useSkills", () => {
 
   describe("fetchSkills", () => {
     it("fetches and transforms skills from the manifest endpoint", async () => {
-      const manifestResponse: SkillManifestResponse = {
+      const manifestResponse = {
         skills: [
           createSkillEntry("skill-one"),
           createSkillEntry("skill-two", {
-            source: "Local",
+            source: 2,
             localPath: "/path/to/skill",
             repoUrl: null,
           }),
@@ -160,9 +160,10 @@ describe("useSkills", () => {
       const { result } = await mountComposable(() => useSkills());
 
       const updateCheckResponse: UpdateCheckResponse = {
+        name: "test-skill",
         updateAvailable: true,
-        currentRef: "main",
-        latestRef: "v2.0.0",
+        remoteRef: "v2.0.0",
+        localRef: "main",
         message: "Update available",
       };
 
@@ -233,10 +234,9 @@ describe("useSkills", () => {
       const { result } = await mountComposable(() => useSkills());
 
       const updateResponse: UpdateSkillResponse = {
-        success: true,
-        message: "Skill updated successfully",
-        previousRef: "main",
-        newRef: "v2.0.0",
+        name: "test-skill",
+        updatedAt: "2026-01-02T00:00:00Z",
+        syncResults: [],
       };
 
       apiMock.POST.mockResolvedValueOnce({
@@ -363,9 +363,8 @@ describe("useSkills", () => {
       const { result } = await mountComposable(() => useSkills());
 
       const installResponse: InstallSkillResponse = {
-        success: true,
-        message: "Skill installed successfully",
-        skillName: "new-skill",
+        name: "new-skill",
+        syncResults: [],
       };
 
       apiMock.POST.mockResolvedValueOnce({
@@ -385,9 +384,11 @@ describe("useSkills", () => {
       expect(apiMock.POST).toHaveBeenCalledWith("/api/skills/install", {
         body: {
           name: "new-skill",
-          source: "GitHub",
+          source: 1,
           repoUrl: "https://github.com/example/new-skill",
+          ref: null,
           localPath: null,
+          targetHarnesses: null,
         },
       });
       expect(response).toEqual(installResponse);
@@ -404,7 +405,7 @@ describe("useSkills", () => {
       const { result } = await mountComposable(() => useSkills());
 
       apiMock.POST.mockResolvedValueOnce({
-        data: { success: true, message: "Installed", skillName: "local-skill" },
+        data: { name: "local-skill", syncResults: [] },
         error: undefined,
       });
 
@@ -412,7 +413,7 @@ describe("useSkills", () => {
         data: {
           skills: [
             createSkillEntry("local-skill", {
-              source: "Local",
+              source: 2,
               localPath: "/path/to/local-skill",
               repoUrl: null,
             }),
@@ -426,9 +427,11 @@ describe("useSkills", () => {
       expect(apiMock.POST).toHaveBeenCalledWith("/api/skills/install", {
         body: {
           name: "local-skill",
-          source: "Local",
+          source: 2,
           repoUrl: null,
+          ref: null,
           localPath: "/path/to/local-skill",
+          targetHarnesses: null,
         },
       });
     });

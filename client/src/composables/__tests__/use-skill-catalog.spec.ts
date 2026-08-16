@@ -3,7 +3,7 @@ import { useSkillCatalog } from "@/composables/use-skill-catalog";
 import type { components } from "@/api/client";
 import { flushAll, mountComposable } from "./test-utils";
 
-type SkillCatalogEntry = components["schemas"]["SkillCatalogEntry"];
+type SkillCatalogEntry = components["schemas"]["CatalogEntryDto"];
 type SkillCatalogResponse = components["schemas"]["SkillCatalogResponse"];
 type InstallSkillRequest = components["schemas"]["InstallSkillRequest"];
 type InstallSkillResponse = components["schemas"]["InstallSkillResponse"];
@@ -27,7 +27,7 @@ function createCatalogEntry(
     name,
     displayName: `${name} Display`,
     description: `Description for ${name}`,
-    source: "GitHub",
+    source: 1,
     repoUrl: `https://github.com/example/${name}`,
     ref: "main",
     localPath: null,
@@ -53,7 +53,7 @@ describe("useSkillCatalog", () => {
         entries: [
           createCatalogEntry("skill-one"),
           createCatalogEntry("skill-two", {
-            source: "Local",
+            source: 2,
             localPath: "/path/to/skill",
             repoUrl: null,
           }),
@@ -194,7 +194,7 @@ describe("useSkillCatalog", () => {
             name: "minimal-skill",
             displayName: null,
             description: null,
-            source: "GitHub",
+            source: 1,
             repoUrl: "https://github.com/example/minimal",
             ref: null,
             localPath: null,
@@ -206,7 +206,7 @@ describe("useSkillCatalog", () => {
             updatedAt: null,
           },
         ],
-        isStale: null,
+        isStale: false,
         cachedAt: null,
       };
 
@@ -248,16 +248,16 @@ describe("useSkillCatalog", () => {
 
       const installRequest: InstallSkillRequest = {
         name: "test-skill",
-        source: "GitHub",
+        source: 1,
         repoUrl: "https://github.com/example/test-skill",
         ref: "main",
         localPath: null,
+        targetHarnesses: null,
       };
 
       const installResponse: InstallSkillResponse = {
-        success: true,
-        message: "Skill installed successfully",
-        skillName: "test-skill",
+        name: "test-skill",
+        syncResults: [],
       };
 
       apiMock.POST.mockResolvedValue({
@@ -288,16 +288,16 @@ describe("useSkillCatalog", () => {
 
       const installRequest: InstallSkillRequest = {
         name: "local-skill",
-        source: "Local",
+        source: 2,
         repoUrl: null,
         ref: null,
         localPath: "/path/to/local-skill",
+        targetHarnesses: null,
       };
 
       const installResponse: InstallSkillResponse = {
-        success: true,
-        message: "Local skill installed",
-        skillName: "local-skill",
+        name: "local-skill",
+        syncResults: [],
       };
 
       apiMock.POST.mockResolvedValue({
@@ -327,10 +327,11 @@ describe("useSkillCatalog", () => {
 
       const installRequest: InstallSkillRequest = {
         name: "failing-skill",
-        source: "GitHub",
+        source: 1,
         repoUrl: "https://github.com/example/failing",
         ref: null,
         localPath: null,
+        targetHarnesses: null,
       };
 
       apiMock.POST.mockResolvedValue({
@@ -358,10 +359,11 @@ describe("useSkillCatalog", () => {
 
       const installRequest: InstallSkillRequest = {
         name: "test-skill",
-        source: "GitHub",
+        source: 1,
         repoUrl: "https://github.com/example/test",
         ref: null,
         localPath: null,
+        targetHarnesses: null,
       };
 
       apiMock.POST.mockResolvedValue({
@@ -378,7 +380,7 @@ describe("useSkillCatalog", () => {
         data: {
           entries: [
             createCatalogEntry("bundled-skill", {
-              source: "Bundled",
+              source: 0,
               repoUrl: null,
               localPath: null,
             }),
@@ -393,16 +395,16 @@ describe("useSkillCatalog", () => {
 
       const installRequest: InstallSkillRequest = {
         name: "bundled-skill",
-        source: "Bundled",
+        source: 0,
         repoUrl: null,
         ref: null,
         localPath: null,
+        targetHarnesses: null,
       };
 
       const installResponse: InstallSkillResponse = {
-        success: true,
-        message: "Bundled skill enabled",
-        skillName: "bundled-skill",
+        name: "bundled-skill",
+        syncResults: [],
       };
 
       apiMock.POST.mockResolvedValue({
@@ -523,25 +525,25 @@ describe("useSkillCatalog", () => {
 
       const installRequest: InstallSkillRequest = {
         name: "available-skill",
-        source: "GitHub",
+        source: 1,
         repoUrl: "https://github.com/example/available-skill",
         ref: "main",
         localPath: null,
+        targetHarnesses: null,
       };
 
       apiMock.POST.mockResolvedValue({
         data: {
-          success: true,
-          message: "Installed",
-          skillName: "available-skill",
+          name: "available-skill",
+          syncResults: [],
         },
         error: undefined,
       });
 
       const installResponse = await result.installSkill(installRequest);
 
-      expect(installResponse?.success).toBe(true);
-      expect(installResponse?.skillName).toBe("available-skill");
+      expect(installResponse?.name).toBe("available-skill");
+      expect(installResponse?.syncResults).toEqual([]);
     });
 
     it("handles multiple catalog refreshes", async () => {

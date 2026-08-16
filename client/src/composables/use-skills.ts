@@ -254,8 +254,8 @@ export function useSkills(): UseSkillsResult {
           source: mapSkillSourceToNumber("GitHub"),
           repoUrl: parsed.repoUrl,
           ref: parsed.ref,
-          subPath: parsed.subPath,
           localPath: null,
+          targetHarnesses: null,
         };
       } else {
         const name = url.split("/").filter(Boolean).pop() ?? "unknown-skill";
@@ -264,8 +264,8 @@ export function useSkills(): UseSkillsResult {
           source: mapSkillSourceToNumber("Local"),
           repoUrl: null,
           ref: null,
-          subPath: null,
           localPath: url,
+          targetHarnesses: null,
         };
       }
 

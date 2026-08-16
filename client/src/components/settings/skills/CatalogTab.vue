@@ -7,6 +7,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { InstallSkillRequest } from "@/composables/use-skill-catalog";
 
+function mapSourceToNumber(source: "GitHub" | "Local" | "Bundled"): number {
+  switch (source) {
+    case "Bundled":
+      return 0;
+    case "GitHub":
+      return 1;
+    case "Local":
+      return 2;
+  }
+}
+
 const { catalog, isLoading, error, installSkill } = useSkillCatalog();
 const { skills: installedSkills, fetchSkills } = useSkills();
 
@@ -29,10 +40,11 @@ async function handleInstall(skillName: string): Promise<void> {
   try {
     const request: InstallSkillRequest = {
       name: catalogEntry.name,
-      source: catalogEntry.source,
+      source: mapSourceToNumber(catalogEntry.source),
       repoUrl: catalogEntry.repoUrl ?? null,
       ref: catalogEntry.ref ?? null,
       localPath: catalogEntry.localPath ?? null,
+      targetHarnesses: [...catalogEntry.targetHarnesses],
     };
 
     await installSkill(request);
