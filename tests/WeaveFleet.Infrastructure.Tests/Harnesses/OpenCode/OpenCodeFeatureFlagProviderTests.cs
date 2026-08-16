@@ -9,14 +9,14 @@ namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
 public sealed class OpenCodeFeatureFlagProviderTests
 {
     [Fact]
-    public async Task pooled_opencode_harness_defaults_to_off()
+    public async Task pooled_opencode_harness_defaults_to_on()
     {
         var preferences = new InMemoryUserPreferenceRepository();
         var provider = CreateProvider(new FleetOptions(), preferences);
 
         var enabled = await provider.IsPooledOpenCodeHarnessEnabledAsync("user-1", CancellationToken.None);
 
-        enabled.ShouldBeFalse();
+        enabled.ShouldBeTrue();
     }
 
     [Fact]

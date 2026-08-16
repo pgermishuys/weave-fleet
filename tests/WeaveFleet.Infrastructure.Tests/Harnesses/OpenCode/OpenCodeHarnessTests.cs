@@ -124,13 +124,13 @@ public sealed class OpenCodeHarnessTests
     }
 
     [Fact]
-    public async Task pooled_mode_defaults_to_off()
+    public async Task pooled_mode_defaults_to_on()
     {
         var runtime = CreateRuntime();
 
         var result = await runtime.IsPooledModeEnabledAsync("user-1", CancellationToken.None);
 
-        result.ShouldBeFalse();
+        result.ShouldBeTrue();
     }
 
     [Fact]
