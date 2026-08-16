@@ -610,38 +610,6 @@ onUnmounted(() => {
               type="button"
               :class="cn(
                 'flex flex-col items-start gap-2 border-2 p-4 text-left transition-colors',
-                whereToRunMode === 'quick-chat'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-border/80 hover:bg-muted/30',
-              )"
-              @click="whereToRunMode = 'quick-chat'"
-            >
-              <div class="flex items-center gap-2">
-                <div
-                  :class="cn(
-                    'flex h-4 w-4 items-center justify-center rounded-full border-2',
-                    whereToRunMode === 'quick-chat'
-                      ? 'border-primary bg-primary'
-                      : 'border-muted-foreground',
-                  )"
-                >
-                  <div
-                    v-if="whereToRunMode === 'quick-chat'"
-                    class="h-2 w-2 rounded-full bg-primary-foreground"
-                  />
-                </div>
-                <MessageSquare class="h-4 w-4 text-muted-foreground" />
-                <span class="font-medium text-foreground">Quick Chat</span>
-              </div>
-              <p class="ml-6 text-sm text-muted-foreground">
-                Start chatting without picking a project or directory
-              </p>
-            </button>
-
-            <button
-              type="button"
-              :class="cn(
-                'flex flex-col items-start gap-2 border-2 p-4 text-left transition-colors',
                 whereToRunMode === 'new-worktree'
                   ? 'border-primary bg-primary/5'
                   : 'border-border hover:border-border/80 hover:bg-muted/30',
@@ -762,6 +730,38 @@ onUnmounted(() => {
               </div>
               <p class="ml-6 text-sm text-muted-foreground">
                 Choose any folder on disk
+              </p>
+            </button>
+
+            <button
+              type="button"
+              :class="cn(
+                'flex flex-col items-start gap-2 border-2 p-4 text-left transition-colors',
+                whereToRunMode === 'quick-chat'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-border/80 hover:bg-muted/30',
+              )"
+              @click="whereToRunMode = 'quick-chat'"
+            >
+              <div class="flex items-center gap-2">
+                <div
+                  :class="cn(
+                    'flex h-4 w-4 items-center justify-center rounded-full border-2',
+                    whereToRunMode === 'quick-chat'
+                      ? 'border-primary bg-primary'
+                      : 'border-muted-foreground',
+                  )"
+                >
+                  <div
+                    v-if="whereToRunMode === 'quick-chat'"
+                    class="h-2 w-2 rounded-full bg-primary-foreground"
+                  />
+                </div>
+                <MessageSquare class="h-4 w-4 text-muted-foreground" />
+                <span class="font-medium text-foreground">Quick Chat</span>
+              </div>
+              <p class="ml-6 text-sm text-muted-foreground">
+                Start chatting without picking a project or directory
               </p>
             </button>
           </div>
