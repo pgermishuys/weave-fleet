@@ -1010,10 +1010,13 @@ function handleExpandVisual(payload: VisualPayload): void {
   gap: 6px;
   margin-top: 1px;
   padding: 0 8px;
+  /* Align with message content (20px icon + 12px gap) */
+  margin-left: 32px;
 }
 
 .delegation-links--user {
   align-items: flex-end;
+  margin-left: 0;
 }
 
 .delegation-link {
