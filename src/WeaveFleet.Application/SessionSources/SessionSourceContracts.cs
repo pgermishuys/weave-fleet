@@ -22,6 +22,7 @@ public static class SessionSourceProviderIds
     public const string Repository = "builtin.repository";
     public const string GitHub = "builtin.github";
     public const string Automation = "builtin.automation";
+    public const string QuickChat = "builtin.quickchat";
 }
 
 public static class SessionSourceTypeNames
@@ -32,6 +33,7 @@ public static class SessionSourceTypeNames
     public const string GitHubIssue = "github-issue";
     public const string GitHubPullRequest = "github-pull-request";
     public const string Automation = "automation";
+    public const string QuickChat = "quick-chat";
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -173,11 +175,27 @@ public static class SessionSourceCatalog
         ProducesContext: false,
         RequiresConfirmation: false);
 
+    public static SessionSourceDescriptor QuickChatStartSession { get; } = new(
+        new SessionSourceKey
+        {
+            ProviderId = SessionSourceProviderIds.QuickChat,
+            SourceType = SessionSourceTypeNames.QuickChat,
+            ActionId = SessionSourceActions.StartSession,
+            ContractVersion = 1
+        },
+        "Quick Chat",
+        SessionSourceKinds.Workspace,
+        [],
+        ProducesWorkspace: true,
+        ProducesContext: false,
+        RequiresConfirmation: false);
+
     public static IReadOnlyList<SessionSourceDescriptor> CoreDescriptors { get; } =
     [
         DirectoryStartSession,
         RepositoryStartSession,
         ExternalDocumentAddToSession,
-        AutomationStartSession
+        AutomationStartSession,
+        QuickChatStartSession
     ];
 }

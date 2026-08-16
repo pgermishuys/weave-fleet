@@ -90,6 +90,9 @@ internal sealed record DirectorySourceInput
     public string? Branch { get; init; }
 }
 
+/// <summary>Typed payload for the <c>local/quick-chat/start-session</c> session source action.</summary>
+internal sealed record QuickChatSourceInput;
+
 // ── Source-generated serializer context ───────────────────────────────────────────────────────────
 
 [JsonSourceGenerationOptions(
@@ -113,6 +116,7 @@ internal sealed record DirectorySourceInput
 [JsonSerializable(typeof(SessionActionCapabilities))]
 [JsonSerializable(typeof(LegacyDirectoryInput))]
 [JsonSerializable(typeof(DirectorySourceInput))]
+[JsonSerializable(typeof(QuickChatSourceInput))]
 internal sealed partial class ApplicationJsonContext : JsonSerializerContext
 {
 }

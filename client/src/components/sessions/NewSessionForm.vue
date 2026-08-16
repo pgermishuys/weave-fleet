@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, shallowRef, watch } from "vue";
 import { useNavigate, useSearch } from "@tanstack/vue-router";
-import { AlertCircle, Check, ChevronDown, ExternalLink, Folder, LoaderCircle } from "lucide-vue-next";
+import { AlertCircle, Check, ChevronDown, ExternalLink, Folder, LoaderCircle, MessageSquare } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +41,7 @@ import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 type SessionSourceKind = "repository" | "directory";
 type IsolationStrategy = "existing" | "worktree";
 type WorktreeMode = "new" | "existing";
-type WhereToRunMode = "new-worktree" | "existing-worktree" | "repository" | "directory";
+type WhereToRunMode = "quick-chat" | "new-worktree" | "existing-worktree" | "repository" | "directory";
 
 const UNGROUPED_PROJECT_ID = "__ungrouped__";
 
@@ -188,6 +188,18 @@ const effectiveDirectory = computed(() => {
 });
 
 const sessionSource = computed<SessionSourceSelection | undefined>(() => {
+  if (whereToRunMode.value === 'quick-chat') {
+    return {
+      key: {
+        providerId: "builtin.quickchat",
+        sourceType: "quick-chat",
+        actionId: "start-session",
+        contractVersion: 1,
+      },
+      input: {},
+    };
+  }
+
   if (sourceKind.value === "repository") {
     if (!selectedRepository.value) {
       return undefined;
@@ -240,6 +252,10 @@ const sessionSource = computed<SessionSourceSelection | undefined>(() => {
 });
 
 const validationMessage = computed(() => {
+  if (whereToRunMode.value === 'quick-chat') {
+    return null;
+  }
+
   if (sourceKind.value === "repository") {
     if (isRepositoriesLoading.value) {
       return "Loading repositories…";
@@ -503,6 +519,15 @@ watch(
   { immediate: true },
 );
 
+// Auto-submit when quick-chat is selected
+watch(whereToRunMode, (newMode) => {
+  if (newMode === 'quick-chat') {
+    void nextTick(() => {
+      void handleSubmit();
+    });
+  }
+});
+
 // Apply initial source on mount
 applyInitialSource();
 
@@ -581,6 +606,38 @@ onUnmounted(() => {
           <label class="block text-base font-semibold text-foreground">Where to run</label>
 
           <div class="grid gap-3">
+            <button
+              type="button"
+              :class="cn(
+                'flex flex-col items-start gap-2 border-2 p-4 text-left transition-colors',
+                whereToRunMode === 'quick-chat'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-border/80 hover:bg-muted/30',
+              )"
+              @click="whereToRunMode = 'quick-chat'"
+            >
+              <div class="flex items-center gap-2">
+                <div
+                  :class="cn(
+                    'flex h-4 w-4 items-center justify-center rounded-full border-2',
+                    whereToRunMode === 'quick-chat'
+                      ? 'border-primary bg-primary'
+                      : 'border-muted-foreground',
+                  )"
+                >
+                  <div
+                    v-if="whereToRunMode === 'quick-chat'"
+                    class="h-2 w-2 rounded-full bg-primary-foreground"
+                  />
+                </div>
+                <MessageSquare class="h-4 w-4 text-muted-foreground" />
+                <span class="font-medium text-foreground">Quick Chat</span>
+              </div>
+              <p class="ml-6 text-sm text-muted-foreground">
+                Start chatting without picking a project or directory
+              </p>
+            </button>
+
             <button
               type="button"
               :class="cn(
@@ -712,7 +769,7 @@ onUnmounted(() => {
 
         <!-- Repository picker (for repo-based modes) -->
         <div
-          v-if="sourceKind === 'repository'"
+          v-if="sourceKind === 'repository' && whereToRunMode !== 'quick-chat'"
           class="space-y-2"
         >
           <label
@@ -847,7 +904,7 @@ onUnmounted(() => {
 
         <!-- Directory picker -->
         <div
-          v-if="sourceKind === 'directory'"
+          v-if="sourceKind === 'directory' && whereToRunMode !== 'quick-chat'"
           class="space-y-2"
         >
           <label

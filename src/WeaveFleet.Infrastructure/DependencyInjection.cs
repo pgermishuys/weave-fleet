@@ -142,6 +142,7 @@ public static class DependencyInjection
         services.AddSingleton<ISessionSourceProvider, RepositorySessionSourceProvider>();
         services.AddScoped<ISessionSourceProvider, GitHubSessionSourceProvider>();
         services.AddScoped<ISessionSourceProvider, AutomationSessionSourceProvider>();
+        services.AddSingleton<ISessionSourceProvider, QuickChatSessionSourceProvider>();
         services.AddScoped<SystemUserContext>();
 
         // ConfigService — singleton, no DB dependency, file-based
