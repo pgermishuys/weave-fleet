@@ -469,6 +469,20 @@ public sealed class SessionRepository(
         return ids.ToHashSet();
     }
 
+    public async Task<IReadOnlyDictionary<string, string>> GetActiveChildToParentMappingAsync()
+    {
+        using var conn = connectionFactory.CreateConnection();
+        var pairs = await conn.QueryAsync(
+            """
+            SELECT id, parent_session_id
+            FROM sessions
+            WHERE parent_session_id IS NOT NULL AND status = 'active' AND user_id = @UserId
+            """,
+            cmd => { cmd.AddParameter("UserId", userContext.UserId); },
+            r => (ChildId: r.GetString(r.GetOrdinal("id")), ParentId: r.GetString(r.GetOrdinal("parent_session_id"))));
+        return pairs.ToDictionary(p => p.ChildId, p => p.ParentId, StringComparer.Ordinal);
+    }
+
     public async Task<IReadOnlyList<Session>> GetForWorkspaceAsync(string workspaceId)
         => await GetForWorkspaceAsync(workspaceId, retentionStatuses: null);
 

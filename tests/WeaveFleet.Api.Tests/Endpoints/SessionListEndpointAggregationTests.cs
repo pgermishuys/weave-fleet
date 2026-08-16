@@ -202,6 +202,8 @@ public sealed class SessionListEndpointAggregationTests : IAsyncLifetime, IDispo
     [Fact]
     public async Task ListSessions_WhenParentHasBusyChild_ReturnsActiveSessionStatus()
     {
+        // The child session has ActivityStatus = "busy" in the DB, but the activity tracker
+        // is not aware of it (no ephemeral state). Therefore, the parent should NOT show as "active".
         var response = await _client!.GetAsync("/api/sessions");
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -219,6 +221,40 @@ public sealed class SessionListEndpointAggregationTests : IAsyncLifetime, IDispo
         var parentSession = sessionsById["session-parent"];
         parentSession.GetProperty("session").GetProperty("id").GetString().ShouldBe("session-parent");
         parentSession.GetProperty("activityStatus").GetString().ShouldBe("idle");
+        // Fixed: parent should be idle when child is not busy in the activity tracker
+        parentSession.GetProperty("sessionStatus").GetString().ShouldBe("idle");
+
+        var standaloneSession = sessionsById["session-standalone"];
+        standaloneSession.GetProperty("activityStatus").GetString().ShouldBe("idle");
+        standaloneSession.GetProperty("sessionStatus").GetString().ShouldBe("idle");
+    }
+
+    [Fact]
+    public async Task ListSessions_WhenParentHasTrackerBusyChild_ReturnsActiveSessionStatus()
+    {
+        // Register the child as busy in the activity tracker
+        using var scope = _factory!.Services.CreateScope();
+        var activityTracker = scope.ServiceProvider.GetRequiredService<Application.Services.SessionActivityTracker>();
+        activityTracker.Update("session-child", "busy", _userId);
+
+        var response = await _client!.GetAsync("/api/sessions");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var sessions = await response.Content.ReadFromJsonAsync<JsonElement[]>(JsonSerializerOptions.Web);
+
+        sessions.ShouldNotBeNull();
+        sessions.Length.ShouldBe(2);
+
+        var sessionsById = sessions.ToDictionary(
+            session => session.GetProperty("session").GetProperty("id").GetString().ShouldNotBeNull(),
+            session => session);
+
+        sessionsById.Count.ShouldBe(2);
+
+        var parentSession = sessionsById["session-parent"];
+        parentSession.GetProperty("session").GetProperty("id").GetString().ShouldBe("session-parent");
+        parentSession.GetProperty("activityStatus").GetString().ShouldBe("idle");
+        // Parent should show as active when child is busy in the activity tracker
         parentSession.GetProperty("sessionStatus").GetString().ShouldBe("active");
 
         var standaloneSession = sessionsById["session-standalone"];

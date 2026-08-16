@@ -359,6 +359,7 @@ internal sealed class FakeSessionRepository : ISessionRepository
     public Task UpdateResumeTokenAsync(string id, string resumeToken) => throw new NotImplementedException();
     public Task<IReadOnlyList<Domain.Entities.Session>> GetActiveChildrenAsync(string parentDbId) => throw new NotImplementedException();
     public Task<IReadOnlySet<string>> GetIdsWithActiveChildrenAsync() => throw new NotImplementedException();
+    public Task<IReadOnlyDictionary<string, string>> GetActiveChildToParentMappingAsync() => throw new NotImplementedException();
     public Task<IReadOnlyList<Domain.Entities.Session>> GetForWorkspaceAsync(string workspaceId) => throw new NotImplementedException();
     public Task<IReadOnlyList<Domain.Entities.Session>> GetForWorkspaceAsync(string workspaceId, IReadOnlyList<string>? retentionStatuses) => throw new NotImplementedException();
     public Task<bool> DeleteAsync(string id) => throw new NotImplementedException();

@@ -260,6 +260,14 @@ public sealed class InMemorySessionRepository : ISessionRepository
         return Task.FromResult<IReadOnlySet<string>>(parentIds);
     }
 
+    public Task<IReadOnlyDictionary<string, string>> GetActiveChildToParentMappingAsync()
+    {
+        var mapping = _store.Values
+            .Where(s => s.ParentSessionId is not null && s.Status == "active")
+            .ToDictionary(s => s.Id, s => s.ParentSessionId!, StringComparer.Ordinal);
+        return Task.FromResult<IReadOnlyDictionary<string, string>>(mapping);
+    }
+
     public Task<IReadOnlyList<Session>> GetForWorkspaceAsync(string workspaceId)
     {
         IReadOnlyList<Session> result = [.. _store.Values.Where(s => s.WorkspaceId == workspaceId)];

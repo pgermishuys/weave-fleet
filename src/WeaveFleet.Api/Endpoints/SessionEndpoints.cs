@@ -47,8 +47,19 @@ public static class SessionEndpoints
                     var projectNamesById = (await projectRepository.ListAsync())
                         .ToDictionary(project => project.Id, project => project.Name, StringComparer.Ordinal);
 
-                    var parentIdsWithBusyChildren = (await sessionRepository.GetIdsWithActiveChildrenAsync())
-                        .ToHashSet(StringComparer.Ordinal);
+                    // Get child-to-parent mapping for all active children
+                    var childToParent = await sessionRepository.GetActiveChildToParentMappingAsync();
+
+                    // Filter to only include parents whose children are actually busy according to the activity tracker
+                    var parentIdsWithBusyChildren = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (var (childId, parentId) in childToParent)
+                    {
+                        var childActivityStatus = activityTracker.GetEffectiveActivityStatus(childId);
+                        if (childActivityStatus == "busy")
+                        {
+                            parentIdsWithBusyChildren.Add(parentId);
+                        }
+                    }
 
                     var originsBySessionId = await sessionSourceUsageRepository.GetPrimaryBySessionIdsAsync(
                         sessions.Select(session => session.Id).ToArray());
