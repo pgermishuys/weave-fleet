@@ -1,16 +1,31 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { sanitizeHtml } from '@/lib/sanitize-html'
-
 interface Props {
   content: string
 }
 
 const props = defineProps<Props>()
-
-const sanitizedContent = computed(() => sanitizeHtml(props.content))
 </script>
 
 <template>
-  <div v-html="sanitizedContent" />
+  <div class="html-renderer">
+    <iframe
+      :srcdoc="props.content"
+      sandbox="allow-same-origin"
+      class="html-iframe"
+    />
+  </div>
 </template>
+
+<style scoped>
+.html-renderer {
+  width: 100%;
+  height: 100%;
+}
+
+.html-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: white;
+}
+</style>
