@@ -5,12 +5,22 @@ import GitHubWorkItemDetailPage from "@/components/pages/GitHubWorkItemDetailPag
 import { useSidebarStore } from "@/stores/sidebar";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
-const { apiFetchMock } = vi.hoisted(() => ({
+const { apiFetchMock, mockNavigate } = vi.hoisted(() => ({
   apiFetchMock: vi.fn(),
+  mockNavigate: vi.fn(),
 }));
 
 vi.mock("@/lib/api-client", () => ({
   apiFetch: apiFetchMock,
+}));
+
+vi.mock("@tanstack/vue-router", () => ({
+  useRouter: () => ({
+    navigate: mockNavigate,
+  }),
+  useLocation: () => ({
+    pathname: { value: "/" },
+  }),
 }));
 
 function createJsonResponse<T>(body: T, status = 200): Response {
@@ -23,6 +33,7 @@ function createJsonResponse<T>(body: T, status = 200): Response {
 describe("GitHubWorkItemDetailPage", () => {
   beforeEach(() => {
     apiFetchMock.mockReset();
+    mockNavigate.mockReset();
     apiFetchMock.mockImplementation(async (url: string) => {
       if (url.endsWith("/comments")) {
         return createJsonResponse([]);
@@ -47,10 +58,10 @@ describe("GitHubWorkItemDetailPage", () => {
     });
   });
 
-  it("waits for the sessions panel switch before opening the dialog", async () => {
+  it("waits for the sessions panel switch before setting the preset and navigating", async () => {
     const sidebarStore = useSidebarStore();
     const workspaceUiStore = useWorkspaceUiStore();
-    const openNewSessionDialogSpy = vi.spyOn(workspaceUiStore, "openNewSessionDialog");
+    const setNewSessionInitialSourceSpy = vi.spyOn(workspaceUiStore, "setNewSessionInitialSource");
 
     const wrapper = mount(GitHubWorkItemDetailPage, {
       props: {
@@ -75,19 +86,31 @@ describe("GitHubWorkItemDetailPage", () => {
 
     expect(sidebarStore.panelCollapsed).toBe(false);
     expect(sidebarStore.activeRail).toBe("sessions");
-    expect(openNewSessionDialogSpy).not.toHaveBeenCalled();
+    expect(setNewSessionInitialSourceSpy).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
 
     await nextTick();
 
-    expect(openNewSessionDialogSpy).toHaveBeenCalledWith(
-      null,
+    expect(setNewSessionInitialSourceSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "github",
         sourceType: "github-issue",
         owner: "acme",
         repo: "weave",
         number: 42,
+        title: "Investigate missing GitHub context",
+        body: "Body",
+        htmlUrl: "https://github.com/acme/weave/issues/42",
+        repoFullName: "acme/weave",
       }),
     );
+    
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: "/sessions/new",
+      search: {
+        projectId: undefined,
+        source: undefined,
+      },
+    });
   });
 });
