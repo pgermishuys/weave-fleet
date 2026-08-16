@@ -69,20 +69,24 @@ public sealed class SignalRDelegationResubscribeTests : IAsyncLifetime, IDisposa
         snapshot1.ValueKind.ShouldBe(JsonValueKind.Object);
 
         // Insert a delegation into DB with status "running"
-        var delegationRepo = _server.Services.GetRequiredService<IDelegationRepository>();
-        var delegation = new Delegation
+        var delegationId1 = $"delegation-{Guid.NewGuid():N}";
+        using (var scope = _server.Services.CreateScope())
         {
-            Id = $"delegation-{Guid.NewGuid():N}",
-            ParentSessionId = sessionA,
-            ChildSessionId = null,
-            ParentToolCallId = $"call-{Guid.NewGuid():N}",
-            Title = "Test delegation",
-            Status = "running",
-            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
-            UpdatedAt = DateTimeOffset.UtcNow.ToString("O"),
-            CompletedAt = null
-        };
-        await delegationRepo.InsertAsync(delegation);
+            var delegationRepo = scope.ServiceProvider.GetRequiredService<IDelegationRepository>();
+            var delegation = new Delegation
+            {
+                Id = delegationId1,
+                ParentSessionId = sessionA,
+                ChildSessionId = null,
+                ParentToolCallId = $"call-{Guid.NewGuid():N}",
+                Title = "Test delegation",
+                Status = "running",
+                CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+                UpdatedAt = DateTimeOffset.UtcNow.ToString("O"),
+                CompletedAt = null
+            };
+            await delegationRepo.InsertAsync(delegation);
+        }
 
         // Set activity status to "busy"
         var activityTracker = _server.Services.GetRequiredService<SessionActivityTracker>();
@@ -112,7 +116,7 @@ public sealed class SignalRDelegationResubscribeTests : IAsyncLifetime, IDisposa
         var firstDelegation = delegations.EnumerateArray().First();
         firstDelegation.GetProperty("status").GetString().ShouldBe("running",
             "Delegation status should be 'running' after re-subscribe");
-        firstDelegation.GetProperty("delegationId").GetString().ShouldBe(delegation.Id);
+        firstDelegation.GetProperty("delegationId").GetString().ShouldBe(delegationId1);
 
         // Assert: snapshot has activityStatus "busy"
         snapshot3.TryGetProperty("activityStatus", out var activityStatus).ShouldBeTrue(
@@ -138,20 +142,23 @@ public sealed class SignalRDelegationResubscribeTests : IAsyncLifetime, IDisposa
         snapshot1.ValueKind.ShouldBe(JsonValueKind.Object);
 
         // Insert a delegation into DB with status "running"
-        var delegationRepo = _server.Services.GetRequiredService<IDelegationRepository>();
-        var delegation = new Delegation
+        using (var scope = _server.Services.CreateScope())
         {
-            Id = $"delegation-{Guid.NewGuid():N}",
-            ParentSessionId = sessionA,
-            ChildSessionId = null,
-            ParentToolCallId = $"call-{Guid.NewGuid():N}",
-            Title = "Test delegation",
-            Status = "running",
-            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
-            UpdatedAt = DateTimeOffset.UtcNow.ToString("O"),
-            CompletedAt = null
-        };
-        await delegationRepo.InsertAsync(delegation);
+            var delegationRepo = scope.ServiceProvider.GetRequiredService<IDelegationRepository>();
+            var delegation = new Delegation
+            {
+                Id = $"delegation-{Guid.NewGuid():N}",
+                ParentSessionId = sessionA,
+                ChildSessionId = null,
+                ParentToolCallId = $"call-{Guid.NewGuid():N}",
+                Title = "Test delegation",
+                Status = "running",
+                CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+                UpdatedAt = DateTimeOffset.UtcNow.ToString("O"),
+                CompletedAt = null
+            };
+            await delegationRepo.InsertAsync(delegation);
+        }
 
         // Set activity status to "idle" (explicitly idle, but delegation is running)
         var activityTracker = _server.Services.GetRequiredService<SessionActivityTracker>();
@@ -216,20 +223,23 @@ public sealed class SignalRDelegationResubscribeTests : IAsyncLifetime, IDisposa
         await WaitForBroadcasterSubscriberAsync();
 
         // Insert a delegation with childSessionId = C and status "running"
-        var delegationRepo = _server.Services.GetRequiredService<IDelegationRepository>();
-        var delegation = new Delegation
+        using (var scope = _server.Services.CreateScope())
         {
-            Id = $"delegation-{Guid.NewGuid():N}",
-            ParentSessionId = parentSessionA,
-            ChildSessionId = childSessionC,
-            ParentToolCallId = $"call-{Guid.NewGuid():N}",
-            Title = "Test delegation to child",
-            Status = "running",
-            CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
-            UpdatedAt = DateTimeOffset.UtcNow.ToString("O"),
-            CompletedAt = null
-        };
-        await delegationRepo.InsertAsync(delegation);
+            var delegationRepo = scope.ServiceProvider.GetRequiredService<IDelegationRepository>();
+            var delegation = new Delegation
+            {
+                Id = $"delegation-{Guid.NewGuid():N}",
+                ParentSessionId = parentSessionA,
+                ChildSessionId = childSessionC,
+                ParentToolCallId = $"call-{Guid.NewGuid():N}",
+                Title = "Test delegation to child",
+                Status = "running",
+                CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+                UpdatedAt = DateTimeOffset.UtcNow.ToString("O"),
+                CompletedAt = null
+            };
+            await delegationRepo.InsertAsync(delegation);
+        }
 
         // Simulate delegation.updated event to trigger auto-subscribe to child topic
         // This is what happens when a delegation is created during normal operation
