@@ -35,7 +35,6 @@ describe("Snapshot tool output hydration", () => {
 
     // Apply the tool part update (simulating snapshot hydration or message.part.updated event)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     messages = applyPartUpdate(messages, toolPartPayload as any)
 
     // Assert: the accumulated message has a tool part with state.output

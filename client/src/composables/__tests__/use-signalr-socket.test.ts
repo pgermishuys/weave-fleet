@@ -117,7 +117,7 @@ function expectedDomainEvent(type: DomainEvent["type"], eventId?: number): Sessi
 
 /** Helper to mock hub invoke with proper handling of SubscribeToSessionsTopicAsync */
 function mockInvokeWithSnapshot(snapshot: SessionSnapshot | ((sessionId: string) => SessionSnapshot)) {
-  mockHubConnection.invoke.mockImplementation(async (method: string, ...args: unknown[]) => {
+  mockHubConnection.invoke.mockImplementation(async (method: string) => {
     if (method === "SubscribeToSessionsTopicAsync") {
       return undefined
     }
@@ -230,7 +230,7 @@ describe("useSignalRSocket", () => {
       const snapshot1 = createSessionSnapshot("session-1")
       const snapshot2 = createSessionSnapshot("session-2")
 
-      mockHubConnection.invoke.mockImplementation(async (method: string, ...args: unknown[]) => {
+      mockHubConnection.invoke.mockImplementation(async (method: string) => {
         if (method === "SubscribeToSessionsTopicAsync") {
           return undefined
         }
@@ -316,7 +316,7 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockImplementation(async (method: string, ...args: unknown[]) => {
+      mockHubConnection.invoke.mockImplementation(async (method: string) => {
         if (method === "SubscribeToSessionsTopicAsync") {
           return undefined
         }
@@ -343,7 +343,7 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockImplementation(async (method: string, ...args: unknown[]) => {
+      mockHubConnection.invoke.mockImplementation(async (method: string) => {
         if (method === "SubscribeToSessionsTopicAsync") {
           return undefined
         }
@@ -633,7 +633,7 @@ describe("useSignalRSocket", () => {
       const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
       const snapshot = createSessionSnapshot("session-1")
 
-      mockHubConnection.invoke.mockImplementation(async (method: string, ...args: unknown[]) => {
+      mockHubConnection.invoke.mockImplementation(async (method: string) => {
         if (method === "SubscribeToSessionsTopicAsync") {
           return undefined
         }
