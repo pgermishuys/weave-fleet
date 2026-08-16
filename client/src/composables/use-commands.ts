@@ -121,7 +121,8 @@ export function useCommands() {
   }
 
   function handleNewSession(): void {
-    workspaceUiStore.openNewSessionDialog(null);
+    sidebarStore.setActiveRail("sessions");
+    void router.navigate({ to: "/sessions/new" });
   }
 
   async function refreshSessions(): Promise<void> {

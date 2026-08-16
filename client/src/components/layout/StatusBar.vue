@@ -6,6 +6,9 @@ import { useSessionsStore } from "@/stores/sessions";
 const sessionsStore = useSessionsStore();
 const { sessions, activeSessionId } = storeToRefs(sessionsStore);
 
+const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+const mod = isMac ? "⌘" : "Ctrl";
+
 const activeSession = computed(() =>
   sessions.value.find((session) => session.session.id === activeSessionId.value) ?? null,
 );
@@ -70,19 +73,15 @@ const tokenCount = computed(() => {
   <footer class="status-bar">
     <div class="status-bar__left">
       <span class="shortcut-hint">
-        <kbd>Ctrl N</kbd> New session
+        <kbd>{{ mod }} K</kbd> Command Palette
       </span>
       <span class="shortcut-separator">·</span>
       <span class="shortcut-hint">
-        <kbd>Ctrl K</kbd> Command
+        <kbd>{{ mod }} [ ]</kbd> Prev / Next Session
       </span>
       <span class="shortcut-separator">·</span>
       <span class="shortcut-hint">
-        <kbd>Ctrl Enter</kbd> Send
-      </span>
-      <span class="shortcut-separator">·</span>
-      <span class="shortcut-hint">
-        <kbd>Ctrl .</kbd> Approve
+        <kbd>{{ mod }} B</kbd> Sidebar
       </span>
       <span class="shortcut-separator">·</span>
       <span class="shortcut-hint">
