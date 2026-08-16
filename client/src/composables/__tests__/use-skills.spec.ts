@@ -4,7 +4,6 @@ import type { components } from "@/api/client";
 import { flushAll, mountComposable } from "./test-utils";
 
 type SkillManifestEntry = components["schemas"]["SkillManifestEntry"];
-type SkillManifest = components["schemas"]["SkillManifest"];
 type UpdateCheckResponse = components["schemas"]["UpdateCheckResponse"];
 type UpdateSkillResponse = components["schemas"]["UpdateSkillResponse"];
 type InstallSkillResponse = components["schemas"]["InstallSkillResponse"];
