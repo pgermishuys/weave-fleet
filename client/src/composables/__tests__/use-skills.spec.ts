@@ -384,7 +384,7 @@ describe("useSkills", () => {
         body: {
           name: "new-skill",
           source: 1,
-          repoUrl: "https://github.com/example/new-skill",
+          repoUrl: "https://github.com/example/new-skill.git",
           ref: null,
           localPath: null,
           targetHarnesses: null,
