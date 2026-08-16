@@ -122,7 +122,7 @@ export function useCommands() {
 
   function handleNewSession(): void {
     sidebarStore.setActiveRail("sessions");
-    void router.navigate({ to: "/sessions/new" });
+    void router.navigate({ to: "/sessions/new", search: { projectId: undefined, source: undefined } });
   }
 
   async function refreshSessions(): Promise<void> {
