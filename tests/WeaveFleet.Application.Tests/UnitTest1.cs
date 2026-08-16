@@ -11,7 +11,7 @@ public sealed class FleetOptionsTests
         options.Port.ShouldBe(3000);
         options.Host.ShouldBe("127.0.0.1");
         options.Debug.ShouldBeFalse();
-        options.Harness.PooledOpenCodeHarness.ShouldBeFalse();
+        options.Harness.PooledOpenCodeHarness.ShouldBeTrue();
     }
 
     [Fact]

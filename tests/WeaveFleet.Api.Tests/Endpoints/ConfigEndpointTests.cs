@@ -14,7 +14,7 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 public sealed class ConfigEndpointTests
 {
     [Fact]
-    public async Task get_config_returns_pooled_opencode_harness_disabled_by_default()
+    public async Task get_config_returns_pooled_opencode_harness_enabled_by_default()
     {
         await using var factory = CreateFactoryWithConfigDirectory(CreateTempConfigDirectory());
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
@@ -29,7 +29,7 @@ public sealed class ConfigEndpointTests
         var payload = await response.Content.ReadFromJsonAsync<JsonObject>();
         payload.ShouldNotBeNull();
         payload["pooledOpenCodeHarness"].ShouldNotBeNull();
-        payload["pooledOpenCodeHarness"]!.GetValue<bool>().ShouldBeFalse();
+        payload["pooledOpenCodeHarness"]!.GetValue<bool>().ShouldBeTrue();
     }
 
     [Fact]
@@ -43,28 +43,28 @@ public sealed class ConfigEndpointTests
             HandleCookies = true,
         });
 
-        var enableResponse = await client.PutAsJsonAsync("/api/config", new JsonObject
-        {
-            ["pooledOpenCodeHarness"] = true,
-        });
-
-        enableResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
-        var options = factory.Services.GetRequiredService<FleetOptions>();
-        options.Harness.PooledOpenCodeHarness.ShouldBeTrue();
-
-        var getEnabledResponse = await client.GetAsync("/api/config");
-        getEnabledResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
-        var enabledPayload = await getEnabledResponse.Content.ReadFromJsonAsync<JsonObject>();
-        enabledPayload.ShouldNotBeNull();
-        enabledPayload["pooledOpenCodeHarness"]!.GetValue<bool>().ShouldBeTrue();
-
         var disableResponse = await client.PutAsJsonAsync("/api/config", new JsonObject
         {
             ["pooledOpenCodeHarness"] = false,
         });
 
         disableResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        var options = factory.Services.GetRequiredService<FleetOptions>();
         options.Harness.PooledOpenCodeHarness.ShouldBeFalse();
+
+        var getDisabledResponse = await client.GetAsync("/api/config");
+        getDisabledResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var disabledPayload = await getDisabledResponse.Content.ReadFromJsonAsync<JsonObject>();
+        disabledPayload.ShouldNotBeNull();
+        disabledPayload["pooledOpenCodeHarness"]!.GetValue<bool>().ShouldBeFalse();
+
+        var enableResponse = await client.PutAsJsonAsync("/api/config", new JsonObject
+        {
+            ["pooledOpenCodeHarness"] = true,
+        });
+
+        enableResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        options.Harness.PooledOpenCodeHarness.ShouldBeTrue();
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public sealed class ConfigEndpointTests
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         var options = factory.Services.GetRequiredService<FleetOptions>();
-        options.Harness.PooledOpenCodeHarness.ShouldBeFalse();
+        options.Harness.PooledOpenCodeHarness.ShouldBeTrue();
     }
 
     private static ApiWebApplicationFactory CreateFactoryWithConfigDirectory(string configDirectory)

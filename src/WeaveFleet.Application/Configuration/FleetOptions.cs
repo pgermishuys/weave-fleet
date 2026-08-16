@@ -113,9 +113,9 @@ public sealed class HarnessOptions
 {
     /// <summary>
     /// Enables pooled OpenCode process mode for new sessions when also enabled in user preferences.
-    /// Default: false (per-session OpenCode process mode).
+    /// Default: true.
     /// </summary>
-    public bool PooledOpenCodeHarness { get; set; }
+    public bool PooledOpenCodeHarness { get; set; } = true;
 
     /// <summary>
     /// Seconds to keep an idle pooled OpenCode process alive after the last lease is released.
