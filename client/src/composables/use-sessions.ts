@@ -15,6 +15,7 @@ import type { SessionListItem } from "@/api/client";
 import { api } from "@/api/client";
 import { sessionsChanged } from "@/lib/session-utils";
 import { useSessionsStore } from "@/stores/sessions";
+import { extractApiError } from "@/lib/api-error";
 
 export interface UseSessionsOptions {
   retentionStatus?: MaybeRefOrGetter<"active" | "archived" | "all">;
@@ -112,7 +113,7 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
       }
 
       if (apiError) {
-        throw new Error(apiError ? String(apiError) : "Failed to fetch sessions");
+        throw new Error(extractApiError(apiError, "Failed to fetch sessions"));
       }
 
       if (!data) {

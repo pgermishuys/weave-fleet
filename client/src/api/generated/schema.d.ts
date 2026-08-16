@@ -1102,7 +1102,55 @@ export interface paths {
         };
         get: operations["ListSkills"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetSkillCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
         post: operations["InstallSkill"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/{name}/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["UpdateSkill"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1116,10 +1164,42 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["GetSkill"];
+        get?: never;
         put?: never;
         post?: never;
         delete: operations["DeleteSkill"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/{name}/update-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["CheckSkillUpdate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetSkillManifest"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2150,6 +2230,23 @@ export interface components {
             entries: components["schemas"]["BrowseEntryDto"][];
             currentPath: string;
         };
+        CatalogEntryDto: {
+            name: string;
+            displayName: null | string;
+            description: null | string;
+            source: components["schemas"]["SkillSource"];
+            repoUrl: null | string;
+            ref: null | string;
+            localPath: null | string;
+            targetHarnesses: string[];
+            author: null | string;
+            version: null | string;
+            tags: string[];
+            /** Format: date-time */
+            createdAt: null | string;
+            /** Format: date-time */
+            updatedAt: null | string;
+        };
         ClientConfigResponse: {
             cloudMode: boolean;
             authEnabled: boolean;
@@ -2269,7 +2366,15 @@ export interface components {
         };
         InstallSkillRequest: {
             name: string;
-            sourcePath: null | string;
+            source: components["schemas"]["SkillSource"];
+            repoUrl: null | string;
+            ref: null | string;
+            localPath: null | string;
+            targetHarnesses: null | string[];
+        };
+        InstallSkillResponse: {
+            name: string;
+            syncResults: components["schemas"]["SkillSyncResultDto"][];
         };
         JsonElement: unknown;
         JsonObject: Record<string, never>;
@@ -2411,6 +2516,14 @@ export interface components {
         };
         PreviewSessionSourceApiRequest: {
             source: components["schemas"]["SessionSourceSelection"];
+        };
+        ProblemDetails: {
+            type?: null | string;
+            title?: null | string;
+            /** Format: int32 */
+            status?: null | number | string;
+            detail?: null | string;
+            instance?: null | string;
         };
         ProjectResponse: {
             id: string;
@@ -2565,6 +2678,58 @@ export interface components {
         SetPreferenceRequest: {
             value: string;
         };
+        SkillCatalogResponse: {
+            entries: components["schemas"]["CatalogEntryDto"][];
+            isStale: boolean;
+            /** Format: date-time */
+            cachedAt: null | string;
+        };
+        SkillListItemDto: {
+            name: string;
+            source: components["schemas"]["SkillSource"];
+            repoUrl: null | string;
+            ref: null | string;
+            localPath: null | string;
+            targetHarnesses: string[];
+            /** Format: date-time */
+            installedAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        SkillListResponse: {
+            skills: components["schemas"]["SkillListItemDto"][];
+        };
+        SkillManifest: {
+            id: string;
+            userId: string;
+            workspaceId?: null | string;
+            skills?: components["schemas"]["SkillManifestEntry"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        SkillManifestEntry: {
+            name: string;
+            source: components["schemas"]["SkillSource"];
+            repoUrl?: null | string;
+            ref?: null | string;
+            localPath?: null | string;
+            targetHarnesses?: string[];
+            /** Format: date-time */
+            installedAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        SkillSource: number;
+        SkillSyncResultDto: {
+            skillName: string;
+            harness: string;
+            success: boolean;
+            skipped: boolean;
+            errorMessage: null | string;
+            targetPath: null | string;
+        };
         SmartLinkDto: {
             id: string;
             sessionId: string;
@@ -2669,6 +2834,13 @@ export interface components {
             providerType: null | string;
             config: null | string;
         };
+        UpdateCheckResponse: {
+            name: string;
+            updateAvailable: boolean;
+            remoteRef: null | string;
+            localRef: null | string;
+            message: null | string;
+        };
         UpdateCredentialRequest: {
             value: string;
             metadata: null | string;
@@ -2685,6 +2857,12 @@ export interface components {
         };
         UpdateSessionTitleRequest: {
             title: string;
+        };
+        UpdateSkillResponse: {
+            name: string;
+            /** Format: date-time */
+            updatedAt: string;
+            syncResults: components["schemas"]["SkillSyncResultDto"][];
         };
         UpsertSmartLinkRequest: {
             url: string;
@@ -4758,7 +4936,38 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["SkillListResponse"];
+                };
+            };
+        };
+    };
+    GetSkillCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillCatalogResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
         };
     };
@@ -4775,16 +4984,45 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
-            200: {
+            /** @description Created */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["InstallSkillResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
         };
     };
-    GetSkill: {
+    UpdateSkill: {
         parameters: {
             query?: never;
             header?: never;
@@ -4800,7 +5038,36 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["UpdateSkillResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
         };
     };
@@ -4815,12 +5082,99 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    CheckSkillUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
             /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["UpdateCheckResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    GetSkillManifest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillManifest"];
+                };
             };
         };
     };

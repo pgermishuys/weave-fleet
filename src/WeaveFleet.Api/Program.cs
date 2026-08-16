@@ -94,6 +94,7 @@ if (!builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddLauncherPatchStartupService();
     builder.Services.AddLegacySessionImportStartupService();
+    builder.Services.AddBundledSkillsStartupService();
     builder.Services.AddOpenCodeWarmupStartupService();
 }
 builder.Services.AddFleetInfrastructure(fleetOptions);

@@ -278,6 +278,17 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
 
     public OpenCodePoolHealthStatus GetPooledOpenCodePoolHealth() => _pooledInstanceRegistry.GetHealthStatus();
 
+    /// <summary>
+    /// Recycles all idle pooled OpenCode instances.
+    /// Active sessions are NOT interrupted.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The number of instances recycled.</returns>
+    internal Task<int> RecycleIdlePooledInstancesAsync(CancellationToken cancellationToken = default)
+    {
+        return _pooledInstanceRegistry.RecycleIdleInstancesAsync(cancellationToken);
+    }
+
     internal PortAllocator PortAllocator => _portAllocator;
 
     /// <inheritdoc />

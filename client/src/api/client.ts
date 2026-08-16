@@ -463,6 +463,12 @@ export interface NuCodeDeviceFlowInitiatedResponse {
 // The OpenAPI generator produces `number | string` for numeric fields, but the
 // API actually returns numbers. These overrides ensure type safety in the frontend.
 
+// ─── Type Overrides for Enums ──────────────────────────────────────────────
+// The OpenAPI generator produces `number` for enums, but the API serializes them
+// as strings. These overrides ensure type safety in the frontend.
+
+export type SkillSource = "GitHub" | "Local" | "Bundled";
+
 export interface SessionListItem {
   instanceId: string;
   workspaceId: string;

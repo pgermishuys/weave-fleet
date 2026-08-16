@@ -10,6 +10,7 @@ using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
+using WeaveFleet.Application.Skills;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Analytics;
 using WeaveFleet.Infrastructure.Data;
@@ -28,6 +29,7 @@ using WeaveFleet.Infrastructure.Plugins;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.SessionSources;
+using WeaveFleet.Infrastructure.Skills;
 
 namespace WeaveFleet.Infrastructure;
 
@@ -74,6 +76,19 @@ public static class DependencyInjection
     public static IServiceCollection AddOpenCodeWarmupStartupService(this IServiceCollection services)
     {
         services.AddHostedService<OpenCodeWarmupHostedService>();
+        return services;
+    }
+
+    /// <summary>
+    /// Adds the bundled skills deployment service that ensures bundled skills are registered
+    /// in the manifest and synced to harness paths on startup.
+    /// In auth-enabled mode the service no-ops immediately; in local mode it deploys bundled
+    /// skills to the deterministic <c>"local-user"</c> owner identity.
+    /// Must be registered after skill infrastructure is available.
+    /// </summary>
+    public static IServiceCollection AddBundledSkillsStartupService(this IServiceCollection services)
+    {
+        services.AddHostedService<BundledSkillsHostedService>();
         return services;
     }
 
@@ -179,6 +194,16 @@ public static class DependencyInjection
         services.AddBuiltInPlugin<GitHubBackendPlugin>();
         services.AddHostedService<WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.CiWatcherService>();
 
+        // Skill services
+        services.AddSingleton<ISkillCatalogService, GitHubSkillCatalogService>();
+        services.AddSingleton<ISkillManifestStore, JsonSkillManifestStore>();
+        services.AddSingleton<ISkillSyncEngine>(sp => new SkillSyncEngine(
+            sp.GetRequiredService<ISkillManifestStore>(),
+            sp.GetRequiredService<ILogger<SkillSyncEngine>>(),
+            sp.GetService<IHarnessPoolRecycler>()));
+        services.AddSingleton<IGitHubSkillFetcher, GitHubSkillFetcher>();
+        services.AddSingleton<SkillManifestMigrator>();
+
         // InstanceTracker is singleton — holds live in-process handles across requests
         services.AddSingleton<InstanceTracker>();
 
@@ -265,6 +290,7 @@ public static class DependencyInjection
             sp.GetRequiredService<IEventBroadcaster>(),
             sp.GetRequiredService<SessionActivityTracker>()));
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<OpenCodeHarnessRuntime>());
+        services.AddSingleton<IHarnessPoolRecycler>(sp => new OpenCodeHarnessPoolRecycler(sp.GetRequiredService<OpenCodeHarnessRuntime>()));
         services.AddSingleton<IOpenCodePoolHealthCheck, PoolHealthCheck>();
 
         // Register ClaudeCodeHarness (descriptor) and ClaudeCodeHarnessRuntime (provisioning) as separate singletons.

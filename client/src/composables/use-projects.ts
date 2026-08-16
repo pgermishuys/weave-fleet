@@ -10,6 +10,7 @@ import {
 } from "vue";
 import type { ProjectResponse } from "@/api/client";
 import { api } from "@/api/client";
+import { extractApiError } from "@/lib/api-error";
 
 export interface UseProjectsOptions {
   enabled?: MaybeRefOrGetter<boolean>;
@@ -57,7 +58,7 @@ export function useProjects(options: UseProjectsOptions = {}): UseProjectsResult
       }
 
       if (apiError || !data) {
-        throw new Error(apiError ? String(apiError) : "No data returned");
+        throw new Error(extractApiError(apiError, "No data returned"));
       }
 
       projects.value = data as ProjectResponse[];

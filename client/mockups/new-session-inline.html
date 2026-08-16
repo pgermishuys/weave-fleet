@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Session — Inline Form Mockup v3</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0a0f;
+      color: #e4e4e7;
+      min-height: 100vh;
+      display: flex;
+    }
+
+    .shell {
+      display: flex;
+      width: 100%;
+      height: 100vh;
+    }
+
+    .rail {
+      width: 48px;
+      background: #111118;
+      border-right: 1px solid #27272a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 12px;
+      gap: 16px;
+    }
+    .rail-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      background: #27272a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      color: #a1a1aa;
+      cursor: pointer;
+    }
+    .rail-icon.active {
+      background: #3b82f6;
+      color: white;
+    }
+
+    .session-list {
+      width: 260px;
+      background: #111118;
+      border-right: 1px solid #27272a;
+      padding: 12px;
+      overflow-y: auto;
+    }
+    .session-list h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #71717a;
+      margin-bottom: 8px;
+    }
+    .session-item {
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      color: #a1a1aa;
+      cursor: pointer;
+      margin-bottom: 2px;
+    }
+    .session-item:hover { background: #1c1c24; }
+    .new-session-btn {
+      width: 100%;
+      padding: 8px 12px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-bottom: 16px;
+    }
+
+    .conversation-panel {
+      flex: 1;
+      background: #0a0a0f;
+      overflow-y: auto;
+      display: flex;
+      justify-content: center;
+      padding: 48px 24px;
+    }
+
+    .new-session-form {
+      width: 100%;
+      max-width: 560px;
+    }
+
+    .form-header {
+      margin-bottom: 36px;
+    }
+    .form-header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      color: #fafafa;
+    }
+    .form-header p {
+      font-size: 14px;
+      color: #71717a;
+      margin-top: 4px;
+    }
+
+    .form-section {
+      margin-bottom: 28px;
+    }
+    .form-section > label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #e4e4e7;
+      margin-bottom: 10px;
+    }
+    .form-section .helper {
+      font-size: 12px;
+      color: #52525b;
+      margin-top: 6px;
+    }
+
+    /* "Where to run" option cards */
+    .run-options {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .run-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1px solid #27272a;
+      border-radius: 10px;
+      background: #18181b;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .run-option:hover {
+      border-color: #3f3f46;
+      background: #1c1c24;
+    }
+    .run-option.active {
+      border-color: #4338ca;
+      background: #1e1b4b;
+    }
+    .run-option .radio {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid #3f3f46;
+      margin-top: 1px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .run-option.active .radio {
+      border-color: #818cf8;
+    }
+    .run-option.active .radio::after {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #818cf8;
+    }
+    .run-option .option-text h4 {
+      font-size: 14px;
+      font-weight: 500;
+      color: #e4e4e7;
+    }
+    .run-option.active .option-text h4 {
+      color: #c7d2fe;
+    }
+    .run-option .option-text p {
+      font-size: 12px;
+      color: #52525b;
+      margin-top: 2px;
+    }
+    .run-option.active .option-text p {
+      color: #6366f1;
+    }
+
+    /* Text inputs */
+    .input-field {
+      width: 100%;
+      padding: 10px 12px;
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      color: #e4e4e7;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .input-field:focus {
+      border-color: #4338ca;
+    }
+    .input-field::placeholder {
+      color: #52525b;
+    }
+    /* Auto-generated value styling */
+    .input-field.auto-value {
+      color: #52525b;
+      font-style: italic;
+    }
+    .input-field.auto-value:focus {
+      color: #e4e4e7;
+      font-style: normal;
+    }
+
+    .select-field {
+      width: 100%;
+      padding: 10px 12px;
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      color: #e4e4e7;
+      font-size: 14px;
+      outline: none;
+      appearance: none;
+      cursor: pointer;
+    }
+
+    /* Collapsible advanced section */
+    .advanced-toggle {
+      font-size: 12px;
+      color: #71717a;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 16px;
+      user-select: none;
+    }
+    .advanced-toggle:hover {
+      color: #a1a1aa;
+    }
+    .advanced-toggle .arrow {
+      transition: transform 0.2s;
+      font-size: 10px;
+    }
+    .advanced-toggle.open .arrow {
+      transform: rotate(90deg);
+    }
+    .advanced-section {
+      display: none;
+      padding-left: 0;
+    }
+    .advanced-section.visible {
+      display: block;
+    }
+
+    /* Action bar */
+    .action-bar {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 40px;
+      padding-top: 24px;
+      border-top: 1px solid #27272a;
+    }
+    .btn-cancel {
+      padding: 10px 20px;
+      background: transparent;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      color: #a1a1aa;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .btn-cancel:hover {
+      background: #18181b;
+    }
+    .btn-create {
+      padding: 10px 24px;
+      background: #3b82f6;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-create:hover {
+      background: #2563eb;
+    }
+    .kbd {
+      font-size: 11px;
+      background: #27272a;
+      padding: 2px 5px;
+      border-radius: 3px;
+      margin-left: 6px;
+      color: #71717a;
+    }
+
+    .content-panel {
+      width: 0;
+      background: #111118;
+      border-left: 1px solid #27272a;
+    }
+
+    /* Auto-gen badge */
+    .auto-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 500;
+      color: #71717a;
+      background: #27272a;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 8px;
+      font-style: normal;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <!-- Rail -->
+    <div class="rail">
+      <div class="rail-icon active">&#9776;</div>
+      <div class="rail-icon">&#9881;</div>
+      <div class="rail-icon">&#9733;</div>
+    </div>
+
+    <!-- Session List -->
+    <div class="session-list">
+      <button class="new-session-btn">+ New Session</button>
+      <h3>Today</h3>
+      <div class="session-item">Fix auth token refresh</div>
+      <div class="session-item">Update API docs</div>
+      <div class="session-item">Refactor user store</div>
+      <h3>Yesterday</h3>
+      <div class="session-item">Add dark mode toggle</div>
+      <div class="session-item">CI pipeline fix</div>
+    </div>
+
+    <!-- Conversation Panel — Inline Form -->
+    <div class="conversation-panel">
+      <div class="new-session-form">
+        <div class="form-header">
+          <h1>New Session</h1>
+          <p>Pick a repo and go — everything else is optional</p>
+        </div>
+
+        <!-- WHERE TO RUN -->
+        <div class="form-section">
+          <label>Where to run</label>
+          <div class="run-options">
+            <div class="run-option active" onclick="selectOption(this, 'worktree')">
+              <div class="radio"></div>
+              <div class="option-text">
+                <h4>New worktree</h4>
+                <p>Creates an isolated worktree — ideal for parallel work</p>
+              </div>
+            </div>
+            <div class="run-option" onclick="selectOption(this, 'existing-worktree')">
+              <div class="radio"></div>
+              <div class="option-text">
+                <h4>Existing worktree</h4>
+                <p>Use a worktree that already exists</p>
+              </div>
+            </div>
+            <div class="run-option" onclick="selectOption(this, 'repository')">
+              <div class="radio"></div>
+              <div class="option-text">
+                <h4>Repository</h4>
+                <p>Work directly in the repo — no isolation</p>
+              </div>
+            </div>
+            <div class="run-option" onclick="selectOption(this, 'directory')">
+              <div class="radio"></div>
+              <div class="option-text">
+                <h4>Directory</h4>
+                <p>Choose any folder on disk</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Repository picker (shown for worktree/existing-worktree/repository) -->
+        <div class="form-section" id="repo-section">
+          <label>Repository</label>
+          <input class="input-field" type="text" placeholder="Type to filter repositories...">
+        </div>
+
+        <!-- Branch (shown for new worktree — auto-generated, editable) -->
+        <div id="branch-section">
+          <div class="form-section">
+            <label>Branch <span class="auto-badge">auto-generated</span></label>
+            <input class="input-field auto-value" type="text" value="session/wt-8k2f">
+            <p class="helper">Generated automatically. Click to override.</p>
+          </div>
+        </div>
+
+        <!-- Worktree picker (shown for existing worktree) -->
+        <div id="worktree-select-section" style="display: none;">
+          <div class="form-section">
+            <label>Worktree</label>
+            <select class="select-field">
+              <option>feature/auth-refactor</option>
+              <option>fix/session-timeout</option>
+              <option>chore/update-deps</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Directory picker (shown for directory) -->
+        <div id="directory-section" style="display: none;">
+          <div class="form-section">
+            <label>Directory</label>
+            <input class="input-field" type="text" placeholder="/path/to/your/project">
+          </div>
+        </div>
+
+        <!-- Advanced (collapsed by default) -->
+        <div class="advanced-toggle" onclick="toggleAdvanced(this)">
+          <span class="arrow">&#9654;</span> More options
+        </div>
+        <div class="advanced-section" id="advanced-section">
+          <div class="form-section">
+            <label>Title <span style="color: #52525b; font-weight: 400;">(optional)</span></label>
+            <input class="input-field" type="text" placeholder="What are you working on?">
+            <p class="helper">If set, branch name will regenerate to match.</p>
+          </div>
+
+          <div class="form-section">
+            <label>Project</label>
+            <select class="select-field">
+              <option>Ungrouped</option>
+              <option>Fleet Core</option>
+              <option>Client UI</option>
+            </select>
+          </div>
+
+          <div class="form-section">
+            <label>Tags <span style="color: #52525b; font-weight: 400;">(optional)</span></label>
+            <input class="input-field" type="text" placeholder="e.g. review-requested, deploy">
+            <p class="helper">Comma-separated tags for organizing sessions</p>
+          </div>
+        </div>
+
+        <!-- Action Bar -->
+        <div class="action-bar">
+          <button class="btn-cancel">Cancel<span class="kbd">Esc</span></button>
+          <button class="btn-create">Create Session<span class="kbd">&#8984;&#8629;</span></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-panel"></div>
+  </div>
+
+  <script>
+    function selectOption(el, type) {
+      document.querySelectorAll('.run-option').forEach(o => o.classList.remove('active'));
+      el.classList.add('active');
+
+      const repoSection = document.getElementById('repo-section');
+      const branchSection = document.getElementById('branch-section');
+      const worktreeSelectSection = document.getElementById('worktree-select-section');
+      const directorySection = document.getElementById('directory-section');
+
+      repoSection.style.display = 'none';
+      branchSection.style.display = 'none';
+      worktreeSelectSection.style.display = 'none';
+      directorySection.style.display = 'none';
+
+      switch (type) {
+        case 'worktree':
+          repoSection.style.display = '';
+          branchSection.style.display = '';
+          break;
+        case 'existing-worktree':
+          repoSection.style.display = '';
+          worktreeSelectSection.style.display = '';
+          break;
+        case 'repository':
+          repoSection.style.display = '';
+          break;
+        case 'directory':
+          directorySection.style.display = '';
+          break;
+      }
+    }
+
+    function toggleAdvanced(el) {
+      el.classList.toggle('open');
+      document.getElementById('advanced-section').classList.toggle('visible');
+    }
+  </script>
+</body>
+</html>

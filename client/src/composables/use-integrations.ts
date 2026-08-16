@@ -6,6 +6,7 @@ import type {
   FleetPluginStatus,
   PluginActionDescriptor,
 } from "@/plugins/types";
+import { extractApiError } from "@/lib/api-error";
 
 export type { IntegrationStatusInfo };
 
@@ -65,7 +66,7 @@ export function useIntegrations(): UseIntegrationsResult {
     try {
       const { data, error: apiError } = await api.GET("/api/plugins");
       if (apiError) {
-        throw new Error(apiError ? String(apiError) : "Failed to fetch plugins");
+        throw new Error(extractApiError(apiError, "Failed to fetch plugins"));
       }
 
       if (!data) {
@@ -107,7 +108,7 @@ export function useIntegrations(): UseIntegrationsResult {
       : (api.PUT as (url: string, init?: { body?: unknown }) => Promise<{ data?: unknown; error?: unknown }>)(action.href, { body: config }));
 
     if (apiError) {
-      throw new Error(apiError ? String(apiError) : "Failed to connect plugin");
+      throw new Error(extractApiError(apiError, "Failed to connect plugin"));
     }
 
     await fetchIntegrations();
@@ -123,7 +124,7 @@ export function useIntegrations(): UseIntegrationsResult {
     const { error: apiError } = await (api.DELETE as (url: string) => Promise<{ data?: unknown; error?: unknown }>)(action.href);
 
     if (apiError) {
-      throw new Error(apiError ? String(apiError) : "Failed to disconnect plugin");
+      throw new Error(extractApiError(apiError, "Failed to disconnect plugin"));
     }
 
     await fetchIntegrations();

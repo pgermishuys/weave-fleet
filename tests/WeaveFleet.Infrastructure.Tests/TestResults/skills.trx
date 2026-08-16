@@ -1,0 +1,738 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="0976afda-fbed-4762-8d29-ff0f893992a3" name="@Pieters-MBP 2026-08-16 21:45:39" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-08-16T21:45:39.5825940+02:00" queuing="2026-08-16T21:45:39.5825940+02:00" start="2026-08-16T21:45:39.1659460+02:00" finish="2026-08-16T21:45:39.6494790+02:00" />
+  <TestSettings name="default" id="9b046bf6-da28-4b20-93d8-9bb9c5a190e1">
+    <Deployment runDeploymentRoot="_Pieters-MBP_2026-08-16_21_45_39" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="2ff69bc2-c616-4ec6-aed0-b6b1ee2d1053" testId="86e63afe-8a94-1148-3d89-d86235feb5d8" testName="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_HandlesEmptySkillsArray" computerName="Pieters-MBP" duration="00:00:00.0007933" startTime="2026-08-16T21:45:39.5668990+02:00" endTime="2026-08-16T21:45:39.5669310+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="2ff69bc2-c616-4ec6-aed0-b6b1ee2d1053" />
+    <UnitTestResult executionId="863799e1-1821-4b9a-909b-8aca23a7444b" testId="a104dc80-77c0-ca4f-aa66-36ce0b7b1540" testName="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_CreatesSymlinkOnMacOsLinux_CopiesOnWindows" computerName="Pieters-MBP" duration="00:00:00.0132678" startTime="2026-08-16T21:45:39.5704520+02:00" endTime="2026-08-16T21:45:39.5766650+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="863799e1-1821-4b9a-909b-8aca23a7444b" />
+    <UnitTestResult executionId="6b6a70dc-074b-4688-b9a3-d191f1b5e7d9" testId="2aa845ed-52db-4206-254d-49ec6608d2c2" testName="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.ValidateWorkspaceId_WithInvalidCharacters_ThrowsException" computerName="Pieters-MBP" duration="00:00:00.0005173" startTime="2026-08-16T21:45:39.6223110+02:00" endTime="2026-08-16T21:45:39.6227530+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="6b6a70dc-074b-4688-b9a3-d191f1b5e7d9" />
+    <UnitTestResult executionId="e5ede675-7fce-4dea-83fa-8397faabe707" testId="f1218949-5db6-bb7c-4a1d-1f46e33546c9" testName="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_SyncsToMultipleHarnesses" computerName="Pieters-MBP" duration="00:00:00.0032627" startTime="2026-08-16T21:45:39.5767580+02:00" endTime="2026-08-16T21:45:39.5802230+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e5ede675-7fce-4dea-83fa-8397faabe707">
+      <Output>
+        <ErrorInfo>
+          <Message>Shouldly.ShouldAssertException : results&#xD;
+    should satisfy the condition&#xD;
+r.Success&#xD;
+    but&#xD;
+[SkillSyncResult { SkillName = multi-harness-skill, Harness = opencode, Success = False, Skipped = False, ErrorMessage = Source directory not found: /var/folders/m8/6hhxrywx6739r5bhjfdzj3kw0000gn/T/weave-test-d6777ee2-e67f-404e-ba14-e2b9d914b997/.weave/skills/multi-harness-skill, TargetPath =  }, SkillSyncResult { SkillName = multi-harness-skill, Harness = claude-code, Success = False, Skipped = False, ErrorMessage = Source directory not found: /var/folders/m8/6hhxrywx6739r5bhjfdzj3kw0000gn/T/weave-test-d6777ee2-e67f-404e-ba14-e2b9d914b997/.weave/skills/multi-harness-skill, TargetPath =  }]&#xD;
+    do not</Message>
+          <StackTrace>   at WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_SyncsToMultipleHarnesses() in /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/SkillSyncEngineTests.cs:line 288
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+--- End of stack trace from previous location ---
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="ba8d20c7-8552-469c-84ac-f936d34dfedb" testId="56227201-f63e-9426-511e-d30b0a5685e2" testName="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenRemoteSucceeds_ReturnsFreshCatalog" computerName="Pieters-MBP" duration="00:00:00.0008930" startTime="2026-08-16T21:45:39.5669770+02:00" endTime="2026-08-16T21:45:39.5670100+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ba8d20c7-8552-469c-84ac-f936d34dfedb" />
+    <UnitTestResult executionId="77714c69-b247-4164-9f25-b7650d982523" testId="56815b2b-c717-15b1-4dbe-f465ba751784" testName="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenInvalidJson_ReturnsValidationError" computerName="Pieters-MBP" duration="00:00:00.0086728" startTime="2026-08-16T21:45:39.4970370+02:00" endTime="2026-08-16T21:45:39.5082110+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="77714c69-b247-4164-9f25-b7650d982523" />
+    <UnitTestResult executionId="da53a4a8-8a2a-45aa-b4e2-78bf6cd967e0" testId="7ec867ce-f228-9938-2a30-df8dc5bf2696" testName="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_OnWindows_CopiesDirectoryRecursively" computerName="Pieters-MBP" duration="00:00:00.0005339" startTime="2026-08-16T21:45:39.5914910+02:00" endTime="2026-08-16T21:45:39.5920020+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="da53a4a8-8a2a-45aa-b4e2-78bf6cd967e0" />
+    <UnitTestResult executionId="09b085f5-0e3c-4ec8-b183-7e11460756e9" testId="2934c3a2-a25c-b4be-e03a-e37e80a7f2d0" testName="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenCacheIsStale_IndicatesStaleness" computerName="Pieters-MBP" duration="00:00:00.0146406" startTime="2026-08-16T21:45:39.5323830+02:00" endTime="2026-08-16T21:45:39.5493320+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="09b085f5-0e3c-4ec8-b183-7e11460756e9">
+      <Output>
+        <ErrorInfo>
+          <Message>Shouldly.ShouldAssertException : result.IsSuccess&#xD;
+    should be&#xD;
+True&#xD;
+    but was&#xD;
+False</Message>
+          <StackTrace>   at WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenCacheIsStale_IndicatesStaleness() in /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/GitHubSkillCatalogServiceTests.cs:line 185
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+--- End of stack trace from previous location ---
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="ea7a9ac7-010a-4117-8916-1481085c988c" testId="37051afa-7cbb-2d37-e7e0-d10ac7bebf77" testName="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_ParsesAllSkillSourceTypes" computerName="Pieters-MBP" duration="00:00:00.0018774" startTime="2026-08-16T21:45:39.5665240+02:00" endTime="2026-08-16T21:45:39.5665840+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ea7a9ac7-010a-4117-8916-1481085c988c" />
+    <UnitTestResult executionId="2f45b2f8-c434-4c31-ab8c-de80dcadbbf9" testId="59fdb673-c893-b110-aeec-fa1317b04542" testName="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenNetworkError_ReturnsNetworkError" computerName="Pieters-MBP" duration="00:00:00.0007542" startTime="2026-08-16T21:45:39.5121370+02:00" endTime="2026-08-16T21:45:39.5121960+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="2f45b2f8-c434-4c31-ab8c-de80dcadbbf9" />
+    <UnitTestResult executionId="f6f4bac1-6a99-4abf-a186-1c237ee172c5" testId="ca65fc5f-99a6-7035-91c9-c4603f1b86d3" testName="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.LoadAsync_WhenFileDoesNotExist_ReturnsEmptyManifest" computerName="Pieters-MBP" duration="00:00:00.0025139" startTime="2026-08-16T21:45:39.6044170+02:00" endTime="2026-08-16T21:45:39.6072820+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f6f4bac1-6a99-4abf-a186-1c237ee172c5">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.Empty() Failure: Collection was not empty
+Collection: [SkillManifestEntry { Name = duplicate-skill, Source = GitHub, RepoUrl = https://github.com/test/skill, Ref = main, LocalPath = , TargetHarnesses = System.Collections.Generic.List`1[System.String], InstalledAt = 8/16/2026 7:45:39 PM +00:00, UpdatedAt = 8/16/2026 7:45:39 PM +00:00 }]</Message>
+          <StackTrace>   at WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.LoadAsync_WhenFileDoesNotExist_ReturnsEmptyManifest() in /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/JsonSkillManifestStoreTests.cs:line 41
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="f8d3e84e-e659-4f71-9a95-c972b123c295" testId="3c469a37-bdea-ac16-e3fb-968b26e533d2" testName="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WhenTargetExistsWithoutMarker_SkipsSync" computerName="Pieters-MBP" duration="00:00:00.0024906" startTime="2026-08-16T21:45:39.5871900+02:00" endTime="2026-08-16T21:45:39.5895730+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f8d3e84e-e659-4f71-9a95-c972b123c295">
+      <Output>
+        <ErrorInfo>
+          <Message>Shouldly.ShouldAssertException : result.Skipped&#xD;
+    should be&#xD;
+True&#xD;
+    but was&#xD;
+False</Message>
+          <StackTrace>   at WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WhenTargetExistsWithoutMarker_SkipsSync() in /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/SkillSyncEngineTests.cs:line 202
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+--- End of stack trace from previous location ---
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="4b024f2f-83bb-43ed-bfe0-51e2db9cce07" testId="e8701f6d-2f35-4062-6452-098ab673fe9e" testName="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.SaveAsync_ThenLoadAsync_RoundTripsManifest" computerName="Pieters-MBP" duration="00:00:00.0017274" startTime="2026-08-16T21:45:39.6205230+02:00" endTime="2026-08-16T21:45:39.6221980+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="4b024f2f-83bb-43ed-bfe0-51e2db9cce07" />
+    <UnitTestResult executionId="6d704c83-c5aa-4b79-807b-7e71c0daebc6" testId="168cd38a-349f-a9e5-6f91-136f7e14c507" testName="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenRemoteFailsAndNoCacheExists_ReturnsError" computerName="Pieters-MBP" duration="00:00:00.0005189" startTime="2026-08-16T21:45:39.5317740+02:00" endTime="2026-08-16T21:45:39.5323160+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="6d704c83-c5aa-4b79-807b-7e71c0daebc6" />
+    <UnitTestResult executionId="730b9d0c-2f87-4036-a345-d63f8989b94b" testId="afc9ecf7-2d53-d950-79da-28f44a65dbbe" testName="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.SaveAsync_WritesAtomically" computerName="Pieters-MBP" duration="00:00:00.0009967" startTime="2026-08-16T21:45:39.6144750+02:00" endTime="2026-08-16T21:45:39.6157300+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="730b9d0c-2f87-4036-a345-d63f8989b94b">
+      <Output>
+        <ErrorInfo>
+          <Message>System.IO.DirectoryNotFoundException : Could not find a part of the path '/var/folders/m8/6hhxrywx6739r5bhjfdzj3kw0000gn/T/weave-test-b7d5c1ca-84d0-453e-9beb-4594d36953cf/.weave/skills'.</Message>
+          <StackTrace>   at System.IO.Enumeration.FileSystemEnumerator`1.CreateDirectoryHandle(String path, Boolean ignoreNotFound)
+   at System.IO.Enumeration.FileSystemEnumerator`1.Init()
+   at System.IO.Enumeration.FileSystemEnumerable`1..ctor(String directory, FindTransform transform, EnumerationOptions options, Boolean isNormalized, String expression)
+   at System.IO.Enumeration.FileSystemEnumerableFactory.UserFiles(String directory, String expression, EnumerationOptions options)
+   at System.IO.Directory.InternalEnumeratePaths(String path, String searchPattern, SearchTarget searchTarget, EnumerationOptions enumerationOptions)
+   at System.IO.Directory.GetFiles(String path, String searchPattern, EnumerationOptions enumerationOptions)
+   at WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.SaveAsync_WritesAtomically() in /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/JsonSkillManifestStoreTests.cs:line 184
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="ec5b380a-8841-400c-86e8-a59ab5907f61" testId="0e85ffa0-b585-7b35-9da5-8bb6543c8859" testName="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncAllAsync_WhenSomeSkillsFail_StillSyncsOthers" computerName="Pieters-MBP" duration="00:00:00.0027145" startTime="2026-08-16T21:45:39.5953830+02:00" endTime="2026-08-16T21:45:39.5979810+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ec5b380a-8841-400c-86e8-a59ab5907f61">
+      <Output>
+        <ErrorInfo>
+          <Message>Shouldly.ShouldAssertException : results.Count&#xD;
+    should be&#xD;
+2&#xD;
+    but was&#xD;
+9</Message>
+          <StackTrace>   at WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncAllAsync_WhenSomeSkillsFail_StillSyncsOthers() in /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/SkillSyncEngineTests.cs:line 491
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+--- End of stack trace from previous location ---
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="76ca5171-199b-4b8d-9227-0f7cd0f7f16e" testId="3bebd25d-5d0d-087e-5680-45d4447f3d50" testName="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenMissingSkillsArray_ReturnsValidationError" computerName="Pieters-MBP" duration="00:00:00.0004003" startTime="2026-08-16T21:45:39.5667250+02:00" endTime="2026-08-16T21:45:39.5667600+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="76ca5171-199b-4b8d-9227-0f7cd0f7f16e" />
+    <UnitTestResult executionId="da3c4937-e69c-48b2-b0a3-0d031044e6fc" testId="2fb12a16-affb-b116-f4f9-f37d08df8d4f" testName="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WhenTargetExistsWithMarker_ReplacesTarget" computerName="Pieters-MBP" duration="00:00:00.0033395" startTime="2026-08-16T21:45:39.5806010+02:00" endTime="2026-08-16T21:45:39.5838210+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="da3c4937-e69c-48b2-b0a3-0d031044e6fc">
+      <Output>
+        <ErrorInfo>
+          <Message>Shouldly.ShouldAssertException : result.Success&#xD;
+    should be&#xD;
+True&#xD;
+    but was&#xD;
+False</Message>
+          <StackTrace>   at WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WhenTargetExistsWithMarker_ReplacesTarget() in /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/SkillSyncEngineTests.cs:line 248
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+--- End of stack trace from previous location ---
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="6b4b5134-88dd-497f-95b9-f1e92474a24c" testId="8fc2306f-67da-167d-9b28-1859e655e3c0" testName="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncAllAsync_SyncsAllSkillsInManifest" computerName="Pieters-MBP" duration="00:00:00.0028224" startTime="2026-08-16T21:45:39.5982950+02:00" endTime="2026-08-16T21:45:39.6010330+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="6b4b5134-88dd-497f-95b9-f1e92474a24c">
+      <Output>
+        <ErrorInfo>
+          <Message>Shouldly.ShouldAssertException : results.Count&#xD;
+    should be&#xD;
+2&#xD;
+    but was&#xD;
+11</Message>
+          <StackTrace>   at WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncAllAsync_SyncsAllSkillsInManifest() in /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/SkillSyncEngineTests.cs:line 383
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+--- End of stack trace from previous location ---
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="e972c9b6-24b5-4fb4-9e80-fda820d60389" testId="6e70a1e5-3db0-4107-3f3a-6987bf00a8de" testName="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.RemoveEntryAsync_WhenSkillNotFound_ThrowsException" computerName="Pieters-MBP" duration="00:00:00.0016171" startTime="2026-08-16T21:45:39.6016450+02:00" endTime="2026-08-16T21:45:39.6027970+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e972c9b6-24b5-4fb4-9e80-fda820d60389" />
+    <UnitTestResult executionId="5b8f1ae8-356c-4aee-a709-31d72decc68e" testId="8e2b066b-b21e-17e3-1cbc-a4e70c8f3831" testName="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenTimeout_ReturnsTimeoutError" computerName="Pieters-MBP" duration="00:00:00.0003923" startTime="2026-08-16T21:45:39.5553270+02:00" endTime="2026-08-16T21:45:39.5556850+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="5b8f1ae8-356c-4aee-a709-31d72decc68e" />
+    <UnitTestResult executionId="f50041c1-a3a6-4bd2-8f57-43ca634356da" testId="a3679525-95d8-8263-0f2e-08740eee5bf4" testName="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_TrimsWhitespaceFromFields" computerName="Pieters-MBP" duration="00:00:00.0008051" startTime="2026-08-16T21:45:39.5670560+02:00" endTime="2026-08-16T21:45:39.5670860+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f50041c1-a3a6-4bd2-8f57-43ca634356da" />
+    <UnitTestResult executionId="8c0f9728-b739-452f-888b-1078c768b632" testId="1e4281ad-472c-6a03-f6d5-e38f1544acce" testName="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_ParsesOptionalFields" computerName="Pieters-MBP" duration="00:00:00.0027337" startTime="2026-08-16T21:45:39.5516530+02:00" endTime="2026-08-16T21:45:39.5541340+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="8c0f9728-b739-452f-888b-1078c768b632" />
+    <UnitTestResult executionId="4c392703-1f73-465e-bb47-ff3eae6fd9fe" testId="3dafedef-8901-18e2-92d4-a5680ba16c71" testName="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenRemoteSucceeds_WritesCacheFile" computerName="Pieters-MBP" duration="00:00:00.0211713" startTime="2026-08-16T21:45:39.5124160+02:00" endTime="2026-08-16T21:45:39.5312780+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="4c392703-1f73-465e-bb47-ff3eae6fd9fe" />
+    <UnitTestResult executionId="4542ed2e-ae56-428b-ac50-9d7bf88f653b" testId="8523d64d-4ec4-8b6e-276f-599cd3706cdb" testName="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.UpdateEntryAsync_WhenSkillNotFound_ThrowsException" computerName="Pieters-MBP" duration="00:00:00.0008209" startTime="2026-08-16T21:45:39.6160890+02:00" endTime="2026-08-16T21:45:39.6166610+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="4542ed2e-ae56-428b-ac50-9d7bf88f653b" />
+    <UnitTestResult executionId="3a7af92e-bdab-4372-ad5d-eda3cf6add96" testId="e6d64e3c-83f8-7161-8147-58a652499d3c" testName="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_SkipsEntriesWithInvalidSource" computerName="Pieters-MBP" duration="00:00:00.0010343" startTime="2026-08-16T21:45:39.5542220+02:00" endTime="2026-08-16T21:45:39.5552670+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="3a7af92e-bdab-4372-ad5d-eda3cf6add96" />
+    <UnitTestResult executionId="8caa65dc-90fa-431f-a3a8-7ff93b34fc16" testId="e747cb1a-6c09-80a2-bb76-b39df8c30ae3" testName="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_SkipsEntriesWithMissingName" computerName="Pieters-MBP" duration="00:00:00.0007892" startTime="2026-08-16T21:45:39.5668160+02:00" endTime="2026-08-16T21:45:39.5668510+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="8caa65dc-90fa-431f-a3a8-7ff93b34fc16" />
+    <UnitTestResult executionId="179fb49e-8634-4060-a780-7db3b345b92f" testId="ac5c834e-3e24-b51b-431e-38b33773861a" testName="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.SaveAsync_WithAllSkillSourceTypes_RoundTripsCorrectly" computerName="Pieters-MBP" duration="00:00:00.0036725" startTime="2026-08-16T21:45:39.6107760+02:00" endTime="2026-08-16T21:45:39.6144100+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="179fb49e-8634-4060-a780-7db3b345b92f" />
+    <UnitTestResult executionId="f3fe2258-6163-474d-b782-896a6e18e4f9" testId="ceb63aba-6737-754b-3734-29e29464fe7c" testName="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.ValidateUserId_WithInvalidCharacters_ThrowsException" computerName="Pieters-MBP" duration="00:00:00.0005386" startTime="2026-08-16T21:45:39.6074310+02:00" endTime="2026-08-16T21:45:39.6078480+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f3fe2258-6163-474d-b782-896a6e18e4f9" />
+    <UnitTestResult executionId="fd075053-13ba-437b-89f9-9184506e1fe7" testId="e308274d-17da-9c6c-92a6-44898cd6d2a7" testName="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.AddEntryAsync_AddsNewSkill" computerName="Pieters-MBP" duration="00:00:00.0009142" startTime="2026-08-16T21:45:39.6167340+02:00" endTime="2026-08-16T21:45:39.6176650+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="fd075053-13ba-437b-89f9-9184506e1fe7" />
+    <UnitTestResult executionId="23e5cb26-d04e-4e50-95b7-07e1de7fab6a" testId="5e34e9a1-053c-6658-bfce-dfd03f7717de" testName="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.LoadAsync_WithWorkspaceId_UsesCorrectFilePath" computerName="Pieters-MBP" duration="00:00:00.0009074" startTime="2026-08-16T21:45:39.6180120+02:00" endTime="2026-08-16T21:45:39.6188180+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="23e5cb26-d04e-4e50-95b7-07e1de7fab6a">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.True() Failure
+Expected: True
+Actual:   False</Message>
+          <StackTrace>   at WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.LoadAsync_WithWorkspaceId_UsesCorrectFilePath() in /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/JsonSkillManifestStoreTests.cs:line 352
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="e8695686-7ac6-4ed1-afd0-85fd5bde988d" testId="3f2d7761-8f7e-c329-0a4d-6537e4a0782b" testName="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WhenSourceDirectoryDoesNotExist_ReturnsErrorForAllHarnesses" computerName="Pieters-MBP" duration="00:00:00.0017226" startTime="2026-08-16T21:45:39.5898780+02:00" endTime="2026-08-16T21:45:39.5914200+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e8695686-7ac6-4ed1-afd0-85fd5bde988d" />
+    <UnitTestResult executionId="f7008706-13ce-4f1a-adb2-7a9fc9013572" testId="5875e9e7-a153-1cfe-9dfb-3a751397ba7a" testName="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.UpdateEntryAsync_UpdatesExistingSkill" computerName="Pieters-MBP" duration="00:00:00.0025025" startTime="2026-08-16T21:45:39.6078950+02:00" endTime="2026-08-16T21:45:39.6105980+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f7008706-13ce-4f1a-adb2-7a9fc9013572">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.Single() Failure: The collection contained 2 items
+Collection: [SkillManifestEntry { Name = duplicate-skill, Source = GitHub, RepoUrl = https://github.com/test/skill, Ref = main, LocalPath = , TargetHarnesses = System.Collections.Generic.List`1[System.String], InstalledAt = 8/16/2026 7:45:39 PM +00:00, UpdatedAt = 8/16/2026 7:45:39 PM +00:00 }, SkillManifestEntry { Name = skill-to-update, Source = GitHub, RepoUrl = https://github.com/test/skill, Ref = v2.0.0, LocalPath = , TargetHarnesses = System.Collections.Generic.List`1[System.String], InstalledAt = 8/16/2026 7:45:39 PM +00:00, UpdatedAt = 8/16/2026 7:46:39 PM +00:00 }]</Message>
+          <StackTrace>   at WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.UpdateEntryAsync_UpdatesExistingSkill() in /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/JsonSkillManifestStoreTests.cs:line 303
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="b188b8ca-bafd-4fc0-ac4c-66d4c39dc078" testId="b4bc0d3f-1d8c-cf8a-dbaa-8b20927b793b" testName="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenRemoteFails_FallsBackToCache" computerName="Pieters-MBP" duration="00:00:00.0019562" startTime="2026-08-16T21:45:39.5513540+02:00" endTime="2026-08-16T21:45:39.5514050+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="b188b8ca-bafd-4fc0-ac4c-66d4c39dc078">
+      <Output>
+        <ErrorInfo>
+          <Message>Shouldly.ShouldAssertException : result.IsSuccess&#xD;
+    should be&#xD;
+True&#xD;
+    but was&#xD;
+False</Message>
+          <StackTrace>   at WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenRemoteFails_FallsBackToCache() in /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/GitHubSkillCatalogServiceTests.cs:line 148
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+--- End of stack trace from previous location ---
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="a8ab337e-83dc-4540-9e54-0491ad67cfd8" testId="15968bdd-30db-c300-ad5e-96e69d6154a8" testName="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WithUnknownHarness_ReturnsError" computerName="Pieters-MBP" duration="00:00:00.0019986" startTime="2026-08-16T21:45:39.5928950+02:00" endTime="2026-08-16T21:45:39.5950490+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a8ab337e-83dc-4540-9e54-0491ad67cfd8">
+      <Output>
+        <ErrorInfo>
+          <Message>Shouldly.ShouldAssertException : result.ErrorMessage&#xD;
+    should contain (case insensitive comparison)&#xD;
+"Unknown harness"&#xD;
+    but was actually&#xD;
+"Source directory not found: /var/folders/m8/6hhxrywx6739r5bhjfdzj3kw0000gn/T/weave-test-d6777ee2-e67..."</Message>
+          <StackTrace>   at WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WithUnknownHarness_ReturnsError() in /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/SkillSyncEngineTests.cs:line 334
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+--- End of stack trace from previous location ---
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="15a84472-bc7d-4578-bbf5-ba7d4d48d355" testId="ee579c50-76bf-005e-8b60-52e3a56867da" testName="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WhenSkillNotInManifest_ReturnsErrorResult" computerName="Pieters-MBP" duration="00:00:00.0007308" startTime="2026-08-16T21:45:39.5920680+02:00" endTime="2026-08-16T21:45:39.5928320+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="15a84472-bc7d-4578-bbf5-ba7d4d48d355" />
+    <UnitTestResult executionId="e6086be9-9dca-4bae-ae03-2efa0d78f16d" testId="c27ecd2e-f0e8-ab29-8dfa-98b40cd6499c" testName="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.AddEntryAsync_WhenSkillExists_ThrowsException" computerName="Pieters-MBP" duration="00:00:00.0014591" startTime="2026-08-16T21:45:39.6028550+02:00" endTime="2026-08-16T21:45:39.6043720+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e6086be9-9dca-4bae-ae03-2efa0d78f16d" />
+    <UnitTestResult executionId="2dcdb7cb-40b9-4c8c-ac67-506181448902" testId="3d7ea698-721f-58a7-e129-339235670db6" testName="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.RemoveEntryAsync_RemovesExistingSkill" computerName="Pieters-MBP" duration="00:00:00.0013730" startTime="2026-08-16T21:45:39.6190120+02:00" endTime="2026-08-16T21:45:39.6203690+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="2dcdb7cb-40b9-4c8c-ac67-506181448902">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.Empty() Failure: Collection was not empty
+Collection: [SkillManifestEntry { Name = new-skill, Source = GitHub, RepoUrl = https://github.com/test/new-skill, Ref = main, LocalPath = , TargetHarnesses = System.Collections.Generic.List`1[System.String], InstalledAt = 8/16/2026 7:45:39 PM +00:00, UpdatedAt = 8/16/2026 7:45:39 PM +00:00 }]</Message>
+          <StackTrace>   at WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.RemoveEntryAsync_RemovesExistingSkill() in /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/JsonSkillManifestStoreTests.cs:line 263
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="4e44cb4c-f3c2-4645-98fe-3acbc99028f4" testId="f6d69fec-10f0-e46c-b7fa-4e178a283223" testName="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncAllAsync_WhenManifestIsEmpty_ReturnsEmptyResults" computerName="Pieters-MBP" duration="00:00:00.0014362" startTime="2026-08-16T21:45:39.5853300+02:00" endTime="2026-08-16T21:45:39.5868750+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="4e44cb4c-f3c2-4645-98fe-3acbc99028f4">
+      <Output>
+        <ErrorInfo>
+          <Message>Shouldly.ShouldAssertException : results&#xD;
+    should be empty but had&#xD;
+3&#xD;
+    items and was&#xD;
+[SkillSyncResult { SkillName = multi-harness-skill, Harness = opencode, Success = False, Skipped = False, ErrorMessage = Source directory not found: /var/folders/m8/6hhxrywx6739r5bhjfdzj3kw0000gn/T/weave-test-d6777ee2-e67f-404e-ba14-e2b9d914b997/.weave/skills/multi-harness-skill, TargetPath =  }, SkillSyncResult { SkillName = multi-harness-skill, Harness = claude-code, Success = False, Skipped = False, ErrorMessage = Source directory not found: /var/folders/m8/6hhxrywx6739r5bhjfdzj3kw0000gn/T/weave-test-d6777ee2-e67f-404e-ba14-e2b9d914b997/.weave/skills/multi-harness-skill, TargetPath =  }, SkillSyncResult { SkillName = fleet-managed-skill, Harness = opencode, Success = False, Skipped = False, ErrorMessage = Source directory not found: /var/folders/m8/6hhxrywx6739r5bhjfdzj3kw0000gn/T/weave-test-d6777ee2-e67f-404e-ba14-e2b9d914b997/.weave/skills/fleet-managed-skill, TargetPath =  }]</Message>
+          <StackTrace>   at WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncAllAsync_WhenManifestIsEmpty_ReturnsEmptyResults() in /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/SkillSyncEngineTests.cs:line 53
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+--- End of stack trace from previous location ---
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="c0b80456-8d1b-41d9-aa4f-5b7dfe2a73da" testId="a6cf273c-a00a-1f65-2077-8992091fc6b7" testName="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WithEmptySkillName_ThrowsArgumentException" computerName="Pieters-MBP" duration="00:00:00.0013063" startTime="2026-08-16T21:45:39.5846500+02:00" endTime="2026-08-16T21:45:39.5852510+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="c0b80456-8d1b-41d9-aa4f-5b7dfe2a73da" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.SaveAsync_WithAllSkillSourceTypes_RoundTripsCorrectly" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="ac5c834e-3e24-b51b-431e-38b33773861a">
+      <Execution id="179fb49e-8634-4060-a780-7db3b345b92f" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests" name="SaveAsync_WithAllSkillSourceTypes_RoundTripsCorrectly" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_SyncsToMultipleHarnesses" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="f1218949-5db6-bb7c-4a1d-1f46e33546c9">
+      <Execution id="e5ede675-7fce-4dea-83fa-8397faabe707" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests" name="SyncSkillAsync_SyncsToMultipleHarnesses" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.UpdateEntryAsync_WhenSkillNotFound_ThrowsException" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="8523d64d-4ec4-8b6e-276f-599cd3706cdb">
+      <Execution id="4542ed2e-ae56-428b-ac50-9d7bf88f653b" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests" name="UpdateEntryAsync_WhenSkillNotFound_ThrowsException" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WithEmptySkillName_ThrowsArgumentException" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="a6cf273c-a00a-1f65-2077-8992091fc6b7">
+      <Execution id="c0b80456-8d1b-41d9-aa4f-5b7dfe2a73da" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests" name="SyncSkillAsync_WithEmptySkillName_ThrowsArgumentException" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WhenSourceDirectoryDoesNotExist_ReturnsErrorForAllHarnesses" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="3f2d7761-8f7e-c329-0a4d-6537e4a0782b">
+      <Execution id="e8695686-7ac6-4ed1-afd0-85fd5bde988d" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests" name="SyncSkillAsync_WhenSourceDirectoryDoesNotExist_ReturnsErrorForAllHarnesses" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenTimeout_ReturnsTimeoutError" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="8e2b066b-b21e-17e3-1cbc-a4e70c8f3831">
+      <Execution id="5b8f1ae8-356c-4aee-a709-31d72decc68e" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests" name="FetchCatalogAsync_WhenTimeout_ReturnsTimeoutError" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.LoadAsync_WithWorkspaceId_UsesCorrectFilePath" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="5e34e9a1-053c-6658-bfce-dfd03f7717de">
+      <Execution id="23e5cb26-d04e-4e50-95b7-07e1de7fab6a" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests" name="LoadAsync_WithWorkspaceId_UsesCorrectFilePath" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.SaveAsync_ThenLoadAsync_RoundTripsManifest" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="e8701f6d-2f35-4062-6452-098ab673fe9e">
+      <Execution id="4b024f2f-83bb-43ed-bfe0-51e2db9cce07" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests" name="SaveAsync_ThenLoadAsync_RoundTripsManifest" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.LoadAsync_WhenFileDoesNotExist_ReturnsEmptyManifest" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="ca65fc5f-99a6-7035-91c9-c4603f1b86d3">
+      <Execution id="f6f4bac1-6a99-4abf-a186-1c237ee172c5" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests" name="LoadAsync_WhenFileDoesNotExist_ReturnsEmptyManifest" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenRemoteFailsAndNoCacheExists_ReturnsError" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="168cd38a-349f-a9e5-6f91-136f7e14c507">
+      <Execution id="6d704c83-c5aa-4b79-807b-7e71c0daebc6" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests" name="FetchCatalogAsync_WhenRemoteFailsAndNoCacheExists_ReturnsError" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.AddEntryAsync_AddsNewSkill" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="e308274d-17da-9c6c-92a6-44898cd6d2a7">
+      <Execution id="fd075053-13ba-437b-89f9-9184506e1fe7" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests" name="AddEntryAsync_AddsNewSkill" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WithUnknownHarness_ReturnsError" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="15968bdd-30db-c300-ad5e-96e69d6154a8">
+      <Execution id="a8ab337e-83dc-4540-9e54-0491ad67cfd8" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests" name="SyncSkillAsync_WithUnknownHarness_ReturnsError" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenRemoteSucceeds_ReturnsFreshCatalog" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="56227201-f63e-9426-511e-d30b0a5685e2">
+      <Execution id="ba8d20c7-8552-469c-84ac-f936d34dfedb" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests" name="FetchCatalogAsync_WhenRemoteSucceeds_ReturnsFreshCatalog" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenMissingSkillsArray_ReturnsValidationError" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="3bebd25d-5d0d-087e-5680-45d4447f3d50">
+      <Execution id="76ca5171-199b-4b8d-9227-0f7cd0f7f16e" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests" name="FetchCatalogAsync_WhenMissingSkillsArray_ReturnsValidationError" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WhenTargetExistsWithoutMarker_SkipsSync" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="3c469a37-bdea-ac16-e3fb-968b26e533d2">
+      <Execution id="f8d3e84e-e659-4f71-9a95-c972b123c295" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests" name="SyncSkillAsync_WhenTargetExistsWithoutMarker_SkipsSync" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.ValidateWorkspaceId_WithInvalidCharacters_ThrowsException" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="2aa845ed-52db-4206-254d-49ec6608d2c2">
+      <Execution id="6b6a70dc-074b-4688-b9a3-d191f1b5e7d9" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests" name="ValidateWorkspaceId_WithInvalidCharacters_ThrowsException" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenRemoteSucceeds_WritesCacheFile" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="3dafedef-8901-18e2-92d4-a5680ba16c71">
+      <Execution id="4c392703-1f73-465e-bb47-ff3eae6fd9fe" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests" name="FetchCatalogAsync_WhenRemoteSucceeds_WritesCacheFile" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_OnWindows_CopiesDirectoryRecursively" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="7ec867ce-f228-9938-2a30-df8dc5bf2696">
+      <Execution id="da53a4a8-8a2a-45aa-b4e2-78bf6cd967e0" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests" name="SyncSkillAsync_OnWindows_CopiesDirectoryRecursively" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WhenSkillNotInManifest_ReturnsErrorResult" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="ee579c50-76bf-005e-8b60-52e3a56867da">
+      <Execution id="15a84472-bc7d-4578-bbf5-ba7d4d48d355" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests" name="SyncSkillAsync_WhenSkillNotInManifest_ReturnsErrorResult" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncAllAsync_SyncsAllSkillsInManifest" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="8fc2306f-67da-167d-9b28-1859e655e3c0">
+      <Execution id="6b4b5134-88dd-497f-95b9-f1e92474a24c" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests" name="SyncAllAsync_SyncsAllSkillsInManifest" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.UpdateEntryAsync_UpdatesExistingSkill" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="5875e9e7-a153-1cfe-9dfb-3a751397ba7a">
+      <Execution id="f7008706-13ce-4f1a-adb2-7a9fc9013572" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests" name="UpdateEntryAsync_UpdatesExistingSkill" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenNetworkError_ReturnsNetworkError" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="59fdb673-c893-b110-aeec-fa1317b04542">
+      <Execution id="2f45b2f8-c434-4c31-ab8c-de80dcadbbf9" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests" name="FetchCatalogAsync_WhenNetworkError_ReturnsNetworkError" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.RemoveEntryAsync_WhenSkillNotFound_ThrowsException" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="6e70a1e5-3db0-4107-3f3a-6987bf00a8de">
+      <Execution id="e972c9b6-24b5-4fb4-9e80-fda820d60389" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests" name="RemoveEntryAsync_WhenSkillNotFound_ThrowsException" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_TrimsWhitespaceFromFields" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="a3679525-95d8-8263-0f2e-08740eee5bf4">
+      <Execution id="f50041c1-a3a6-4bd2-8f57-43ca634356da" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests" name="FetchCatalogAsync_TrimsWhitespaceFromFields" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_HandlesEmptySkillsArray" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="86e63afe-8a94-1148-3d89-d86235feb5d8">
+      <Execution id="2ff69bc2-c616-4ec6-aed0-b6b1ee2d1053" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests" name="FetchCatalogAsync_HandlesEmptySkillsArray" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenCacheIsStale_IndicatesStaleness" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="2934c3a2-a25c-b4be-e03a-e37e80a7f2d0">
+      <Execution id="09b085f5-0e3c-4ec8-b183-7e11460756e9" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests" name="FetchCatalogAsync_WhenCacheIsStale_IndicatesStaleness" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.ValidateUserId_WithInvalidCharacters_ThrowsException" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="ceb63aba-6737-754b-3734-29e29464fe7c">
+      <Execution id="f3fe2258-6163-474d-b782-896a6e18e4f9" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests" name="ValidateUserId_WithInvalidCharacters_ThrowsException" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenInvalidJson_ReturnsValidationError" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="56815b2b-c717-15b1-4dbe-f465ba751784">
+      <Execution id="77714c69-b247-4164-9f25-b7650d982523" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests" name="FetchCatalogAsync_WhenInvalidJson_ReturnsValidationError" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_CreatesSymlinkOnMacOsLinux_CopiesOnWindows" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="a104dc80-77c0-ca4f-aa66-36ce0b7b1540">
+      <Execution id="863799e1-1821-4b9a-909b-8aca23a7444b" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests" name="SyncSkillAsync_CreatesSymlinkOnMacOsLinux_CopiesOnWindows" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_SkipsEntriesWithInvalidSource" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="e6d64e3c-83f8-7161-8147-58a652499d3c">
+      <Execution id="3a7af92e-bdab-4372-ad5d-eda3cf6add96" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests" name="FetchCatalogAsync_SkipsEntriesWithInvalidSource" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenRemoteFails_FallsBackToCache" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="b4bc0d3f-1d8c-cf8a-dbaa-8b20927b793b">
+      <Execution id="b188b8ca-bafd-4fc0-ac4c-66d4c39dc078" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests" name="FetchCatalogAsync_WhenRemoteFails_FallsBackToCache" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_ParsesOptionalFields" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="1e4281ad-472c-6a03-f6d5-e38f1544acce">
+      <Execution id="8c0f9728-b739-452f-888b-1078c768b632" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests" name="FetchCatalogAsync_ParsesOptionalFields" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncAllAsync_WhenManifestIsEmpty_ReturnsEmptyResults" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="f6d69fec-10f0-e46c-b7fa-4e178a283223">
+      <Execution id="4e44cb4c-f3c2-4645-98fe-3acbc99028f4" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests" name="SyncAllAsync_WhenManifestIsEmpty_ReturnsEmptyResults" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.AddEntryAsync_WhenSkillExists_ThrowsException" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="c27ecd2e-f0e8-ab29-8dfa-98b40cd6499c">
+      <Execution id="e6086be9-9dca-4bae-ae03-2efa0d78f16d" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests" name="AddEntryAsync_WhenSkillExists_ThrowsException" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WhenTargetExistsWithMarker_ReplacesTarget" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="2fb12a16-affb-b116-f4f9-f37d08df8d4f">
+      <Execution id="da3c4937-e69c-48b2-b0a3-0d031044e6fc" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests" name="SyncSkillAsync_WhenTargetExistsWithMarker_ReplacesTarget" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncAllAsync_WhenSomeSkillsFail_StillSyncsOthers" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="0e85ffa0-b585-7b35-9da5-8bb6543c8859">
+      <Execution id="ec5b380a-8841-400c-86e8-a59ab5907f61" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests" name="SyncAllAsync_WhenSomeSkillsFail_StillSyncsOthers" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.RemoveEntryAsync_RemovesExistingSkill" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="3d7ea698-721f-58a7-e129-339235670db6">
+      <Execution id="2dcdb7cb-40b9-4c8c-ac67-506181448902" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests" name="RemoveEntryAsync_RemovesExistingSkill" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_SkipsEntriesWithMissingName" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="e747cb1a-6c09-80a2-bb76-b39df8c30ae3">
+      <Execution id="8caa65dc-90fa-431f-a3a8-7ff93b34fc16" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests" name="FetchCatalogAsync_SkipsEntriesWithMissingName" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_ParsesAllSkillSourceTypes" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="37051afa-7cbb-2d37-e7e0-d10ac7bebf77">
+      <Execution id="ea7a9ac7-010a-4117-8916-1481085c988c" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests" name="FetchCatalogAsync_ParsesAllSkillSourceTypes" />
+    </UnitTest>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.SaveAsync_WritesAtomically" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="afc9ecf7-2d53-d950-79da-28f44a65dbbe">
+      <Execution id="730b9d0c-2f87-4036-a345-d63f8989b94b" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests" name="SaveAsync_WritesAtomically" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="86e63afe-8a94-1148-3d89-d86235feb5d8" executionId="2ff69bc2-c616-4ec6-aed0-b6b1ee2d1053" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="a104dc80-77c0-ca4f-aa66-36ce0b7b1540" executionId="863799e1-1821-4b9a-909b-8aca23a7444b" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="2aa845ed-52db-4206-254d-49ec6608d2c2" executionId="6b6a70dc-074b-4688-b9a3-d191f1b5e7d9" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="f1218949-5db6-bb7c-4a1d-1f46e33546c9" executionId="e5ede675-7fce-4dea-83fa-8397faabe707" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="56227201-f63e-9426-511e-d30b0a5685e2" executionId="ba8d20c7-8552-469c-84ac-f936d34dfedb" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="56815b2b-c717-15b1-4dbe-f465ba751784" executionId="77714c69-b247-4164-9f25-b7650d982523" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="7ec867ce-f228-9938-2a30-df8dc5bf2696" executionId="da53a4a8-8a2a-45aa-b4e2-78bf6cd967e0" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="2934c3a2-a25c-b4be-e03a-e37e80a7f2d0" executionId="09b085f5-0e3c-4ec8-b183-7e11460756e9" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="37051afa-7cbb-2d37-e7e0-d10ac7bebf77" executionId="ea7a9ac7-010a-4117-8916-1481085c988c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="59fdb673-c893-b110-aeec-fa1317b04542" executionId="2f45b2f8-c434-4c31-ab8c-de80dcadbbf9" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="ca65fc5f-99a6-7035-91c9-c4603f1b86d3" executionId="f6f4bac1-6a99-4abf-a186-1c237ee172c5" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="3c469a37-bdea-ac16-e3fb-968b26e533d2" executionId="f8d3e84e-e659-4f71-9a95-c972b123c295" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e8701f6d-2f35-4062-6452-098ab673fe9e" executionId="4b024f2f-83bb-43ed-bfe0-51e2db9cce07" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="168cd38a-349f-a9e5-6f91-136f7e14c507" executionId="6d704c83-c5aa-4b79-807b-7e71c0daebc6" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="afc9ecf7-2d53-d950-79da-28f44a65dbbe" executionId="730b9d0c-2f87-4036-a345-d63f8989b94b" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="0e85ffa0-b585-7b35-9da5-8bb6543c8859" executionId="ec5b380a-8841-400c-86e8-a59ab5907f61" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="3bebd25d-5d0d-087e-5680-45d4447f3d50" executionId="76ca5171-199b-4b8d-9227-0f7cd0f7f16e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="2fb12a16-affb-b116-f4f9-f37d08df8d4f" executionId="da3c4937-e69c-48b2-b0a3-0d031044e6fc" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="8fc2306f-67da-167d-9b28-1859e655e3c0" executionId="6b4b5134-88dd-497f-95b9-f1e92474a24c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="6e70a1e5-3db0-4107-3f3a-6987bf00a8de" executionId="e972c9b6-24b5-4fb4-9e80-fda820d60389" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="8e2b066b-b21e-17e3-1cbc-a4e70c8f3831" executionId="5b8f1ae8-356c-4aee-a709-31d72decc68e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="a3679525-95d8-8263-0f2e-08740eee5bf4" executionId="f50041c1-a3a6-4bd2-8f57-43ca634356da" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="1e4281ad-472c-6a03-f6d5-e38f1544acce" executionId="8c0f9728-b739-452f-888b-1078c768b632" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="3dafedef-8901-18e2-92d4-a5680ba16c71" executionId="4c392703-1f73-465e-bb47-ff3eae6fd9fe" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="8523d64d-4ec4-8b6e-276f-599cd3706cdb" executionId="4542ed2e-ae56-428b-ac50-9d7bf88f653b" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e6d64e3c-83f8-7161-8147-58a652499d3c" executionId="3a7af92e-bdab-4372-ad5d-eda3cf6add96" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e747cb1a-6c09-80a2-bb76-b39df8c30ae3" executionId="8caa65dc-90fa-431f-a3a8-7ff93b34fc16" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="ac5c834e-3e24-b51b-431e-38b33773861a" executionId="179fb49e-8634-4060-a780-7db3b345b92f" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="ceb63aba-6737-754b-3734-29e29464fe7c" executionId="f3fe2258-6163-474d-b782-896a6e18e4f9" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="e308274d-17da-9c6c-92a6-44898cd6d2a7" executionId="fd075053-13ba-437b-89f9-9184506e1fe7" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="5e34e9a1-053c-6658-bfce-dfd03f7717de" executionId="23e5cb26-d04e-4e50-95b7-07e1de7fab6a" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="3f2d7761-8f7e-c329-0a4d-6537e4a0782b" executionId="e8695686-7ac6-4ed1-afd0-85fd5bde988d" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="5875e9e7-a153-1cfe-9dfb-3a751397ba7a" executionId="f7008706-13ce-4f1a-adb2-7a9fc9013572" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b4bc0d3f-1d8c-cf8a-dbaa-8b20927b793b" executionId="b188b8ca-bafd-4fc0-ac4c-66d4c39dc078" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="15968bdd-30db-c300-ad5e-96e69d6154a8" executionId="a8ab337e-83dc-4540-9e54-0491ad67cfd8" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="ee579c50-76bf-005e-8b60-52e3a56867da" executionId="15a84472-bc7d-4578-bbf5-ba7d4d48d355" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="c27ecd2e-f0e8-ab29-8dfa-98b40cd6499c" executionId="e6086be9-9dca-4bae-ae03-2efa0d78f16d" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="3d7ea698-721f-58a7-e129-339235670db6" executionId="2dcdb7cb-40b9-4c8c-ac67-506181448902" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="f6d69fec-10f0-e46c-b7fa-4e178a283223" executionId="4e44cb4c-f3c2-4645-98fe-3acbc99028f4" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="a6cf273c-a00a-1f65-2077-8992091fc6b7" executionId="c0b80456-8d1b-41d9-aa4f-5b7dfe2a73da" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Failed">
+    <Counters total="40" executed="40" passed="26" failed="14" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.10)
+[xUnit.net 00:00:00.05]   Discovering: WeaveFleet.Infrastructure.Tests
+[xUnit.net 00:00:00.09]   Discovered:  WeaveFleet.Infrastructure.Tests
+[xUnit.net 00:00:00.10]   Starting:    WeaveFleet.Infrastructure.Tests
+[xUnit.net 00:00:00.17]       Shouldly.ShouldAssertException : result.IsSuccess&#xD;
+[xUnit.net 00:00:00.17]           should be&#xD;
+[xUnit.net 00:00:00.17]       True&#xD;
+[xUnit.net 00:00:00.17]           but was&#xD;
+[xUnit.net 00:00:00.17]       False
+[xUnit.net 00:00:00.17]       Stack Trace:
+[xUnit.net 00:00:00.17]         /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/GitHubSkillCatalogServiceTests.cs(185,0): at WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenCacheIsStale_IndicatesStaleness()
+[xUnit.net 00:00:00.17]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.17]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.17]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.17]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.17]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.17]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.17]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.17]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.17]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.17]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.17]       Shouldly.ShouldAssertException : result.IsSuccess&#xD;
+[xUnit.net 00:00:00.17]           should be&#xD;
+[xUnit.net 00:00:00.17]       True&#xD;
+[xUnit.net 00:00:00.17]           but was&#xD;
+[xUnit.net 00:00:00.17]       False
+[xUnit.net 00:00:00.17]       Stack Trace:
+[xUnit.net 00:00:00.17]         /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/GitHubSkillCatalogServiceTests.cs(148,0): at WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenRemoteFails_FallsBackToCache()
+[xUnit.net 00:00:00.17]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.17]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.17]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.17]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.17]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.17]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.17]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.17]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.17]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.17]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.20]       Shouldly.ShouldAssertException : results&#xD;
+[xUnit.net 00:00:00.20]           should satisfy the condition&#xD;
+[xUnit.net 00:00:00.20]       r.Success&#xD;
+[xUnit.net 00:00:00.20]           but&#xD;
+[xUnit.net 00:00:00.20]       [SkillSyncResult { SkillName = multi-harness-skill, Harness = opencode, Success = False, Skipped = False, ErrorMessage = Source directory not found: /var/folders/m8/6hhxrywx6739r5bhjfdzj3kw0000gn/T/weave-test-d6777ee2-e67f-404e-ba14-e2b9d914b997/.weave/skills/multi-harness-skill, TargetPath =  }, SkillSyncResult { SkillName = multi-harness-skill, Harness = claude-code, Success = False, Skipped = False, ErrorMessage = Source directory not found: /var/folders/m8/6hhxrywx6739r5bhjfdzj3kw0000gn/T/weave-test-d6777ee2-e67f-404e-ba14-e2b9d914b997/.weave/skills/multi-harness-skill, TargetPath =  }]&#xD;
+[xUnit.net 00:00:00.20]           do not
+[xUnit.net 00:00:00.20]       Stack Trace:
+[xUnit.net 00:00:00.20]         /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/SkillSyncEngineTests.cs(288,0): at WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_SyncsToMultipleHarnesses()
+[xUnit.net 00:00:00.20]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.20]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.20]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.20]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.20]       Shouldly.ShouldAssertException : result.Success&#xD;
+[xUnit.net 00:00:00.20]           should be&#xD;
+[xUnit.net 00:00:00.20]       True&#xD;
+[xUnit.net 00:00:00.20]           but was&#xD;
+[xUnit.net 00:00:00.20]       False
+[xUnit.net 00:00:00.20]       Stack Trace:
+[xUnit.net 00:00:00.20]         /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/SkillSyncEngineTests.cs(248,0): at WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WhenTargetExistsWithMarker_ReplacesTarget()
+[xUnit.net 00:00:00.20]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.20]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.20]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.20]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.20]       Shouldly.ShouldAssertException : results&#xD;
+[xUnit.net 00:00:00.20]           should be empty but had&#xD;
+[xUnit.net 00:00:00.20]       3&#xD;
+[xUnit.net 00:00:00.20]           items and was&#xD;
+[xUnit.net 00:00:00.20]       [SkillSyncResult { SkillName = multi-harness-skill, Harness = opencode, Success = False, Skipped = False, ErrorMessage = Source directory not found: /var/folders/m8/6hhxrywx6739r5bhjfdzj3kw0000gn/T/weave-test-d6777ee2-e67f-404e-ba14-e2b9d914b997/.weave/skills/multi-harness-skill, TargetPath =  }, SkillSyncResult { SkillName = multi-harness-skill, Harness = claude-code, Success = False, Skipped = False, ErrorMessage = Source directory not found: /var/folders/m8/6hhxrywx6739r5bhjfdzj3kw0000gn/T/weave-test-d6777ee2-e67f-404e-ba14-e2b9d914b997/.weave/skills/multi-harness-skill, TargetPath =  }, SkillSyncResult { SkillName = fleet-managed-skill, Harness = opencode, Success = False, Skipped = False, ErrorMessage = Source directory not found: /var/folders/m8/6hhxrywx6739r5bhjfdzj3kw0000gn/T/weave-test-d6777ee2-e67f-404e-ba14-e2b9d914b997/.weave/skills/fleet-managed-skill, TargetPath =  }]
+[xUnit.net 00:00:00.20]       Stack Trace:
+[xUnit.net 00:00:00.20]         /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/SkillSyncEngineTests.cs(53,0): at WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncAllAsync_WhenManifestIsEmpty_ReturnsEmptyResults()
+[xUnit.net 00:00:00.20]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.20]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.20]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.20]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.20]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.21]       Shouldly.ShouldAssertException : result.Skipped&#xD;
+[xUnit.net 00:00:00.21]           should be&#xD;
+[xUnit.net 00:00:00.21]       True&#xD;
+[xUnit.net 00:00:00.21]           but was&#xD;
+[xUnit.net 00:00:00.21]       False
+[xUnit.net 00:00:00.21]       Stack Trace:
+[xUnit.net 00:00:00.21]         /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/SkillSyncEngineTests.cs(202,0): at WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WhenTargetExistsWithoutMarker_SkipsSync()
+[xUnit.net 00:00:00.21]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.21]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.21]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.21]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.21]       Shouldly.ShouldAssertException : result.ErrorMessage&#xD;
+[xUnit.net 00:00:00.21]           should contain (case insensitive comparison)&#xD;
+[xUnit.net 00:00:00.21]       "Unknown harness"&#xD;
+[xUnit.net 00:00:00.21]           but was actually&#xD;
+[xUnit.net 00:00:00.21]       "Source directory not found: /var/folders/m8/6hhxrywx6739r5bhjfdzj3kw0000gn/T/weave-test-d6777ee2-e67..."
+[xUnit.net 00:00:00.21]       Stack Trace:
+[xUnit.net 00:00:00.21]         /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/SkillSyncEngineTests.cs(334,0): at WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WithUnknownHarness_ReturnsError()
+[xUnit.net 00:00:00.21]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.21]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.21]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.21]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.21]       Shouldly.ShouldAssertException : results.Count&#xD;
+[xUnit.net 00:00:00.21]           should be&#xD;
+[xUnit.net 00:00:00.21]       2&#xD;
+[xUnit.net 00:00:00.21]           but was&#xD;
+[xUnit.net 00:00:00.21]       9
+[xUnit.net 00:00:00.21]       Stack Trace:
+[xUnit.net 00:00:00.21]         /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/SkillSyncEngineTests.cs(491,0): at WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncAllAsync_WhenSomeSkillsFail_StillSyncsOthers()
+[xUnit.net 00:00:00.21]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.21]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.21]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.21]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.21]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.22]       Shouldly.ShouldAssertException : results.Count&#xD;
+[xUnit.net 00:00:00.22]           should be&#xD;
+[xUnit.net 00:00:00.22]       2&#xD;
+[xUnit.net 00:00:00.22]           but was&#xD;
+[xUnit.net 00:00:00.22]       11
+[xUnit.net 00:00:00.22]       Stack Trace:
+[xUnit.net 00:00:00.22]         /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/SkillSyncEngineTests.cs(383,0): at WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncAllAsync_SyncsAllSkillsInManifest()
+[xUnit.net 00:00:00.22]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.22]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.22]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.22]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.22]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.22]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.22]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.22]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.22]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.22]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.22]       Assert.Empty() Failure: Collection was not empty
+[xUnit.net 00:00:00.22]       Collection: [SkillManifestEntry { Name = duplicate-skill, Source = GitHub, RepoUrl = https://github.com/test/skill, Ref = main, LocalPath = , TargetHarnesses = System.Collections.Generic.List`1[System.String], InstalledAt = 8/16/2026 7:45:39 PM +00:00, UpdatedAt = 8/16/2026 7:45:39 PM +00:00 }]
+[xUnit.net 00:00:00.22]       Stack Trace:
+[xUnit.net 00:00:00.22]         /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/JsonSkillManifestStoreTests.cs(41,0): at WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.LoadAsync_WhenFileDoesNotExist_ReturnsEmptyManifest()
+[xUnit.net 00:00:00.22]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.23]       Assert.Single() Failure: The collection contained 2 items
+[xUnit.net 00:00:00.23]       Collection: [SkillManifestEntry { Name = duplicate-skill, Source = GitHub, RepoUrl = https://github.com/test/skill, Ref = main, LocalPath = , TargetHarnesses = System.Collections.Generic.List`1[System.String], InstalledAt = 8/16/2026 7:45:39 PM +00:00, UpdatedAt = 8/16/2026 7:45:39 PM +00:00 }, SkillManifestEntry { Name = skill-to-update, Source = GitHub, RepoUrl = https://github.com/test/skill, Ref = v2.0.0, LocalPath = , TargetHarnesses = System.Collections.Generic.List`1[System.String], InstalledAt = 8/16/2026 7:45:39 PM +00:00, UpdatedAt = 8/16/2026 7:46:39 PM +00:00 }]
+[xUnit.net 00:00:00.23]       Stack Trace:
+[xUnit.net 00:00:00.23]         /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/JsonSkillManifestStoreTests.cs(303,0): at WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.UpdateEntryAsync_UpdatesExistingSkill()
+[xUnit.net 00:00:00.23]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.23]       System.IO.DirectoryNotFoundException : Could not find a part of the path '/var/folders/m8/6hhxrywx6739r5bhjfdzj3kw0000gn/T/weave-test-b7d5c1ca-84d0-453e-9beb-4594d36953cf/.weave/skills'.
+[xUnit.net 00:00:00.23]       Stack Trace:
+[xUnit.net 00:00:00.23]            at System.IO.Enumeration.FileSystemEnumerator`1.CreateDirectoryHandle(String path, Boolean ignoreNotFound)
+[xUnit.net 00:00:00.23]            at System.IO.Enumeration.FileSystemEnumerator`1.Init()
+[xUnit.net 00:00:00.23]            at System.IO.Enumeration.FileSystemEnumerable`1..ctor(String directory, FindTransform transform, EnumerationOptions options, Boolean isNormalized, String expression)
+[xUnit.net 00:00:00.23]            at System.IO.Enumeration.FileSystemEnumerableFactory.UserFiles(String directory, String expression, EnumerationOptions options)
+[xUnit.net 00:00:00.23]            at System.IO.Directory.InternalEnumeratePaths(String path, String searchPattern, SearchTarget searchTarget, EnumerationOptions enumerationOptions)
+[xUnit.net 00:00:00.23]            at System.IO.Directory.GetFiles(String path, String searchPattern, EnumerationOptions enumerationOptions)
+[xUnit.net 00:00:00.23]         /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/JsonSkillManifestStoreTests.cs(184,0): at WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.SaveAsync_WritesAtomically()
+[xUnit.net 00:00:00.23]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.24]       Assert.True() Failure
+[xUnit.net 00:00:00.24]       Expected: True
+[xUnit.net 00:00:00.24]       Actual:   False
+[xUnit.net 00:00:00.24]       Stack Trace:
+[xUnit.net 00:00:00.24]         /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/JsonSkillManifestStoreTests.cs(352,0): at WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.LoadAsync_WithWorkspaceId_UsesCorrectFilePath()
+[xUnit.net 00:00:00.24]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.24]       Assert.Empty() Failure: Collection was not empty
+[xUnit.net 00:00:00.24]       Collection: [SkillManifestEntry { Name = new-skill, Source = GitHub, RepoUrl = https://github.com/test/new-skill, Ref = main, LocalPath = , TargetHarnesses = System.Collections.Generic.List`1[System.String], InstalledAt = 8/16/2026 7:45:39 PM +00:00, UpdatedAt = 8/16/2026 7:45:39 PM +00:00 }]
+[xUnit.net 00:00:00.24]       Stack Trace:
+[xUnit.net 00:00:00.24]         /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/JsonSkillManifestStoreTests.cs(263,0): at WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.RemoveEntryAsync_RemovesExistingSkill()
+[xUnit.net 00:00:00.24]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.24]   Finished:    WeaveFleet.Infrastructure.Tests
+</StdOut>
+    </Output>
+    <RunInfos>
+      <RunInfo computerName="Pieters-MBP" outcome="Error" timestamp="2026-08-16T21:45:39.5506090+02:00">
+        <Text>[xUnit.net 00:00:00.17]     WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenCacheIsStale_IndicatesStaleness [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="Pieters-MBP" outcome="Error" timestamp="2026-08-16T21:45:39.5525850+02:00">
+        <Text>[xUnit.net 00:00:00.17]     WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenRemoteFails_FallsBackToCache [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="Pieters-MBP" outcome="Error" timestamp="2026-08-16T21:45:39.5851350+02:00">
+        <Text>[xUnit.net 00:00:00.20]     WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_SyncsToMultipleHarnesses [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="Pieters-MBP" outcome="Error" timestamp="2026-08-16T21:45:39.5851660+02:00">
+        <Text>[xUnit.net 00:00:00.20]     WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WhenTargetExistsWithMarker_ReplacesTarget [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="Pieters-MBP" outcome="Error" timestamp="2026-08-16T21:45:39.5870110+02:00">
+        <Text>[xUnit.net 00:00:00.20]     WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncAllAsync_WhenManifestIsEmpty_ReturnsEmptyResults [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="Pieters-MBP" outcome="Error" timestamp="2026-08-16T21:45:39.5898070+02:00">
+        <Text>[xUnit.net 00:00:00.21]     WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WhenTargetExistsWithoutMarker_SkipsSync [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="Pieters-MBP" outcome="Error" timestamp="2026-08-16T21:45:39.5952420+02:00">
+        <Text>[xUnit.net 00:00:00.21]     WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncSkillAsync_WithUnknownHarness_ReturnsError [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="Pieters-MBP" outcome="Error" timestamp="2026-08-16T21:45:39.5981790+02:00">
+        <Text>[xUnit.net 00:00:00.21]     WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncAllAsync_WhenSomeSkillsFail_StillSyncsOthers [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="Pieters-MBP" outcome="Error" timestamp="2026-08-16T21:45:39.6011800+02:00">
+        <Text>[xUnit.net 00:00:00.22]     WeaveFleet.Infrastructure.Tests.Skills.SkillSyncEngineTests.SyncAllAsync_SyncsAllSkillsInManifest [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="Pieters-MBP" outcome="Error" timestamp="2026-08-16T21:45:39.6074420+02:00">
+        <Text>[xUnit.net 00:00:00.22]     WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.LoadAsync_WhenFileDoesNotExist_ReturnsEmptyManifest [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="Pieters-MBP" outcome="Error" timestamp="2026-08-16T21:45:39.6107590+02:00">
+        <Text>[xUnit.net 00:00:00.23]     WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.UpdateEntryAsync_UpdatesExistingSkill [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="Pieters-MBP" outcome="Error" timestamp="2026-08-16T21:45:39.6160750+02:00">
+        <Text>[xUnit.net 00:00:00.23]     WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.SaveAsync_WritesAtomically [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="Pieters-MBP" outcome="Error" timestamp="2026-08-16T21:45:39.6190370+02:00">
+        <Text>[xUnit.net 00:00:00.24]     WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.LoadAsync_WithWorkspaceId_UsesCorrectFilePath [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="Pieters-MBP" outcome="Error" timestamp="2026-08-16T21:45:39.6204630+02:00">
+        <Text>[xUnit.net 00:00:00.24]     WeaveFleet.Infrastructure.Tests.Skills.JsonSkillManifestStoreTests.RemoveEntryAsync_RemovesExistingSkill [FAIL]</Text>
+      </RunInfo>
+    </RunInfos>
+  </ResultSummary>
+</TestRun>

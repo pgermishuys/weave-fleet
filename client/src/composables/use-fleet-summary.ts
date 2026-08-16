@@ -10,6 +10,7 @@ import {
 } from "vue";
 import type { FleetSummaryResponse } from "@/api/client";
 import { api } from "@/api/client";
+import { extractApiError } from "@/lib/api-error";
 
 export interface UseFleetSummaryOptions {
   pollIntervalMs?: MaybeRefOrGetter<number>;
@@ -75,7 +76,7 @@ export function useFleetSummary(options: UseFleetSummaryOptions = {}): UseFleetS
       }
 
       if (apiError || !data) {
-        throw new Error(apiError ? String(apiError) : "No data returned");
+        throw new Error(extractApiError(apiError, "No data returned"));
       }
 
       const typedData = data as FleetSummaryResponse;

@@ -68,6 +68,7 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
     private const string KillReasonImmediateRelease = "immediate_release";
     private const string KillReasonRegistryDispose = "registry_dispose";
     private const string KillReasonCrashRecovery = "crash_recovery";
+    private const string KillReasonSkillSyncRecycle = "skill_sync_recycle";
 
     private static readonly ConcurrentDictionary<Guid, PooledOpenCodeInstanceRegistry> MetricRegistries = new();
 
@@ -453,6 +454,42 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
             instances.Count(instance => instance.IsWarm),
             instances.Count(instance => !instance.IsWarm && instance.IsAvailable),
             instances);
+    }
+
+    /// <summary>
+    /// Recycles all idle (RefCount == 0) pooled instances.
+    /// Active sessions (RefCount > 0) are NOT interrupted.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The number of instances recycled.</returns>
+    internal async Task<int> RecycleIdleInstancesAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+        var recycledCount = 0;
+        var entriesToRecycle = _entries.Values.ToArray();
+
+        foreach (var entry in entriesToRecycle)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await entry.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                // Only recycle if idle (no active leases) and instance exists
+                if (entry.RefCount == 0 && entry.Instance is not null)
+                {
+                    await StopIdleInstanceAsync(entry, KillReasonSkillSyncRecycle).ConfigureAwait(false);
+                    recycledCount++;
+                }
+            }
+            finally
+            {
+                entry.Gate.Release();
+            }
+        }
+
+        return recycledCount;
     }
 
     private async ValueTask ReleaseLeaseAsync(InstanceLease lease, InstanceLeaseReleaseMode releaseMode)

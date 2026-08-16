@@ -1,5 +1,6 @@
 import { onMounted, readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
 import { api } from "@/api/client";
+import { extractApiError } from "@/lib/api-error";
 
 export interface AvailableTool {
   id: string;
@@ -24,7 +25,7 @@ const sharedError = shallowRef<string | undefined>(undefined);
 async function fetchAvailableTools(): Promise<AvailableTool[]> {
   const { data, error: apiError } = await api.GET("/api/available-tools");
   if (apiError) {
-    throw new Error(apiError ? String(apiError) : "Failed to fetch available tools");
+    throw new Error(extractApiError(apiError, "Failed to fetch available tools"));
   }
 
   if (!data) {

@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Skills;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 using WeaveFleet.Infrastructure.Harnesses.NuCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
@@ -262,6 +263,12 @@ internal sealed record NuCodeStatusPayload
 [JsonSerializable(typeof(GitHubSourceInput))]
 [JsonSerializable(typeof(AutomationSourceInput))]
 [JsonSerializable(typeof(DeviceCodeResponse))]
+[JsonSerializable(typeof(CachedCatalog))]
+[JsonSerializable(typeof(CatalogEntry))]
+[JsonSerializable(typeof(List<CatalogEntry>))]
+[JsonSerializable(typeof(SkillManifest))]
+[JsonSerializable(typeof(SkillManifestEntry))]
+[JsonSerializable(typeof(SkillSource))]
 internal sealed partial class InfrastructureJsonContext : JsonSerializerContext
 {
     /// <summary>Returns a serialized activity-status payload.</summary>
@@ -287,3 +294,8 @@ internal sealed partial class InfrastructureJsonContext : JsonSerializerContext
     /// <summary>A pre-computed empty JSON object <c>{}</c> as a <see cref="JsonElement"/>.</summary>
     internal static readonly JsonElement EmptyObject = JsonDocument.Parse("{}").RootElement.Clone();
 }
+
+// ── Skill catalog cache ───────────────────────────────────────────────────────────────────────────
+
+/// <summary>Cached skill catalog with timestamp.</summary>
+internal sealed record CachedCatalog(IReadOnlyList<CatalogEntry> Entries, DateTimeOffset CachedAt);

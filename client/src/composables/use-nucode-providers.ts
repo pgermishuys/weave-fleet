@@ -7,6 +7,7 @@ import type {
   NuCodeDeviceCodeResponse,
   NuCodeDevicePollResponse,
 } from "@/api/client";
+import { extractApiError } from "@/lib/api-error";
 
 export interface UseNuCodeProvidersResult {
   providers: Readonly<Ref<readonly NuCodeProvider[]>>;
@@ -32,7 +33,7 @@ export function useNuCodeProviders(): UseNuCodeProvidersResult {
     try {
       const { data, error: apiError } = await api.GET("/api/nucode/providers");
       if (apiError) {
-        throw new Error(apiError ? String(apiError) : "Failed to load providers");
+        throw new Error(extractApiError(apiError, "Failed to load providers"));
       }
       if (!data) {
         throw new Error("No data returned");
@@ -57,7 +58,7 @@ export function useNuCodeProviders(): UseNuCodeProvidersResult {
     });
 
     if (apiError) {
-      throw new Error(apiError ? String(apiError) : "Failed to store credentials");
+      throw new Error(extractApiError(apiError, "Failed to store credentials"));
     }
 
     await fetchProviders();
@@ -69,7 +70,7 @@ export function useNuCodeProviders(): UseNuCodeProvidersResult {
     });
 
     if (apiError) {
-      throw new Error(apiError ? String(apiError) : "Failed to delete credentials");
+      throw new Error(extractApiError(apiError, "Failed to delete credentials"));
     }
 
     await fetchProviders();
@@ -81,7 +82,7 @@ export function useNuCodeProviders(): UseNuCodeProvidersResult {
     });
 
     if (apiError) {
-      throw new Error(apiError ? String(apiError) : "Failed to test connection");
+      throw new Error(extractApiError(apiError, "Failed to test connection"));
     }
 
     if (!data) {
@@ -97,7 +98,7 @@ export function useNuCodeProviders(): UseNuCodeProvidersResult {
     });
 
     if (apiError) {
-      throw new Error(apiError ? String(apiError) : "Failed to request device code");
+      throw new Error(extractApiError(apiError, "Failed to request device code"));
     }
 
     if (!data) {
@@ -114,7 +115,7 @@ export function useNuCodeProviders(): UseNuCodeProvidersResult {
     });
 
     if (apiError) {
-      throw new Error(apiError ? String(apiError) : "Failed to poll device flow");
+      throw new Error(extractApiError(apiError, "Failed to poll device flow"));
     }
 
     if (!data) {

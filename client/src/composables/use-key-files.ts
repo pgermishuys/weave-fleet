@@ -1,5 +1,6 @@
 import { readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
 import { api } from "@/api/client";
+import { extractApiError } from "@/lib/api-error";
 
 export interface KeyFilesResponse {
   filesByTool: Record<string, readonly string[]>;
@@ -27,7 +28,7 @@ export function useKeyFiles(): UseKeyFilesResult {
       });
 
       if (apiError) {
-        throw new Error(apiError ? String(apiError) : "Failed to load key files");
+        throw new Error(extractApiError(apiError, "Failed to load key files"));
       }
 
       if (!data) {

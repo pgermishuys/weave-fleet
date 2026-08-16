@@ -1,0 +1,77 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="07287472-bff6-43d5-8c88-8129cfdbd22c" name="@Pieters-MBP 2026-08-16 21:48:49" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-08-16T21:48:49.9110570+02:00" queuing="2026-08-16T21:48:49.9110570+02:00" start="2026-08-16T21:48:49.5034370+02:00" finish="2026-08-16T21:48:49.9130950+02:00" />
+  <TestSettings name="default" id="a56a7786-f2f2-4266-a0a2-bc9868162835">
+    <Deployment runDeploymentRoot="_Pieters-MBP_2026-08-16_21_48_49" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="41b1ffd0-e3be-413a-ae09-4f0e5a6ffe4a" testId="2934c3a2-a25c-b4be-e03a-e37e80a7f2d0" testName="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenCacheIsStale_IndicatesStaleness" computerName="Pieters-MBP" duration="00:00:00.0369454" startTime="2026-08-16T21:48:49.8169720+02:00" endTime="2026-08-16T21:48:49.8592710+02:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="41b1ffd0-e3be-413a-ae09-4f0e5a6ffe4a">
+      <Output>
+        <ErrorInfo>
+          <Message>Shouldly.ShouldAssertException : result.IsSuccess&#xD;
+    should be&#xD;
+True&#xD;
+    but was&#xD;
+False</Message>
+          <StackTrace>   at WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenCacheIsStale_IndicatesStaleness() in /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/GitHubSkillCatalogServiceTests.cs:line 182
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+--- End of stack trace from previous location ---
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+   at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+   at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+   at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenCacheIsStale_IndicatesStaleness" storage="/users/pgermishuys/source/weave-fleet/tests/weavefleet.infrastructure.tests/bin/debug/net10.0/weavefleet.infrastructure.tests.dll" id="2934c3a2-a25c-b4be-e03a-e37e80a7f2d0">
+      <Execution id="41b1ffd0-e3be-413a-ae09-4f0e5a6ffe4a" />
+      <TestMethod codeBase="/Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/bin/Debug/net10.0/WeaveFleet.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests" name="FetchCatalogAsync_WhenCacheIsStale_IndicatesStaleness" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="2934c3a2-a25c-b4be-e03a-e37e80a7f2d0" executionId="41b1ffd0-e3be-413a-ae09-4f0e5a6ffe4a" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Failed">
+    <Counters total="1" executed="1" passed="0" failed="1" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.10)
+[xUnit.net 00:00:00.05]   Discovering: WeaveFleet.Infrastructure.Tests
+[xUnit.net 00:00:00.09]   Discovered:  WeaveFleet.Infrastructure.Tests
+[xUnit.net 00:00:00.10]   Starting:    WeaveFleet.Infrastructure.Tests
+[xUnit.net 00:00:00.16]       Shouldly.ShouldAssertException : result.IsSuccess&#xD;
+[xUnit.net 00:00:00.16]           should be&#xD;
+[xUnit.net 00:00:00.16]       True&#xD;
+[xUnit.net 00:00:00.16]           but was&#xD;
+[xUnit.net 00:00:00.16]       False
+[xUnit.net 00:00:00.16]       Stack Trace:
+[xUnit.net 00:00:00.16]         /Users/pgermishuys/source/weave-fleet/tests/WeaveFleet.Infrastructure.Tests/Skills/GitHubSkillCatalogServiceTests.cs(182,0): at WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenCacheIsStale_IndicatesStaleness()
+[xUnit.net 00:00:00.16]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.16]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.16]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.16]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:00.16]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.16]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.16]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.16]            at System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
+[xUnit.net 00:00:00.16]            at System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)
+[xUnit.net 00:00:00.16]            at System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task, ConfigureAwaitOptions options)
+[xUnit.net 00:00:00.16]   Finished:    WeaveFleet.Infrastructure.Tests
+</StdOut>
+    </Output>
+    <RunInfos>
+      <RunInfo computerName="Pieters-MBP" outcome="Error" timestamp="2026-08-16T21:48:49.8608640+02:00">
+        <Text>[xUnit.net 00:00:00.16]     WeaveFleet.Infrastructure.Tests.Skills.GitHubSkillCatalogServiceTests.FetchCatalogAsync_WhenCacheIsStale_IndicatesStaleness [FAIL]</Text>
+      </RunInfo>
+    </RunInfos>
+  </ResultSummary>
+</TestRun>

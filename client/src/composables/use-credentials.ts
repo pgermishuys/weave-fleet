@@ -1,6 +1,7 @@
 import { readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
 import { api } from "@/api/client";
 import type { CredentialSummary, StoreCredentialRequest } from "@/api/client";
+import { extractApiError } from "@/lib/api-error";
 
 export interface UseCredentialsResult {
   credentials: Readonly<Ref<readonly CredentialSummary[]>>;
@@ -24,7 +25,7 @@ export function useCredentials(): UseCredentialsResult {
     try {
       const { data, error: apiError } = await api.GET("/api/credentials");
       if (apiError) {
-        throw new Error(apiError ? String(apiError) : "Failed to load credentials");
+        throw new Error(extractApiError(apiError, "Failed to load credentials"));
       }
 
       if (!data) {
@@ -45,7 +46,7 @@ export function useCredentials(): UseCredentialsResult {
     });
 
     if (apiError) {
-      throw new Error(apiError ? String(apiError) : "Failed to store credential");
+      throw new Error(extractApiError(apiError, "Failed to store credential"));
     }
 
     await fetchCredentials();
@@ -58,7 +59,7 @@ export function useCredentials(): UseCredentialsResult {
     });
 
     if (apiError) {
-      throw new Error(apiError ? String(apiError) : "Failed to update credential");
+      throw new Error(extractApiError(apiError, "Failed to update credential"));
     }
 
     await fetchCredentials();
@@ -70,7 +71,7 @@ export function useCredentials(): UseCredentialsResult {
     });
 
     if (apiError) {
-      throw new Error(apiError ? String(apiError) : "Failed to delete credential");
+      throw new Error(extractApiError(apiError, "Failed to delete credential"));
     }
 
     await fetchCredentials();
