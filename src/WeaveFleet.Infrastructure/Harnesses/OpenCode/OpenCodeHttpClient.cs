@@ -338,6 +338,18 @@ internal sealed class OpenCodeHttpClient
         await PostVoidAsync(url, body, OpenCodeJsonContext.Default.OpenCodeQuestionRejectRequest, ct).ConfigureAwait(false);
     }
 
+    /// <summary>POST /permission/{requestId}/reply?directory={directory}</summary>
+    public async Task ReplyPermissionAsync(
+        string requestId,
+        string reply,
+        string directory,
+        CancellationToken ct)
+    {
+        var url = BuildUrl($"/permission/{Uri.EscapeDataString(requestId)}/reply", directory);
+        var body = new OpenCodePermissionReplyRequest { Reply = reply };
+        await PostVoidAsync(url, body, OpenCodeJsonContext.Default.OpenCodePermissionReplyRequest, ct).ConfigureAwait(false);
+    }
+
     /// <summary>POST /session/{sessionId}/fork?directory={directory}</summary>
     public async Task<OpenCodeSessionInfo> ForkSessionAsync(
         string sessionId,

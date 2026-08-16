@@ -54,6 +54,14 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(8, "DelegationFailed"),
             "Failed to process delegation event for session {SessionId}");
 
+    private static readonly Action<ILogger, string, string, Exception?> LogPermissionAutoApproved =
+        LoggerMessage.Define<string, string>(LogLevel.Warning, new EventId(9, "PermissionAutoApproved"),
+            "Auto-approved permission request {RequestId} for permission '{Permission}' (headless harness cannot prompt user).");
+
+    private static readonly Action<ILogger, string, Exception?> LogPermissionApprovalFailed =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(10, "PermissionApprovalFailed"),
+            "Failed to auto-approve permission request {RequestId}");
+
     private readonly IOpenCodeInstanceHandle _instanceHandle;
     private readonly string _workingDirectory;
     private readonly ILogger<OpenCodeHarnessSession> _logger;
@@ -350,6 +358,12 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             if (harnessEvent.Type == "question.asked")
                 TryCacheQuestionMapping(harnessEvent);
 
+            // Auto-approve permission requests (defense-in-depth: config should prevent these,
+            // but if a sub-task agent with different config asks for permission, auto-approve
+            // since the harness is headless and cannot prompt the user).
+            if (harnessEvent.Type == "permission.asked")
+                _ = TryAutoApprovePermissionAsync(harnessEvent);
+
             yield return harnessEvent;
 
             // Emit synthetic tool-result event if this is a completed tool part with output
@@ -557,6 +571,46 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
         if (!string.IsNullOrWhiteSpace(callId))
             _toolCallToQuestionId[callId] = questionId;
+    }
+
+    /// <summary>
+    /// Auto-approves a permission request from a <c>permission.asked</c> event.
+    /// The event payload is <c>{ id: "perm_...", sessionID: "...", permission: "webfetch", patterns: [...], ... }</c>.
+    /// This is a defense-in-depth measure: the harness sets <c>OPENCODE_CONFIG_CONTENT</c> to auto-allow
+    /// all permissions, but if a sub-task agent with different config asks for permission, we auto-approve
+    /// since the harness is headless and cannot prompt the user.
+    /// </summary>
+    private async Task TryAutoApprovePermissionAsync(HarnessEvent evt)
+    {
+        if (!evt.Payload.HasValue || evt.Payload.Value.ValueKind != JsonValueKind.Object)
+            return;
+
+        var payload = evt.Payload.Value;
+
+        if (!payload.TryGetProperty("id", out var idEl) || idEl.ValueKind != JsonValueKind.String)
+            return;
+
+        var requestId = idEl.GetString();
+        if (string.IsNullOrWhiteSpace(requestId))
+            return;
+
+        // Extract permission name for logging
+        var permissionName = payload.TryGetProperty("permission", out var permEl) && permEl.ValueKind == JsonValueKind.String
+            ? permEl.GetString() ?? "unknown"
+            : "unknown";
+
+        LogPermissionAutoApproved(_logger, requestId, permissionName, null);
+
+        try
+        {
+            await _instanceHandle.HttpClient.ReplyPermissionAsync(requestId, "always", _workingDirectory, CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Log but don't throw — we don't want to break the event stream
+            LogPermissionApprovalFailed(_logger, requestId, ex);
+        }
     }
 
     /// <inheritdoc />

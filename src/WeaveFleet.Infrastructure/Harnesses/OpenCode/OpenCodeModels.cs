@@ -644,3 +644,13 @@ internal sealed record OpenCodeQuestionReplyRequest
 
 /// <summary>Request body for POST /question/{requestID}/reject.</summary>
 internal sealed record OpenCodeQuestionRejectRequest;
+
+// ---------------------------------------------------------------------------
+// Permissions
+// ---------------------------------------------------------------------------
+
+/// <summary>Request body for POST /permission/{requestID}/reply.</summary>
+internal sealed record OpenCodePermissionReplyRequest
+{
+    [JsonPropertyName("reply")] public required string Reply { get; init; }
+}
