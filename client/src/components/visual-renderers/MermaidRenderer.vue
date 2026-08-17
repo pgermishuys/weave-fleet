@@ -172,6 +172,8 @@ watch(() => props.content, (newContent) => {
   width: 100%;
   flex: 1;
   min-height: 0;
+  background-color: #ffffff;
+  border-radius: 0.375rem;
 }
 
 .mermaid-output {
