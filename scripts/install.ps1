@@ -1,6 +1,9 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Ensure TLS 1.2+ is available (required for GitHub; Windows PowerShell 5.1 defaults to TLS 1.0/1.1)
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
 $repo = if ($env:WEAVE_FLEET_GITHUB_REPO) { $env:WEAVE_FLEET_GITHUB_REPO } else { 'pgermishuys/fleet-releases' }
 $homeDirectory = [Environment]::GetFolderPath('UserProfile')
 $installDir = if ($env:WEAVE_FLEET_INSTALL_DIR) { $env:WEAVE_FLEET_INSTALL_DIR } else { Join-Path $homeDirectory '.weave/fleet' }
@@ -99,7 +102,7 @@ function Get-ExpectedHashFromContent {
             return $parts[0]
         }
 
-        if ($parts[1].Contains($AssetName, [System.StringComparison]::Ordinal)) {
+        if ($parts[1].IndexOf($AssetName, [System.StringComparison]::Ordinal) -ge 0) {
             return $parts[0]
         }
     }
@@ -118,7 +121,7 @@ function Get-ExpectedHash {
     $perAssetChecksumPath = Join-Path $WorkDir "$AssetName.sha256"
 
     try {
-        Invoke-WebRequest -Uri $perAssetChecksumUrl -OutFile $perAssetChecksumPath | Out-Null
+        Invoke-WebRequest -UseBasicParsing -Uri $perAssetChecksumUrl -OutFile $perAssetChecksumPath | Out-Null
         $perAssetChecksum = Get-Content -Raw -Path $perAssetChecksumPath
         $expectedHash = Get-ExpectedHashFromContent -Content $perAssetChecksum -AssetName $AssetName
         if ($expectedHash) {
@@ -131,7 +134,7 @@ function Get-ExpectedHash {
     $checksumsUrl = "$DownloadBaseUrl/$checksumsName"
     $checksumsPath = Join-Path $WorkDir $checksumsName
     try {
-        Invoke-WebRequest -Uri $checksumsUrl -OutFile $checksumsPath | Out-Null
+        Invoke-WebRequest -UseBasicParsing -Uri $checksumsUrl -OutFile $checksumsPath | Out-Null
         $checksumsContent = Get-Content -Raw -Path $checksumsPath
         $expectedHash = Get-ExpectedHashFromContent -Content $checksumsContent -AssetName $AssetName
         if ($expectedHash) {
@@ -253,12 +256,12 @@ try {
     $archivePath = Join-Path $workDir $assetName
 
     try {
-        Invoke-WebRequest -Uri "$downloadBaseUrl/$assetName" -OutFile $archivePath | Out-Null
+        Invoke-WebRequest -UseBasicParsing -Uri "$downloadBaseUrl/$assetName" -OutFile $archivePath | Out-Null
     }
     catch {
         $assetName = "$assetBaseName.tar.gz"
         $archivePath = Join-Path $workDir $assetName
-        Invoke-WebRequest -Uri "$downloadBaseUrl/$assetName" -OutFile $archivePath | Out-Null
+        Invoke-WebRequest -UseBasicParsing -Uri "$downloadBaseUrl/$assetName" -OutFile $archivePath | Out-Null
     }
 
     $expectedHash = (Get-ExpectedHash -DownloadBaseUrl $downloadBaseUrl -AssetName $assetName -WorkDir $workDir).ToLowerInvariant()
