@@ -554,8 +554,7 @@ app.Use(async (context, next) =>
 app.UseAuthentication();
 app.UseAuthorization();
 
-if (app.Environment.IsDevelopment())
-    app.MapOpenApi();
+app.MapOpenApi();
 
 // Origin validation for SignalR hubs
 app.Use(async (context, next) =>
