@@ -1,3 +1,8 @@
+---
+name: fleet-api
+description: Weave Fleet API for managing Fleet sessions (not OpenCode sessions), automations, GitHub integration, and session sources. Use when an agent needs to create, query, or control Weave Fleet sessions, manage automations, or interact with GitHub repositories through the Fleet API.
+---
+
 # fleet-api
 
 **Fleet API for sessions, automations, GitHub integration, and session sources.**
