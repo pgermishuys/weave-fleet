@@ -256,6 +256,7 @@ export function useSkills(): UseSkillsResult {
           ref: parsed.ref,
           localPath: null,
           targetHarnesses: null,
+          subPath: null,
         };
       } else {
         const name = url.split("/").filter(Boolean).pop() ?? "unknown-skill";
@@ -266,6 +267,7 @@ export function useSkills(): UseSkillsResult {
           ref: null,
           localPath: url,
           targetHarnesses: null,
+          subPath: null,
         };
       }
 

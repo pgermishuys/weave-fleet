@@ -2237,6 +2237,7 @@ export interface components {
             source: components["schemas"]["SkillSource"];
             repoUrl: null | string;
             ref: null | string;
+            subPath: null | string;
             localPath: null | string;
             targetHarnesses: string[];
             author: null | string;
@@ -2369,6 +2370,7 @@ export interface components {
             source: components["schemas"]["SkillSource"];
             repoUrl: null | string;
             ref: null | string;
+            subPath: null | string;
             localPath: null | string;
             targetHarnesses: null | string[];
         };

@@ -31,6 +31,7 @@ function createCatalogEntry(
     repoUrl: `https://github.com/example/${name}`,
     ref: "main",
     localPath: null,
+    subPath: null,
     targetHarnesses: ["opencode"],
     author: "Example Author",
     version: "1.0.0",
@@ -198,6 +199,7 @@ describe("useSkillCatalog", () => {
             repoUrl: "https://github.com/example/minimal",
             ref: null,
             localPath: null,
+            subPath: null,
             targetHarnesses: [],
             author: null,
             version: null,
@@ -253,6 +255,7 @@ describe("useSkillCatalog", () => {
         ref: "main",
         localPath: null,
         targetHarnesses: null,
+        subPath: null,
       };
 
       const installResponse: InstallSkillResponse = {
@@ -293,6 +296,7 @@ describe("useSkillCatalog", () => {
         ref: null,
         localPath: "/path/to/local-skill",
         targetHarnesses: null,
+        subPath: null,
       };
 
       const installResponse: InstallSkillResponse = {
@@ -332,6 +336,7 @@ describe("useSkillCatalog", () => {
         ref: null,
         localPath: null,
         targetHarnesses: null,
+        subPath: null,
       };
 
       apiMock.POST.mockResolvedValue({
@@ -364,6 +369,7 @@ describe("useSkillCatalog", () => {
         ref: null,
         localPath: null,
         targetHarnesses: null,
+        subPath: null,
       };
 
       apiMock.POST.mockResolvedValue({
@@ -400,6 +406,7 @@ describe("useSkillCatalog", () => {
         ref: null,
         localPath: null,
         targetHarnesses: null,
+        subPath: null,
       };
 
       const installResponse: InstallSkillResponse = {
@@ -530,6 +537,7 @@ describe("useSkillCatalog", () => {
         ref: "main",
         localPath: null,
         targetHarnesses: null,
+        subPath: null,
       };
 
       apiMock.POST.mockResolvedValue({

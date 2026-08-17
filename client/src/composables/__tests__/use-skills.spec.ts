@@ -388,6 +388,7 @@ describe("useSkills", () => {
           ref: null,
           localPath: null,
           targetHarnesses: null,
+          subPath: null,
         },
       });
       expect(response).toEqual(installResponse);
@@ -431,6 +432,7 @@ describe("useSkills", () => {
           ref: null,
           localPath: "/path/to/local-skill",
           targetHarnesses: null,
+          subPath: null,
         },
       });
     });
