@@ -214,70 +214,59 @@ function formatTargetType(targetType: string | undefined): string {
         <!-- Content sections -->
         <div class="flex-1 space-y-6 p-6">
           <!-- Prompt section -->
-          <section>
+          <div class="rounded-lg border bg-card p-4">
             <h3 class="mb-2 text-sm font-medium text-muted-foreground">
               Prompt
             </h3>
             <p class="whitespace-pre-wrap text-sm">
               {{ currentAutomation.prompt }}
             </p>
-          </section>
+          </div>
 
-          <!-- Trigger section -->
-          <section>
-            <h3 class="mb-2 text-sm font-medium text-muted-foreground">
-              Trigger
+          <!-- When & Where section -->
+          <div class="rounded-lg border bg-card p-4">
+            <h3 class="mb-3 text-sm font-medium text-muted-foreground">
+              When & Where
             </h3>
-            <div class="space-y-2 text-sm">
+            <div class="space-y-3 text-sm">
               <div>
-                <span class="font-medium">Type:</span>
-                <span class="ml-2">{{ currentAutomation.triggerType }}</span>
+                <Badge>{{ currentAutomation.triggerType }}</Badge>
               </div>
               <div>
                 <span class="font-medium">Configuration:</span>
-                <pre class="mt-1 rounded bg-muted p-2 text-xs">{{ formatTriggerConfig(currentAutomation.triggerConfig) }}</pre>
+                <code class="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs font-mono">{{ formatTriggerConfig(currentAutomation.triggerConfig) }}</code>
+              </div>
+              <div>
+                <span class="text-muted-foreground">Target:</span>
+                <span class="ml-2">{{ formatTargetType(currentAutomation.targetType) }}</span>
               </div>
             </div>
-          </section>
-
-          <!-- Target section -->
-          <section>
-            <h3 class="mb-2 text-sm font-medium text-muted-foreground">
-              Target
-            </h3>
-            <div class="text-sm">
-              <span class="font-medium">Target:</span>
-              <span class="ml-2">{{ formatTargetType(currentAutomation.targetType) }}</span>
-            </div>
-          </section>
+          </div>
 
           <!-- Policy section -->
-          <section>
-            <h3 class="mb-2 text-sm font-medium text-muted-foreground">
+          <div class="rounded-lg border bg-card p-4">
+            <h3 class="mb-3 text-sm font-medium text-muted-foreground">
               Policy
             </h3>
-            <div class="space-y-1 text-sm">
+            <div class="grid grid-cols-3 gap-4">
               <div>
-                <span class="font-medium">Max concurrent runs:</span>
-                <span class="ml-2">{{ currentAutomation.maxConcurrentRuns ?? 'Unlimited' }}</span>
+                <div class="text-xs text-muted-foreground">Max concurrent runs</div>
+                <div class="text-sm font-medium">{{ currentAutomation.maxConcurrentRuns ?? 'Unlimited' }}</div>
               </div>
               <div>
-                <span class="font-medium">Max runs per hour:</span>
-                <span class="ml-2">{{ currentAutomation.maxRunsPerHour ?? 'Unlimited' }}</span>
+                <div class="text-xs text-muted-foreground">Max runs per hour</div>
+                <div class="text-sm font-medium">{{ currentAutomation.maxRunsPerHour ?? 'Unlimited' }}</div>
               </div>
               <div>
-                <span class="font-medium">Timeout:</span>
-                <span class="ml-2">{{ currentAutomation.timeoutMinutes ?? 'None' }} minutes</span>
+                <div class="text-xs text-muted-foreground">Timeout</div>
+                <div class="text-sm font-medium">{{ currentAutomation.timeoutMinutes ?? 'None' }} minutes</div>
               </div>
             </div>
-          </section>
+          </div>
 
-          <!-- Metadata section -->
-          <section>
-            <h3 class="mb-2 text-sm font-medium text-muted-foreground">
-              Metadata
-            </h3>
-            <div class="flex flex-wrap gap-2">
+          <!-- Metadata footer -->
+          <div class="pt-4 border-t">
+            <div class="flex flex-wrap gap-2 items-center">
               <Badge
                 v-if="currentAutomation.workspaceId"
                 variant="outline"
@@ -305,11 +294,11 @@ function formatTargetType(targetType: string | undefined): string {
                   Tag: {{ tag }}
                 </Badge>
               </template>
-              <Badge variant="outline">
-                Created: {{ new Date(currentAutomation.createdAt).toLocaleDateString() }}
-              </Badge>
+              <span class="text-xs text-muted-foreground">
+                Created {{ new Date(currentAutomation.createdAt).toLocaleDateString() }}
+              </span>
             </div>
-          </section>
+          </div>
         </div>
       </div>
     </div>

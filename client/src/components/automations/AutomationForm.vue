@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { AlertCircle, LoaderCircle } from "lucide-vue-next";
+import { AlertCircle, ChevronDown, LoaderCircle } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import type { Automation, CreateAutomationRequest } from "@/composables/use-automations";
 import { useAutomations } from "@/composables/use-automations";
 
@@ -42,6 +43,7 @@ const submitAttempted = shallowRef(false);
 const isLoadingEventCatalog = shallowRef(false);
 const eventCatalog = shallowRef<string[]>([]);
 const eventCatalogError = shallowRef<string | null>(null);
+const advancedOpen = shallowRef(false);
 
 const { fetchEventCatalog } = useAutomations();
 
@@ -405,83 +407,6 @@ watch(
       />
     </div>
 
-    <div class="grid grid-cols-3 gap-3">
-      <div class="space-y-2">
-        <label
-          for="automation-max-concurrent"
-          class="text-sm font-medium text-foreground"
-        >Max Concurrent</label>
-        <Input
-          id="automation-max-concurrent"
-          v-model.number="maxConcurrentRuns"
-          type="number"
-          min="1"
-        />
-      </div>
-
-      <div class="space-y-2">
-        <label
-          for="automation-max-per-hour"
-          class="text-sm font-medium text-foreground"
-        >Max Per Hour</label>
-        <Input
-          id="automation-max-per-hour"
-          v-model.number="maxRunsPerHour"
-          type="number"
-          min="1"
-        />
-      </div>
-
-      <div class="space-y-2">
-        <label
-          for="automation-timeout"
-          class="text-sm font-medium text-foreground"
-        >Timeout (min)</label>
-        <Input
-          id="automation-timeout"
-          v-model.number="timeoutMinutes"
-          type="number"
-          min="1"
-        />
-      </div>
-    </div>
-
-    <div class="space-y-2">
-      <label
-        for="automation-workspace"
-        class="text-sm font-medium text-foreground"
-      >Workspace ID <span class="font-normal text-muted-foreground">(optional)</span></label>
-      <Input
-        id="automation-workspace"
-        v-model="workspaceId"
-        placeholder="Workspace ID"
-      />
-    </div>
-
-    <div class="space-y-2">
-      <label
-        for="automation-model"
-        class="text-sm font-medium text-foreground"
-      >Model <span class="font-normal text-muted-foreground">(optional)</span></label>
-      <Input
-        id="automation-model"
-        v-model="model"
-        placeholder="Model name"
-      />
-    </div>
-
-    <div class="space-y-2">
-      <label
-        for="automation-agent"
-        class="text-sm font-medium text-foreground"
-      >Agent <span class="font-normal text-muted-foreground">(optional)</span></label>
-      <Input
-        id="automation-agent"
-        v-model="agent"
-        placeholder="Agent name"
-      />
-    </div>
-
     <div class="space-y-2">
       <label
         for="automation-target-type"
@@ -526,6 +451,92 @@ watch(
         Sessions must have at least one matching tag
       </p>
     </div>
+
+    <div class="grid grid-cols-3 gap-3">
+      <div class="space-y-2">
+        <label
+          for="automation-max-concurrent"
+          class="text-sm font-medium text-foreground"
+        >Max Concurrent</label>
+        <Input
+          id="automation-max-concurrent"
+          v-model.number="maxConcurrentRuns"
+          type="number"
+          min="1"
+        />
+      </div>
+
+      <div class="space-y-2">
+        <label
+          for="automation-max-per-hour"
+          class="text-sm font-medium text-foreground"
+        >Max Per Hour</label>
+        <Input
+          id="automation-max-per-hour"
+          v-model.number="maxRunsPerHour"
+          type="number"
+          min="1"
+        />
+      </div>
+
+      <div class="space-y-2">
+        <label
+          for="automation-timeout"
+          class="text-sm font-medium text-foreground"
+        >Timeout (min)</label>
+        <Input
+          id="automation-timeout"
+          v-model.number="timeoutMinutes"
+          type="number"
+          min="1"
+        />
+      </div>
+    </div>
+
+    <Collapsible v-model:open="advancedOpen" class="border-t pt-4 mt-2">
+      <CollapsibleTrigger class="flex w-full items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+        Advanced
+        <ChevronDown class="h-4 w-4 transition-transform" :class="{ 'rotate-180': advancedOpen }" />
+      </CollapsibleTrigger>
+      <CollapsibleContent class="space-y-5 pt-4">
+        <!-- workspace ID field -->
+        <div class="space-y-2">
+          <label
+            for="automation-workspace"
+            class="text-sm font-medium text-foreground"
+          >Workspace ID <span class="font-normal text-muted-foreground">(optional)</span></label>
+          <Input
+            id="automation-workspace"
+            v-model="workspaceId"
+            placeholder="Workspace ID"
+          />
+        </div>
+        <!-- model field -->
+        <div class="space-y-2">
+          <label
+            for="automation-model"
+            class="text-sm font-medium text-foreground"
+          >Model <span class="font-normal text-muted-foreground">(optional)</span></label>
+          <Input
+            id="automation-model"
+            v-model="model"
+            placeholder="Model name"
+          />
+        </div>
+        <!-- agent field -->
+        <div class="space-y-2">
+          <label
+            for="automation-agent"
+            class="text-sm font-medium text-foreground"
+          >Agent <span class="font-normal text-muted-foreground">(optional)</span></label>
+          <Input
+            id="automation-agent"
+            v-model="agent"
+            placeholder="Agent name"
+          />
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
 
     <div
       v-if="dialogError"
