@@ -210,8 +210,8 @@ public static class SessionEndpoints
                 return modelResolution.ErrorResult;
 
             var attachments = req.Attachments?.Select(a => new HarnessAttachment(a.Mime, a.Filename ?? "image.png", a.Data)).ToList();
-            var options = req.Agent is not null || req.Model is not null || attachments is { Count: > 0 }
-                ? new PromptOptions { Agent = req.Agent, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId, Attachments = attachments }
+            var options = req.Agent is not null || req.Model is not null || attachments is { Count: > 0 } || req.Effort is not null
+                ? new PromptOptions { Agent = req.Agent, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId, Attachments = attachments, Effort = req.Effort }
                 : null;
             var result = await orchestrator.PromptSessionWithReceiptAsync(id, req.Text, options, req.UserMessageId, req.CorrelationId, ct);
             return result.Match(r => Results.Ok(new SendPromptApiResponse(r.EventId, r.CorrelationId)), err => err.ToSessionApiResult());
@@ -485,7 +485,7 @@ public static class SessionEndpoints
                     var items = providers.Select(p => new InstanceProviderItem(
                         p.Id,
                         p.Name ?? p.Id,
-                        p.Models.Select(m => new InstanceModelItem(m.Id, m.Name ?? m.Id)).ToList())).ToList();
+                        p.Models.Select(m => new InstanceModelItem(m.Id, m.Name ?? m.Id, m.Variants)).ToList())).ToList();
                     return Results.Ok(items);
                 },
                 err => err.ToSessionApiResult());
@@ -892,7 +892,8 @@ internal sealed record SendPromptApiRequest(
     ModelRef? Model,
     ImageAttachmentDto[]? Attachments,
     string? UserMessageId,
-    string? CorrelationId);
+    string? CorrelationId,
+    string? Effort);
 
 internal sealed record SendPromptApiResponse(long? EventId, string CorrelationId);
 

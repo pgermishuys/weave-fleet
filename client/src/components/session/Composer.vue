@@ -5,6 +5,7 @@ import { Send, Paperclip, X, CircleX } from "lucide-vue-next";
 import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
 import AgentSelector from "@/components/session/AgentSelector.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
+import EffortToggle from "@/components/session/EffortToggle.vue";
 import { Button } from "@/components/ui/button";
 import { useAgents } from "@/composables/use-agents";
 import { useAbortSession } from "@/composables/use-session-actions";
@@ -39,8 +40,8 @@ const emit = defineEmits<{
 
 const { agents } = useAgents(props.sessionId);
 const { abortSession, isAborting } = useAbortSession();
-const { models, defaultModelKey } = useModels(props.sessionId);
-const { draft, setText, setAgentId, setModelId } = useDraftState(props.sessionId, {
+const { models, defaultModelKey, modelsByKey } = useModels(props.sessionId);
+const { draft, setText, setAgentId, setModelId, setEffort } = useDraftState(props.sessionId, {
   agentId: "",
   modelId: "",
 });
@@ -346,6 +347,23 @@ const selectedModelId = computed({
   set: (value: string) => {
     setModelId(value);
   },
+});
+
+const selectedEffort = computed({
+  get: () => draft.effort,
+  set: (value) => {
+    setEffort(value);
+  },
+});
+
+const selectedModelVariants = computed(() => {
+  const modelId = selectedModelId.value || defaultModelKey.value || "";
+  const model = modelsByKey.value[modelId];
+  return model?.variants ?? [];
+});
+
+const supportsReasoning = computed(() => {
+  return selectedModelVariants.value.length > 0;
 });
 
 function clearStatusIndicatorTimer(): void {
@@ -702,6 +720,11 @@ function handleKeydown(event: KeyboardEvent): void {
         <ModelSelector
           v-model="selectedModelId"
           :models="models"
+        />
+        <EffortToggle
+          v-if="supportsReasoning"
+          v-model="selectedEffort"
+          :variants="selectedModelVariants"
         />
         <Button
           variant="toolbar-icon-danger"

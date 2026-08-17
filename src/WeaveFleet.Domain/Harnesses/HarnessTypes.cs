@@ -157,6 +157,7 @@ public sealed record PromptOptions
     public string? ProviderId { get; init; }
     public string? ModelId { get; init; }
     public IReadOnlyList<HarnessAttachment>? Attachments { get; init; }
+    public string? Effort { get; init; }
     public string? MessageId { get; init; }
 }
 
@@ -231,4 +232,5 @@ public sealed record ModelInfo
 {
     public required string Id { get; init; }
     public string? Name { get; init; }
+    public IReadOnlyList<string>? Variants { get; init; }
 }

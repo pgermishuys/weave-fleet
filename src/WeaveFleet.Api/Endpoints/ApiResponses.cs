@@ -121,7 +121,7 @@ public sealed record InstanceProviderItem(
     string Name,
     IReadOnlyList<InstanceModelItem> Models);
 
-public sealed record InstanceModelItem(string Id, string Name);
+public sealed record InstanceModelItem(string Id, string Name, IReadOnlyList<string>? Variants = null);
 
 public sealed record InstanceCommandsResponse(
     string InstanceId,

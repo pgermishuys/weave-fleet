@@ -2,22 +2,36 @@
 import { computed } from "vue";
 import type { EffortLevel } from "@/composables/use-draft-state";
 
+interface Props {
+  variants?: readonly string[];
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  variants: undefined,
+});
+
 const selectedEffort = defineModel<EffortLevel>({ required: true });
 
-const effortOrder: readonly EffortLevel[] = ["low", "medium", "high"];
-const effortLabels: Record<EffortLevel, string> = {
+const defaultVariants: readonly string[] = ["low", "medium", "high"];
+const effortOrder = computed(() => props.variants ?? defaultVariants);
+
+const defaultLabels: Record<string, string> = {
   low: "Low",
   medium: "Medium",
   high: "High",
 };
 
-const filledDots = computed(() => effortOrder.indexOf(selectedEffort.value) + 1);
-const effortLabel = computed(() => effortLabels[selectedEffort.value]);
+function capitalize(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+const filledDots = computed(() => effortOrder.value.indexOf(selectedEffort.value) + 1);
+const effortLabel = computed(() => defaultLabels[selectedEffort.value] ?? capitalize(selectedEffort.value));
 
 function cycleEffort(): void {
-  const currentIndex = effortOrder.indexOf(selectedEffort.value);
-  const nextIndex = (currentIndex + 1) % effortOrder.length;
-  selectedEffort.value = effortOrder[nextIndex] ?? "medium";
+  const currentIndex = effortOrder.value.indexOf(selectedEffort.value);
+  const nextIndex = (currentIndex + 1) % effortOrder.value.length;
+  selectedEffort.value = effortOrder.value[nextIndex] ?? effortOrder.value[0] ?? "medium";
 }
 </script>
 
@@ -34,7 +48,7 @@ function cycleEffort(): void {
       aria-hidden="true"
     >
       <span
-        v-for="dotIndex in 3"
+        v-for="dotIndex in effortOrder.length"
         :key="dotIndex"
         class="effort-dot"
         :class="{ filled: dotIndex <= filledDots }"

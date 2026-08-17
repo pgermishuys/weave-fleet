@@ -1,6 +1,6 @@
 import { reactive } from "vue";
 
-export type EffortLevel = "low" | "medium" | "high";
+export type EffortLevel = string;
 
 export interface DraftState {
   text: string;

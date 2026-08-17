@@ -11,6 +11,7 @@ export interface ModelOption {
   selectionKey: string;
   provider: string;
   description: string;
+  variants?: readonly string[];
 }
 
 export function createModelSelectionKey(providerId: string, modelId: string): string {
@@ -26,6 +27,7 @@ function toModelOptions(providers: readonly AvailableProvider[]): ModelOption[] 
       selectionKey: createModelSelectionKey(provider.id, model.id),
       provider: provider.name,
       description: "",
+      variants: model.variants,
     }));
   });
 }

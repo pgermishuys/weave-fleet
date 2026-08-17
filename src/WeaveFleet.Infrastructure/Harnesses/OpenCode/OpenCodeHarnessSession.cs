@@ -216,6 +216,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             Agent = options?.Agent,
             Model = modelRef,
             MessageId = options?.MessageId,
+            Variant = options?.Effort,
         };
 
         LogSendPrompt(_logger, InstanceId, null);
@@ -738,6 +739,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 {
                     Id = m.Id,
                     Name = m.Name,
+                    Variants = m.Variants?.Select(v => v.Id).ToList(),
                 }).ToList(),
             }).ToList();
     }

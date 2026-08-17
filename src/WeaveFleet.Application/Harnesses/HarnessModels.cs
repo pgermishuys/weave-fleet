@@ -69,7 +69,7 @@ public sealed record HarnessAgent(string Name, string? Description, string? Mode
 public sealed record HarnessProvider(string Id, string Name, IReadOnlyList<HarnessModel> Models);
 
 /// <summary>An AI model within a provider.</summary>
-public sealed record HarnessModel(string Id, string Name);
+public sealed record HarnessModel(string Id, string Name, IReadOnlyList<string>? Variants = null);
 
 // ── Runtime preparation ─────────────────────────────────────────────────────
 

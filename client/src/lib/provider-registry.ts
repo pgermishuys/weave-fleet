@@ -9,6 +9,7 @@
 export interface ProviderModelInfo {
   id: string;       // e.g. "claude-sonnet-4-5"
   name: string;     // e.g. "Claude Sonnet 4.5"
+  variants?: string[];
 }
 
 export interface BundledProvider {

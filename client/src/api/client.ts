@@ -221,6 +221,7 @@ export interface AutocompleteAgent {
 export interface AvailableModel {
   id: string;
   name: string;
+  variants?: string[];
 }
 
 export interface AvailableProvider {

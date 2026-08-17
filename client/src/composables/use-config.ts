@@ -15,6 +15,7 @@ export interface WeaveConfig {
 export interface ProviderModelInfo {
   id: string;
   name: string;
+  variants?: string[];
 }
 
 export interface ProviderStatus {
