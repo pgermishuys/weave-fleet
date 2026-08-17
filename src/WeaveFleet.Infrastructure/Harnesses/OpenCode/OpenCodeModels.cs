@@ -570,13 +570,14 @@ internal sealed record OpenCodeProviderModel
     [JsonPropertyName("id")] public required string Id { get; init; }
     [JsonPropertyName("name")] public string? Name { get; init; }
     [JsonPropertyName("capabilities")] public JsonElement? Capabilities { get; init; }
-    [JsonPropertyName("variants")] public IReadOnlyList<OpenCodeModelVariant> Variants { get; init; } = [];
+    [JsonPropertyName("variants")] public IReadOnlyDictionary<string, OpenCodeModelVariant>? Variants { get; init; }
 }
 
-/// <summary>A model variant within a provider model.</summary>
+/// <summary>A model variant within a provider model, keyed by variant ID in the parent dictionary.</summary>
 internal sealed record OpenCodeModelVariant
 {
-    [JsonPropertyName("id")] public required string Id { get; init; }
+    [JsonPropertyName("headers")] public IReadOnlyDictionary<string, string>? Headers { get; init; }
+    [JsonPropertyName("body")] public IReadOnlyDictionary<string, JsonElement>? Body { get; init; }
 }
 
 /// <summary>Full providers response from GET /provider.</summary>

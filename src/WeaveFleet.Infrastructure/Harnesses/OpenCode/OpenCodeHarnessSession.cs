@@ -739,7 +739,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 {
                     Id = m.Id,
                     Name = m.Name,
-                    Variants = m.Variants?.Select(v => v.Id).ToList(),
+                    Variants = m.Variants?.Keys.ToList(),
                 }).ToList(),
             }).ToList();
     }
