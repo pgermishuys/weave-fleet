@@ -209,8 +209,15 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(RenameWorkspaceRequest))]
 // User
 [JsonSerializable(typeof(UserMeResponse))]
-// Skills (request)
+// Skills
 [JsonSerializable(typeof(InstallSkillRequest))]
+[JsonSerializable(typeof(InstallSkillResponse))]
+[JsonSerializable(typeof(SkillListResponse))]
+[JsonSerializable(typeof(SkillCatalogResponse))]
+[JsonSerializable(typeof(CatalogEntryDto))]
+[JsonSerializable(typeof(CatalogEntryDto[]))]
+[JsonSerializable(typeof(SkillSyncResultDto))]
+[JsonSerializable(typeof(SkillSyncResultDto[]))]
 // Auth
 [JsonSerializable(typeof(AuthStatusResponse))]
 [JsonSerializable(typeof(TokenLoginRequest))]
