@@ -45,23 +45,34 @@ public sealed partial class GitHubSkillFetcher(ILogger<GitHubSkillFetcher> logge
         {
             if (Directory.Exists(localPath) && Directory.Exists(Path.Combine(localPath, ".git")))
             {
-                // Repository exists, update it
-                LogUpdatingRepository(localPath);
-                var updateResult = await UpdateRepositoryAsync(localPath, gitRef, subPath, cancellationToken).ConfigureAwait(false);
-                if (!updateResult.IsSuccess)
+                // When subPath is specified, we cannot do an in-place update because the
+                // existing directory contains a full git repo structure. The update path
+                // would leave the full repo structure with subPath nested inside.
+                // Instead, delete and re-clone to extract only the subPath contents.
+                if (!string.IsNullOrWhiteSpace(subPath))
                 {
-                    return updateResult.Error;
+                    Directory.Delete(localPath, recursive: true);
+                }
+                else
+                {
+                    // Repository exists, update it
+                    LogUpdatingRepository(localPath);
+                    var updateResult = await UpdateRepositoryAsync(localPath, gitRef, subPath, cancellationToken).ConfigureAwait(false);
+                    if (!updateResult.IsSuccess)
+                    {
+                        return updateResult.Error;
+                    }
+
+                    return Result.Success(localPath);
                 }
             }
-            else
+
+            // Clone new repository (or re-clone after deleting for subPath case)
+            LogCloningRepository(repoUrl, localPath);
+            var cloneResult = await CloneRepositoryAsync(repoUrl, localPath, gitRef, subPath, cancellationToken).ConfigureAwait(false);
+            if (!cloneResult.IsSuccess)
             {
-                // Clone new repository
-                LogCloningRepository(repoUrl, localPath);
-                var cloneResult = await CloneRepositoryAsync(repoUrl, localPath, gitRef, subPath, cancellationToken).ConfigureAwait(false);
-                if (!cloneResult.IsSuccess)
-                {
-                    return cloneResult.Error;
-                }
+                return cloneResult.Error;
             }
 
             return Result.Success(localPath);
