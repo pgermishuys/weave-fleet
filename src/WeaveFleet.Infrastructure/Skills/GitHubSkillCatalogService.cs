@@ -13,7 +13,7 @@ namespace WeaveFleet.Infrastructure.Skills;
 /// </summary>
 public sealed partial class GitHubSkillCatalogService : ISkillCatalogService
 {
-    private const string DefaultCatalogUrl = "https://raw.githubusercontent.com/weave-fleet/skill-catalog/main/catalog.json";
+    private const string DefaultCatalogUrl = "https://raw.githubusercontent.com/pgermishuys/weave-fleet/main/catalog/catalog.json";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(1);
 
     private readonly IHttpClientFactory _httpClientFactory;
@@ -207,6 +207,7 @@ public sealed partial class GitHubSkillCatalogService : ISkillCatalogService
             Source = source,
             RepoUrl = skillObject["repoUrl"]?.GetValue<string>()?.Trim(),
             Ref = skillObject["ref"]?.GetValue<string>()?.Trim(),
+            SubPath = skillObject["subPath"]?.GetValue<string>()?.Trim(),
             LocalPath = skillObject["localPath"]?.GetValue<string>()?.Trim(),
             TargetHarnesses = ParseStringArray(skillObject["targetHarnesses"]),
             Author = skillObject["author"]?.GetValue<string>()?.Trim(),

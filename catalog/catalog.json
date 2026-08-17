@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "skills": [
+    {
+      "name": "fleet-api",
+      "displayName": "Fleet API",
+      "description": "Weave Fleet API for managing Fleet sessions, automations, GitHub integration, and session sources. Use when an agent needs to create, query, or control Weave Fleet sessions, manage automations, or interact with GitHub repositories through the Fleet API.",
+      "source": "GitHub",
+      "repoUrl": "https://github.com/pgermishuys/weave-fleet",
+      "ref": "main",
+      "subPath": "opencode/skills/fleet-api",
+      "targetHarnesses": ["opencode"],
+      "author": "pgermishuys",
+      "version": "1.0.0",
+      "tags": ["fleet", "api", "sessions", "automations", "github"]
+    }
+  ]
+}

@@ -43,6 +43,7 @@ async function handleInstall(skillName: string): Promise<void> {
       source: mapSourceToNumber(catalogEntry.source),
       repoUrl: catalogEntry.repoUrl ?? null,
       ref: catalogEntry.ref ?? null,
+      subPath: catalogEntry.subPath ?? catalogEntry.localPath ?? null,
       localPath: catalogEntry.localPath ?? null,
       targetHarnesses: [...catalogEntry.targetHarnesses],
     };

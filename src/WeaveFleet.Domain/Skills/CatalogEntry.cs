@@ -23,6 +23,9 @@ public sealed record CatalogEntry
     /// <summary>Default Git ref or branch (optional, defaults to main/master when Source is GitHub).</summary>
     public string? Ref { get; init; }
 
+    /// <summary>Subdirectory within the repository (optional, GitHub only).</summary>
+    public string? SubPath { get; init; }
+
     /// <summary>Local filesystem path (required when Source is Local).</summary>
     public string? LocalPath { get; init; }
 

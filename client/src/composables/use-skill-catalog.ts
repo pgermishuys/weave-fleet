@@ -31,6 +31,7 @@ export interface CatalogEntry {
   source: "GitHub" | "Local" | "Bundled";
   repoUrl?: string | null;
   ref?: string | null;
+  subPath?: string | null;
   localPath?: string | null;
   targetHarnesses: readonly string[];
   author?: string | null;
