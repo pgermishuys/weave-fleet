@@ -1,3 +1,4 @@
+& {
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -299,4 +300,5 @@ finally {
     if (Test-Path $workDir) {
         Remove-Item -Recurse -Force -Path $workDir
     }
+}
 }
