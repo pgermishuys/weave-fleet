@@ -79,6 +79,7 @@ export function useSkillCatalog(): UseSkillCatalogResult {
         source: mapSkillSource(entry.source),
         repoUrl: entry.repoUrl,
         ref: entry.ref,
+        subPath: entry.subPath,
         localPath: entry.localPath,
         targetHarnesses: entry.targetHarnesses as readonly string[],
         author: entry.author,
