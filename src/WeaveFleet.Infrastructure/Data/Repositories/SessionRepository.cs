@@ -1,6 +1,5 @@
 using System.Data;
 using System.Data.Common;
-using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using WeaveFleet.Application.Data;
@@ -662,13 +661,11 @@ public sealed class SessionRepository(
         };
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "List<string> is a simple type safe for JSON serialization")]
     private static string SerializeTags(List<string> tags)
     {
-        return JsonSerializer.Serialize(tags);
+        return JsonSerializer.Serialize(tags, InfrastructureJsonContext.Default.ListString);
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "List<string> is a simple type safe for JSON deserialization")]
     private static List<string> DeserializeTags(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
@@ -678,7 +675,7 @@ public sealed class SessionRepository(
 
         try
         {
-            return JsonSerializer.Deserialize<List<string>>(json) ?? [];
+            return JsonSerializer.Deserialize(json, InfrastructureJsonContext.Default.ListString) ?? [];
         }
         catch (JsonException)
         {

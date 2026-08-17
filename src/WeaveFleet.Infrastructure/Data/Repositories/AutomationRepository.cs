@@ -1,5 +1,4 @@
 using System.Data.Common;
-using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
@@ -230,7 +229,6 @@ public sealed class AutomationRepository : IAutomationRepository
         };
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "List<string> is a simple type safe for JSON serialization")]
     private static string? SerializeTargetTags(List<string> targetTags)
     {
         if (targetTags.Count == 0)
@@ -238,10 +236,9 @@ public sealed class AutomationRepository : IAutomationRepository
             return null;
         }
 
-        return JsonSerializer.Serialize(targetTags);
+        return JsonSerializer.Serialize(targetTags, InfrastructureJsonContext.Default.ListString);
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "List<string> is a simple type safe for JSON deserialization")]
     private static List<string> DeserializeTargetTags(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
@@ -251,7 +248,7 @@ public sealed class AutomationRepository : IAutomationRepository
 
         try
         {
-            return JsonSerializer.Deserialize<List<string>>(json) ?? [];
+            return JsonSerializer.Deserialize(json, InfrastructureJsonContext.Default.ListString) ?? [];
         }
         catch (JsonException)
         {
