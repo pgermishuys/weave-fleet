@@ -23,6 +23,7 @@ interface Props {
   retryAttempt?: number | null;
   retryMessage?: string | null;
   retryNext?: string | null;
+  directory?: string | null;
   tags?: readonly string[];
   sessionStateChanged?: (patch: {
     activityStatus?: string | null;
@@ -261,6 +262,14 @@ onUnmounted(() => {
           </span>
         </div>
 
+        <div
+          v-if="props.directory"
+          class="session-detail-header__directory"
+          :title="props.directory"
+        >
+          {{ props.directory }}
+        </div>
+
         <div class="session-detail-header__tags-row">
           <Badge
             v-for="tag in props.tags"
@@ -435,6 +444,16 @@ onUnmounted(() => {
   flex-shrink: 0;
   font-size: 0.78rem;
   color: var(--muted-foreground, var(--muted));
+}
+
+.session-detail-header__directory {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  color: var(--muted-foreground, var(--muted));
+  opacity: 0.7;
 }
 
 .session-detail-header__tags-row {
