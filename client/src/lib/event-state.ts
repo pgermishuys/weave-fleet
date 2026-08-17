@@ -163,7 +163,7 @@ function mapCommittedSnapshotPart(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   part: Record<string, any>,
   index: number,
-): AccumulatedTextPart | AccumulatedFilePart | null {
+): AccumulatedTextPart | AccumulatedFilePart | AccumulatedToolPart | AccumulatedReasoningPart | null {
   if (part.type === "text") {
     return {
       partId: typeof part.id === "string" ? part.id : `${messageId}-text-${index}`,
@@ -182,15 +182,36 @@ function mapCommittedSnapshotPart(
     };
   }
 
+  if (part.type === "reasoning") {
+    return {
+      partId: typeof part.id === "string" ? part.id : `${messageId}-reasoning-${index}`,
+      type: "reasoning",
+      text: typeof part.text === "string" ? part.text : "",
+      summary: typeof part.summary === "string" ? part.summary : undefined,
+    };
+  }
+
+  if (part.type === "tool") {
+    return {
+      partId: typeof part.id === "string" ? part.id : `${messageId}-tool-${index}`,
+      type: "tool",
+      tool: typeof part.tool === "string" ? part.tool : "",
+      callId: typeof part.callID === "string" ? part.callID : "",
+      state: part.state,
+    };
+  }
+
   return null;
 }
 
 function mergeCommittedSnapshotParts(
   existingParts: AccumulatedMessage["parts"],
-  snapshotParts: Array<AccumulatedTextPart | AccumulatedFilePart>,
+  snapshotParts: Array<AccumulatedTextPart | AccumulatedFilePart | AccumulatedToolPart | AccumulatedReasoningPart>,
 ): AccumulatedMessage["parts"] {
   const snapshotTextParts = snapshotParts.filter((p): p is AccumulatedTextPart => p.type === "text");
   const snapshotFileParts = snapshotParts.filter((p): p is AccumulatedFilePart => p.type === "file");
+  const snapshotReasoningParts = snapshotParts.filter((p): p is AccumulatedReasoningPart => p.type === "reasoning");
+  const snapshotToolParts = snapshotParts.filter((p): p is AccumulatedToolPart => p.type === "tool");
 
   const existingTextByPartId = new Map(
     existingParts
@@ -213,11 +234,25 @@ function mergeCommittedSnapshotParts(
   );
   const mergedFiles = [...snapshotFileParts, ...existingFileParts];
 
+  // Merge reasoning parts: snapshot wins for matching IDs, preserve existing ones not in snapshot
+  const snapshotReasoningPartIds = new Set(snapshotReasoningParts.map((p) => p.partId));
+  const existingReasoningParts = existingParts.filter(
+    (p): p is AccumulatedReasoningPart => p.type === "reasoning" && !snapshotReasoningPartIds.has(p.partId),
+  );
+  const mergedReasoning = [...snapshotReasoningParts, ...existingReasoningParts];
+
+  // Merge tool parts: snapshot wins for matching IDs, preserve existing ones not in snapshot
+  const snapshotToolPartIds = new Set(snapshotToolParts.map((p) => p.partId));
+  const existingToolParts = existingParts.filter(
+    (p): p is AccumulatedToolPart => p.type === "tool" && !snapshotToolPartIds.has(p.partId),
+  );
+  const mergedTools = [...snapshotToolParts, ...existingToolParts];
+
   const otherParts = existingParts.filter(
-    (part) => part.type !== "text" && part.type !== "reasoning" && part.type !== "file",
+    (part) => part.type !== "text" && part.type !== "reasoning" && part.type !== "file" && part.type !== "tool",
   );
 
-  return [...mergedText, ...mergedFiles, ...otherParts];
+  return [...mergedText, ...mergedFiles, ...mergedReasoning, ...mergedTools, ...otherParts];
 }
 
 export function applyPartUpdate(
