@@ -24,7 +24,7 @@ const textHtml = computed(() => markdownRenderer.render(props.text));
 </script>
 
 <template>
-  <article class="reasoning-row" data-testid="reasoning-block">
+  <article v-if="text.trim() || summary?.trim()" class="reasoning-row" data-testid="reasoning-block">
     <div class="reasoning-row__layout">
       <div class="reasoning-row__icon">
         <Brain class="reasoning-row__icon-svg" aria-hidden="true" />

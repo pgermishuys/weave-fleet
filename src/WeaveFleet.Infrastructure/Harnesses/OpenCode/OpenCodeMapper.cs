@@ -80,7 +80,7 @@ internal static class OpenCodeMapper
                     },
                     State: toolState);
 
-            case OpenCodeReasoningPart reasoning when reasoning.Text is not null:
+            case OpenCodeReasoningPart reasoning when !string.IsNullOrWhiteSpace(reasoning.Text):
                 return new ReasoningPart(reasoning.Text, reasoning.Summary);
 
             case OpenCodeFilePart filePart when !string.IsNullOrWhiteSpace(filePart.Url):
