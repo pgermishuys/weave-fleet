@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Settings } from "lucide-vue-next";
+import { Brain } from "lucide-vue-next";
 
 defineProps<{
   text: string;
@@ -9,7 +9,7 @@ defineProps<{
 
 <template>
   <div class="reasoning-block" data-testid="reasoning-block">
-    <Settings class="reasoning-block__icon" aria-hidden="true" />
+    <Brain class="reasoning-block__icon" aria-hidden="true" />
     <p class="reasoning-block__text">{{ text }}</p>
   </div>
 </template>
