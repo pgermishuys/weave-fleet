@@ -51,7 +51,7 @@ public sealed partial class GitHubSkillFetcher(ILogger<GitHubSkillFetcher> logge
                 // Instead, delete and re-clone to extract only the subPath contents.
                 if (!string.IsNullOrWhiteSpace(subPath))
                 {
-                    Directory.Delete(localPath, recursive: true);
+                    ForceDeleteDirectory(localPath);
                 }
                 else
                 {
@@ -186,7 +186,7 @@ public sealed partial class GitHubSkillFetcher(ILogger<GitHubSkillFetcher> logge
             // Clean up if exists from a previous failed attempt
             if (Directory.Exists(tempClonePath))
             {
-                Directory.Delete(tempClonePath, recursive: true);
+                ForceDeleteDirectory(tempClonePath);
             }
 
             // Clone with no checkout
@@ -241,7 +241,7 @@ public sealed partial class GitHubSkillFetcher(ILogger<GitHubSkillFetcher> logge
             // Ensure target directory exists and move contents
             if (Directory.Exists(localPath))
             {
-                Directory.Delete(localPath, recursive: true);
+                ForceDeleteDirectory(localPath);
             }
 
             Directory.Move(subDirPath, localPath);
@@ -446,6 +446,29 @@ public sealed partial class GitHubSkillFetcher(ILogger<GitHubSkillFetcher> logge
     }
 
     // ── Logging ────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Recursively deletes a directory after clearing read-only attributes on all files.
+    /// Git repositories contain read-only pack/object files that <see cref="Directory.Delete"/>
+    /// cannot remove on Windows without first clearing the attribute.
+    /// </summary>
+    private static void ForceDeleteDirectory(string path)
+    {
+        var directory = new DirectoryInfo(path);
+        if (!directory.Exists)
+        {
+            return;
+        }
+
+        foreach (var file in directory.GetFiles("*", SearchOption.AllDirectories))
+        {
+            file.Attributes = FileAttributes.Normal;
+        }
+
+        directory.Delete(recursive: true);
+    }
+
+    // ── Log Messages ──────────────────────────────────────────────────────────
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Updating existing skill repository at {LocalPath}")]
     private partial void LogUpdatingRepository(string localPath);
