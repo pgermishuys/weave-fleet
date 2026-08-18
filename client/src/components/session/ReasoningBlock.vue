@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { Brain } from "lucide-vue-next";
 import { useTimeAgo } from "@vueuse/core";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { createMarkdownRenderer } from "@/lib/markdown-renderer";
 
 const props = defineProps<{
   text: string;
@@ -10,11 +11,16 @@ const props = defineProps<{
   createdAt?: number;
 }>();
 
+const markdownRenderer = createMarkdownRenderer();
+
 const relativeTime = useTimeAgo(() => props.createdAt ? new Date(props.createdAt) : new Date());
 const absoluteTime = computed(() => {
   if (!props.createdAt) return "";
   return new Date(props.createdAt).toLocaleString();
 });
+
+const summaryHtml = computed(() => props.summary ? markdownRenderer.renderInline(props.summary) : "");
+const textHtml = computed(() => markdownRenderer.render(props.text));
 </script>
 
 <template>
@@ -25,11 +31,14 @@ const absoluteTime = computed(() => {
       </div>
 
       <div class="reasoning-row__content">
-        <p
+        <!-- eslint-disable-next-line vue/no-v-html -->
+        <span
           v-if="summary"
           class="reasoning-row__summary"
-        >{{ summary }}</p>
-        <p class="reasoning-row__text">{{ text }}</p>
+          v-html="summaryHtml"
+        />
+        <!-- eslint-disable-next-line vue/no-v-html -->
+        <div class="reasoning-row__text md-content" v-html="textHtml" />
       </div>
 
       <TooltipProvider v-if="createdAt">
