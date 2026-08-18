@@ -91,6 +91,31 @@ function Write-Log {
     Write-Host $Message
 }
 
+function Get-Sha256Hash {
+    param(
+        [string] $Path
+    )
+
+    if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) {
+        return (Get-FileHash -Algorithm SHA256 -Path $Path).Hash
+    }
+
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        try {
+            $hashBytes = $sha256.ComputeHash($stream)
+            return [BitConverter]::ToString($hashBytes) -replace '-', ''
+        }
+        finally {
+            $stream.Dispose()
+        }
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+
 if (-not (Test-Path -LiteralPath $PublishDir -PathType Container)) {
     throw "Publish directory does not exist: $PublishDir"
 }
@@ -169,7 +194,7 @@ try {
         }
     }
 
-    $hash = (Get-FileHash -Algorithm SHA256 -Path $archivePath).Hash.ToLowerInvariant()
+    $hash = (Get-Sha256Hash -Path $archivePath).ToLowerInvariant()
     Set-Content -Path $checksumPath -Value "$hash  $archiveName" -NoNewline
 
     Write-Log "Created $archivePath"

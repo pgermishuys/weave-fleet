@@ -21,6 +21,8 @@ set "APP_BIN="
 set "APP_CONTENT_ROOT="
 set "INSTALL_LAYOUT=0"
 
+call :detect_powershell
+
 if exist "%PACKAGE_BIN%" (
     set "APP_DIR=%PACKAGE_APP_DIR%"
     set "APP_BIN=%PACKAGE_BIN%"
@@ -43,6 +45,15 @@ if "%INSTALL_LAYOUT%"=="1" call :apply_staged_update
 
 goto :parse_args
 
+:detect_powershell
+where pwsh >nul 2>&1
+if %ERRORLEVEL%==0 (
+    set "PS_CMD=pwsh"
+) else (
+    set "PS_CMD=powershell"
+)
+goto :eof
+
 :apply_staged_update
 set "UPDATE_DIR=%ROOT_DIR%\update"
 set "MANIFEST=%UPDATE_DIR%\update-manifest.json"
@@ -50,7 +61,7 @@ if not exist "%MANIFEST%" goto :eof
 
 echo Checking for staged Fleet update...
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+%PS_CMD% -NoProfile -ExecutionPolicy Bypass -Command ^
   "$m = Get-Content '%MANIFEST%' | ConvertFrom-Json;" ^
   "$v = $m.version; $a = $m.assetFileName;" ^
   "if (-not $v -or -not $a) { exit 1 };" ^

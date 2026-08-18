@@ -35,6 +35,31 @@ function Get-NormalizedTag {
     return "v$Version"
 }
 
+function Get-Sha256Hash {
+    param(
+        [string] $Path
+    )
+
+    if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) {
+        return (Get-FileHash -Algorithm SHA256 -Path $Path).Hash
+    }
+
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        try {
+            $hashBytes = $sha256.ComputeHash($stream)
+            return [BitConverter]::ToString($hashBytes) -replace '-', ''
+        }
+        finally {
+            $stream.Dispose()
+        }
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+
 function Get-ReleaseTag {
     if ($env:WEAVE_FLEET_VERSION) {
         return Get-NormalizedTag -Version $env:WEAVE_FLEET_VERSION
@@ -266,7 +291,7 @@ try {
     }
 
     $expectedHash = (Get-ExpectedHash -DownloadBaseUrl $downloadBaseUrl -AssetName $assetName -WorkDir $workDir).ToLowerInvariant()
-    $actualHash = (Get-FileHash -Algorithm SHA256 -Path $archivePath).Hash.ToLowerInvariant()
+    $actualHash = (Get-Sha256Hash -Path $archivePath).ToLowerInvariant()
     if ($expectedHash -ne $actualHash) {
         throw "Checksum verification failed for $assetName."
     }
