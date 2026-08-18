@@ -1433,6 +1433,87 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         }
     }
 
+    // ── File Browser ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task browse_and_read_file_work_consistently()
+    {
+        // Arrange: create a session with a file in a subdirectory
+        using var tempDirectory = new TempDirectory();
+        var subDir = Path.Combine(tempDirectory.Path, ".weave");
+        Directory.CreateDirectory(subDir);
+        var filePath = Path.Combine(subDir, "weave.log");
+        await File.WriteAllTextAsync(filePath, "test content");
+
+        ConfigureHarnessAndScratchProject();
+
+        var createResult = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            Title = "File Browser Test"
+        });
+        createResult.IsSuccess.ShouldBeTrue();
+        var sessionId = createResult.Value.Session.Id;
+
+        // Act: browse the subdirectory
+        var browseResult = await _sut.BrowseSessionDirectoryAsync(sessionId, ".weave");
+        browseResult.IsSuccess.ShouldBeTrue();
+        browseResult.Value.Entries.ShouldContain(e => e.Name == "weave.log");
+
+        // Act: read the file using forward slash (as API would send)
+        var readResult = await _sut.ReadSessionFileAsync(sessionId, ".weave/weave.log");
+
+        // Assert: both operations should succeed
+        readResult.IsSuccess.ShouldBeTrue();
+        readResult.Value.Content.ShouldBe("test content");
+    }
+
+    [Fact]
+    public async Task read_file_returns_404_when_path_is_null()
+    {
+        // Arrange
+        using var tempDirectory = new TempDirectory();
+        ConfigureHarnessAndScratchProject();
+
+        var createResult = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            Title = "File Browser Test"
+        });
+        createResult.IsSuccess.ShouldBeTrue();
+        var sessionId = createResult.Value.Session.Id;
+
+        // Act: read with null path
+        var readResult = await _sut.ReadSessionFileAsync(sessionId, null);
+
+        // Assert: should return validation error
+        readResult.IsFailure.ShouldBeTrue();
+        readResult.Error.Code.ShouldStartWith("Validation.");
+    }
+
+    [Fact]
+    public async Task read_file_returns_404_when_path_is_empty()
+    {
+        // Arrange
+        using var tempDirectory = new TempDirectory();
+        ConfigureHarnessAndScratchProject();
+
+        var createResult = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            Title = "File Browser Test"
+        });
+        createResult.IsSuccess.ShouldBeTrue();
+        var sessionId = createResult.Value.Session.Id;
+
+        // Act: read with empty path
+        var readResult = await _sut.ReadSessionFileAsync(sessionId, string.Empty);
+
+        // Assert: should return validation error
+        readResult.IsFailure.ShouldBeTrue();
+        readResult.Error.Code.ShouldStartWith("Validation.");
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         public TempDirectory()

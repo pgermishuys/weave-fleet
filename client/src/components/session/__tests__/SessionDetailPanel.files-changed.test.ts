@@ -9,7 +9,7 @@ import { SessionDiffsContextKey } from "@/composables/use-session-diffs-context"
 
 const routerNavigateMock = vi.fn();
 
-const { apiFetchMock, diffState } = vi.hoisted(() => ({
+const { apiFetchMock, diffState, mockTodos } = vi.hoisted(() => ({
   apiFetchMock: vi.fn(),
   diffState: {
     diffs: null as unknown as Ref<FileDiffItem[]>,
@@ -18,6 +18,7 @@ const { apiFetchMock, diffState } = vi.hoisted(() => ({
     error: null as unknown as ShallowRef<string | undefined>,
     fetchDiffs: vi.fn(),
   },
+  mockTodos: { value: [] as any[] },
 }));
 
 vi.mock("@tanstack/vue-router", () => ({
@@ -32,43 +33,9 @@ vi.mock("@/composables/use-session-todos", async () => {
   const { computed: vueComputed } = await import("vue");
 
   return {
-    useSessionTodos: () => ({ todos: vueComputed(() => []) }),
+    useSessionTodos: () => ({ todos: vueComputed(() => mockTodos.value) }),
   };
 });
-
-const FilesChangedStub = {
-  name: "FilesChangedStub",
-  props: {
-    files: {
-      type: Array,
-      default: () => [],
-    },
-    isLoading: {
-      type: Boolean,
-      default: false,
-    },
-    error: {
-      type: String,
-      default: null,
-    },
-    unavailable: {
-      type: Boolean,
-      default: false,
-    },
-  },
-  emits: ["click"],
-  template: `
-    <button
-      type="button"
-      class="files-changed__badge"
-      aria-expanded="false"
-      :disabled="isLoading"
-      @click="$emit('click', { open: true, fileCount: files.length, additions: 0, deletions: 0 })"
-    >
-      {{ files.length }} files changed
-    </button>
-  `,
-};
 
 import SessionDetailPanel from "@/components/session/SessionDetailPanel.vue";
 
@@ -181,7 +148,6 @@ function createSessionDetailContext(overrides: Partial<Pick<SessionDetailContext
 }
 
 interface MountPanelOptions {
-  openDiffsTray?: () => void;
   session?: SessionListItem;
   context?: Partial<Pick<SessionDetailContext, "supportsArchive" | "supportsFork">>;
 }
@@ -190,12 +156,8 @@ function mountPanel(options: MountPanelOptions = {}) {
   return mount(SessionDetailPanel, {
     props: {
       session: options.session ?? createSession(),
-      openDiffsTray: options.openDiffsTray ?? vi.fn(),
     },
     global: {
-      stubs: {
-        FilesChanged: FilesChangedStub,
-      },
       provide: {
         [SessionDetailContextKey as symbol]: createSessionDetailContext(options.context),
         [SessionDiffsContextKey as symbol]: {
@@ -212,9 +174,10 @@ function mountPanel(options: MountPanelOptions = {}) {
   });
 }
 
-describe("SessionDetailPanel files changed integration", () => {
+describe("SessionDetailPanel toolbar actions", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    mockTodos.value = [];
     diffState.diffs = ref<FileDiffItem[]>([]);
     diffState.available = shallowRef(false);
     diffState.isLoading = shallowRef(false);
@@ -255,16 +218,6 @@ describe("SessionDetailPanel files changed integration", () => {
         capabilities: createCapabilities(),
       });
     });
-  });
-
-  it("opens_diffs_tray_from_badge_when_handler_is_available", async () => {
-    const openDiffsTray = vi.fn();
-    const wrapper = mountPanel({ openDiffsTray });
-    await flushPromises();
-
-    await wrapper.get(".files-changed__badge").trigger("click");
-
-    expect(openDiffsTray).toHaveBeenCalledTimes(1);
   });
 
   it("shows_toolbar_actions_enabled_by_session_capabilities", async () => {
@@ -334,5 +287,87 @@ describe("SessionDetailPanel files changed integration", () => {
 
     expect(wrapper.find("[data-testid='session-resume-button']").exists()).toBe(false);
     expect(wrapper.find("[data-testid='session-stop-button']").exists()).toBe(false);
+  });
+});
+
+describe("SessionDetailPanel TODO rendering", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    mockTodos.value = [];
+    diffState.diffs = ref<FileDiffItem[]>([]);
+    diffState.available = shallowRef(false);
+    diffState.isLoading = shallowRef(false);
+    diffState.error = shallowRef<string | undefined>(undefined);
+    routerNavigateMock.mockReset();
+    diffState.fetchDiffs.mockReset();
+    apiFetchMock.mockImplementation(async (url: string) => {
+      if (url.includes("smart-links")) {
+        return Response.json([]);
+      }
+
+      return Response.json({
+        id: "session-1",
+        instanceId: "instance-1",
+        title: "Test session",
+        lifecycleStatus: "running",
+        activityStatus: "idle",
+        retentionStatus: "active",
+        capabilities: createCapabilities(),
+      });
+    });
+  });
+
+  it("hides_todo_section_when_no_todos", async () => {
+    mockTodos.value = [];
+
+    const wrapper = mountPanel({
+      session: createSession(),
+    });
+    await flushPromises();
+
+    expect(wrapper.find(".session-section-card").exists()).toBe(false);
+    expect(wrapper.findComponent({ name: "TodoListView" }).exists()).toBe(false);
+  });
+
+  it("shows_todo_section_when_todos_present", async () => {
+    mockTodos.value = [
+      {
+        id: "todo-1",
+        text: "Implement feature",
+        status: "pending",
+        createdAt: Date.now(),
+      },
+      {
+        id: "todo-2",
+        text: "Write tests",
+        status: "completed",
+        createdAt: Date.now(),
+      },
+    ];
+
+    const wrapper = mountPanel({
+      session: createSession(),
+    });
+    await flushPromises();
+
+    const todoSection = wrapper.find(".session-section-card");
+    expect(todoSection.exists()).toBe(true);
+    expect(todoSection.text()).toContain("Todo (1/2 complete)");
+    expect(wrapper.findComponent({ name: "TodoListView" }).exists()).toBe(true);
+  });
+
+  it("updates_todo_progress_label_based_on_completed_count", async () => {
+    mockTodos.value = [
+      { id: "todo-1", text: "Task 1", status: "completed", createdAt: Date.now() },
+      { id: "todo-2", text: "Task 2", status: "completed", createdAt: Date.now() },
+      { id: "todo-3", text: "Task 3", status: "pending", createdAt: Date.now() },
+    ];
+
+    const wrapper = mountPanel({
+      session: createSession(),
+    });
+    await flushPromises();
+
+    expect(wrapper.find(".session-section-card__title").text()).toBe("Todo (2/3 complete)");
   });
 });

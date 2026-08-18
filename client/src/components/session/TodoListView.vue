@@ -6,10 +6,8 @@ import type { TodoItem as TodoEntry } from "@/lib/todo-utils";
 
 const props = withDefaults(defineProps<{
   todos: readonly TodoEntry[];
-  emptyMessage?: string;
   ariaLabel?: string;
 }>(), {
-  emptyMessage: "No todos yet.",
   ariaLabel: "Todo list",
 });
 
@@ -75,15 +73,8 @@ function getStatusIndicatorClass(status: TodoEntry["status"]): string {
       class="todo-list-view__progress"
     />
 
-    <p
-      v-if="todos.length === 0"
-      class="todo-list-view__empty"
-    >
-      {{ emptyMessage }}
-    </p>
-
     <ul
-      v-else
+      v-if="todos.length > 0"
       class="todo-list-view__list"
     >
       <li

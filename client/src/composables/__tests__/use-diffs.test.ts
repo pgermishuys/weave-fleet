@@ -202,12 +202,16 @@ describe("useDiffs", () => {
     wrapper.unmount();
   });
 
-  it("documents that backend session diff summaries omit before and after content", async () => {
+  it("documents that backend session diff summaries include before and after content", async () => {
     const backendDiffSummary = {
       file: "src/App.vue",
       status: "modified",
       additions: 1,
       deletions: 1,
+      before: "original content",
+      after: "modified content",
+      isBinary: false,
+      isTruncated: false,
     };
 
     apiFetchMock.mockResolvedValue({
@@ -232,16 +236,14 @@ describe("useDiffs", () => {
     const [diff] = result.diffs.value;
     expect(diff?.status).toBe("modified");
     expect(diff).toEqual(backendDiffSummary);
-    expect(diff).not.toHaveProperty("before");
-    expect(diff).not.toHaveProperty("after");
-
-    // This intentionally verifies the real backend/frontend mismatch: GET
-    // /api/sessions/{id}/diffs currently returns FileDiffSummary objects with
-    // file/status/additions/deletions only. DiffView.vue integration cannot rely
-    // on FileDiffItem.before/after from useDiffs; the plan must use or introduce
-    // another source for populated diff content before wiring that view.
-    expect(diff?.before).toBeUndefined();
-    expect(diff?.after).toBeUndefined();
+    expect(diff).toHaveProperty("before");
+    expect(diff).toHaveProperty("after");
+    expect(diff).toHaveProperty("isBinary");
+    expect(diff).toHaveProperty("isTruncated");
+    expect(diff?.before).toBe("original content");
+    expect(diff?.after).toBe("modified content");
+    expect(diff?.isBinary).toBe(false);
+    expect(diff?.isTruncated).toBe(false);
 
     wrapper.unmount();
   });

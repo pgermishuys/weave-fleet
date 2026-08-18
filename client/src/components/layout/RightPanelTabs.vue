@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { PanelRightClose } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import type { ContentPanelTab } from "@/composables/use-content-panel";
 
 interface RightPanelTabOption {
-  id: string;
+  id: ContentPanelTab | string;
   label: string;
 }
 
 const props = defineProps<{
   tabs: readonly RightPanelTabOption[];
-  activeTab: string;
+  activeTab: ContentPanelTab | string;
 }>();
 
 const emit = defineEmits<{
@@ -39,11 +40,13 @@ function handleCollapse(): void {
     <button
       v-for="tab in tabs"
       :key="tab.id"
+      :id="`tab-${tab.id}`"
       type="button"
       class="right-tab"
       :class="{ active: activeTab === tab.id }"
       role="tab"
       :aria-selected="activeTab === tab.id"
+      :aria-controls="`panel-${tab.id}`"
       @click="handleSelect(tab.id)"
     >
       {{ tab.label }}
@@ -84,6 +87,12 @@ function handleCollapse(): void {
   border-bottom: 2px solid transparent;
   background: transparent;
   transition: color var(--transition), border-color var(--transition);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .right-tab {
+    transition: none;
+  }
 }
 
 .right-tab:hover {

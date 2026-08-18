@@ -50,6 +50,7 @@ function handleExpand(): void {
 
       <span class="collapsed-rail__body">
         <span
+          v-if="totalCount > 0"
           class="collapsed-rail__progress"
           aria-hidden="true"
         >

@@ -89,7 +89,15 @@ export function useFileBrowser(sessionId: Ref<string | null>) {
       const response = await readSessionFile(sessionId.value, path)
       
       if (response.isBinary) {
-        error.value = `Cannot display binary file: ${path}`
+        // Show a visual payload with a binary file message
+        const binaryPayload = {
+          $type: 'markdown' as const,
+          content: `# Binary File\n\nCannot display binary file: \`${path}\`\n\nThis file is a binary file and cannot be previewed as text.`,
+          sourceFilePath: path,
+          sourceText: '',
+          viewMode: 'rendered' as const,
+        }
+        showVisual(binaryPayload)
         return
       }
 

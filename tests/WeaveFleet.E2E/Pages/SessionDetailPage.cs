@@ -274,4 +274,68 @@ public sealed class SessionDetailPage(IPage page)
 
     /// <summary>Check whether the abort button is currently visible.</summary>
     public Task<bool> IsAbortVisibleAsync() => AbortButton.IsVisibleAsync();
+
+    // ── Content Panel ─────────────────────────────────────────────────────────
+
+    /// <summary>Get the Files tab button.</summary>
+    public ILocator GetFilesTab() => _page.Locator("#tab-files");
+
+    /// <summary>Get the Preview tab button.</summary>
+    public ILocator GetPreviewTab() => _page.Locator("#tab-preview");
+
+    /// <summary>Get the Details tab button.</summary>
+    public ILocator GetDetailsTab() => _page.Locator("#tab-details");
+
+    /// <summary>Get the Files tab panel.</summary>
+    public ILocator GetFilesPanel() => _page.Locator("#panel-files");
+
+    /// <summary>Get the Preview tab panel.</summary>
+    public ILocator GetPreviewPanel() => _page.Locator("#panel-preview");
+
+    /// <summary>Get the Details tab panel.</summary>
+    public ILocator GetDetailsPanel() => _page.Locator("#panel-details");
+
+    /// <summary>Get the changes drawer handle.</summary>
+    public ILocator GetChangesDrawerHandle() => _page.Locator(".changes-drawer__handle");
+
+    /// <summary>Get the changes drawer summary text.</summary>
+    public ILocator GetChangesDrawerSummary() => _page.Locator(".changes-drawer__summary");
+
+    /// <summary>Get the changes drawer content area.</summary>
+    public ILocator GetChangesDrawerContent() => _page.Locator("#changes-drawer-content");
+
+    /// <summary>Get the panel collapse button.</summary>
+    public ILocator GetPanelCollapseButton() => _page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Collapse right panel" });
+
+    /// <summary>Get the collapsed right rail (when panel is collapsed).</summary>
+    public ILocator GetCollapsedRightRail() => _page.Locator(".collapsed-right-rail");
+
+    /// <summary>Get the expand button on the collapsed rail.</summary>
+    public ILocator GetPanelExpandButton() => _page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Expand right panel" });
+
+    /// <summary>Click a tab by ID (files, preview, or details).</summary>
+    public Task ClickTabAsync(string tabId) => _page.Locator($"#tab-{tabId}").ClickAsync();
+
+    /// <summary>Check if a tab is currently active.</summary>
+    public async Task<bool> IsTabActiveAsync(string tabId)
+    {
+        var ariaSelected = await _page.Locator($"#tab-{tabId}").GetAttributeAsync("aria-selected");
+        return string.Equals(ariaSelected, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Check if the changes drawer is expanded.</summary>
+    public async Task<bool> IsChangesDrawerExpandedAsync()
+    {
+        var ariaExpanded = await GetChangesDrawerHandle().GetAttributeAsync("aria-expanded");
+        return string.Equals(ariaExpanded, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Click the changes drawer handle to toggle it.</summary>
+    public Task ClickChangesDrawerHandleAsync() => GetChangesDrawerHandle().ClickAsync();
+
+    /// <summary>Click the panel collapse button.</summary>
+    public Task ClickPanelCollapseAsync() => GetPanelCollapseButton().ClickAsync();
+
+    /// <summary>Click the panel expand button on the collapsed rail.</summary>
+    public Task ClickPanelExpandAsync() => GetPanelExpandButton().ClickAsync();
 }

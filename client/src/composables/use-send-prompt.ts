@@ -327,6 +327,7 @@ interface BackendSendPromptRequest {
   attachments?: ImageAttachment[];
   userMessageId?: string;
   correlationId: string;
+  effort?: string;
 }
 
 interface BackendSendPromptResponse {
@@ -491,6 +492,10 @@ export function useSendPrompt(sessionId: string) {
 
     if (attachments && attachments.length > 0) {
       request.attachments = attachments;
+    }
+
+    if (draft.effort !== "medium") {
+      request.effort = draft.effort;
     }
 
     void postPrompt(promptId, request);

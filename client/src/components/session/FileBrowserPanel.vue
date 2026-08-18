@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, provide, ref } from 'vue'
+import { computed, inject, provide, ref } from 'vue'
 import { RotateCw, Loader2, Search, X } from 'lucide-vue-next'
 import { useFileBrowser } from '@/composables/use-file-browser'
 import { useFindFiles } from '@/composables/use-find-files'
+import type { UseDiffsResult } from '@/composables/use-diffs'
+import { useContentPanelContext } from '@/composables/use-content-panel'
 import FileBrowserTreeNode from './FileBrowserTreeNode.vue'
 
 interface Props {
@@ -13,9 +15,12 @@ const props = defineProps<Props>()
 
 const sessionIdRef = computed(() => props.sessionId)
 const fileBrowser = useFileBrowser(sessionIdRef)
+const diffsComposable = inject<UseDiffsResult>('sharedDiffs')!
+const contentPanel = useContentPanelContext()
 
 // Provide the composable to child components
 provide('fileBrowser', fileBrowser)
+provide('diffs', diffsComposable)
 
 const { rootEntries, rootLoading, error, refresh, selectFile } = fileBrowser
 
@@ -37,19 +42,100 @@ function handleSearchKeydown(event: KeyboardEvent) {
     clearSearch()
     ;(event.target as HTMLInputElement)?.blur()
   } else if (event.key === 'Enter' && findFiles.files.value.length > 0) {
-    selectFile(findFiles.files.value[0])
+    handleResultClick(findFiles.files.value[0])
   }
 }
 
 function handleResultClick(path: string) {
+  contentPanel.selectFile(path)
   selectFile(path)
 }
+
+// All/Changed filter
+const allChangedFilter = computed(() => contentPanel.filesContext.value.allChangedFilter)
+const changedCount = computed(() => diffsComposable.diffs.value.length)
+
+function setFilter(filter: 'all' | 'changed') {
+  contentPanel.updateFilesContext({ allChangedFilter: filter })
+}
+
+function handleFilterKeydown(event: KeyboardEvent, filter: 'all' | 'changed') {
+  if (event.key === ' ' || event.key === 'Enter') {
+    event.preventDefault()
+    setFilter(filter)
+  } else if (event.key === 'ArrowLeft' && filter === 'changed') {
+    event.preventDefault()
+    setFilter('all')
+  } else if (event.key === 'ArrowRight' && filter === 'all') {
+    event.preventDefault()
+    setFilter('changed')
+  }
+}
+
+// Filtered entries based on All/Changed mode
+const filteredRootEntries = computed(() => {
+  if (allChangedFilter.value === 'all') {
+    return rootEntries.value
+  }
+
+  // In "changed" mode, filter to only show changed files and their ancestor directories
+  const changedPaths = new Set(diffsComposable.diffs.value.map(d => d.file))
+  
+  // Build set of all ancestor directories needed
+  const neededDirs = new Set<string>()
+  for (const path of changedPaths) {
+    let current = path
+    while (current.includes('/')) {
+      const parent = current.substring(0, current.lastIndexOf('/'))
+      if (parent) {
+        neededDirs.add(parent)
+        current = parent
+      } else {
+        break
+      }
+    }
+  }
+
+  return rootEntries.value.filter(entry => {
+    if (entry.isDirectory) {
+      // Include if it's an ancestor of a changed file
+      return neededDirs.has(entry.relativePath)
+    } else {
+      // Include if it's a changed file
+      return changedPaths.has(entry.relativePath)
+    }
+  })
+})
 </script>
 
 <template>
   <div class="file-browser-panel">
     <div class="file-browser-panel__header">
       <span class="file-browser-panel__title">Files</span>
+      <div class="file-browser-panel__filter-toggle" role="radiogroup" aria-label="File filter">
+        <button
+          class="file-browser-panel__filter-option"
+          :class="{ 'file-browser-panel__filter-option--active': allChangedFilter === 'all' }"
+          role="radio"
+          :aria-checked="allChangedFilter === 'all'"
+          @click="setFilter('all')"
+          @keydown="handleFilterKeydown($event, 'all')"
+          tabindex="0"
+        >
+          All
+        </button>
+        <button
+          class="file-browser-panel__filter-option"
+          :class="{ 'file-browser-panel__filter-option--active': allChangedFilter === 'changed' }"
+          role="radio"
+          :aria-checked="allChangedFilter === 'changed'"
+          @click="setFilter('changed')"
+          @keydown="handleFilterKeydown($event, 'changed')"
+          tabindex="0"
+        >
+          Changed ({{ changedCount }})
+        </button>
+      </div>
       <button
         class="file-browser-panel__refresh"
         :disabled="rootLoading"
@@ -138,7 +224,7 @@ function handleResultClick(path: string) {
       <!-- Tree -->
       <div v-else class="file-browser-panel__tree">
         <FileBrowserTreeNode
-          v-for="entry in rootEntries"
+          v-for="entry in filteredRootEntries"
           :key="entry.relativePath"
           :entry="entry"
           :depth="0"
@@ -160,7 +246,7 @@ function handleResultClick(path: string) {
 .file-browser-panel__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   padding: 8px 8px;
   border-bottom: 1px solid var(--border);
 }
@@ -171,6 +257,51 @@ function handleResultClick(path: string) {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.file-browser-panel__filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background-color: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.file-browser-panel__filter-option {
+  flex: 1;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  transition: background-color var(--transition), color var(--transition);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-browser-panel__filter-option {
+    transition: none;
+  }
+}
+
+.file-browser-panel__filter-option:hover {
+  background-color: var(--border);
+  color: var(--text);
+}
+
+.file-browser-panel__filter-option--active {
+  background-color: var(--primary);
+  color: white;
+}
+
+.file-browser-panel__filter-option--active:hover {
+  background-color: var(--primary);
+  color: white;
 }
 
 .file-browser-panel__refresh {

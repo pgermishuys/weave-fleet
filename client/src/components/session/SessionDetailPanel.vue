@@ -3,28 +3,16 @@ import { computed, ref, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
 import { Archive, GitFork, Loader2, OctagonX, Pencil, RotateCcw, Square, Trash2 } from "lucide-vue-next";
 import ConfirmDeleteSessionDialog from "@/components/sessions/ConfirmDeleteSessionDialog.vue";
-import FilesChanged from "@/components/session/FilesChanged.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
 import SmartLinkItem from "@/plugins/builtin/smart-links/SmartLinkItem.vue";
 import TodoListView from "@/components/session/TodoListView.vue";
 import { useSessionTodos } from "@/composables/use-session-todos";
 import { useSessionDetailContext } from "@/composables/use-session-detail-context";
-import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { apiFetch } from "@/lib/api-client";
 import { trackAction } from "@/lib/track-action";
 import type { SessionActionCapabilities, SessionListItem } from "@/api/client";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { secondsUntilRefresh, isRefreshing, refreshNow, POLL_INTERVAL_SECONDS } from "@/plugins/builtin/smart-links/composables/use-smart-links";
-
-interface ChangedFile {
-  path: string;
-  additions: number;
-  deletions: number;
-}
-
-interface FilesChangedBadgeClickPayload {
-  open: boolean;
-}
 
 interface SessionApiDetail {
   id?: string;
@@ -50,13 +38,11 @@ interface SessionApiDetail {
 
 const props = defineProps<{
   session: SessionListItem | null;
-  openDiffsTray?: () => void;
 }>();
 
 const router = useRouter();
 const ctx = useSessionDetailContext();
 const smartLinksStore = useSmartLinksStore();
-const sessionDiffsContext = useSessionDiffsContext();
 
 const { abortSession, isAborting, error: abortError } = ctx.abort;
 const { archiveSession, isArchiving, error: archiveError } = ctx.archive;
@@ -98,18 +84,8 @@ const effectiveSessionStatus = computed(() => props.session?.sessionStatus
   ?? remoteSessionDetail.value?.status
   ?? null);
 const { todos } = useSessionTodos(todoSessionId);
-const diffState = computed(() => sessionDiffsContext.value?.diffState ?? null);
-const fileDiffs = computed(() => diffState.value?.diffs.value ?? []);
-const filesChanged = computed<ChangedFile[]>(() => fileDiffs.value.map((diff) => ({
-  path: diff.file,
-  additions: diff.additions,
-  deletions: diff.deletions,
-})));
-const isLoadingFilesChanged = computed(() => diffState.value?.isLoading.value ?? false);
-const filesChangedError = computed(() => diffState.value?.error.value ?? null);
-const areFilesChangedAvailable = computed(() => diffState.value?.available.value ?? false);
-const areFilesChangedUnavailable = computed(() => !isLoadingFilesChanged.value && !filesChangedError.value && !areFilesChangedAvailable.value);
-const shouldShowFilesChangedSection = computed(() => isLoadingFilesChanged.value || Boolean(filesChangedError.value) || areFilesChangedAvailable.value);
+const completedTodosCount = computed(() => todos.value.filter((t) => t.status === "completed").length);
+const todoProgressLabel = computed(() => `Todo (${completedTodosCount.value}/${todos.value.length} complete)`);
 const effectiveLifecycleStatus = computed(() => normalizeLifecycleStatus(
   props.session?.lifecycleStatus
     ?? remoteSessionDetail.value?.lifecycleStatus
@@ -347,16 +323,6 @@ async function handleArchive(): Promise<void> {
 
 function refreshPanelData(): void {
   refreshVersion.value += 1;
-}
-
-function handleFilesChangedBadgeClick(payload: FilesChangedBadgeClickPayload): void {
-  if (areFilesChangedUnavailable.value || isLoadingFilesChanged.value) {
-    return;
-  }
-
-  if (payload.open) {
-    props.openDiffsTray?.();
-  }
 }
 
 function normalizeString(value: string | null | undefined): string | null {
@@ -601,31 +567,19 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       </p>
     </div>
 
-    <article class="session-section-card">
+    <article
+      v-if="todos.length > 0"
+      class="session-section-card"
+    >
       <div class="session-section-card__header">
         <p class="session-section-card__title">
-          Todo list
+          {{ todoProgressLabel }}
         </p>
       </div>
 
       <TodoListView
         :todos="todos"
         aria-label="Session todo list"
-        :empty-message="sessionId ? 'No todos yet.' : 'Select a session to view todos.'"
-      />
-    </article>
-
-    <article
-      v-if="shouldShowFilesChangedSection"
-      class="session-section-card"
-    >
-      <FilesChanged
-        :files="filesChanged"
-        :is-loading="isLoadingFilesChanged"
-        :error="filesChangedError"
-        :unavailable="areFilesChangedUnavailable"
-        :disabled="!openDiffsTray"
-        @click="handleFilesChangedBadgeClick"
       />
     </article>
 
