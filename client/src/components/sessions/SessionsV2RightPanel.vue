@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, provide, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { X } from "lucide-vue-next";
+import { Code, Eye, X } from "lucide-vue-next";
+import HtmlRenderer from "@/components/visual-renderers/HtmlRenderer.vue";
+import MarkdownRenderer from "@/components/visual-renderers/MarkdownRenderer.vue";
 import AnnotationPopover from "@/components/annotations/AnnotationPopover.vue";
 import ChangesDrawer from "@/components/session/ChangesDrawer.vue";
 import CollapsedRightRail from "@/components/layout/CollapsedRightRail.vue";
@@ -257,6 +259,39 @@ const diffLines = computed(() => {
 const shouldShowDiff = computed(() => {
   return contentPanelContext.activeTab.value === "preview" && diffLines.value !== null;
 });
+
+// --- Diff / Rendered toggle for HTML and Markdown files ---
+type DiffViewMode = "diff" | "rendered";
+const diffViewMode = ref<DiffViewMode>("diff");
+
+// Check if the selected diff file supports rendered preview
+const isRenderableFile = computed(() => {
+  const path = selectedFileDiff.value?.file;
+  if (!path) return false;
+  const lower = path.toLowerCase();
+  return lower.endsWith(".html") || lower.endsWith(".htm") || lower.endsWith(".md");
+});
+
+const renderableFileType = computed(() => {
+  const path = selectedFileDiff.value?.file;
+  if (!path) return null;
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
+  if (lower.endsWith(".md")) return "markdown";
+  return null;
+});
+
+// The content to render (use the "after" state of the diff)
+const renderableContent = computed(() => {
+  if (!selectedFileDiff.value) return "";
+  return selectedFileDiff.value.after ?? "";
+});
+
+// Reset to diff view when selected file changes
+watch(
+  () => contentPanelContext.filesContext.value.selectedFilePath,
+  () => { diffViewMode.value = "diff"; },
+);
 </script>
 
 <template>
@@ -295,19 +330,43 @@ const shouldShowDiff = computed(() => {
         >
           <div class="visual-panel__header">
             <div class="visual-panel__file-info">
-              <span class="visual-panel__file-label">Diff:</span>
+              <span class="visual-panel__file-label">{{ diffViewMode === 'rendered' ? 'Preview:' : 'Diff:' }}</span>
               <span class="visual-panel__file-path">{{ selectedFileDiff?.file }}</span>
             </div>
-            <button
-              class="visual-panel__close"
-              data-testid="visual-panel-close"
-              @click="clearVisual"
-            >
-              <X class="visual-panel__close-icon" />
-            </button>
+            <div class="visual-panel__actions">
+              <div v-if="isRenderableFile" class="visual-panel__toggle">
+                <button
+                  class="visual-panel__toggle-btn"
+                  :class="{ 'visual-panel__toggle-btn--active': diffViewMode === 'diff' }"
+                  title="Show diff"
+                  @click="diffViewMode = 'diff'"
+                >
+                  <Code class="visual-panel__toggle-icon" />
+                </button>
+                <button
+                  class="visual-panel__toggle-btn"
+                  :class="{ 'visual-panel__toggle-btn--active': diffViewMode === 'rendered' }"
+                  title="Show rendered preview"
+                  @click="diffViewMode = 'rendered'"
+                >
+                  <Eye class="visual-panel__toggle-icon" />
+                </button>
+              </div>
+              <button
+                class="visual-panel__close"
+                data-testid="visual-panel-close"
+                @click="clearVisual"
+              >
+                <X class="visual-panel__close-icon" />
+              </button>
+            </div>
           </div>
           <div class="visual-panel__content">
-            <DiffView :lines="diffLines!" />
+            <template v-if="diffViewMode === 'rendered' && isRenderableFile">
+              <HtmlRenderer v-if="renderableFileType === 'html'" :content="renderableContent" />
+              <MarkdownRenderer v-else-if="renderableFileType === 'markdown'" :content="renderableContent" />
+            </template>
+            <DiffView v-else :lines="diffLines!" />
           </div>
         </section>
 
@@ -564,5 +623,53 @@ const shouldShowDiff = computed(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+.visual-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.visual-panel__toggle {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.visual-panel__toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: var(--surface, #fff);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.visual-panel__toggle-btn:not(:last-child) {
+  border-right: 1px solid var(--border);
+}
+
+.visual-panel__toggle-btn--active {
+  background: var(--bg, rgba(0, 0, 0, 0.04));
+  color: var(--text);
+}
+
+.visual-panel__toggle-btn:hover:not(.visual-panel__toggle-btn--active) {
+  background: var(--bg, rgba(0, 0, 0, 0.02));
+  color: var(--text);
+}
+
+.visual-panel__toggle-icon {
+  width: 13px;
+  height: 13px;
 }
 </style>
