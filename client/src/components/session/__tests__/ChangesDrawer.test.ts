@@ -228,7 +228,7 @@ describe("ChangesDrawer", () => {
         },
       ] as FileDiffItem[];
 
-      const wrapper = mount(ChangesDrawer, {
+      mount(ChangesDrawer, {
         props: { sessionId: "session-1" },
         global: {
           provide: {

@@ -18,7 +18,8 @@ const { apiFetchMock, diffState, mockTodos } = vi.hoisted(() => ({
     error: null as unknown as ShallowRef<string | undefined>,
     fetchDiffs: vi.fn(),
   },
-  mockTodos: { value: [] as any[] },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  mockTodos: { value: [] as Array<{ id: string; text: string; status: string; createdAt: number }> },
 }));
 
 vi.mock("@tanstack/vue-router", () => ({

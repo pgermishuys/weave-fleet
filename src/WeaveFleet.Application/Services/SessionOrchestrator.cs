@@ -1594,10 +1594,15 @@ public sealed partial class SessionOrchestrator(
         if (!Directory.Exists(sessionDirectory))
             return FleetError.ValidationError("Session.Directory", "Session directory does not exist.");
 
+        // Normalize path separators to support both forward and backslashes on all platforms
+        var normalizedPath = string.IsNullOrWhiteSpace(path)
+            ? null
+            : path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+
         // Resolve target directory with path traversal protection
-        var targetDirectory = string.IsNullOrWhiteSpace(path)
+        var targetDirectory = string.IsNullOrWhiteSpace(normalizedPath)
             ? sessionDirectory
-            : Path.GetFullPath(Path.Combine(sessionDirectory, path));
+            : Path.GetFullPath(Path.Combine(sessionDirectory, normalizedPath));
 
         var sessionDirectoryFullPath = Path.GetFullPath(sessionDirectory);
         if (!IsSameOrChildPath(targetDirectory, sessionDirectoryFullPath))
@@ -1652,8 +1657,12 @@ public sealed partial class SessionOrchestrator(
         if (!Directory.Exists(sessionDirectory))
             return FleetError.ValidationError("Session.Directory", "Session directory does not exist.");
 
+        // Normalize path separators to support both forward and backslashes on all platforms
+        var normalizedPath = path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+
         // Resolve target file with path traversal protection
-        var targetFilePath = Path.GetFullPath(Path.Combine(sessionDirectory, path));
+        // Path.GetFullPath will normalize separators (both / and \ work on all platforms)
+        var targetFilePath = Path.GetFullPath(Path.Combine(sessionDirectory, normalizedPath));
         var sessionDirectoryFullPath = Path.GetFullPath(sessionDirectory);
         if (!IsSameOrChildPath(targetFilePath, sessionDirectoryFullPath))
             return FleetError.ValidationError("Session.File", "Path traversal is not allowed.");
