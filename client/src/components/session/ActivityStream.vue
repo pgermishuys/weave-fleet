@@ -4,6 +4,7 @@ import { ArrowUpRight, Bot } from "lucide-vue-next";
 import { useRouter } from "@tanstack/vue-router";
 import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
+import ReasoningBlock from "@/components/session/ReasoningBlock.vue";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { clearSentPrompts, reconcileSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { useSmartLinks } from "@/plugins/builtin/smart-links"
@@ -709,6 +710,13 @@ function handleExpandVisual(payload: VisualPayload): void {
           `activity-message--${message.clusterPosition}`,
         ]"
       >
+        <ReasoningBlock
+          v-for="reasoning in message.reasoningParts ?? []"
+          :key="reasoning.partId"
+          :text="reasoning.text"
+          :summary="reasoning.summary"
+          :created-at="message.createdAt"
+        />
         <MessageBubble
           :author="message.author"
           :model-id="message.modelId"
@@ -718,7 +726,6 @@ function handleExpandVisual(payload: VisualPayload): void {
           :images="message.images"
           :tools="message.tools"
           :question-parts="message.questionParts"
-          :reasoning-parts="message.reasoningParts"
           :session-id="props.sessionId"
           :show-identity="message.showIdentity"
           :cluster-position="message.clusterPosition"
