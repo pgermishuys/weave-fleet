@@ -141,18 +141,18 @@ function handleExpandVisual(payload: VisualPayload): void {
       
       <div class="msg-content">
         <div class="msg-body">
-          <!-- eslint-disable-next-line vue/no-v-html -->
-          <div
-            v-if="body"
-            class="msg-body__content md-content"
-            v-html="bodyHtml"
-          />
-
           <ReasoningBlock
             v-for="reasoning in reasoningParts ?? []"
             :key="reasoning.partId"
             :text="reasoning.text"
             :summary="reasoning.summary"
+          />
+
+          <!-- eslint-disable-next-line vue/no-v-html -->
+          <div
+            v-if="body"
+            class="msg-body__content md-content"
+            v-html="bodyHtml"
           />
 
           <div
