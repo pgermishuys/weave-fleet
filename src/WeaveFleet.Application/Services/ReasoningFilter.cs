@@ -70,36 +70,7 @@ public static class ReasoningFilter
         return string.Equals(typeElement.GetString(), ReasoningType, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// Filters reasoning parts from a list of <see cref="MessagePart"/> instances for durable storage.
-    /// </summary>
-    public static MessagePart[] FilterDurableParts(IReadOnlyList<MessagePart> parts)
-        => parts.Where(static part => part is not ReasoningPart).ToArray();
 
-    /// <summary>
-    /// Removes reasoning-only content from event payloads before broadcast or storage.
-    /// Returns <c>null</c> if the event contains only reasoning content and should be suppressed entirely.
-    /// </summary>
-    public static JsonElement? SanitizeEventPayload(string eventType, JsonElement? payload)
-    {
-        if (!payload.HasValue)
-            return JsonDocument.Parse("{}").RootElement.Clone();
-
-        if (!EventTypeMetadata.Classify(eventType).RequiresReasoningFilter)
-            return payload.Value.Clone();
-
-        if (eventType is EventTypes.MessageCreated or EventTypes.MessageUpdated)
-            return FilterMessageEventPayload(payload.Value);
-
-        // message.part.updated — suppress reasoning parts entirely
-        var payloadValue = payload.Value;
-        if (payloadValue.ValueKind != JsonValueKind.Object)
-            return payloadValue.Clone();
-
-        return IsReasoningPartEvent(payloadValue)
-            ? null
-            : payloadValue.Clone();
-    }
 
     private static bool IsReasoningPartElement(JsonElement part)
         => part.ValueKind == JsonValueKind.Object

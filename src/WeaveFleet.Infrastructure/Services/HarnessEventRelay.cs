@@ -28,8 +28,6 @@ internal sealed record ParsedActivityStatus(
 /// events and maintains one async-enumerable pump per live harness instance. Each pump:
 /// <list type="number">
 ///   <item>Resolves the Fleet session metadata (id, owner, project, harness-type).</item>
-///   <item>Applies the reasoning-content filter before publish for event types whose
-///     classification requires it, so unsanitized reasoning never reaches event bus subscribers.</item>
 ///   <item>Publishes every <see cref="HarnessEvent"/> via <see cref="IEventPublisher"/>
 ///     with an internal per-pump monotonic dedup key.</item>
 ///   <item>On disconnect: emits a final idle broadcast on the global <c>sessions</c> topic.</item>
@@ -221,19 +219,7 @@ public sealed class HarnessEventRelay : BackgroundService
                 _logger.LogDebug("[Relay:Pump] Received event type={Type} session={Session} instance={Instance}", evt.Type, evt.SessionId, instanceId);
                 var targetFleetSessionId = evt.FleetSessionId ?? fleetSessionId;
 
-                // Apply the reasoning-content filter BEFORE publishing — the unified fan-out
-                // subscriber forwards the published payload directly to WebSocket clients, so
-                // unsanitized reasoning must never leave this method. Null from the sanitizer
-                // means "reasoning-only part; drop the event entirely".
-                var classification = EventTypeMetadata.Classify(evt.Type);
                 HarnessEvent eventToPublish = evt;
-                if (classification.RequiresReasoningFilter)
-                {
-                    var filteredPayload = ReasoningFilter.SanitizeEventPayload(evt.Type, evt.Payload);
-                    if (filteredPayload is null)
-                        continue;
-                    eventToPublish = evt with { Payload = filteredPayload };
-                }
 
                 if (ShouldSuppressUserEcho(eventToPublish, suppressedUserMessageIds))
                 {

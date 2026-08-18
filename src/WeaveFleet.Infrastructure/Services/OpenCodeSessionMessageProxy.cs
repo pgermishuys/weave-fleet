@@ -237,15 +237,13 @@ public sealed class OpenCodeSessionMessageProxy(
 
     private static MessageLifecyclePayload ToMessageLifecyclePayload(HarnessMessage message, string fleetSessionId)
     {
-        // Filter reasoning parts before conversion
-        var filteredParts = ReasoningFilter.FilterDurableParts(message.Parts);
-
         var parts = new List<MessageEventPart>();
         int textIndex = 0;
         int toolIndex = 0;
         int fileIndex = 0;
+        int reasoningIndex = 0;
 
-        foreach (var part in filteredParts)
+        foreach (var part in message.Parts)
         {
             MessageEventPart? eventPart = part switch
             {
@@ -255,6 +253,14 @@ public sealed class OpenCodeSessionMessageProxy(
                     SessionId = fleetSessionId,
                     MessageId = message.Id,
                     Text = textPart.Text,
+                },
+                ReasoningPart reasoningPart => new ReasoningMessageEventPart
+                {
+                    Id = $"{message.Id}-reasoning-{reasoningIndex++}",
+                    SessionId = fleetSessionId,
+                    MessageId = message.Id,
+                    Text = reasoningPart.Text,
+                    Summary = reasoningPart.Summary,
                 },
                 ToolUsePart toolPart => new ToolMessageEventPart
                 {

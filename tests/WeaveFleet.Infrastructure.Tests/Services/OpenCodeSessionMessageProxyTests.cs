@@ -502,11 +502,14 @@ public sealed class OpenCodeSessionMessageProxyTests
         message.Info.Agent.ShouldBe("shuttle");
         message.Info.ModelId.ShouldBe("claude-sonnet-4");
 
-        // Verify reasoning parts are filtered out
-        message.Parts.ShouldNotContain(p => p is ReasoningMessageEventPart);
+        // Verify reasoning parts are preserved
+        var reasoningParts = message.Parts.OfType<ReasoningMessageEventPart>().ToList();
+        reasoningParts.Count.ShouldBe(1);
+        reasoningParts[0].Text.ShouldBe("Internal reasoning text");
+        reasoningParts[0].Summary.ShouldBe("Summary of reasoning");
 
         // Verify all other part types are present
-        message.Parts.Count.ShouldBe(5); // 2 text + 1 tool + 1 file + 1 step-finish
+        message.Parts.Count.ShouldBe(6); // 2 text + 1 tool + 1 file + 1 step-finish + 1 reasoning
 
         var textParts = message.Parts.OfType<TextMessageEventPart>().ToList();
         textParts.Count.ShouldBe(2);
@@ -605,8 +608,10 @@ public sealed class OpenCodeSessionMessageProxyTests
         var message = snapshot.Messages[0];
         message.Info.Id.ShouldBe("msg-reasoning-only");
 
-        // All reasoning parts should be filtered out
-        message.Parts.ShouldBeEmpty();
+        // Reasoning parts should be preserved
+        message.Parts.Count.ShouldBe(2);
+        message.Parts[0].ShouldBeOfType<ReasoningMessageEventPart>().Text.ShouldBe("First reasoning block");
+        message.Parts[1].ShouldBeOfType<ReasoningMessageEventPart>().Text.ShouldBe("Second reasoning block");
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Mvc;
 using WeaveFleet.Api;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Services;
@@ -320,14 +321,13 @@ public static class SessionEndpoints
             return result.Match(
                 page =>
                 {
-                    var sanitizedMessages = ClientPayloadSanitizer.SanitizeMessages(page.Messages);
                     var oldest = page.Messages.Count > 0 ? page.Messages[0].Id : null;
                     return Results.Ok(new GetSessionMessagesApiResponse(
-                        sanitizedMessages,
+                        page.Messages,
                         new SessionMessagesPagination(
                             page.HasMore,
                             oldest,
-                            sanitizedMessages.Count)));
+                            page.Messages.Count)));
                 },
                 err => err.ToSessionApiResult());
         })
@@ -541,7 +541,7 @@ public static class SessionEndpoints
         .WithName("FindSessionFiles");
 
         // GET /api/sessions/{id}/files/browse?path= — session directory browser
-        group.MapGet("/{id}/files/browse", async (string id, string? path, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        group.MapGet("/{id}/files/browse", async (string id, [FromQuery] string? path, SessionOrchestrator orchestrator, CancellationToken ct) =>
         {
             var result = await orchestrator.BrowseSessionDirectoryAsync(id, path, ct);
             return result.Match(
@@ -556,7 +556,7 @@ public static class SessionEndpoints
         .WithName("BrowseSessionDirectory");
 
         // GET /api/sessions/{id}/files/content?path= — read session file content
-        group.MapGet("/{id}/files/content", async (string id, string? path, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        group.MapGet("/{id}/files/content", async (string id, [FromQuery] string? path, SessionOrchestrator orchestrator, CancellationToken ct) =>
         {
             var result = await orchestrator.ReadSessionFileAsync(id, path, ct);
             return result.Match(

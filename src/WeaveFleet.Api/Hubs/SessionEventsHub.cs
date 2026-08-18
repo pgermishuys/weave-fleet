@@ -332,11 +332,6 @@ public class SessionEventsHub : Hub
                 ? ResolveDomainEventType(evt.DomainEvent)
                 : evt.Type;
 
-            // Sanitize the payload before sending to client
-            var sanitizedPayload = ClientPayloadSanitizer.SanitizeEventPayload(wireType, evt.Payload);
-            if (!sanitizedPayload.HasValue)
-                continue;
-
             // Build the wire envelope matching the client's WebSocketEvent shape:
             // { type: string, eventId?: number, properties: Record<string, any> }
             // Serialize as raw JSON to avoid type-system mismatch with SignalR's JSON serializer.
@@ -344,7 +339,7 @@ public class SessionEventsHub : Hub
             {
                 Type = wireType,
                 EventId = evt.EventId,
-                Properties = sanitizedPayload.Value
+                Properties = evt.Payload
             }, ApiJsonContext.Default.ClientEvent);
 
             // Send event to the caller via IHubContext (safe to use outside hub method scope)

@@ -128,44 +128,4 @@ public sealed class ReasoningFilterTests
         ReasoningFilter.IsReasoningPartEvent(payload).ShouldBeTrue();
     }
 
-    // -----------------------------------------------------------------------
-    // FilterDurableParts
-    // -----------------------------------------------------------------------
-
-    [Fact]
-    public void FilterDurableParts_EmptyList_ReturnsEmpty()
-    {
-        var result = ReasoningFilter.FilterDurableParts([]);
-        result.ShouldBeEmpty();
-    }
-
-    [Fact]
-    public void FilterDurableParts_NoReasoningParts_ReturnsAllParts()
-    {
-        MessagePart[] parts = [new TextPart("hello"), new TextPart("world")];
-        var result = ReasoningFilter.FilterDurableParts(parts);
-        result.Length.ShouldBe(2);
-    }
-
-    [Fact]
-    public void FilterDurableParts_MixedParts_StripsReasoningParts()
-    {
-        MessagePart[] parts =
-        [
-            new TextPart("hello"),
-            new ReasoningPart("thinking..."),
-            new TextPart("world"),
-        ];
-        var result = ReasoningFilter.FilterDurableParts(parts);
-        result.Length.ShouldBe(2);
-        result.ShouldAllBe(p => p is TextPart);
-    }
-
-    [Fact]
-    public void FilterDurableParts_OnlyReasoningParts_ReturnsEmpty()
-    {
-        MessagePart[] parts = [new ReasoningPart("thinking...")];
-        var result = ReasoningFilter.FilterDurableParts(parts);
-        result.ShouldBeEmpty();
-    }
 }

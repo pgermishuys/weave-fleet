@@ -70,7 +70,7 @@ public sealed class MessagePersistenceServiceTests
     }
 
     [Fact]
-    public void RoundTrip_ReasoningPart_ExcludesContentFromDurableHistory()
+    public void RoundTrip_ReasoningPart_PreservesContentInDurableHistory()
     {
         var original = MakeMessage([
             new ReasoningPart("Let me think", "summary")
@@ -79,7 +79,10 @@ public sealed class MessagePersistenceServiceTests
         var persisted = MessagePersistenceService.ToPersistedMessage("session-1", original);
         var restored = MessagePersistenceService.ToHarnessMessage(persisted);
 
-        restored.Parts.ShouldBeEmpty();
+        restored.Parts.Count.ShouldBe(1);
+        var reasoning = restored.Parts[0].ShouldBeOfType<ReasoningPart>();
+        reasoning.Text.ShouldBe("Let me think");
+        reasoning.Summary.ShouldBe("summary");
     }
 
     [Fact]
@@ -173,14 +176,14 @@ public sealed class MessagePersistenceServiceTests
     }
 
     [Fact]
-    public void BuildCommittedMessagePayload_UsesPersistedSnapshotTextPartsOnly()
+    public void BuildCommittedMessagePayload_IncludesReasoningPartsInSnapshot()
     {
         var persisted = new PersistedMessage
         {
             Id = "msg-1",
             SessionId = "session-1",
             Role = "assistant",
-            PartsJson = """[{"type":"text","text":"Merged final text"},{"type":"reasoning","text":"Hidden thought"}]""",
+            PartsJson = """[{"type":"text","text":"Merged final text"},{"type":"reasoning","text":"Hidden thought","summary":"thinking"}]""",
             Timestamp = new DateTimeOffset(2026, 4, 15, 6, 0, 0, TimeSpan.Zero).ToString("O"),
             CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
             AgentName = "loom",
@@ -191,9 +194,12 @@ public sealed class MessagePersistenceServiceTests
         payload.GetProperty("info").GetProperty("id").GetString().ShouldBe("msg-1");
         payload.GetProperty("info").GetProperty("agent").GetString().ShouldBe("loom");
         var parts = payload.GetProperty("parts");
-        parts.GetArrayLength().ShouldBe(1);
+        parts.GetArrayLength().ShouldBe(2);
         parts[0].GetProperty("type").GetString().ShouldBe("text");
         parts[0].GetProperty("text").GetString().ShouldBe("Merged final text");
+        parts[1].GetProperty("type").GetString().ShouldBe("reasoning");
+        parts[1].GetProperty("text").GetString().ShouldBe("Hidden thought");
+        parts[1].GetProperty("summary").GetString().ShouldBe("thinking");
     }
 
     [Fact]
@@ -221,48 +227,7 @@ public sealed class MessagePersistenceServiceTests
     }
 
     [Fact]
-    public void SanitizeDurableEventPayload_DropsReasoningPartUpdates()
-    {
-        var payload = JsonSerializer.SerializeToElement(new
-        {
-            part = new
-            {
-                id = "part-r1",
-                messageID = "msg-1",
-                sessionID = "session-1",
-                type = "reasoning",
-                text = "Hidden thought"
-            }
-        });
-
-        var sanitized = ReasoningFilter.SanitizeEventPayload("message.part.updated", payload);
-
-        sanitized.HasValue.ShouldBeFalse();
-    }
-
-    [Fact]
-    public void SanitizeDurableEventPayload_PreservesNonReasoningPartUpdates()
-    {
-        var payload = JsonSerializer.SerializeToElement(new
-        {
-            part = new
-            {
-                id = "part-1",
-                messageID = "msg-1",
-                sessionID = "session-1",
-                type = "text",
-                text = "Visible text"
-            }
-        });
-
-        var sanitized = ReasoningFilter.SanitizeEventPayload("message.part.updated", payload);
-
-        sanitized.HasValue.ShouldBeTrue();
-        sanitized.Value.GetProperty("part").GetProperty("type").GetString().ShouldBe("text");
-    }
-
-    [Fact]
-    public void ToPersistedMessage_ExcludesReasoningPartsFromDurableHistory()
+    public void ToPersistedMessage_IncludesReasoningPartsInDurableHistory()
     {
         var original = MakeMessage([
             new TextPart("Visible text"),
@@ -272,11 +237,12 @@ public sealed class MessagePersistenceServiceTests
         var persisted = MessagePersistenceService.ToPersistedMessage("session-1", original);
 
         persisted.PartsJson.ShouldContain("Visible text");
-        persisted.PartsJson.ShouldNotContain("Hidden thought");
+        persisted.PartsJson.ShouldContain("Hidden thought");
+        persisted.PartsJson.ShouldContain("\"type\":\"reasoning\"");
     }
 
     [Fact]
-    public void ToHarnessMessage_FiltersLegacyReasoningPartsFromDurableHistory()
+    public void ToHarnessMessage_PreservesReasoningPartsFromDurableHistory()
     {
         var persisted = new PersistedMessage
         {
@@ -290,12 +256,13 @@ public sealed class MessagePersistenceServiceTests
 
         var restored = MessagePersistenceService.ToHarnessMessage(persisted);
 
-        restored.Parts.Count.ShouldBe(1);
+        restored.Parts.Count.ShouldBe(2);
         restored.Parts[0].ShouldBeOfType<TextPart>().Text.ShouldBe("Visible text");
+        restored.Parts[1].ShouldBeOfType<ReasoningPart>().Text.ShouldBe("Hidden thought");
     }
 
     [Fact]
-    public void MergePartAndMetadata_IgnoresReasoningPartsInDurableHistory()
+    public void MergePartAndMetadata_IncludesReasoningPartsInDurableHistory()
     {
         var existing = MakePersistedMessage("""[{"type":"text","text":"Visible text"}]""");
 
@@ -306,7 +273,8 @@ public sealed class MessagePersistenceServiceTests
             null);
 
         result.PartsJson.ShouldContain("Visible text");
-        result.PartsJson.ShouldNotContain("Hidden thought");
+        result.PartsJson.ShouldContain("Hidden thought");
+        result.PartsJson.ShouldContain("\"type\":\"reasoning\"");
     }
 
     // -----------------------------------------------------------------------
@@ -435,7 +403,7 @@ public sealed class MessagePersistenceServiceTests
     }
 
     [Fact]
-    public void MergePart_ReasoningPart_DoesNotPersistHiddenContent()
+    public void MergePart_ReasoningPart_PersistsContent()
     {
         var initial = MakeMessage([new ReasoningPart("Old thought", "old")]);
         var existingMsg = MessagePersistenceService.ToPersistedMessage("session-1", initial);
@@ -445,7 +413,9 @@ public sealed class MessagePersistenceServiceTests
         var result = MessagePersistenceService.MergePart(existingMsg, updatedReasoning);
 
         var restored = MessagePersistenceService.ToHarnessMessage(result);
-        restored.Parts.ShouldBeEmpty();
+        restored.Parts.Count.ShouldBe(2);
+        restored.Parts[0].ShouldBeOfType<ReasoningPart>().Text.ShouldBe("Old thought");
+        restored.Parts[1].ShouldBeOfType<ReasoningPart>().Text.ShouldBe("New thought");
     }
 
     [Fact]
@@ -664,11 +634,11 @@ public sealed class MessagePersistenceServiceTests
     // would need a concurrent integration test to demonstrate.
 
     [Fact]
-    public void MergeMissingSnapshotParts_AddsTextToEmptyExistingRow()
+    public void MergeMissingSnapshotParts_AddsTextAndReasoningToEmptyExistingRow()
     {
         // Simulates: reasoning-only message.part.updated created a stub row with
         // empty parts, then message.updated arrives carrying TextPart + ReasoningPart.
-        // The TextPart must be merged in; the ReasoningPart must be ignored.
+        // Both parts must be merged in.
         var existing = MakePersistedMessage("[]");
 
         var merged = MessagePersistenceService.MergeMissingSnapshotParts(
@@ -678,8 +648,9 @@ public sealed class MessagePersistenceServiceTests
             null);
 
         var restored = MessagePersistenceService.ToHarnessMessage(merged);
-        restored.Parts.Count.ShouldBe(1);
+        restored.Parts.Count.ShouldBe(2);
         restored.Parts[0].ShouldBeOfType<TextPart>().Text.ShouldBe("Hello");
+        restored.Parts[1].ShouldBeOfType<ReasoningPart>().Text.ShouldBe("Hidden");
     }
 
     [Fact]

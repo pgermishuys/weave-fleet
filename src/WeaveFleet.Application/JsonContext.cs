@@ -41,6 +41,14 @@ internal sealed record CommittedFilePart(
     string Url,
     string? Filename);
 
+internal sealed record CommittedReasoningPart(
+    string Id,
+    string MessageID,
+    string SessionID,
+    string Type,
+    string Text,
+    string? Summary);
+
 // ── Session lifecycle outbox payload types (replaces anonymous types in SessionOrchestrator) ─────
 
 internal sealed record SessionCreatedOutboxPayload
@@ -105,6 +113,7 @@ internal sealed record QuickChatSourceInput;
 [JsonSerializable(typeof(CommittedUserPromptMessage))]
 [JsonSerializable(typeof(CommittedTextPart))]
 [JsonSerializable(typeof(CommittedFilePart))]
+[JsonSerializable(typeof(CommittedReasoningPart))]
 [JsonSerializable(typeof(SessionCreatedOutboxPayload))]
 [JsonSerializable(typeof(SessionStoppedOutboxPayload))]
 [JsonSerializable(typeof(SessionArchivedOutboxPayload))]

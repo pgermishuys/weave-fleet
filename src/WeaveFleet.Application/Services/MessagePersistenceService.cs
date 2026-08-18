@@ -26,8 +26,8 @@ public sealed class MessagePersistenceService
     public static PersistedMessage ToPersistedMessage(string sessionId, HarnessMessage message)
     {
         var partsJson = JsonSerializer.Serialize(
-            ReasoningFilter.FilterDurableParts(message.Parts),
-            ApplicationJsonContext.Default.MessagePartArray);
+            message.Parts.ToList(),
+            ApplicationJsonContext.Default.ListMessagePart);
         return new PersistedMessage
         {
             Id = message.Id,
@@ -104,8 +104,8 @@ public sealed class MessagePersistenceService
     /// </summary>
     public static HarnessMessage ToHarnessMessage(PersistedMessage persisted)
     {
-        var parts = ReasoningFilter.FilterDurableParts(JsonSerializer.Deserialize(
-            persisted.PartsJson, ApplicationJsonContext.Default.ListMessagePart) ?? []);
+        var parts = JsonSerializer.Deserialize(
+            persisted.PartsJson, ApplicationJsonContext.Default.ListMessagePart) ?? [];
 
         return new HarnessMessage
         {
@@ -259,9 +259,6 @@ public sealed class MessagePersistenceService
         string? role,
         string? agentName)
     {
-        if (newPart is ReasoningPart)
-            return MergeMetadata(existing, role ?? existing.Role, agentName ?? existing.AgentName);
-
         var parts = JsonSerializer.Deserialize(existing.PartsJson, ApplicationJsonContext.Default.ListMessagePart) ?? [];
 
         switch (newPart)
@@ -282,6 +279,12 @@ public sealed class MessagePersistenceService
                     parts[idx] = textPart;
                 else
                     parts.Add(textPart);
+                break;
+            }
+            case ReasoningPart reasoningPart:
+            {
+                // Always append reasoning parts (they don't replace each other)
+                parts.Add(reasoningPart);
                 break;
             }
             case FilePart filePart:
@@ -346,6 +349,15 @@ public sealed class MessagePersistenceService
                     filePart.Url,
                     filePart.Filename),
                 ApplicationJsonContext.Default.CommittedFilePart),
+            ReasoningPart reasoningPart => JsonSerializer.SerializeToElement(
+                new CommittedReasoningPart(
+                    $"{messageId}-reasoning-{index}",
+                    messageId,
+                    sessionId,
+                    "reasoning",
+                    reasoningPart.Text,
+                    reasoningPart.Summary),
+                ApplicationJsonContext.Default.CommittedReasoningPart),
             _ => null,
         };
     }
@@ -392,12 +404,17 @@ public sealed class MessagePersistenceService
         {
             switch (part)
             {
-                case ReasoningPart:
-                    continue;
                 case TextPart textPart:
                     if (!parts.Any(p => p is TextPart))
                     {
                         parts.Add(textPart);
+                        changed = true;
+                    }
+                    break;
+                case ReasoningPart reasoningPart:
+                    if (!parts.Any(p => p is ReasoningPart))
+                    {
+                        parts.Add(reasoningPart);
                         changed = true;
                     }
                     break;

@@ -10,7 +10,7 @@ import { useSmartLinks } from "@/plugins/builtin/smart-links"
 import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { CommandEventName } from "@/lib/command-events";
-import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart } from "@/lib/client-types";
+import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart, AccumulatedReasoningPart } from "@/lib/client-types";
 import type { VisualPayload } from "@/lib/visual-payload";
 import { isQuestionPart } from "@/lib/question-types";
 import { diagLog } from "@/lib/message-diagnostics";
@@ -35,6 +35,7 @@ interface ActivityMessage {
   images: ImageAttachmentDisplay[];
   tools?: ToolCardItem[];
   questionParts?: AccumulatedToolPart[];
+  reasoningParts?: AccumulatedReasoningPart[];
   delegationLinks: DelegationLink[];
   optimisticStatus?: "pending" | "confirmed" | "needs_retry";
   clusterPosition: "single" | "first" | "middle" | "last";
@@ -181,6 +182,8 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
           .map(toToolCardItem),
         questionParts: message.parts
           .filter((part): part is AccumulatedToolPart => part.type === "tool" && isQuestionPart(part as AccumulatedToolPart)),
+        reasoningParts: message.parts
+          .filter((part): part is AccumulatedReasoningPart => part.type === "reasoning"),
         delegationLinks: getDelegationLinks(message),
         clusterPosition: "single" as const,
         showIdentity: true,
@@ -201,6 +204,7 @@ const optimisticMessages = computed<ActivityMessage[]>(() => {
     images: prompt.images,
     tools: [],
     questionParts: [],
+    reasoningParts: [],
     delegationLinks: [],
     optimisticStatus: prompt.status,
     clusterPosition: "single",
@@ -618,8 +622,8 @@ function renderMessagePart(part: AccumulatedPart): string | null {
   }
 
   if (part.type === "reasoning") {
-    const reasoningText = (part.summary ?? part.text).trim();
-    return reasoningText ? reasoningText.split("\n").map((line) => `> ${line}`).join("\n") : null;
+    // Reasoning is now rendered separately, not in the markdown body
+    return null;
   }
 
   if (part.type === "file") {
@@ -714,6 +718,7 @@ function handleExpandVisual(payload: VisualPayload): void {
           :images="message.images"
           :tools="message.tools"
           :question-parts="message.questionParts"
+          :reasoning-parts="message.reasoningParts"
           :session-id="props.sessionId"
           :show-identity="message.showIdentity"
           :cluster-position="message.clusterPosition"

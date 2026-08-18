@@ -21,9 +21,6 @@ public readonly struct EventClassification
     /// </summary>
     public bool IsAdvisory { get; init; }
 
-    /// <summary>Whether the event payload may contain reasoning content that must be filtered before delivery or storage.</summary>
-    public bool RequiresReasoningFilter { get; init; }
-
     /// <summary>Whether the event carries session activity status information.</summary>
     public bool IsActivitySignal { get; init; }
 }
@@ -49,7 +46,6 @@ public static class EventTypeMetadata
             IsDurable = true,
             IsEphemeralRelay = false,
             IsAdvisory = false,
-            RequiresReasoningFilter = true,
             IsActivitySignal = false,
         },
         EventTypes.MessageUpdated => new EventClassification
@@ -58,7 +54,6 @@ public static class EventTypeMetadata
             IsDurable = true,
             IsEphemeralRelay = false,
             IsAdvisory = false,
-            RequiresReasoningFilter = true,
             IsActivitySignal = false,
         },
         EventTypes.MessagePartUpdated => new EventClassification
@@ -67,7 +62,6 @@ public static class EventTypeMetadata
             IsDurable = true,
             IsEphemeralRelay = false,
             IsAdvisory = false,
-            RequiresReasoningFilter = true,
             IsActivitySignal = false,
         },
         EventTypes.MessageRemoved => new EventClassification
@@ -76,7 +70,6 @@ public static class EventTypeMetadata
             IsDurable = true,
             IsEphemeralRelay = false,
             IsAdvisory = false,
-            RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
         EventTypes.MessagePartRemoved => new EventClassification
@@ -85,7 +78,6 @@ public static class EventTypeMetadata
             IsDurable = true,
             IsEphemeralRelay = false,
             IsAdvisory = false,
-            RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
         EventTypes.UserPromptCommitted => new EventClassification
@@ -94,7 +86,6 @@ public static class EventTypeMetadata
             IsDurable = true,
             IsEphemeralRelay = false,
             IsAdvisory = false,
-            RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
         EventTypes.SessionCreated => new EventClassification
@@ -103,7 +94,6 @@ public static class EventTypeMetadata
             IsDurable = false,
             IsEphemeralRelay = true,
             IsAdvisory = true,
-            RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
         EventTypes.SessionUpdated => new EventClassification
@@ -112,7 +102,6 @@ public static class EventTypeMetadata
             IsDurable = true,
             IsEphemeralRelay = false,
             IsAdvisory = false,
-            RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
         EventTypes.SessionError => new EventClassification
@@ -121,7 +110,6 @@ public static class EventTypeMetadata
             IsDurable = true,
             IsEphemeralRelay = false,
             IsAdvisory = false,
-            RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
         EventTypes.SessionCompacted => new EventClassification
@@ -130,7 +118,6 @@ public static class EventTypeMetadata
             IsDurable = true,
             IsEphemeralRelay = false,
             IsAdvisory = false,
-            RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
         EventTypes.SessionDeleted => new EventClassification
@@ -139,7 +126,6 @@ public static class EventTypeMetadata
             IsDurable = true,
             IsEphemeralRelay = false,
             IsAdvisory = false,
-            RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
         EventTypes.SessionStatus => new EventClassification
@@ -148,7 +134,6 @@ public static class EventTypeMetadata
             IsDurable = false,
             IsEphemeralRelay = true,
             IsAdvisory = true,
-            RequiresReasoningFilter = false,
             IsActivitySignal = true,
         },
         EventTypes.SessionIdle => new EventClassification
@@ -157,7 +142,6 @@ public static class EventTypeMetadata
             IsDurable = false,
             IsEphemeralRelay = true,
             IsAdvisory = true,
-            RequiresReasoningFilter = false,
             IsActivitySignal = true,
         },
         EventTypes.MessagePartDelta => new EventClassification
@@ -166,7 +150,6 @@ public static class EventTypeMetadata
             IsDurable = false,
             IsEphemeralRelay = true,
             IsAdvisory = true,
-            RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
         EventTypes.Error => new EventClassification
@@ -175,7 +158,6 @@ public static class EventTypeMetadata
             IsDurable = false,
             IsEphemeralRelay = true,
             IsAdvisory = true,
-            RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
         EventTypes.ServerHeartbeat => new EventClassification
@@ -184,7 +166,6 @@ public static class EventTypeMetadata
             IsDurable = false,
             IsEphemeralRelay = false,
             IsAdvisory = false,
-            RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
         EventTypes.ServerConnected => new EventClassification
@@ -193,7 +174,6 @@ public static class EventTypeMetadata
             IsDurable = false,
             IsEphemeralRelay = false,
             IsAdvisory = false,
-            RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
         EventTypes.SessionDiff => new EventClassification
@@ -202,7 +182,6 @@ public static class EventTypeMetadata
             IsDurable = false,
             IsEphemeralRelay = false,
             IsAdvisory = false,
-            RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
         _ when EventTypes.IsPermissionEvent(eventType) => new EventClassification
@@ -211,7 +190,6 @@ public static class EventTypeMetadata
             IsDurable = false,
             IsEphemeralRelay = true,
             IsAdvisory = true,
-            RequiresReasoningFilter = false,
             IsActivitySignal = false,
         },
         _ => default,

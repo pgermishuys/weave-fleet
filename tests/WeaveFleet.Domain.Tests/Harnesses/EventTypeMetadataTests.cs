@@ -57,31 +57,6 @@ public sealed class EventTypeMetadataTests
     }
 
     // -----------------------------------------------------------------------
-    // Reasoning filter events
-    // -----------------------------------------------------------------------
-
-    [Theory]
-    [InlineData(EventTypes.MessageCreated)]
-    [InlineData(EventTypes.MessageUpdated)]
-    [InlineData(EventTypes.MessagePartUpdated)]
-    public void MessageLifecycleEventTypes_RequireReasoningFilter(string eventType)
-    {
-        var classification = EventTypeMetadata.Classify(eventType);
-        classification.RequiresReasoningFilter.ShouldBeTrue();
-    }
-
-    [Theory]
-    [InlineData(EventTypes.MessageRemoved)]
-    [InlineData(EventTypes.SessionUpdated)]
-    [InlineData(EventTypes.SessionStatus)]
-    [InlineData(EventTypes.Error)]
-    public void NonMessageLifecycleEventTypes_DoNotRequireReasoningFilter(string eventType)
-    {
-        var classification = EventTypeMetadata.Classify(eventType);
-        classification.RequiresReasoningFilter.ShouldBeFalse();
-    }
-
-    // -----------------------------------------------------------------------
     // Activity signal events
     // -----------------------------------------------------------------------
 
@@ -119,7 +94,6 @@ public sealed class EventTypeMetadataTests
         classification.IsDurable.ShouldBeFalse();
         classification.IsEphemeralRelay.ShouldBeFalse();
         classification.IsAdvisory.ShouldBeFalse();
-        classification.RequiresReasoningFilter.ShouldBeFalse();
         classification.IsActivitySignal.ShouldBeFalse();
     }
 

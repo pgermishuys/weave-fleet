@@ -3,7 +3,8 @@ import { computed, ref } from "vue";
 import { X, User, Bot, Copy } from "lucide-vue-next";
 import ToolCard from "@/components/session/ToolCard.vue";
 import QuestionCard from "@/components/session/QuestionCard.vue";
-import type { AccumulatedToolPart } from "@/lib/client-types";
+import ReasoningBlock from "@/components/session/ReasoningBlock.vue";
+import type { AccumulatedToolPart, AccumulatedReasoningPart } from "@/lib/client-types";
 import type { VisualPayload } from "@/lib/visual-payload";
 import { useQuestionAnswer } from "@/composables/use-question-answer";
 import { useRelativeTime } from "@/composables/use-relative-time";
@@ -45,6 +46,7 @@ const props = defineProps<{
   images?: ImageAttachmentDisplay[];
   tools?: ToolCardItem[];
   questionParts?: AccumulatedToolPart[];
+  reasoningParts?: AccumulatedReasoningPart[];
   sessionId?: string;
   showIdentity: boolean;
   clusterPosition: "single" | "first" | "middle" | "last";
@@ -144,6 +146,13 @@ function handleExpandVisual(payload: VisualPayload): void {
             v-if="body"
             class="msg-body__content md-content"
             v-html="bodyHtml"
+          />
+
+          <ReasoningBlock
+            v-for="reasoning in reasoningParts ?? []"
+            :key="reasoning.partId"
+            :text="reasoning.text"
+            :summary="reasoning.summary"
           />
 
           <div
