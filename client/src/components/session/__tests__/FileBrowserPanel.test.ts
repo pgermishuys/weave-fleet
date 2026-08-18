@@ -3,10 +3,10 @@ import { createPinia, setActivePinia } from "pinia";
 import { ref } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import FileBrowserPanel from "@/components/session/FileBrowserPanel.vue";
-import type { FileDiffItem } from "@/api/client";
+import type { BrowseDirectoryEntry, FileDiffItem } from "@/api/client";
 
 const mockFileBrowser = {
-  rootEntries: ref([]),
+  rootEntries: ref<BrowseDirectoryEntry[]>([]),
   expandedDirs: ref(new Map()),
   loadingDirs: ref(new Set()),
   rootLoading: ref(false),
@@ -135,12 +135,11 @@ describe("FileBrowserPanel", () => {
     });
 
     it("filters_tree_to_show_only_changed_files_and_ancestors", async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mockFileBrowser.rootEntries.value = [
         { relativePath: "src", isDirectory: true, name: "src" },
         { relativePath: "docs", isDirectory: true, name: "docs" },
         { relativePath: "README.md", isDirectory: false, name: "README.md" },
-      ];
+      ] as BrowseDirectoryEntry[];
 
       mockDiffs.diffs.value = [
         { file: "src/components/App.vue", status: "modified", additions: 1, deletions: 0 },
@@ -165,12 +164,11 @@ describe("FileBrowserPanel", () => {
     });
 
     it("shows_all_files_when_all_filter_is_active", async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mockFileBrowser.rootEntries.value = [
         { relativePath: "src", isDirectory: true, name: "src" },
         { relativePath: "docs", isDirectory: true, name: "docs" },
         { relativePath: "README.md", isDirectory: false, name: "README.md" },
-      ];
+      ] as BrowseDirectoryEntry[];
 
       mockContentPanel.filesContext.value.allChangedFilter = "all";
 
