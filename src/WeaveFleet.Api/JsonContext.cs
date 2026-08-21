@@ -218,6 +218,15 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(CatalogEntryDto[]))]
 [JsonSerializable(typeof(SkillSyncResultDto))]
 [JsonSerializable(typeof(SkillSyncResultDto[]))]
+// Tools
+[JsonSerializable(typeof(InstallToolRequest))]
+[JsonSerializable(typeof(InstallToolResponse))]
+[JsonSerializable(typeof(ToolListResponse))]
+[JsonSerializable(typeof(ToolDto))]
+[JsonSerializable(typeof(ToolDto[]))]
+[JsonSerializable(typeof(ToolCatalogResponse))]
+[JsonSerializable(typeof(ToolCatalogDto))]
+[JsonSerializable(typeof(ToolCatalogDto[]))]
 // Auth
 [JsonSerializable(typeof(AuthStatusResponse))]
 [JsonSerializable(typeof(TokenLoginRequest))]
