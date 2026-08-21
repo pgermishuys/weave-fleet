@@ -89,6 +89,8 @@ async function submitNativeInstall(): Promise<void> {
       args: null,
       env: null,
       repoUrl: isGitHub ? url : null,
+      ref: null,
+      subPath: null,
       localPath: isGitHub ? null : url,
     };
 
@@ -130,6 +132,8 @@ async function submitMcpInstall(): Promise<void> {
       args: args.length > 0 ? args : null,
       env: Object.keys(env).length > 0 ? env : null,
       repoUrl: null,
+      ref: null,
+      subPath: null,
       localPath: null,
     };
 

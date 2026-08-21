@@ -104,6 +104,7 @@ public static class SkillEndpoints
                 return Results.Conflict(new ErrorResponse($"Skill '{req.Name}' is already installed."));
 
             // Validate source
+            var localPath = req.LocalPath;
             if (req.Source == SkillSource.GitHub)
             {
                 if (string.IsNullOrWhiteSpace(req.RepoUrl))
@@ -123,6 +124,9 @@ public static class SkillEndpoints
                         title: "GitHub clone failed",
                         detail: cloneResult.Error.Description
                     );
+
+                // Use the local path where the skill was cloned
+                localPath = cloneResult.Value;
             }
             else if (req.Source == SkillSource.Local)
             {
@@ -145,7 +149,7 @@ public static class SkillEndpoints
                 RepoUrl = req.RepoUrl,
                 Ref = req.Ref,
                 SubPath = req.SubPath,
-                LocalPath = req.LocalPath,
+                LocalPath = localPath,
                 TargetHarnesses = req.TargetHarnesses ?? [],
                 InstalledAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow

@@ -99,15 +99,59 @@ public sealed partial class GitHubSkillFetcher(ILogger<GitHubSkillFetcher> logge
             return FleetError.ValidationError("RepoUrl", "Skill manifest entry is missing repository URL.");
         }
 
-        if (string.IsNullOrWhiteSpace(entry.LocalPath) || !Directory.Exists(entry.LocalPath))
+        // Derive local path from skill name when not explicitly set (e.g. older manifest entries)
+        var localPath = entry.LocalPath;
+        if (string.IsNullOrWhiteSpace(localPath))
+        {
+            localPath = Path.Combine(_skillsBasePath, entry.Name);
+        }
+
+        if (!Directory.Exists(localPath))
         {
             return FleetError.ValidationError("LocalPath", "Skill is not installed locally.");
+        }
+
+        // For subPath skills, the main directory has no .git — use the sparse-temp clone if available
+        var gitPath = localPath;
+        if (!Directory.Exists(Path.Combine(localPath, ".git")))
+        {
+            var sparseTemp = localPath + ".sparse-temp";
+            var sparseTempGit = Path.Combine(sparseTemp, ".git");
+
+            // Verify the sparse-temp is a functional git repo (has HEAD file)
+            if (Directory.Exists(sparseTempGit) && File.Exists(Path.Combine(sparseTempGit, "HEAD")))
+            {
+                gitPath = sparseTemp;
+            }
+            else
+            {
+                // No usable git history available locally; do a remote-only check
+                var remoteRefResult = await GetRemoteRefShaAsync(
+                    entry.RepoUrl,
+                    entry.Ref ?? "HEAD",
+                    cancellationToken).ConfigureAwait(false);
+
+                if (!remoteRefResult.IsSuccess)
+                {
+                    LogRemoteCheckFailed(entry.Name, remoteRefResult.Error);
+                    return Result.Success(new UpdateCheckResult(
+                        UpdateAvailable: false,
+                        RemoteRef: null,
+                        LocalRef: null));
+                }
+
+                // Without local SHA we can't compare — report as potentially outdated
+                return Result.Success(new UpdateCheckResult(
+                    UpdateAvailable: true,
+                    RemoteRef: remoteRefResult.Value,
+                    LocalRef: null));
+            }
         }
 
         try
         {
             // Get local HEAD SHA
-            var localRefResult = await GetLocalHeadShaAsync(entry.LocalPath, cancellationToken).ConfigureAwait(false);
+            var localRefResult = await GetLocalHeadShaAsync(gitPath, cancellationToken).ConfigureAwait(false);
             if (!localRefResult.IsSuccess)
             {
                 return localRefResult.Error;

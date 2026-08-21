@@ -1,6 +1,8 @@
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Tools;
 using WeaveFleet.Domain.Common;
+using WeaveFleet.Domain.Skills;
 using WeaveFleet.Domain.Tools;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -57,12 +59,15 @@ public static class ToolEndpoints
                     Entries: catalog.Entries.Select(e => new ToolCatalogDto(
                         Name: e.Name,
                         ToolType: e.ToolType.ToString().ToLowerInvariant(),
+                        Source: (int)e.Source,
                         DisplayName: e.DisplayName,
                         Description: e.Description,
                         Command: e.Command,
                         Args: e.Args,
                         Env: e.Env,
                         RepoUrl: e.RepoUrl,
+                        Ref: e.Ref,
+                        SubPath: e.SubPath,
                         LocalPath: e.LocalPath,
                         Author: e.Author,
                         Version: e.Version,
@@ -89,6 +94,7 @@ public static class ToolEndpoints
             InstallToolRequest req,
             IToolManifestStore manifestStore,
             IToolInstaller installer,
+            IGitHubSkillFetcher gitHubFetcher,
             IUserContext userContext,
             CancellationToken ct) =>
         {
@@ -108,13 +114,38 @@ public static class ToolEndpoints
                 return Results.BadRequest(new ErrorResponse($"Invalid tool type '{req.ToolType}'. Must be 'native' or 'mcp'."));
 
             // Validate local path for native tools
+            var sourcePath = req.LocalPath;
             if (toolType == ToolType.Native)
             {
-                if (string.IsNullOrWhiteSpace(req.LocalPath))
-                    return Results.BadRequest(new ErrorResponse("LocalPath is required for native tools."));
+                if (req.Source == SkillSource.GitHub)
+                {
+                    // Clone from GitHub to get source files
+                    if (string.IsNullOrWhiteSpace(req.RepoUrl))
+                        return Results.BadRequest(new ErrorResponse("RepoUrl is required for GitHub source."));
 
-                if (!File.Exists(req.LocalPath))
-                    return Results.BadRequest(new ErrorResponse("Local file does not exist."));
+                    var cloneResult = await gitHubFetcher.CloneOrUpdateAsync(
+                        req.RepoUrl,
+                        $"tool-{req.Name}",
+                        req.Ref,
+                        req.SubPath,
+                        ct);
+
+                    if (cloneResult.IsFailure)
+                        return Results.Problem(
+                            statusCode: 500,
+                            title: "GitHub clone failed",
+                            detail: cloneResult.Error.Description);
+
+                    sourcePath = cloneResult.Value;
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(req.LocalPath))
+                        return Results.BadRequest(new ErrorResponse("LocalPath is required for native tools."));
+
+                    if (!File.Exists(req.LocalPath))
+                        return Results.BadRequest(new ErrorResponse("Local file does not exist."));
+                }
             }
 
             // Validate MCP fields for MCP tools
@@ -144,7 +175,7 @@ public static class ToolEndpoints
             {
                 ToolType.Native => await installer.InstallNativeAsync(
                     req.Name,
-                    req.LocalPath!,
+                    sourcePath!,
                     userContext.UserId,
                     workspaceId: null,
                     ct),
@@ -243,6 +274,8 @@ internal sealed record InstallToolRequest(
     IReadOnlyList<string>? Args,
     IReadOnlyDictionary<string, string>? Env,
     string? RepoUrl,
+    string? Ref,
+    string? SubPath,
     string? LocalPath);
 
 internal sealed record InstallToolResponse(
@@ -274,12 +307,15 @@ internal sealed record ToolCatalogResponse(
 internal sealed record ToolCatalogDto(
     string Name,
     string ToolType,
+    int Source,
     string? DisplayName,
     string? Description,
     string? Command,
     IReadOnlyList<string>? Args,
     IReadOnlyDictionary<string, string>? Env,
     string? RepoUrl,
+    string? Ref,
+    string? SubPath,
     string? LocalPath,
     string? Author,
     string? Version,

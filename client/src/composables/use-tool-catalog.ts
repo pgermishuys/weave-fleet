@@ -24,12 +24,15 @@ function mapToolType(toolType: string): "native" | "mcp" {
 export interface ToolCatalogEntry {
   name: string;
   toolType: "native" | "mcp";
+  source: number;
   displayName?: string | null;
   description?: string | null;
   command?: string | null;
   args?: readonly string[] | null;
   env?: Record<string, string> | null;
   repoUrl?: string | null;
+  ref?: string | null;
+  subPath?: string | null;
   localPath?: string | null;
   author?: string | null;
   version?: string | null;
@@ -69,22 +72,28 @@ export function useToolCatalog(): UseToolCatalogResult {
         throw new Error("No data returned");
       }
 
-      catalog.value = (data.entries ?? []).map((entry) => ({
-        name: entry.name,
-        toolType: mapToolType(entry.toolType),
-        displayName: entry.displayName,
-        description: entry.description,
-        command: entry.command,
-        args: entry.args as readonly string[] | null,
-        env: entry.env ?? null,
-        repoUrl: entry.repoUrl,
-        localPath: entry.localPath,
-        author: entry.author,
-        version: entry.version,
-        tags: entry.tags as readonly string[],
-        createdAt: entry.createdAt,
-        updatedAt: entry.updatedAt,
-      }));
+      catalog.value = (data.entries ?? []).map((entry) => {
+        const e = entry as Record<string, unknown>;
+        return {
+          name: entry.name,
+          toolType: mapToolType(entry.toolType),
+          source: (e.source as number) ?? 1,
+          displayName: entry.displayName,
+          description: entry.description,
+          command: entry.command,
+          args: entry.args as readonly string[] | null,
+          env: entry.env ?? null,
+          repoUrl: entry.repoUrl,
+          ref: (e.ref as string | null) ?? null,
+          subPath: (e.subPath as string | null) ?? null,
+          localPath: entry.localPath,
+          author: entry.author,
+          version: entry.version,
+          tags: entry.tags as readonly string[],
+          createdAt: entry.createdAt,
+          updatedAt: entry.updatedAt,
+        };
+      });
       isStale.value = data.isStale ?? false;
       cachedAt.value = data.cachedAt ?? null;
     } catch (fetchError) {

@@ -14,6 +14,8 @@ interface InstallToolRequest {
   args: null | string[];
   env: null | Record<string, string>;
   repoUrl: null | string;
+  ref: null | string;
+  subPath: null | string;
   localPath: null | string;
 }
 
@@ -21,6 +23,7 @@ const { catalog, isLoading, error, installTool } = useToolCatalog();
 const { tools: installedTools, fetchTools } = useTools();
 
 const installingToolName = shallowRef<string | null>(null);
+const installError = shallowRef<string | null>(null);
 
 const hasCatalog = computed(() => catalog.value.length > 0);
 
@@ -35,21 +38,26 @@ async function handleInstall(toolName: string): Promise<void> {
   }
 
   installingToolName.value = toolName;
+  installError.value = null;
 
   try {
     const request: InstallToolRequest = {
       name: catalogEntry.name,
       toolType: catalogEntry.toolType,
-      source: 1, // Default to GitHub (1) for catalog installs
+      source: catalogEntry.source,
       command: catalogEntry.command ?? null,
       args: catalogEntry.args ? [...catalogEntry.args] : null,
       env: catalogEntry.env ?? null,
       repoUrl: catalogEntry.repoUrl ?? null,
+      ref: catalogEntry.ref ?? null,
+      subPath: catalogEntry.subPath ?? null,
       localPath: catalogEntry.localPath ?? null,
     };
 
     await installTool(request);
     await fetchTools();
+  } catch (err) {
+    installError.value = err instanceof Error ? err.message : "Failed to install tool.";
   } finally {
     installingToolName.value = null;
   }
@@ -205,6 +213,19 @@ async function handleInstall(toolName: string): Promise<void> {
           </div>
         </div>
       </article>
+    </div>
+
+    <div
+      v-if="installError"
+      class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
+      role="alert"
+    >
+      <AlertCircle
+        :size="16"
+        class="mt-0.5 shrink-0"
+        aria-hidden="true"
+      />
+      <span>{{ installError }}</span>
     </div>
 
     <div

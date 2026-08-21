@@ -2452,6 +2452,8 @@ export interface components {
                 [key: string]: string;
             };
             repoUrl: null | string;
+            ref: null | string;
+            subPath: null | string;
             localPath: null | string;
         };
         InstallToolResponse: {
