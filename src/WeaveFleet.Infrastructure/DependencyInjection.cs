@@ -11,6 +11,7 @@ using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Skills;
+using WeaveFleet.Application.Tools;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Analytics;
 using WeaveFleet.Infrastructure.Data;
@@ -30,6 +31,7 @@ using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.SessionSources;
 using WeaveFleet.Infrastructure.Skills;
+using WeaveFleet.Infrastructure.Tools;
 
 namespace WeaveFleet.Infrastructure;
 
@@ -203,6 +205,11 @@ public static class DependencyInjection
             sp.GetService<IHarnessPoolRecycler>()));
         services.AddSingleton<IGitHubSkillFetcher, GitHubSkillFetcher>();
         services.AddSingleton<SkillManifestMigrator>();
+
+        // Tool services
+        services.AddSingleton<IToolCatalogService, GitHubToolCatalogService>();
+        services.AddSingleton<IToolManifestStore, JsonToolManifestStore>();
+        services.AddSingleton<IToolInstaller, ToolInstaller>();
 
         // InstanceTracker is singleton — holds live in-process handles across requests
         services.AddSingleton<InstanceTracker>();

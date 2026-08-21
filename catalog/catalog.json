@@ -14,5 +14,19 @@
       "version": "1.0.0",
       "tags": ["fleet", "api", "sessions", "automations", "github"]
     }
+  ],
+  "tools": [
+    {
+      "name": "visualize",
+      "displayName": "Visualize",
+      "description": "Render visual diagrams inline in the conversation. Supports sequence diagrams (Mermaid) and interactive flow diagrams (flowcharts, architecture, state machines, etc.) with automatic layout.",
+      "toolType": "native",
+      "source": "GitHub",
+      "repoUrl": "https://github.com/pgermishuys/weave-fleet",
+      "ref": "main",
+      "subPath": "opencode/tools",
+      "files": ["visualize.ts"],
+      "tags": ["diagrams", "mermaid", "visualization", "flowcharts"]
+    }
   ]
 }

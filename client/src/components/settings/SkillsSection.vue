@@ -20,7 +20,7 @@ import CustomInstallTab from "./skills/CustomInstallTab.vue";
       default-value="installed"
       class="mt-5"
     >
-      <TabsList class="grid w-full grid-cols-3">
+      <TabsList variant="underline" class="grid w-full grid-cols-3">
         <TabsTrigger value="installed">
           Installed
         </TabsTrigger>

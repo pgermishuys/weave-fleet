@@ -24,3 +24,32 @@ const forwardedProps = useForwardProps(delegatedProps)
     <slot />
   </TabsTrigger>
 </template>
+
+<style>
+/* Underline variant: override default trigger styling when parent has data-variant="underline" */
+[data-variant="underline"] > [data-slot="tabs-trigger"] {
+  height: auto;
+  flex: none;
+  border: none;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 8px 2px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+[data-variant="underline"] > [data-slot="tabs-trigger"]:hover {
+  color: var(--text);
+}
+
+[data-variant="underline"] > [data-slot="tabs-trigger"][data-state="active"] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  background: transparent !important;
+}
+</style>

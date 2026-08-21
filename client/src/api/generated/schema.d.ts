@@ -1205,6 +1205,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListTools"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tools/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetToolCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tools/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["InstallTool"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tools/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["DeleteTool"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/instances/{id}/models": {
         parameters: {
             query?: never;
@@ -2378,6 +2442,24 @@ export interface components {
             name: string;
             syncResults: components["schemas"]["SkillSyncResultDto"][];
         };
+        InstallToolRequest: {
+            name: string;
+            toolType: string;
+            source: components["schemas"]["SkillSource"];
+            command: null | string;
+            args: null | string[];
+            env: null | {
+                [key: string]: string;
+            };
+            repoUrl: null | string;
+            localPath: null | string;
+        };
+        InstallToolResponse: {
+            name: string;
+            toolType: string;
+            /** Format: date-time */
+            installedAt: string;
+        };
         JsonElement: unknown;
         JsonObject: Record<string, never>;
         LegacySessionImportApiResponse: {
@@ -2571,6 +2653,7 @@ export interface components {
             attachments: null | components["schemas"]["ImageAttachmentDto"][];
             userMessageId: null | string;
             correlationId: null | string;
+            effort: null | string;
         };
         SessionActionCapabilities: {
             canPrompt: boolean;
@@ -2691,6 +2774,7 @@ export interface components {
             source: components["schemas"]["SkillSource"];
             repoUrl: null | string;
             ref: null | string;
+            subPath: null | string;
             localPath: null | string;
             targetHarnesses: string[];
             /** Format: date-time */
@@ -2716,6 +2800,7 @@ export interface components {
             source: components["schemas"]["SkillSource"];
             repoUrl?: null | string;
             ref?: null | string;
+            subPath?: null | string;
             localPath?: null | string;
             targetHarnesses?: string[];
             /** Format: date-time */
@@ -2785,6 +2870,52 @@ export interface components {
         };
         TokenLoginRequest: {
             token: string;
+        };
+        ToolCatalogDto: {
+            name: string;
+            toolType: string;
+            displayName: null | string;
+            description: null | string;
+            command: null | string;
+            args: null | string[];
+            env: null | {
+                [key: string]: string;
+            };
+            repoUrl: null | string;
+            localPath: null | string;
+            author: null | string;
+            version: null | string;
+            tags: string[];
+            /** Format: date-time */
+            createdAt: null | string;
+            /** Format: date-time */
+            updatedAt: null | string;
+        };
+        ToolCatalogResponse: {
+            entries: components["schemas"]["ToolCatalogDto"][];
+            isStale: boolean;
+            /** Format: date-time */
+            cachedAt: null | string;
+        };
+        ToolDto: {
+            name: string;
+            toolType: string;
+            displayName: null | string;
+            description: null | string;
+            command: null | string;
+            args: null | string[];
+            env: null | {
+                [key: string]: string;
+            };
+            repoUrl: null | string;
+            localPath: null | string;
+            /** Format: date-time */
+            installedAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ToolListResponse: {
+            tools: components["schemas"]["ToolDto"][];
         };
         UiActionRequest: {
             action: string;
@@ -5176,6 +5307,144 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SkillManifest"];
+                };
+            };
+        };
+    };
+    ListTools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolListResponse"];
+                };
+            };
+        };
+    };
+    GetToolCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolCatalogResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    InstallTool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstallToolRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallToolResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    DeleteTool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

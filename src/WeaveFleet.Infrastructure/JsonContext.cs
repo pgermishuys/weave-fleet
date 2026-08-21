@@ -4,10 +4,12 @@ using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Skills;
+using WeaveFleet.Domain.Tools;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 using WeaveFleet.Infrastructure.Harnesses.NuCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Tools;
 
 namespace WeaveFleet.Infrastructure;
 
@@ -270,6 +272,12 @@ internal sealed record NuCodeStatusPayload
 [JsonSerializable(typeof(SkillManifest))]
 [JsonSerializable(typeof(SkillManifestEntry))]
 [JsonSerializable(typeof(SkillSource))]
+[JsonSerializable(typeof(CachedToolCatalog))]
+[JsonSerializable(typeof(ToolCatalogEntry))]
+[JsonSerializable(typeof(List<ToolCatalogEntry>))]
+[JsonSerializable(typeof(ToolManifest))]
+[JsonSerializable(typeof(ToolManifestEntry))]
+[JsonSerializable(typeof(ToolType))]
 internal sealed partial class InfrastructureJsonContext : JsonSerializerContext
 {
     /// <summary>Returns a serialized activity-status payload.</summary>
