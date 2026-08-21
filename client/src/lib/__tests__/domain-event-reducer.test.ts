@@ -701,8 +701,8 @@ describe("domain-event-reducer", () => {
       },
     })
 
-    expect(state.explicitStatus).toBe("busy")
-    expect(state.sessionStatus).toBe("busy")
+    expect(state.explicitStatus).toBe("idle")
+    expect(state.sessionStatus).toBe("delegating")
   })
 
   it("stays delegating after explicit idle until the final active delegation completes", () => {
@@ -862,7 +862,64 @@ describe("domain-event-reducer", () => {
 
     const afterParentDelegationCompleted = applyDelegationCompletedEvent(afterParentTurnEnded)
 
-    expect(afterParentDelegationCompleted.explicitStatus).toBe("idle")
+     expect(afterParentDelegationCompleted.explicitStatus).toBe("idle")
     expect(afterParentDelegationCompleted.sessionStatus).toBe("idle")
+  })
+
+  it("transitions to idle when turn.ended arrives without a preceding session.idled and no active delegations", () => {
+    const busyState = applyDomainEvent(createState(), {
+      type: "turn.started",
+      payload: {
+        sessionID: "session-1",
+        messageID: "message-1",
+        index: 0,
+        agent: null,
+        modelID: null,
+        parentID: null,
+      },
+    })
+
+    expect(busyState.explicitStatus).toBe("busy")
+    expect(busyState.sessionStatus).toBe("busy")
+
+    const afterTurnEnded = applyDomainEvent(busyState, {
+      type: "turn.ended",
+      payload: {
+        sessionID: "session-1",
+        messageID: "message-1",
+        index: 0,
+        reason: null,
+        cost: 0,
+        tokens: null,
+        completedAt: null,
+      },
+    })
+
+    expect(afterTurnEnded.explicitStatus).toBe("idle")
+    expect(afterTurnEnded.sessionStatus).toBe("idle")
+  })
+
+  it("stays delegating when turn.ended arrives with active delegations", () => {
+    const busyWithDelegations = createState({
+      delegations: [createDelegation({ status: "running" })],
+      explicitStatus: "busy",
+      sessionStatus: "busy",
+    })
+
+    const afterTurnEnded = applyDomainEvent(busyWithDelegations, {
+      type: "turn.ended",
+      payload: {
+        sessionID: "session-1",
+        messageID: "message-1",
+        index: 0,
+        reason: null,
+        cost: 0,
+        tokens: null,
+        completedAt: null,
+      },
+    })
+
+    expect(afterTurnEnded.explicitStatus).toBe("idle")
+    expect(afterTurnEnded.sessionStatus).toBe("delegating")
   })
 })

@@ -97,7 +97,7 @@ export function applyDomainEvent(state: SessionStreamState, event: DomainEvent):
       return withExplicitStatus(state, "busy")
 
     case "turn.ended":
-      return state
+      return withExplicitStatus(state, "idle")
 
     case "delegation.created":
       return withDelegations(state, applyDelegationCreated(state.delegations, mapDelegationEvent(event)))
