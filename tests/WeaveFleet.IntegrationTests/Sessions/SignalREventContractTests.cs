@@ -547,7 +547,15 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
             }
         };
 
-        var rawPayload = JsonSerializer.SerializeToElement(domainEvent.Payload);
+        var rawPayload = JsonSerializer.SerializeToElement(new
+        {
+            sessionId,
+            files = new[]
+            {
+                new { path = "src/Example.cs", changeType = "modified" },
+                new { path = "tests/ExampleTests.cs", changeType = "created" }
+            }
+        });
 
         await broadcaster.BroadcastAsync(
             topic,
