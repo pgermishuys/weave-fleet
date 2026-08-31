@@ -276,7 +276,27 @@ public static class ToolRegistry
         if (cmd.CwdIsDirectory)
             psi.WorkingDirectory = safeDir;
 
+        ScrubHostingEnvironmentVars(psi);
+
         return psi;
+    }
+
+    /// <summary>
+    /// Removes ASP.NET Core hosting variables (ASPNETCORE_*, DOTNET_*) from the
+    /// child process environment so spawned editors/terminals don't inherit them.
+    /// </summary>
+    private static void ScrubHostingEnvironmentVars(ProcessStartInfo psi)
+    {
+        // Accessing .Environment causes the collection to be populated from the
+        // current process's environment block, so we can then selectively remove keys.
+        var env = psi.Environment;
+        var keysToRemove = env.Keys
+            .Where(k => k.StartsWith("ASPNETCORE_", StringComparison.OrdinalIgnoreCase)
+                     || k.StartsWith("DOTNET_", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var key in keysToRemove)
+            env.Remove(key);
     }
 
     /// <summary>
