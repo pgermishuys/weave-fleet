@@ -267,6 +267,27 @@ public sealed class DomainEventSerializationTests
                 },
             });
 
+            cases.Add("files.changed", new FilesChanged
+            {
+                Payload = new FilesChangedPayload
+                {
+                    SessionId = "session-1",
+                    Files =
+                    [
+                        new FileChangeEntry
+                        {
+                            Path = "src/Program.cs",
+                            ChangeType = "modified",
+                        },
+                        new FileChangeEntry
+                        {
+                            Path = "tests/ProgramTests.cs",
+                            ChangeType = "created",
+                        },
+                    ],
+                },
+            });
+
             return cases;
         }
     }

@@ -25,7 +25,13 @@ public static class EventTypes
     public const string ServerHeartbeat = "server.heartbeat";
     public const string ServerConnected = "server.connected";
 
+    public const string FileWatcherUpdated = "file.watcher.updated";
+
     /// <summary>Returns <c>true</c> if the event type is a permission event (i.e. starts with "permission.").</summary>
     public static bool IsPermissionEvent(string type) =>
         type.StartsWith("permission.", StringComparison.Ordinal);
+
+    /// <summary>Returns <c>true</c> if the event type is a file watcher event (i.e. starts with "file.watcher.").</summary>
+    public static bool IsFileWatcherEvent(string type) =>
+        type.StartsWith("file.watcher.", StringComparison.Ordinal);
 }

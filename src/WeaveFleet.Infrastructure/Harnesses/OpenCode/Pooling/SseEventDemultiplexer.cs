@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Diagnostics;
+using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 
@@ -40,6 +41,11 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
         "weave_fleet.opencode.sse.unattributable_events.dropped",
         "events",
         "OpenCode SSE events dropped because they could not be safely attributed to an active Fleet session consumer.");
+
+    private static readonly Counter<long> FileWatcherEventsRouted = FleetInstrumentation.Meter.CreateCounter<long>(
+        "weave_fleet.opencode.sse.file_watcher_events.routed",
+        "events",
+        "OpenCode SSE file watcher events routed to all consumers on a directory stream.");
 
     private static readonly Action<ILogger, string, string, Exception?> LogDroppedUnattributableEvent =
         LoggerMessage.Define<string, string>(
@@ -267,6 +273,24 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
 
     private void RouteEvent(DirectoryStreamEntry entry, OpenCodeSseEvent evt)
     {
+        // File watcher events are broadcast to all consumers on the directory stream
+        if (EventTypes.IsFileWatcherEvent(evt.Type))
+        {
+            ConsumerEntry[] consumers;
+            lock (entry.Sync)
+            {
+                consumers = entry.Consumers.Values.ToArray();
+            }
+
+            foreach (var consumer in consumers)
+            {
+                consumer.Channel.Writer.TryWrite(evt);
+            }
+
+            FileWatcherEventsRouted.Add(1);
+            return;
+        }
+
         var openCodeSessionId = OpenCodeMapper.TryResolveSessionId(evt);
         if (string.IsNullOrWhiteSpace(openCodeSessionId))
         {

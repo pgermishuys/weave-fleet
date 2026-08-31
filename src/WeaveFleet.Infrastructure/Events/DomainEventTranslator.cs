@@ -63,6 +63,7 @@ internal sealed class DomainEventTranslator
             DelegationCreatedEventType => TranslateDelegationCreated(evt),
             DelegationUpdatedEventType => TranslateDelegationUpdated(evt),
             DelegationCompletedEventType => TranslateDelegationCompleted(evt),
+            EventTypes.FileWatcherUpdated => TranslateFileWatcherUpdated(evt),
 
             // message.removed and message.part.removed are durable persistence signals only.
             EventTypes.MessageRemoved or EventTypes.MessagePartRemoved => null,
@@ -75,6 +76,9 @@ internal sealed class DomainEventTranslator
 
             // permission.* events are UI interaction signals rather than domain events.
             _ when EventTypes.IsPermissionEvent(evt.Type) => null,
+
+            // file.watcher.* events other than file.watcher.updated are not yet mapped to domain events.
+            _ when EventTypes.IsFileWatcherEvent(evt.Type) => null,
 
             _ => DropUnknown(evt.Type),
         };
@@ -281,6 +285,58 @@ internal sealed class DomainEventTranslator
                 ParentSessionId = string.IsNullOrWhiteSpace(payload.ParentSessionId)
                     ? ResolveSessionId(evt)
                     : payload.ParentSessionId,
+            }
+        };
+    }
+
+    private static FilesChanged? TranslateFileWatcherUpdated(HarnessEvent evt)
+    {
+        if (evt.Payload is not { ValueKind: JsonValueKind.Object } payload)
+            return null;
+
+        var sessionId = ResolveSessionId(evt);
+        var files = new List<FileChangeEntry>();
+
+        // Try to extract file changes from various possible payload structures
+        // Pattern 1: Single file with "path" and optional "changeType"
+        var path = GetStringProperty(payload, "path", "filePath", "file");
+        if (path is not null)
+        {
+            var changeType = GetStringProperty(payload, "changeType", "type") ?? "updated";
+            files.Add(new FileChangeEntry { Path = path, ChangeType = changeType });
+        }
+
+        // Pattern 2: Array of files in "files" or "changes" property
+        if (files.Count == 0)
+        {
+            var filesArray = TryGetArrayProperty(payload, "files", "changes");
+            if (filesArray is not null)
+            {
+                foreach (var fileElement in filesArray.Value.EnumerateArray())
+                {
+                    if (fileElement.ValueKind != JsonValueKind.Object)
+                        continue;
+
+                    var filePath = GetStringProperty(fileElement, "path", "filePath", "file");
+                    if (filePath is null)
+                        continue;
+
+                    var changeType = GetStringProperty(fileElement, "changeType", "type") ?? "updated";
+                    files.Add(new FileChangeEntry { Path = filePath, ChangeType = changeType });
+                }
+            }
+        }
+
+        // If no files were extracted, return null (graceful degradation)
+        if (files.Count == 0)
+            return null;
+
+        return new FilesChanged
+        {
+            Payload = new FilesChangedPayload
+            {
+                SessionId = sessionId,
+                Files = files
             }
         };
     }
@@ -523,6 +579,19 @@ internal sealed class DomainEventTranslator
             return null;
 
         return property;
+    }
+
+    private static JsonElement? TryGetArrayProperty(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.Array)
+                continue;
+
+            return property;
+        }
+
+        return null;
     }
 
     private static string? GetStringProperty(JsonElement element, params string[] propertyNames)

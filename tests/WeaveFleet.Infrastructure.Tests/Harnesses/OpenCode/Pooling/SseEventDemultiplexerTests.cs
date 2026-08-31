@@ -365,6 +365,55 @@ public sealed class SseEventDemultiplexerTests
             cts.Token));
     }
 
+    [Fact]
+    public async Task file_watcher_events_are_broadcast_to_all_consumers_on_same_directory_stream()
+    {
+        var instance = CreateInstance();
+        var firstConsumerId = Guid.NewGuid();
+        var secondConsumerId = Guid.NewGuid();
+        var thirdConsumerId = Guid.NewGuid();
+        var resolver = new FakeBindingResolver();
+        var streamFactory = new FakeStreamFactory();
+        await using var demultiplexer = new SseEventDemultiplexer(
+            resolver,
+            streamFactory,
+            NullLogger<SseEventDemultiplexer>.Instance,
+            TimeSpan.Zero,
+            TimeSpan.Zero);
+
+        resolver.Bind(instance, "/repo/one", "oc-session-1", firstConsumerId);
+        resolver.Bind(instance, "/repo/one", "oc-session-2", secondConsumerId);
+        resolver.Bind(instance, "/repo/one", "oc-session-3", thirdConsumerId);
+
+        var firstConsumer = Channel.CreateUnbounded<OpenCodeSseEvent>();
+        var secondConsumer = Channel.CreateUnbounded<OpenCodeSseEvent>();
+        var thirdConsumer = Channel.CreateUnbounded<OpenCodeSseEvent>();
+
+        await using var firstRegistration = await demultiplexer.RegisterConsumerAsync(instance, "/repo/one", firstConsumerId, firstConsumer, CancellationToken.None);
+        await using var secondRegistration = await demultiplexer.RegisterConsumerAsync(instance, "/repo/one", secondConsumerId, secondConsumer, CancellationToken.None);
+        await using var thirdRegistration = await demultiplexer.RegisterConsumerAsync(instance, "/repo/one", thirdConsumerId, thirdConsumer, CancellationToken.None);
+
+        var stream = await streamFactory.WaitForSubscriptionAsync(instance, "/repo/one", 1);
+
+        var fileWatcherEvent = CreateFileWatcherEvent("file.watcher.updated");
+        await stream.WriteAsync(fileWatcherEvent);
+
+        var firstReceived = await ReadNextAsync(firstConsumer);
+        var secondReceived = await ReadNextAsync(secondConsumer);
+        var thirdReceived = await ReadNextAsync(thirdConsumer);
+
+        firstReceived.ShouldBeSameAs(fileWatcherEvent);
+        secondReceived.ShouldBeSameAs(fileWatcherEvent);
+        thirdReceived.ShouldBeSameAs(fileWatcherEvent);
+
+        var regularEvent = CreateEvent("message.updated", "oc-session-1");
+        await stream.WriteAsync(regularEvent);
+
+        (await ReadNextAsync(firstConsumer)).ShouldBeSameAs(regularEvent);
+        await AssertNoEventAsync(secondConsumer);
+        await AssertNoEventAsync(thirdConsumer);
+    }
+
     private static PooledOpenCodeInstance CreateInstance()
     {
         return new PooledOpenCodeInstance(
@@ -377,6 +426,12 @@ public sealed class SseEventDemultiplexerTests
     private static OpenCodeSseEvent CreateEvent(string type, string sessionId)
     {
         var properties = JsonSerializer.SerializeToElement(new { sessionID = sessionId });
+        return new OpenCodeSseEvent { Type = type, Properties = properties };
+    }
+
+    private static OpenCodeSseEvent CreateFileWatcherEvent(string type)
+    {
+        var properties = JsonSerializer.SerializeToElement(new { path = "/repo/one/file.txt", changeType = "modified" });
         return new OpenCodeSseEvent { Type = type, Properties = properties };
     }
 

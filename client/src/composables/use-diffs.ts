@@ -26,6 +26,7 @@ export function useDiffs(
   const { subscribeV2 } = useWeaveSocket();
 
   let requestId = 0;
+  let debounceTimeoutId: ReturnType<typeof setTimeout> | undefined;
 
   async function fetchDiffs(): Promise<void> {
     const activeSessionId = currentSessionId.value;
@@ -90,6 +91,17 @@ export function useDiffs(
     isStale.value = true;
   }
 
+  function debouncedFetchDiffs(): void {
+    if (debounceTimeoutId) {
+      clearTimeout(debounceTimeoutId);
+    }
+
+    debounceTimeoutId = setTimeout(() => {
+      void fetchDiffs();
+      debounceTimeoutId = undefined;
+    }, 500);
+  }
+
   watch(
     currentSessionId,
     () => {
@@ -116,15 +128,21 @@ export function useDiffs(
           // Diff state is loaded from the REST endpoint; snapshots are ignored here.
         },
         (event: DomainEvent) => {
-          if (event.type !== "turn.ended" || event.payload.sessionID !== activeSessionId) {
-            return;
+          if (event.type === "turn.ended" && event.payload.sessionID === activeSessionId) {
+            void fetchDiffs();
+          } else if (event.type === "files.changed" && event.payload.sessionId === activeSessionId) {
+            debouncedFetchDiffs();
           }
-
-          void fetchDiffs();
         },
       );
 
-      onCleanup(unsubscribe);
+      onCleanup(() => {
+        if (debounceTimeoutId) {
+          clearTimeout(debounceTimeoutId);
+          debounceTimeoutId = undefined;
+        }
+        unsubscribe();
+      });
     },
     { immediate: true },
   );

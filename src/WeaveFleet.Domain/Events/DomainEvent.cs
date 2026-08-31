@@ -20,4 +20,5 @@ namespace WeaveFleet.Domain.Events;
 [JsonDerivedType(typeof(DelegationCreated), "delegation.created")]
 [JsonDerivedType(typeof(DelegationUpdated), "delegation.updated")]
 [JsonDerivedType(typeof(DelegationCompleted), "delegation.completed")]
+[JsonDerivedType(typeof(FilesChanged), "files.changed")]
 public abstract record DomainEvent;

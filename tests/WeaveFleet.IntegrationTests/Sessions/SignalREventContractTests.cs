@@ -514,6 +514,100 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task Hub_sends_files_changed_domain_event_with_correct_shape()
+    {
+        // Arrange: create a session and subscribe
+        var sessionId = await CreateSessionAsync();
+        var topic = $"session:{sessionId}";
+
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        await WaitForBroadcasterSubscriberAsync();
+
+        var broadcaster = _server.Services.GetRequiredService<IEventBroadcaster>();
+
+        // Act: broadcast a FilesChanged domain event
+        var domainEvent = new WeaveFleet.Domain.Events.FilesChanged
+        {
+            Payload = new WeaveFleet.Domain.Events.FilesChangedPayload
+            {
+                SessionId = sessionId,
+                Files = new[]
+                {
+                    new WeaveFleet.Domain.Events.FileChangeEntry
+                    {
+                        Path = "src/Example.cs",
+                        ChangeType = "modified"
+                    },
+                    new WeaveFleet.Domain.Events.FileChangeEntry
+                    {
+                        Path = "tests/ExampleTests.cs",
+                        ChangeType = "created"
+                    }
+                }
+            }
+        };
+
+        var rawPayload = JsonSerializer.SerializeToElement(domainEvent.Payload);
+
+        await broadcaster.BroadcastAsync(
+            topic,
+            "files.changed",
+            rawPayload,
+            eventId: 500,
+            domainEvent: domainEvent,
+            userId: "local-user",
+            ct: CancellationToken.None);
+
+        // Assert: the client receives the event with correct shape
+        var received = await WaitForEventAsync(TimeSpan.FromSeconds(5));
+        received.ShouldNotBeNull("No files.changed event received");
+
+        // Verify event type discriminator
+        received.Data.TryGetProperty("type", out var typeEl).ShouldBeTrue(
+            $"Missing 'type'. Actual: {received.Data.GetRawText()}");
+        typeEl.GetString().ShouldBe("files.changed",
+            "Event type discriminator should be 'files.changed'");
+
+        // Verify properties structure
+        received.Data.TryGetProperty("properties", out var props).ShouldBeTrue(
+            $"Missing 'properties'. Actual: {received.Data.GetRawText()}");
+
+        // Verify sessionId
+        props.TryGetProperty("sessionId", out var sessionIdProp).ShouldBeTrue(
+            $"Missing 'sessionId' in properties. Actual: {props.GetRawText()}");
+        sessionIdProp.GetString().ShouldBe(sessionId);
+
+        // Verify files array
+        props.TryGetProperty("files", out var filesProp).ShouldBeTrue(
+            $"Missing 'files' array in properties. Actual: {props.GetRawText()}");
+        filesProp.ValueKind.ShouldBe(JsonValueKind.Array,
+            "Files should be an array");
+
+        var filesArray = filesProp.EnumerateArray().ToList();
+        filesArray.Count.ShouldBe(2, "Expected 2 file change entries");
+
+        // Verify first file entry
+        var firstFile = filesArray[0];
+        firstFile.TryGetProperty("path", out var path1).ShouldBeTrue(
+            $"First file missing 'path'. Actual: {firstFile.GetRawText()}");
+        path1.GetString().ShouldBe("src/Example.cs");
+
+        firstFile.TryGetProperty("changeType", out var changeType1).ShouldBeTrue(
+            $"First file missing 'changeType'. Actual: {firstFile.GetRawText()}");
+        changeType1.GetString().ShouldBe("modified");
+
+        // Verify second file entry
+        var secondFile = filesArray[1];
+        secondFile.TryGetProperty("path", out var path2).ShouldBeTrue(
+            $"Second file missing 'path'. Actual: {secondFile.GetRawText()}");
+        path2.GetString().ShouldBe("tests/ExampleTests.cs");
+
+        secondFile.TryGetProperty("changeType", out var changeType2).ShouldBeTrue(
+            $"Second file missing 'changeType'. Actual: {secondFile.GetRawText()}");
+        changeType2.GetString().ShouldBe("created");
+    }
+
+    [Fact]
     public async Task Snapshot_returns_messages_on_subscribe()
     {
         var sessionId = await CreateSessionAsync();

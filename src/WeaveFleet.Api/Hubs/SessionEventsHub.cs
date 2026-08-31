@@ -380,6 +380,7 @@ public class SessionEventsHub : Hub
         DelegationCreated       => "delegation.created",
         DelegationUpdated       => "delegation.updated",
         DelegationCompleted     => "delegation.completed",
+        FilesChanged            => "files.changed",
         _ => domainEvent.GetType().Name,
     };
 }

@@ -243,6 +243,11 @@ export interface ActivityStatusPayload {
   next?: string | null;
 }
 
+export interface FilesChangedPayload {
+  sessionId: string;
+  files: Array<{ path: string; changeType: string }>;
+}
+
 export interface SessionStarted extends EventCursorMetadata {
   type: "session.started";
   payload: SessionStartedPayload;
@@ -323,6 +328,11 @@ export interface ActivityStatus extends EventCursorMetadata {
   payload: ActivityStatusPayload;
 }
 
+export interface FilesChanged extends EventCursorMetadata {
+  type: "files.changed";
+  payload: FilesChangedPayload;
+}
+
 export type DomainEvent =
   | SessionStarted
   | SessionIdled
@@ -339,4 +349,5 @@ export type DomainEvent =
   | DelegationCreated
   | DelegationUpdated
   | DelegationCompleted
-  | ActivityStatus;
+  | ActivityStatus
+  | FilesChanged;

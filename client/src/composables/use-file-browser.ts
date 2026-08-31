@@ -3,9 +3,12 @@ import { browseSessionDirectory, readSessionFile } from '@/api/session-files'
 import type { BrowseDirectoryEntry } from '@/api/client'
 import { buildPayloadForFile } from '@/lib/file-payload'
 import { useVisualPanel } from '@/composables/use-visual-panel'
+import { useWeaveSocket } from '@/composables/use-weave-socket'
+import type { DomainEvent } from '@/lib/domain-events'
 
 export function useFileBrowser(sessionId: Ref<string | null>) {
   const { showVisual } = useVisualPanel()
+  const { subscribeV2 } = useWeaveSocket()
 
   // State
   const rootEntries = ref<BrowseDirectoryEntry[]>([])
@@ -13,6 +16,9 @@ export function useFileBrowser(sessionId: Ref<string | null>) {
   const loadingDirs = ref<Set<string>>(new Set())
   const rootLoading = ref(false)
   const error = ref<string | null>(null)
+
+  // Debounce state for file change events
+  let debounceTimeoutId: ReturnType<typeof setTimeout> | undefined
 
   // Actions
   async function loadRoot(): Promise<void> {
@@ -133,6 +139,12 @@ export function useFileBrowser(sessionId: Ref<string | null>) {
     sessionId,
     (newId, oldId) => {
       if (newId !== oldId) {
+        // Clear debounce timeout on session change
+        if (debounceTimeoutId !== undefined) {
+          clearTimeout(debounceTimeoutId)
+          debounceTimeoutId = undefined
+        }
+
         // Clear state
         rootEntries.value = []
         expandedDirs.value.clear()
@@ -144,6 +156,46 @@ export function useFileBrowser(sessionId: Ref<string | null>) {
           loadRoot()
         }
       }
+    },
+    { immediate: true }
+  )
+
+  // Subscribe to files.changed events
+  watch(
+    sessionId,
+    (activeSessionId, _previousSessionId, onCleanup) => {
+      if (!activeSessionId) {
+        return
+      }
+
+      const unsubscribe = subscribeV2(
+        `session:${activeSessionId}`,
+        () => {
+          // File browser state is loaded from the REST endpoint; snapshots are ignored here.
+        },
+        (event: DomainEvent) => {
+          if (event.type !== 'files.changed' || event.payload.sessionId !== activeSessionId) {
+            return
+          }
+
+          // Debounce loadRoot to avoid flooding the API during rapid edits
+          if (debounceTimeoutId !== undefined) {
+            clearTimeout(debounceTimeoutId)
+          }
+
+          debounceTimeoutId = setTimeout(() => {
+            void loadRoot()
+          }, 500)
+        }
+      )
+
+      onCleanup(() => {
+        unsubscribe()
+        if (debounceTimeoutId !== undefined) {
+          clearTimeout(debounceTimeoutId)
+          debounceTimeoutId = undefined
+        }
+      })
     },
     { immediate: true }
   )
