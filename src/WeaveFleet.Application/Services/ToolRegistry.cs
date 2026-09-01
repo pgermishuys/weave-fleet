@@ -281,18 +281,53 @@ public static class ToolRegistry
         return psi;
     }
 
+    // Prefixes of environment variables injected by Fleet or its launcher scripts
+    // that must not leak into child processes (editors, terminals, IDEs).
+    private static readonly string[] ScrubPrefixes =
+    [
+        "ASPNETCORE_",
+        "DOTNET_",
+        "Fleet__",
+        "WEAVE_FLEET_",
+        "APP_",
+        "PACKAGE_",
+        "REPO_",
+    ];
+
+    // Exact environment variable names injected by Fleet or its launcher scripts.
+    private static readonly HashSet<string> ScrubExact = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "LISTEN_URL",
+        "URLS",
+        "DATA_DIR",
+        "DB_PATH_DEFAULT",
+        "ANALYTICS_DB_PATH_DEFAULT",
+        "KEY_DIR_DEFAULT",
+        "ROOT_DIR",
+        "SCRIPT_DIR",
+        "UPDATE_DIR",
+        "DEV_VERSION_FILE",
+        "VERSION_FILE",
+        "VERSION",
+        "MANIFEST",
+        "INSTALL_LAYOUT",
+        "INSTALL_SCRIPT_URL",
+        "PS_CMD",
+    };
+
     /// <summary>
-    /// Removes ASP.NET Core hosting variables (ASPNETCORE_*, DOTNET_*) from the
-    /// child process environment so spawned editors/terminals don't inherit them.
+    /// Removes Fleet host and launcher environment variables from the child
+    /// process so spawned editors/terminals don't inherit them. This prevents
+    /// conflicts when using Fleet to develop .NET applications.
     /// </summary>
-    private static void ScrubHostingEnvironmentVars(ProcessStartInfo psi)
+    public static void ScrubHostingEnvironmentVars(ProcessStartInfo psi)
     {
         // Accessing .Environment causes the collection to be populated from the
         // current process's environment block, so we can then selectively remove keys.
         var env = psi.Environment;
         var keysToRemove = env.Keys
-            .Where(k => k.StartsWith("ASPNETCORE_", StringComparison.OrdinalIgnoreCase)
-                     || k.StartsWith("DOTNET_", StringComparison.OrdinalIgnoreCase))
+            .Where(k => ScrubExact.Contains(k)
+                     || ScrubPrefixes.Any(p => k.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
             .ToList();
 
         foreach (var key in keysToRemove)
