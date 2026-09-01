@@ -116,14 +116,8 @@ public static class OpenDirectoryEndpoints
 
         psi.ArgumentList.Add(path);
 
-        // Strip hosting env vars so file managers don't inherit them
-        foreach (var key in psi.Environment.Keys
-            .Where(k => k.StartsWith("ASPNETCORE_", StringComparison.OrdinalIgnoreCase)
-                     || k.StartsWith("DOTNET_", StringComparison.OrdinalIgnoreCase))
-            .ToList())
-        {
-            psi.Environment.Remove(key);
-        }
+        // Strip Fleet host/launcher env vars so child processes don't inherit them
+        ToolRegistry.ScrubHostingEnvironmentVars(psi);
 
         Process.Start(psi);
     }
