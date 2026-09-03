@@ -79,4 +79,52 @@ public sealed class HarnessTypesTests
 
         msg.TextContent.ShouldBe("Visible answer");
     }
+
+    [Fact]
+    public void CommandOptions_Validate_AllowsColonForNamespacedCommands()
+    {
+        var options = new CommandOptions { Command = "weave:start" };
+        options.Validate().ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("help")]
+    [InlineData("run-tests")]
+    [InlineData("do_thing")]
+    [InlineData("weave:start")]
+    [InlineData("a:b:c")]
+    public void CommandOptions_Validate_AllowsLettersDigitsHyphensUnderscoresAndColons(string command)
+    {
+        var options = new CommandOptions { Command = command };
+        options.Validate().ShouldBeNull();
+    }
+
+    [Fact]
+    public void CommandOptions_Validate_RejectsMissingCommand()
+    {
+        var options = new CommandOptions { Command = "   " };
+        options.Validate().ShouldBe("Command name is required.");
+    }
+
+    [Fact]
+    public void CommandOptions_Validate_RejectsTooLongCommand()
+    {
+        var options = new CommandOptions { Command = new string('a', 65) };
+        options.Validate().ShouldBe("Command name exceeds 64 characters.");
+    }
+
+    [Fact]
+    public void CommandOptions_Validate_RejectsInvalidCharacterAndMentionsColonInMessage()
+    {
+        var options = new CommandOptions { Command = "bad/command" };
+        options.Validate().ShouldBe(
+            "Command name contains invalid character '/'. Only letters, digits, hyphens, underscores, and colons are allowed.");
+    }
+
+    [Fact]
+    public void CommandOptions_Validate_RejectsTooLongArguments()
+    {
+        var options = new CommandOptions { Command = "help", Arguments = new string('a', 4097) };
+        options.Validate().ShouldBe("Arguments exceed 4096 characters.");
+    }
 }

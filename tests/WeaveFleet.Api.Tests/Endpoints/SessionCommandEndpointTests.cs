@@ -80,6 +80,21 @@ public sealed class SessionCommandEndpointTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task Command_accepts_namespaced_command_with_colon()
+    {
+        var response = await _client!.PostAsJsonAsync(
+            $"/api/sessions/{_sessionId}/command",
+            new { command = "weave:start" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
+
+        await Task.Delay(200);
+
+        _slowSession!.SendCommandCalls.Count.ShouldBe(1);
+        _slowSession.SendCommandCalls[0].Command.ShouldBe("weave:start");
+    }
+
+    [Fact]
     public async Task Command_passes_cancellation_token_none_to_orchestrator()
     {
         var response = await _client!.PostAsJsonAsync(
