@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Prototype B — Content Slot Explorer</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0a0a0b;--card:#141416;--card-hover:#1a1a1e;--border:#1e1e22;--border-2:#2a2a2e;--text:#e4e4e7;--muted:#71717a;--accent:#6366f1;--accent-soft:rgba(99,102,241,.14);--green:#22c55e;--amber:#f59e0b;--blue:#3b82f6;--red:#ef4444}
+  html,body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;font-size:13px;line-height:1.5;min-height:100vh}
+  body{padding:32px 24px 80px}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  code{font-family:'SF Mono',Consolas,monospace;font-size:12px;background:#1c1c22;padding:1px 5px;border-radius:3px}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  .header{max-width:1400px;margin:0 auto 20px}
+  h1{font-size:24px;font-weight:600;letter-spacing:-.02em;margin-bottom:6px}
+  .sub{color:var(--muted);font-size:14px;max-width:80ch;margin-bottom:16px}
+  .controls{display:flex;gap:16px;align-items:center;padding:14px 16px;background:var(--card);border:1px solid var(--border);border-radius:8px}
+  .ctrl-group{display:flex;gap:6px;align-items:center}
+  .ctrl-group label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin-right:4px}
+  .ctrl-btn{padding:5px 10px;border-radius:5px;font-size:12px;color:var(--muted);border:1px solid var(--border);background:var(--bg)}
+  .ctrl-btn:hover{color:var(--text);border-color:var(--border-2)}
+  .ctrl-btn.on{background:var(--accent-soft);color:var(--accent);border-color:rgba(99,102,241,.4)}
+
+  /* Grid of variants */
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:24px;max-width:1400px;margin:24px auto 0}
+  .variant{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+  .variant-hd{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .variant-hd .name{font-size:14px;font-weight:600}
+  .variant-hd .tagline{font-size:12px;color:var(--muted);margin-top:2px}
+  .cost{font-size:10.5px;padding:2px 7px;border-radius:8px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;white-space:nowrap;flex-shrink:0}
+  .cost.small{background:rgba(34,197,94,.14);color:#86efac}
+  .cost.medium{background:rgba(245,158,11,.14);color:#fbbf24}
+  .cost.large{background:rgba(239,68,68,.14);color:#fca5a5}
+
+  /* Simulated right panel */
+  .panel{height:520px;display:flex;flex-direction:column;background:var(--card);border-top:1px solid var(--border-2)}
+  .meta{border-bottom:1px solid var(--border);padding:8px 12px;background:rgba(255,255,255,.015)}
+  .meta-row{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px}
+  .meta-title{font-size:11.5px;font-weight:600}
+  .meta-actions{display:flex;gap:3px}
+  .meta-actions button{padding:2px 7px;border-radius:4px;font-size:10.5px;color:var(--muted);border:1px solid var(--border);background:var(--bg)}
+  .meta-actions button.primary{color:var(--accent);border-color:rgba(99,102,241,.4);background:var(--accent-soft)}
+  .meta-chips{display:flex;gap:5px;flex-wrap:wrap}
+  .chip{font-size:10px;padding:2px 6px;border-radius:8px;background:rgba(255,255,255,.04);color:var(--muted);border:1px solid var(--border)}
+  .chip.link{color:#93c5fd;border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.08)}
+  .chip.todo{color:var(--amber);border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.08)}
+
+  .tabs{display:flex;border-bottom:1px solid var(--border)}
+  .tab{flex:1;padding:8px;font-size:11.5px;color:var(--muted);border-bottom:2px solid transparent;text-align:center;font-weight:500}
+  .tab.active{color:var(--text);border-bottom-color:var(--accent)}
+  .tab .count{font-size:9.5px;padding:1px 5px;border-radius:6px;background:var(--accent);color:white;font-weight:600;margin-left:3px}
+
+  .body{flex:1;display:flex;min-height:0;overflow:hidden}
+
+  /* Tree pieces */
+  .tree{padding:6px 4px;font-size:11.5px;overflow-y:auto}
+  .tsearch{padding:6px 8px;border-bottom:1px solid var(--border)}
+  .tsearch input{width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:11px;outline:none}
+  .t-row{display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:3px;color:#c4c4c8;cursor:pointer;white-space:nowrap;overflow:hidden}
+  .t-row:hover{background:var(--card-hover)}
+  .t-row.dir{color:var(--text)}
+  .t-row.selected{background:var(--accent-soft);color:var(--text)}
+  .t-row .caret{width:8px;color:#52525b;font-size:8px;flex-shrink:0}
+  .t-row .name{overflow:hidden;text-overflow:ellipsis}
+  .t-row .stat{margin-left:auto;font-size:9px;padding:0 4px;border-radius:6px;flex-shrink:0}
+  .t-row .stat.mod{color:var(--amber);background:rgba(245,158,11,.1)}
+  .t-row .stat.add{color:var(--green);background:rgba(34,197,94,.1)}
+  .ti-1{padding-left:16px}
+  .ti-2{padding-left:28px}
+
+  /* Content slot pieces */
+  .content{flex:1;display:flex;flex-direction:column;min-width:0;background:#0d0d10}
+  .c-head{padding:6px 10px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:var(--card);font-size:11px}
+  .c-head .path{color:var(--text);font-weight:500;font-family:'SF Mono',monospace;font-size:11px;display:flex;align-items:center;gap:6px}
+  .c-head .path .b{font-size:9px;padding:1px 4px;border-radius:6px;text-transform:uppercase;font-weight:600;color:var(--amber);background:rgba(245,158,11,.12)}
+  .c-head .path .b.virtual{color:#c084fc;background:rgba(168,85,247,.14)}
+  .c-head .toggle{display:flex;gap:3px}
+  .c-head .toggle button{padding:1px 7px;border-radius:3px;font-size:10px;color:var(--muted)}
+  .c-head .toggle button.on{background:var(--accent-soft);color:var(--accent)}
+
+  .c-body{flex:1;overflow:auto;padding:0}
+
+  /* Diff */
+  .diff{font-family:'SF Mono',Consolas,monospace;font-size:10.5px;padding:6px 0}
+  .diff .hunk{padding:2px 10px;background:rgba(99,102,241,.06);color:var(--muted);font-size:9.5px}
+  .dline{display:grid;grid-template-columns:26px 26px 12px 1fr;padding:0 3px;color:#a4a4a8}
+  .dline .ln{color:#3f3f46;text-align:right;padding-right:4px}
+  .dline .m{color:#52525b;text-align:center}
+  .dline .code{white-space:pre;padding-left:4px}
+  .dline.add{background:rgba(34,197,94,.08)}
+  .dline.add .code,.dline.add .m{color:#86efac}
+  .dline.del{background:rgba(239,68,68,.08)}
+  .dline.del .code,.dline.del .m{color:#fca5a5}
+
+  /* Rendered Markdown */
+  .md{padding:14px 18px;font-family:system-ui;font-size:12.5px;line-height:1.6;color:#d4d4d8;max-width:100%}
+  .md h1{font-size:18px;font-weight:600;margin:0 0 8px;color:var(--text);letter-spacing:-.01em}
+  .md h2{font-size:14px;font-weight:600;margin:14px 0 6px;color:var(--text)}
+  .md p{margin:0 0 10px}
+  .md ul{padding-left:20px;margin:0 0 10px}
+  .md li{margin-bottom:3px}
+  .md code{background:#1c1c22;padding:1px 5px;border-radius:3px;font-size:11.5px;color:#c4b5fd}
+  .md pre{background:#0a0a0b;border:1px solid var(--border);border-radius:5px;padding:8px 10px;overflow:auto;margin:0 0 10px}
+  .md pre code{background:transparent;padding:0;color:#e4e4e7;font-size:11px;line-height:1.55}
+  .md blockquote{border-left:2px solid var(--accent);padding:2px 12px;color:var(--muted);margin:0 0 10px;background:rgba(99,102,241,.04)}
+
+  /* Rendered HTML (simulated) */
+  .html-frame{margin:0;background:white;color:#111;padding:16px 20px;font-family:Georgia,serif;font-size:13px;line-height:1.65;height:100%;overflow:auto}
+  .html-frame h1{font-size:20px;margin-bottom:8px;color:#1e293b}
+  .html-frame p{margin-bottom:10px}
+  .html-frame .sandbox-note{font-size:10px;color:#888;background:#f5f5f5;padding:4px 8px;border-radius:4px;margin-bottom:12px;font-family:system-ui}
+
+  /* Source code */
+  .src{font-family:'SF Mono',Consolas,monospace;font-size:11px;padding:8px 10px;color:#d4d4d8;white-space:pre;line-height:1.55}
+  .src .k{color:#c084fc}.src .s{color:#86efac}.src .c{color:#52525b}
+
+  /* Resize gutter (V1, V4) */
+  .gutter-v{width:4px;background:var(--border);cursor:col-resize;flex-shrink:0}
+  .gutter-v:hover{background:var(--accent-soft)}
+  .gutter-h{height:4px;background:var(--border);cursor:row-resize}
+  .gutter-h:hover{background:var(--accent-soft)}
+
+  /* Breadcrumb (V2) */
+  .crumb{padding:6px 10px;background:var(--card);border-bottom:1px solid var(--border);font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .crumb button{color:var(--accent);font-size:11px;padding:0}
+  .crumb .path{font-family:'SF Mono',monospace;color:var(--text)}
+
+  /* Slim strip (V3) */
+  .strip{width:34px;padding:6px 0;display:flex;flex-direction:column;gap:2px;align-items:center;background:var(--card);border-right:1px solid var(--border);overflow-y:auto;flex-shrink:0}
+  .strip .icon{width:22px;height:22px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);cursor:pointer;position:relative}
+  .strip .icon:hover{background:var(--card-hover);color:var(--text)}
+  .strip .icon.selected{background:var(--accent-soft);color:var(--accent)}
+  .strip .icon .dot{position:absolute;bottom:2px;right:2px;width:5px;height:5px;border-radius:50%;background:var(--amber)}
+  .strip .icon .dot.add{background:var(--green)}
+
+  /* V4 stack */
+  .stacked{flex-direction:column}
+  .stacked .tree{flex:0 0 38%;border-bottom:1px solid var(--border);overflow-y:auto}
+
+  /* Explainer footer */
+  .foot{padding:10px 14px;background:rgba(99,102,241,.05);border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.5}
+  .foot b{color:var(--text)}
+
+  /* Bottom links */
+  .links{max-width:1400px;margin:32px auto 0;padding:20px;background:var(--card);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--muted);line-height:1.7}
+  .links a{color:var(--accent)}
+  .links b{color:var(--text)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Prototype B — Content Slot Explorer</h1>
+  <p class="sub">Four ways the file tree and rendered content share the Files tab, shown against four kinds of content. Change the mode below to see how each layout handles Markdown, HTML, a diff, and an agent-produced visual payload (VP4 mirror). See the <a href="right-panel-b-viability.md">viability note</a> for cost analysis grounded in the current Vue code.</p>
+
+  <div class="controls">
+    <div class="ctrl-group">
+      <label>Content in slot:</label>
+      <button class="ctrl-btn" data-mode="md">Markdown file</button>
+      <button class="ctrl-btn" data-mode="html">HTML file</button>
+      <button class="ctrl-btn on" data-mode="diff">Diff (from Changes)</button>
+      <button class="ctrl-btn" data-mode="src">Source code</button>
+      <button class="ctrl-btn" data-mode="payload">Visual payload (VP4)</button>
+    </div>
+  </div>
+</div>
+
+<div class="grid">
+
+  <!-- ================= V1 SPLIT ================= -->
+  <div class="variant">
+    <div class="variant-hd">
+      <div>
+        <div class="name">V1 · Split</div>
+        <div class="tagline">Tree left, content right, resize gutter</div>
+      </div>
+      <span class="cost small">Small</span>
+    </div>
+    <div class="panel">
+      <div class="meta">
+        <div class="meta-row">
+          <div class="meta-title">SCIM #1111 · <span style="color:var(--muted);font-weight:400">products-private</span></div>
+          <div class="meta-actions"><button>Fork</button><button class="primary">Commit</button></div>
+        </div>
+        <div class="meta-chips">
+          <span class="chip link">↗ #1111</span><span class="chip link">↗ PR #3421</span><span class="chip todo">2/4 todos</span>
+        </div>
+      </div>
+      <div class="tabs">
+        <div class="tab">Files</div>
+        <div class="tab active">Changes <span class="count">3</span></div>
+      </div>
+      <div class="body">
+        <div class="tree" style="width:38%;flex-shrink:0">
+          <div class="tsearch"><input placeholder="Search"></div>
+          <div class="t-row dir"><span class="caret">▾</span><span class="name">📁 src</span></div>
+          <div class="t-row dir ti-1"><span class="caret">▾</span><span class="name">📁 Scim</span></div>
+          <div class="t-row selected ti-2"><span class="caret"></span><span class="name">📄 ScimGroupCommandProcessor.cs</span><span class="stat mod">M</span></div>
+          <div class="t-row dir ti-1"><span class="caret">▾</span><span class="name">📁 Storage</span></div>
+          <div class="t-row ti-2"><span class="caret"></span><span class="name">📄 IUserProfileStorage.cs</span><span class="stat mod">M</span></div>
+          <div class="t-row dir"><span class="caret">▾</span><span class="name">📁 tests</span></div>
+          <div class="t-row ti-2"><span class="caret"></span><span class="name">📄 GroupMembershipTests.cs</span><span class="stat add">A</span></div>
+          <div class="t-row"><span class="caret">▸</span><span class="name">📁 docs</span></div>
+          <div class="t-row"><span class="caret"></span><span class="name">📄 README.md</span></div>
+        </div>
+        <div class="gutter-v"></div>
+        <div class="content" data-slot></div>
+      </div>
+      <div class="foot"><b>Small surgery.</b> Tree stays visible while you read. Resize gutter reuses the AppShell pattern. Search sits inside the left half. Recommended.</div>
+    </div>
+  </div>
+
+  <!-- ================= V2 SWAP ================= -->
+  <div class="variant">
+    <div class="variant-hd">
+      <div>
+        <div class="name">V2 · Swap + breadcrumb</div>
+        <div class="tagline">Tree fills tab; click file → content + back</div>
+      </div>
+      <span class="cost small">Small</span>
+    </div>
+    <div class="panel">
+      <div class="meta">
+        <div class="meta-row">
+          <div class="meta-title">SCIM #1111 · <span style="color:var(--muted);font-weight:400">products-private</span></div>
+          <div class="meta-actions"><button>Fork</button><button class="primary">Commit</button></div>
+        </div>
+        <div class="meta-chips">
+          <span class="chip link">↗ #1111</span><span class="chip link">↗ PR #3421</span><span class="chip todo">2/4 todos</span>
+        </div>
+      </div>
+      <div class="tabs">
+        <div class="tab">Files</div>
+        <div class="tab active">Changes <span class="count">3</span></div>
+      </div>
+      <div class="crumb"><button>← Tree</button><span>·</span><span class="path" data-crumb>src/Scim/ScimGroupCommandProcessor.cs</span></div>
+      <div class="body">
+        <div class="content" data-slot style="flex:1"></div>
+      </div>
+      <div class="foot"><b>Small surgery.</b> Best when the panel is narrow. Loses "read while browsing" but the breadcrumb-back is very familiar. Search state and tree scroll are preserved on return.</div>
+    </div>
+  </div>
+
+  <!-- ================= V3 STRIP ================= -->
+  <div class="variant">
+    <div class="variant-hd">
+      <div>
+        <div class="name">V3 · Slim strip</div>
+        <div class="tagline">Tree collapses to icon column on selection</div>
+      </div>
+      <span class="cost medium">Medium</span>
+    </div>
+    <div class="panel">
+      <div class="meta">
+        <div class="meta-row">
+          <div class="meta-title">SCIM #1111 · <span style="color:var(--muted);font-weight:400">products-private</span></div>
+          <div class="meta-actions"><button>Fork</button><button class="primary">Commit</button></div>
+        </div>
+        <div class="meta-chips">
+          <span class="chip link">↗ #1111</span><span class="chip link">↗ PR #3421</span><span class="chip todo">2/4 todos</span>
+        </div>
+      </div>
+      <div class="tabs">
+        <div class="tab">Files</div>
+        <div class="tab active">Changes <span class="count">3</span></div>
+      </div>
+      <div class="body">
+        <div class="strip">
+          <div class="icon" title="src/Scim/ScimGroupCommandProcessor.cs" data-name="src/Scim/ScimGroupCommandProcessor.cs">📄<span class="dot"></span></div>
+          <div class="icon" title="src/Storage/IUserProfileStorage.cs" data-name="src/Storage/IUserProfileStorage.cs">📄<span class="dot"></span></div>
+          <div class="icon" title="tests/GroupMembershipTests.cs" data-name="tests/GroupMembershipTests.cs">📄<span class="dot add"></span></div>
+          <div class="icon" title="README.md" data-name="README.md">📄</div>
+          <div class="icon selected" title="ScimGroupCommandProcessor.cs" data-name="src/Scim/ScimGroupCommandProcessor.cs">📄<span class="dot"></span></div>
+        </div>
+        <div class="content" data-slot></div>
+      </div>
+      <div class="foot"><b>Medium surgery.</b> Clean visual, saves horizontal space. Icons need tooltips + aria-labels, search must live in a popover. Icon glyphs currently absent from the tree code.</div>
+    </div>
+  </div>
+
+  <!-- ================= V4 STACK ================= -->
+  <div class="variant">
+    <div class="variant-hd">
+      <div>
+        <div class="name">V4 · Stack</div>
+        <div class="tagline">Tree on top ~40%, content below, vertical gutter</div>
+      </div>
+      <span class="cost medium">Medium</span>
+    </div>
+    <div class="panel">
+      <div class="meta">
+        <div class="meta-row">
+          <div class="meta-title">SCIM #1111 · <span style="color:var(--muted);font-weight:400">products-private</span></div>
+          <div class="meta-actions"><button>Fork</button><button class="primary">Commit</button></div>
+        </div>
+        <div class="meta-chips">
+          <span class="chip link">↗ #1111</span><span class="chip link">↗ PR #3421</span><span class="chip todo">2/4 todos</span>
+        </div>
+      </div>
+      <div class="tabs">
+        <div class="tab">Files</div>
+        <div class="tab active">Changes <span class="count">3</span></div>
+      </div>
+      <div class="body stacked">
+        <div class="tree">
+          <div class="tsearch"><input placeholder="Search"></div>
+          <div class="t-row dir"><span class="caret">▾</span><span class="name">📁 src</span></div>
+          <div class="t-row dir ti-1"><span class="caret">▾</span><span class="name">📁 Scim</span></div>
+          <div class="t-row selected ti-2"><span class="caret"></span><span class="name">📄 ScimGroupCommandProcessor.cs</span><span class="stat mod">M</span></div>
+          <div class="t-row ti-2"><span class="caret"></span><span class="name">📄 ScimUserProcessor.cs</span></div>
+          <div class="t-row dir ti-1"><span class="caret">▾</span><span class="name">📁 Storage</span></div>
+          <div class="t-row ti-2"><span class="caret"></span><span class="name">📄 IUserProfileStorage.cs</span><span class="stat mod">M</span></div>
+        </div>
+        <div class="gutter-h"></div>
+        <div class="content" data-slot></div>
+      </div>
+      <div class="foot"><b>Medium surgery.</b> Familiar file-manager feel. Tight at current panel widths: both scrollers feel cramped. Better if the right panel gets wider.</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="links">
+  <b>Related</b><br>
+  → <a href="right-panel-index.html">Prototype index</a> — the three top-level directions (A/B/C)<br>
+  → <a href="right-panel-b-changes.html">Prototype B mockup</a> — the recommended direction<br>
+  → <a href="right-panel-b-viability.md">B viability note</a> — cost per variant, gotchas, HTML safety, markdown pipeline, session-scoped payload bug<br>
+  → <a href="research-right-panel-prior-art.md">Prior-art research</a> — VS Code, Zed, Cursor, Claude Code, GitHub, Graphite, Linear
+</div>
+
+<!-- Content payloads per mode, rendered into every [data-slot] -->
+<template id="tpl-md">
+  <div class="c-head">
+    <div class="path"><span>README.md</span></div>
+    <div class="toggle"><button class="on">Rendered</button><button>Source</button></div>
+  </div>
+  <div class="c-body">
+    <div class="md">
+      <h1>Weave Fleet</h1>
+      <p>An <b>LLM harness orchestrator</b> for managing parallel AI agent sessions. Runs opencode, Claude Code, and others as first-class fleet members.</p>
+      <h2>Highlights</h2>
+      <ul>
+        <li>Real-time <code>SignalR</code> event stream per session</li>
+        <li>Worktree isolation so two sessions can safely touch the same repo</li>
+        <li>Persistent diffs, todos, and PR/issue smart links</li>
+      </ul>
+      <blockquote>Diffs render inline in the right panel. No separate drawer.</blockquote>
+      <h2>Getting started</h2>
+      <pre><code>bun install
+dotnet run --project src/WeaveFleet.Api</code></pre>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-html">
+  <div class="c-head">
+    <div class="path"><span>docs/release-notes.html</span></div>
+    <div class="toggle"><button class="on">Rendered</button><button>Source</button></div>
+  </div>
+  <div class="c-body">
+    <div class="html-frame">
+      <div class="sandbox-note">⛨ Sandboxed &lt;iframe srcdoc&gt; · sandbox="allow-same-origin"</div>
+      <h1>Release 0.9.4</h1>
+      <p>This release simplifies the right panel. The old Preview and Details tabs are consolidated into a persistent metadata header and a two-tab body: Files and Changes.</p>
+      <p><i>Highlights:</i> per-file reviewed state, aggregate multi-file diff, and inline Markdown/HTML rendering for viewable files.</p>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-diff">
+  <div class="c-head">
+    <div class="path"><span>src/Scim/ScimGroupCommandProcessor.cs</span><span class="b">Modified</span></div>
+    <div class="toggle"><button class="on">Diff</button><button>Source</button><button>☐ Reviewed</button></div>
+  </div>
+  <div class="c-body">
+    <div class="diff">
+      <div class="hunk">@@ -142,7 +142,12 @@ ProcessMembersAsync</div>
+      <div class="dline"><span class="ln">142</span><span class="ln">142</span><span class="m"> </span><span class="code">    var results = new List&lt;MemberResult&gt;();</span></div>
+      <div class="dline del"><span class="ln">143</span><span class="ln"></span><span class="m">−</span><span class="code">    foreach (var member in members)</span></div>
+      <div class="dline del"><span class="ln">144</span><span class="ln"></span><span class="m">−</span><span class="code">    {</span></div>
+      <div class="dline del"><span class="ln">145</span><span class="ln"></span><span class="m">−</span><span class="code">        var uuid = await _storage.ResolveProfileUuidAsync(member.Id);</span></div>
+      <div class="dline del"><span class="ln">146</span><span class="ln"></span><span class="m">−</span><span class="code">        results.Add(new MemberResult(member, uuid));</span></div>
+      <div class="dline del"><span class="ln">147</span><span class="ln"></span><span class="m">−</span><span class="code">    }</span></div>
+      <div class="dline add"><span class="ln"></span><span class="ln">143</span><span class="m">+</span><span class="code">    var ids = members.Select(m =&gt; m.Id).ToArray();</span></div>
+      <div class="dline add"><span class="ln"></span><span class="ln">144</span><span class="m">+</span><span class="code">    var lookup = await _storage.ResolveProfileUuidsBulkAsync(ids, ct);</span></div>
+      <div class="dline add"><span class="ln"></span><span class="ln">145</span><span class="m">+</span><span class="code">    foreach (var member in members)</span></div>
+      <div class="dline add"><span class="ln"></span><span class="ln">146</span><span class="m">+</span><span class="code">    {</span></div>
+      <div class="dline add"><span class="ln"></span><span class="ln">147</span><span class="m">+</span><span class="code">        results.Add(new MemberResult(member, lookup[member.Id]));</span></div>
+      <div class="dline add"><span class="ln"></span><span class="ln">148</span><span class="m">+</span><span class="code">    }</span></div>
+      <div class="dline"><span class="ln">148</span><span class="ln">149</span><span class="m"> </span><span class="code">    return results;</span></div>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-src">
+  <div class="c-head">
+    <div class="path"><span>src/Scim/ScimGroupCommandProcessor.cs</span></div>
+    <div class="toggle"><button>Diff</button><button class="on">Source</button></div>
+  </div>
+  <div class="c-body">
+    <div class="src"><span class="k">public class</span> ScimGroupCommandProcessor
+{
+    <span class="k">private readonly</span> IUserProfileStorage _storage;
+
+    <span class="k">public async</span> Task&lt;List&lt;MemberResult&gt;&gt; ProcessMembersAsync(
+        List&lt;Member&gt; members,
+        CancellationToken ct)
+    {
+        <span class="c">// Bulk resolve to avoid N+1 storage calls</span>
+        <span class="k">var</span> ids = members.Select(m =&gt; m.Id).ToArray();
+        <span class="k">var</span> lookup = <span class="k">await</span> _storage.ResolveProfileUuidsBulkAsync(ids, ct);
+
+        <span class="k">var</span> results = <span class="k">new</span> List&lt;MemberResult&gt;();
+        <span class="k">foreach</span> (<span class="k">var</span> member <span class="k">in</span> members)
+        {
+            results.Add(<span class="k">new</span> MemberResult(member, lookup[member.Id]));
+        }
+        <span class="k">return</span> results;
+    }
+}</div>
+  </div>
+</template>
+
+<template id="tpl-payload">
+  <div class="c-head">
+    <div class="path"><span>__visual__/plan.md</span><span class="b virtual">Agent artifact</span></div>
+    <div class="toggle"><button class="on">Rendered</button><button>Source</button></div>
+  </div>
+  <div class="c-body">
+    <div class="md">
+      <h1>Plan · SCIM #1111</h1>
+      <p>Refactor <code>ScimGroupCommandProcessor</code> to bulk-resolve members via a new storage primitive.</p>
+      <h2>Steps</h2>
+      <ul>
+        <li>✅ Introduce <code>ResolveProfileUuidsBulkAsync</code> on <code>IUserProfileStorage</code></li>
+        <li>✅ Route <code>ProcessMembersAsync</code> through the bulk primitive</li>
+        <li>◐ Add integration tests for race conditions on batch creation</li>
+        <li>○ Delete dead <code>ResolveProfileUuidsAsync</code> and its tests</li>
+      </ul>
+      <blockquote>Agent-produced. Rendered into the Files-tab content slot with a synthetic <code>__visual__/</code> path. Dismissible; not persisted to disk.</blockquote>
+    </div>
+  </div>
+</template>
+
+<script>
+  const templates = {
+    md: document.getElementById('tpl-md'),
+    html: document.getElementById('tpl-html'),
+    diff: document.getElementById('tpl-diff'),
+    src: document.getElementById('tpl-src'),
+    payload: document.getElementById('tpl-payload'),
+  };
+
+  const crumbPaths = {
+    md: 'README.md',
+    html: 'docs/release-notes.html',
+    diff: 'src/Scim/ScimGroupCommandProcessor.cs',
+    src: 'src/Scim/ScimGroupCommandProcessor.cs',
+    payload: '__visual__/plan.md (agent artifact)',
+  };
+
+  function render(mode) {
+    document.querySelectorAll('[data-slot]').forEach(slot => {
+      slot.innerHTML = '';
+      const clone = templates[mode].content.cloneNode(true);
+      slot.appendChild(clone);
+    });
+    document.querySelectorAll('[data-crumb]').forEach(c => {
+      c.textContent = crumbPaths[mode];
+    });
+    document.querySelectorAll('.ctrl-btn').forEach(b => {
+      b.classList.toggle('on', b.dataset.mode === mode);
+    });
+  }
+
+  document.querySelectorAll('.ctrl-btn').forEach(btn => {
+    btn.addEventListener('click', () => render(btn.dataset.mode));
+  });
+
+  render('diff');
+</script>
+
+</body>
+</html>

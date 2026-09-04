@@ -1,6 +1,6 @@
 /**
  * Provide/inject contract for the content panel (right panel).
- * Owns tab state, files explorer context, and changes drawer mode.
+ * Owns files explorer context. No tabs.
  */
 import {
   type InjectionKey,
@@ -16,9 +16,11 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-export type ContentPanelTab = "files" | "preview" | "details";
 export type AllChangedFilter = "all" | "changed";
-export type DrawerMode = "collapsed" | "expanded" | "maximized";
+export type ContentViewMode = "file" | "diff";
+
+const FILES_TREE_WIDTH_KEY = "weave:files-tree-width";
+const DEFAULT_FILES_TREE_WIDTH = 260;
 
 export interface FilesExplorerContext {
   allChangedFilter: AllChangedFilter;
@@ -26,6 +28,7 @@ export interface FilesExplorerContext {
   expandedDirs: Set<string>;
   searchQuery: string;
   scrollTop: number;
+  filesTreeWidth: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -34,39 +37,25 @@ export interface FilesExplorerContext {
 
 export interface ContentPanelContext {
   /**
-   * Active tab in the content panel.
-   */
-  activeTab: Readonly<ShallowRef<ContentPanelTab>>;
-
-  /**
-   * Files explorer context (preserved when switching tabs).
+   * Files explorer context.
    */
   filesContext: Readonly<ShallowRef<FilesExplorerContext>>;
 
   /**
-   * Changes drawer mode (persisted to localStorage).
+   * Content-viewer mode: "file" renders the file preview; "diff" renders the diff.
+   * Defaults to "file" and resets to "file" on selection change.
    */
-  drawerMode: Readonly<ShallowRef<DrawerMode>>;
+  viewMode: Readonly<ShallowRef<ContentViewMode>>;
 
   /**
-   * Select a file and switch to the preview tab.
+   * Select a file. Also resets viewMode to "file".
    */
   selectFile: (path: string) => void;
 
   /**
-   * Switch to the files tab (restores saved explorer context).
+   * Set the content-viewer mode explicitly.
    */
-  switchToFiles: () => void;
-
-  /**
-   * Switch to a specific tab.
-   */
-  switchToTab: (tab: ContentPanelTab) => void;
-
-  /**
-   * Set the changes drawer mode.
-   */
-  setDrawerMode: (mode: DrawerMode) => void;
+  setViewMode: (mode: ContentViewMode) => void;
 
   /**
    * Update files explorer context.
@@ -81,37 +70,38 @@ export interface ContentPanelContext {
 export const ContentPanelContextKey: InjectionKey<ContentPanelContext> = Symbol("ContentPanelContext");
 
 export function provideContentPanelContext(sessionId: Readonly<Ref<string | null>>): ContentPanelContext {
-  const DRAWER_MODE_KEY = "weave:changes-drawer-mode";
-
   // State
-  const activeTab = shallowRef<ContentPanelTab>("files");
   const filesContext = shallowRef<FilesExplorerContext>({
     allChangedFilter: "all",
     selectedFilePath: null,
     expandedDirs: new Set(),
     searchQuery: "",
     scrollTop: 0,
+    filesTreeWidth: readFilesTreeWidth(),
   });
-  const drawerMode = shallowRef<DrawerMode>(readDrawerMode());
 
-  // Persist drawer mode to localStorage
-  watch(drawerMode, (mode) => {
-    persistDrawerMode(mode);
-  });
+  const viewMode = shallowRef<ContentViewMode>("file");
+
+  // Persist files tree width to localStorage
+  watch(
+    () => filesContext.value.filesTreeWidth,
+    (width) => {
+      persistFilesTreeWidth(width);
+    },
+  );
 
   // Reset transient state on session change
   watch(sessionId, (newId, oldId) => {
     if (newId !== oldId && newId !== null) {
-      // Reset filter to "all", clear selection, collapse drawer, keep tab on "files"
       filesContext.value = {
         allChangedFilter: "all",
         selectedFilePath: null,
         expandedDirs: new Set(),
         searchQuery: "",
         scrollTop: 0,
+        filesTreeWidth: readFilesTreeWidth(),
       };
-      drawerMode.value = "collapsed";
-      activeTab.value = "files";
+      viewMode.value = "file";
     }
   });
 
@@ -121,19 +111,12 @@ export function provideContentPanelContext(sessionId: Readonly<Ref<string | null
       ...filesContext.value,
       selectedFilePath: path,
     };
-    activeTab.value = "preview";
+    // Reset to file view on every selection change.
+    viewMode.value = "file";
   }
 
-  function switchToFiles(): void {
-    activeTab.value = "files";
-  }
-
-  function switchToTab(tab: ContentPanelTab): void {
-    activeTab.value = tab;
-  }
-
-  function setDrawerMode(mode: DrawerMode): void {
-    drawerMode.value = mode;
+  function setViewMode(mode: ContentViewMode): void {
+    viewMode.value = mode;
   }
 
   function updateFilesContext(patch: Partial<FilesExplorerContext>): void {
@@ -146,44 +129,42 @@ export function provideContentPanelContext(sessionId: Readonly<Ref<string | null
     };
   }
 
-  // Helper: read drawer mode from localStorage
-  function readDrawerMode(): DrawerMode {
-    if (typeof window === "undefined") {
-      return "collapsed";
+  // Helper: read files tree width from localStorage
+  function readFilesTreeWidth(): number {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") {
+      return DEFAULT_FILES_TREE_WIDTH;
     }
 
     try {
-      const raw = localStorage.getItem(DRAWER_MODE_KEY);
-      if (raw === "expanded" || raw === "maximized" || raw === "collapsed") {
-        return raw;
+      const raw = localStorage.getItem(FILES_TREE_WIDTH_KEY);
+      const parsed = raw === null ? Number.NaN : Number.parseFloat(raw);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
       }
-      return "collapsed";
+      return DEFAULT_FILES_TREE_WIDTH;
     } catch {
-      return "collapsed";
+      return DEFAULT_FILES_TREE_WIDTH;
     }
   }
 
-  // Helper: persist drawer mode to localStorage
-  function persistDrawerMode(mode: DrawerMode): void {
-    if (typeof window === "undefined") {
+  // Helper: persist files tree width to localStorage
+  function persistFilesTreeWidth(width: number): void {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") {
       return;
     }
 
     try {
-      localStorage.setItem(DRAWER_MODE_KEY, mode);
+      localStorage.setItem(FILES_TREE_WIDTH_KEY, String(width));
     } catch {
       // localStorage unavailable
     }
   }
 
   const ctx: ContentPanelContext = {
-    activeTab,
     filesContext,
-    drawerMode,
+    viewMode,
     selectFile,
-    switchToFiles,
-    switchToTab,
-    setDrawerMode,
+    setViewMode,
     updateFilesContext,
   };
 

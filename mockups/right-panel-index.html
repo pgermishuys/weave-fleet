@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Weave Fleet — Right Panel Prototypes</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0a0a0b;--card:#141416;--card-hover:#1a1a1e;--border:#1e1e22;--text:#e4e4e7;--muted:#71717a;--accent:#6366f1;--accent-hover:#818cf8;--green:#22c55e;--amber:#f59e0b;--blue:#3b82f6;--red:#ef4444}
+  html,body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.5;min-height:100vh}
+  body{padding:48px 24px;max-width:1100px;margin:0 auto}
+  h1{font-size:28px;font-weight:600;margin-bottom:8px;letter-spacing:-0.02em}
+  h2{font-size:18px;font-weight:600;margin:32px 0 12px;letter-spacing:-0.01em}
+  p{color:#c4c4c8;margin-bottom:12px;max-width:72ch}
+  p.lead{color:var(--muted);font-size:15px;margin-bottom:24px;max-width:72ch}
+  code{font-family:'SF Mono',Consolas,monospace;font-size:12.5px;background:#1c1c22;color:#e4e4e7;padding:1px 6px;border-radius:4px}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{color:var(--accent-hover);text-decoration:underline}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:20px 0 32px}
+  .card{display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;color:inherit;text-decoration:none;transition:border-color .15s,transform .15s}
+  .card:hover{border-color:var(--accent);text-decoration:none;transform:translateY(-2px)}
+  .card .tag{display:inline-block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);font-weight:600;margin-bottom:8px}
+  .card h3{font-size:16px;font-weight:600;margin-bottom:6px}
+  .card p{font-size:13px;color:var(--muted);margin:0}
+  .principle{background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;padding:12px 16px;margin-bottom:10px;font-size:13.5px}
+  .principle b{color:var(--text)}
+  .principle span{color:var(--muted)}
+  .problem{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:6px;padding:14px 16px;margin-bottom:10px;font-size:13.5px}
+  .problem b{color:#fca5a5}
+  ul{padding-left:20px;color:#c4c4c8}
+  ul li{margin-bottom:4px}
+  hr{border:none;border-top:1px solid var(--border);margin:32px 0}
+  .footer{color:var(--muted);font-size:12px;margin-top:48px}
+</style>
+</head>
+<body>
+
+<h1>Right Panel Prototypes</h1>
+<p class="lead">Three creative directions for the Files / Preview / Details tabs and diff view in Weave Fleet. Grounded in <a href="research-right-panel-prior-art.md">prior-art research</a> covering VS Code, Zed, GitHub, Cursor, Claude Code, Graphite, and Linear.</p>
+
+<h2>The problem, in one paragraph</h2>
+<p>The right panel today has three flat tabs (Files, Preview, Details) and a persistent bottom diff drawer. In practice, <b>Preview</b> is empty until you click a file, <b>Details</b> holds real content (todos, PR/issue links, session actions) but nobody opens it because the conversation header already carries the main actions, and the <b>diff</b> shows in two places — inline in Preview and in the bottom drawer — which is redundant. There's also no distinction between "browse the whole tree" and "review what the agent just changed."</p>
+
+<h2>Principles the research settled</h2>
+<div class="principle"><b>Split browse from review.</b> <span>A generic file tree is for exploring. A changed-files list is a different object.</span></div>
+<div class="principle"><b>Metadata doesn't belong behind a tab.</b> <span>Todos, linked PR/issue, session actions live in a persistent strip, not competing with Files for a click.</span></div>
+<div class="principle"><b>Scale picks the diff shape.</b> <span>One file changed wants inline. Many files want an aggregate multi-file view.</span></div>
+<div class="principle"><b>Every changed file has reviewed state.</b> <span>Turn the change list into a checklist, not just a menu.</span></div>
+<div class="principle"><b>Live-following ≠ deliberate review.</b> <span>Auto-shift the highlight within a stable structure. Never auto-swap the entire layout.</span></div>
+
+<h2>The three prototypes</h2>
+
+<div class="grid">
+  <a class="card" href="right-panel-a-contextual.html">
+    <span class="tag">Prototype A</span>
+    <h3>Contextual (no tabs)</h3>
+    <p>Panel modes shift with what you're doing. Metadata strip stays put on top. Diff renders inline where the file is selected. Most opinionated.</p>
+  </a>
+  <a class="card" href="right-panel-b-changes.html">
+    <span class="tag">Prototype B</span>
+    <h3>Files + Changes</h3>
+    <p>Two tabs modeled on VS Code Agents: a browse tree and a promoted changed-files list with per-file review state. Persistent metadata header. Safest bet.</p>
+  </a>
+  <a class="card" href="right-panel-c-peek.html">
+    <span class="tag">Prototype C</span>
+    <h3>Files + slide-over peek</h3>
+    <p>Tree only. Selecting a file peeks a preview over the conversation. A separate full-width "Review changes" mode handles diffs. Boldest, most VS-Code-like.</p>
+  </a>
+</div>
+
+<h2>How to read these</h2>
+<ul>
+  <li>Each prototype shows a plausible slice of the app so you can see how the right panel behaves in context.</li>
+  <li>Interactive bits: try clicking files in the tree, review toggles, mode buttons, drawer states.</li>
+  <li>Session list and conversation are intentionally low-detail — they're not what's being redesigned.</li>
+  <li>Colors and typography match the current app, so this reads as an evolution rather than a repaint.</li>
+</ul>
+
+<h2>Prior art</h2>
+<p>See <a href="research-right-panel-prior-art.md">research-right-panel-prior-art.md</a> for the full comparison across VS Code, Zed, GitHub, Cursor, Claude Code, Graphite, and Linear — including the specific mechanics each product converged on and where they disagree.</p>
+
+<hr>
+
+<h2>⭐ Recommended prototype</h2>
+<p><a href="right-panel-recommended.html"><b>Full interactive mockup — V1 Split + VP4 Mirror</b></a> — the recommended combination as a working screen. Try clicking Files ↔ Changes tabs, ticking review checkboxes to see the progress update, opening the visual artifact from the conversation link or the ✦ chip, dragging the internal resize gutter, and picking Markdown / HTML / source / binary files from the tree to see how the content slot handles each type.</p>
+
+<h2>Deep-dive: Prototype B content slot</h2>
+<p>How Markdown/HTML preview, source, diff, and agent-produced visual payloads share space inside B's Files and Changes tabs.</p>
+<ul>
+  <li><a href="right-panel-b-content-slot.html">Content slot explorer</a> — four layout variants (Split, Swap, Slim strip, Stack) rendered side by side; swap between Markdown / HTML / Diff / Source / Visual payload to see how each holds up.</li>
+  <li><a href="right-panel-b-viability.md">Viability note</a> — cost per variant grounded in the actual Vue code, HTML sandbox / Markdown pipeline analysis, and one preexisting gotcha the exploration surfaced (<code>useVisualPanel</code> is a global singleton that leaks payloads across sessions).</li>
+</ul>
+
+<h2>Recommendation, if you want one</h2>
+<p><b>Prototype B is the safest, most-validated direction.</b> It maps one-to-one onto VS Code's Agents window (the closest peer product to Weave Fleet), moves the redundant Details tab into a header where it stops competing for clicks, and gives per-file review state — which the research flagged as the single most-repeated "works well" pattern.</p>
+<p><b>Prototype A is more opinionated but riskier.</b> The "auto-shift" idea only works if you keep the underlying structure stable and only shift emphasis, not layout. Done right it feels magical; done wrong it destroys scroll position.</p>
+<p><b>Prototype C is worth building if you're planning to make full-diff review a first-class mode</b> (like a lightweight PR review view). The slide-over is a good match for casual peek-and-close file reads that don't warrant taking over the panel.</p>
+
+<div class="footer">Weave Fleet — right panel exploration, 2026-09-03</div>
+
+</body>
+</html>

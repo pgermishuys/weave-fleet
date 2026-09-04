@@ -58,7 +58,10 @@ const props = defineProps<{
 const router = useRouter();
 const sessionsStore = useSessionsStore();
 const { sessions } = storeToRefs(sessionsStore);
-const { showVisual } = useVisualPanel();
+const visualPanel = computed(() => useVisualPanel(props.sessionId));
+function showVisual(payload: VisualPayload): void {
+  visualPanel.value.showVisual(payload);
+}
 
 const selectedSession = computed(() => {
   return sessions.value.find((session) => session.session.id === props.sessionId) ?? null;

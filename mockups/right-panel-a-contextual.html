@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Prototype A — Contextual right panel</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0a0a0b;--card:#141416;--card-hover:#1a1a1e;--border:#1e1e22;--border-2:#2a2a2e;--text:#e4e4e7;--muted:#71717a;--accent:#6366f1;--accent-soft:rgba(99,102,241,.14);--green:#22c55e;--amber:#f59e0b;--blue:#3b82f6;--red:#ef4444}
+  html,body{height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;font-size:13.5px;line-height:1.5;overflow:hidden}
+  ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:#2a2a2e;border-radius:3px}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  .app{display:flex;height:100vh}
+  .rail{width:44px;background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:8px;flex-shrink:0}
+  .rail .logo{width:24px;height:24px;background:linear-gradient(135deg,var(--accent),#a855f7);border-radius:6px;margin-bottom:6px}
+  .rail .r-btn{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px}
+  .rail .r-btn:hover{background:var(--card-hover);color:var(--text)}
+  .rail .r-btn.active{background:var(--accent-soft);color:var(--accent)}
+
+  .sessions{width:240px;background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+  .sessions-head{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;gap:6px}
+  .sessions-head button{padding:6px 10px;border-radius:6px;background:var(--accent);color:white;font-size:12px;font-weight:500;flex:1}
+  .sessions-search{padding:8px 12px;border-bottom:1px solid var(--border)}
+  .sessions-search input{width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;outline:none}
+  .sessions-list{flex:1;overflow-y:auto;padding:8px}
+  .s-item{padding:9px 10px;border-radius:6px;font-size:12.5px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:8px}
+  .s-item:hover{background:var(--card-hover)}
+  .s-item.active{background:#1c1c24;color:var(--text)}
+  .s-dot{width:6px;height:6px;border-radius:50%;background:var(--amber);flex-shrink:0}
+  .s-dot.running{background:var(--green);box-shadow:0 0 4px var(--green)}
+  .s-group{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:#52525b;padding:8px 10px 4px;font-weight:600}
+
+  .conv{flex:1;display:flex;flex-direction:column;min-width:0;background:#0a0a0b}
+  .conv-head{height:52px;border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+  .conv-title{display:flex;align-items:center;gap:10px}
+  .conv-title h1{font-size:14px;font-weight:600}
+  .conv-title .status{font-size:11px;color:var(--amber);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+  .conv-actions{display:flex;gap:4px}
+  .conv-actions button{width:30px;height:30px;border-radius:6px;color:var(--muted)}
+  .conv-actions button:hover{background:var(--card-hover);color:var(--text)}
+  .conv-body{flex:1;overflow-y:auto;padding:20px 24px;color:#a4a4a8;font-size:13px}
+  .conv-body .msg{max-width:720px;margin-bottom:20px}
+  .conv-body .msg .who{font-size:12px;font-weight:600;margin-bottom:4px}
+  .conv-body .msg.user .who{color:var(--text)}
+  .conv-body .msg.agent .who{color:var(--accent)}
+  .composer{border-top:1px solid var(--border);padding:12px 20px;background:var(--card)}
+  .composer input{width:100%;padding:10px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;outline:none}
+
+  /* === Right panel === */
+  .right{width:460px;background:var(--card);border-left:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+
+  /* Metadata strip: always visible, replaces Details tab */
+  .meta{border-bottom:1px solid var(--border);padding:12px 14px}
+  .meta-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+  .meta-title{font-size:12.5px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px}
+  .meta-actions{display:flex;gap:4px}
+  .meta-actions button{padding:3px 8px;border-radius:5px;font-size:11px;color:var(--muted);border:1px solid var(--border);background:var(--bg)}
+  .meta-actions button:hover{color:var(--text);border-color:var(--border-2)}
+  .meta-actions button.primary{color:var(--accent);border-color:rgba(99,102,241,.4);background:var(--accent-soft)}
+  .meta-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+  .chip{font-size:11px;padding:3px 8px;border-radius:10px;background:rgba(255,255,255,.04);color:var(--muted);border:1px solid var(--border);display:inline-flex;align-items:center;gap:5px}
+  .chip.link{color:#93c5fd;border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.08)}
+  .chip.link:hover{background:rgba(59,130,246,.14);cursor:pointer}
+  .todos{font-size:12px;color:var(--muted)}
+  .todos summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;padding:2px 0}
+  .todos summary::-webkit-details-marker{display:none}
+  .todos summary::before{content:'▸';font-size:9px;transition:transform .15s;color:#52525b}
+  .todos[open] summary::before{transform:rotate(90deg)}
+  .todos ul{list-style:none;padding:6px 0 0 14px;margin:0}
+  .todos ul li{padding:2px 0;font-size:12px;display:flex;gap:6px;align-items:baseline}
+  .todos ul li::before{content:'○';color:#52525b;font-size:10px}
+  .todos ul li.done{color:#52525b;text-decoration:line-through}
+  .todos ul li.done::before{content:'●';color:var(--green)}
+  .todos ul li.active{color:var(--text)}
+  .todos ul li.active::before{content:'◐';color:var(--amber)}
+
+  /* Mode header */
+  .rp-mode{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+  .rp-mode .mode-label{display:flex;align-items:center;gap:8px}
+  .rp-mode .mode-dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  .rp-mode .mode-switch{display:flex;gap:4px;text-transform:none;letter-spacing:0;font-weight:500}
+  .rp-mode .mode-switch button{padding:3px 8px;border-radius:5px;font-size:11px;color:var(--muted)}
+  .rp-mode .mode-switch button.on{background:var(--accent-soft);color:var(--accent)}
+
+  /* Body swaps by mode */
+  .rp-body{flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+
+  /* Browse mode: tree */
+  .tree{padding:8px 6px;overflow-y:auto;flex:1;font-size:12.5px}
+  .tree-search{padding:8px 10px 10px;border-bottom:1px solid var(--border)}
+  .tree-search input{width:100%;padding:5px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;outline:none}
+  .t-row{display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:4px;cursor:pointer;color:#c4c4c8}
+  .t-row:hover{background:var(--card-hover)}
+  .t-row .caret{width:10px;color:#52525b;font-size:9px}
+  .t-row.file .caret{visibility:hidden}
+  .t-row.dir{color:var(--text)}
+  .t-row .stat{margin-left:auto;font-size:10px;padding:1px 5px;border-radius:8px;color:#52525b}
+  .t-row .stat.mod{color:var(--amber);background:rgba(245,158,11,.1)}
+  .t-row .stat.add{color:var(--green);background:rgba(34,197,94,.1)}
+  .t-row.selected{background:var(--accent-soft);color:var(--text)}
+  .t-indent-1{padding-left:22px}
+  .t-indent-2{padding-left:36px}
+
+  /* Review mode: changed file list up top, diff below */
+  .changes-summary{padding:10px 14px;background:rgba(99,102,241,.05);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:12px}
+  .changes-summary .lhs{color:var(--text);font-weight:500}
+  .changes-summary .lhs b{color:var(--accent)}
+  .changes-summary .adds{color:var(--green);font-family:'SF Mono',monospace;margin-left:8px}
+  .changes-summary .dels{color:var(--red);font-family:'SF Mono',monospace;margin-left:4px}
+  .changes-summary button{font-size:11px;padding:4px 8px;border-radius:5px;color:var(--muted);border:1px solid var(--border)}
+  .changes-summary button:hover{color:var(--text)}
+  .changed-list{border-bottom:1px solid var(--border);max-height:140px;overflow-y:auto;padding:4px 0}
+  .cf-row{display:flex;align-items:center;gap:8px;padding:5px 12px;font-size:12px;cursor:pointer}
+  .cf-row:hover{background:var(--card-hover)}
+  .cf-row.selected{background:var(--accent-soft)}
+  .cf-check{width:14px;height:14px;border:1.5px solid #3f3f46;border-radius:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--green)}
+  .cf-check.done{background:var(--green);border-color:var(--green);color:white}
+  .cf-path{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d4d4d8}
+  .cf-badge{font-size:9.5px;padding:1px 5px;border-radius:8px;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+  .cf-badge.mod{color:var(--amber);background:rgba(245,158,11,.12)}
+  .cf-badge.add{color:var(--green);background:rgba(34,197,94,.12)}
+  .cf-badge.del{color:var(--red);background:rgba(239,68,68,.12)}
+  .cf-stat{font-family:'SF Mono',monospace;font-size:10.5px;color:var(--muted)}
+  .cf-stat .a{color:var(--green)}.cf-stat .d{color:var(--red)}
+
+  .diff{flex:1;overflow:auto;background:#0d0d10;font-family:'SF Mono',Consolas,monospace;font-size:11.5px}
+  .diff-header{padding:8px 12px;background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-family:system-ui;font-size:11.5px;color:var(--muted)}
+  .diff-header .path{color:var(--text);font-weight:500;font-family:'SF Mono',monospace}
+  .diff-header .modes{display:flex;gap:4px}
+  .diff-header .modes button{padding:2px 8px;border-radius:4px;font-size:10.5px;color:var(--muted)}
+  .diff-header .modes button.on{background:var(--accent-soft);color:var(--accent)}
+  .diff-line{display:grid;grid-template-columns:36px 36px 14px 1fr;padding:0 4px;color:#a4a4a8}
+  .diff-line .ln{color:#3f3f46;text-align:right;padding-right:6px;user-select:none}
+  .diff-line .m{color:#52525b;text-align:center}
+  .diff-line .code{white-space:pre;padding-left:6px}
+  .diff-line.add{background:rgba(34,197,94,.08)}
+  .diff-line.add .m,.diff-line.add .code{color:#86efac}
+  .diff-line.del{background:rgba(239,68,68,.08)}
+  .diff-line.del .m,.diff-line.del .code{color:#fca5a5}
+  .diff-hunk{padding:3px 12px;background:rgba(99,102,241,.06);color:var(--muted);font-size:10.5px}
+  .diff-empty{padding:40px 20px;text-align:center;color:var(--muted);font-family:system-ui}
+  .diff-empty h4{color:var(--text);font-size:13px;margin-bottom:6px}
+  .diff-empty p{font-size:12px}
+
+  /* Note banner explaining the prototype */
+  .note{position:fixed;bottom:16px;left:16px;background:rgba(99,102,241,.14);border:1px solid rgba(99,102,241,.35);color:#c7d2fe;padding:10px 14px;border-radius:8px;font-size:12px;max-width:340px;line-height:1.55;z-index:10}
+  .note b{color:#e0e7ff}
+  .note a{color:#e0e7ff;text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Rail -->
+  <div class="rail">
+    <div class="logo"></div>
+    <button class="r-btn active" title="Sessions">◆</button>
+    <button class="r-btn" title="GitHub">◐</button>
+    <div style="flex:1"></div>
+    <button class="r-btn" title="Automations">⚡</button>
+    <button class="r-btn" title="Settings">⚙</button>
+  </div>
+
+  <!-- Sessions -->
+  <div class="sessions">
+    <div class="sessions-head"><button>+ New Session</button></div>
+    <div class="sessions-search"><input placeholder="Filter sessions"></div>
+    <div class="sessions-list">
+      <div class="s-group">Work</div>
+      <div class="s-item"><span class="s-dot"></span>Review PR #3416</div>
+      <div class="s-item"><span class="s-dot"></span>SCIM #1153 Extend schema</div>
+      <div class="s-item active"><span class="s-dot running"></span>SCIM #1111 Bulk members</div>
+      <div class="s-item"><span class="s-dot"></span>Issue #3390 Soft delete</div>
+      <div class="s-group">Weave Fleet</div>
+      <div class="s-item"><span class="s-dot"></span>Rework right panel</div>
+    </div>
+  </div>
+
+  <!-- Conversation -->
+  <div class="conv">
+    <div class="conv-head">
+      <div class="conv-title">
+        <h1>SCIM #1111 — Bulk member resolution</h1>
+        <span class="status">● Working</span>
+      </div>
+      <div class="conv-actions">
+        <button title="Stop">■</button>
+        <button title="Fork">⑂</button>
+        <button title="Rename">✎</button>
+        <button title="Delete">🗑</button>
+      </div>
+    </div>
+    <div class="conv-body">
+      <div class="msg user"><div class="who">You</div>Let's refactor <code>ScimGroupCommandProcessor</code> to bulk-resolve members.</div>
+      <div class="msg agent"><div class="who">opencode</div>I'll introduce a bulk primitive on <code>IUserProfileStorage</code> and route the group processor through it. Editing 3 files.</div>
+      <div class="msg agent"><div class="who">opencode</div>Done. Diff is on the right — <b>3 files, +142 −38</b>. Ready for review.</div>
+    </div>
+    <div class="composer"><input placeholder="Type a message..."></div>
+  </div>
+
+  <!-- === RIGHT PANEL: Contextual === -->
+  <div class="right">
+
+    <!-- Persistent metadata strip (replaces Details tab) -->
+    <div class="meta">
+      <div class="meta-row">
+        <div class="meta-title">◐ Session context</div>
+        <div class="meta-actions">
+          <button>Rename</button>
+          <button>Fork</button>
+          <button class="primary">Commit</button>
+        </div>
+      </div>
+      <div class="meta-chips">
+        <span class="chip link">↗ Issue #1111</span>
+        <span class="chip link">↗ PR #3421 (draft)</span>
+        <span class="chip">worktree: <code style="font-size:10.5px;background:transparent;padding:0">wt/scim-1111</code></span>
+      </div>
+      <details class="todos" open>
+        <summary>Todos <span style="color:#52525b">· 2 of 4</span></summary>
+        <ul>
+          <li class="done">Add bulk primitive to IUserProfileStorage</li>
+          <li class="done">Update ScimGroupCommandProcessor</li>
+          <li class="active">Add integration tests for race conditions</li>
+          <li>Delete dead ResolveProfileUuidsAsync</li>
+        </ul>
+      </details>
+    </div>
+
+    <!-- Mode header: auto-shifted, but user can override -->
+    <div class="rp-mode">
+      <div class="mode-label">
+        <span class="mode-dot"></span>
+        <span>Review · 3 changed files</span>
+      </div>
+      <div class="mode-switch">
+        <button>Browse</button>
+        <button class="on">Review</button>
+      </div>
+    </div>
+
+    <div class="rp-body">
+      <!-- Review mode active -->
+      <div class="changes-summary">
+        <div class="lhs"><b>3</b> files changed<span class="adds">+142</span><span class="dels">−38</span></div>
+        <button>Restore checkpoint ↶</button>
+      </div>
+      <div class="changed-list">
+        <div class="cf-row selected">
+          <div class="cf-check">✓</div>
+          <span class="cf-path">src/Scim/ScimGroupCommandProcessor.cs</span>
+          <span class="cf-badge mod">M</span>
+          <span class="cf-stat"><span class="a">+68</span> <span class="d">−22</span></span>
+        </div>
+        <div class="cf-row">
+          <div class="cf-check done">✓</div>
+          <span class="cf-path">src/Storage/IUserProfileStorage.cs</span>
+          <span class="cf-badge mod">M</span>
+          <span class="cf-stat"><span class="a">+14</span> <span class="d">−0</span></span>
+        </div>
+        <div class="cf-row">
+          <div class="cf-check"></div>
+          <span class="cf-path">tests/Scim/GroupMembershipIntegrationTests.cs</span>
+          <span class="cf-badge add">A</span>
+          <span class="cf-stat"><span class="a">+60</span> <span class="d">−16</span></span>
+        </div>
+      </div>
+
+      <div class="diff-header">
+        <span class="path">ScimGroupCommandProcessor.cs</span>
+        <div class="modes">
+          <button class="on">Diff</button>
+          <button>Source</button>
+          <button>Rendered</button>
+        </div>
+      </div>
+      <div class="diff">
+        <div class="diff-hunk">@@ -142,7 +142,12 @@ ProcessMembersAsync</div>
+        <div class="diff-line"><span class="ln">142</span><span class="ln">142</span><span class="m"> </span><span class="code">    var results = new List&lt;MemberResult&gt;();</span></div>
+        <div class="diff-line del"><span class="ln">143</span><span class="ln"></span><span class="m">−</span><span class="code">    foreach (var member in members)</span></div>
+        <div class="diff-line del"><span class="ln">144</span><span class="ln"></span><span class="m">−</span><span class="code">    {</span></div>
+        <div class="diff-line del"><span class="ln">145</span><span class="ln"></span><span class="m">−</span><span class="code">        var uuid = await _storage.ResolveProfileUuidAsync(member.Id);</span></div>
+        <div class="diff-line del"><span class="ln">146</span><span class="ln"></span><span class="m">−</span><span class="code">        results.Add(new MemberResult(member, uuid));</span></div>
+        <div class="diff-line del"><span class="ln">147</span><span class="ln"></span><span class="m">−</span><span class="code">    }</span></div>
+        <div class="diff-line add"><span class="ln"></span><span class="ln">143</span><span class="m">+</span><span class="code">    var ids = members.Select(m =&gt; m.Id).ToArray();</span></div>
+        <div class="diff-line add"><span class="ln"></span><span class="ln">144</span><span class="m">+</span><span class="code">    var lookup = await _storage.ResolveProfileUuidsBulkAsync(ids, ct);</span></div>
+        <div class="diff-line add"><span class="ln"></span><span class="ln">145</span><span class="m">+</span><span class="code">    foreach (var member in members)</span></div>
+        <div class="diff-line add"><span class="ln"></span><span class="ln">146</span><span class="m">+</span><span class="code">    {</span></div>
+        <div class="diff-line add"><span class="ln"></span><span class="ln">147</span><span class="m">+</span><span class="code">        results.Add(new MemberResult(member, lookup[member.Id]));</span></div>
+        <div class="diff-line add"><span class="ln"></span><span class="ln">148</span><span class="m">+</span><span class="code">    }</span></div>
+        <div class="diff-line"><span class="ln">148</span><span class="ln">149</span><span class="m"> </span><span class="code">    return results;</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="note">
+  <b>Prototype A — Contextual right panel.</b><br>
+  No tabs. Metadata (todos, issue/PR links, session actions) is a persistent strip up top. The body auto-shifts between <b>Browse</b> (tree) and <b>Review</b> (changed files + diff) based on what the agent just did — but the user can override with the toggle. Diff always renders in the same slot; no bottom drawer.
+  <br><br><a href="right-panel-index.html">← back to index</a>
+</div>
+
+</body>
+</html>

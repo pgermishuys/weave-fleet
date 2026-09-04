@@ -276,44 +276,36 @@ public sealed class SessionDetailPage(IPage page)
     public Task<bool> IsAbortVisibleAsync() => AbortButton.IsVisibleAsync();
 
     // ── Content Panel ─────────────────────────────────────────────────────────
+    // The right panel exposes exactly two tabs: Files and Changes. There is no
+    // Preview/Details tab and no changes-drawer — the "changes" tab shows the
+    // changed-files list in the left pane of an internal split, with rendered
+    // content (visual renderer / diff view) on the right.
 
     /// <summary>Get the Files tab button.</summary>
     public ILocator GetFilesTab() => _page.Locator("#tab-files");
 
-    /// <summary>Get the Preview tab button.</summary>
-    public ILocator GetPreviewTab() => _page.Locator("#tab-preview");
-
-    /// <summary>Get the Details tab button.</summary>
-    public ILocator GetDetailsTab() => _page.Locator("#tab-details");
+    /// <summary>Get the Changes tab button.</summary>
+    public ILocator GetChangesTab() => _page.Locator("#tab-changes");
 
     /// <summary>Get the Files tab panel.</summary>
     public ILocator GetFilesPanel() => _page.Locator("#panel-files");
 
-    /// <summary>Get the Preview tab panel.</summary>
-    public ILocator GetPreviewPanel() => _page.Locator("#panel-preview");
+    /// <summary>Get the Changes tab panel.</summary>
+    public ILocator GetChangesPanel() => _page.Locator("#panel-changes");
 
-    /// <summary>Get the Details tab panel.</summary>
-    public ILocator GetDetailsPanel() => _page.Locator("#panel-details");
-
-    /// <summary>Get the changes drawer handle.</summary>
-    public ILocator GetChangesDrawerHandle() => _page.Locator(".changes-drawer__handle");
-
-    /// <summary>Get the changes drawer summary text.</summary>
-    public ILocator GetChangesDrawerSummary() => _page.Locator(".changes-drawer__summary");
-
-    /// <summary>Get the changes drawer content area.</summary>
-    public ILocator GetChangesDrawerContent() => _page.Locator("#changes-drawer-content");
+    /// <summary>Get all tab buttons in the right panel tablist.</summary>
+    public ILocator GetAllTabs() => _page.Locator(".right-tabs [role='tab']");
 
     /// <summary>Get the panel collapse button.</summary>
     public ILocator GetPanelCollapseButton() => _page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Collapse right panel" });
 
     /// <summary>Get the collapsed right rail (when panel is collapsed).</summary>
-    public ILocator GetCollapsedRightRail() => _page.Locator(".collapsed-right-rail");
+    public ILocator GetCollapsedRightRail() => _page.Locator("[data-testid='collapsed-right-rail']");
 
     /// <summary>Get the expand button on the collapsed rail.</summary>
     public ILocator GetPanelExpandButton() => _page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Expand right panel" });
 
-    /// <summary>Click a tab by ID (files, preview, or details).</summary>
+    /// <summary>Click a tab by ID (files or changes).</summary>
     public Task ClickTabAsync(string tabId) => _page.Locator($"#tab-{tabId}").ClickAsync();
 
     /// <summary>Check if a tab is currently active.</summary>
@@ -323,19 +315,29 @@ public sealed class SessionDetailPage(IPage page)
         return string.Equals(ariaSelected, "true", StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Check if the changes drawer is expanded.</summary>
-    public async Task<bool> IsChangesDrawerExpandedAsync()
-    {
-        var ariaExpanded = await GetChangesDrawerHandle().GetAttributeAsync("aria-expanded");
-        return string.Equals(ariaExpanded, "true", StringComparison.OrdinalIgnoreCase);
-    }
+    /// <summary>Press a key on the currently focused tab (e.g. "ArrowRight", "ArrowLeft").</summary>
+    public Task PressKeyOnTabAsync(string tabId, string key) => _page.Locator($"#tab-{tabId}").PressAsync(key);
 
-    /// <summary>Click the changes drawer handle to toggle it.</summary>
-    public Task ClickChangesDrawerHandleAsync() => GetChangesDrawerHandle().ClickAsync();
+    /// <summary>Get the reviewed-count label shown on the Changes tab (e.g. "0/3 reviewed").</summary>
+    public ILocator GetChangesTabReviewedLabel() => GetChangesTab().Locator(".right-tab__reviewed");
 
     /// <summary>Click the panel collapse button.</summary>
     public Task ClickPanelCollapseAsync() => GetPanelCollapseButton().ClickAsync();
 
     /// <summary>Click the panel expand button on the collapsed rail.</summary>
     public Task ClickPanelExpandAsync() => GetPanelExpandButton().ClickAsync();
+
+    /// <summary>Get the artifact chip in the session metadata header, if present.</summary>
+    public ILocator GetArtifactChip() => _page.Locator(".meta-chip--artifact");
+
+    /// <summary>Click the artifact chip to route it into the content slot.</summary>
+    public Task ClickArtifactChipAsync() => GetArtifactChip().ClickAsync();
+
+    /// <summary>Get the reviewed checkbox for a specific file row in the Changes tab list.</summary>
+    public ILocator GetFileReviewedCheckbox(string filePath)
+        => _page.Locator(".files-changed-file-list__row", new PageLocatorOptions { HasText = filePath })
+            .Locator("xpath=preceding-sibling::input[contains(@class,'files-changed-file-list__reviewed-checkbox')]");
+
+    /// <summary>Get the resize gutter between the file list and content slot.</summary>
+    public ILocator GetContentSplitGutter() => _page.Locator(".right-content__gutter");
 }

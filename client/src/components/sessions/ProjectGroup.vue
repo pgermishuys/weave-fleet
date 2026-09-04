@@ -441,7 +441,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 8px 12px 8px 8px;
   cursor: pointer;
   border: 0;
   background: transparent;

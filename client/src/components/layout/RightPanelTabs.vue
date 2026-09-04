@@ -1,16 +1,15 @@
 <script setup lang="ts">
 import { PanelRightClose } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
-import type { ContentPanelTab } from "@/composables/use-content-panel";
 
 interface RightPanelTabOption {
-  id: ContentPanelTab | string;
+  id: string;
   label: string;
 }
 
 const props = defineProps<{
   tabs: readonly RightPanelTabOption[];
-  activeTab: ContentPanelTab | string;
+  activeTab: string;
 }>();
 
 const emit = defineEmits<{

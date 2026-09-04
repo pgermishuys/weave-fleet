@@ -90,7 +90,14 @@ var fleetOptions = builder.Configuration
 // Configure services
 builder.Services.Configure<FleetOptions>(
     builder.Configuration.GetSection(FleetOptions.SectionName));
-if (!builder.Environment.IsEnvironment("Testing"))
+// WebApplicationFactory-based E2E tests call ConfigureWebHost(...).UseEnvironment("Testing") to
+// isolate startup services (legacy import, warmup, etc.) from the host. For minimal-hosting apps,
+// that setting lands in configuration (builder.Configuration) but NOT in the already-materialized
+// builder.Environment.EnvironmentName snapshot captured by WebApplication.CreateBuilder(args), so we
+// must consult configuration directly to see the overridden value.
+var effectiveEnvironmentName = builder.Configuration["ASPNETCORE_ENVIRONMENT"] ?? builder.Environment.EnvironmentName;
+if (!string.Equals(effectiveEnvironmentName, "Testing", StringComparison.OrdinalIgnoreCase) &&
+    !string.Equals(effectiveEnvironmentName, "Test", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddLauncherPatchStartupService();
     builder.Services.AddLegacySessionImportStartupService();

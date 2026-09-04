@@ -1,16 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, provide, ref, watch } from "vue";
+import { computed, provide, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { Code, Eye, X } from "lucide-vue-next";
-import HtmlRenderer from "@/components/visual-renderers/HtmlRenderer.vue";
-import MarkdownRenderer from "@/components/visual-renderers/MarkdownRenderer.vue";
+import { FileText, GitCompare, X } from "lucide-vue-next";
 import AnnotationPopover from "@/components/annotations/AnnotationPopover.vue";
-import ChangesDrawer from "@/components/session/ChangesDrawer.vue";
 import CollapsedRightRail from "@/components/layout/CollapsedRightRail.vue";
 import DiffView from "@/components/session/DiffView.vue";
 import FileBrowserPanel from "@/components/session/FileBrowserPanel.vue";
-import RightPanelTabs from "@/components/layout/RightPanelTabs.vue";
-import SessionDetailPanel from "@/components/session/SessionDetailPanel.vue";
+import SessionMetadataHeader from "@/components/session/SessionMetadataHeader.vue";
 import {
   useAbortSession,
   useArchiveSession,
@@ -33,7 +29,13 @@ import { getVisualRenderer } from "@/lib/visual-renderer-registry";
 import { formatAnnotationPrompt } from "@/lib/format-annotation-prompt";
 import { extractAnchorText } from "@/lib/annotation-types";
 import { parseDiffLines } from "@/lib/diff-parser";
+import { VISUAL_SYNTHETIC_PATH_PREFIX } from "@/lib/visual-payload-path";
 import type { AnnotationAnchor } from "@/lib/annotation-types";
+
+const SYNTHETIC_PATH_PREFIX = VISUAL_SYNTHETIC_PATH_PREFIX;
+const TREE_WIDTH_MIN = 180;
+const TREE_WIDTH_MAX = 600;
+const TREE_WIDTH_STEP = 10;
 
 interface Props {
   width?: number;
@@ -45,10 +47,16 @@ const props = withDefaults(defineProps<Props>(), {
 
 const sidebarStore = useSidebarStore();
 const sessionsStore = useSessionsStore();
-const { visualPayload, clearVisual } = useVisualPanel();
 
 const { rightPanelCollapsed } = storeToRefs(sidebarStore);
 const { sessions, activeSessionId } = storeToRefs(sessionsStore);
+
+// Visual panel state is keyed by session id; re-derive when the active session changes.
+const visualPanel = computed(() => useVisualPanel(activeSessionId.value ?? ""));
+const visualPayload = computed(() => visualPanel.value.visualPayload.value);
+function clearVisual(): void {
+  visualPanel.value.clearVisual();
+}
 
 // Provide content panel context
 const contentPanelContext = provideContentPanelContext(activeSessionId);
@@ -99,86 +107,6 @@ const { todos } = useSessionTodos(
   computed(() => activeSessionId.value ?? ""),
 );
 
-// --- Tabs ---
-const rightPanelTabs = [
-  {
-    id: "files",
-    label: "Files",
-  },
-  {
-    id: "preview",
-    label: "Preview",
-  },
-  {
-    id: "details",
-    label: "Details",
-  },
-] as const;
-
-const sessionTab = {
-  id: "session",
-  label: "Session",
-  eyebrow: "Session",
-  title: "Session Details",
-  description: "Selected session context, metadata, and quick actions will appear here.",
-} as const;
-
-const activeTab = computed(() => {
-  if (!selectedSession.value) {
-    return sessionTab;
-  }
-
-  const statusLabel = getStatusLabel(selectedSession.value.sessionStatus);
-  const projectLabel = selectedSession.value.projectName ?? "Ungrouped";
-
-  return {
-    ...sessionTab,
-    eyebrow: projectLabel,
-    title: selectedSession.value.session.title,
-    description: `${statusLabel} session in ${projectLabel}. Details and quick actions for the selected session appear here.`,
-  };
-});
-
-// Refs for focus management
-const filesTabPanelRef = ref<HTMLElement | null>(null);
-const previewTabPanelRef = ref<HTMLElement | null>(null);
-const detailsTabPanelRef = ref<HTMLElement | null>(null);
-
-function handleTabSelect(tabId: string): void {
-  if (tabId === "files" || tabId === "preview" || tabId === "details") {
-    contentPanelContext.switchToTab(tabId);
-  }
-}
-
-// Focus management: move focus to tab panel when tab changes
-watch(() => contentPanelContext.activeTab.value, async (newTab) => {
-  await nextTick();
-  
-  if (newTab === "files" && filesTabPanelRef.value) {
-    filesTabPanelRef.value.focus();
-  } else if (newTab === "preview" && previewTabPanelRef.value) {
-    previewTabPanelRef.value.focus();
-  } else if (newTab === "details" && detailsTabPanelRef.value) {
-    detailsTabPanelRef.value.focus();
-  }
-});
-
-function getStatusLabel(status: string): string {
-  switch (status) {
-    case "completed": return "Complete";
-    case "idle": return "Idle";
-    case "stopped":
-    case "disconnected": return "Stopped";
-    case "error": return "Error";
-    case "waiting_input": return "Waiting for input";
-    default: return "Running";
-  }
-}
-
-function handleCollapse(): void {
-  sidebarStore.setRightPanelCollapsed(true);
-}
-
 function handleExpand(): void {
   sidebarStore.setRightPanelCollapsed(false);
 }
@@ -204,19 +132,19 @@ const {
   onSubmit: (formattedText: string) => {
     const sessionId = currentSessionId.value;
     if (!sessionId) return;
-    
+
     // Get the composables for the current session
     const { sendPrompt } = useSendPrompt(sessionId);
     const { setText } = useDraftState(sessionId, {
       agentId: "",
       modelId: "",
     });
-    
+
     // Format the annotation prompt with file path if available
     const filePath = visualPayload.value?.sourceFilePath ?? "";
     const anchorText = activeAnchor.value ? extractAnchorText(activeAnchor.value) : "";
     const prompt = formatAnnotationPrompt(filePath, anchorText, formattedText);
-    
+
     // Set the draft text and send
     setText(prompt);
     sendPrompt();
@@ -240,58 +168,87 @@ const isMarkdownRenderer = computed(() => {
   return visualPayload.value?.$type === "markdown";
 });
 
+// --- Content-slot routing ---
+const selectedFilePath = computed(() => contentPanelContext.filesContext.value.selectedFilePath);
+const isSyntheticPath = computed(() => selectedFilePath.value?.startsWith(SYNTHETIC_PATH_PREFIX) ?? false);
+
 // Check if the selected file has diff data available
 const selectedFileDiff = computed(() => {
-  const selectedPath = contentPanelContext.filesContext.value.selectedFilePath;
-  if (!selectedPath) return null;
-  
+  const selectedPath = selectedFilePath.value;
+  if (!selectedPath || isSyntheticPath.value) return null;
+
   return sharedDiffs.diffs.value.find(d => d.file === selectedPath) ?? null;
 });
 
 // Parse diff lines for the selected file
 const diffLines = computed(() => {
   if (!selectedFileDiff.value) return null;
-  
+
   return parseDiffLines(selectedFileDiff.value.before, selectedFileDiff.value.after);
 });
 
-// Determine if we should show diff view instead of visual payload
-const shouldShowDiff = computed(() => {
-  return contentPanelContext.activeTab.value === "preview" && diffLines.value !== null;
-});
+// Does a diff exist for the selected file?
+const hasDiff = computed(() => diffLines.value !== null);
 
-// --- Diff / Rendered toggle for HTML and Markdown files ---
-type DiffViewMode = "diff" | "rendered";
-const diffViewMode = ref<DiffViewMode>("diff");
-
-// Check if the selected diff file supports rendered preview
-const isRenderableFile = computed(() => {
-  const path = selectedFileDiff.value?.file;
-  if (!path) return false;
-  const lower = path.toLowerCase();
-  return lower.endsWith(".html") || lower.endsWith(".htm") || lower.endsWith(".md");
-});
-
-const renderableFileType = computed(() => {
-  const path = selectedFileDiff.value?.file;
-  if (!path) return null;
-  const lower = path.toLowerCase();
-  if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
-  if (lower.endsWith(".md")) return "markdown";
-  return null;
-});
-
-// The content to render (use the "after" state of the diff)
-const renderableContent = computed(() => {
-  if (!selectedFileDiff.value) return "";
-  return selectedFileDiff.value.after ?? "";
-});
-
-// Reset to diff view when selected file changes
-watch(
-  () => contentPanelContext.filesContext.value.selectedFilePath,
-  () => { diffViewMode.value = "diff"; },
+// Show the diff view when the user has toggled to it AND a diff exists.
+const shouldShowDiff = computed(() =>
+  contentPanelContext.viewMode.value === "diff" && hasDiff.value && !isSyntheticPath.value,
 );
+
+function setFileView(): void {
+  contentPanelContext.setViewMode("file");
+}
+
+function setDiffView(): void {
+  if (!hasDiff.value) return;
+  contentPanelContext.setViewMode("diff");
+}
+
+// --- Files-tree width resize gutter ---
+const isGutterDragging = ref(false);
+
+function onGutterPointerDown(e: PointerEvent): void {
+  isGutterDragging.value = true;
+  const startX = e.clientX;
+  const startWidth = contentPanelContext.filesContext.value.filesTreeWidth;
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+
+  const onMove = (ev: PointerEvent) => {
+    const delta = ev.clientX - startX;
+    const nextWidth = Math.max(TREE_WIDTH_MIN, Math.min(TREE_WIDTH_MAX, startWidth + delta));
+    contentPanelContext.updateFilesContext({ filesTreeWidth: nextWidth });
+  };
+
+  const onUp = () => {
+    isGutterDragging.value = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+  };
+
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
+}
+
+function onGutterKeydown(e: KeyboardEvent): void {
+  const current = contentPanelContext.filesContext.value.filesTreeWidth;
+
+  if (e.key === "ArrowLeft") {
+    e.preventDefault();
+    contentPanelContext.updateFilesContext({ filesTreeWidth: Math.max(TREE_WIDTH_MIN, current - TREE_WIDTH_STEP) });
+  } else if (e.key === "ArrowRight") {
+    e.preventDefault();
+    contentPanelContext.updateFilesContext({ filesTreeWidth: Math.min(TREE_WIDTH_MAX, current + TREE_WIDTH_STEP) });
+  } else if (e.key === "Home") {
+    e.preventDefault();
+    contentPanelContext.updateFilesContext({ filesTreeWidth: TREE_WIDTH_MIN });
+  } else if (e.key === "End") {
+    e.preventDefault();
+    contentPanelContext.updateFilesContext({ filesTreeWidth: TREE_WIDTH_MAX });
+  }
+}
 </script>
 
 <template>
@@ -307,155 +264,133 @@ watch(
     :style="{ width: `${props.width}px`, minWidth: '280px' }"
     aria-label="Right panel"
   >
-    <RightPanelTabs
-      :tabs="rightPanelTabs"
-      :active-tab="contentPanelContext.activeTab.value"
-      @select="handleTabSelect"
-      @collapse="handleCollapse"
-    />
+    <SessionMetadataHeader :session="selectedSession" />
 
-    <div
-      class="right-content"
-      :class="{ 'right-content--visual': (contentPanelContext.activeTab.value === 'preview' && visualPayload && visualRenderer) || shouldShowDiff }"
-    >
-      <div class="right-content__panel">
-        <section
-          v-if="shouldShowDiff"
-          id="panel-preview"
-          ref="previewTabPanelRef"
-          class="visual-panel"
-          role="tabpanel"
-          aria-labelledby="tab-preview"
-          tabindex="-1"
-        >
-          <div class="visual-panel__header">
-            <div class="visual-panel__file-info">
-              <span class="visual-panel__file-label">{{ diffViewMode === 'rendered' ? 'Preview:' : 'Diff:' }}</span>
-              <span class="visual-panel__file-path">{{ selectedFileDiff?.file }}</span>
-            </div>
-            <div class="visual-panel__actions">
-              <div v-if="isRenderableFile" class="visual-panel__toggle">
-                <button
-                  class="visual-panel__toggle-btn"
-                  :class="{ 'visual-panel__toggle-btn--active': diffViewMode === 'diff' }"
-                  title="Show diff"
-                  @click="diffViewMode = 'diff'"
-                >
-                  <Code class="visual-panel__toggle-icon" />
-                </button>
-                <button
-                  class="visual-panel__toggle-btn"
-                  :class="{ 'visual-panel__toggle-btn--active': diffViewMode === 'rendered' }"
-                  title="Show rendered preview"
-                  @click="diffViewMode = 'rendered'"
-                >
-                  <Eye class="visual-panel__toggle-icon" />
-                </button>
+    <div class="right-content">
+      <div
+        class="right-content__split"
+        :style="{ '--files-tree-width': `${contentPanelContext.filesContext.value.filesTreeWidth}px` }"
+      >
+        <div class="right-content__left">
+          <FileBrowserPanel :session-id="activeSessionId ?? ''" />
+        </div>
+
+        <div
+          class="right-content__gutter"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize files panel"
+          :aria-valuenow="contentPanelContext.filesContext.value.filesTreeWidth"
+          :aria-valuemin="TREE_WIDTH_MIN"
+          :aria-valuemax="TREE_WIDTH_MAX"
+          tabindex="0"
+          :class="{ 'right-content__gutter--dragging': isGutterDragging }"
+          @pointerdown="onGutterPointerDown"
+          @keydown="onGutterKeydown"
+        />
+
+        <div class="right-content__right">
+          <!-- Visual (VP4) mirror: synthetic __visual__/... paths -->
+          <section
+            v-if="isSyntheticPath && visualPayload && visualRenderer"
+            class="visual-panel"
+          >
+            <div class="visual-panel__header">
+              <div
+                v-if="visualPayload.sourceFilePath"
+                class="visual-panel__file-info"
+              >
+                <span class="visual-panel__file-label">File:</span>
+                <span class="visual-panel__file-path">{{ visualPayload.sourceFilePath }}</span>
               </div>
+              <h2
+                v-else
+                class="visual-panel__title"
+              >
+                {{ visualPayload.title ?? 'Visual Content' }}
+              </h2>
               <button
                 class="visual-panel__close"
                 data-testid="visual-panel-close"
+                aria-label="Close preview"
                 @click="clearVisual"
               >
                 <X class="visual-panel__close-icon" />
               </button>
             </div>
-          </div>
-          <div class="visual-panel__content">
-            <template v-if="diffViewMode === 'rendered' && isRenderableFile">
-              <HtmlRenderer v-if="renderableFileType === 'html'" :content="renderableContent" />
-              <MarkdownRenderer v-else-if="renderableFileType === 'markdown'" :content="renderableContent" />
-            </template>
-            <DiffView v-else :lines="diffLines!" />
-          </div>
-        </section>
-
-        <section
-          v-else-if="contentPanelContext.activeTab.value === 'preview' && visualPayload && visualRenderer"
-          id="panel-preview"
-          ref="previewTabPanelRef"
-          class="visual-panel"
-          role="tabpanel"
-          aria-labelledby="tab-preview"
-          tabindex="-1"
-        >
-          <div class="visual-panel__header">
-            <div
-              v-if="visualPayload.sourceFilePath"
-              class="visual-panel__file-info"
-            >
-              <span class="visual-panel__file-label">File:</span>
-              <span class="visual-panel__file-path">{{ visualPayload.sourceFilePath }}</span>
+            <div class="visual-panel__content">
+              <component
+                :is="visualRenderer"
+                :content="visualPayload.content"
+                :annotatable="isMarkdownRenderer"
+                @annotate="handleAnnotate"
+              />
             </div>
-            <h2
-              v-else
-              class="visual-panel__title"
-            >
-              {{ visualPayload.title ?? 'Visual Content' }}
-            </h2>
-            <button
-              class="visual-panel__close"
-              data-testid="visual-panel-close"
-              @click="clearVisual"
-            >
-              <X class="visual-panel__close-icon" />
-            </button>
-          </div>
-          <div class="visual-panel__content">
-            <component
-              :is="visualRenderer"
-              :content="visualPayload.content"
-              :annotatable="isMarkdownRenderer"
-              @annotate="handleAnnotate"
-            />
-          </div>
-        </section>
-
-        <div
-          v-if="contentPanelContext.activeTab.value === 'files'"
-          id="panel-files"
-          ref="filesTabPanelRef"
-          role="tabpanel"
-          aria-labelledby="tab-files"
-          tabindex="-1"
-        >
-          <FileBrowserPanel
-            :session-id="activeSessionId ?? ''"
-          />
-        </div>
-
-        <div
-          v-else-if="contentPanelContext.activeTab.value === 'details'"
-          id="panel-details"
-          ref="detailsTabPanelRef"
-          role="tabpanel"
-          aria-labelledby="tab-details"
-          tabindex="-1"
-        >
-          <section
-            v-if="!selectedSession"
-            class="right-section"
-          >
-            <p class="right-section__eyebrow">
-              {{ activeTab.eyebrow }}
-            </p>
-            <h2 class="right-section__title">
-              {{ activeTab.title }}
-            </h2>
-            <p class="right-section__description">
-              {{ activeTab.description }}
-            </p>
           </section>
 
-          <SessionDetailPanel
-            v-else
-            :session="selectedSession"
-          />
+          <!-- File / Diff viewer for a real selected file -->
+          <section
+            v-else-if="visualPayload && visualRenderer"
+            class="visual-panel"
+          >
+            <div class="visual-panel__header">
+              <div class="visual-panel__file-info">
+                <span class="visual-panel__file-label">{{ shouldShowDiff ? 'Diff:' : 'File:' }}</span>
+                <span class="visual-panel__file-path">{{ visualPayload.sourceFilePath ?? visualPayload.title ?? '' }}</span>
+              </div>
+              <div class="visual-panel__actions">
+                <div class="visual-panel__toggle" role="group" aria-label="Content view mode">
+                  <button
+                    class="visual-panel__toggle-btn"
+                    :class="{ 'visual-panel__toggle-btn--active': !shouldShowDiff }"
+                    :aria-pressed="!shouldShowDiff"
+                    aria-label="Show file"
+                    title="Show file"
+                    @click="setFileView"
+                  >
+                    <FileText class="visual-panel__toggle-icon" />
+                  </button>
+                  <button
+                    class="visual-panel__toggle-btn"
+                    :class="{ 'visual-panel__toggle-btn--active': shouldShowDiff }"
+                    :aria-pressed="shouldShowDiff"
+                    :disabled="!hasDiff"
+                    aria-label="Show diff"
+                    title="Show diff"
+                    @click="setDiffView"
+                  >
+                    <GitCompare class="visual-panel__toggle-icon" />
+                  </button>
+                </div>
+                <button
+                  class="visual-panel__close"
+                  data-testid="visual-panel-close"
+                  aria-label="Close preview"
+                  @click="clearVisual"
+                >
+                  <X class="visual-panel__close-icon" />
+                </button>
+              </div>
+            </div>
+            <div class="visual-panel__content">
+              <DiffView v-if="shouldShowDiff && diffLines" :lines="diffLines" />
+              <component
+                v-else
+                :is="visualRenderer"
+                :content="visualPayload.content"
+                :annotatable="isMarkdownRenderer"
+                @annotate="handleAnnotate"
+              />
+            </div>
+          </section>
+
+          <div v-else class="right-content__empty">
+            <p class="right-content__empty-text">
+              Select a file to view its content.
+            </p>
+          </div>
         </div>
       </div>
-
-      <!-- Changes Drawer (persistent across tabs) -->
-      <ChangesDrawer :session-id="activeSessionId" />
     </div>
 
     <!-- Annotation Popover -->
@@ -492,51 +427,107 @@ watch(
   overflow: hidden;
 }
 
-.right-content--visual {
+.right-content__split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
   overflow: hidden;
 }
 
-.right-content__panel {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
+.right-content__left {
+  width: var(--files-tree-width, 260px);
+  flex: 0 0 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 10px 10px 0;
+  border-right: 1px solid var(--border);
 }
 
-.right-content__panel [role="tabpanel"]:focus {
+.right-content__gutter {
+  flex: 0 0 4px;
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background var(--transition);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .right-content__gutter {
+    transition: none;
+  }
+}
+
+.right-content__gutter:hover,
+.right-content__gutter--dragging {
+  background: var(--accent);
+}
+
+.right-content__gutter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.right-content__right {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.right-content__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+}
+
+.right-content__empty-text {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.right-content__left [role="tabpanel"]:focus {
   outline: none;
 }
 
-.right-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
+.session-artifacts {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
 }
 
-.right-section__eyebrow {
-  margin: 0;
-  font-size: 9px;
+.session-artifacts__title {
+  margin: 0 0 6px;
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.05em;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
   color: var(--muted);
 }
 
-.right-section__title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
+.session-artifacts__item {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
   color: var(--text);
+  transition: background-color var(--transition), border-color var(--transition);
 }
 
-.right-section__description {
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--muted);
+.session-artifacts__item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.session-artifacts__item--selected {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .visual-panel {
@@ -597,10 +588,10 @@ watch(
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 0;
-  background: var(--surface, #fff);
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
-  transition: background var(--transition), color var(--transition);
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -610,7 +601,8 @@ watch(
 }
 
 .visual-panel__close:hover {
-  background: var(--bg, rgba(0, 0, 0, 0.04));
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border-color: color-mix(in srgb, var(--text) 25%, var(--border));
   color: var(--text);
 }
 
@@ -648,7 +640,7 @@ watch(
   height: 24px;
   padding: 0;
   border: none;
-  background: var(--surface, #fff);
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
   transition: background var(--transition), color var(--transition);
@@ -659,12 +651,12 @@ watch(
 }
 
 .visual-panel__toggle-btn--active {
-  background: var(--bg, rgba(0, 0, 0, 0.04));
+  background: color-mix(in srgb, var(--text) 12%, transparent);
   color: var(--text);
 }
 
 .visual-panel__toggle-btn:hover:not(.visual-panel__toggle-btn--active) {
-  background: var(--bg, rgba(0, 0, 0, 0.02));
+  background: color-mix(in srgb, var(--text) 6%, transparent);
   color: var(--text);
 }
 
