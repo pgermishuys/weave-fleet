@@ -102,6 +102,7 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
         {
             RemoveProductionHarnessRegistrations(services);
             ReplaceOpenCodePoolHealthCheck(services);
+            ReplaceHarnessPoolRecycler(services);
 
             // ── Remove all production IHarness registrations ─────────────────
             var harnessDescriptors = services
@@ -222,6 +223,24 @@ public sealed class FleetWebApplicationFactory : WebApplicationFactory<Program>,
     private sealed class EmptyOpenCodePoolHealthCheck : IOpenCodePoolHealthCheck
     {
         public OpenCodePoolHealthStatus GetStatus() => new(0, 0, WarmCount: 0, ActiveCount: 0, []);
+    }
+
+    private static void ReplaceHarnessPoolRecycler(IServiceCollection services)
+    {
+        var poolRecyclerDescriptors = services
+            .Where(d => d.ServiceType == typeof(IHarnessPoolRecycler))
+            .ToList();
+
+        foreach (var descriptor in poolRecyclerDescriptors)
+            services.Remove(descriptor);
+
+        services.AddSingleton<IHarnessPoolRecycler, NoOpHarnessPoolRecycler>();
+    }
+
+    private sealed class NoOpHarnessPoolRecycler : IHarnessPoolRecycler
+    {
+        public Task<int> RecycleIdleInstancesAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(0);
     }
 
     /// <summary>

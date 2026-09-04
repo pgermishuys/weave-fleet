@@ -1,14 +1,20 @@
-import { ref, watch, type Ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import { browseSessionDirectory, readSessionFile } from '@/api/session-files'
 import type { BrowseDirectoryEntry } from '@/api/client'
 import { buildPayloadForFile } from '@/lib/file-payload'
 import { useVisualPanel } from '@/composables/use-visual-panel'
 import { useWeaveSocket } from '@/composables/use-weave-socket'
+import { useContentPanelContext } from '@/composables/use-content-panel'
 import type { DomainEvent } from '@/lib/domain-events'
+import type { VisualPayload } from '@/lib/visual-payload'
+
+const SYNTHETIC_PATH_PREFIX = '__visual__/'
 
 export function useFileBrowser(sessionId: Ref<string | null>) {
-  const { showVisual } = useVisualPanel()
+  const visualPanel = computed(() => useVisualPanel(sessionId.value ?? ''))
+  const showVisual = (payload: VisualPayload): void => visualPanel.value.showVisual(payload)
   const { subscribeV2 } = useWeaveSocket()
+  const contentPanel = useContentPanelContext()
 
   // State
   const rootEntries = ref<BrowseDirectoryEntry[]>([])
@@ -90,6 +96,13 @@ export function useFileBrowser(sessionId: Ref<string | null>) {
     }
 
     error.value = null
+
+    if (path.startsWith(SYNTHETIC_PATH_PREFIX)) {
+      // Synthetic visual artifact paths are never fetched from the session
+      // filesystem; the content slot rerenders directly off visualPayload.
+      contentPanel.selectFile(path)
+      return
+    }
 
     try {
       const response = await readSessionFile(sessionId.value, path)

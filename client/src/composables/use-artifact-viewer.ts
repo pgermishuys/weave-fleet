@@ -1,11 +1,21 @@
 import { computed, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useVisualPanel } from '@/composables/use-visual-panel'
 import { useSessionDiffsContext } from '@/composables/use-session-diffs-context'
+import { useSessionsStore } from '@/stores/sessions'
 import type { VisualPayload } from '@/lib/visual-payload'
 import { getFileExtension, isRenderableExtension, buildPayloadForFile } from '@/lib/file-payload'
 
 export function useArtifactViewer() {
-  const { visualPayload, showVisual, clearVisual } = useVisualPanel()
+  const { activeSessionId } = storeToRefs(useSessionsStore())
+  const visualPanel = computed(() => useVisualPanel(activeSessionId.value ?? ''))
+  const visualPayload = computed(() => visualPanel.value.visualPayload.value)
+  function showVisual(payload: VisualPayload): void {
+    visualPanel.value.showVisual(payload)
+  }
+  function clearVisual(): void {
+    visualPanel.value.clearVisual()
+  }
   const diffsContext = useSessionDiffsContext()
 
   const activeFilePath = ref<string | null>(null)

@@ -1,18 +1,21 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { Archive, GitFork, Loader2, OctagonX, Pencil, RotateCcw, Square, Trash2 } from "lucide-vue-next";
+import { Archive, GitFork, Loader2, OctagonX, Pencil, RotateCcw, Square, Trash2, FileText, ChevronDown, ChevronRight } from "lucide-vue-next";
 import ConfirmDeleteSessionDialog from "@/components/sessions/ConfirmDeleteSessionDialog.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
 import SmartLinkItem from "@/plugins/builtin/smart-links/SmartLinkItem.vue";
 import TodoListView from "@/components/session/TodoListView.vue";
 import { useSessionTodos } from "@/composables/use-session-todos";
 import { useSessionDetailContext } from "@/composables/use-session-detail-context";
+import { useVisualPanel } from "@/composables/use-visual-panel";
+import { useContentPanelContext } from "@/composables/use-content-panel";
 import { apiFetch } from "@/lib/api-client";
 import { trackAction } from "@/lib/track-action";
+import { getVisualPayloadSyntheticPath } from "@/lib/visual-payload-path";
 import type { SessionActionCapabilities, SessionListItem } from "@/api/client";
 import { useSmartLinksStore } from "@/stores/smart-links";
-import { secondsUntilRefresh, isRefreshing, refreshNow, POLL_INTERVAL_SECONDS } from "@/plugins/builtin/smart-links/composables/use-smart-links";
+import { secondsUntilRefresh, isRefreshing, refreshNow as useSmartLinksRefresh, POLL_INTERVAL_SECONDS } from "@/plugins/builtin/smart-links/composables/use-smart-links";
 
 interface SessionApiDetail {
   id?: string;
@@ -43,6 +46,7 @@ const props = defineProps<{
 const router = useRouter();
 const ctx = useSessionDetailContext();
 const smartLinksStore = useSmartLinksStore();
+const contentPanel = useContentPanelContext();
 
 const { abortSession, isAborting, error: abortError } = ctx.abort;
 const { archiveSession, isArchiving, error: archiveError } = ctx.archive;
@@ -64,13 +68,14 @@ const arcOffset = computed(() =>
 );
 
 async function handleSmartLinksRefreshNow(): Promise<void> {
-  await refreshNow();
+  await useSmartLinksRefresh();
 }
 
 const remoteSessionDetail = ref<SessionApiDetail | null>(null);
 const refreshVersion = shallowRef(0);
 const isDeleteDialogOpen = shallowRef(false);
 const isForkDialogOpen = shallowRef(false);
+const isTodosExpanded = shallowRef(false);
 
 const sessionId = computed(() => props.session?.session.id ?? null);
 const activeSmartLinks = computed(() => sessionId.value ? smartLinksStore.getActiveLinks(sessionId.value) : []);
@@ -85,7 +90,7 @@ const effectiveSessionStatus = computed(() => props.session?.sessionStatus
   ?? null);
 const { todos } = useSessionTodos(todoSessionId);
 const completedTodosCount = computed(() => todos.value.filter((t) => t.status === "completed").length);
-const todoProgressLabel = computed(() => `Todo (${completedTodosCount.value}/${todos.value.length} complete)`);
+const todoProgressLabel = computed(() => `${completedTodosCount.value} of ${todos.value.length} todos`);
 const effectiveLifecycleStatus = computed(() => normalizeLifecycleStatus(
   props.session?.lifecycleStatus
     ?? remoteSessionDetail.value?.lifecycleStatus
@@ -139,6 +144,45 @@ const actionErrors = computed(() => [
   resumeError.value,
   terminateError.value,
 ].filter((message): message is string => Boolean(message)));
+
+// Artifact chip — reflects the currently mirrored visual artifact for this session, if any.
+const visualPanel = computed(() => sessionId.value ? useVisualPanel(sessionId.value) : null);
+const artifactPayload = computed(() => visualPanel.value?.visualPayload.value ?? null);
+const artifactName = computed(() => {
+  const path = artifactPayload.value?.sourceFilePath;
+  if (!path) return null;
+  const segments = path.split("/");
+  return segments[segments.length - 1] || path;
+});
+
+function handleArtifactChipActivate(): void {
+  const payload = artifactPayload.value;
+  const panel = visualPanel.value;
+
+  if (payload) {
+    if (panel) {
+      panel.showVisual(payload);
+    }
+    void contentPanel.selectFile(getVisualPayloadSyntheticPath(payload));
+    return;
+  }
+
+  const name = artifactName.value;
+  if (name) {
+    void contentPanel.selectFile(`__visual__/${name}`);
+  }
+}
+
+function handleArtifactChipKeydown(event: KeyboardEvent): void {
+  if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
+    event.preventDefault();
+    handleArtifactChipActivate();
+  }
+}
+
+function toggleTodosExpanded(): void {
+  isTodosExpanded.value = !isTodosExpanded.value;
+}
 
 watch(
   [sessionId, refreshVersion],
@@ -400,14 +444,16 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
 </script>
 
 <template>
-  <section
-    class="session-detail-panel"
-    aria-label="Session details"
+  <header
+    class="session-metadata-header"
+    aria-label="Session metadata"
   >
-    <!-- Compact icon toolbar (V1 layout) -->
+    <!-- Actions toolbar -->
     <div
       v-if="ctx.actionsLayout === 'toolbar'"
       class="session-action-toolbar"
+      role="toolbar"
+      aria-label="Session actions"
     >
       <button
         v-if="canAbort"
@@ -416,6 +462,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
         class="session-action-toolbar__btn session-action-toolbar__btn--danger"
         :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
         title="Abort"
+        aria-label="Abort session"
         @click="handleAbort"
       >
         <Loader2
@@ -438,6 +485,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
         class="session-action-toolbar__btn"
         :disabled="isAnyActionPending || !sessionId"
         title="Resume"
+        aria-label="Resume session"
         @click="handleResume"
       >
         <Loader2
@@ -460,6 +508,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
         class="session-action-toolbar__btn session-action-toolbar__btn--danger"
         :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
         title="Stop"
+        aria-label="Stop session"
         @click="handleStop"
       >
         <Loader2
@@ -484,6 +533,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
         class="session-action-toolbar__btn"
         :disabled="isAnyActionPending || !sessionId"
         title="Fork"
+        aria-label="Fork session"
         @click="handleFork"
       >
         <GitFork
@@ -498,6 +548,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
         class="session-action-toolbar__btn"
         :disabled="isAnyActionPending || !sessionId"
         title="Rename"
+        aria-label="Rename session"
         @click="handleRename"
       >
         <Loader2
@@ -520,6 +571,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
         class="session-action-toolbar__btn session-action-toolbar__btn--danger"
         :disabled="isAnyActionPending || !sessionId || !resolvedInstanceId"
         title="Delete"
+        aria-label="Delete session"
         @click="handleDelete"
       >
         <Loader2
@@ -542,6 +594,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
         class="session-action-toolbar__btn"
         :disabled="isAnyActionPending || !sessionId"
         title="Archive"
+        aria-label="Archive session"
         @click="handleArchive"
       >
         <Loader2
@@ -567,70 +620,106 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       </p>
     </div>
 
-    <article
-      v-if="todos.length > 0"
-      class="session-section-card"
+    <!-- Smart-link / todo / artifact chips row -->
+    <div
+      v-if="activeSmartLinks.length > 0 || todos.length > 0 || artifactName"
+      class="session-meta-chips"
+      role="list"
+      aria-label="Session links and artifacts"
     >
-      <div class="session-section-card__header">
-        <p class="session-section-card__title">
-          {{ todoProgressLabel }}
-        </p>
-      </div>
+      <button
+        v-if="todos.length > 0"
+        type="button"
+        class="meta-chip meta-chip--todo"
+        role="listitem"
+        :aria-label="`${todoProgressLabel}. ${isTodosExpanded ? 'Collapse' : 'Expand'} todo list`"
+        :aria-expanded="isTodosExpanded"
+        @click="toggleTodosExpanded"
+      >
+        <component
+          :is="isTodosExpanded ? ChevronDown : ChevronRight"
+          :size="11"
+          aria-hidden="true"
+        />
+        {{ todoProgressLabel }}
+      </button>
 
+      <button
+        v-if="artifactName"
+        type="button"
+        class="meta-chip meta-chip--artifact"
+        role="listitem"
+        :aria-label="`Open artifact ${artifactName}`"
+        tabindex="0"
+        @click="handleArtifactChipActivate"
+        @keydown="handleArtifactChipKeydown"
+      >
+        <FileText :size="11" aria-hidden="true" />
+        {{ artifactName }}
+      </button>
+
+      <button
+        v-if="activeSmartLinks.length > 0"
+        type="button"
+        class="refresh-timer-btn"
+        role="listitem"
+        :aria-label="isRefreshing ? 'Refreshing smart links…' : `Refresh smart links now (next refresh in ${secondsUntilRefresh}s)`"
+        :title="isRefreshing ? 'Refreshing…' : `Refresh now (next refresh in ${secondsUntilRefresh}s)`"
+        :disabled="isRefreshing"
+        @click="handleSmartLinksRefreshNow"
+      >
+        <svg
+          class="refresh-arc"
+          :class="{ 'refresh-arc--spinning': isRefreshing }"
+          width="16"
+          height="16"
+          viewBox="0 0 18 18"
+          aria-hidden="true"
+        >
+          <circle
+            class="arc-track"
+            cx="9"
+            cy="9"
+            :r="ARC_RADIUS"
+            fill="none"
+            stroke-width="2"
+          />
+          <circle
+            class="arc-fill"
+            cx="9"
+            cy="9"
+            :r="ARC_RADIUS"
+            fill="none"
+            stroke-width="2"
+            :stroke-dasharray="ARC_CIRCUMFERENCE"
+            :stroke-dashoffset="arcOffset"
+            stroke-linecap="round"
+            transform="rotate(-90 9 9)"
+          />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Expandable todo strip -->
+    <article
+      v-if="todos.length > 0 && isTodosExpanded"
+      class="session-section-card"
+      role="region"
+      aria-label="Session todo list"
+    >
       <TodoListView
         :todos="todos"
         aria-label="Session todo list"
       />
     </article>
 
+    <!-- Smart links (PR / issue) detail cards -->
     <article
       v-if="activeSmartLinks.length > 0"
       class="session-section-card"
+      role="region"
+      aria-label="Smart links"
     >
-      <div class="session-section-card__header">
-        <p class="session-section-card__title">
-          Smart links
-        </p>
-        <button
-          type="button"
-          class="refresh-timer-btn"
-          :aria-label="isRefreshing ? 'Refreshing…' : `Refresh now (next refresh in ${secondsUntilRefresh}s)`"
-          :title="isRefreshing ? 'Refreshing…' : `Refresh now (next refresh in ${secondsUntilRefresh}s)`"
-          :disabled="isRefreshing"
-          @click="handleSmartLinksRefreshNow"
-        >
-          <svg
-            class="refresh-arc"
-            :class="{ 'refresh-arc--spinning': isRefreshing }"
-            width="18"
-            height="18"
-            viewBox="0 0 18 18"
-            aria-hidden="true"
-          >
-            <circle
-              class="arc-track"
-              cx="9"
-              cy="9"
-              :r="ARC_RADIUS"
-              fill="none"
-              stroke-width="2"
-            />
-            <circle
-              class="arc-fill"
-              cx="9"
-              cy="9"
-              :r="ARC_RADIUS"
-              fill="none"
-              stroke-width="2"
-              :stroke-dasharray="ARC_CIRCUMFERENCE"
-              :stroke-dashoffset="arcOffset"
-              stroke-linecap="round"
-              transform="rotate(-90 9 9)"
-            />
-          </svg>
-        </button>
-      </div>
-
       <div
         v-if="smartLinkPRs.length > 0"
         class="smart-links-group"
@@ -678,14 +767,14 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       :source-title="sessionTitle"
       @update:open="isForkDialogOpen = $event"
     />
-  </section>
+  </header>
 </template>
 
 <style scoped>
-.session-detail-panel {
+.session-metadata-header {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .session-section-card {
@@ -698,35 +787,23 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
   background: var(--card-bg);
 }
 
-.session-section-card__header {
+.smart-links-group {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.session-section-card__title {
+.smart-links-group__heading {
   margin: 0;
-  font-size: 10px;
-  font-weight: 650;
+  font-size: 9.5px;
+  font-weight: 700;
   letter-spacing: 0.03em;
   line-height: 1.2;
   text-transform: uppercase;
-  color: var(--text);
-}
-
-.session-section-card__note {
-  margin: 0;
-  font-size: 10px;
-  line-height: 1.35;
   color: var(--muted);
 }
 
-.session-section-card__note--error {
-  color: var(--error);
-}
-
-/* ---- Compact icon toolbar (V1 layout) ---- */
+/* ---- Compact icon toolbar ---- */
 
 .session-action-toolbar {
   display: flex;
@@ -782,7 +859,7 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
 }
 
 .session-action-toolbar__spinner {
-  animation: session-detail-panel-spin 0.8s linear infinite;
+  animation: session-metadata-header-spin 0.8s linear infinite;
 }
 
 .session-action-toolbar__error {
@@ -792,9 +869,53 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
   color: var(--error);
 }
 
-@keyframes session-detail-panel-spin {
+@keyframes session-metadata-header-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* ---- Chip row ---- */
+
+.session-meta-chips {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.meta-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.meta-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.meta-chip--todo {
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.meta-chip--artifact {
+  color: #d8b4fe;
+  border-color: rgba(192, 132, 252, 0.3);
+  background: rgba(192, 132, 252, 0.08);
+  font-weight: 500;
 }
 
 /* Smart links refresh arc timer */
@@ -846,5 +967,4 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
   from { transform: rotate(-90deg); transform-origin: 9px 9px; }
   to { transform: rotate(270deg); transform-origin: 9px 9px; }
 }
-
 </style>

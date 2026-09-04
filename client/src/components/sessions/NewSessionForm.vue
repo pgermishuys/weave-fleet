@@ -540,6 +540,7 @@ onUnmounted(() => {
 <template>
   <div
     class="flex h-full flex-col overflow-y-auto"
+    data-testid="new-session-form"
     @keydown="handleKeydown"
   >
     <div class="mx-auto w-full max-w-[560px] px-6 py-8">

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 
 namespace WeaveFleet.E2E.Pages;
@@ -83,13 +84,14 @@ public sealed class FleetDashboardPage(IPage page)
 
     // ── Actions ───────────────────────────────────────────────────────────────
 
-    /// <summary>Click "New Session" and return the dialog page object.</summary>
-    public async Task<NewSessionDialog> ClickNewSessionAsync()
+    /// <summary>Click "New Session" and return the inline new-session form page object.</summary>
+    public async Task<NewSessionFormPage> ClickNewSessionAsync()
     {
         await NewSessionButton.ClickAsync();
-        var dialog = new NewSessionDialog(_page);
-        await dialog.WaitForVisibleAsync();
-        return dialog;
+        await _page.WaitForURLAsync(new Regex("/sessions/new"));
+        var form = new NewSessionFormPage(_page);
+        await form.WaitForVisibleAsync();
+        return form;
     }
 
     /// <summary>Click the delete button on a session card (trigger delete confirmation).</summary>

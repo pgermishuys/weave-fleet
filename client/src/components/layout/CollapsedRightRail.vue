@@ -32,12 +32,13 @@ function handleExpand(): void {
 <template>
   <aside
     class="collapsed-rail"
-    aria-label="Expand right panel"
+    data-testid="collapsed-right-rail"
   >
     <Button
       variant="toolbar-icon"
       size="toolbar"
       class="collapsed-rail__button"
+      aria-label="Expand right panel"
       @click="handleExpand"
     >
       <span class="collapsed-rail__top">

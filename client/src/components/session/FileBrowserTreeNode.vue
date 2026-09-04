@@ -5,6 +5,8 @@ import type { BrowseDirectoryEntry } from '@/api/client'
 import type { UseDiffsResult } from '@/composables/use-diffs'
 import { useContentPanelContext } from '@/composables/use-content-panel'
 
+const SYNTHETIC_PATH_PREFIX = '__visual__/'
+
 interface Props {
   entry: BrowseDirectoryEntry
   depth: number
@@ -27,7 +29,7 @@ if (!diffs) {
 }
 
 const indentStyle = computed(() => ({
-  paddingLeft: `${props.depth * 16}px`
+  paddingLeft: `${8 + props.depth * 16}px`
 }))
 
 const isExpanded = computed(() => 
@@ -45,6 +47,7 @@ const children = computed(() =>
 // Find diff info for this file
 const diffInfo = computed(() => {
   if (props.entry.isDirectory) return null
+  if (props.entry.relativePath.startsWith(SYNTHETIC_PATH_PREFIX)) return null
   return diffs.diffs.value.find(d => d.file === props.entry.relativePath)
 })
 
@@ -138,6 +141,8 @@ const filteredChildren = computed(() => {
 
 async function toggleDirectory() {
   if (!fileBrowser) return
+  // Defensive: synthetic visual-artifact paths are never real directories.
+  if (props.entry.relativePath.startsWith(SYNTHETIC_PATH_PREFIX)) return
   if (isExpanded.value) {
     fileBrowser.collapseDirectory(props.entry.relativePath)
   } else {
@@ -147,9 +152,10 @@ async function toggleDirectory() {
 
 async function handleFileClick() {
   if (!fileBrowser) return
-  // Call contentPanel.selectFile which updates state and switches to preview tab
+  // Call contentPanel.selectFile which updates state and switches to the changes tab
   contentPanel.selectFile(props.entry.relativePath)
-  // Then load the file content and show visual
+  // Then load the file content and show visual.
+  // Synthetic paths short-circuit inside fileBrowser.selectFile (no fetch).
   await fileBrowser.selectFile(props.entry.relativePath)
 }
 </script>

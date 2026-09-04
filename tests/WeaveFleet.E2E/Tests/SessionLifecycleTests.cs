@@ -507,12 +507,12 @@ public sealed class SessionLifecycleTests : E2ETestBase,
             // Click "New Session" from the project context menu
             await newSessionMenuItem.ClickAsync();
 
-            // Verify the New Session dialog opens
-            var dialogLocator = Page.GetByTestId("new-session-dialog");
-            await Microsoft.Playwright.Assertions.Expect(dialogLocator).ToBeVisibleAsync();
+            // Verify navigation to the inline new-session form (route-based, not a modal)
+            await Page.WaitForURLAsync(new System.Text.RegularExpressions.Regex("/sessions/new"));
+            var dialog = new NewSessionFormPage(Page);
+            await dialog.WaitForVisibleAsync();
 
             // Fill in the directory and submit to create a session
-            var dialog = new NewSessionDialog(Page);
             await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
             var detail = await dialog.SubmitAsync();
             await detail.WaitForLoadedAsync();

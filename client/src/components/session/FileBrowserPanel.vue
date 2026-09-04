@@ -7,6 +7,8 @@ import type { UseDiffsResult } from '@/composables/use-diffs'
 import { useContentPanelContext } from '@/composables/use-content-panel'
 import FileBrowserTreeNode from './FileBrowserTreeNode.vue'
 
+const SYNTHETIC_PATH_PREFIX = '__visual__/'
+
 interface Props {
   sessionId: string
 }
@@ -47,64 +49,46 @@ function handleSearchKeydown(event: KeyboardEvent) {
 }
 
 function handleResultClick(path: string) {
+  // Defensive: search results are real filesystem paths, but guard against
+  // synthetic visual-artifact paths ever slipping through so we never fetch them.
   contentPanel.selectFile(path)
+  if (path.startsWith(SYNTHETIC_PATH_PREFIX)) return
   selectFile(path)
 }
 
-// All/Changed filter
-const allChangedFilter = computed(() => contentPanel.filesContext.value.allChangedFilter)
+// Diff filter — restrict tree to changed files + their ancestor directories.
+const isDiffFilterActive = computed(
+  () => contentPanel.filesContext.value.allChangedFilter === 'changed',
+)
 const changedCount = computed(() => diffsComposable.diffs.value.length)
 
-function setFilter(filter: 'all' | 'changed') {
+function setAllChangedFilter(filter: 'all' | 'changed') {
   contentPanel.updateFilesContext({ allChangedFilter: filter })
 }
 
-function handleFilterKeydown(event: KeyboardEvent, filter: 'all' | 'changed') {
-  if (event.key === ' ' || event.key === 'Enter') {
-    event.preventDefault()
-    setFilter(filter)
-  } else if (event.key === 'ArrowLeft' && filter === 'changed') {
-    event.preventDefault()
-    setFilter('all')
-  } else if (event.key === 'ArrowRight' && filter === 'all') {
-    event.preventDefault()
-    setFilter('changed')
-  }
-}
-
-// Filtered entries based on All/Changed mode
 const filteredRootEntries = computed(() => {
-  if (allChangedFilter.value === 'all') {
+  if (!isDiffFilterActive.value) {
     return rootEntries.value
   }
 
-  // In "changed" mode, filter to only show changed files and their ancestor directories
   const changedPaths = new Set(diffsComposable.diffs.value.map(d => d.file))
-  
-  // Build set of all ancestor directories needed
+
   const neededDirs = new Set<string>()
   for (const path of changedPaths) {
     let current = path
     while (current.includes('/')) {
       const parent = current.substring(0, current.lastIndexOf('/'))
-      if (parent) {
-        neededDirs.add(parent)
-        current = parent
-      } else {
-        break
-      }
+      if (!parent) break
+      neededDirs.add(parent)
+      current = parent
     }
   }
 
-  return rootEntries.value.filter(entry => {
-    if (entry.isDirectory) {
-      // Include if it's an ancestor of a changed file
-      return neededDirs.has(entry.relativePath)
-    } else {
-      // Include if it's a changed file
-      return changedPaths.has(entry.relativePath)
-    }
-  })
+  return rootEntries.value.filter(entry =>
+    entry.isDirectory
+      ? neededDirs.has(entry.relativePath)
+      : changedPaths.has(entry.relativePath),
+  )
 })
 </script>
 
@@ -112,35 +96,34 @@ const filteredRootEntries = computed(() => {
   <div class="file-browser-panel">
     <div class="file-browser-panel__header">
       <span class="file-browser-panel__title">Files</span>
-      <div class="file-browser-panel__filter-toggle" role="radiogroup" aria-label="File filter">
+      <div class="file-browser-panel__filter" role="radiogroup" aria-label="File filter">
         <button
+          type="button"
           class="file-browser-panel__filter-option"
-          :class="{ 'file-browser-panel__filter-option--active': allChangedFilter === 'all' }"
+          :class="{ 'file-browser-panel__filter-option--active': !isDiffFilterActive }"
           role="radio"
-          :aria-checked="allChangedFilter === 'all'"
-          @click="setFilter('all')"
-          @keydown="handleFilterKeydown($event, 'all')"
-          tabindex="0"
+          :aria-checked="!isDiffFilterActive"
+          @click="setAllChangedFilter('all')"
         >
           All
         </button>
         <button
+          type="button"
           class="file-browser-panel__filter-option"
-          :class="{ 'file-browser-panel__filter-option--active': allChangedFilter === 'changed' }"
+          :class="{ 'file-browser-panel__filter-option--active': isDiffFilterActive }"
           role="radio"
-          :aria-checked="allChangedFilter === 'changed'"
-          @click="setFilter('changed')"
-          @keydown="handleFilterKeydown($event, 'changed')"
-          tabindex="0"
+          :aria-checked="isDiffFilterActive"
+          @click="setAllChangedFilter('changed')"
         >
           Changed ({{ changedCount }})
         </button>
       </div>
       <button
-        class="file-browser-panel__refresh"
+        class="file-browser-panel__icon-btn"
         :disabled="rootLoading"
-        @click="handleRefresh"
+        aria-label="Refresh"
         title="Refresh"
+        @click="handleRefresh"
       >
         <RotateCw :size="14" :class="{ 'file-browser-panel__refresh-icon--spinning': rootLoading }" />
       </button>
@@ -257,74 +240,73 @@ const filteredRootEntries = computed(() => {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-}
-
-.file-browser-panel__filter-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  background-color: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  overflow: hidden;
   flex: 1;
 }
 
-.file-browser-panel__filter-option {
-  flex: 1;
-  padding: 4px 8px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--muted);
-  transition: background-color var(--transition), color var(--transition);
-  white-space: nowrap;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .file-browser-panel__filter-option {
-    transition: none;
-  }
-}
-
-.file-browser-panel__filter-option:hover {
-  background-color: var(--border);
-  color: var(--text);
-}
-
-.file-browser-panel__filter-option--active {
-  background-color: var(--primary);
-  color: white;
-}
-
-.file-browser-panel__filter-option--active:hover {
-  background-color: var(--primary);
-  color: white;
-}
-
-.file-browser-panel__refresh {
+.file-browser-panel__icon-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 4px;
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   border-radius: 4px;
   cursor: pointer;
+  color: var(--muted);
+  transition: background-color var(--transition), color var(--transition), border-color var(--transition);
+}
+
+.file-browser-panel__icon-btn:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+
+.file-browser-panel__icon-btn--active {
+  background-color: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent);
+}
+
+.file-browser-panel__icon-btn--active:hover {
+  background-color: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+}
+
+.file-browser-panel__icon-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.file-browser-panel__filter {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.file-browser-panel__filter-option {
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
   color: var(--muted);
   transition: background-color var(--transition), color var(--transition);
 }
 
-.file-browser-panel__refresh:hover:not(:disabled) {
-  background-color: var(--bg);
-  color: var(--text);
+.file-browser-panel__filter-option:not(:last-child) {
+  border-right: 1px solid var(--border);
 }
 
-.file-browser-panel__refresh:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
+.file-browser-panel__filter-option--active {
+  background-color: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+
+.file-browser-panel__filter-option:hover:not(.file-browser-panel__filter-option--active) {
+  background-color: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
 }
 
 .file-browser-panel__refresh-icon--spinning {

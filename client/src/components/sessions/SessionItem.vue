@@ -570,7 +570,7 @@ function removeSessionFromStore(): void {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 12px;
+  padding: 0 12px 0 24px;
   cursor: pointer;
   border: 0;
   border-left: 3px solid transparent;

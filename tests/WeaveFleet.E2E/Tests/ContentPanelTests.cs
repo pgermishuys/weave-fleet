@@ -6,7 +6,16 @@ namespace WeaveFleet.E2E.Tests;
 
 /// <summary>
 /// E2E smoke tests for the content panel (right panel) in the Sessions V2 view.
-/// Verifies tabs (Files, Preview, Details), changes drawer, and panel collapse/expand.
+/// Verifies the two tabs (Files, Changes), reviewed-count label, panel collapse/expand,
+/// and roving keyboard focus across tabs.
+///
+/// Note: the current <c>TestScenarioBuilder</c> has no support for seeding session diffs
+/// or mirrored visual artifacts. Content-slot routing to <c>__visual__/plan.md</c> via
+/// <c>useContentPanelContext().selectFile</c> (from the artifact chip or a file-browser
+/// selection) is covered at the unit level in
+/// <c>client/src/composables/__tests__/use-file-browser.test.ts</c> (around line 93); it is
+/// not re-verified here because there is no scenario-builder hook to produce a non-empty
+/// diff set or a mirrored visual payload for a real session.
 /// </summary>
 [Trait("Category", "E2E")]
 [Trait("Lane", "Smoke")]
@@ -18,10 +27,11 @@ public sealed class ContentPanelTests : E2ETestBase,
         : base(factory, playwright) { }
 
     /// <summary>
-    /// Verify that all three tabs (Files, Preview, Details) are visible in the content panel.
+    /// Verify that exactly two tabs (Files, Changes) are visible in the content panel,
+    /// and that no Preview/Details tabs exist.
     /// </summary>
     [Fact]
-    public async Task ContentPanel_ShowsThreeTabs()
+    public async Task ContentPanel_ShowsExactlyTwoTabs()
     {
         await WithFailureCapture(async () =>
         {
@@ -40,21 +50,21 @@ public sealed class ContentPanelTests : E2ETestBase,
             var detail = await dialog.SubmitAsync();
             await detail.WaitForLoadedAsync();
 
-            // All three tabs should be visible
+            // Files and Changes tabs should both be visible.
             await Assertions.Expect(detail.GetFilesTab()).ToBeVisibleAsync();
-            await Assertions.Expect(detail.GetPreviewTab()).ToBeVisibleAsync();
-            await Assertions.Expect(detail.GetDetailsTab()).ToBeVisibleAsync();
+            await Assertions.Expect(detail.GetChangesTab()).ToBeVisibleAsync();
+
+            // Exactly two tabs should exist in the tablist — no Preview, no Details.
+            await Assertions.Expect(detail.GetAllTabs()).ToHaveCountAsync(2);
         });
     }
 
     /// <summary>
-    /// Verify that clicking a file in the Files tab switches to the Preview tab.
-    /// Note: This test assumes the Files tab contains at least one file.
-    /// In a real scenario, we would need to ensure files exist in the workspace.
-    /// For now, we verify the tab switching mechanism works.
+    /// Verify that clicking the Changes tab switches to it, and that returning to
+    /// Files preserves the tab state.
     /// </summary>
     [Fact]
-    public async Task ContentPanel_ClickingFileInFilesSwitchesToPreview()
+    public async Task ContentPanel_SwitchingBetweenFilesAndChangesPreservesState()
     {
         await WithFailureCapture(async () =>
         {
@@ -62,46 +72,6 @@ public sealed class ContentPanelTests : E2ETestBase,
                 b.WithSimpleTextResponse(
                     "_placeholder_",
                     "msg-content-panel-2",
-                    "File preview test response"));
-
-            var dashboard = new FleetDashboardPage(Page);
-            await dashboard.GotoAsync();
-
-            var dialog = await dashboard.ClickNewSessionAsync();
-            await dialog.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
-
-            var detail = await dialog.SubmitAsync();
-            await detail.WaitForLoadedAsync();
-
-            // Start on Files tab
-            await detail.ClickTabAsync("files");
-            await Assertions.Expect(detail.GetFilesPanel()).ToBeVisibleAsync();
-
-            var isFilesActive = await detail.IsTabActiveAsync("files");
-            isFilesActive.ShouldBeTrue("Files tab should be active after clicking it");
-
-            // Note: In a real test, we would click a file here.
-            // For this smoke test, we verify the tab mechanism works by clicking Preview directly.
-            await detail.ClickTabAsync("preview");
-            await Assertions.Expect(detail.GetPreviewPanel()).ToBeVisibleAsync();
-
-            var isPreviewActive = await detail.IsTabActiveAsync("preview");
-            isPreviewActive.ShouldBeTrue("Preview tab should be active after clicking it");
-        });
-    }
-
-    /// <summary>
-    /// Verify that returning to the Files tab preserves the tab state.
-    /// </summary>
-    [Fact]
-    public async Task ContentPanel_ReturningToFilesPreservesTabState()
-    {
-        await WithFailureCapture(async () =>
-        {
-            ConfigureScenario(b =>
-                b.WithSimpleTextResponse(
-                    "_placeholder_",
-                    "msg-content-panel-3",
                     "Tab state test response"));
 
             var dashboard = new FleetDashboardPage(Page);
@@ -113,26 +83,39 @@ public sealed class ContentPanelTests : E2ETestBase,
             var detail = await dialog.SubmitAsync();
             await detail.WaitForLoadedAsync();
 
-            // Navigate: Files -> Preview -> Files
-            await detail.ClickTabAsync("files");
-            await Assertions.Expect(detail.GetFilesPanel()).ToBeVisibleAsync();
-
-            await detail.ClickTabAsync("preview");
-            await Assertions.Expect(detail.GetPreviewPanel()).ToBeVisibleAsync();
-
+            // Start on Files tab.
             await detail.ClickTabAsync("files");
             await Assertions.Expect(detail.GetFilesPanel()).ToBeVisibleAsync();
 
             var isFilesActive = await detail.IsTabActiveAsync("files");
-            isFilesActive.ShouldBeTrue("Files tab should be active after returning to it");
+            isFilesActive.ShouldBeTrue("Files tab should be active after clicking it");
+
+            // Navigate: Files -> Changes -> Files.
+            await detail.ClickTabAsync("changes");
+            await Assertions.Expect(detail.GetChangesPanel()).ToBeVisibleAsync();
+
+            var isChangesActive = await detail.IsTabActiveAsync("changes");
+            isChangesActive.ShouldBeTrue("Changes tab should be active after clicking it");
+
+            await detail.ClickTabAsync("files");
+            await Assertions.Expect(detail.GetFilesPanel()).ToBeVisibleAsync();
+
+            var isFilesActiveAgain = await detail.IsTabActiveAsync("files");
+            isFilesActiveAgain.ShouldBeTrue("Files tab should be active after returning to it");
         });
     }
 
     /// <summary>
-    /// Verify that the changes drawer handle is visible with a summary.
+    /// Verify the "N/M reviewed" label is not rendered on the Changes tab when there are
+    /// no changed files (total == 0). The label is only shown when total &gt; 0 per the
+    /// RightPanelTabs implementation.
+    ///
+    /// Note: this test only covers the "no changes" (total == 0) case, since the current
+    /// TestScenarioBuilder has no hook to seed a non-empty diff set for a real session.
+    /// The "label shown when total &gt; 0" branch is not covered end-to-end for that reason.
     /// </summary>
     [Fact]
-    public async Task ContentPanel_ChangesDrawerHandleVisibleWithSummary()
+    public async Task ContentPanel_ChangesTabHidesReviewedLabelWhenNoChanges()
     {
         await WithFailureCapture(async () =>
         {
@@ -140,7 +123,7 @@ public sealed class ContentPanelTests : E2ETestBase,
                 b.WithSimpleTextResponse(
                     "_placeholder_",
                     "msg-content-panel-4",
-                    "Changes drawer test response"));
+                    "Reviewed label test response"));
 
             var dashboard = new FleetDashboardPage(Page);
             await dashboard.GotoAsync();
@@ -151,19 +134,17 @@ public sealed class ContentPanelTests : E2ETestBase,
             var detail = await dialog.SubmitAsync();
             await detail.WaitForLoadedAsync();
 
-            // Changes drawer handle should be visible
-            await Assertions.Expect(detail.GetChangesDrawerHandle()).ToBeVisibleAsync();
-
-            // Summary should be visible (even if it says "No changes")
-            await Assertions.Expect(detail.GetChangesDrawerSummary()).ToBeVisibleAsync();
+            // A freshly-created session against an empty temp directory has no diffs,
+            // so the reviewed-count label should not render on the Changes tab.
+            await Assertions.Expect(detail.GetChangesTabReviewedLabel()).ToHaveCountAsync(0);
         });
     }
 
     /// <summary>
-    /// Verify that clicking the changes drawer handle expands it.
+    /// Verify that ArrowRight moves roving tab focus from Files to Changes.
     /// </summary>
     [Fact]
-    public async Task ContentPanel_ClickingDrawerHandleExpandsIt()
+    public async Task ContentPanel_ArrowRightMovesTabFocus()
     {
         await WithFailureCapture(async () =>
         {
@@ -171,7 +152,7 @@ public sealed class ContentPanelTests : E2ETestBase,
                 b.WithSimpleTextResponse(
                     "_placeholder_",
                     "msg-content-panel-5",
-                    "Drawer expand test response"));
+                    "Keyboard nav test response"));
 
             var dashboard = new FleetDashboardPage(Page);
             await dashboard.GotoAsync();
@@ -182,18 +163,16 @@ public sealed class ContentPanelTests : E2ETestBase,
             var detail = await dialog.SubmitAsync();
             await detail.WaitForLoadedAsync();
 
-            // Drawer should start collapsed
-            var isExpandedInitially = await detail.IsChangesDrawerExpandedAsync();
-            isExpandedInitially.ShouldBeFalse("Changes drawer should start collapsed");
+            await detail.ClickTabAsync("files");
+            await Assertions.Expect(detail.GetFilesTab()).ToBeFocusedAsync();
 
-            // Click to expand
-            await detail.ClickChangesDrawerHandleAsync();
+            // ArrowRight moves focus from Files to Changes (roving tabindex).
+            await detail.PressKeyOnTabAsync("files", "ArrowRight");
+            await Assertions.Expect(detail.GetChangesTab()).ToBeFocusedAsync();
 
-            // Drawer should now be expanded
-            await Assertions.Expect(detail.GetChangesDrawerContent()).ToBeVisibleAsync();
-
-            var isExpandedAfterClick = await detail.IsChangesDrawerExpandedAsync();
-            isExpandedAfterClick.ShouldBeTrue("Changes drawer should be expanded after clicking handle");
+            // ArrowRight again wraps back to Files.
+            await detail.PressKeyOnTabAsync("changes", "ArrowRight");
+            await Assertions.Expect(detail.GetFilesTab()).ToBeFocusedAsync();
         });
     }
 
@@ -220,16 +199,16 @@ public sealed class ContentPanelTests : E2ETestBase,
             var detail = await dialog.SubmitAsync();
             await detail.WaitForLoadedAsync();
 
-            // Panel should start expanded (tabs visible)
+            // Panel should start expanded (tabs visible).
             await Assertions.Expect(detail.GetFilesTab()).ToBeVisibleAsync();
 
-            // Click collapse button
+            // Click collapse button.
             await detail.ClickPanelCollapseAsync();
 
-            // Panel should now be collapsed (collapsed rail visible)
+            // Panel should now be collapsed (collapsed rail visible).
             await Assertions.Expect(detail.GetCollapsedRightRail()).ToBeVisibleAsync();
 
-            // Tabs should be hidden
+            // Tabs should be hidden.
             await Assertions.Expect(detail.GetFilesTab()).ToBeHiddenAsync();
         });
     }
@@ -257,19 +236,18 @@ public sealed class ContentPanelTests : E2ETestBase,
             var detail = await dialog.SubmitAsync();
             await detail.WaitForLoadedAsync();
 
-            // Collapse the panel first
+            // Collapse the panel first.
             await detail.ClickPanelCollapseAsync();
             await Assertions.Expect(detail.GetCollapsedRightRail()).ToBeVisibleAsync();
 
-            // Click expand button
+            // Click expand button.
             await detail.ClickPanelExpandAsync();
 
-            // Panel should now be expanded (tabs visible again)
+            // Panel should now be expanded (tabs visible again).
             await Assertions.Expect(detail.GetFilesTab()).ToBeVisibleAsync();
-            await Assertions.Expect(detail.GetPreviewTab()).ToBeVisibleAsync();
-            await Assertions.Expect(detail.GetDetailsTab()).ToBeVisibleAsync();
+            await Assertions.Expect(detail.GetChangesTab()).ToBeVisibleAsync();
 
-            // Collapsed rail should be hidden
+            // Collapsed rail should be hidden.
             await Assertions.Expect(detail.GetCollapsedRightRail()).ToBeHiddenAsync();
         });
     }
@@ -299,19 +277,19 @@ public sealed class ContentPanelTests : E2ETestBase,
             var detail = await dialog.SubmitAsync();
             await detail.WaitForLoadedAsync();
 
-            // Collapse the panel
+            // Collapse the panel.
             await detail.ClickPanelCollapseAsync();
             await Assertions.Expect(detail.GetCollapsedRightRail()).ToBeVisibleAsync();
 
-            // Navigate away and back (simulating session selection)
+            // Navigate away and back (simulating session selection).
             await Page.GotoAsync("/");
             await dashboard.WaitForLoadedAsync();
 
-            // Navigate back to the session
+            // Navigate back to the session.
             await Page.GoBackAsync();
             await detail.WaitForLoadedAsync();
 
-            // Panel should still be collapsed
+            // Panel should still be collapsed.
             await Assertions.Expect(detail.GetCollapsedRightRail()).ToBeVisibleAsync();
             await Assertions.Expect(detail.GetFilesTab()).ToBeHiddenAsync();
         });
