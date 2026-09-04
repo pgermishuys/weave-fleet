@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, provide, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { FileText, GitCompare, X } from "lucide-vue-next";
+import { FileText, GitCompare, PanelRightClose, X } from "lucide-vue-next";
+import { Button } from "@/components/ui/button";
 import AnnotationPopover from "@/components/annotations/AnnotationPopover.vue";
 import CollapsedRightRail from "@/components/layout/CollapsedRightRail.vue";
 import DiffView from "@/components/session/DiffView.vue";
@@ -109,6 +110,10 @@ const { todos } = useSessionTodos(
 
 function handleExpand(): void {
   sidebarStore.setRightPanelCollapsed(false);
+}
+
+function handleCollapse(): void {
+  sidebarStore.setRightPanelCollapsed(true);
 }
 
 const visualRenderer = computed(() => {
@@ -264,6 +269,17 @@ function onGutterKeydown(e: KeyboardEvent): void {
     :style="{ width: `${props.width}px`, minWidth: '280px' }"
     aria-label="Right panel"
   >
+    <Button
+      variant="toolbar-icon"
+      size="toolbar"
+      class="right-panel__collapse"
+      aria-label="Collapse right panel"
+      title="Collapse right panel"
+      @click="handleCollapse"
+    >
+      <PanelRightClose />
+    </Button>
+
     <SessionMetadataHeader :session="selectedSession" />
 
     <div class="right-content">
@@ -417,6 +433,13 @@ function onGutterKeydown(e: KeyboardEvent): void {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.right-panel__collapse {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
 }
 
 .right-content {
