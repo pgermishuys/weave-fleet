@@ -190,8 +190,8 @@ public sealed record CommandOptions
 
         foreach (var ch in Command)
         {
-            if (!char.IsLetterOrDigit(ch) && ch is not ('_' or '-'))
-                return $"Command name contains invalid character '{ch}'. Only letters, digits, hyphens, and underscores are allowed.";
+            if (!char.IsLetterOrDigit(ch) && ch is not ('_' or '-' or ':'))
+                return $"Command name contains invalid character '{ch}'. Only letters, digits, hyphens, underscores, and colons are allowed.";
         }
 
         if (Arguments is not null && Arguments.Length > MaxArgumentsLength)
