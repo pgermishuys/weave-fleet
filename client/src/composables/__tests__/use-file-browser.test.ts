@@ -75,26 +75,33 @@ describe("use-file-browser", () => {
     subscribeV2Mock.mockImplementation(() => () => {});
   });
 
-  it("selectFile with a synthetic path does not call readSessionFile and updates selectedFilePath", async () => {
-    const sessionId = ref<string | null>("session-1");
-    const { contentPanel, fileBrowser } = await mountFileBrowserHarness(sessionId);
-
-    await fileBrowser.selectFile("__visual__/plan.md");
-    await flushAll();
-
-    expect(readSessionFileMock).not.toHaveBeenCalled();
-    expect(contentPanel.filesContext.value.selectedFilePath).toBe("__visual__/plan.md");
-  });
-
-  it("selectFile with a real path does call readSessionFile", async () => {
+  it("selectFile reads the file and shows it in the canvas viewer", async () => {
     readSessionFileMock.mockResolvedValue({ content: "hello", isBinary: false });
 
     const sessionId = ref<string | null>("session-1");
-    const { fileBrowser } = await mountFileBrowserHarness(sessionId);
+    const { contentPanel, fileBrowser } = await mountFileBrowserHarness(sessionId);
 
     await fileBrowser.selectFile("src/main.ts");
     await flushAll();
 
     expect(readSessionFileMock).toHaveBeenCalledWith("session-1", "src/main.ts");
+    expect(contentPanel.filePayload.value).toMatchObject({
+      sourceFilePath: "src/main.ts",
+      sourceText: "hello",
+    });
+  });
+
+  it("selectFile shows a notice instead of binary content", async () => {
+    readSessionFileMock.mockResolvedValue({ content: "", isBinary: true });
+
+    const sessionId = ref<string | null>("session-1");
+    const { contentPanel, fileBrowser } = await mountFileBrowserHarness(sessionId);
+
+    await fileBrowser.selectFile("assets/logo.png");
+    await flushAll();
+
+    expect(contentPanel.filePayload.value?.$type).toBe("markdown");
+    expect(contentPanel.filePayload.value?.content).toContain("Cannot display binary file");
+    expect(contentPanel.filePayload.value?.sourceFilePath).toBe("assets/logo.png");
   });
 });

@@ -172,8 +172,8 @@ watch(() => props.content, (newContent) => {
   width: 100%;
   flex: 1;
   min-height: 0;
-  background-color: #ffffff;
-  border-radius: 0.375rem;
+  background-color: transparent;
+  border-radius: var(--radius-btn);
 }
 
 .mermaid-output {
@@ -193,42 +193,110 @@ watch(() => props.content, (newContent) => {
 .mermaid-output :deep(svg) {
   width: 100%;
   height: 100%;
+  font-family: var(--font-sans-stack);
+}
+
+/*
+ * sanitizeHtml drops the <style> block Mermaid embeds in its SVG, so the
+ * diagram is themed here from Fleet's tokens and follows theme changes.
+ */
+.mermaid-output :deep(text) {
+  fill: var(--text);
+}
+
+.mermaid-output :deep(.actor),
+.mermaid-output :deep(.node rect),
+.mermaid-output :deep(.node polygon),
+.mermaid-output :deep(.node circle),
+.mermaid-output :deep(.node ellipse),
+.mermaid-output :deep(.node path) {
+  fill: var(--card-bg);
+  stroke: color-mix(in srgb, var(--text) 30%, transparent);
+}
+
+.mermaid-output :deep(text.actor),
+.mermaid-output :deep(.actor tspan),
+.mermaid-output :deep(.messageText),
+.mermaid-output :deep(.noteText),
+.mermaid-output :deep(.nodeLabel) {
+  fill: var(--text);
+  stroke: none;
+}
+
+.mermaid-output :deep(.actor-line) {
+  stroke: color-mix(in srgb, var(--text) 22%, transparent);
+}
+
+.mermaid-output :deep(.messageLine0),
+.mermaid-output :deep(.messageLine1),
+.mermaid-output :deep(.edgePath .path),
+.mermaid-output :deep(.flowchart-link) {
+  stroke: color-mix(in srgb, var(--text) 50%, transparent);
+}
+
+.mermaid-output :deep(marker path),
+.mermaid-output :deep(.arrowheadPath) {
+  fill: color-mix(in srgb, var(--text) 50%, transparent);
+  stroke: none;
+}
+
+.mermaid-output :deep(.note) {
+  fill: var(--accent-dim);
+  stroke: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.mermaid-output :deep(.activation0),
+.mermaid-output :deep(.activation1),
+.mermaid-output :deep(.activation2) {
+  fill: color-mix(in srgb, var(--text) 8%, var(--card-bg));
+  stroke: color-mix(in srgb, var(--text) 30%, transparent);
+}
+
+.mermaid-output :deep(.edgeLabel rect),
+.mermaid-output :deep(.labelBkg) {
+  fill: var(--panel-bg);
+}
+
+.mermaid-output :deep(.cluster rect) {
+  fill: color-mix(in srgb, var(--text) 3%, transparent);
+  stroke: var(--border);
 }
 
 .zoom-controls {
   position: absolute;
-  bottom: 1rem;
-  right: 1rem;
+  bottom: 12px;
+  right: 12px;
   display: flex;
-  gap: 0.25rem;
-  background: rgba(0, 0, 0, 0.7);
-  border-radius: 0.375rem;
-  padding: 0.25rem;
-  backdrop-filter: blur(4px);
+  gap: 2px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  padding: 3px;
 }
 
 .zoom-btn {
-  width: 2rem;
-  height: 2rem;
+  width: 26px;
+  height: 26px;
   border: none;
   background: transparent;
-  color: white;
-  font-size: 1.125rem;
-  font-weight: 600;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 500;
   cursor: pointer;
-  border-radius: 0.25rem;
+  border-radius: calc(var(--radius-btn) - 2px);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--transition), color var(--transition);
 }
 
 .zoom-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
 }
 
 .zoom-btn:active {
-  background: rgba(255, 255, 255, 0.25);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
 }
 
 .mermaid-fallback {
@@ -236,25 +304,32 @@ watch(() => props.content, (newContent) => {
 }
 
 .error-message {
-  color: #dc2626;
-  background-color: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: 0.375rem;
+  color: var(--error);
+  background-color: color-mix(in srgb, var(--error) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
+  border-radius: var(--radius-btn);
   padding: 0.75rem;
   margin-bottom: 1rem;
-  font-size: 0.875rem;
+  font-size: 13px;
 }
 
 .raw-content {
-  background-color: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.375rem;
+  background-color: color-mix(in srgb, var(--text) 4%, transparent);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
   padding: 1rem;
   overflow-x: auto;
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
-  font-size: 0.875rem;
+  font-family: var(--font-mono-stack);
+  font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zoom-btn {
+    transition: none;
+  }
 }
 </style>

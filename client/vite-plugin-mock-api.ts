@@ -22,6 +22,45 @@ interface MockApiOptions {
   mode?: string;
 }
 
+// Example diffs and workspace files for mock sessions (right-panel canvases).
+const MOCK_DIFFS = [
+  {
+    "file": "src/middleware/auth.ts",
+    "status": "added",
+    "additions": 18,
+    "deletions": 0,
+    "before": "",
+    "after": "import jwt from 'jsonwebtoken';\nimport type { Request, Response, NextFunction } from 'express';\n\nexport function authenticate(req: Request, res: Response, next: NextFunction) {\n  const header = req.headers.authorization;\n  if (!header?.startsWith('Bearer ')) {\n    return res.status(401).json({ error: 'Missing token' });\n  }\n\n  try {\n    const token = header.slice('Bearer '.length);\n    req.user = jwt.verify(token, process.env.JWT_SECRET!, { algorithms: ['HS256'] });\n    next();\n  } catch {\n    res.status(401).json({ error: 'Invalid token' });\n  }\n}\n"
+  },
+  {
+    "file": "src/middleware/index.ts",
+    "status": "modified",
+    "additions": 1,
+    "deletions": 0,
+    "before": "export { errorHandler } from './error-handler';\nexport { requestLogger } from './logger';\nexport { rateLimiter } from './rate-limiter';\n",
+    "after": "export { authenticate } from './auth';\nexport { errorHandler } from './error-handler';\nexport { requestLogger } from './logger';\nexport { rateLimiter } from './rate-limiter';\n"
+  },
+  {
+    "file": "docs/auth.md",
+    "status": "added",
+    "additions": 7,
+    "deletions": 0,
+    "before": "",
+    "after": "# Authentication\n\nProtected routes use the `authenticate` middleware.\n\n- Send `Authorization: Bearer <token>`\n- Tokens are verified with HS256\n- Invalid or missing tokens get a 401\n"
+  }
+];
+
+const MOCK_FILES: Record<string, string> = {
+  "src/middleware/auth.ts": "import jwt from 'jsonwebtoken';\nimport type { Request, Response, NextFunction } from 'express';\n\nexport function authenticate(req: Request, res: Response, next: NextFunction) {\n  const header = req.headers.authorization;\n  if (!header?.startsWith('Bearer ')) {\n    return res.status(401).json({ error: 'Missing token' });\n  }\n\n  try {\n    const token = header.slice('Bearer '.length);\n    req.user = jwt.verify(token, process.env.JWT_SECRET!, { algorithms: ['HS256'] });\n    next();\n  } catch {\n    res.status(401).json({ error: 'Invalid token' });\n  }\n}\n",
+  "src/middleware/index.ts": "export { authenticate } from './auth';\nexport { errorHandler } from './error-handler';\nexport { requestLogger } from './logger';\nexport { rateLimiter } from './rate-limiter';\n",
+  "docs/auth.md": "# Authentication\n\nProtected routes use the `authenticate` middleware.\n\n- Send `Authorization: Bearer <token>`\n- Tokens are verified with HS256\n- Invalid or missing tokens get a 401\n",
+  "src/middleware/error-handler.ts": "export function errorHandler(err, _req, res, _next) {\n  res.status(500).json({ error: err.message });\n}\n",
+  "src/middleware/logger.ts": "export function requestLogger(req, _res, next) {\n  console.log(req.method, req.url);\n  next();\n}\n",
+  "src/utils/token.ts": "export function readBearer(header?: string) {\n  return header?.startsWith('Bearer ') ? header.slice(7) : null;\n}\n",
+  "package.json": "{\n  \"name\": \"auth-service\",\n  \"private\": true\n}\n",
+  "README.md": "# auth-service\n\nExample project for Fleet's mock mode.\n"
+};
+
 export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
   const mockDir = resolve(__dirname, "src/mocks");
   
@@ -631,6 +670,50 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
             agent: "shuttle",
             modelId: "claude-sonnet-4-5",
           },
+          // Message 9b: Assistant with visualize tool output (renders as canvases)
+          {
+            id: "msg-9b",
+            role: "assistant",
+            parts: [
+              {
+                "type": "text",
+                "kind": 0,
+                "text": "Here is how a request moves through the new middleware, and how token refresh will work."
+              },
+              {
+                "type": "tool",
+                "kind": 0,
+                "toolCallId": "call-9b",
+                "toolName": "visualize",
+                "arguments": {
+                  "type": "flow",
+                  "title": "Auth request flow"
+                },
+                "state": 2,
+                "metadata": {
+                  "output": "{\"$type\": \"visual/flow\", \"title\": \"Auth request flow\", \"content\": {\"direction\": \"TB\", \"nodes\": [{\"id\": \"client\", \"label\": \"HTTP request\", \"type\": \"input\"}, {\"id\": \"auth\", \"label\": \"authenticate()\"}, {\"id\": \"verify\", \"label\": \"jsonwebtoken.verify\"}, {\"id\": \"ctx\", \"label\": \"req.user\"}, {\"id\": \"route\", \"label\": \"Protected route\", \"type\": \"output\"}, {\"id\": \"reject\", \"label\": \"401 Unauthorized\", \"type\": \"output\"}], \"edges\": [{\"id\": \"e1\", \"source\": \"client\", \"target\": \"auth\", \"label\": \"Bearer token\"}, {\"id\": \"e2\", \"source\": \"auth\", \"target\": \"verify\"}, {\"id\": \"e3\", \"source\": \"verify\", \"target\": \"ctx\", \"label\": \"valid\"}, {\"id\": \"e4\", \"source\": \"ctx\", \"target\": \"route\"}, {\"id\": \"e5\", \"source\": \"verify\", \"target\": \"reject\", \"label\": \"invalid\", \"animated\": true}]}}"
+                }
+              },
+              {
+                "type": "tool",
+                "kind": 0,
+                "toolCallId": "call-9c",
+                "toolName": "visualize",
+                "arguments": {
+                  "type": "sequence",
+                  "title": "Token refresh"
+                },
+                "state": 2,
+                "metadata": {
+                  "output": "{\"$type\": \"visual/sequence\", \"title\": \"Token refresh\", \"content\": \"sequenceDiagram\\n  Client->>API: request with expired token\\n  API-->>Client: 401 token expired\\n  Client->>Auth: POST /refresh\\n  Auth-->>Client: new access token\\n  Client->>API: retry request\"}"
+                }
+              }
+            ],
+            timestamp: new Date(now - 515000).toISOString(),
+            textContent: "Here is how a request moves through the new middleware, and how token refresh will work.",
+            agent: "shuttle",
+            modelId: "claude-sonnet-4-5",
+          },
           // Message 10: Assistant summary
           {
             id: "msg-10",
@@ -699,11 +782,50 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       },
     },
     {
+      pattern: /^\/api\/sessions\/([^/]+)\/files\/browse$/,
+      handler: (url) => {
+        const path = url.searchParams.get("path") ?? "";
+        console.log(`[mock-api] GET files/browse ${path || "/"}`);
+        const prefix = path ? `${path}/` : "";
+        const names = new Map<string, boolean>();
+        for (const file of Object.keys(MOCK_FILES)) {
+          if (!file.startsWith(prefix)) continue;
+          const [name, ...rest] = file.slice(prefix.length).split("/");
+          names.set(name, names.get(name) || rest.length > 0);
+        }
+        const entries = [...names.entries()]
+          .sort(([a, aDir], [b, bDir]) => Number(bDir) - Number(aDir) || a.localeCompare(b))
+          .map(([name, isDirectory]) => ({ name, relativePath: `${prefix}${name}`, isDirectory }));
+        return new Response(JSON.stringify({ entries, currentPath: path }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/files\/content$/,
+      handler: (url) => {
+        const path = url.searchParams.get("path") ?? "";
+        console.log(`[mock-api] GET files/content ${path}`);
+        const content = MOCK_FILES[path];
+        if (content === undefined) {
+          return new Response(JSON.stringify({ error: "File not found" }), {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ path, content, isBinary: false, isTruncated: false }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    },
+    {
       pattern: /^\/api\/sessions\/([^/]+)\/diffs$/,
       handler: (url) => {
         const id = url.pathname.split("/")[3];
         console.log(`[mock-api] GET /api/sessions/${id}/diffs`);
-        return new Response(JSON.stringify({ diffs: [], available: false }), {
+        return new Response(JSON.stringify({ diffs: MOCK_DIFFS, available: true }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });

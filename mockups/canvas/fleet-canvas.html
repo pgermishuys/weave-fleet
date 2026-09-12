@@ -1,0 +1,1700 @@
+<title>Fleet Canvas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  /* page chrome (same system as the Feel Pass mockup) */
+  --page: #ECEDF2;
+  --surface: #F7F7FA;
+  --ink: #15161C;
+  --ink-2: #3B3E4A;
+  --muted: #5F6374;
+  --rule: #D5D7E0;
+  --accent: #4F5FC0;
+  --on-accent: #FFFFFF;
+  --coral: #BF4A2A;
+  --on-coral: #FFFFFF;
+  --focus: #4F5FC0;
+  --code-bg: #E4E5EC;
+
+  /* Fleet today: client/src/assets/main.css [data-theme="light"] */
+  --f-chrome: #F3F2EF;
+  --f-sheet: #FFFFFF;
+  --f-raised: #FFFFFF;
+  --f-line: rgba(26, 25, 24, 0.09);
+  --f-text: #1A1918;
+  --f-text-2: #34322F;
+  --f-muted: #6E6A65;
+  --f-faint: #A29E98;
+  --f-hover: rgba(26, 25, 24, 0.05);
+  --f-active: rgba(26, 25, 24, 0.09);
+  --f-accent: #5B6EC7;
+  --f-accent-ink: #4557B5;
+  --f-accent-soft: rgba(91, 110, 199, 0.12);
+  --f-run: #16a34a;
+  --f-wait: #b45309;
+  --f-wait-soft: rgba(217, 119, 6, 0.13);
+  --f-done: #2563eb;
+  --f-err: #dc2626;
+  --f-add-bg: rgba(22, 163, 74, 0.09);
+  --f-del-bg: rgba(220, 38, 38, 0.07);
+  --f-shadow: 0 1px 2px rgba(26, 25, 24, 0.04), 0 12px 32px -18px rgba(26, 25, 24, 0.18);
+  --f-pop-shadow: 0 10px 30px -12px rgba(26, 25, 24, 0.28), 0 1px 2px rgba(26, 25, 24, 0.06);
+  --f-grid: rgba(26, 25, 24, 0.07);
+  --f-term: #FAF9F7;
+  --f-term-ink: #2A2826;
+  --f-term-dim: #8A857F;
+  --f-term-ok: #15803d;
+  --f-term-prompt: #4557B5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #101116;
+    --surface: #171820;
+    --ink: #E7E8EE;
+    --ink-2: #C4C6D2;
+    --muted: #8C90A3;
+    --rule: #272A35;
+    --accent: #8D98F2;
+    --on-accent: #0E1030;
+    --coral: #EE7753;
+    --on-coral: #1A0D08;
+    --focus: #8D98F2;
+    --code-bg: #1E2029;
+
+    --f-chrome: #0D0D10;
+    --f-sheet: #141418;
+    --f-raised: #1B1B20;
+    --f-line: rgba(255, 255, 255, 0.075);
+    --f-text: #E8E8EC;
+    --f-text-2: #C9C9D1;
+    --f-muted: #8E8E9A;
+    --f-faint: #65656F;
+    --f-hover: rgba(255, 255, 255, 0.045);
+    --f-active: rgba(255, 255, 255, 0.085);
+    --f-accent: #6366F1;
+    --f-accent-ink: #A2A7FA;
+    --f-accent-soft: rgba(99, 102, 241, 0.18);
+    --f-run: #4ade80;
+    --f-wait: #fbbf24;
+    --f-wait-soft: rgba(251, 191, 36, 0.13);
+    --f-done: #60a5fa;
+    --f-err: #f87171;
+    --f-add-bg: rgba(74, 222, 128, 0.08);
+    --f-del-bg: rgba(248, 113, 113, 0.08);
+    --f-shadow: none;
+    --f-pop-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.75);
+    --f-grid: rgba(255, 255, 255, 0.05);
+    --f-term: #0F0F12;
+    --f-term-ink: #D6D6DD;
+    --f-term-dim: #6B6B76;
+    --f-term-ok: #4ade80;
+    --f-term-prompt: #A2A7FA;
+  }
+}
+
+:root[data-theme="dark"] {
+  --page: #101116;
+  --surface: #171820;
+  --ink: #E7E8EE;
+  --ink-2: #C4C6D2;
+  --muted: #8C90A3;
+  --rule: #272A35;
+  --accent: #8D98F2;
+  --on-accent: #0E1030;
+  --coral: #EE7753;
+  --on-coral: #1A0D08;
+  --focus: #8D98F2;
+  --code-bg: #1E2029;
+
+  --f-chrome: #0D0D10;
+  --f-sheet: #141418;
+  --f-raised: #1B1B20;
+  --f-line: rgba(255, 255, 255, 0.075);
+  --f-text: #E8E8EC;
+  --f-text-2: #C9C9D1;
+  --f-muted: #8E8E9A;
+  --f-faint: #65656F;
+  --f-hover: rgba(255, 255, 255, 0.045);
+  --f-active: rgba(255, 255, 255, 0.085);
+  --f-accent: #6366F1;
+  --f-accent-ink: #A2A7FA;
+  --f-accent-soft: rgba(99, 102, 241, 0.18);
+  --f-run: #4ade80;
+  --f-wait: #fbbf24;
+  --f-wait-soft: rgba(251, 191, 36, 0.13);
+  --f-done: #60a5fa;
+  --f-err: #f87171;
+  --f-add-bg: rgba(74, 222, 128, 0.08);
+  --f-del-bg: rgba(248, 113, 113, 0.08);
+  --f-shadow: none;
+  --f-pop-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.75);
+  --f-grid: rgba(255, 255, 255, 0.05);
+  --f-term: #0F0F12;
+  --f-term-ink: #D6D6DD;
+  --f-term-dim: #6B6B76;
+  --f-term-ok: #4ade80;
+  --f-term-prompt: #A2A7FA;
+}
+
+/* ───────────── Page chrome ───────────── */
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 1340px; margin: 0 auto; padding-inline: 24px; padding-block: 36px 64px; }
+.intro { display: grid; gap: 10px; max-width: 76ch; }
+.eyebrow {
+  margin: 0;
+  font-family: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+}
+h1 { margin: 0; font-size: 34px; line-height: 1.1; font-weight: 600; letter-spacing: -0.02em; text-wrap: balance; }
+.lede { margin: 0; color: var(--ink-2); font-size: 15.5px; max-width: 68ch; }
+
+.toolbar { margin-top: 28px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.seg { display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); }
+.seg button {
+  appearance: none; border: 0; background: transparent; color: var(--muted); font: inherit;
+  font-size: 13.5px; font-weight: 500; height: 32px; padding: 0 14px; border-radius: 7px; cursor: pointer;
+  transition: background 120ms ease-out, color 120ms ease-out;
+}
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--page); }
+.btn {
+  appearance: none; display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px;
+  border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); color: var(--ink);
+  font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer;
+  transition: border-color 120ms ease-out, background 120ms ease-out, opacity 120ms ease-out;
+}
+.btn:hover:not([disabled]) { border-color: color-mix(in srgb, var(--ink) 35%, var(--rule)); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover:not([disabled]) { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.check { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 4px; font-size: 13.5px; color: var(--ink-2); cursor: pointer; }
+.check input { width: 16px; height: 16px; accent-color: var(--coral); margin: 0; }
+.kbd-hint { font-size: 12.5px; color: var(--muted); }
+kbd {
+  display: inline-block; min-width: 20px; padding: 1px 6px; border: 1px solid var(--rule); border-bottom-width: 2px;
+  border-radius: 5px; background: var(--surface); font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11.5px; text-align: center; color: var(--ink);
+}
+.spacer { flex: 1; }
+
+.caption { margin: 14px 0 0; min-height: 48px; display: flex; align-items: flex-start; gap: 10px; font-size: 14px; color: var(--ink-2); max-width: 110ch; }
+.caption .dot { flex-shrink: 0; margin-top: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.caption[data-mode="canvas"] .dot { background: var(--accent); }
+
+.stage {
+  margin-top: 10px; width: 100%; max-width: 1282px; aspect-ratio: 1282 / 782; position: relative;
+  border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 24px 48px -32px rgba(0, 0, 0, 0.35);
+}
+.stage-note { display: none; margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
+@media (max-width: 760px) { .stage-note { display: block; } }
+
+section.block { margin-top: 48px; }
+.block-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; }
+.block h2 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+.block-head p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 70ch; }
+
+.note-grid { list-style: none; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 640px) { .note-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .note-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.note {
+  display: flex; flex-direction: column; gap: 10px; padding: 16px 16px 14px; border: 1px solid var(--rule);
+  border-radius: 12px; background: var(--surface); transition: border-color 140ms ease-out, box-shadow 140ms ease-out; outline: none;
+}
+.note:hover, .note:focus-visible { border-color: color-mix(in srgb, var(--coral) 60%, var(--rule)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--coral) 14%, transparent); }
+.note-top { display: flex; align-items: center; gap: 10px; }
+.note h3 { margin: 0; font-size: 15px; line-height: 1.3; font-weight: 600; text-wrap: balance; }
+.note p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--ink-2); }
+.spec {
+  margin-top: auto; display: block; padding: 7px 9px; border-radius: 7px; background: var(--page);
+  font-family: "Geist Mono", ui-monospace, monospace; font-size: 11.5px; line-height: 1.5; color: var(--ink-2); overflow-wrap: anywhere;
+}
+.num {
+  flex-shrink: 0; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--coral); color: var(--on-coral); font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; font-weight: 500;
+}
+.tag {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 5px; border: 1px solid var(--rule);
+  font-family: "Geist Mono", ui-monospace, monospace; font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--muted); white-space: nowrap; margin-left: auto;
+}
+.tag.s1 { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--rule)); }
+.tag.s2 { color: var(--coral); border-color: color-mix(in srgb, var(--coral) 40%, var(--rule)); }
+
+/* architecture */
+.arch { margin-top: 16px; display: grid; gap: 12px; grid-template-columns: 1fr; }
+@media (min-width: 980px) { .arch { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.arch-col { border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 8px; position: relative; }
+.arch-col h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.arch-where { margin: 0; font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; color: var(--muted); letter-spacing: 0.02em; }
+.arch-col ul { margin: 2px 0 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+.arch-col li { font-size: 13px; line-height: 1.45; color: var(--ink-2); padding-left: 12px; position: relative; }
+.arch-col li::before { content: ""; position: absolute; left: 0; top: 0.62em; width: 5px; height: 1px; background: var(--muted); }
+.arch-link { margin-top: auto; padding-top: 8px; border-top: 1px dashed var(--rule); font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; color: var(--accent); }
+.arch-col.new { border-color: color-mix(in srgb, var(--coral) 45%, var(--rule)); }
+.arch-col.new .arch-badge { position: absolute; top: 12px; right: 12px; font-family: "Geist Mono", ui-monospace, monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--coral); }
+
+.code-pair { margin-top: 16px; display: grid; gap: 12px; grid-template-columns: 1fr; }
+@media (min-width: 980px) { .code-pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.code-card { border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); overflow: hidden; display: flex; flex-direction: column; }
+.code-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+.code-card header strong { font-size: 13.5px; font-weight: 600; }
+.code-card header span { font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; color: var(--muted); }
+.code-card pre { margin: 0; padding: 12px 14px; overflow-x: auto; font-family: "Geist Mono", ui-monospace, monospace; font-size: 12px; line-height: 1.6; color: var(--ink-2); flex: 1; }
+.code-card .k { color: var(--accent); }
+.code-card .s { color: var(--coral); }
+.code-card .c { color: var(--muted); }
+
+.foot { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--rule); font-family: "Geist Mono", ui-monospace, monospace; font-size: 11.5px; line-height: 1.7; color: var(--muted); max-width: 120ch; }
+
+:where(button, input, [tabindex]):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+@media (max-width: 520px) {
+  .wrap { padding-inline: 16px; padding-block: 24px 48px; }
+  h1 { font-size: 28px; }
+  .spacer { display: none; }
+}
+
+/* ───────────── Mock frame: Fleet as it looks after the feel pass ───────────── */
+
+.frame {
+  position: absolute; top: 0; left: 0; width: 1280px; height: 780px; transform-origin: 0 0; overflow: hidden;
+  font-family: "Inter", "Inter Variable", system-ui, -apple-system, sans-serif; font-size: 13px; line-height: 1.4;
+  color: var(--f-text); background: var(--f-chrome);
+  --mono: "JetBrains Mono", "JetBrains Mono Variable", ui-monospace, monospace;
+}
+:where(.frame) button { font: inherit; color: inherit; appearance: none; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+.frame .ic { display: block; flex-shrink: 0; }
+.frame.today .only-canvas { display: none !important; }
+.frame.canvas .only-today { display: none !important; }
+
+.app { display: flex; height: 100%; padding: 8px 8px 8px 0; }
+
+.rail { width: 52px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; }
+.rail-logo { width: 26px; height: 18px; margin: 4px 0 14px; display: grid; place-items: center; color: var(--f-accent); }
+.rail-item { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; color: var(--f-muted); }
+.rail-item.active { background: var(--f-active); color: var(--f-text); }
+.rail-fill { flex: 1; }
+
+.sessions { width: 256px; flex-shrink: 0; padding: 2px 6px 0 0; display: flex; flex-direction: column; min-height: 0; }
+.s-actions { display: flex; gap: 6px; padding: 0 6px 8px; }
+.s-btn { height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; font-weight: 500; }
+.s-btn.primary { flex: 1; background: var(--f-raised); border: 1px solid var(--f-line); }
+.s-btn.secondary { width: 32px; color: var(--f-muted); }
+.s-search { margin: 0 6px 10px; height: 32px; border-radius: 8px; background: var(--f-hover); display: flex; align-items: center; gap: 8px; padding: 0 10px; color: var(--f-faint); font-size: 13px; }
+.s-list { padding: 0 6px; }
+.g-head { height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 6px; color: var(--f-muted); font-size: 12px; font-weight: 600; }
+.g-head .g-count { margin-left: auto; font-weight: 500; color: var(--f-faint); font-variant-numeric: tabular-nums; }
+.group + .group { margin-top: 10px; }
+.row { height: 32px; display: flex; align-items: center; gap: 9px; padding: 0 10px; border-radius: 8px; color: var(--f-text-2); font-size: 13px; margin: 2px 0; }
+.row[aria-current="true"] { background: var(--f-active); color: var(--f-text); font-weight: 500; }
+.row .r-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .r-meta { margin-left: auto; flex-shrink: 0; font-size: 12px; font-weight: 400; color: var(--f-faint); font-variant-numeric: tabular-nums; }
+.row .r-meta.working { color: var(--f-muted); }
+.row .r-meta.needs { padding: 1px 7px; border-radius: 6px; background: var(--f-wait-soft); color: var(--f-wait); font-weight: 500; font-size: 11.5px; }
+.glyph { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; border: 1.5px solid var(--f-faint); }
+.glyph.run { background: var(--f-run); border-color: var(--f-run); }
+.glyph.wait { background: var(--f-wait); border-color: var(--f-wait); transform: rotate(45deg); border-radius: 1px; }
+.glyph.done { border: 0; width: 10px; height: 10px; background: none; color: var(--f-done); }
+
+.sheet { flex: 1; min-width: 0; display: flex; background: var(--f-sheet); border: 1px solid var(--f-line); border-radius: 12px; overflow: hidden; box-shadow: var(--f-shadow); }
+
+.convo { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.c-head { height: 58px; flex-shrink: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 0 18px; border-bottom: 1px solid var(--f-line); }
+.c-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; min-width: 0; }
+.c-title .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c-state { font-size: 11.5px; font-weight: 500; color: var(--f-muted); background: var(--f-hover); padding: 1px 7px; border-radius: 6px; }
+.c-sub { font-size: 12px; color: var(--f-muted); display: flex; gap: 6px; white-space: nowrap; }
+.c-sub .mono { font-family: var(--mono); font-size: 11.5px; }
+.c-stream { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; padding: 20px 26px 8px; }
+.msg { max-width: 620px; margin: 0 auto 18px; }
+.msg.user { display: flex; justify-content: flex-end; }
+.msg.user .bubble { max-width: 86%; background: var(--f-hover); border: 1px solid var(--f-line); border-radius: 14px 14px 4px 14px; padding: 9px 13px; font-size: 13.5px; line-height: 1.55; }
+.msg.assistant { font-size: 13.5px; line-height: 1.62; }
+.msg p { margin: 0 0 9px; }
+.msg p:last-child { margin-bottom: 0; }
+.msg code { font-family: var(--mono); font-size: 12px; padding: 1px 5px; border-radius: 5px; background: var(--f-hover); }
+.tools { margin: 4px 0 12px; padding: 4px; border: 1px solid var(--f-line); border-radius: 10px; background: color-mix(in srgb, var(--f-hover) 60%, transparent); }
+.tool { height: 28px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border-radius: 6px; font-size: 12.5px; min-width: 0; }
+.tool .ic { color: var(--f-faint); }
+.tool .t-label { font-weight: 500; flex-shrink: 0; }
+.tool .t-detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 11.5px; color: var(--f-muted); }
+.tool .t-status { margin-left: auto; flex-shrink: 0; font-size: 11.5px; color: var(--f-faint); display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.tool .t-status .ok { color: var(--f-run); }
+.tool.cv .ic { color: var(--f-accent-ink); }
+.tool.cv .t-label { color: var(--f-accent-ink); }
+.tool.enter { animation: tool-in 220ms ease-out both; }
+@keyframes tool-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.vis-card { margin: 4px 0 12px; border: 1px solid var(--f-line); border-radius: 10px; overflow: hidden; }
+.vis-card header { height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--f-line); font-size: 12.5px; font-weight: 500; }
+.vis-card header .ic { color: var(--f-faint); }
+.vis-card header .open { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--f-accent-ink); }
+.vis-card .thumb { height: 86px; background-image: radial-gradient(var(--f-grid) 1px, transparent 1px); background-size: 14px 14px; display: grid; place-items: center; color: var(--f-faint); font-size: 12px; }
+
+.composer { flex-shrink: 0; padding: 6px 22px 16px; }
+.cmp-box { max-width: 620px; margin: 0 auto; border: 1px solid var(--f-line); border-radius: 14px; background: var(--f-raised); }
+.cmp-ctx { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px 0; }
+.cmp-ctx:empty { display: none; }
+.ctx-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: 7px; background: var(--f-accent-soft); color: var(--f-accent-ink); font-size: 12px; font-weight: 500; animation: tool-in 200ms ease-out both; }
+.ctx-chip .x { opacity: 0.7; }
+.cmp-input { min-height: 44px; padding: 12px 16px 4px; font-size: 13.5px; color: var(--f-faint); }
+.cmp-input.filled { color: var(--f-text); }
+.cmp-foot { display: flex; align-items: center; gap: 2px; padding: 4px 8px 8px; font-size: 12px; color: var(--f-muted); }
+.cmp-chip { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border-radius: 7px; }
+.cmp-chip .ic { color: var(--f-faint); }
+.cmp-send { margin-left: auto; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--f-accent); color: #fff; transition: transform 150ms ease-out, opacity 150ms ease-out; }
+.cmp-send[disabled] { opacity: 0.4; cursor: default; }
+.cmp-send:not([disabled]):hover { transform: scale(1.06); }
+
+/* ── right panel ── */
+.rp { width: var(--rp-w, 392px); flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--f-line); position: relative; transition: width 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.frame.canvas .rp { --rp-w: 452px; }
+.frame.canvas.wide .rp { --rp-w: 760px; }
+.rp-head { height: 58px; flex-shrink: 0; display: flex; align-items: center; gap: 2px; padding: 0 8px 0 10px; border-bottom: 1px solid var(--f-line); position: relative; }
+.ptab { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: 7px; font-size: 13px; color: var(--f-muted); white-space: nowrap; flex-shrink: 0; transition: background 150ms ease-out, color 150ms ease-out; }
+.ptab:hover { background: var(--f-hover); color: var(--f-text); }
+.ptab[aria-selected="true"] { background: var(--f-active); color: var(--f-text); font-weight: 500; }
+.ptab .count { font-size: 12px; color: var(--f-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+.ptab .x { color: var(--f-faint); opacity: 0; margin-right: -3px; border-radius: 4px; transition: opacity 120ms ease-out; }
+.ptab:hover .x, .ptab[aria-selected="true"] .x { opacity: 1; }
+.ptab .live { width: 6px; height: 6px; border-radius: 50%; background: var(--f-accent); box-shadow: 0 0 0 3px var(--f-accent-soft); }
+.ptab.enter { animation: tab-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes tab-in { from { opacity: 0; transform: translateX(8px) scale(0.96); } to { opacity: 1; transform: none; } }
+.tabs { display: flex; align-items: center; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; flex: 0 1 auto; }
+.icon-btn { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--f-muted); flex-shrink: 0; transition: background 150ms ease-out, color 150ms ease-out; }
+.icon-btn:hover, .icon-btn[aria-expanded="true"] { background: var(--f-hover); color: var(--f-text); }
+.head-fill { flex: 1; }
+
+/* today's panel body */
+.t-meta { display: flex; gap: 6px; padding: 10px 10px 0; }
+.file-chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 7px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--f-accent) 45%, transparent); color: var(--f-accent-ink); font-size: 11.5px; font-weight: 500; }
+.f-search { margin: 10px 10px 4px; height: 30px; border-radius: 8px; background: var(--f-hover); display: flex; align-items: center; gap: 8px; padding: 0 10px; color: var(--f-faint); font-size: 13px; }
+.changes { padding: 2px 8px 6px; }
+.change { height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: 8px; font-size: 13px; color: var(--f-text-2); width: 100%; }
+.change:hover { background: var(--f-hover); }
+.change.on { background: var(--f-active); color: var(--f-text); }
+.change .ic { color: var(--f-faint); }
+.change .f-name { flex-shrink: 0; }
+.change .f-dir { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--f-faint); font-size: 12px; }
+.change .f-num { flex-shrink: 0; font-family: var(--mono); font-size: 11.5px; display: inline-flex; gap: 6px; font-variant-numeric: tabular-nums; }
+.add { color: var(--f-run); }
+.del { color: var(--f-err); }
+.viewer { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 12px 12px; border-top: 1px solid var(--f-line); margin-top: 4px; }
+.v-head { height: 36px; flex-shrink: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.v-head .lbl { color: var(--f-muted); }
+.v-head .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 11.5px; }
+.v-toggle { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--f-hover); }
+.v-toggle span { width: 26px; height: 22px; display: grid; place-items: center; color: var(--f-muted); border-radius: 6px; }
+.v-toggle span.on { background: var(--f-active); color: var(--f-text); }
+.diff-box { flex: 1; min-height: 0; border: 1px solid var(--f-line); border-radius: 10px; overflow: hidden; }
+.diff { margin: 0; white-space: pre; overflow: hidden; font-family: var(--mono); font-size: 11.5px; line-height: 1.65; padding: 6px 0; color: var(--f-text-2); }
+.diff span { display: block; padding: 0 12px; }
+.diff .h { color: var(--f-faint); }
+.diff .a { background: var(--f-add-bg); }
+.diff .d { background: var(--f-del-bg); }
+.frozen { flex: 1; min-height: 0; border: 1px solid var(--f-line); border-radius: 10px; overflow: hidden; position: relative; background-image: radial-gradient(var(--f-grid) 1px, transparent 1px); background-size: 16px 16px; }
+.frozen svg { display: block; width: 100%; height: 100%; }
+
+/* ── canvas host ── */
+.cv-body { flex: 1; min-height: 0; position: relative; }
+.pane { position: absolute; inset: 0; display: flex; flex-direction: column; min-height: 0; }
+.pane[hidden] { display: none !important; }
+.cv-bar { height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 14px; border-bottom: 1px solid var(--f-line); font-size: 12.5px; min-width: 0; }
+.cv-bar .cv-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cv-bar .cv-sub { color: var(--f-muted); font-size: 12px; white-space: nowrap; }
+.cv-bar .cv-fill { flex: 1; }
+.pill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 11.5px; font-weight: 500; white-space: nowrap; color: var(--f-muted); background: var(--f-hover); }
+.pill.shared { color: var(--f-accent-ink); background: var(--f-accent-soft); }
+.pill.edits { color: var(--f-wait); background: var(--f-wait-soft); }
+.pill.edits[hidden] { display: none; }
+.pill.sandbox { color: var(--f-muted); background: transparent; border: 1px dashed color-mix(in srgb, var(--f-muted) 55%, transparent); }
+.pill .pulse { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.pop { animation: pill-pop 260ms ease-out; }
+@keyframes pill-pop { 0% { transform: scale(0.9); } 60% { transform: scale(1.06); } 100% { transform: none; } }
+
+/* diagram */
+.dg-wrap { flex: 1; min-height: 0; position: relative; overflow: hidden; background-image: radial-gradient(var(--f-grid) 1px, transparent 1px); background-size: 16px 16px; }
+.dg-wrap svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.dg-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--f-faint); font-size: 12.5px; pointer-events: none; }
+.dg-foot span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dg-foot { height: 34px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 12px 0 14px; border-top: 1px solid var(--f-line); font-size: 11.5px; color: var(--f-muted); }
+.dg-foot .mono { font-family: var(--mono); font-size: 11px; }
+.dg-foot .fill { flex: 1; }
+.node rect.box { fill: var(--f-raised); stroke: var(--f-line); stroke-width: 1; }
+.node.server rect.box { fill: color-mix(in srgb, var(--f-accent) 5%, var(--f-raised)); }
+.node .lab { fill: var(--f-text); font-size: 12.5px; font-weight: 500; font-family: "Inter", system-ui, sans-serif; }
+.node .sub { fill: var(--f-muted); font-size: 10.5px; font-family: "JetBrains Mono", ui-monospace, monospace; }
+.node .tick { fill: var(--f-faint); }
+.frame.canvas .node.live { cursor: grab; }
+.frame.canvas .node.live:hover rect.box { stroke: color-mix(in srgb, var(--f-text) 28%, transparent); }
+.node.sel rect.box { stroke: var(--f-accent); stroke-width: 1.5; }
+.node.dragging { cursor: grabbing; }
+.node.flag rect.box { stroke: var(--f-wait); stroke-dasharray: 4 3; }
+.node.born .nb { animation: node-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.node.dying .nb { animation: node-out 280ms ease-in both; }
+@keyframes node-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes node-out { to { opacity: 0; transform: translateY(4px); } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-out { to { opacity: 0; } }
+.node .you { fill: var(--f-wait); }
+.edge path { fill: none; stroke: color-mix(in srgb, var(--f-text) 38%, transparent); stroke-width: 1.4; }
+.edge.dash path { stroke-dasharray: 5 4; }
+.edge.plan path { stroke: var(--f-accent); stroke-dasharray: 5 4; }
+.edge.draw:not(.dash):not(.plan) path { stroke-dasharray: 600; animation: edge-draw 460ms ease-out both; }
+.edge.draw.dash, .edge.draw.plan, .edge.draw rect, .edge.draw text { animation: fade-in 360ms ease-out both; }
+@keyframes edge-draw { from { stroke-dashoffset: 600; } to { stroke-dashoffset: 0; } }
+.edge.dying { animation: fade-out 260ms ease-in both; }
+.edge .elab-bg { fill: var(--f-sheet); }
+.edge .elab { fill: var(--f-muted); font-size: 10.5px; font-family: "Inter", system-ui, sans-serif; }
+.edge.plan .elab { fill: var(--f-accent-ink); font-weight: 500; }
+.arrow-head { fill: color-mix(in srgb, var(--f-text) 38%, transparent); }
+.arrow-plan { fill: var(--f-accent); }
+.lane { fill: var(--f-faint); font-size: 10px; letter-spacing: 0.08em; font-family: "Inter", system-ui, sans-serif; font-weight: 600; }
+
+.dg-pop { position: absolute; display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--f-raised); border: 1px solid var(--f-line); box-shadow: var(--f-pop-shadow); z-index: 5; transform: translate(-50%, -100%); animation: tool-in 150ms ease-out both; }
+.dg-pop button { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.dg-pop button:hover { background: var(--f-hover); }
+.dg-pop .ic { color: var(--f-faint); }
+.dg-pop button.ask { color: var(--f-accent-ink); }
+.dg-pop button.ask .ic { color: var(--f-accent-ink); }
+
+/* terminal */
+.term { flex: 1; min-height: 0; margin: 10px 12px 12px; border: 1px solid var(--f-line); border-radius: 10px; background: var(--f-term); padding: 12px 14px; font-family: var(--mono); font-size: 12px; line-height: 1.7; color: var(--f-term-ink); overflow: hidden; white-space: pre; }
+.term .dim { color: var(--f-term-dim); }
+.term .ok { color: var(--f-term-ok); }
+.term .p { color: var(--f-term-prompt); }
+.term .by { color: var(--f-term-dim); font-style: italic; }
+.term .cur { display: inline-block; width: 7px; height: 14px; vertical-align: -2px; background: var(--f-term-ink); animation: blink 1.1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* browser */
+.b-bar { height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 0 10px; border-bottom: 1px solid var(--f-line); }
+.b-url { flex: 1; min-width: 0; height: 26px; border-radius: 7px; background: var(--f-hover); display: flex; align-items: center; gap: 6px; padding: 0 10px; font-family: var(--mono); font-size: 11.5px; color: var(--f-text-2); white-space: nowrap; overflow: hidden; }
+.b-url .ic { color: var(--f-faint); }
+.b-view { flex: 1; min-height: 0; margin: 10px 12px 0; border: 1px solid var(--f-line); border-radius: 10px; overflow: hidden; display: flex; background: var(--f-chrome); }
+.b-side { width: 32%; padding: 12px 10px; display: flex; flex-direction: column; gap: 7px; }
+.b-main { flex: 1; margin: 6px 6px 6px 0; border-radius: 8px; background: var(--f-sheet); border: 1px solid var(--f-line); padding: 14px; display: flex; flex-direction: column; gap: 9px; }
+.sk { height: 9px; border-radius: 4px; background: var(--f-active); }
+.sk.hi { background: color-mix(in srgb, var(--f-accent) 30%, transparent); }
+.sk.row { height: 20px; border-radius: 6px; background: var(--f-hover); }
+.sk.row.on { background: var(--f-active); }
+.b-note { flex-shrink: 0; margin: 8px 12px 12px; font-size: 11.5px; color: var(--f-muted); display: flex; gap: 6px; align-items: flex-start; line-height: 1.45; }
+.b-note .ic { color: var(--f-faint); margin-top: 1px; }
+
+/* files tree */
+.tree { padding: 8px; font-size: 13px; }
+.tree .tn { height: 28px; display: flex; align-items: center; gap: 7px; border-radius: 7px; padding: 0 8px; color: var(--f-text-2); }
+.tree .tn .ic { color: var(--f-faint); }
+.tree .tn.on { background: var(--f-active); color: var(--f-text); }
+
+/* checklist (plugin, sandboxed) */
+.sandbox { flex: 1; min-height: 0; margin: 10px 12px 12px; border: 1px dashed color-mix(in srgb, var(--f-muted) 45%, transparent); border-radius: 10px; padding: 14px 16px; overflow: hidden; display: flex; flex-direction: column; gap: 10px; }
+.ck-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ck-head strong { font-size: 15px; font-weight: 600; }
+.ck-head span { font-family: var(--mono); font-size: 11.5px; color: var(--f-muted); }
+.ck-bar { height: 4px; border-radius: 2px; background: var(--f-hover); overflow: hidden; }
+.ck-bar i { display: block; height: 100%; background: var(--f-run); border-radius: 2px; transition: width 220ms ease-out; }
+.ck-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.ck-item { display: flex; align-items: flex-start; gap: 10px; padding: 7px 8px; border-radius: 8px; cursor: pointer; }
+.ck-item:hover { background: var(--f-hover); }
+.ck-box { width: 16px; height: 16px; margin-top: 1px; border-radius: 5px; border: 1.5px solid var(--f-faint); display: grid; place-items: center; flex-shrink: 0; color: #fff; transition: background 150ms ease-out, border-color 150ms ease-out; }
+.ck-item.done .ck-box { background: var(--f-run); border-color: var(--f-run); }
+.ck-item.done .ck-text { color: var(--f-muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--f-muted) 60%, transparent); }
+.ck-text { flex: 1; font-size: 13px; line-height: 1.4; }
+.ck-text code { font-family: var(--mono); font-size: 11.5px; }
+.ck-by { font-size: 11px; color: var(--f-faint); white-space: nowrap; margin-top: 2px; }
+.ck-by.agent { color: var(--f-accent-ink); }
+
+.trust { margin: auto; max-width: 340px; display: flex; flex-direction: column; gap: 10px; padding: 18px; border: 1px solid var(--f-line); border-radius: 12px; background: var(--f-raised); box-shadow: var(--f-pop-shadow); }
+.trust .ic.big { color: var(--f-wait); }
+.trust h4 { margin: 0; font-size: 14px; font-weight: 600; }
+.trust p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--f-text-2); }
+.trust code { font-family: var(--mono); font-size: 11.5px; }
+.trust ul { margin: 0; padding: 0 0 0 16px; font-size: 12px; color: var(--f-muted); line-height: 1.6; }
+.trust .row-btns { display: flex; gap: 6px; margin-top: 4px; }
+.fbtn { height: 30px; padding: 0 12px; border-radius: 8px; font-size: 12.5px; font-weight: 500; display: inline-flex; align-items: center; }
+.fbtn.primary { background: var(--f-accent); color: #fff !important; }
+.fbtn.ghost { color: var(--f-muted) !important; }
+.fbtn.ghost:hover { background: var(--f-hover); }
+
+/* board (user canvas) */
+.board { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 10px 12px 12px; }
+.col { background: var(--f-hover); border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.col h5 { margin: 0 0 2px; font-size: 11.5px; font-weight: 600; color: var(--f-muted); display: flex; justify-content: space-between; }
+.card { background: var(--f-raised); border: 1px solid var(--f-line); border-radius: 8px; padding: 7px 9px; font-size: 12px; line-height: 1.4; }
+.card .ref { display: block; margin-top: 3px; font-family: var(--mono); font-size: 10.5px; color: var(--f-faint); }
+
+/* picker */
+.picker { position: absolute; top: 50px; left: var(--pk-left, 180px); width: 290px; z-index: 10; border-radius: 12px; background: var(--f-raised); border: 1px solid var(--f-line); box-shadow: var(--f-pop-shadow); padding: 6px; animation: tool-in 150ms ease-out both; }
+.picker[hidden] { display: none; }
+.pk-group { padding: 8px 8px 4px; font-size: 11px; font-weight: 600; color: var(--f-faint); display: flex; justify-content: space-between; gap: 8px; }
+.pk-group .mono { font-family: var(--mono); font-weight: 400; }
+.pk-item { width: 100%; height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border-radius: 8px; font-size: 13px; }
+.pk-item:hover, .pk-item:focus-visible { background: var(--f-hover); outline: none; }
+.pk-item .ic { color: var(--f-muted); }
+.pk-item .hint { margin-left: auto; font-size: 11.5px; color: var(--f-faint); }
+.pk-item .hint.warn { color: var(--f-wait); }
+.pk-sep { height: 1px; background: var(--f-line); margin: 4px 6px; }
+
+/* pins */
+.pins { position: absolute; inset: 0; pointer-events: none; z-index: 20; }
+.pin {
+  position: absolute; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--coral); color: var(--on-coral); font-family: "Geist Mono", ui-monospace, monospace; font-size: 10.5px; font-weight: 500; line-height: 1;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--coral) 25%, transparent), 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: transform 140ms ease-out;
+}
+.pin.on { transform: scale(1.2); }
+.frame.no-pins .pins { display: none; }
+.frame .hl { outline: 2px solid var(--coral) !important; outline-offset: -2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .frame *, .frame *::before { animation: none !important; transition: none !important; }
+  .seg button, .btn, .note { transition: none; }
+}
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <p class="eyebrow">Weave Fleet 0.18.0 · UI proposal · 12 Sep 2026</p>
+    <h1>Fleet Canvas</h1>
+    <p class="lede">The right panel becomes a row of canvases that you and the agent both work in. Diagrams, the terminal, a browser and canvases from a repo all open as tabs. The agent can open and edit them, and it sees what you changed.</p>
+  </header>
+
+  <div class="toolbar">
+    <div class="seg" role="group" aria-label="Version shown">
+      <button type="button" id="v-today" aria-pressed="false">Current</button>
+      <button type="button" id="v-canvas" aria-pressed="true">Canvas</button>
+    </div>
+    <span class="kbd-hint"><kbd>C</kbd> to flip</span>
+    <span class="spacer"></span>
+    <button type="button" class="btn primary" id="play"><span data-icon="play" data-size="14"></span>Replay agent turn</button>
+    <button type="button" class="btn" id="revise"><span data-icon="rotate" data-size="14"></span>Agent revises</button>
+    <button type="button" class="btn" id="reset">Reset</button>
+    <label class="check" for="pins-toggle"><input type="checkbox" id="pins-toggle" checked> Notes</label>
+  </div>
+
+  <p class="caption" id="caption" aria-live="polite"><span class="dot"></span><span id="caption-text"></span></p>
+
+  <div class="stage" id="stage">
+    <div class="frame canvas" id="frame">
+      <div class="app">
+        <aside class="rail" aria-label="Primary navigation">
+          <div class="rail-logo" data-icon="weave" data-size="22"></div>
+          <span class="rail-item active" data-icon="message" data-size="18"></span>
+          <span class="rail-item" data-icon="grid" data-size="18"></span>
+          <span class="rail-fill"></span>
+          <span class="rail-item" data-icon="puzzle" data-size="18"></span>
+          <span class="rail-item" data-icon="zap" data-size="18"></span>
+          <span class="rail-item" data-icon="chart" data-size="18"></span>
+          <span class="rail-item" data-icon="settings" data-size="18"></span>
+        </aside>
+
+        <section class="sessions" aria-label="Sessions">
+          <div class="s-actions">
+            <span class="s-btn primary"><span data-icon="plus" data-size="14"></span>New Session</span>
+            <span class="s-btn secondary" data-icon="folderplus" data-size="16"></span>
+          </div>
+          <div class="s-search"><span data-icon="search" data-size="13"></span>Filter sessions</div>
+          <div class="s-list">
+            <div class="group">
+              <div class="g-head"><span data-icon="chevron" data-size="12"></span>weave-fleet<span class="g-count">4</span></div>
+              <div class="row" aria-current="true"><span class="glyph run"></span><span class="r-title">Push session list over SignalR</span><span class="r-meta working">Working</span></div>
+              <div class="row"><span class="glyph wait"></span><span class="r-title">Fix SignalR reconnect after sleep</span><span class="r-meta needs">Needs input</span></div>
+              <div class="row"><span class="glyph"></span><span class="r-title">Goals mode mockup</span><span class="r-meta">2h</span></div>
+              <div class="row"><span class="glyph done" data-icon="check" data-size="10"></span><span class="r-title">Bump version to 0.18.0</span><span class="r-meta">Done</span></div>
+            </div>
+            <div class="group">
+              <div class="g-head"><span data-icon="chevron" data-size="12"></span>nucode<span class="g-count">3</span></div>
+              <div class="row"><span class="glyph run"></span><span class="r-title">LSP diagnostics for C# files</span><span class="r-meta working">Working</span></div>
+              <div class="row"><span class="glyph"></span><span class="r-title">Provider credential form</span><span class="r-meta">4h</span></div>
+              <div class="row"><span class="glyph"></span><span class="r-title">MCP tool timeout handling</span><span class="r-meta">1d</span></div>
+            </div>
+            <div class="group">
+              <div class="g-head"><span data-icon="chevron" data-size="12"></span>weave-bootstrap-plugin<span class="g-count">1</span></div>
+              <div class="row"><span class="glyph"></span><span class="r-title">Session context hook</span><span class="r-meta">2d</span></div>
+            </div>
+          </div>
+        </section>
+
+        <div class="sheet">
+          <section class="convo" aria-label="Conversation">
+            <header class="c-head">
+              <div class="c-title"><span class="t">Push session list over SignalR</span><span class="c-state">Working</span></div>
+              <div class="c-sub"><span>weave-fleet</span>·<span>claude-code</span>·<span class="mono">~/source/weave-fleet</span></div>
+            </header>
+            <div class="c-stream" id="stream">
+              <div class="msg user"><div class="bubble">Draw how a session update gets from NuCode to the session list in the browser. Keep it current while we replace the poll.</div></div>
+              <div class="msg assistant" id="a1">
+                <p>I'll trace it from the session through the hub to the client store.</p>
+                <div class="tools" id="tools-1"></div>
+                <div id="vis-card-slot"></div>
+                <p id="a1-done">The diagram is on the right. The odd one out is <code>use-sessions.ts</code>: it still polls <code>/api/sessions</code> every 15 seconds, so I've drawn that edge dashed.</p>
+              </div>
+              <div class="msg user" id="u2" hidden><div class="bubble" id="u2-text"></div></div>
+              <div class="msg assistant" id="a2" hidden>
+                <div class="tools" id="tools-2"></div>
+                <p id="a2-text"></p>
+              </div>
+            </div>
+            <div class="composer">
+              <div class="cmp-box">
+                <div class="cmp-ctx" id="cmp-ctx"></div>
+                <div class="cmp-input" id="cmp-input">Type a message…</div>
+                <div class="cmp-foot">
+                  <span class="cmp-chip"><span data-icon="paperclip" data-size="13"></span></span>
+                  <span class="cmp-chip"><span data-icon="sparkle" data-size="13"></span>claude-opus-5</span>
+                  <span class="cmp-chip"><span data-icon="bot" data-size="13"></span>Weave</span>
+                  <button type="button" class="cmp-send" id="send" aria-label="Send" disabled><span data-icon="arrowup" data-size="15"></span></button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside class="rp" id="rp" aria-label="Right panel">
+            <!-- CURRENT: FileBrowserPanel header + change list + one viewer -->
+            <div class="only-today" style="display:flex;flex-direction:column;flex:1;min-height:0">
+              <div class="rp-head">
+                <span class="ptab" aria-selected="true"><span data-icon="compare" data-size="14"></span>Changes <span class="count">4</span></span>
+                <span class="ptab"><span data-icon="folder" data-size="14"></span>Files</span>
+                <span class="head-fill"></span>
+                <span class="icon-btn" data-icon="refresh" data-size="14"></span>
+                <span class="icon-btn" data-icon="panelclose" data-size="15"></span>
+              </div>
+              <div class="t-meta"><span class="file-chip"><span data-icon="filetext" data-size="11"></span>use-sessions.ts</span></div>
+              <div class="f-search"><span data-icon="search" data-size="13"></span>Search files...</div>
+              <div class="changes" id="t-changes"></div>
+              <div class="viewer">
+                <div class="v-head" id="t-vhead"></div>
+                <div class="diff-box" id="t-diff"><pre class="diff" id="t-diff-pre"></pre></div>
+                <div class="frozen" id="t-frozen" hidden><svg id="dg-today" viewBox="0 0 368 420" preserveAspectRatio="xMidYMid meet"></svg></div>
+              </div>
+            </div>
+
+            <!-- CANVAS: tabs of canvases -->
+            <div class="only-canvas" style="display:flex;flex-direction:column;flex:1;min-height:0">
+              <div class="rp-head">
+                <div class="tabs" role="tablist" aria-label="Canvases" id="tabs"></div>
+                <button type="button" class="icon-btn" id="add-canvas" aria-label="Open a canvas" aria-expanded="false" aria-haspopup="menu" data-icon="plus" data-size="15"></button>
+                <span class="head-fill"></span>
+                <button type="button" class="icon-btn" id="widen" aria-label="Widen canvas" data-icon="maximize" data-size="14"></button>
+                <span class="icon-btn" data-icon="panelclose" data-size="15"></span>
+                <div class="picker" id="picker" role="menu" hidden>
+                  <div class="pk-group">Built in</div>
+                  <button type="button" class="pk-item" role="menuitem" data-open="changes"><span data-icon="compare" data-size="15"></span>Changes</button>
+                  <button type="button" class="pk-item" role="menuitem" data-open="files"><span data-icon="folder" data-size="15"></span>Files</button>
+                  <button type="button" class="pk-item" role="menuitem" data-open="diagram"><span data-icon="network" data-size="15"></span>Diagram</button>
+                  <button type="button" class="pk-item" role="menuitem" data-open="terminal"><span data-icon="terminal" data-size="15"></span>Terminal</button>
+                  <button type="button" class="pk-item" role="menuitem" data-open="browser"><span data-icon="globe" data-size="15"></span>Browser<span class="hint">Desktop app</span></button>
+                  <div class="pk-sep"></div>
+                  <div class="pk-group">This project <span class="mono">.weave/canvases</span></div>
+                  <button type="button" class="pk-item" role="menuitem" data-open="checklist"><span data-icon="listchecks" data-size="15"></span>Release checklist<span class="hint warn" id="pk-trust">Not trusted yet</span></button>
+                  <div class="pk-group">Yours <span class="mono">~/.weave/canvases</span></div>
+                  <button type="button" class="pk-item" role="menuitem" data-open="board"><span data-icon="kanban" data-size="15"></span>Triage board</button>
+                </div>
+              </div>
+
+              <div class="cv-body">
+                <div class="pane" data-pane="changes" hidden>
+                  <div class="changes" id="c-changes" style="padding-top:8px"></div>
+                  <div class="viewer">
+                    <div class="v-head"><span class="lbl">Diff:</span><span class="path">client/src/composables/use-sessions.ts</span><span class="v-toggle"><span data-icon="filetext" data-size="12"></span><span class="on" data-icon="compare" data-size="12"></span></span></div>
+                    <div class="diff-box"><pre class="diff" id="c-diff-pre"></pre></div>
+                  </div>
+                </div>
+
+                <div class="pane" data-pane="files" hidden>
+                  <div class="tree">
+                    <div class="tn"><span data-icon="chevron" data-size="12"></span><span data-icon="folder" data-size="14"></span>client/src</div>
+                    <div class="tn" style="padding-left:30px"><span data-icon="chevron" data-size="12"></span><span data-icon="folder" data-size="14"></span>composables</div>
+                    <div class="tn" style="padding-left:52px"><span data-icon="filetext" data-size="14"></span>use-session-stream.ts</div>
+                    <div class="tn on" style="padding-left:52px"><span data-icon="filetext" data-size="14"></span>use-sessions.ts</div>
+                    <div class="tn" style="padding-left:30px"><span data-icon="chevron" data-size="12"></span><span data-icon="folder" data-size="14"></span>stores</div>
+                    <div class="tn" style="padding-left:52px"><span data-icon="filetext" data-size="14"></span>sessions.ts</div>
+                    <div class="tn"><span data-icon="chevron" data-size="12"></span><span data-icon="folder" data-size="14"></span>src/WeaveFleet.Api/Hubs</div>
+                    <div class="tn" style="padding-left:30px"><span data-icon="filetext" data-size="14"></span>SessionEventsHub.cs</div>
+                  </div>
+                </div>
+
+                <div class="pane" data-pane="diagram" hidden>
+                  <div class="cv-bar">
+                    <span class="cv-title">Session event flow</span>
+                    <span class="cv-sub" id="dg-ver">v1</span>
+                    <span class="cv-fill"></span>
+                    <span class="pill edits" id="dg-edits" hidden></span>
+                    <span class="pill shared" id="dg-shared"><span class="pulse"></span>Shared with agent</span>
+                  </div>
+                  <div class="dg-wrap" id="dg-wrap">
+                    <svg id="dg-live" aria-label="Session event flow diagram"></svg>
+                    <div class="dg-empty" id="dg-empty" hidden>The agent is drawing…</div>
+                  </div>
+                  <div class="dg-foot"><span>Drag a box, or click one to ask about it.</span><span class="fill"></span><span class="mono" id="dg-log">agent · canvas_patch</span></div>
+                </div>
+
+                <div class="pane" data-pane="terminal" hidden>
+                  <div class="cv-bar"><span class="cv-title">zsh</span><span class="cv-sub">client · pty 1</span><span class="cv-fill"></span><span class="pill shared"><span class="pulse"></span>Agent can run here</span></div>
+<pre class="term"><span class="p">~/source/weave-fleet/client</span> <span class="dim">(feat/session-push)</span>
+<span class="p">$</span> npm run test -- sessions  <span class="by">← run by agent</span>
+
+ <span class="ok">✓</span> src/composables/__tests__/use-sessions.test.ts <span class="dim">(14)</span>
+ <span class="ok">✓</span> src/stores/__tests__/sessions.test.ts <span class="dim">(9)</span>
+ <span class="ok">✓</span> src/composables/__tests__/use-session-stream.test.ts <span class="dim">(6)</span>
+
+ <span class="dim">Test Files</span>  <span class="ok">3 passed</span> (3)
+ <span class="dim">     Tests</span>  <span class="ok">29 passed</span> (29)
+ <span class="dim">  Duration</span>  1.92s
+
+<span class="p">~/source/weave-fleet/client</span> <span class="dim">(feat/session-push)</span>
+<span class="p">$</span> <span class="cur"></span></pre>
+                </div>
+
+                <div class="pane" data-pane="browser" hidden>
+                  <div class="b-bar">
+                    <span class="icon-btn" data-icon="chevronleft" data-size="14"></span>
+                    <span class="icon-btn" data-icon="chevronright" data-size="14"></span>
+                    <span class="icon-btn" data-icon="refresh" data-size="13"></span>
+                    <span class="b-url"><span data-icon="globe" data-size="12"></span>localhost:5173/sessions</span>
+                  </div>
+                  <div class="b-view" aria-label="Fleet dev server preview">
+                    <div class="b-side"><span class="sk hi" style="width:60%"></span><span class="sk row on"></span><span class="sk row"></span><span class="sk row"></span><span class="sk row"></span><span class="sk" style="width:45%;margin-top:6px"></span><span class="sk row"></span><span class="sk row"></span></div>
+                    <div class="b-main"><span class="sk" style="width:55%;height:11px"></span><span class="sk" style="width:90%"></span><span class="sk" style="width:80%"></span><span class="sk" style="width:86%"></span><span class="sk row" style="margin-top:auto;height:34px"></span></div>
+                  </div>
+                  <p class="b-note"><span data-icon="info" data-size="13"></span>Runs in the desktop app's own webview. The web build can only show your local dev servers, because most sites refuse to be framed.</p>
+                </div>
+
+                <div class="pane" data-pane="checklist" hidden>
+                  <div class="cv-bar"><span class="cv-title">Release checklist</span><span class="cv-sub">.weave/canvases</span><span class="cv-fill"></span><span class="pill sandbox"><span data-icon="shield" data-size="11"></span>Sandboxed</span></div>
+                  <div class="trust" id="trust">
+                    <span class="ic big" data-icon="shield" data-size="20"></span>
+                    <h4>Run a canvas from this repo?</h4>
+                    <p><code>weave-fleet</code> includes a canvas at <code>.weave/canvases/release-checklist</code>. It was committed to the repo, not installed by you.</p>
+                    <ul><li>Runs sandboxed, with no network access</li><li>Can read and change only its own checklist</li><li>The agent can read it and tick items</li></ul>
+                    <div class="row-btns"><button type="button" class="fbtn primary" id="trust-yes">Trust weave-fleet</button><button type="button" class="fbtn ghost" id="trust-no">Not now</button></div>
+                  </div>
+                  <div class="sandbox" id="checklist" hidden>
+                    <div class="ck-head"><strong>Release v0.18.1</strong><span id="ck-count">1 of 6</span></div>
+                    <div class="ck-bar"><i id="ck-bar"></i></div>
+                    <ul class="ck-list" id="ck-list"></ul>
+                  </div>
+                </div>
+
+                <div class="pane" data-pane="board" hidden>
+                  <div class="cv-bar"><span class="cv-title">Triage board</span><span class="cv-sub">~/.weave/canvases</span><span class="cv-fill"></span><span class="pill sandbox"><span data-icon="shield" data-size="11"></span>Sandboxed</span></div>
+                  <div class="board">
+                    <div class="col"><h5>New <span>3</span></h5><div class="card">Session list flickers on reconnect<span class="ref">#212</span></div><div class="card">Terminal canvas: copy on select<span class="ref">#219</span></div><div class="card">Diff view loses scroll on refresh<span class="ref">#220</span></div></div>
+                    <div class="col"><h5>This week <span>2</span></h5><div class="card">Push session list over SignalR<span class="ref">#198</span></div><div class="card">MCP tool timeout handling<span class="ref">#205</span></div></div>
+                    <div class="col"><h5>Later <span>1</span></h5><div class="card">Remote access over Tailscale<span class="ref">#171</span></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+      <div class="pins" id="pins"></div>
+    </div>
+  </div>
+  <p class="stage-note">The mockup is a 1280px desktop screen scaled to fit. It reads best on a laptop or wider.</p>
+
+  <section class="block" aria-labelledby="notes-h">
+    <div class="block-head">
+      <h2 id="notes-h">What changes</h2>
+      <p>Numbers match the pins in the Canvas view. Hover a note to outline its spot.</p>
+    </div>
+    <ol class="note-grid" id="notes">
+      <li class="note" tabindex="0" data-pin="1">
+        <div class="note-top"><span class="num">1</span><h3>Every panel is a canvas tab</h3><span class="tag s1">Step 1</span></div>
+        <p>Changes, Files and the diagram stop sharing one viewer. Each session keeps its own ordered list of open canvases, like t3code's right-panel surfaces. The fake <code>__visual__/</code> file paths go away.</p>
+        <code class="spec">viewMode + __visual__/ paths → canvases[] + activeCanvasId</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="2">
+        <div class="note-top"><span class="num">2</span><h3>The agent opens and edits canvases</h3><span class="tag s2">Step 2</span></div>
+        <p>Instead of returning a one-off picture, the agent calls canvas tools. It can change the same diagram later. Press Agent revises: it removes the poll and draws the planned push edge without starting over.</p>
+        <code class="spec">visualize(type, content) → canvas_open · canvas_patch</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="3">
+        <div class="note-top"><span class="num">3</span><h3>Your edits go back to the agent</h3><span class="tag s2">Step 2</span></div>
+        <p>Drag a box or remove one, and the canvas counts your edits. On its next turn the agent reads them. Click a box and Ask agent to attach it to your message, the way markdown annotations work today.</p>
+        <code class="spec">canvas_read(id, since) → state + your edits</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="4">
+        <div class="note-top"><span class="num">4</span><h3>A terminal you share</h3><span class="tag">Step 3</span></div>
+        <p>A real shell on the server, shown with xterm.js over SignalR. The agent can run commands in it, so you watch the tests it runs instead of reading a collapsed Bash card.</p>
+        <code class="spec">server PTY · SessionEventsHub stream · terminal_run</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="5">
+        <div class="note-top"><span class="num">5</span><h3>Room when a canvas needs it</h3><span class="tag s1">Step 1</span></div>
+        <p>Diagrams and boards need width that a file list doesn't. Widen gives the active canvas most of the sheet, and the conversation stays visible beside it.</p>
+        <code class="spec">452px → 760px, per canvas type</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="6">
+        <div class="note-top"><span class="num">6</span><h3>Canvases from a repo or your home folder</h3><span class="tag">Step 4–5</span></div>
+        <p>Open + to see built-in canvases, the ones a project commits under <code>.weave/canvases</code> and your own. Repo canvases ask for trust first and run in a sandboxed frame. Browser comes last, and only in the desktop app.</p>
+        <code class="spec">canvas.json + index.html · sandboxed iframe · postMessage SDK</code>
+      </li>
+    </ol>
+  </section>
+
+  <section class="block" aria-labelledby="arch-h">
+    <div class="block-head">
+      <h2 id="arch-h">How the pieces connect</h2>
+      <p>Canvas state lives on the server, so every harness can reach it and it survives a reload, a second window or a remote client.</p>
+    </div>
+    <div class="arch">
+      <div class="arch-col">
+        <h3>Canvas host</h3>
+        <p class="arch-where">client/src</p>
+        <ul>
+          <li>Tabs per session, replacing SessionsV2RightPanel's fixed stack</li>
+          <li>Built-in canvas types are Vue components in a registry</li>
+          <li>Other canvases run in a sandboxed iframe with a small postMessage SDK</li>
+        </ul>
+        <span class="arch-link">↔ SignalR: canvas.updated</span>
+      </div>
+      <div class="arch-col new">
+        <span class="arch-badge">New</span>
+        <h3>Canvas store</h3>
+        <p class="arch-where">WeaveFleet.Application</p>
+        <ul>
+          <li>Canvas instances per session, with versioned state</li>
+          <li>Records who changed what, you or the agent</li>
+          <li>Checks every patch against the canvas's JSON Schema</li>
+        </ul>
+        <span class="arch-link">↔ canvas_* tools</span>
+      </div>
+      <div class="arch-col new">
+        <span class="arch-badge">New</span>
+        <h3>Canvas MCP server</h3>
+        <p class="arch-where">WeaveFleet.Api</p>
+        <ul>
+          <li>One per session, added to every harness Fleet starts</li>
+          <li>Generic tools: list, open, read, patch, focus</li>
+          <li>Built-in types can add their own, like terminal_run</li>
+        </ul>
+        <span class="arch-link">↔ MCP</span>
+      </div>
+      <div class="arch-col">
+        <h3>Harnesses</h3>
+        <p class="arch-where">NuCode · opencode · Claude Code</p>
+        <ul>
+          <li>NuCode already has an MCP client (src/NuCode/Mcp)</li>
+          <li>opencode and Claude Code take MCP config</li>
+          <li>opencode/tools/visualize.ts retires in favour of canvas_open</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="code-pair">
+      <div class="code-card">
+        <header><strong>A canvas in a repo</strong><span>.weave/canvases/release-checklist/canvas.json</span></header>
+<pre>{
+  <span class="k">"id"</span>: <span class="s">"release-checklist"</span>,
+  <span class="k">"title"</span>: <span class="s">"Release checklist"</span>,
+  <span class="k">"icon"</span>: <span class="s">"list-checks"</span>,
+  <span class="k">"entry"</span>: <span class="s">"index.html"</span>,
+  <span class="k">"state"</span>: { <span class="k">"schema"</span>: <span class="s">"./state.schema.json"</span> },
+  <span class="k">"agent"</span>: {
+    <span class="k">"describe"</span>: <span class="s">"Steps from RELEASE.md for one version."</span>,
+    <span class="k">"tools"</span>: [<span class="s">"read"</span>, <span class="s">"patch"</span>]
+  },
+  <span class="k">"permissions"</span>: { <span class="k">"network"</span>: false }
+}</pre>
+      </div>
+      <div class="code-card">
+        <header><strong>What the agent gets</strong><span>MCP tools, one server per session</span></header>
+<pre>canvas_list()                  <span class="c">→ open canvases, types, versions</span>
+canvas_open(type, state?)      <span class="c">→ { canvasId, version }</span>
+canvas_read(canvasId, since?)  <span class="c">→ state + your edits since then</span>
+canvas_patch(canvasId, ops[],  <span class="c">→ JSON Patch, checked against</span>
+             ifVersion)        <span class="c">  the schema; fails if stale</span>
+canvas_focus(canvasId)         <span class="c">→ bring its tab forward</span>
+
+<span class="c"># added by built-in types</span>
+terminal_run(command)          <span class="c">→ runs in the Terminal canvas</span>
+browser_open(url)              <span class="c">→ desktop app only</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">The shell and tokens match Fleet after the feel pass (client/src/assets/main.css on main, 0.18.0). The right panel today is SessionsV2RightPanel.vue with FileBrowserPanel.vue; diagrams come from opencode/tools/visualize.ts through use-visual-panel.ts. The session, files, test output and issues shown are examples. Tool names and the manifest are a starting point to react to, not a spec.</p>
+</div>
+
+<script>
+(() => {
+  const ICON = {
+    weave: '<path d="M2 5l4.5 14L12 8l5.5 11L22 5"/>',
+    grid: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+    message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    messageplus: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v6"/><path d="M9 10h6"/>',
+    puzzle: '<path d="M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.706 1.087.706 1.704s-.235 1.233-.706 1.704l-1.611 1.611a.98.98 0 0 1-.837.276c-.47-.07-.802-.48-.968-.925a2.501 2.501 0 1 0-3.214 3.214c.446.166.855.497.925.968a.979.979 0 0 1-.276.837l-1.61 1.61a2.404 2.404 0 0 1-1.705.707 2.402 2.402 0 0 1-1.704-.706l-1.568-1.568a1.026 1.026 0 0 0-.877-.29c-.493.074-.84.504-1.02.968a2.5 2.5 0 1 1-3.237-3.237c.464-.18.894-.527.967-1.02a1.026 1.026 0 0 0-.289-.877l-1.568-1.568A2.402 2.402 0 0 1 1.998 12c0-.617.236-1.234.706-1.704L4.23 8.77c.24-.24.581-.353.917-.303.515.077.877.528 1.073 1.01a2.5 2.5 0 1 0 3.259-3.259c-.482-.196-.933-.558-1.01-1.073-.05-.336.062-.676.303-.917l1.525-1.525A2.402 2.402 0 0 1 12 1.998c.617 0 1.234.236 1.704.706l1.568 1.568c.23.23.556.338.877.29.493-.074.84-.504 1.02-.968a2.5 2.5 0 1 1 3.237 3.237c-.464.18-.894.527-.967 1.02Z"/>',
+    zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+    chart: '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+    settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+    plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+    search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    chevron: '<path d="m6 9 6 6 6-6"/>',
+    chevronleft: '<path d="m15 18-6-6 6-6"/>',
+    chevronright: '<path d="m9 18 6-6-6-6"/>',
+    folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+    folderplus: '<path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+    filetext: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+    compare: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/>',
+    terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>',
+    panelclose: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/>',
+    arrowup: '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+    bot: '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    book: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+    play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+    rotate: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+    refresh: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+    sparkle: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
+    paperclip: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+    maximize: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/>',
+    minimize: '<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" x2="21" y1="10" y2="3"/><line x1="3" x2="10" y1="21" y2="14"/>',
+    network: '<rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/>',
+    globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+    listchecks: '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
+    kanban: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 7v7"/><path d="M12 7v4"/><path d="M16 7v9"/>',
+    shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+    info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+    trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+    eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>'
+  };
+  const icon = (name, size = 16, cls = '') =>
+    `<svg class="ic ${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[name] || ''}</svg>`;
+  const hydrate = (root = document) => root.querySelectorAll('[data-icon]').forEach((el) => {
+    if (el.dataset.done) return;
+    el.dataset.done = '1';
+    el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon, el.dataset.size || 16));
+  });
+  hydrate();
+
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const frame = $('#frame');
+  const stage = $('#stage');
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const sleep = (ms) => new Promise((r) => setTimeout(r, reduce.matches ? 0 : ms));
+
+  /* ── scale the 1280×780 frame into the stage ── */
+  let scale = 1;
+  function fit() {
+    scale = stage.clientWidth / 1282;
+    frame.style.transform = `scale(${scale})`;
+    placePinsSoon();
+  }
+  new ResizeObserver(fit).observe(stage);
+
+  /* ── changes + diff (example data) ── */
+  const CHANGES = [
+    { name: 'use-sessions.ts', dir: 'client/src/composables', add: 6, del: 41 },
+    { name: 'SessionEventsHub.cs', dir: 'src/WeaveFleet.Api/Hubs', add: 38, del: 0 },
+    { name: 'sessions.ts', dir: 'client/src/stores', add: 22, del: 3 },
+    { name: 'use-session-stream.ts', dir: 'client/src/composables', add: 14, del: 0 }
+  ];
+  const changesHTML = CHANGES.map((c, i) =>
+    `<button type="button" class="change${i === 0 ? ' on' : ''}">${icon('filetext', 14)}<span class="f-name">${c.name}</span><span class="f-dir">${c.dir}</span><span class="f-num">${c.add ? `<span class="add">+${c.add}</span>` : ''}${c.del ? `<span class="del">−${c.del}</span>` : ''}</span></button>`).join('');
+  $('#t-changes').innerHTML = changesHTML;
+  $('#c-changes').innerHTML = changesHTML;
+  const DIFF = [
+    ['h', '@@ -58,22 +58,9 @@ export function useSessions() {'],
+    ['', '   const store = useSessionsStore();'],
+    ['d', '-  let pollTimer: ReturnType<typeof setInterval> | undefined;'],
+    ['', ''],
+    ['d', '-  function startPolling(): void {'],
+    ['d', '-    pollTimer = setInterval(() => {'],
+    ['d', '-      void refetch();'],
+    ['d', '-    }, 15_000);'],
+    ['d', '-  }'],
+    ['a', '+  const stream = useSessionListStream();'],
+    ['a', '+  stream.on("SessionListChanged", (patch) => {'],
+    ['a', '+    store.applyListPatch(patch);'],
+    ['a', '+  });'],
+    ['', ''],
+    ['', '   onMounted(() => void refetch());']
+  ];
+  const diffHTML = DIFF.map(([k, t]) => `<span class="${k}">${esc(t) || ' '}</span>`).join('');
+  $('#t-diff-pre').innerHTML = diffHTML;
+  $('#c-diff-pre').innerHTML = diffHTML;
+
+  /* ── diagram model ── */
+  const W = 164, H = 44, VBW = 460, VBH = 548;
+  const BASE_NODES = [
+    { id: 'n1', label: 'NuCode session', sub: 'NuCode/Sessions', x: 20, y: 44 },
+    { id: 'n2', label: 'Session events', sub: 'Application/Events', x: 248, y: 44 },
+    { id: 'n8', label: 'GET /api/sessions', sub: 'SessionEndpoints', x: 20, y: 150 },
+    { id: 'n3', label: 'SessionEventsHub', sub: 'Api/Hubs · SignalR', x: 248, y: 150 },
+    { id: 'n7', label: 'use-sessions.ts', sub: 'polls the list', x: 20, y: 280 },
+    { id: 'n4', label: 'use-session-stream.ts', sub: 'one session live', x: 248, y: 280 },
+    { id: 'n5', label: 'sessions store', sub: 'stores/sessions.ts', x: 148, y: 390 },
+    { id: 'n6', label: 'SessionItem.vue', sub: 'session list row', x: 148, y: 484 }
+  ];
+  const BASE_EDGES = [
+    { id: 'e1', from: 'n1', to: 'n2', label: 'publishes' },
+    { id: 'e2', from: 'n2', to: 'n3' },
+    { id: 'e3', from: 'n3', to: 'n4', label: 'SignalR' },
+    { id: 'e4', from: 'n8', to: 'n7', label: 'every 15s', kind: 'dash' },
+    { id: 'e5', from: 'n4', to: 'n5' },
+    { id: 'e6', from: 'n7', to: 'n5' },
+    { id: 'e7', from: 'n5', to: 'n6' }
+  ];
+  const PLAN_EDGE = { id: 'e9', from: 'n3', to: 'n5', label: 'SessionListChanged', kind: 'plan', fs: 'l', ts: 't' };
+  const revisedModel = (m) => ({
+    nodes: m.nodes.filter((n) => n.id !== 'n7' && n.id !== 'n8'),
+    edges: [...m.edges.filter((e) => !['n7', 'n8'].includes(e.from) && !['n7', 'n8'].includes(e.to)), { ...PLAN_EDGE }]
+  });
+  const baseModel = () => ({ nodes: BASE_NODES.map((n) => ({ ...n })), edges: BASE_EDGES.map((e) => ({ ...e })) });
+
+  function anchor(n, side) {
+    if (side === 't') return [n.x + W / 2, n.y];
+    if (side === 'b') return [n.x + W / 2, n.y + H];
+    if (side === 'l') return [n.x, n.y + H / 2];
+    return [n.x + W, n.y + H / 2];
+  }
+  function edgeGeom(e, byId) {
+    const a = byId[e.from], b = byId[e.to];
+    const dx = (b.x - a.x), dy = (b.y - a.y);
+    let fs = e.fs, ts = e.ts;
+    if (!fs || !ts) {
+      if (Math.abs(dy) >= Math.abs(dx) * 0.5) { fs = dy > 0 ? 'b' : 't'; ts = dy > 0 ? 't' : 'b'; }
+      else { fs = dx > 0 ? 'r' : 'l'; ts = dx > 0 ? 'l' : 'r'; }
+    }
+    const p0 = anchor(a, fs), p3 = anchor(b, ts);
+    const d = Math.max(28, Math.hypot(p3[0] - p0[0], p3[1] - p0[1]) * 0.38);
+    const off = { t: [0, -d], b: [0, d], l: [-d, 0], r: [d, 0] };
+    const p1 = [p0[0] + off[fs][0], p0[1] + off[fs][1]];
+    const p2 = [p3[0] + off[ts][0], p3[1] + off[ts][1]];
+    const mx = 0.125 * p0[0] + 0.375 * p1[0] + 0.375 * p2[0] + 0.125 * p3[0];
+    const my = 0.125 * p0[1] + 0.375 * p1[1] + 0.375 * p2[1] + 0.125 * p3[1];
+    return { d: `M${p0[0]},${p0[1]} C${p1[0]},${p1[1]} ${p2[0]},${p2[1]} ${p3[0]},${p3[1]}`, mx, my };
+  }
+  function edgeInner(e, byId, pfx) {
+    const g = edgeGeom(e, byId);
+    const marker = e.kind === 'plan' ? `${pfx}-ahp` : `${pfx}-ah`;
+    let lab = '';
+    if (e.label) {
+      const w = e.label.length * 5.7 + 12;
+      lab = `<rect class="elab-bg" x="${g.mx - w / 2}" y="${g.my - 8}" width="${w}" height="16" rx="4"/><text class="elab" x="${g.mx}" y="${g.my + 3.5}" text-anchor="middle">${esc(e.label)}</text>`;
+    }
+    return `<path d="${g.d}" marker-end="url(#${marker})"/>${lab}`;
+  }
+  function nodeInner(n, moved) {
+    return `<g class="nb"><rect class="box" width="${W}" height="${H}" rx="9"/>` +
+      `<text class="lab" x="12" y="19">${esc(n.label)}</text><text class="sub" x="12" y="34">${esc(n.sub)}</text>` +
+      (moved ? `<circle class="you" cx="${W - 10}" cy="10" r="3.5"><title>Moved by you</title></circle>` : '') + '</g>';
+  }
+  function renderDiagram(svg, model, opts) {
+    const pfx = svg.id;
+    const byId = Object.fromEntries(model.nodes.map((n) => [n.id, n]));
+    svg.setAttribute('viewBox', `0 0 ${VBW} ${VBH}`);
+    const defs = `<defs>
+      <marker id="${pfx}-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow-head"/></marker>
+      <marker id="${pfx}-ahp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrow-plan"/></marker></defs>`;
+    const lanes = `<text class="lane" x="20" y="26">SERVER</text><line x1="12" x2="${VBW - 12}" y1="244" y2="244" stroke="var(--f-line)" stroke-dasharray="3 4"/><text class="lane" x="20" y="264">BROWSER</text>`;
+    const edges = model.edges.filter((e) => byId[e.from] && byId[e.to]).map((e) => {
+      const cls = ['edge', e.kind || '', opts.draw?.has(e.id) ? 'draw' : ''].join(' ');
+      return `<g class="${cls}" data-id="${e.id}">${edgeInner(e, byId, pfx)}</g>`;
+    }).join('');
+    const nodes = model.nodes.map((n) => {
+      const cls = ['node', n.y < 244 ? 'server' : '', opts.live ? 'live' : '', opts.born?.has(n.id) ? 'born' : '', opts.sel === n.id ? 'sel' : ''].join(' ');
+      return `<g class="${cls}" data-id="${n.id}" transform="translate(${n.x},${n.y})" ${opts.live ? 'tabindex="0" role="button"' : ''} aria-label="${esc(n.label)}">${nodeInner(n, opts.moved?.has(n.id))}</g>`;
+    }).join('');
+    svg.innerHTML = defs + lanes + `<g class="edges">${edges}</g><g class="nodes">${nodes}</g>`;
+  }
+
+  /* ── state ── */
+  const TYPES = {
+    changes: { label: 'Changes', icon: 'compare', count: 4, fixed: true },
+    files: { label: 'Files', icon: 'folder' },
+    diagram: { label: 'Diagram', icon: 'network' },
+    terminal: { label: 'Terminal', icon: 'terminal' },
+    browser: { label: 'localhost:5173', icon: 'globe' },
+    checklist: { label: 'Release checklist', icon: 'listchecks' },
+    board: { label: 'Triage', icon: 'kanban' }
+  };
+  const CHECKS = [
+    { t: 'Bump <code>&lt;Version&gt;</code> in Directory.Build.props to 0.18.1', by: 'agent' },
+    { t: 'Push the release commit to main' },
+    { t: 'Tag it: <code>git tag -a v0.18.1 -m "v0.18.1"</code>' },
+    { t: 'Push the tag: <code>git push origin v0.18.1</code>' },
+    { t: 'Release workflow green for linux-x64, osx-arm64, win-x64, win-arm64' },
+    { t: 'Check install.sh and install.ps1 from the latest release' }
+  ];
+  let S;
+  function freshState() {
+    return {
+      mode: S?.mode ?? 'canvas',
+      step: 1,
+      live: baseModel(),
+      agent: baseModel(),
+      moved: new Set(),
+      edits: 0,
+      readEdits: 0,
+      ver: 2,
+      sel: null,
+      ctx: null,
+      text: '',
+      userMsg: '',
+      open: ['changes', 'files', 'terminal', 'diagram'],
+      active: 'diagram',
+      trusted: false,
+      checks: CHECKS.map((c) => ({ done: c.by === 'agent', by: c.by || null })),
+      live1: false
+    };
+  }
+  S = freshState();
+  let runToken = 0;
+
+  /* ── conversation tools ── */
+  const TOOLS1_COMMON = [
+    { ic: 'book', label: 'Read', detail: 'src/WeaveFleet.Api/Hubs/SessionEventsHub.cs', st: 'ok' },
+    { ic: 'search', label: 'Grep', detail: '"SessionUpdated" in client/src', st: '7 matches' },
+    { ic: 'book', label: 'Read', detail: 'client/src/composables/use-sessions.ts', st: 'ok' }
+  ];
+  const tools1 = (mode) => mode === 'canvas'
+    ? [...TOOLS1_COMMON,
+      { cv: true, ic: 'network', label: 'Canvas', detail: 'open Diagram · "Session event flow"', st: 'v1' },
+      { cv: true, ic: 'network', label: 'Canvas', detail: 'patch Diagram · +8 boxes, +7 edges', st: 'v2' }]
+    : [...TOOLS1_COMMON, { ic: 'network', label: 'Visualize', detail: 'flow · "Session event flow"', st: 'ok' }];
+  const tools2 = (mode) => mode === 'canvas'
+    ? [{ cv: true, ic: 'eye', label: 'Canvas', detail: `read Diagram · ${S.readEdits === 0 ? 'no edits' : S.readEdits === 1 ? '1 edit' : `${S.readEdits} edits`} by you`, st: `v${S.readVer ?? S.ver}` },
+      { ic: 'book', label: 'Read', detail: 'client/src/stores/sessions.ts', st: 'ok' },
+      { cv: true, ic: 'network', label: 'Canvas', detail: 'patch Diagram · −2 boxes, +1 planned edge', st: `v${(S.readVer ?? S.ver) + 1}` }]
+    : [{ ic: 'book', label: 'Read', detail: 'client/src/stores/sessions.ts', st: 'ok' },
+      { ic: 'network', label: 'Visualize', detail: 'flow · "Session event flow (push)"', st: 'ok' }];
+  const toolHTML = (t, enter) =>
+    `<div class="tool${t.cv ? ' cv' : ''}${enter ? ' enter' : ''}">${icon(t.ic, 14)}<span class="t-label">${t.label}</span><span class="t-detail">${esc(t.detail)}</span><span class="t-status">${t.st === 'ok' ? `<span class="ok">${icon('check', 13)}</span>` : esc(t.st)}</span></div>`;
+  const VIS_CARD = `<div class="vis-card"><header>${icon('network', 14)}Session event flow<span class="open">Shown in panel</span></header><div class="thumb">Diagram preview</div></div>`;
+
+  function a2Text() {
+    if (S.mode === 'today') return 'Here is a new diagram with the push instead of the poll. It replaces the previous one in the viewer.';
+    const n = S.readEdits;
+    const edits = n === 0 ? 'you hadn\'t changed anything' : `you moved or removed ${n === 1 ? 'one box' : `${n} boxes`}`;
+    return `I read the diagram first: ${edits}. With <code>SessionListChanged</code> pushed from the hub, the poll isn't needed, so I removed <code>use-sessions.ts</code>'s poll and <code>GET /api/sessions</code> from the flow and drew the planned edge in blue. Your layout stays as you left it.`;
+  }
+  function bubbleHTML() {
+    const chip = S.userCtx ? `<div style="margin-bottom:6px"><span class="ctx-chip">${icon('network', 12)}Diagram › ${esc(S.userCtx)}</span></div>` : '';
+    return chip + esc(S.userMsg);
+  }
+
+  /* ── render ── */
+  function renderStream() {
+    $('#tools-1').innerHTML = S.step >= 1 ? tools1(S.mode).map((t) => toolHTML(t)).join('') : '';
+    $('#vis-card-slot').innerHTML = S.mode === 'today' && S.step >= 1 ? VIS_CARD : '';
+    $('#a1-done').hidden = S.step < 1;
+    $('#u2').hidden = S.step < 2;
+    $('#a2').hidden = S.step < 2;
+    if (S.step >= 2) {
+      $('#u2-text').innerHTML = bubbleHTML();
+      $('#tools-2').innerHTML = tools2(S.mode).map((t) => toolHTML(t)).join('');
+      $('#a2-text').innerHTML = a2Text();
+    }
+  }
+  function renderComposer() {
+    $('#cmp-ctx').innerHTML = S.ctx ? `<span class="ctx-chip">${icon('network', 12)}Diagram › ${esc(S.ctx)}<button type="button" class="x" id="ctx-x" aria-label="Remove">${icon('x', 12)}</button></span>` : '';
+    const inp = $('#cmp-input');
+    inp.textContent = S.text || 'Type a message…';
+    inp.classList.toggle('filled', !!S.text);
+    $('#send').disabled = !(S.text && S.step === 1);
+  }
+  function renderToday() {
+    const show = S.step >= 1;
+    $('#t-frozen').hidden = !show;
+    $('#t-diff').hidden = show;
+    $('#t-vhead').innerHTML = show
+      ? `<span class="lbl">File:</span><span class="path">Session event flow</span><span class="icon-btn" aria-hidden="true">${icon('x', 14)}</span>`
+      : `<span class="lbl">Diff:</span><span class="path">client/src/composables/use-sessions.ts</span><span class="v-toggle"><span>${icon('filetext', 12)}</span><span class="on">${icon('compare', 12)}</span></span>`;
+    if (show) renderDiagram($('#dg-today'), S.agent, {});
+  }
+  function renderTabs(enterId) {
+    $('#tabs').innerHTML = S.open.map((id) => {
+      const t = TYPES[id];
+      const sel = id === S.active;
+      const extra = t.count ? `<span class="count">${t.count}</span>` : '';
+      const live = id === 'diagram' && S.live1 ? '<span class="live" title="Agent is editing"></span>' : '';
+      const x = t.fixed ? '' : `<span class="x" data-close="${id}" role="button" aria-label="Close ${t.label}">${icon('x', 12)}</span>`;
+      return `<button type="button" class="ptab${enterId === id ? ' enter' : ''}" role="tab" data-id="${id}" aria-selected="${sel}">${icon(t.icon, 14)}${esc(t.label)}${extra}${live}${x}</button>`;
+    }).join('');
+    $$('.pane').forEach((p) => { p.hidden = p.dataset.pane !== S.active; });
+  }
+  function renderLive(opts = {}) {
+    const diagramOpen = S.open.includes('diagram');
+    $('#dg-empty').hidden = !(S.step === 0 && diagramOpen && S.live.nodes.length === 0);
+    renderDiagram($('#dg-live'), S.live, { live: true, moved: S.moved, sel: S.sel, ...opts });
+    $('#dg-ver').textContent = `v${S.ver}`;
+    const pill = $('#dg-edits');
+    pill.hidden = S.edits === 0;
+    pill.textContent = S.edits === 1 ? '1 edit not read yet' : `${S.edits} edits not read yet`;
+  }
+  function renderChecklist() {
+    $('#trust').hidden = S.trusted;
+    $('#checklist').hidden = !S.trusted;
+    $('#pk-trust').textContent = S.trusted ? 'Trusted' : 'Not trusted yet';
+    $('#pk-trust').classList.toggle('warn', !S.trusted);
+    const done = S.checks.filter((c) => c.done).length;
+    $('#ck-count').textContent = `${done} of ${CHECKS.length}`;
+    $('#ck-bar').style.width = `${(done / CHECKS.length) * 100}%`;
+    $('#ck-list').innerHTML = CHECKS.map((c, i) => {
+      const st = S.checks[i];
+      const by = st.done ? `<span class="ck-by ${st.by === 'agent' ? 'agent' : ''}">${st.by === 'agent' ? 'by agent' : 'by you'}</span>` : '';
+      return `<li class="ck-item${st.done ? ' done' : ''}" data-i="${i}" role="checkbox" aria-checked="${st.done}" tabindex="0"><span class="ck-box">${st.done ? icon('check', 11) : ''}</span><span class="ck-text">${c.t}</span>${by}</li>`;
+    }).join('');
+  }
+  function renderAll() {
+    frame.classList.toggle('today', S.mode === 'today');
+    frame.classList.toggle('canvas', S.mode === 'canvas');
+    $('#v-today').setAttribute('aria-pressed', String(S.mode === 'today'));
+    $('#v-canvas').setAttribute('aria-pressed', String(S.mode === 'canvas'));
+    renderStream();
+    renderComposer();
+    renderToday();
+    renderTabs();
+    renderLive();
+    renderChecklist();
+    $('#revise').disabled = S.step !== 1;
+    closePicker();
+    hidePop();
+    caption();
+    placePinsSoon();
+  }
+
+  /* ── captions ── */
+  function caption(kind) {
+    let t;
+    const c = S.mode === 'canvas';
+    if (kind) t = kind;
+    else if (!c) t = S.step >= 2
+      ? 'Current Fleet: to change the diagram, the agent drew a new one from scratch. It never saw the old one again, and anything you did to it is gone.'
+      : 'Current Fleet: the visualize tool returns a picture. It opens in the file viewer through a __visual__/ path and can only be closed. The agent can\'t update it or see what you do with it.';
+    else if (S.step >= 2) t = `Canvas: the agent read your edits with canvas_read, then patched the same diagram. The poll is gone and the planned push edge is drawn in blue. Now at v${S.ver}.`;
+    else if (S.edits > 0) t = 'You changed the diagram. The agent hasn\'t seen it yet. It reads your edits at the start of its next turn: send a message or press Agent revises.';
+    else if (S.active === 'checklist') t = S.trusted ? 'A canvas from .weave/canvases, running sandboxed. The agent ticked the first item through canvas_patch; tick the rest yourself and the agent sees them.' : 'A canvas committed to the repo asks for trust before it runs, like VS Code\'s workspace trust.';
+    else if (S.active === 'browser') t = 'Browser: the desktop app hosts a real webview. The web build can only show local dev servers, so this canvas ships last.';
+    else if (S.active === 'terminal') t = 'Terminal: a real shell on the server, streamed over SignalR. Commands the agent runs show up here.';
+    else if (S.active === 'board') t = 'A canvas from your home folder. Same sandbox and SDK as project canvases, just not shared with the team.';
+    else t = 'Canvas: the agent opened a Diagram canvas and drew into it. Drag a box, or click one to ask about it, then press Agent revises. Use + to open other canvases.';
+    $('#caption-text').textContent = t;
+    $('#caption').dataset.mode = S.mode;
+  }
+
+  /* ── tabs, picker ── */
+  function openCanvas(id, enter = true) {
+    const isNew = !S.open.includes(id);
+    if (isNew) S.open.push(id);
+    S.active = id;
+    renderTabs(isNew && enter ? id : null);
+    hidePop();
+    caption();
+    placePinsSoon();
+  }
+  function closeCanvas(id) {
+    const i = S.open.indexOf(id);
+    if (i < 0) return;
+    S.open.splice(i, 1);
+    if (S.active === id) S.active = S.open[Math.max(0, i - 1)];
+    renderTabs();
+    hidePop();
+    caption();
+    placePinsSoon();
+  }
+  $('#tabs').addEventListener('click', (e) => {
+    const x = e.target.closest('[data-close]');
+    if (x) { e.stopPropagation(); closeCanvas(x.dataset.close); return; }
+    const tab = e.target.closest('.ptab');
+    if (tab) openCanvas(tab.dataset.id);
+  });
+  const picker = $('#picker');
+  const addBtn = $('#add-canvas');
+  function closePicker() { picker.hidden = true; addBtn.setAttribute('aria-expanded', 'false'); }
+  addBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!picker.hidden) { closePicker(); return; }
+    const left = Math.min(addBtn.offsetLeft, $('#rp').clientWidth - 300);
+    picker.style.setProperty('--pk-left', `${Math.max(8, left)}px`);
+    picker.hidden = false;
+    addBtn.setAttribute('aria-expanded', 'true');
+    picker.querySelector('.pk-item')?.focus();
+  });
+  picker.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-open]');
+    if (!item) return;
+    closePicker();
+    openCanvas(item.dataset.open);
+  });
+  document.addEventListener('click', (e) => {
+    if (!picker.hidden && !picker.contains(e.target)) closePicker();
+    if (!e.target.closest('.dg-pop') && !e.target.closest('.node')) hidePop();
+  });
+  $('#widen').addEventListener('click', () => {
+    const wide = frame.classList.toggle('wide');
+    const b = $('#widen');
+    b.setAttribute('aria-label', wide ? 'Narrow canvas' : 'Widen canvas');
+    b.innerHTML = icon(wide ? 'minimize' : 'maximize', 14);
+    hidePop();
+    setTimeout(placePinsSoon, 220);
+  });
+
+  /* ── trust + checklist ── */
+  $('#trust-yes').addEventListener('click', () => { S.trusted = true; renderChecklist(); caption(); });
+  $('#trust-no').addEventListener('click', () => closeCanvas('checklist'));
+  function toggleCheck(li) {
+    const i = Number(li.dataset.i);
+    const st = S.checks[i];
+    st.done = !st.done;
+    st.by = st.done ? 'you' : null;
+    renderChecklist();
+  }
+  $('#ck-list').addEventListener('click', (e) => { const li = e.target.closest('.ck-item'); if (li) toggleCheck(li); });
+  $('#ck-list').addEventListener('keydown', (e) => {
+    if (e.key !== ' ' && e.key !== 'Enter') return;
+    const li = e.target.closest('.ck-item');
+    if (!li) return;
+    e.preventDefault();
+    toggleCheck(li);
+    $(`.ck-item[data-i="${li.dataset.i}"]`)?.focus();
+  });
+
+  /* ── diagram interaction (Canvas mode) ── */
+  const svg = $('#dg-live');
+  const wrap = $('#dg-wrap');
+  let drag = null;
+  function svgPoint(evt) {
+    const pt = svg.createSVGPoint();
+    pt.x = evt.clientX; pt.y = evt.clientY;
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
+  }
+  function updateEdgesFor(id) {
+    const byId = Object.fromEntries(S.live.nodes.map((n) => [n.id, n]));
+    S.live.edges.filter((e) => e.from === id || e.to === id).forEach((e) => {
+      const g = svg.querySelector(`.edge[data-id="${e.id}"]`);
+      if (g && byId[e.from] && byId[e.to]) { g.classList.remove('draw'); g.innerHTML = edgeInner(e, byId, svg.id); }
+    });
+  }
+  function userEdit() {
+    S.edits += 1;
+    S.ver += 1;
+    $('#dg-log').textContent = 'you · edited';
+    renderLive();
+    const pill = $('#dg-edits');
+    pill.classList.remove('pop'); void pill.offsetWidth; pill.classList.add('pop');
+    caption();
+  }
+  svg.addEventListener('pointerdown', (e) => {
+    if (S.mode !== 'canvas' || S.step < 1) return;
+    const g = e.target.closest('.node');
+    if (!g) { hidePop(); return; }
+    const n = S.live.nodes.find((x) => x.id === g.dataset.id);
+    const p = svgPoint(e);
+    drag = { n, g, sx: p.x, sy: p.y, nx: n.x, ny: n.y, moved: false };
+    e.preventDefault();
+  });
+  svg.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const p = svgPoint(e);
+    const dx = p.x - drag.sx, dy = p.y - drag.sy;
+    if (!drag.moved && Math.hypot(dx, dy) < 3) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      drag.g.classList.add('dragging');
+      drag.g.classList.remove('born');
+      hidePop();
+      try { svg.setPointerCapture(e.pointerId); } catch { /* pointer already released */ }
+    }
+    drag.n.x = Math.round(Math.min(VBW - W - 4, Math.max(4, drag.nx + dx)));
+    drag.n.y = Math.round(Math.min(VBH - H - 4, Math.max(30, drag.ny + dy)));
+    drag.g.setAttribute('transform', `translate(${drag.n.x},${drag.n.y})`);
+    updateEdgesFor(drag.n.id);
+  });
+  svg.addEventListener('pointerup', () => {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    if (d.moved) { S.moved.add(d.n.id); S.sel = null; userEdit(); }
+    else selectNode(d.n.id);
+  });
+  svg.addEventListener('keydown', (e) => {
+    const g = e.target.closest('.node');
+    if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); selectNode(g.dataset.id); }
+    if (e.key === 'Escape') hidePop();
+  });
+  function selectNode(id) {
+    S.sel = id;
+    $$('.node', svg).forEach((g) => g.classList.toggle('sel', g.dataset.id === id));
+    showPop(id);
+  }
+  function showPop(id) {
+    hidePop(true);
+    const g = svg.querySelector(`.node[data-id="${id}"] rect`);
+    if (!g) return;
+    const r = g.getBoundingClientRect();
+    const wr = wrap.getBoundingClientRect();
+    const pop = document.createElement('div');
+    pop.className = 'dg-pop';
+    pop.style.left = `${(r.left + r.width / 2 - wr.left) / scale}px`;
+    pop.style.top = `${Math.max(40, (r.top - wr.top) / scale - 6)}px`;
+    pop.innerHTML = `<button type="button" class="ask" data-act="ask">${icon('messageplus', 13)}Ask agent</button><button type="button" data-act="remove">${icon('trash', 13)}Remove</button>`;
+    pop.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-act]');
+      if (!b) return;
+      if (b.dataset.act === 'ask') askAbout(id); else removeNode(id);
+    });
+    wrap.appendChild(pop);
+  }
+  function hidePop(keepSel) {
+    $$('.dg-pop').forEach((p) => p.remove());
+    if (!keepSel && S.sel) { S.sel = null; $$('.node.sel', svg).forEach((g) => g.classList.remove('sel')); }
+  }
+  function askAbout(id) {
+    const n = S.live.nodes.find((x) => x.id === id);
+    S.ctx = n.label;
+    S.text = id === 'n7' ? 'Can we drop this poll and push the list instead?' : `What would change here if we push the list instead of polling?`;
+    hidePop();
+    renderComposer();
+    caption('The box is attached to your message as context, the way markdown annotations work today. Press send and the agent reads the diagram before it answers.');
+  }
+  function removeNode(id) {
+    hidePop();
+    const g = svg.querySelector(`.node[data-id="${id}"]`);
+    S.live.nodes = S.live.nodes.filter((n) => n.id !== id);
+    const gone = S.live.edges.filter((e) => e.from === id || e.to === id).map((e) => e.id);
+    S.live.edges = S.live.edges.filter((e) => !gone.includes(e.id));
+    S.moved.delete(id);
+    g?.classList.add('dying');
+    gone.forEach((eid) => svg.querySelector(`.edge[data-id="${eid}"]`)?.classList.add('dying'));
+    setTimeout(userEdit, reduce.matches ? 0 : 260);
+  }
+  $('#cmp-ctx').addEventListener('click', (e) => {
+    if (e.target.closest('#ctx-x')) { S.ctx = null; S.text = ''; renderComposer(); caption(); }
+  });
+  $('#send').addEventListener('click', () => revise(S.text, S.ctx));
+
+  /* ── agent turns ── */
+  async function play() {
+    const my = ++runToken;
+    const alive = () => my === runToken;
+    const keepMode = S.mode;
+    S = freshState();
+    S.mode = keepMode;
+    S.step = 0;
+    S.ver = 0;
+    S.live = { nodes: [], edges: [] };
+    S.open = ['changes', 'files', 'terminal'];
+    S.active = 'changes';
+    renderAll();
+    $('#play').disabled = true;
+    caption(S.mode === 'canvas'
+      ? 'Canvas: the agent calls canvas_open, then canvas_patch. The tab appears, then the boxes arrive as one patch.'
+      : 'Current Fleet: the agent calls visualize once and gets a picture back.');
+    const box = $('#tools-1');
+    const list = tools1(S.mode);
+    for (let i = 0; i < list.length; i++) {
+      await sleep(i === 0 ? 350 : 520);
+      if (!alive()) return;
+      box.insertAdjacentHTML('beforeend', toolHTML(list[i], true));
+      const t = list[i];
+      if (S.mode === 'canvas' && t.st === 'v1') {
+        S.ver = 1;
+        S.live1 = true;
+        openCanvas('diagram');
+        renderLive();
+      }
+      if (S.mode === 'canvas' && t.st === 'v2') {
+        S.ver = 2;
+        const full = baseModel();
+        for (let k = 0; k < full.nodes.length; k++) {
+          S.live.nodes.push(full.nodes[k]);
+          renderLive({ born: new Set([full.nodes[k].id]) });
+          await sleep(110);
+          if (!alive()) return;
+        }
+        for (let k = 0; k < full.edges.length; k++) {
+          S.live.edges.push(full.edges[k]);
+          renderLive({ draw: new Set([full.edges[k].id]) });
+          await sleep(90);
+          if (!alive()) return;
+        }
+      }
+      if (S.mode === 'today' && t.label === 'Visualize') {
+        S.step = 1;
+        $('#vis-card-slot').innerHTML = VIS_CARD;
+        renderToday();
+      }
+    }
+    await sleep(300);
+    if (!alive()) return;
+    S.step = 1;
+    S.live1 = false;
+    S.live = baseModel();
+    if (!S.open.includes('diagram')) { S.open.push('diagram'); S.active = 'diagram'; }
+    $('#a1-done').hidden = false;
+    renderTabs();
+    renderLive();
+    $('#dg-log').textContent = 'agent · canvas_patch';
+    $('#play').disabled = false;
+    $('#revise').disabled = false;
+    renderComposer();
+    caption();
+    placePinsSoon();
+  }
+
+  async function revise(text, ctx) {
+    if (S.step !== 1) return;
+    const my = ++runToken;
+    const alive = () => my === runToken;
+    S.userMsg = text || 'Plan the push. What changes in this flow?';
+    S.userCtx = ctx || null;
+    S.ctx = null; S.text = '';
+    S.readEdits = S.edits;
+    S.readVer = S.ver;
+    renderComposer();
+    hidePop();
+    $('#revise').disabled = true;
+    $('#u2-text').innerHTML = bubbleHTML();
+    $('#u2').hidden = false;
+    $('#a2').hidden = false;
+    $('#tools-2').innerHTML = '';
+    $('#a2-text').innerHTML = '';
+    const stream = $('#stream');
+    stream.scrollTo({ top: stream.scrollHeight, behavior: reduce.matches ? 'auto' : 'smooth' });
+    const list = tools2(S.mode);
+    for (let i = 0; i < list.length; i++) {
+      await sleep(i === 0 ? 400 : 560);
+      if (!alive()) return;
+      $('#tools-2').insertAdjacentHTML('beforeend', toolHTML(list[i], true));
+      if (S.mode === 'canvas' && i === 0) {
+        if (!S.open.includes('diagram')) openCanvas('diagram'); else if (S.active !== 'diagram') openCanvas('diagram');
+        S.edits = 0;
+        S.moved = new Set();
+        S.live1 = true;
+        renderTabs();
+        renderLive();
+        caption('The agent calls canvas_read and gets the current state plus the edits you made since its last write.');
+      }
+      if (S.mode === 'canvas' && i === 2) {
+        const dying = S.live.nodes.filter((n) => n.id === 'n7' || n.id === 'n8').map((n) => n.id);
+        dying.forEach((id) => svg.querySelector(`.node[data-id="${id}"]`)?.classList.add('dying'));
+        S.live.edges.filter((e) => dying.includes(e.from) || dying.includes(e.to)).forEach((e) => svg.querySelector(`.edge[data-id="${e.id}"]`)?.classList.add('dying'));
+        await sleep(300);
+        if (!alive()) return;
+        S.live = revisedModel(S.live);
+        S.ver = S.readVer + 1;
+        renderLive({ draw: new Set(['e9']) });
+        $('#dg-log').textContent = 'agent · canvas_patch';
+      }
+      if (S.mode === 'today' && i === 1) {
+        S.agent = revisedModel(baseModel());
+        renderToday();
+      }
+    }
+    await sleep(250);
+    if (!alive()) return;
+    S.step = 2;
+    S.agent = revisedModel(baseModel());
+    S.live1 = false;
+    $('#a2-text').innerHTML = a2Text();
+    renderTabs();
+    caption();
+    stream.scrollTo({ top: stream.scrollHeight, behavior: reduce.matches ? 'auto' : 'smooth' });
+    placePinsSoon();
+  }
+
+  $('#play').addEventListener('click', play);
+  $('#revise').addEventListener('click', () => revise(S.text, S.ctx));
+  $('#reset').addEventListener('click', () => {
+    runToken++;
+    const m = S.mode;
+    S = freshState();
+    S.mode = m;
+    frame.classList.remove('wide');
+    $('#widen').innerHTML = icon('maximize', 14);
+    $('#play').disabled = false;
+    renderAll();
+    $('#stream').scrollTop = 0;
+  });
+
+  function setMode(m) {
+    if (m === S.mode) return;
+    runToken++;
+    S.mode = m;
+    if (S.step === 0) { S.step = 1; S.live = baseModel(); S.ver = 2; S.live1 = false; if (!S.open.includes('diagram')) S.open.push('diagram'); }
+    $('#play').disabled = false;
+    renderAll();
+  }
+  $('#v-today').addEventListener('click', () => setMode('today'));
+  $('#v-canvas').addEventListener('click', () => setMode('canvas'));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closePicker(); hidePop(); }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.target.closest('input, textarea, [contenteditable]')) return;
+    if (e.key === 'c' || e.key === 'C') setMode(S.mode === 'canvas' ? 'today' : 'canvas');
+  });
+
+  /* ── pins ── */
+  const PINS = [
+    { n: 1, sel: '#tabs', at: 'tl' },
+    { n: 2, sel: '#tools-1 .tool.cv', at: 'l' },
+    { n: 3, sel: '#dg-shared', at: 'tl' },
+    { n: 4, sel: '.ptab[data-id="terminal"]', at: 'bc' },
+    { n: 5, sel: '#widen', at: 'bc' },
+    { n: 6, sel: '#add-canvas', at: 'bc' }
+  ];
+  const pinsLayer = $('#pins');
+  pinsLayer.innerHTML = PINS.map((p) => `<span class="pin" data-pin="${p.n}">${p.n}</span>`).join('');
+  function placePins() {
+    const fr = frame.getBoundingClientRect();
+    PINS.forEach((p) => {
+      const pin = pinsLayer.querySelector(`[data-pin="${p.n}"]`);
+      const el = S.mode === 'canvas' ? frame.querySelector(p.sel) : null;
+      const r = el && el.getBoundingClientRect();
+      if (!r || (r.width === 0 && r.height === 0)) { pin.hidden = true; return; }
+      pin.hidden = false;
+      const L = (r.left - fr.left) / scale, T = (r.top - fr.top) / scale, Wd = r.width / scale, Ht = r.height / scale;
+      let x, y;
+      if (p.at === 'tl') { x = L - 10; y = T - 10; }
+      else if (p.at === 'tr') { x = L + Wd - 10; y = T - 10; }
+      else if (p.at === 'bc') { x = L + Wd / 2 - 10; y = T + Ht - 4; }
+      else { x = L - 24; y = T + Ht / 2 - 10; }
+      pin.style.left = `${Math.max(2, x)}px`;
+      pin.style.top = `${Math.max(2, y)}px`;
+    });
+  }
+  let pinRaf = 0;
+  function placePinsSoon() { cancelAnimationFrame(pinRaf); pinRaf = requestAnimationFrame(placePins); }
+  $('#stream').addEventListener('scroll', placePinsSoon);
+  $('#pins-toggle').addEventListener('change', (e) => frame.classList.toggle('no-pins', !e.target.checked));
+  function highlight(n, on) {
+    const p = PINS.find((x) => x.n === Number(n));
+    pinsLayer.querySelector(`[data-pin="${n}"]`)?.classList.toggle('on', on);
+    frame.querySelector(p.sel)?.classList.toggle('hl', on);
+  }
+  $$('.note').forEach((note) => {
+    const n = note.dataset.pin;
+    note.addEventListener('mouseenter', () => highlight(n, true));
+    note.addEventListener('mouseleave', () => highlight(n, false));
+    note.addEventListener('focus', () => highlight(n, true));
+    note.addEventListener('blur', () => highlight(n, false));
+  });
+
+  renderAll();
+  fit();
+  if (document.fonts?.ready) document.fonts.ready.then(placePinsSoon);
+})();
+</script>

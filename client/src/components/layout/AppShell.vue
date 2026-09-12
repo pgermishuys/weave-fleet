@@ -8,6 +8,7 @@ Panel Vocabulary:
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from "vue";
 import { useLocation } from "@tanstack/vue-router";
+import { useElementSize } from "@vueuse/core";
 import { storeToRefs } from "pinia";
 import CommandPalette from "@/components/CommandPalette.vue";
 import TauriUpdateDialog from "@/components/TauriUpdateDialog.vue";
@@ -28,6 +29,7 @@ import { useVisualViewport } from "@/composables/use-visual-viewport";
 import { useKeyboardScroll } from "@/composables/use-keyboard-scroll";
 import { useFoldableScreen } from "@/composables/use-foldable-screen";
 import { useBoardFeature } from "@/composables/use-board-feature";
+import { useCanvasesStore } from "@/stores/canvases";
 import { useSidebarStore } from "@/stores/sidebar";
 
 useCommands();
@@ -114,6 +116,22 @@ function onTouchEnd(e: TouchEvent): void {
 const rightPanelWidth = ref(360);
 const isGutterDragging = ref(false);
 
+// Widen gives the active canvas most of the sheet without losing the dragged width,
+// and always leaves the conversation room to read.
+const WIDENED_RIGHT_PANEL_WIDTH = 760;
+const MIN_CONVERSATION_WIDTH = 480;
+const canvasesStore = useCanvasesStore();
+const workspaceSheetRef = shallowRef<HTMLElement | null>(null);
+const { width: workspaceSheetWidth } = useElementSize(workspaceSheetRef);
+const sessionsRightPanelWidth = computed(() =>
+  canvasesStore.widened
+    ? Math.max(
+      rightPanelWidth.value,
+      Math.min(WIDENED_RIGHT_PANEL_WIDTH, Math.round(workspaceSheetWidth.value - MIN_CONVERSATION_WIDTH)),
+    )
+    : rightPanelWidth.value,
+);
+
 // --- Left gutter (context panel ↔ conversation) ---
 const contextPanelRef = shallowRef<InstanceType<typeof ContextPanel> | null>(null);
 const isLeftGutterDragging = ref(false);
@@ -148,6 +166,12 @@ function onLeftGutterPointerDown(e: PointerEvent): void {
 }
 
 function onGutterPointerDown(e: PointerEvent): void {
+  if (showSessionsV2Panel.value && canvasesStore.widened) {
+    // Dragging takes over from Widen, starting at the width on screen.
+    rightPanelWidth.value = sessionsRightPanelWidth.value;
+    canvasesStore.setWidened(false);
+  }
+
   isGutterDragging.value = true;
   const startX = e.clientX;
   const startWidth = rightPanelWidth.value;
@@ -228,7 +252,10 @@ function onGutterPointerDown(e: PointerEvent): void {
       </template>
 
       <!-- Conversation and right panel share one raised sheet. -->
-      <div class="workspace-sheet">
+      <div
+        ref="workspaceSheetRef"
+        class="workspace-sheet"
+      >
         <CenterContent>
           <slot />
         </CenterContent>
@@ -242,7 +269,7 @@ function onGutterPointerDown(e: PointerEvent): void {
 
         <SessionsV2RightPanel
           v-if="showSessionsV2Panel"
-          :width="rightPanelWidth"
+          :width="sessionsRightPanelWidth"
         />
         <BoardRightPanel
           v-else-if="showBoardPanel"

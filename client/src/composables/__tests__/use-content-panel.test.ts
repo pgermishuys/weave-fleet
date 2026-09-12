@@ -36,19 +36,19 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-describe("useContentPanelContext (post-tab redesign)", () => {
+describe("useContentPanelContext", () => {
   it("initializes with default files context and file view mode", () => {
     const ctx = mountHarness();
 
     expect(ctx.viewMode.value).toBe("file");
     expect(ctx.filesContext.value).toMatchObject({
-      allChangedFilter: "all",
       selectedFilePath: null,
       searchQuery: "",
       scrollTop: 0,
       filesTreeWidth: 260,
     });
     expect(ctx.filesContext.value.expandedDirs).toBeInstanceOf(Set);
+    expect(ctx.filePayload.value).toBeNull();
   });
 
   it("selectFile updates selectedFilePath and resets viewMode to file", async () => {
@@ -90,6 +90,7 @@ describe("useContentPanelContext (post-tab redesign)", () => {
     const ctx = mountHarness(sessionId);
 
     ctx.selectFile("some/file.ts");
+    ctx.showFile({ $type: "markdown", content: "x", sourceFilePath: "some/file.ts" });
     ctx.setViewMode("diff");
     ctx.updateFilesContext({ searchQuery: "abc", scrollTop: 99 });
     await nextTick();
@@ -100,7 +101,7 @@ describe("useContentPanelContext (post-tab redesign)", () => {
     expect(ctx.filesContext.value.selectedFilePath).toBeNull();
     expect(ctx.filesContext.value.searchQuery).toBe("");
     expect(ctx.filesContext.value.scrollTop).toBe(0);
-    expect(ctx.filesContext.value.allChangedFilter).toBe("all");
+    expect(ctx.filePayload.value).toBeNull();
     expect(ctx.filesContext.value.filesTreeWidth).toBe(320);
     expect(ctx.viewMode.value).toBe("file");
   });
@@ -121,14 +122,18 @@ describe("useContentPanelContext (post-tab redesign)", () => {
     expect(ctx.filesContext.value.filesTreeWidth).toBe(375);
   });
 
-  it("allChangedFilter can be toggled via updateFilesContext", () => {
+  it("showFile holds the loaded content and clearFile closes the viewer", () => {
     const ctx = mountHarness();
 
-    ctx.updateFilesContext({ allChangedFilter: "changed" });
-    expect(ctx.filesContext.value.allChangedFilter).toBe("changed");
+    ctx.selectFile("README.md");
+    ctx.setViewMode("diff");
+    ctx.showFile({ $type: "markdown", content: "# Hi", sourceFilePath: "README.md" });
+    expect(ctx.filePayload.value?.sourceFilePath).toBe("README.md");
 
-    ctx.updateFilesContext({ allChangedFilter: "all" });
-    expect(ctx.filesContext.value.allChangedFilter).toBe("all");
+    ctx.clearFile();
+    expect(ctx.filePayload.value).toBeNull();
+    expect(ctx.filesContext.value.selectedFilePath).toBeNull();
+    expect(ctx.viewMode.value).toBe("file");
   });
 
   it("throws when used outside a provider", () => {

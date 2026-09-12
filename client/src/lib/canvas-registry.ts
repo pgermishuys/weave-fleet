@@ -1,0 +1,43 @@
+import type { Component } from "vue";
+import { FileText, FolderTree, GitCompare, Globe, Workflow } from "lucide-vue-next";
+import ChangesCanvas from "@/components/canvas/ChangesCanvas.vue";
+import FilesCanvas from "@/components/canvas/FilesCanvas.vue";
+import VisualCanvas from "@/components/canvas/VisualCanvas.vue";
+import type { CanvasInstance, CanvasKind } from "@/stores/canvases";
+import { visualCanvasTitle } from "@/stores/canvases";
+import type { VisualPayload } from "@/lib/visual-payload";
+
+export interface CanvasTypeDefinition {
+  kind: CanvasKind;
+  label: string;
+  icon: Component;
+  component: Component;
+}
+
+export const CANVAS_TYPES: Record<CanvasKind, CanvasTypeDefinition> = {
+  changes: { kind: "changes", label: "Changes", icon: GitCompare, component: ChangesCanvas },
+  files: { kind: "files", label: "Files", icon: FolderTree, component: FilesCanvas },
+  visual: { kind: "visual", label: "Diagram", icon: Workflow, component: VisualCanvas },
+};
+
+/** Built-in canvases a person can open from the + menu. */
+export const PICKABLE_CANVAS_KINDS = ["changes", "files"] as const;
+
+const VISUAL_ICONS: Record<VisualPayload["$type"], Component> = {
+  "visual/flow": Workflow,
+  "visual/sequence": Workflow,
+  markdown: FileText,
+  html: Globe,
+};
+
+export function visualIcon(payload: VisualPayload): Component {
+  return VISUAL_ICONS[payload.$type];
+}
+
+export function canvasTitle(canvas: CanvasInstance): string {
+  return canvas.payload ? visualCanvasTitle(canvas.payload) : CANVAS_TYPES[canvas.kind].label;
+}
+
+export function canvasIcon(canvas: CanvasInstance): Component {
+  return canvas.payload ? visualIcon(canvas.payload) : CANVAS_TYPES[canvas.kind].icon;
+}

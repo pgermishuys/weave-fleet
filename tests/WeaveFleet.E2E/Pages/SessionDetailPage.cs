@@ -276,10 +276,10 @@ public sealed class SessionDetailPage(IPage page)
     public Task<bool> IsAbortVisibleAsync() => AbortButton.IsVisibleAsync();
 
     // ── Content Panel ─────────────────────────────────────────────────────────
-    // The right panel exposes exactly two tabs: Files and Changes. There is no
-    // Preview/Details tab and no changes-drawer — the "changes" tab shows the
-    // changed-files list in the left pane of an internal split, with rendered
-    // content (visual renderer / diff view) on the right.
+    // The right panel is a row of canvas tabs. A new session opens with two:
+    // Changes (changed files, with the diff below) and Files (the workspace
+    // tree). Diagrams the agent renders open as further tabs. Only the active
+    // canvas is rendered, as the tab's controlled panel.
 
     /// <summary>Get the Files tab button.</summary>
     public ILocator GetFilesTab() => _page.Locator("#tab-files");
@@ -294,7 +294,7 @@ public sealed class SessionDetailPage(IPage page)
     public ILocator GetChangesPanel() => _page.Locator("#panel-changes");
 
     /// <summary>Get all tab buttons in the right panel tablist.</summary>
-    public ILocator GetAllTabs() => _page.Locator(".right-tabs [role='tab']");
+    public ILocator GetAllTabs() => _page.Locator("[role='tablist'][aria-label='Canvases'] [role='tab']");
 
     /// <summary>Get the panel collapse button.</summary>
     public ILocator GetPanelCollapseButton() => _page.GetByRole(AriaRole.Button, new PageGetByRoleOptions { Name = "Collapse right panel" });
@@ -326,12 +326,6 @@ public sealed class SessionDetailPage(IPage page)
 
     /// <summary>Click the panel expand button on the collapsed rail.</summary>
     public Task ClickPanelExpandAsync() => GetPanelExpandButton().ClickAsync();
-
-    /// <summary>Get the artifact chip in the session metadata header, if present.</summary>
-    public ILocator GetArtifactChip() => _page.Locator(".meta-chip--artifact");
-
-    /// <summary>Click the artifact chip to route it into the content slot.</summary>
-    public Task ClickArtifactChipAsync() => GetArtifactChip().ClickAsync();
 
     /// <summary>Get the reviewed checkbox for a specific file row in the Changes tab list.</summary>
     public ILocator GetFileReviewedCheckbox(string filePath)
