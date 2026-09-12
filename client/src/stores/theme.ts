@@ -42,8 +42,8 @@ export interface ThemeDefinition {
 }
 
 export const themes: readonly ThemeDefinition[] = [
-  { id: "dark", label: "Default Dark", colorScheme: "dark", swatches: ["#0a0a0b", "#141416", "#6366f1", "#e4e4e7"] },
-  { id: "light", label: "Light", colorScheme: "light", swatches: ["#FAF9F7", "#ffffff", "#5B6EC7", "#1A1918"] },
+  { id: "dark", label: "Default Dark", colorScheme: "dark", swatches: ["#0d0d10", "#1b1b20", "#6366f1", "#e8e8ec"] },
+  { id: "light", label: "Light", colorScheme: "light", swatches: ["#F3F2EF", "#ffffff", "#5B6EC7", "#1A1918"] },
   { id: "weave-classic", label: "Weave Classic", colorScheme: "dark", swatches: ["#0F172A", "#1E293B", "#A855F7", "#F8FAFC"] },
   { id: "black", label: "Black (OLED)", colorScheme: "dark", swatches: ["#000000", "#0A0A0A", "#A855F7", "#FAFAFA"] },
   { id: "nord", label: "Nord", colorScheme: "dark", swatches: ["#2E3440", "#3B4252", "#88C0D0", "#ECEFF4"] },

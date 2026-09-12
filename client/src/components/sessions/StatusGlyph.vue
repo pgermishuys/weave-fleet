@@ -7,12 +7,12 @@ const props = defineProps<Props>();
 
 const COLOR_MAP: Record<string, string> = {
   completed: "var(--complete)",
-  idle: "var(--idle)",
+  idle: "var(--status-idle)",
   resuming: "var(--running)",
   stopped: "var(--muted)",
   disconnected: "var(--muted)",
   error: "var(--error)",
-  waiting_input: "var(--queued)",
+  waiting_input: "var(--status-waiting)",
 };
 
 function statusColor(status: string): string {

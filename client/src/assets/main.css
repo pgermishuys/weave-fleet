@@ -6,13 +6,15 @@
 :root {
   --visual-vh: 100dvh;
   --fold-gap: 0px;
-  --rail-bg: #0c0c0d;
-  --panel-bg: #111113;
-  --card-bg: #141416;
-  --main-bg: #0a0a0b;
-  --border: #1e1e22;
-  --text: #e4e4e7;
-  --muted: #71717a;
+  /* Three surfaces: window chrome, panels on top of it, raised elements on panels. */
+  --rail-bg: #0d0d10;
+  --panel-bg: #141418;
+  --card-bg: #1b1b20;
+  --main-bg: #0d0d10;
+  /* Translucent so a border reads the same on every surface it crosses. */
+  --border: rgba(255, 255, 255, 0.075);
+  --text: #e8e8ec;
+  --muted: #8e8e9a;
   --coral: #D95A3A;
   --indigo: #6366f1;
   --accent: #6366f1;
@@ -26,10 +28,14 @@
   --queued: #8b5cf6;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
-  --radius-card: 0px;
-  --radius-btn: 0px;
-  --radius-panel: 0px;
-  --transition: 180ms ease-out;
+  --radius-card: 10px;
+  --radius-btn: 8px;
+  --radius-panel: 12px;
+  --transition: 150ms ease-out;
+  /* Status glyphs: colour only the states that need attention. Idle is the
+     resting state, so it stays quiet; waiting on the user is amber. */
+  --status-idle: var(--muted);
+  --status-waiting: var(--idle);
   --bg: var(--main-bg);
   --font-sans-stack: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
   --font-mono-stack: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
@@ -37,17 +43,17 @@
 
 :root[data-theme="light"] {
   /* Prototype design tokens */
-  --bg: #FAF9F7;
+  --bg: #F3F2EF;
   --surface: #FFFFFF;
   --coral: #D95A3A;
   --indigo: #5B6EC7;
-  
+
   /* Mapped to existing variables */
   --rail-bg: #FFFFFF;
   --panel-bg: #FFFFFF;
   --card-bg: #ffffff;
-  --main-bg: #FAF9F7;
-  --border: #E8E6E3;
+  --main-bg: #F3F2EF;
+  --border: rgba(26, 25, 24, 0.09);
   --text: #1A1918;
   --muted: #6E6A65;
   --accent: #5B6EC7;
