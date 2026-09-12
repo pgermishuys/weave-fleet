@@ -108,6 +108,17 @@ internal sealed class OpenCodeHttpClient
         return new OpenCodeSessionInfo { Id = identity.Id };
     }
 
+    /// <summary>GET /session/{sessionId}?directory={directory}, reading only the parent session id.</summary>
+    public async Task<string?> GetSessionParentIdAsync(
+        string sessionId,
+        string directory,
+        CancellationToken ct)
+    {
+        var url = BuildUrl($"/session/{Uri.EscapeDataString(sessionId)}", directory);
+        var session = await GetAsync(url, OpenCodeJsonContext.Default.OpenCodeSessionParent, ct).ConfigureAwait(false);
+        return session.ParentId;
+    }
+
     /// <summary>GET /session?directory={directory}</summary>
     public async Task<IReadOnlyList<OpenCodeSessionInfo>> ListSessionsAsync(
         string directory,

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Entities;
@@ -236,6 +237,23 @@ public sealed record CanvasResponse(
     string Title,
     int Version,
     JsonElement State);
+
+/// <summary>
+/// Body of a canvas tool call from a harness process. <c>openCodeSessionId</c> is always needed; the rest
+/// depends on the tool. <c>state</c> and <c>ops</c> stay raw JSON because models sometimes send them as strings.
+/// </summary>
+public sealed record CanvasBridgeRequest(
+    string? OpenCodeSessionId,
+    string? CanvasId = null,
+    string? Kind = null,
+    string? Title = null,
+    JsonNode? State = null,
+    JsonNode? Ops = null);
+
+/// <summary>What the tool returns to the harness as-is: a tool-card title, the text the model reads, and metadata.</summary>
+public sealed record CanvasToolResponse(string Title, string Output, CanvasToolMetadata Metadata);
+
+public sealed record CanvasToolMetadata(string? CanvasId, int? Version);
 
 // ── Session Sources ──────────────────────────────────────────────────────────
 

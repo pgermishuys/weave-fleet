@@ -94,6 +94,27 @@ internal sealed class PoolDemuxBindingTable : IOpenCodeSseEventBindingResolver
         return true;
     }
 
+    /// <summary>
+    /// Finds a session's binding on <paramref name="instance"/> in any directory. For callers that know the
+    /// process and the OpenCode session but not the workspace, such as the agent bridge.
+    /// </summary>
+    public bool TryGetBinding(
+        PooledOpenCodeInstance instance,
+        string openCodeSessionId,
+        out PoolDemuxBinding binding)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+        ArgumentException.ThrowIfNullOrWhiteSpace(openCodeSessionId);
+
+        if (!instance.IsAvailable)
+        {
+            binding = default;
+            return false;
+        }
+
+        return _bindings.TryGetValue(new BindingKey(instance, openCodeSessionId), out binding);
+    }
+
     public bool TryGetBinding(
         PooledOpenCodeInstance instance,
         string directory,

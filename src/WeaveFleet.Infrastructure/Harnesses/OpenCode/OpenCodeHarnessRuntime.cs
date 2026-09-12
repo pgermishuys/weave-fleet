@@ -291,6 +291,10 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
 
     internal PortAllocator PortAllocator => _portAllocator;
 
+    internal PooledOpenCodeInstanceRegistry PooledInstanceRegistry => _pooledInstanceRegistry;
+
+    internal PoolDemuxBindingTable PoolBindingTable => _poolBindingTable;
+
     /// <inheritdoc />
     public string HarnessType => "opencode";
 
@@ -819,6 +823,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             var startupTimeout = TimeSpan.FromSeconds(_options.HarnessStartupTimeoutSeconds);
             var password = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
             const string username = "opencode";
+            var bridgeToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 
             processManager = new OpenCodeProcessManager(
                 _loggerFactory.CreateLogger<OpenCodeProcessManager>());
@@ -858,7 +863,10 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                 processInfo.ProcessId,
                 openCodeHttpClient,
                 ownedProcessManager,
-                async () => await ownedProcessManager.DisposeAsync().ConfigureAwait(false));
+                async () => await ownedProcessManager.DisposeAsync().ConfigureAwait(false))
+            {
+                BridgeToken = bridgeToken,
+            };
         }
         catch
         {

@@ -56,6 +56,16 @@ internal sealed record OpenCodeSessionIdentity
     [JsonPropertyName("id")] public required string Id { get; init; }
 }
 
+/// <summary>
+/// A session's parent link, from GET /session/{id}. A subagent's session has the calling session as its parent.
+/// OpenCode spells the field <c>parentID</c>.
+/// </summary>
+internal sealed record OpenCodeSessionParent
+{
+    [JsonPropertyName("id")] public required string Id { get; init; }
+    [JsonPropertyName("parentID")] public string? ParentId { get; init; }
+}
+
 /// <summary>Timestamps on a session.</summary>
 internal sealed record OpenCodeSessionTime
 {

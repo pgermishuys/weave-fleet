@@ -151,6 +151,8 @@ public static class DependencyInjection
         services.AddScoped<DelegationService>();
         services.AddScoped<SmartLinkService>();
         services.AddScoped<ICanvasService, CanvasService>();
+        services.AddScoped<CanvasBridge>();
+        services.AddSingleton<IBackgroundUserScope, BackgroundUserScope>();
         services.AddScoped<AutomationService>();
         services.AddScoped<AutomationExecutionService>();
         services.AddScoped<EventTriggerMatcher>();
@@ -302,6 +304,9 @@ public static class DependencyInjection
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<OpenCodeHarnessRuntime>());
         services.AddSingleton<IHarnessPoolRecycler>(sp => new OpenCodeHarnessPoolRecycler(sp.GetRequiredService<OpenCodeHarnessRuntime>()));
         services.AddSingleton<IOpenCodePoolHealthCheck, PoolHealthCheck>();
+        services.AddSingleton<IHarnessCanvasCallerResolver>(sp => new OpenCodeCanvasCallerResolver(
+            sp.GetRequiredService<OpenCodeHarnessRuntime>(),
+            sp.GetRequiredService<ILogger<OpenCodeCanvasCallerResolver>>()));
 
         // Register ClaudeCodeHarness (descriptor) and ClaudeCodeHarnessRuntime (provisioning) as separate singletons.
         services.AddSingleton<ClaudeCodeHarness>();
