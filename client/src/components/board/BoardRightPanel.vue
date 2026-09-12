@@ -69,9 +69,8 @@ function handleCollapse(): void {
 <style scoped>
 .right-panel {
   min-height: 0;
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-panel);
+  background: transparent;
+  border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;

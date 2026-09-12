@@ -270,9 +270,7 @@ function handleSelect(item: RailItem): void {
 .rail {
   width: 48px;
   min-width: 48px;
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-panel);
+  background: transparent;
   display: flex;
   flex-direction: column;
   align-items: center;
