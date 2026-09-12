@@ -126,6 +126,7 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IBoardRepository, BoardRepository>();
         services.AddScoped<ISmartLinkRepository, SmartLinkRepository>();
+        services.AddScoped<ICanvasRepository, CanvasRepository>();
         services.AddScoped<IAutomationRepository, AutomationRepository>();
         services.AddScoped<IAutomationEventLedgerRepository, AutomationEventLedgerRepository>();
 
