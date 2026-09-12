@@ -62,6 +62,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _subscriptions = new();
     private readonly ConcurrentDictionary<string, Task> _pumpTasks = new();
     private readonly ConcurrentDictionary<string, long> _internalPumpDedupKeys = new();
+    private readonly SmartLinkDetector? _smartLinkDetector;
     private CancellationToken _stoppingToken;
 
     public HarnessEventRelay(
@@ -70,7 +71,8 @@ public sealed class HarnessEventRelay : BackgroundService
         IEventPublisher publisher,
         SessionActivityTracker activityTracker,
         IServiceScopeFactory scopeFactory,
-        ILogger<HarnessEventRelay> logger)
+        ILogger<HarnessEventRelay> logger,
+        SmartLinkDetector? smartLinkDetector = null)
     {
         _tracker = tracker;
         _broadcaster = broadcaster;
@@ -78,6 +80,7 @@ public sealed class HarnessEventRelay : BackgroundService
         _activityTracker = activityTracker;
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _smartLinkDetector = smartLinkDetector;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -220,6 +223,9 @@ public sealed class HarnessEventRelay : BackgroundService
                 var targetFleetSessionId = evt.FleetSessionId ?? fleetSessionId;
 
                 HarnessEvent eventToPublish = evt;
+
+                // Before echo suppression, so links the user pasted into a prompt are found too.
+                _smartLinkDetector?.Observe(targetFleetSessionId, sessionUserId, evt.Type, evt.Payload);
 
                 if (ShouldSuppressUserEcho(eventToPublish, suppressedUserMessageIds))
                 {

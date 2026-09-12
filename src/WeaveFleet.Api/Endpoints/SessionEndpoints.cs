@@ -25,6 +25,7 @@ public static class SessionEndpoints
             ISessionRepository sessionRepository,
             ISessionSourceUsageRepository sessionSourceUsageRepository,
             IProjectRepository projectRepository,
+            IWorkspaceRepository workspaceRepository,
             SessionActivityTracker activityTracker,
             SessionCapabilitiesResolver capabilitiesResolver,
             int limit = 100,
@@ -65,7 +66,10 @@ public static class SessionEndpoints
                     var originsBySessionId = await sessionSourceUsageRepository.GetPrimaryBySessionIdsAsync(
                         sessions.Select(session => session.Id).ToArray());
 
-                    return Results.Ok(sessions.Select(session => ToListResponse(session, parentIdsWithBusyChildren, projectNamesById, originsBySessionId, activityTracker, capabilitiesResolver)).ToList());
+                    var workspacesById = (await workspaceRepository.ListAsync())
+                        .ToDictionary(workspace => workspace.Id, StringComparer.Ordinal);
+
+                    return Results.Ok(sessions.Select(session => ToListResponse(session, parentIdsWithBusyChildren, projectNamesById, originsBySessionId, activityTracker, capabilitiesResolver, workspacesById)).ToList());
                 },
                 error => Task.FromResult(Results.Problem(error.Description) as IResult));
         })
@@ -577,7 +581,8 @@ public static class SessionEndpoints
 
     /// <summary>
     /// Maps a domain <see cref="Session"/> to a <see cref="SessionListResponse"/> DTO.
-    /// Workspace/instance details are embedded inline for now; Phase 4 will enrich with joins.
+    /// Workspace fields (branch, isolation, source directory) come from <paramref name="workspacesById"/> when
+    /// given; instance details are still placeholders.
     /// </summary>
     private static SessionListResponse ToListResponse(
         Session s,
@@ -585,8 +590,11 @@ public static class SessionEndpoints
         Dictionary<string, string> projectNamesById,
         IReadOnlyDictionary<string, SessionSourceUsage> originsBySessionId,
         SessionActivityTracker activityTracker,
-        SessionCapabilitiesResolver capabilitiesResolver)
+        SessionCapabilitiesResolver capabilitiesResolver,
+        Dictionary<string, Workspace>? workspacesById = null)
     {
+        var workspace = workspacesById is not null && workspacesById.TryGetValue(s.WorkspaceId, out var found) ? found : null;
+
         // Parse created_at to Unix ms for the frontend
         var createdMs = TryParseUnixMs(s.CreatedAt);
         var updatedMs = createdMs; // Sessions don't have an updated_at; use created_at
@@ -605,8 +613,8 @@ public static class SessionEndpoints
             InstanceId: s.InstanceId,
             WorkspaceId: s.WorkspaceId,
             WorkspaceDirectory: s.Directory,
-            WorkspaceDisplayName: null,       // enriched in Phase 4
-            IsolationStrategy: "existing",    // enriched in Phase 4
+            WorkspaceDisplayName: workspace?.DisplayName,
+            IsolationStrategy: workspace?.IsolationStrategy ?? "existing",
             SessionStatus: sessionStatus,
             Session: new SessionFleetInfo(
                 Id: s.Id,
@@ -615,8 +623,8 @@ public static class SessionEndpoints
                 Tags: s.Tags ?? []),
             InstanceStatus: "running",        // enriched in Phase 4
             ParentSessionId: s.ParentSessionId,
-            SourceDirectory: null,            // enriched in Phase 4
-            Branch: null,                     // enriched in Phase 4
+            SourceDirectory: workspace?.SourceDirectory,
+            Branch: workspace?.Branch,
             ActivityStatus: activityStatus,
             LifecycleStatus: lifecycleStatus,
             RetentionStatus: s.RetentionStatus,

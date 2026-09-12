@@ -44,116 +44,119 @@ public sealed class SmartLinkEndpointTests
         return sessionId;
     }
 
+    private static string SeedMentionedLink(ApiWebApplicationFactory factory, string sessionId)
+    {
+        using var scope = factory.Services.CreateScope();
+        using var conn = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+        var id = Guid.NewGuid().ToString();
+        conn.Execute("""
+            INSERT INTO smart_links (id, session_id, url, provider_id, resource_type, resource_id, title, user_id, relationship)
+            VALUES (@Id, @SessionId, 'https://github.com/owner/repo/issues/7', 'github', 'issue', 'owner/repo#7', 'owner/repo #7', 'local-user', 'mentioned')
+            """,
+            new { Id = id, SessionId = sessionId });
+        return id;
+    }
+
     [Fact]
-    public async Task SmartLinks_FullLifecycle_UpsertListAndDismiss()
+    public async Task SmartLinks_AddListDismissAndRestore()
     {
         await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient();
         var sessionId = await SeedSessionAsync(factory);
 
-        // Initially empty
         var listResponse = await client.GetAsync($"/api/sessions/{sessionId}/smart-links");
         listResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
-        var links = await listResponse.Content.ReadFromJsonAsync<SmartLinkDto[]>(JsonOptions);
-        links.ShouldNotBeNull();
-        links.Length.ShouldBe(0);
+        (await listResponse.Content.ReadFromJsonAsync<SmartLinkDto[]>(JsonOptions)).ShouldBeEmpty();
 
-        // Upsert a link
-        var upsertResponse = await client.PostAsJsonAsync(
+        // Attach a pull request; a trailing path and fragment are normalised away.
+        var addResponse = await client.PostAsJsonAsync(
             $"/api/sessions/{sessionId}/smart-links",
-            new UpsertSmartLinkRequest(
-                "https://github.com/owner/repo/pull/1",
-                "github",
-                "pr",
-                "owner/repo#1",
-                "Fix bug",
-                "open",
-                "Open",
-                null,
-                false));
-        upsertResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
-        var created = await upsertResponse.Content.ReadFromJsonAsync<SmartLinkDto>(JsonOptions);
+            new AddSmartLinkRequest("https://github.com/owner/repo/pull/1/files#diff-1"));
+        addResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var created = await addResponse.Content.ReadFromJsonAsync<SmartLinkDto>(JsonOptions);
         created.ShouldNotBeNull();
-        created.Title.ShouldBe("Fix bug");
-        created.Status.ShouldBe("open");
+        created.Url.ShouldBe("https://github.com/owner/repo/pull/1");
+        created.ResourceType.ShouldBe("pull_request");
+        created.ResourceId.ShouldBe("owner/repo#1");
+        created.Relationship.ShouldBe("pinned");
 
-        // List shows the link
-        listResponse = await client.GetAsync($"/api/sessions/{sessionId}/smart-links");
-        links = await listResponse.Content.ReadFromJsonAsync<SmartLinkDto[]>(JsonOptions);
+        // Adding the same number again doesn't create a second link.
+        await client.PostAsJsonAsync($"/api/sessions/{sessionId}/smart-links", new AddSmartLinkRequest("https://github.com/owner/repo/pull/1"));
+        var links = await client.GetFromJsonAsync<SmartLinkDto[]>($"/api/sessions/{sessionId}/smart-links", JsonOptions);
         links.ShouldNotBeNull();
         links.Length.ShouldBe(1);
-        links[0].Url.ShouldBe("https://github.com/owner/repo/pull/1");
 
-        // Upsert again with updated status (idempotent)
-        var updateResponse = await client.PostAsJsonAsync(
-            $"/api/sessions/{sessionId}/smart-links",
-            new UpsertSmartLinkRequest(
-                "https://github.com/owner/repo/pull/1",
-                "github",
-                "pr",
-                "owner/repo#1",
-                "Fix bug",
-                "merged",
-                "Merged",
-                null,
-                true));
-        updateResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
-        var updated = await updateResponse.Content.ReadFromJsonAsync<SmartLinkDto>(JsonOptions);
-        updated.ShouldNotBeNull();
-        updated.Status.ShouldBe("merged");
-        updated.IsTerminal.ShouldBeTrue();
-
-        // Dismiss the link
-        var dismissResponse = await client.PatchAsync(
-            $"/api/sessions/{sessionId}/smart-links/{created.Id}/dismiss",
-            null);
+        var dismissResponse = await client.PatchAsync($"/api/sessions/{sessionId}/smart-links/{created.Id}/dismiss", null);
         dismissResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await client.GetFromJsonAsync<SmartLinkDto[]>($"/api/sessions/{sessionId}/smart-links", JsonOptions)).ShouldBeEmpty();
 
-        // List no longer shows dismissed link
-        listResponse = await client.GetAsync($"/api/sessions/{sessionId}/smart-links");
-        links = await listResponse.Content.ReadFromJsonAsync<SmartLinkDto[]>(JsonOptions);
-        links.ShouldNotBeNull();
-        links.Length.ShouldBe(0);
-
-        // All endpoint shows dismissed link
-        var allResponse = await client.GetAsync($"/api/sessions/{sessionId}/smart-links/all");
-        var allLinks = await allResponse.Content.ReadFromJsonAsync<SmartLinkDto[]>(JsonOptions);
+        var allLinks = await client.GetFromJsonAsync<SmartLinkDto[]>($"/api/sessions/{sessionId}/smart-links/all", JsonOptions);
         allLinks.ShouldNotBeNull();
         allLinks.Length.ShouldBe(1);
         allLinks[0].IsDismissed.ShouldBeTrue();
+
+        // Attaching a dismissed link again shows it again.
+        await client.PostAsJsonAsync($"/api/sessions/{sessionId}/smart-links", new AddSmartLinkRequest("https://github.com/owner/repo/pull/1"));
+        links = await client.GetFromJsonAsync<SmartLinkDto[]>($"/api/sessions/{sessionId}/smart-links", JsonOptions);
+        links.ShouldNotBeNull();
+        links.Length.ShouldBe(1);
     }
 
     [Fact]
-    public async Task SmartLinks_BulkUpsert_AddsMultipleLinks()
+    public async Task SmartLinks_AddRejectsNonGitHubUrls()
     {
         await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient();
         var sessionId = await SeedSessionAsync(factory);
 
-        var requests = new[]
-        {
-            new UpsertSmartLinkRequest("https://github.com/owner/repo/pull/1", "github", "pr", "owner/repo#1", "PR 1", "open", "Open", null, false),
-            new UpsertSmartLinkRequest("https://github.com/owner/repo/issues/2", "github", "issue", "owner/repo#2", "Issue 2", "open", "Open", null, false),
-        };
+        var response = await client.PostAsJsonAsync(
+            $"/api/sessions/{sessionId}/smart-links",
+            new AddSmartLinkRequest("https://example.com/owner/repo/pull/1"));
 
-        var bulkResponse = await client.PostAsJsonAsync($"/api/sessions/{sessionId}/smart-links/bulk", requests);
-        bulkResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
-
-        var listResponse = await client.GetAsync($"/api/sessions/{sessionId}/smart-links");
-        var links = await listResponse.Content.ReadFromJsonAsync<SmartLinkDto[]>(JsonOptions);
-        links.ShouldNotBeNull();
-        links.Length.ShouldBe(2);
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
     [Fact]
-    public async Task SmartLinks_UpsertForUnknownSession_ReturnsNotFound()
+    public async Task SmartLinks_PinAndUnpinMovesBetweenMentionedAndPinned()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient();
+        var sessionId = await SeedSessionAsync(factory);
+        var linkId = SeedMentionedLink(factory, sessionId);
+
+        (await client.PatchAsync($"/api/sessions/{sessionId}/smart-links/{linkId}/pin", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        var links = await client.GetFromJsonAsync<SmartLinkDto[]>($"/api/sessions/{sessionId}/smart-links", JsonOptions);
+        links.ShouldNotBeNull();
+        links.Single().Relationship.ShouldBe("pinned");
+
+        (await client.PatchAsync($"/api/sessions/{sessionId}/smart-links/{linkId}/unpin", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        links = await client.GetFromJsonAsync<SmartLinkDto[]>($"/api/sessions/{sessionId}/smart-links", JsonOptions);
+        links.ShouldNotBeNull();
+        links.Single().Relationship.ShouldBe("mentioned");
+
+        (await client.PatchAsync($"/api/sessions/{sessionId}/smart-links/no-such-link/pin", null)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task SmartLinks_Refresh_AcceptsForOwnSessionOnly()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient();
+        var sessionId = await SeedSessionAsync(factory);
+
+        (await client.PostAsync($"/api/sessions/{sessionId}/smart-links/refresh", null)).StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        (await client.PostAsync("/api/sessions/nonexistent-session/smart-links/refresh", null)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task SmartLinks_AddForUnknownSession_ReturnsNotFound()
     {
         await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient();
 
         var response = await client.PostAsJsonAsync(
             "/api/sessions/nonexistent-session/smart-links",
-            new UpsertSmartLinkRequest("https://github.com/owner/repo/pull/1", "github", "pr", "owner/repo#1", "PR", "open", "Open", null, false));
+            new AddSmartLinkRequest("https://github.com/owner/repo/pull/1"));
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }

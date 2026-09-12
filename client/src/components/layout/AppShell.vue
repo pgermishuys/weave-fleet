@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { useCommands } from "@/composables/use-commands";
 import { useWeaveSocket } from "@/composables/use-weave-socket";
 import { useSessionActivityUpdates } from "@/composables/use-session-activity-updates";
+import { useSmartLinkUpdates } from "@/composables/use-smart-link-updates";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useVisualViewport } from "@/composables/use-visual-viewport";
 import { useKeyboardScroll } from "@/composables/use-keyboard-scroll";
@@ -35,6 +36,7 @@ import { useSidebarStore } from "@/stores/sidebar";
 useCommands();
 useWeaveSocket();
 useSessionActivityUpdates();
+useSmartLinkUpdates();
 useVisualViewport();
 useKeyboardScroll();
 

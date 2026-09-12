@@ -4,7 +4,7 @@
     "workspaceId": "mock-workspace-1",
     "workspaceDirectory": "C:\\Users\\demo\\projects\\weave-fleet",
     "workspaceDisplayName": "weave-fleet",
-    "isolationStrategy": "existing",
+    "isolationStrategy": "worktree",
     "sessionStatus": "idle",
     "session": {
       "id": "mock-session-1",
@@ -18,7 +18,7 @@
     "instanceStatus": "running",
     "parentSessionId": null,
     "sourceDirectory": "C:\\Users\\demo\\projects\\weave-fleet",
-    "branch": "main",
+    "branch": "feat/mock-api",
     "activityStatus": "idle",
     "lifecycleStatus": "running",
     "retentionStatus": "active",
@@ -35,7 +35,7 @@
       "title": "Add mock API support",
       "resourceUrl": "https://github.com/example/weave-fleet/issues/42",
       "resourceId": "42",
-      "providerId": "github"
+      "providerId": "builtin.github"
     }
   },
   {

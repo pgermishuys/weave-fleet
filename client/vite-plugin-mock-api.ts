@@ -156,6 +156,69 @@ function toCanvasResponse(canvas: MockCanvas) {
   return { canvasId: canvas.canvasId, kind: canvas.kind, title: canvas.title, version: canvas.version, state: canvas.state };
 }
 
+// Example linked pull requests and issues (Context tab and header chips) for mock-session-1.
+function mockSmartLink(
+  id: string,
+  kind: "pull" | "issues",
+  number: number,
+  title: string,
+  relationship: string,
+  status: string,
+  metadata: Record<string, unknown>,
+) {
+  const checkedAt = new Date(Date.now() - 12_000).toISOString();
+  return {
+    id,
+    sessionId: "mock-session-1",
+    url: `https://github.com/example/weave-fleet/${kind}/${number}`,
+    providerId: "github",
+    resourceType: kind === "pull" ? "pull_request" : "issue",
+    resourceId: `example/weave-fleet#${number}`,
+    title: `example/weave-fleet #${number}: ${title}`,
+    status,
+    statusLabel: status[0].toUpperCase() + status.slice(1),
+    metadataJson: JSON.stringify({ owner: "example", repo: "weave-fleet", number, ...metadata }),
+    isDismissed: false,
+    isTerminal: status === "closed" || status === "merged",
+    createdAt: checkedAt,
+    updatedAt: checkedAt,
+    relationship,
+    enrichmentStatus: "resolved",
+    lastCheckedAt: checkedAt,
+  };
+}
+
+const MOCK_SMART_LINKS: Record<string, unknown[]> = {
+  "mock-session-1": [
+    mockSmartLink("mock-link-origin", "issues", 42, "Add mock API support", "origin", "open", {
+      labels: [{ name: "enhancement", color: "a2eeef" }],
+    }),
+    mockSmartLink("mock-link-pr", "pull", 187, "feat(client): mock API support for session detail", "own", "open", {
+      labels: [{ name: "client", color: "1d76db" }, { name: "needs-review", color: "fbca04" }],
+      headRef: "feat/mock-api",
+      baseRef: "main",
+      mergeable: false,
+      ci: {
+        headSha: "a1b2c3d4e5f6",
+        ciStatus: "failure",
+        checkRuns: [
+          { id: 1, name: "client-tests", status: "completed", conclusion: "failure", htmlUrl: "https://github.com/example/weave-fleet/actions/runs/1", workflowName: "CI", startedAt: null, completedAt: null },
+          { id: 2, name: "e2e", status: "in_progress", conclusion: null, htmlUrl: "https://github.com/example/weave-fleet/actions/runs/2", workflowName: "CI", startedAt: null, completedAt: null },
+          { id: 3, name: "build (ubuntu)", status: "completed", conclusion: "success", htmlUrl: "https://github.com/example/weave-fleet/actions/runs/3", workflowName: "CI", startedAt: null, completedAt: null },
+        ],
+      },
+      reviewThreads: {
+        unresolvedCount: 2,
+        threads: [
+          { threadNodeId: "t1", isResolved: false, isOutdated: false, path: "client/vite-plugin-mock-api.ts", line: 278, comments: [{ id: "c1", databaseId: 1, body: "Can we keep origin null here?", authorLogin: "reviewer", createdAt: "", url: "https://github.com/example/weave-fleet/pull/187#discussion_r1" }] },
+          { threadNodeId: "t2", isResolved: false, isOutdated: false, path: "client/src/mocks/sessions.json", line: 33, comments: [{ id: "c2", databaseId: 2, body: "providerId should be builtin.github", authorLogin: "reviewer", createdAt: "", url: "https://github.com/example/weave-fleet/pull/187#discussion_r2" }] },
+        ],
+      },
+    }),
+    mockSmartLink("mock-link-mention", "issues", 156, "SignalR hub in mock mode", "mentioned", "closed", {}),
+  ],
+};
+
 export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
   const mockDir = resolve(__dirname, "src/mocks");
   
@@ -1029,15 +1092,23 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       },
     },
     {
-      pattern: /^\/api\/sessions\/([^/]+)\/smart-links$/,
+      pattern: /^\/api\/sessions\/([^/]+)\/smart-links(\/all)?$/,
       handler: (url) => {
         const id = url.pathname.split("/")[3];
-        console.log(`[mock-api] GET /api/sessions/${id}/smart-links`);
-        return new Response(JSON.stringify({ links: [] }), {
+        console.log(`[mock-api] GET ${url.pathname}`);
+        return new Response(JSON.stringify(MOCK_SMART_LINKS[id] ?? []), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
       },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/smart-links\/refresh$/,
+      handler: () => new Response(null, { status: 202 }),
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/smart-links\/([^/]+)\/(pin|unpin|dismiss)$/,
+      handler: () => new Response(null, { status: 204 }),
     },
     // ─── Priority 2: Instance/Agent/Command/Models ──────────────────────────────
     {

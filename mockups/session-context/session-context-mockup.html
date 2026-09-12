@@ -1,0 +1,946 @@
+<title>Fleet Session Context</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #F3F2EF;
+  --surface: #FFFFFF;
+  --sunken: #EAE8E3;
+  --text: #1A1918;
+  --muted: #6E6A65;
+  --faint: #9A958E;
+  --line: rgba(26, 25, 24, 0.1);
+  --accent: #5B6EC7;
+  --accent-ink: #FFFFFF;
+  --accent-soft: rgba(91, 110, 199, 0.12);
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101013;
+    --surface: #18181C;
+    --sunken: #202026;
+    --text: #E8E8EC;
+    --muted: #9A9AA6;
+    --faint: #6E6E78;
+    --line: rgba(255, 255, 255, 0.09);
+    --accent: #8B93F5;
+    --accent-ink: #101013;
+    --accent-soft: rgba(139, 147, 245, 0.15);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101013;
+  --surface: #18181C;
+  --sunken: #202026;
+  --text: #E8E8EC;
+  --muted: #9A9AA6;
+  --faint: #6E6E78;
+  --line: rgba(255, 255, 255, 0.09);
+  --accent: #8B93F5;
+  --accent-ink: #101013;
+  --accent-soft: rgba(139, 147, 245, 0.15);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14.5px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+.page {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding-inline: 20px;
+  padding-block: 40px 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+h1, h2, h3 { margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 { font-size: 28px; font-weight: 650; line-height: 1.2; }
+h2 { font-size: 18px; font-weight: 600; }
+p { margin: 0; }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+a { color: var(--accent); }
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.intro { display: flex; flex-direction: column; gap: 12px; max-width: 68ch; }
+.intro p { color: var(--muted); }
+.intro p strong { color: var(--text); font-weight: 600; }
+
+section { display: flex; flex-direction: column; gap: 16px; }
+.section-head { display: flex; flex-direction: column; gap: 6px; max-width: 70ch; }
+.section-head p { color: var(--muted); }
+
+/* ---------- inventory table ---------- */
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+table { width: 100%; border-collapse: collapse; min-width: 760px; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--sunken);
+}
+td:first-child { font-weight: 600; width: 19%; }
+td:nth-child(2) { width: 22%; color: var(--muted); }
+td:nth-child(2) code { font-size: 12px; }
+.pill {
+  display: inline-block;
+  padding: 1px 7px;
+  margin-right: 4px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pill--hidden { background: rgba(207, 34, 46, 0.12); color: #B42330; }
+.pill--weak { background: rgba(191, 135, 0, 0.14); color: #8A5A00; }
+.pill--ok { background: rgba(26, 127, 55, 0.12); color: #1A7F37; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .pill--hidden { color: #FF7B72; background: rgba(248, 81, 73, 0.15); }
+  :root:not([data-theme="light"]) .pill--weak { color: #E3B341; background: rgba(210, 153, 34, 0.16); }
+  :root:not([data-theme="light"]) .pill--ok { color: #56D364; background: rgba(63, 185, 80, 0.15); }
+}
+:root[data-theme="dark"] .pill--hidden { color: #FF7B72; background: rgba(248, 81, 73, 0.15); }
+:root[data-theme="dark"] .pill--weak { color: #E3B341; background: rgba(210, 153, 34, 0.16); }
+:root[data-theme="dark"] .pill--ok { color: #56D364; background: rgba(63, 185, 80, 0.15); }
+
+/* ---------- controls ---------- */
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; }
+.control { display: flex; align-items: center; gap: 8px; }
+.control-label { font-size: 12px; color: var(--muted); }
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 10px;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+}
+.seg button {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+.seg button:focus-visible, .fleet button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.controls[hidden] { display: none !important; }
+
+.stage-wrap { overflow-x: auto; padding-bottom: 4px; }
+.stage { width: 1090px; position: relative; }
+
+/* ---------- before ---------- */
+.shot {
+  position: relative;
+  width: 1090px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 30px -18px rgba(0,0,0,0.35);
+}
+.shot img { display: block; width: 1090px; max-width: none; height: auto; }
+.marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.9), 0 2px 6px rgba(0,0,0,0.25);
+}
+.legend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 28px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.legend li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; font-size: 13.5px; }
+.legend .marker { position: static; transform: none; box-shadow: none; }
+@media (max-width: 720px) { .legend { grid-template-columns: 1fr; } }
+
+.note { font-size: 12.5px; color: var(--muted); }
+
+/* ---------- Fleet mock ---------- */
+.fleet {
+  --f-bg: #F3F2EF;
+  --f-surface: #FFFFFF;
+  --f-card: #FFFFFF;
+  --f-text: #1A1918;
+  --f-muted: #6E6A65;
+  --f-faint: #A29D96;
+  --f-border: rgba(26, 25, 24, 0.09);
+  --f-hover: rgba(26, 25, 24, 0.045);
+  --f-tab: #EFEEEB;
+  --f-accent: #5B6EC7;
+  --f-open: #1A7F37;
+  --f-merged: #8250DF;
+  --f-fail: #CF222E;
+  --f-warn: #BF8700;
+  --f-closed: #6E6A65;
+  --f-fail-soft: rgba(207, 34, 46, 0.07);
+  width: 1090px;
+  height: 560px;
+  display: grid;
+  grid-template-columns: 722px 1fr;
+  background: var(--f-surface);
+  color: var(--f-text);
+  border: 1px solid var(--f-border);
+  border-radius: 12px;
+  overflow: hidden;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 10px 30px -18px rgba(0,0,0,0.35);
+}
+.fleet--dark {
+  --f-bg: #0E0E11;
+  --f-surface: #141418;
+  --f-card: #1B1B20;
+  --f-text: #E8E8EC;
+  --f-muted: #8E8E9A;
+  --f-faint: #62626C;
+  --f-border: rgba(255, 255, 255, 0.075);
+  --f-hover: rgba(255, 255, 255, 0.05);
+  --f-tab: rgba(255, 255, 255, 0.07);
+  --f-accent: #8B8EF7;
+  --f-open: #3FB950;
+  --f-merged: #A371F7;
+  --f-fail: #F85149;
+  --f-warn: #D29922;
+  --f-closed: #8E8E9A;
+  --f-fail-soft: rgba(248, 81, 73, 0.08);
+}
+.fleet svg { width: 14px; height: 14px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.fleet button { font: inherit; color: inherit; }
+.f-center { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--f-border); }
+.f-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--f-border);
+}
+.f-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.f-title-row { display: flex; align-items: center; gap: 8px; }
+.f-title { font-size: 14px; font-weight: 600; letter-spacing: -0.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.f-status { font-size: 11px; color: var(--f-muted); padding: 1px 7px; border-radius: 6px; background: var(--f-tab); }
+.f-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--f-muted); white-space: nowrap; min-width: 0; }
+.f-meta .sep { opacity: 0.6; }
+.f-meta .dir { font-family: var(--mono); font-size: 11px; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.f-branch { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 11px; color: var(--f-text); }
+.f-branch svg { width: 12px; height: 12px; color: var(--f-muted); }
+
+.f-chips { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.f-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--f-border);
+  border-radius: 8px;
+  background: var(--f-surface);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.f-chip:hover { background: var(--f-hover); }
+.f-chip .num { font-family: var(--mono); font-size: 11.5px; }
+.f-chip .dot-sep { width: 1px; height: 12px; background: var(--f-border); }
+.f-chip .sig { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; }
+.f-chip .sig svg { width: 12px; height: 12px; }
+.f-chip--attention { border-color: color-mix(in srgb, var(--f-fail) 35%, transparent); }
+
+.f-actions { display: flex; align-items: center; gap: 2px; color: var(--f-muted); }
+.f-actions span { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; }
+.f-actions .div { width: 1px; height: 16px; background: var(--f-border); margin-inline: 3px; }
+.f-convo { flex: 1; display: flex; align-items: flex-end; padding: 16px; }
+.f-sent {
+  margin-left: auto;
+  max-width: 70%;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--f-tab);
+  font-size: 12.5px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.f-sent .from { font-size: 11px; color: var(--f-muted); }
+.f-sent .body { font-family: var(--mono); font-size: 11.5px; white-space: pre-wrap; }
+
+.f-panel { display: flex; flex-direction: column; min-width: 0; background: var(--f-surface); }
+.f-tabs { display: flex; align-items: center; gap: 2px; padding: 8px 10px; border-bottom: 1px solid var(--f-border); }
+.f-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--f-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  position: relative;
+}
+.f-tab[aria-selected="true"] { background: var(--f-tab); color: var(--f-text); }
+.f-tab .count { font-size: 11.5px; color: var(--f-muted); font-variant-numeric: tabular-nums; }
+.f-tab .alert { width: 7px; height: 7px; border-radius: 50%; background: var(--f-fail); }
+.f-tabs .spacer { flex: 1; }
+.f-tabs .ghost { display: grid; place-items: center; width: 28px; height: 28px; color: var(--f-muted); }
+.f-body { flex: 1; overflow-y: auto; padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 16px; }
+
+.f-sec { display: flex; flex-direction: column; gap: 6px; }
+.f-sec-label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--f-muted); }
+.f-row { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; align-items: start; border-radius: 8px; padding: 6px; margin-inline: -6px; }
+.f-row > svg { margin-top: 2px; }
+.f-row-title { font-weight: 500; font-size: 13px; }
+.f-row-sub { font-size: 11.5px; color: var(--f-muted); display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; margin-top: 2px; }
+.f-row .num { font-family: var(--mono); font-size: 11.5px; color: var(--f-muted); padding-top: 1px; }
+.f-row .trail { display: flex; align-items: center; gap: 6px; }
+.f-x { display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 6px; background: transparent; color: var(--f-faint); cursor: pointer; }
+.f-x:hover { background: var(--f-hover); color: var(--f-text); }
+.f-x svg { width: 12px; height: 12px; }
+.flash { animation: flash 1.2s ease-out; }
+@keyframes flash { 0% { background: color-mix(in srgb, var(--f-accent) 22%, transparent); } 100% { background: transparent; } }
+
+.f-state {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 0 7px; height: 18px; border-radius: 999px;
+  font-size: 11px; font-weight: 600;
+}
+.f-state--open { color: var(--f-open); background: color-mix(in srgb, var(--f-open) 12%, transparent); }
+.f-state--merged { color: var(--f-merged); background: color-mix(in srgb, var(--f-merged) 12%, transparent); }
+.f-state--closed { color: var(--f-closed); background: color-mix(in srgb, var(--f-closed) 14%, transparent); }
+.f-label { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600; border: 1px solid; }
+
+.f-card { border: 1px solid var(--f-border); border-radius: 10px; background: var(--f-card); overflow: hidden; }
+.f-card-head { padding: 10px 12px; display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; }
+.f-card-head > svg { margin-top: 2px; }
+.f-card-head a { color: inherit; text-decoration: none; font-weight: 500; }
+.f-card-head .num { font-family: var(--mono); font-size: 11.5px; color: var(--f-muted); display: inline-flex; align-items: center; gap: 4px; padding-top: 1px; }
+.f-card-head .num svg { width: 11px; height: 11px; }
+.f-signals { border-top: 1px solid var(--f-border); display: flex; flex-direction: column; }
+.f-sig {
+  display: grid;
+  grid-template-columns: 16px auto 1fr 12px;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.f-sig + .f-sig, .f-sig + .f-sublist + .f-sig { border-top: 1px solid var(--f-border); }
+.f-sig:hover { background: var(--f-hover); }
+.f-sig .what { font-weight: 500; }
+.f-sig .detail { color: var(--f-muted); text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+.f-sig .chev { width: 12px; height: 12px; color: var(--f-faint); transition: transform 150ms ease-out; }
+.f-sig[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.f-sig--static { cursor: default; }
+.f-sig--static:hover { background: transparent; }
+.f-sig--bad { background: var(--f-fail-soft); }
+.f-sig--bad:hover { background: color-mix(in srgb, var(--f-fail) 11%, transparent); }
+.f-sublist { list-style: none; margin: 0; padding: 2px 12px 8px 36px; display: flex; flex-direction: column; gap: 2px; }
+.f-sub { display: grid; grid-template-columns: 14px 1fr auto; gap: 7px; align-items: center; min-height: 26px; font-size: 12px; }
+.f-sub svg { width: 12px; height: 12px; }
+.f-sub .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.f-sub .name .path { font-family: var(--mono); font-size: 11px; }
+.f-sub .name .quote { display: block; color: var(--f-muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; }
+.f-sub--thread { align-items: start; padding-block: 3px; }
+.f-sub--thread > svg { margin-top: 3px; }
+.f-sub .acts { display: flex; align-items: center; gap: 4px; }
+.f-send {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 22px; padding: 0 8px;
+  border: 1px solid var(--f-border); border-radius: 6px;
+  background: var(--f-surface);
+  font-size: 11.5px; font-weight: 500;
+  cursor: pointer; white-space: nowrap;
+}
+.f-send:hover { border-color: var(--f-accent); color: var(--f-accent); }
+.f-send svg { width: 11px; height: 11px; }
+.f-send[disabled] { color: var(--f-open); border-color: transparent; cursor: default; }
+.f-ext { display: grid; place-items: center; width: 22px; height: 22px; color: var(--f-faint); }
+.f-ext svg { width: 11px; height: 11px; }
+.f-labels { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; align-items: center; }
+
+.f-kv { display: grid; grid-template-columns: 76px 1fr; gap: 4px 10px; font-size: 12px; }
+.f-kv dt { color: var(--f-muted); }
+.f-kv dd { margin: 0; font-family: var(--mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.f-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid var(--f-border); font-size: 11.5px; color: var(--f-muted); margin-top: auto; }
+.f-foot button { border: 0; background: transparent; color: var(--f-accent); font-weight: 500; font-size: 11.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px; border-radius: 5px; }
+.f-foot button svg { width: 11px; height: 11px; }
+.f-foot button:hover { background: var(--f-hover); }
+.f-empty { font-size: 12px; color: var(--f-muted); }
+
+.f-changes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.f-changes li { display: grid; grid-template-columns: 16px auto 1fr auto; gap: 8px; align-items: center; padding: 8px 2px; font-size: 13px; }
+.f-changes .dirn { color: var(--f-muted); font-size: 12px; }
+.f-changes .add { color: var(--f-open); font-family: var(--mono); font-size: 11.5px; }
+
+.c-open { color: var(--f-open); }
+.c-merged { color: var(--f-merged); }
+.c-fail { color: var(--f-fail); }
+.c-warn { color: var(--f-warn); }
+.c-closed { color: var(--f-closed); }
+.c-muted { color: var(--f-muted); }
+
+/* ---------- lists ---------- */
+.cols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+@media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+.items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.items li { padding: 12px 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px; }
+.items li:last-child { border-bottom: 1px solid var(--line); }
+.items .what { font-weight: 600; font-size: 14px; }
+.items .why { color: var(--muted); font-size: 13.5px; }
+.items .where { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: flex; flex-direction: column; gap: 14px; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 26px 1fr; gap: 10px; }
+.steps li::before {
+  content: counter(s);
+  width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 12px; font-weight: 700;
+  background: var(--accent-soft); color: var(--accent);
+}
+.steps strong { display: block; font-weight: 600; }
+.steps span { color: var(--muted); font-size: 13.5px; }
+.callout { padding: 16px 18px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.callout p { color: var(--muted); font-size: 13.5px; }
+.callout strong { color: var(--text); }
+
+@media (prefers-reduced-motion: reduce) {
+  .flash { animation: none; }
+  .f-sig .chev { transition: none; }
+}
+</style>
+
+<main class="page">
+  <header class="intro">
+    <span class="eyebrow">Fleet · UI proposal</span>
+    <h1>What a session is attached to</h1>
+    <p>Sessions pick up context from several places: the GitHub issue or PR they were started from, links the conversation mentions, the branch they run on, the automation that launched them. Today that shows up in <strong>three different spots with three different styles</strong>, and some of it doesn't show up at all. This page lists every kind of attachment, shows the current UI as it renders now, and proposes one place for all of it.</p>
+  </header>
+
+  <section aria-labelledby="inv">
+    <div class="section-head">
+      <h2 id="inv">Everything that can attach to a session</h2>
+      <p>Traced from the domain entities through the API to the Vue components.</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Context</th><th>Stored as</th><th>Shown today</th><th>Proposed</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Origin: the issue or PR a session was started from, including starts from board cards</td>
+            <td><code>SessionSourceUsage</code>, primary record on <code>session.origin</code></td>
+            <td><span class="pill pill--weak">weak</span>A grey pill in the session header showing only the title. The full history on <code>GET /sessions/{id}/origin</code> (action, summary, time) is never requested.</td>
+            <td>Typed chip in the header (<em>Issue #42</em>) plus a “Started from” entry in the Context tab</td>
+          </tr>
+          <tr>
+            <td>Linked PRs and issues (smart links)</td>
+            <td><code>smart_links</code>, with the origin URL added automatically</td>
+            <td><span class="pill pill--weak">weak</span>A card in the canvas below-header slot, grouped by type. The origin appears a second time here with no marker.</td>
+            <td>Context tab, grouped by relationship: started from, pull requests, mentioned in conversation</td>
+          </tr>
+          <tr>
+            <td>PR signals: checks, unresolved review threads, merge conflicts, labels</td>
+            <td>Smart link metadata, filled by the client poll and <code>CiWatcherService</code></td>
+            <td><span class="pill pill--weak">weak</span>Icon-only CI, a bare “2” for threads, an emoji for conflicts. The send-to-agent buttons stay at <code>opacity: 0</code> until hover.</td>
+            <td>Worded status rows (“1 failing · 1 running”) with a visible <em>Send to agent</em> button</td>
+          </tr>
+          <tr>
+            <td>Branch and isolation (worktree or clone)</td>
+            <td><code>branch</code>, <code>isolationStrategy</code>, <code>GitBaselineRef</code></td>
+            <td><span class="pill pill--hidden">not shown</span>The branch never renders. A worktree only shows as an icon on the sidebar row.</td>
+            <td>Branch in the header meta row, workspace block in the Context tab</td>
+          </tr>
+          <tr>
+            <td>Automation trigger</td>
+            <td><code>SourceReference = "automation:{id}"</code></td>
+            <td><span class="pill pill--hidden">not shown</span>Used only for loop protection in <code>AutomationEventDispatcherService</code></td>
+            <td>“Started by automation <em>name</em>” as the origin</td>
+          </tr>
+          <tr>
+            <td>Todos</td>
+            <td>Derived from the latest <code>todowrite</code> tool output</td>
+            <td><span class="pill pill--ok">fine</span>Progress chip under the canvas tabs and the collapsed rail</td>
+            <td>Unchanged. They track progress, not external context.</td>
+          </tr>
+          <tr>
+            <td>Project, harness, directory, tags</td>
+            <td>Columns on <code>Session</code></td>
+            <td><span class="pill pill--ok">fine</span>Header meta row, tags editable inline</td>
+            <td>Unchanged; the branch joins this row</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="ba">
+    <div class="section-head">
+      <h2 id="ba">Today and proposed</h2>
+      <p>“Today” is a screenshot of the real client in Vite mock mode, with one PR and one issue loaded into the smart-links store and the CI and review lists expanded. “Proposed” uses the same data and Fleet's own theme values. It's interactive: click the header chips, expand the rows, send a failure to the agent.</p>
+    </div>
+
+    <div class="controls">
+      <div class="control">
+        <div class="seg" role="group" aria-label="View">
+          <button type="button" id="v-before" data-view="before" aria-pressed="false">Today</button>
+          <button type="button" id="v-after" data-view="after" aria-pressed="true">Proposed</button>
+        </div>
+      </div>
+      <div class="control" id="scenario-control">
+        <span class="control-label">Scenario</span>
+        <div class="seg" role="group" aria-label="Scenario">
+          <button type="button" id="s-attention" data-scenario="attention" aria-pressed="true">PR needs work</button>
+          <button type="button" id="s-ready" data-scenario="ready" aria-pressed="false">PR ready</button>
+          <button type="button" id="s-merged" data-scenario="merged" aria-pressed="false">Merged</button>
+          <button type="button" id="s-automation" data-scenario="automation" aria-pressed="false">From automation</button>
+        </div>
+      </div>
+      <div class="control" id="theme-control">
+        <span class="control-label">Fleet theme</span>
+        <div class="seg" role="group" aria-label="Fleet theme">
+          <button type="button" id="t-light" data-ftheme="light" aria-pressed="true">Light</button>
+          <button type="button" id="t-dark" data-ftheme="dark" aria-pressed="false">Dark</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage-wrap">
+      <div class="stage">
+        <div id="before" hidden>
+          <div class="shot">
+            <img src="before-light.png" alt="Current Fleet session view: a grey origin pill in the header, and in the right panel an unlabeled refresh ring above a card listing a pull request with icon-only CI status, a merge conflict warning, labels, check runs and review threads, followed by the origin issue listed again." width="1090" height="490">
+            <span class="marker" style="left:51%;top:5.4%">A</span>
+            <span class="marker" style="left:70%;top:15.5%">B</span>
+            <span class="marker" style="left:72%;top:30.4%">C</span>
+            <span class="marker" style="left:72.6%;top:54.6%">D</span>
+            <span class="marker" style="left:84%;top:73%">E</span>
+            <span class="marker" style="left:80%;top:87%">F</span>
+          </div>
+        </div>
+        <div id="after"></div>
+      </div>
+    </div>
+
+    <ol class="legend" id="legend-before" hidden>
+      <li><span class="marker">A</span><span>The origin is a grey pill with only the title. It has no type, number or state, and it looks like a disabled button.</span></li>
+      <li><span class="marker">B</span><span>An unlabeled ring on its own line. It's the 30-second poll countdown.</span></li>
+      <li><span class="marker">C</span><span>CI state is an icon with no words. The checks it expands render further down, below the labels.</span></li>
+      <li><span class="marker">D</span><span>Review threads show as a bare “2”. The send-to-agent buttons stay invisible until you hover a row, so touch users can't reach them.</span></li>
+      <li><span class="marker">E</span><span>Issue #42 is the session's origin but is listed again as an ordinary issue, with nothing linking it to the pill in A.</span></li>
+      <li><span class="marker">F</span><span>The card sits in the canvas below-header slot, so it appears above every tab and pushes the Changes list down.</span></li>
+    </ol>
+    <p class="note" id="legend-after">The Context tab is a built-in tab next to Changes and Files, so it follows the canvas model from PR #184. The red dot on the tab and the outlined header chip only appear when something needs you: a failing check or a merge conflict.</p>
+  </section>
+
+  <section aria-labelledby="clean">
+    <div class="section-head">
+      <h2 id="clean">Cleanup along the way</h2>
+      <p>Found while tracing the code. Most of it can go first, with no visible change.</p>
+    </div>
+    <div class="cols">
+      <ul class="items">
+        <li>
+          <span class="what">Remove the dead action toolbar from the right panel header</span>
+          <span class="why">It only renders when <code>actionsLayout === 'toolbar'</code>, and the only provider passes <code>"card"</code>. That leaves about 300 lines of abort, resume, rename, delete and fork handlers, two dialogs, and an extra <code>GET /api/sessions/{id}</code> on every session switch.</span>
+          <span class="where">session/SessionMetadataHeader.vue · use-session-detail-context.ts</span>
+        </li>
+        <li>
+          <span class="what">Stop fetching smart links twice</span>
+          <span class="why">The header loads <code>/smart-links/all</code>, and so does <code>useSmartLinks</code> in the activity stream, for the same session at the same moment.</span>
+          <span class="where">SessionMetadataHeader.vue · use-smart-links.ts</span>
+        </li>
+        <li>
+          <span class="what">Delete the orphaned smart links panel</span>
+          <span class="why">Only its own test imports it. It also carries a second copy of the refresh-ring SVG and CSS.</span>
+          <span class="where">plugins/builtin/smart-links/SmartLinksPanel.vue (+ test)</span>
+        </li>
+        <li>
+          <span class="what">Fix the smart link row's structure</span>
+          <span class="why">The check list renders after the labels, away from its toggle. Rows line up using <code>margin-left: -23px</code>. The conflict warning is an emoji, and the hover-only buttons can't be reached on touch.</span>
+          <span class="where">plugins/builtin/smart-links/SmartLinkItem.vue</span>
+        </li>
+        <li>
+          <span class="what">Poll GitHub from one place</span>
+          <span class="why">The client re-resolves the active session's links every 30 seconds while <code>CiWatcherService</code> polls every open PR link every 30 seconds on the server. Keeping only the server poll and pushing changes over SignalR removes the countdown ring, and it fits the push-based session list planned for the feel pass.</span>
+          <span class="where">use-smart-links.ts · CiWatcherService.cs</span>
+        </li>
+        <li>
+          <span class="what">Treat the origin as a smart link, not a copy of one</span>
+          <span class="why">Match the origin to its smart link by URL and flag it, so the Context tab can show it under “Started from” instead of listing it twice.</span>
+          <span class="where">SessionOriginBadge.vue · stores/smart-links.ts</span>
+        </li>
+      </ul>
+
+      <div style="display:flex;flex-direction:column;gap:24px">
+        <div class="section-head">
+          <h3 style="font-size:15px;font-weight:600">Suggested order</h3>
+        </div>
+        <ol class="steps">
+          <li><div><strong>Delete dead code and duplicate fetches</strong><span>No visible change. Makes the next steps smaller.</span></div></li>
+          <li><div><strong>Rebuild the smart link row</strong><span>Worded status rows, visible Send to agent buttons, the check list under its own toggle, no negative margins.</span></div></li>
+          <li><div><strong>Add the Context tab and header chips</strong><span>Merge the origin into it, show the branch in the header and automation starts in the tab.</span></div></li>
+          <li><div><strong>One server-side poller that pushes updates</strong><span>Removes the client timer. The footer shows when GitHub was last checked.</span></div></li>
+        </ol>
+        <div class="callout">
+          <strong>One decision for you</strong>
+          <p><strong>A tab or a pinned section?</strong> I made Context a tab, so it doesn't take height from Changes and Files, and the header chips give the at-a-glance status. The alternative is a collapsible section pinned above the tabs: always visible, but it takes 100–250px from every canvas.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  var I = {
+    pr: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" x2="6" y1="9" y2="21"/>',
+    merge: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>',
+    issue: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="1"/>',
+    issueDone: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+    ok: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+    fail: '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
+    run: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    msg: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    warn: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    ext: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+    branch: '<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+    zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+    chev: '<path d="m9 18 6-6-6-6"/>',
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    refresh: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+    send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    clip: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+    compare: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/>',
+    tree: '<path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/>',
+    plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+    max: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/>',
+    panel: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/>',
+    square: '<rect width="18" height="18" x="3" y="3" rx="2"/>',
+    fork: '<circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/>',
+    pencil: '<path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>',
+    trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+    chart: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+    file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>'
+  };
+  function ic(name, cls) {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"' + (cls ? ' class="' + cls + '"' : '') + '>' + I[name] + '</svg>';
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
+  }
+
+  var LABELS = {
+    client: { c: "#1D76DB" }, "needs-review": { c: "#B08800" }, approved: { c: "#1A7F37" },
+    enhancement: { c: "#0E8A9E" }, dependencies: { c: "#0366D6" }
+  };
+  function label(name) {
+    var c = (LABELS[name] || { c: "#6E6A65" }).c;
+    return '<span class="f-label" style="color:' + c + ';border-color:' + c + '55;background:' + c + '14">' + esc(name) + '</span>';
+  }
+
+  var ORIGIN_ISSUE = { kind: "issue", num: 42, title: "Add mock API support", state: "open", how: "Started from a board card · 2 days ago", labels: ["enhancement"] };
+  var THREADS = [
+    { id: "t1", path: "client/vite-plugin-mock-api.ts", line: 278, author: "reviewer", body: "Can we keep origin null here?" },
+    { id: "t2", path: "client/src/mocks/sessions.json", line: 33, author: "reviewer", body: "providerId should be builtin.github" }
+  ];
+  var WS = { branch: "feat/mock-api", isolation: "worktree", dir: "C:\\Users\\demo\\projects\\weave-fleet-wt\\mock-api" };
+  var PR_TITLE = "feat(client): mock API support for session detail";
+
+  var SCENARIOS = {
+    attention: {
+      origin: ORIGIN_ISSUE,
+      pr: { num: 187, title: PR_TITLE, state: "open", labels: ["client", "needs-review"],
+        checks: [{ name: "client-tests", s: "fail" }, { name: "e2e", s: "run" }, { name: "build (ubuntu)", s: "ok" }],
+        threads: THREADS, conflict: true },
+      mentioned: [{ id: "m1", kind: "issue", num: 156, title: "SignalR hub in mock mode", state: "closed" }],
+      ws: WS
+    },
+    ready: {
+      origin: ORIGIN_ISSUE,
+      pr: { num: 187, title: PR_TITLE, state: "open", labels: ["client", "approved"],
+        checks: [{ name: "build (ubuntu)", s: "ok" }, { name: "client-tests", s: "ok" }, { name: "e2e", s: "ok" }],
+        threads: [], conflict: false },
+      mentioned: [{ id: "m1", kind: "issue", num: 156, title: "SignalR hub in mock mode", state: "closed" }],
+      ws: WS
+    },
+    merged: {
+      origin: Object.assign({}, ORIGIN_ISSUE, { state: "closed" }),
+      pr: { num: 187, title: PR_TITLE, state: "merged", labels: ["client", "approved"],
+        checks: [{ name: "build (ubuntu)", s: "ok" }, { name: "client-tests", s: "ok" }, { name: "e2e", s: "ok" }],
+        threads: [], conflict: false, when: "Merged 3 hours ago" },
+      mentioned: [],
+      ws: WS
+    },
+    automation: {
+      origin: { kind: "automation", title: "Nightly dependency sweep", how: "Scheduled · today at 04:00" },
+      pr: null,
+      mentioned: [],
+      ws: { branch: "chore/deps-2026-09-12", isolation: "clone", dir: "C:\\Users\\demo\\.weave\\clones\\weave-fleet-7f3a" }
+    }
+  };
+
+  var state = {
+    view: "after", scenario: "attention", ftheme: "light", tab: "context",
+    open: { checks: true, review: false }, sent: {}, dismissed: {}, checked: "12s ago", flash: null
+  };
+
+  function prIcon(pr) { return pr.state === "merged" ? ic("merge", "c-merged") : ic("pr", pr.state === "closed" ? "c-closed" : "c-open"); }
+  function issueIcon(it) { return it.state === "closed" ? ic("issueDone", "c-merged") : ic("issue", "c-open"); }
+  function stateWord(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+  function checkSummary(checks) {
+    var f = 0, r = 0, o = 0;
+    checks.forEach(function (c) { if (c.s === "fail") f++; else if (c.s === "run") r++; else o++; });
+    if (!f && !r) return { icon: "ok", cls: "c-open", text: "All " + o + " passed", bad: false };
+    var parts = [];
+    if (f) parts.push(f + " failing");
+    if (r) parts.push(r + " running");
+    if (o) parts.push(o + " passed");
+    return { icon: f ? "fail" : "run", cls: f ? "c-fail" : "c-warn", text: parts.join(" · "), bad: !!f };
+  }
+  function needsAttention(sc) {
+    if (!sc.pr) return false;
+    return sc.pr.conflict || sc.pr.checks.some(function (c) { return c.s === "fail"; });
+  }
+
+  function headerChips(sc) {
+    var h = "";
+    var o = sc.origin;
+    if (o.kind === "automation") {
+      h += '<button type="button" class="f-chip" data-go="origin" title="Started by automation: ' + esc(o.title) + '">' + ic("zap", "c-warn") + '<span>Automation</span></button>';
+    } else {
+      h += '<button type="button" class="f-chip" data-go="origin" title="Started from issue #' + o.num + ': ' + esc(o.title) + '">' + issueIcon(o) + '<span class="num">#' + o.num + '</span></button>';
+    }
+    var pr = sc.pr;
+    if (pr) {
+      var cs = checkSummary(pr.checks);
+      var att = needsAttention(sc);
+      h += '<button type="button" class="f-chip' + (att ? " f-chip--attention" : "") + '" data-go="pr" title="PR #' + pr.num + ': ' + esc(pr.title) + '">' + prIcon(pr) + '<span class="num">#' + pr.num + '</span>';
+      if (pr.state !== "merged") {
+        h += '<span class="dot-sep"></span><span class="sig ' + cs.cls + '">' + ic(cs.icon) + '</span>';
+        if (pr.threads.length) h += '<span class="sig c-warn">' + ic("msg") + pr.threads.length + '</span>';
+        if (pr.conflict) h += '<span class="sig c-warn">' + ic("warn") + '</span>';
+      } else {
+        h += '<span class="sig c-merged">Merged</span>';
+      }
+      h += '</button>';
+    }
+    return h;
+  }
+
+  function contextTab(sc) {
+    var h = "";
+    var o = sc.origin;
+    h += '<div class="f-sec"><span class="f-sec-label">Started from</span>';
+    if (o.kind === "automation") {
+      h += '<div class="f-row" id="ctx-origin">' + ic("zap", "c-warn") + '<div><div class="f-row-title">' + esc(o.title) + '</div><div class="f-row-sub">Automation · ' + esc(o.how) + '</div></div><span></span></div>';
+    } else {
+      h += '<div class="f-row" id="ctx-origin">' + issueIcon(o) + '<div><div class="f-row-title">' + esc(o.title) + '</div><div class="f-row-sub"><span class="f-state f-state--' + (o.state === "closed" ? "merged" : "open") + '">' + (o.state === "closed" ? "Closed" : "Open") + '</span><span>' + esc(o.how) + '</span></div></div><span class="num">#' + o.num + '</span></div>';
+    }
+    h += '</div>';
+
+    var pr = sc.pr;
+    if (pr) {
+      var cs = checkSummary(pr.checks);
+      h += '<div class="f-sec"><span class="f-sec-label">Pull request</span><div class="f-card" id="ctx-pr">';
+      h += '<div class="f-card-head">' + prIcon(pr) + '<div><a href="#" onclick="return false">' + esc(pr.title) + '</a><div class="f-labels"><span class="f-state f-state--' + pr.state + '">' + stateWord(pr.state) + '</span>' + pr.labels.map(label).join("") + '</div></div><span class="num">#' + pr.num + ic("ext") + '</span></div>';
+      if (pr.state === "merged") {
+        h += '<div class="f-signals"><div class="f-sig f-sig--static">' + ic("merge", "c-merged") + '<span class="what">' + esc(pr.when) + '</span><span class="detail">No longer checked</span><span></span></div></div>';
+      } else {
+        h += '<div class="f-signals">';
+        var failing = pr.checks.some(function (c) { return c.s === "fail"; });
+        h += '<button type="button" class="f-sig' + (failing ? " f-sig--bad" : "") + '" data-toggle="checks" aria-expanded="' + state.open.checks + '">' + ic(cs.icon, cs.cls) + '<span class="what">Checks</span><span class="detail">' + cs.text + '</span>' + ic("chev", "chev") + '</button>';
+        if (state.open.checks) {
+          h += '<ul class="f-sublist">' + pr.checks.map(function (c) {
+            var iconName = c.s === "fail" ? "fail" : c.s === "run" ? "run" : "ok";
+            var cls = c.s === "fail" ? "c-fail" : c.s === "run" ? "c-warn" : "c-open";
+            var acts = "";
+            if (c.s === "fail") {
+              var key = "check:" + c.name;
+              acts += state.sent[key]
+                ? '<button type="button" class="f-send" disabled>' + ic("check") + 'Sent</button>'
+                : '<button type="button" class="f-send" data-send="' + esc(key) + '" title="Send the failure log for ' + esc(c.name) + ' to the agent">' + ic("send") + 'Send to agent</button>';
+            } else if (c.s === "run") {
+              acts += '<span class="c-muted" style="font-size:11px">running</span>';
+            }
+            acts += '<span class="f-ext">' + ic("ext") + '</span>';
+            return '<li class="f-sub">' + ic(iconName, cls) + '<span class="name">' + esc(c.name) + '</span><span class="acts">' + acts + '</span></li>';
+          }).join("") + '</ul>';
+        }
+        if (pr.threads.length) {
+          h += '<button type="button" class="f-sig" data-toggle="review" aria-expanded="' + state.open.review + '">' + ic("msg", "c-warn") + '<span class="what">Review</span><span class="detail">' + pr.threads.length + ' unresolved thread' + (pr.threads.length === 1 ? "" : "s") + '</span>' + ic("chev", "chev") + '</button>';
+          if (state.open.review) {
+            h += '<ul class="f-sublist">' + pr.threads.map(function (t) {
+              var key = "thread:" + t.id;
+              var btn = state.sent[key]
+                ? '<button type="button" class="f-send" disabled>' + ic("check") + 'Sent</button>'
+                : '<button type="button" class="f-send" data-send="' + key + '" title="Send this review comment to the agent">' + ic("send") + 'Send</button>';
+              return '<li class="f-sub f-sub--thread">' + ic("msg", "c-warn") + '<span class="name"><span class="path">' + esc(t.path.split("/").pop()) + ':' + t.line + '</span><span class="quote">' + esc(t.author) + ': “' + esc(t.body) + '”</span></span><span class="acts">' + btn + '</span></li>';
+            }).join("") + '</ul>';
+          }
+        } else {
+          h += '<div class="f-sig f-sig--static">' + ic("msg", "c-muted") + '<span class="what">Review</span><span class="detail">No open threads</span><span></span></div>';
+        }
+        if (pr.conflict) {
+          h += '<div class="f-sig f-sig--static f-sig--bad">' + ic("warn", "c-warn") + '<span class="what">Merge conflicts</span><span class="detail">with main</span><span></span></div>';
+        }
+        h += '</div>';
+      }
+      h += '</div></div>';
+    }
+
+    var mentioned = sc.mentioned.filter(function (m) { return !state.dismissed[m.id]; });
+    if (mentioned.length) {
+      h += '<div class="f-sec"><span class="f-sec-label">Mentioned in conversation</span>';
+      h += mentioned.map(function (m) {
+        return '<div class="f-row">' + issueIcon(m) + '<div><div class="f-row-title">' + esc(m.title) + '</div><div class="f-row-sub">Issue #' + m.num + ' · ' + stateWord(m.state) + '</div></div><span class="trail"><button type="button" class="f-x" data-dismiss="' + m.id + '" aria-label="Dismiss issue #' + m.num + '" title="Dismiss">' + ic("x") + '</button></span></div>';
+      }).join("");
+      h += '</div>';
+    }
+
+    h += '<div class="f-sec"><span class="f-sec-label">Workspace</span><dl class="f-kv"><dt>Branch</dt><dd>' + esc(sc.ws.branch) + '</dd><dt>Isolation</dt><dd>' + esc(sc.ws.isolation) + '</dd><dt>Directory</dt><dd title="' + esc(sc.ws.dir) + '">' + esc(sc.ws.dir) + '</dd></dl></div>';
+
+    if (sc.pr || sc.mentioned.length) {
+      h += '<div class="f-foot"><span>GitHub checked ' + state.checked + '</span><button type="button" data-refresh="1">' + ic("refresh") + 'Refresh</button></div>';
+    }
+    return h;
+  }
+
+  function changesTab() {
+    var rows = [["auth.md", "docs", "+7"], ["auth.ts", "src/middleware", "+18"], ["index.ts", "src/middleware", "+1"]];
+    return '<ul class="f-changes">' + rows.map(function (r) {
+      return '<li>' + ic("file", "c-muted") + '<span>' + r[0] + '</span><span class="dirn">' + r[1] + '</span><span class="add">' + r[2] + '</span></li>';
+    }).join("") + '</ul>';
+  }
+
+  function sentBubble() {
+    var keys = Object.keys(state.sent);
+    if (!keys.length) return "";
+    var last = keys[keys.length - 1];
+    var text = last.indexOf("check:") === 0
+      ? "[CI Failure — example/weave-fleet PR #187]\nWorkflow: " + last.slice(6) + "\nStatus: failure · Commit: a1b2c3d\n## Failure Logs …"
+      : "[Review Comment — example/weave-fleet PR #187]\nFile: " + (THREADS.filter(function (t) { return "thread:" + t.id === last; })[0] || THREADS[0]).path + "\n## Comment …";
+    return '<div class="f-sent"><span class="from">You · sent from the Context tab</span><span class="body">' + esc(text) + '</span></div>';
+  }
+
+  function renderAfter() {
+    var sc = SCENARIOS[state.scenario];
+    var att = needsAttention(sc);
+    var linkedCount = 1 + (sc.pr ? 1 : 0) + sc.mentioned.filter(function (m) { return !state.dismissed[m.id]; }).length;
+    var body = state.tab === "context" ? contextTab(sc)
+      : state.tab === "changes" ? changesTab()
+      : '<p class="f-empty">File tree</p>';
+    var html = ''
+      + '<div class="fleet' + (state.ftheme === "dark" ? " fleet--dark" : "") + '">'
+      + '<div class="f-center">'
+      + '<div class="f-header">'
+      + '<div class="f-main">'
+      + '<div class="f-title-row"><span class="f-title">Implement mock API plugin for frontend</span><span class="f-status">Idle</span></div>'
+      + '<div class="f-meta"><span>Fleet Core</span><span class="sep">·</span><span>OpenCode</span><span class="sep">·</span><span class="f-branch">' + ic("branch") + esc(sc.ws.branch) + '</span><span class="sep">·</span><span class="dir">' + esc(sc.ws.dir) + '</span></div>'
+      + '</div>'
+      + '<div class="f-chips">' + headerChips(sc) + '</div>'
+      + '<div class="f-actions"><span>' + ic("square") + '</span><span class="div"></span><span>' + ic("fork") + '</span><span>' + ic("pencil") + '</span><span>' + ic("trash") + '</span><span>' + ic("chart") + '</span></div>'
+      + '</div>'
+      + '<div class="f-convo">' + sentBubble() + '</div>'
+      + '</div>'
+      + '<div class="f-panel">'
+      + '<div class="f-tabs" role="tablist" aria-label="Right panel">'
+      + '<button type="button" class="f-tab" role="tab" data-tab="context" aria-selected="' + (state.tab === "context") + '">' + ic("clip") + 'Context' + (att ? '<span class="alert" aria-label="needs attention"></span>' : '<span class="count">' + linkedCount + '</span>') + '</button>'
+      + '<button type="button" class="f-tab" role="tab" data-tab="changes" aria-selected="' + (state.tab === "changes") + '">' + ic("compare") + 'Changes<span class="count">3</span></button>'
+      + '<button type="button" class="f-tab" role="tab" data-tab="files" aria-selected="' + (state.tab === "files") + '">' + ic("tree") + 'Files</button>'
+      + '<span class="ghost">' + ic("plus") + '</span><span class="spacer"></span><span class="ghost">' + ic("max") + '</span><span class="ghost">' + ic("panel") + '</span>'
+      + '</div>'
+      + '<div class="f-body">' + body + '</div>'
+      + '</div>'
+      + '</div>';
+    document.getElementById("after").innerHTML = html;
+    if (state.flash) {
+      var el = document.getElementById(state.flash);
+      if (el) { el.classList.add("flash"); el.scrollIntoView({ block: "nearest" }); }
+      state.flash = null;
+    }
+  }
+
+  function renderShell() {
+    var before = state.view === "before";
+    document.getElementById("before").hidden = !before;
+    document.getElementById("after").hidden = before;
+    document.getElementById("legend-before").hidden = !before;
+    document.getElementById("legend-after").hidden = before;
+    document.getElementById("scenario-control").hidden = before;
+    document.getElementById("theme-control").hidden = before;
+    document.querySelectorAll("[data-view]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.view === state.view)); });
+    document.querySelectorAll("[data-scenario]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.scenario === state.scenario)); });
+    document.querySelectorAll("[data-ftheme]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.ftheme === state.ftheme)); });
+    if (!before) renderAfter();
+  }
+
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest("button");
+    if (!t) return;
+    var d = t.dataset;
+    if (d.view) { state.view = d.view; }
+    else if (d.scenario) { state.scenario = d.scenario; state.sent = {}; state.dismissed = {}; state.open = { checks: d.scenario === "attention", review: false }; state.tab = "context"; }
+    else if (d.ftheme) { state.ftheme = d.ftheme; }
+    else if (d.tab) { state.tab = d.tab; }
+    else if (d.go) { state.tab = "context"; state.flash = d.go === "pr" ? "ctx-pr" : "ctx-origin"; }
+    else if (d.toggle) { state.open[d.toggle] = !state.open[d.toggle]; }
+    else if (d.send) { state.sent[d.send] = true; }
+    else if (d.dismiss) { state.dismissed[d.dismiss] = true; }
+    else if (d.refresh) { state.checked = "just now"; }
+    else return;
+    renderShell();
+  });
+
+  renderShell();
+})();
+</script>

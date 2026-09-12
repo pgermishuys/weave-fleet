@@ -338,9 +338,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Application.DTOs.SmartLinkDto))]
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.DTOs.SmartLinkDto>))]
 [JsonSerializable(typeof(List<WeaveFleet.Application.DTOs.SmartLinkDto>))]
-[JsonSerializable(typeof(WeaveFleet.Application.DTOs.UpsertSmartLinkRequest))]
-[JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.DTOs.UpsertSmartLinkRequest>))]
-[JsonSerializable(typeof(List<WeaveFleet.Application.DTOs.UpsertSmartLinkRequest>))]
+[JsonSerializable(typeof(WeaveFleet.Application.DTOs.AddSmartLinkRequest))]
 // NuCode providers
 [JsonSerializable(typeof(NuCodeTestConnectionResponse))]
 [JsonSerializable(typeof(List<NuCodeProviderResponse>))]

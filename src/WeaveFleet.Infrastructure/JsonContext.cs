@@ -282,6 +282,7 @@ internal sealed record NuCodeStatusPayload
 [JsonSerializable(typeof(ToolManifest))]
 [JsonSerializable(typeof(ToolManifestEntry))]
 [JsonSerializable(typeof(ToolType))]
+[JsonSerializable(typeof(WeaveFleet.Application.DTOs.SmartLinkDto))]
 internal sealed partial class InfrastructureJsonContext : JsonSerializerContext
 {
     /// <summary>Returns a serialized activity-status payload.</summary>

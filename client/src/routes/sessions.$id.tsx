@@ -760,6 +760,7 @@ const SessionDetailPage = defineComponent({
             projectName={selectedSession.value?.projectName ?? null}
             harnessType={selectedSession.value?.harnessType ?? remoteSession.value?.harnessType ?? null}
             directory={selectedSession.value?.workspaceDirectory ?? remoteSession.value?.workspaceDirectory ?? null}
+            branch={selectedSession.value?.branch ?? remoteSession.value?.branch ?? null}
             activityStatus={effectiveActivityStatus.value}
             lifecycleStatus={effectiveLifecycleStatus.value}
             retentionStatus={optimisticSessionState.value?.retentionStatus ?? sessionStateOverride.value?.retentionStatus ?? selectedSession.value?.retentionStatus ?? remoteSession.value?.retentionStatus}
