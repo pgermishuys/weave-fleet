@@ -268,57 +268,54 @@ const layoutedNodes = computed<VueFlowNode[]>(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.375rem;
+  background-color: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
   overflow: hidden;
 }
 
 .flow-title {
   padding: 0.75rem 1rem;
   font-weight: 600;
-  font-size: 0.875rem;
-  border-bottom: 1px solid #e5e7eb;
-  background-color: #f9fafb;
+  font-size: 13px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
 }
 
 .flow-toolbar {
   display: flex;
-  gap: 0.5rem;
-  padding: 0.5rem;
-  border-bottom: 1px solid #e5e7eb;
-  background-color: #f9fafb;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
 }
 
 .toolbar-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
+  width: 28px;
+  height: 28px;
   padding: 0;
-  background-color: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.25rem;
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn);
   cursor: pointer;
-  color: #6b7280;
-  transition: all 0.15s ease;
+  color: var(--muted);
+  transition: background-color var(--transition), color var(--transition);
 }
 
 .toolbar-btn:hover:not(:disabled) {
-  background-color: #f3f4f6;
-  border-color: #d1d5db;
-  color: #374151;
+  background-color: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
 }
 
 .toolbar-btn:active:not(:disabled) {
-  background-color: #e5e7eb;
+  background-color: color-mix(in srgb, var(--text) 10%, transparent);
 }
 
 .toolbar-btn.active {
-  background-color: #3b82f6;
-  border-color: #3b82f6;
-  color: #ffffff;
+  background-color: var(--accent-dim);
+  color: var(--accent);
 }
 
 .toolbar-btn:disabled {
@@ -330,11 +327,12 @@ const layoutedNodes = computed<VueFlowNode[]>(() => {
   flex: 1;
   margin: 0;
   padding: 1rem;
-  background-color: #f9fafb;
+  background-color: color-mix(in srgb, var(--text) 4%, transparent);
+  color: var(--text);
   border: none;
   overflow: auto;
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
-  font-size: 0.875rem;
+  font-family: var(--font-mono-stack);
+  font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
@@ -347,8 +345,9 @@ const layoutedNodes = computed<VueFlowNode[]>(() => {
 .flow-container {
   position: relative;
   width: 100%;
-  height: 400px;
-  background-color: #ffffff;
+  flex: 1;
+  min-height: 400px;
+  background-color: transparent;
 }
 
 .flow-container :deep(.vue-flow) {
@@ -357,37 +356,48 @@ const layoutedNodes = computed<VueFlowNode[]>(() => {
 }
 
 .flow-container :deep(.vue-flow__node) {
-  background-color: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.375rem;
+  background-color: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
   padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  color: #374151;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
 }
 
 .flow-container :deep(.vue-flow__node:hover) {
-  border-color: #3b82f6;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  border-color: color-mix(in srgb, var(--text) 28%, transparent);
+}
+
+.flow-container :deep(.vue-flow__node.selected) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .flow-container :deep(.vue-flow__edge-path) {
-  stroke: #9ca3af;
-  stroke-width: 1.5;
+  stroke: color-mix(in srgb, var(--text) 38%, transparent);
+  stroke-width: 1.4;
 }
 
 .flow-container :deep(.vue-flow__edge-text) {
-  font-size: 0.75rem;
-  fill: #6b7280;
+  font-size: 11px;
+  fill: var(--muted);
 }
 
 .flow-container :deep(.vue-flow__edge-textbg) {
-  fill: #ffffff;
+  fill: var(--panel-bg);
 }
 
 .flow-container :deep(.vue-flow__handle) {
-  width: 8px;
-  height: 8px;
-  background-color: #3b82f6;
-  border: 2px solid #ffffff;
+  width: 6px;
+  height: 6px;
+  background-color: var(--accent);
+  border: 1.5px solid var(--card-bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toolbar-btn {
+    transition: none;
+  }
 }
 </style>
