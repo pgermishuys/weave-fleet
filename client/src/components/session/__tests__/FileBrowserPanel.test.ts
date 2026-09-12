@@ -1,9 +1,14 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
-import { ref } from "vue";
+import { ref, type DefineComponent } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import FileBrowserPanel from "@/components/session/FileBrowserPanel.vue";
+import FileBrowserPanelComponent from "@/components/session/FileBrowserPanel.vue";
 import type { BrowseDirectoryEntry, FileDiffItem } from "@/api/client";
+
+// vue-tsc types FileBrowserPanel together with its named slots, and the
+// @vue/test-utils version pinned in package-lock (2.2.7) can't match that
+// shape in mount(). Mount it through its props-only type instead.
+const FileBrowserPanel = FileBrowserPanelComponent as unknown as DefineComponent<{ sessionId: string }>;
 
 const mockFileBrowser = {
   rootEntries: ref<BrowseDirectoryEntry[]>([]),
