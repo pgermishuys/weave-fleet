@@ -191,21 +191,26 @@ function handleExpandVisual(payload: VisualPayload): void {
             </div>
           </Teleport>
 
-          <ToolCard
-            v-for="tool in tools ?? []"
-            :id="tool.id"
-            :key="tool.id"
-            :title="tool.title"
-            :kind="tool.kind"
-            :status="tool.status"
-            :summary="tool.summary"
-            :output="tool.output"
-            :diff-lines="tool.diffLines"
-            :initially-collapsed="tool.initiallyCollapsed"
-            :preview="tool.preview"
-            :is-pattern-tool="tool.isPatternTool"
-            @expand-visual="handleExpandVisual"
-          />
+          <div
+            v-if="tools && tools.length > 0"
+            class="msg-tools"
+          >
+            <ToolCard
+              v-for="tool in tools"
+              :id="tool.id"
+              :key="tool.id"
+              :title="tool.title"
+              :kind="tool.kind"
+              :status="tool.status"
+              :summary="tool.summary"
+              :output="tool.output"
+              :diff-lines="tool.diffLines"
+              :initially-collapsed="tool.initiallyCollapsed"
+              :preview="tool.preview"
+              :is-pattern-tool="tool.isPatternTool"
+              @expand-visual="handleExpandVisual"
+            />
+          </div>
 
           <QuestionCard
             v-for="qpart in questionParts ?? []"
@@ -233,75 +238,97 @@ function handleExpandVisual(payload: VisualPayload): void {
 </template>
 
 <style scoped>
+/* A conversation, not a log: no dividers or hover bars. Your messages are
+   bubbles on the right; the agent's text flows in the reading column. */
 .message {
   width: var(--activity-bubble-width, 100%);
   box-sizing: border-box;
-  padding: 12px;
-  border-bottom: 1px solid var(--border);
-  border-left: 3px solid transparent;
   position: relative;
+  padding: 2px 0;
   background: transparent;
-  transition: background var(--transition), border-left-color var(--transition);
 }
 
-.message:hover {
-  border-left-color: var(--indigo);
-  background: rgba(91, 110, 199, 0.03);
+.message--user {
+  width: auto;
+  max-width: 82%;
+  align-self: flex-end;
 }
 
 .msg-layout {
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  gap: 4px;
   align-items: flex-start;
 }
 
+.message--user .msg-layout {
+  align-items: flex-end;
+}
+
 .msg-icon {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 2px;
-}
-
-.msg-icon__svg {
-  width: 16px;
-  height: 16px;
-  color: var(--muted);
-}
-
-.message--user .msg-icon__svg {
-  color: var(--text);
-}
-
-.message--assistant .msg-icon__svg {
-  color: var(--indigo);
+  display: none;
 }
 
 .msg-content {
-  flex: 1;
+  width: 100%;
   min-width: 0;
 }
 
+.message--user .msg-content {
+  width: auto;
+}
+
+/* Out of flow so hidden timestamps don't add space between messages. */
 .msg-timestamp {
+  position: absolute;
+  top: 5px;
+  right: 34px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
-  flex-shrink: 0;
-  align-self: flex-start;
-  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
   cursor: default;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.message--user .msg-timestamp {
+  top: auto;
+  right: calc(100% + 10px);
+  bottom: 6px;
+}
+
+.message:hover .msg-timestamp,
+.message:focus-within .msg-timestamp {
+  opacity: 1;
 }
 
 .msg-body {
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.65;
   color: var(--text);
+}
+
+.message--user .msg-body {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-panel) + 2px) calc(var(--radius-panel) + 2px) 4px calc(var(--radius-panel) + 2px);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  line-height: 1.55;
 }
 
 .message--user .msg-body__content {
   text-align: left;
+}
+
+.msg-tools {
+  display: flex;
+  flex-direction: column;
+  margin: 10px 0 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
 }
 
 .msg-images {
@@ -314,8 +341,8 @@ function handleExpandVisual(payload: VisualPayload): void {
 .msg-image-thumb {
   display: block;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
   background: transparent;
   cursor: pointer;
   overflow: hidden;
@@ -323,7 +350,7 @@ function handleExpandVisual(payload: VisualPayload): void {
 }
 
 .msg-image-thumb:hover {
-  border-color: rgba(255, 255, 255, 0.3);
+  border-color: color-mix(in srgb, var(--text) 30%, transparent);
 }
 
 .msg-image-thumb__img {
@@ -331,34 +358,40 @@ function handleExpandVisual(payload: VisualPayload): void {
   max-width: 180px;
   max-height: 120px;
   object-fit: cover;
-  border-radius: 0;
 }
 
 .msg-copy-btn {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 0;
+  right: 0;
   width: 26px;
   height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);
-  border-radius: 0;
-  background: var(--surface);
+  border-radius: var(--radius-btn);
+  background: var(--card-bg);
   color: var(--muted);
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--transition);
+  transition: opacity var(--transition), color var(--transition);
   padding: 0;
 }
 
-.message:hover .msg-copy-btn {
+.message--user .msg-copy-btn {
+  right: auto;
+  left: -34px;
+  top: 6px;
+}
+
+.message:hover .msg-copy-btn,
+.msg-copy-btn:focus-visible {
   opacity: 1;
 }
 
 .msg-copy-btn:hover {
-  background: var(--bg);
+  color: var(--text);
 }
 
 .msg-copy-btn__icon {

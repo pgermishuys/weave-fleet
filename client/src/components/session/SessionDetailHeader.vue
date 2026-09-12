@@ -260,54 +260,58 @@ onUnmounted(() => {
           >
             {{ harnessLabel }}
           </span>
-        </div>
-
-        <div
-          v-if="props.directory"
-          class="session-detail-header__directory"
-          :title="props.directory"
-        >
-          {{ props.directory }}
-        </div>
-
-        <div class="session-detail-header__tags-row">
-          <Badge
-            v-for="tag in props.tags"
-            :key="tag"
-            variant="outline"
-            class="session-detail-header__tag"
+          <span
+            v-if="props.directory && (props.projectName || harnessLabel)"
+            class="session-detail-header__separator"
+          >·</span>
+          <span
+            v-if="props.directory"
+            class="session-detail-header__directory"
+            :title="props.directory"
           >
-            {{ tag }}
-            <button
-              type="button"
-              :aria-label="`Remove tag ${tag}`"
-              class="session-detail-header__tag-remove"
-              @click="removeTag(tag)"
+            {{ props.directory }}
+          </span>
+
+          <span class="session-detail-header__tags-row">
+            <Badge
+              v-for="tag in props.tags"
+              :key="tag"
+              variant="outline"
+              class="session-detail-header__tag"
             >
-              <X :size="12" />
+              {{ tag }}
+              <button
+                type="button"
+                :aria-label="`Remove tag ${tag}`"
+                class="session-detail-header__tag-remove"
+                @click="removeTag(tag)"
+              >
+                <X :size="12" />
+              </button>
+            </Badge>
+
+            <input
+              v-if="isAddingTag"
+              v-model="newTagInput"
+              type="text"
+              data-testid="tag-input"
+              placeholder="Tag name..."
+              class="session-detail-header__tag-input"
+              @blur="addTag"
+              @keydown="handleTagInputKeydown"
+            />
+
+            <button
+              v-if="!isAddingTag"
+              type="button"
+              aria-label="Add tag"
+              title="Add tag"
+              class="session-detail-header__tag-add"
+              @click="startAddingTag"
+            >
+              <Plus :size="12" />
             </button>
-          </Badge>
-
-          <input
-            v-if="isAddingTag"
-            v-model="newTagInput"
-            type="text"
-            data-testid="tag-input"
-            placeholder="Tag name..."
-            class="session-detail-header__tag-input"
-            @blur="addTag"
-            @keydown="handleTagInputKeydown"
-          />
-
-          <button
-            v-if="!isAddingTag"
-            type="button"
-            aria-label="Add tag"
-            class="session-detail-header__tag-add"
-            @click="startAddingTag"
-          >
-            <Plus :size="14" />
-          </button>
+          </span>
         </div>
       </div>
 
@@ -368,13 +372,14 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+/* Two lines: title with status, then one muted line of context. */
 .session-detail-header {
   display: flex;
-  min-height: 52px;
+  min-height: 56px;
   align-items: center;
   border-bottom: 1px solid var(--border);
-  background: var(--background, var(--panel-bg));
-  padding: 0.5rem max(0.75rem, env(safe-area-inset-right)) 0.5rem max(0.75rem, env(safe-area-inset-left));
+  background: transparent;
+  padding: 8px max(1rem, env(safe-area-inset-right)) 8px max(1rem, env(safe-area-inset-left));
 }
 
 .session-detail-header__main {
@@ -382,7 +387,7 @@ onUnmounted(() => {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 3px;
   overflow: hidden;
 }
 
@@ -390,7 +395,7 @@ onUnmounted(() => {
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 0.25rem;
+  gap: 2px;
   margin-left: 0.75rem;
 }
 
@@ -408,7 +413,7 @@ onUnmounted(() => {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 0.5rem;
+  gap: 6px;
 }
 
 .session-detail-header__title {
@@ -416,48 +421,47 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.95rem;
-  font-weight: 650;
-  line-height: 1.25;
-  color: var(--foreground, var(--text));
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+  color: var(--text);
 }
 
-.session-detail-header__project {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.session-detail-header__meta-row {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
   white-space: nowrap;
-  font-size: 0.78rem;
-  color: var(--muted-foreground, var(--muted));
 }
 
+.session-detail-header__project,
 .session-detail-header__harness {
-  min-width: 0;
+  flex-shrink: 0;
+  max-width: 14rem;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.78rem;
-  color: var(--muted-foreground, var(--muted));
 }
 
 .session-detail-header__separator {
   flex-shrink: 0;
-  font-size: 0.78rem;
-  color: var(--muted-foreground, var(--muted));
+  opacity: 0.6;
 }
 
 .session-detail-header__directory {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.72rem;
-  color: var(--muted-foreground, var(--muted));
-  opacity: 0.7;
+  font-family: var(--font-mono-stack);
+  font-size: 11.5px;
+  opacity: 0.8;
 }
 
 .session-detail-header__tags-row {
-  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: 4px;
+  margin-left: 4px;
 }
 
 .session-detail-header__tag {
@@ -475,58 +479,62 @@ onUnmounted(() => {
   background: transparent;
   padding: 0.125rem;
   cursor: pointer;
-  color: var(--muted-foreground, var(--muted));
-  transition: color 0.15s;
+  color: var(--muted);
+  transition: color var(--transition);
 }
 
 .session-detail-header__tag-remove:hover {
-  color: var(--foreground, var(--text));
+  color: var(--text);
 }
 
 .session-detail-header__tag-add {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px dashed var(--border);
-  border-radius: 0;
+  width: 20px;
+  height: 20px;
+  border: 1px dashed color-mix(in srgb, var(--muted) 45%, transparent);
+  border-radius: calc(var(--radius-btn) - 2px);
   background: transparent;
-  padding: 0.125rem 0.375rem;
+  padding: 0;
   cursor: pointer;
-  color: var(--muted-foreground, var(--muted));
-  transition: color 0.15s, border-color 0.15s;
+  color: var(--muted);
+  opacity: 0.7;
+  transition: color var(--transition), border-color var(--transition), opacity var(--transition);
 }
 
 .session-detail-header__tag-add:hover {
-  border-color: var(--foreground, var(--text));
-  color: var(--foreground, var(--text));
+  border-color: var(--text);
+  color: var(--text);
+  opacity: 1;
 }
 
 .session-detail-header__tag-input {
   border: 1px solid var(--border);
-  border-radius: 0;
-  background: var(--background, var(--panel-bg));
-  padding: 0.125rem 0.5rem;
-  font-size: 0.75rem;
-  color: var(--foreground, var(--text));
+  border-radius: calc(var(--radius-btn) - 2px);
+  background: var(--card-bg);
+  padding: 1px 8px;
+  font-size: 12px;
+  color: var(--text);
   outline: none;
   min-width: 120px;
 }
 
 .session-detail-header__tag-input:focus {
-  border-color: var(--ring);
+  border-color: var(--ring, var(--accent));
 }
 
 .session-detail-header__status {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
-  border: 1px solid var(--border);
-  border-radius: 0;
-  padding: 0.125rem 0.5rem;
-  font-size: 0.75rem;
+  border-radius: calc(var(--radius-btn) - 2px);
+  padding: 1px 8px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  font-size: 12px;
   font-weight: 500;
-  line-height: 1.25;
-  color: var(--muted-foreground, var(--muted));
+  line-height: 1.4;
+  color: var(--muted);
 }
 
 .session-detail-banners {
@@ -543,10 +551,6 @@ onUnmounted(() => {
 @container session-detail-header (min-width: 48rem) {
   .session-detail-header {
     padding-inline: 1.25rem;
-  }
-
-  .session-detail-header__meta-row {
-    justify-content: flex-start;
   }
 }
 </style>

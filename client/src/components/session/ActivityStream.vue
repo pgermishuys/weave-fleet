@@ -818,7 +818,7 @@ function handleExpandVisual(payload: VisualPayload): void {
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px 20px;
+  padding: 24px 32px 12px;
   scrollbar-width: thin;
   scrollbar-color: var(--muted) transparent;
 }
@@ -830,19 +830,19 @@ function handleExpandVisual(payload: VisualPayload): void {
   z-index: 2;
   display: inline-flex;
   padding: 8px 12px;
-  border: 1px solid rgba(129, 140, 248, 0.35);
-  border-radius: 0;
-  background: rgba(24, 24, 27, 0.92);
-  color: #e4e4e7;
-  font-size: 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 13px;
   line-height: 1;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.35);
   cursor: pointer;
+  transition: border-color var(--transition);
 }
 
 .jump-to-latest:hover {
-  border-color: rgba(129, 140, 248, 0.65);
-  background: rgba(39, 39, 42, 0.96);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
 }
 
 .load-older-indicator,
@@ -852,8 +852,8 @@ function handleExpandVisual(payload: VisualPayload): void {
   justify-content: center;
   gap: 8px;
   padding: 8px 0;
-  color: #a1a1aa;
-  font-size: 0.8125rem;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .load-older-button {
@@ -866,14 +866,14 @@ function handleExpandVisual(payload: VisualPayload): void {
 
 .load-older-button:hover {
   opacity: 1;
-  color: #e4e4e7;
+  color: var(--text);
 }
 
 .load-older-spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(129, 140, 248, 0.3);
-  border-top-color: rgba(129, 140, 248, 0.8);
+  border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }
@@ -884,11 +884,11 @@ function handleExpandVisual(payload: VisualPayload): void {
   gap: 8px;
   padding: 12px 16px;
   margin-bottom: 16px;
-  background: rgba(251, 191, 36, 0.1);
-  border: 1px solid rgba(251, 191, 36, 0.3);
-  border-radius: 6px;
-  color: #fbbf24;
-  font-size: 0.875rem;
+  background: color-mix(in srgb, var(--idle) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--idle) 30%, transparent);
+  border-radius: var(--radius-card);
+  color: var(--idle);
+  font-size: 13px;
   line-height: 1.4;
 }
 
@@ -900,8 +900,8 @@ function handleExpandVisual(payload: VisualPayload): void {
 .optimistic-retry {
   width: var(--activity-bubble-width);
   margin: 4px 0 8px;
-  color: #fbbf24;
-  font-size: 0.75rem;
+  color: var(--idle);
+  font-size: 12px;
 }
 
 .optimistic-retry--user {
@@ -919,12 +919,14 @@ function handleExpandVisual(payload: VisualPayload): void {
   }
 }
 
+/* One centred reading column; space between turns instead of divider lines. */
 .activity-message {
   display: flex;
   flex-direction: column;
   width: 100%;
-  gap: 0px;
-  margin-bottom: 0px;
+  max-width: 760px;
+  gap: 0;
+  margin: 0 auto 20px;
 }
 
 .activity-message--assistant {
@@ -932,21 +934,21 @@ function handleExpandVisual(payload: VisualPayload): void {
 }
 
 .activity-message--user {
-  align-items: flex-start;
+  align-items: flex-end;
 }
 
 .activity-message--first,
 .activity-message--middle {
-  margin-bottom: 0px;
+  margin-bottom: 6px;
 }
 
 .streaming-indicator {
   display: flex;
   flex-direction: column;
   width: 100%;
-  padding: 4px 12px;
-  margin-bottom: 12px;
-  border-left: 3px solid transparent;
+  max-width: 760px;
+  padding: 4px 0;
+  margin: 0 auto 12px;
   box-sizing: border-box;
 }
 
@@ -957,6 +959,7 @@ function handleExpandVisual(payload: VisualPayload): void {
 }
 
 .streaming-indicator__icon {
+  display: none;
   flex-shrink: 0;
   width: 20px;
   height: 20px;
@@ -1024,9 +1027,7 @@ function handleExpandVisual(payload: VisualPayload): void {
   box-sizing: border-box;
   gap: 6px;
   margin-top: 1px;
-  padding: 0 8px;
-  /* Align with message content (20px icon + 12px gap) */
-  margin-left: 32px;
+  padding: 0;
 }
 
 .delegation-links--user {
