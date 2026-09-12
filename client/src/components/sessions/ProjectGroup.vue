@@ -408,16 +408,21 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
         @enter="heightEnter"
         @leave="heightLeave"
       >
-        <SessionItem
+        <!-- SessionItem renders several root nodes (row + dialogs), so each row
+             gets a single element wrapper the transition can animate. -->
+        <div
           v-for="session in project.sessions"
           :key="session.session.id"
-          :session="session"
-          :active="session.session.id === activeSessionId"
-          @changed="emit('sessionChanged')"
-          @select="handleSessionSelect"
-          @drag-session-start="handleSessionDragStart"
-          @drag-session-end="handleSessionDragEnd"
-        />
+          class="project-row"
+        >
+          <SessionItem
+            :session="session"
+            :active="session.session.id === activeSessionId"
+            @select="handleSessionSelect"
+            @drag-session-start="handleSessionDragStart"
+            @drag-session-end="handleSessionDragEnd"
+          />
+        </div>
       </TransitionGroup>
     </Transition>
 

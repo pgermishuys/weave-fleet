@@ -61,13 +61,19 @@ function cycleEffort(): void {
 .effort-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 0;
+  gap: 7px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-btn);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  transition: background var(--transition);
+}
+
+.effort-toggle:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
 .effort-toggle:focus-visible {
@@ -76,8 +82,8 @@ function cycleEffort(): void {
 }
 
 .effort-toggle__label {
-  color: var(--text);
-  font-size: 11px;
+  color: color-mix(in srgb, var(--text) 80%, transparent);
+  font-size: 12px;
 }
 
 .effort-toggle__dots {
@@ -90,7 +96,7 @@ function cycleEffort(): void {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #3f3f46;
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
 }
 
 .effort-dot.filled {

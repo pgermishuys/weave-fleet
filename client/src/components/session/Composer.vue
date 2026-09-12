@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, ref, useTemplateRef, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { Send, Paperclip, X, CircleX } from "lucide-vue-next";
+import { ArrowUp, Paperclip, X, CircleX } from "lucide-vue-next";
 import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
 import AgentSelector from "@/components/session/AgentSelector.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
@@ -738,14 +738,15 @@ function handleKeydown(event: KeyboardEvent): void {
 
         <Button
           variant="default"
-          size="sm"
-          class="ml-auto"
+          size="toolbar-lg"
+          class="composer-send ml-auto"
           data-testid="prompt-send-button"
+          aria-label="Send"
+          title="Send"
           :disabled="isDisabled || !hasContent"
           @click="handleSend"
         >
-          <Send class="size-3.5" />
-          <span>Send</span>
+          <ArrowUp class="size-4" />
         </Button>
         <span
           v-if="queue.length > 0"
@@ -783,33 +784,38 @@ function handleKeydown(event: KeyboardEvent): void {
 </template>
 
 <style scoped>
+/* The composer floats on the sheet, aligned with the reading column. */
 .composer {
   flex-shrink: 0;
-  border-top: 1px solid var(--border);
-  padding: 12px 24px 16px;
-  background: var(--panel-bg);
+  padding: 4px 24px 18px;
+  background: transparent;
 }
 
 .composer-error {
-  margin: 0 0 10px;
+  max-width: 760px;
+  margin: 0 auto 10px;
   border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
-  border-radius: 0;
+  border-radius: var(--radius-card);
   padding: 10px 12px;
   background: color-mix(in srgb, var(--error) 10%, transparent);
   color: var(--error);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
 .composer-box {
   position: relative;
+  max-width: 760px;
+  margin: 0 auto;
   border: 1px solid var(--border);
-  border-radius: var(--radius-panel);
+  border-radius: calc(var(--radius-panel) + 2px);
   background: var(--card-bg);
+  box-shadow: 0 10px 28px -18px rgba(0, 0, 0, 0.5);
+  transition: border-color var(--transition);
 }
 
 .composer-box:focus-within {
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
 }
 
 .input-history {
@@ -821,7 +827,7 @@ function handleKeydown(event: KeyboardEvent): void {
   overflow-y: auto;
   border: 1px solid var(--border);
   border-bottom: none;
-  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+  border-radius: calc(var(--radius-panel) + 2px) calc(var(--radius-panel) + 2px) 0 0;
   background: var(--card-bg);
   z-index: 20;
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.25);
@@ -853,16 +859,21 @@ function handleKeydown(event: KeyboardEvent): void {
 
 .composer-box__textarea {
   width: 100%;
-  min-height: 48px;
-  max-height: 140px;
-  padding: 12px 16px;
+  min-height: 52px;
+  max-height: 180px;
+  padding: 14px 16px 6px;
   border: none;
   background: transparent;
   color: var(--text);
   resize: none;
   outline: none;
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* The box's focus-within border already shows focus; skip the global inner ring. */
+.composer-box__textarea:focus-visible {
+  box-shadow: none !important;
 }
 
 .composer-box__textarea::placeholder {
@@ -872,13 +883,19 @@ function handleKeydown(event: KeyboardEvent): void {
 .composer-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-top: 1px solid var(--border);
+  gap: 2px;
+  padding: 4px 8px 8px;
+}
+
+.composer-send {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 999px;
 }
 
 .queue-badge {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -902,9 +919,9 @@ function handleKeydown(event: KeyboardEvent): void {
   gap: 4px;
   padding: 6px;
   border: 1px solid var(--border);
-  border-radius: 0;
+  border-radius: var(--radius-btn);
   background: var(--panel-bg);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text);
   position: relative;
 }
@@ -915,7 +932,7 @@ function handleKeydown(event: KeyboardEvent): void {
   border: none;
   background: transparent;
   cursor: pointer;
-  border-radius: 0;
+  border-radius: calc(var(--radius-btn) - 3px);
 }
 
 .attachment-chip__thumb-btn:hover {
@@ -925,7 +942,7 @@ function handleKeydown(event: KeyboardEvent): void {
 .attachment-chip__thumb {
   width: 80px;
   height: 80px;
-  border-radius: 0;
+  border-radius: calc(var(--radius-btn) - 3px);
   object-fit: cover;
 }
 
