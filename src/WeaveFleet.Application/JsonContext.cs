@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Domain.DTOs;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Application;
@@ -126,6 +127,8 @@ internal sealed record QuickChatSourceInput;
 [JsonSerializable(typeof(LegacyDirectoryInput))]
 [JsonSerializable(typeof(DirectorySourceInput))]
 [JsonSerializable(typeof(QuickChatSourceInput))]
+[JsonSerializable(typeof(CanvasUpdatedPayload))]
+[JsonSerializable(typeof(CanvasRefPayload))]
 internal sealed partial class ApplicationJsonContext : JsonSerializerContext
 {
 }

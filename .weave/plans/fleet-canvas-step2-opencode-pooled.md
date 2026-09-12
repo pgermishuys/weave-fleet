@@ -157,11 +157,19 @@ Each tool POSTs to `{FLEET_URL}/api/bridge/opencode/canvas/{op}` with `Authoriza
     - The sequence summary is the line count, e.g. "14 lines".
   - **For Task 3: an agent write must not move `agent_seen_version` past user removals it hasn't read.** If it did, a patch that happens not to touch a removed box would silently use up the refusal. The agent would get "no box with id" later, and `fleet_canvas_list` would drop "(changed by user)". Rule: after an accepted agent write, set `agent_seen_version` to the new version only if `CanvasConflicts.UserRemovals` since the old seen version is empty. Otherwise keep the old value. Open and read always set it.
 
-- [ ] 3. `ICanvasService` and events
+- [x] 3. `ICanvasService` and events (done 2026-09-12 on branch `feat/canvas-store`)
   - **What**: `ListAsync`, `GetAsync`, `OpenAsync`, `ReadAsync(full)`, `ApplyAsync(actor, ops)`, `FocusAsync`, `CloseAsync`. An agent open, apply or read sets `agent_seen_version`. Each accepted change broadcasts `CanvasUpdated` (`canvas.updated`: canvas id, kind, title, version, actor, full state including positions, summary). Close broadcasts `canvas.closed`, and focus broadcasts `canvas.focused`. Opening with an existing title reopens that canvas (Decision 4).
   - **Files**: `src/WeaveFleet.Application/Canvases/ICanvasService.cs`, `CanvasService.cs` (new); `src/WeaveFleet.Domain/Events/CanvasEvents.cs` (new) plus `[JsonDerivedType]` entries in `DomainEvent.cs`; source-gen registrations in the `JsonContext.cs` files.
   - **Acceptance**: The sequence agent open → user move → user remove → agent patch touching the removed box is refused → agent read → agent patch succeeds leaves the user's positions intact.
   - **Tests**: application tests for that sequence, and a SignalR contract test that asserts the exact `canvas.updated` JSON.
+  - **As built**:
+    - Wire shape: `{"type":"canvas.updated","eventId":null,"properties":{sessionId, canvasId, kind, title, version, actor, state, summary}}`. `canvas.closed` and `canvas.focused` carry `{sessionId, canvasId}`. The events aren't persisted and have no event id; the client loads canvases with `GET …/canvases` on session open (Task 8). `SessionEventsHub.ResolveDomainEventType` maps the three new types.
+    - `canvas.updated` means "this canvas is open, and here it is". The client upserts the tab from it. Reopening sends it with summary `reopened`.
+    - Opening an existing title computes the change as ops (`CanvasOps.Replace`), so boxes that stay keep the user's positions, and the conflict rule applies: an open that brings back a box the user removed is refused. The same state only focuses. A title that's already another kind is rejected. Titles are trimmed and 1–120 characters.
+    - Agent writes follow the Task 2 rule. Open and read always mark the canvas seen, and a read marks only the version it read.
+    - An agent patch on a closed canvas is refused ("the user closed … Call fleet_canvas_open with its title to reopen it"). Focus reopens a closed canvas. Close is idempotent.
+    - Errors carry `CanvasErrorKind`; `NotFound` was added for a missing session or canvas. Lost write races retry up to 5 times.
+    - Registered as `ICanvasService` (scoped) in `DependencyInjection.cs`. `InMemoryCanvasRepository` in `tests/WeaveFleet.Testing` mirrors the SQLite rules for application tests.
 
 - [ ] 4. Client canvas endpoints
   - **What**: `GET /api/sessions/{id}/canvases`, `POST /api/sessions/{id}/canvases/{canvasId}/changes` (body `{ ops }`, user ops only, actor `user`), `DELETE /api/sessions/{id}/canvases/{canvasId}`. A user op on a box the agent has since removed returns 409, and the client refetches. The session-owner check matches the neighbouring session endpoints.

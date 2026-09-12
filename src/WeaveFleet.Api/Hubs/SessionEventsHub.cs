@@ -381,6 +381,9 @@ public class SessionEventsHub : Hub
         DelegationUpdated       => "delegation.updated",
         DelegationCompleted     => "delegation.completed",
         FilesChanged            => "files.changed",
+        CanvasUpdated           => "canvas.updated",
+        CanvasClosed            => "canvas.closed",
+        CanvasFocused           => "canvas.focused",
         _ => domainEvent.GetType().Name,
     };
 }

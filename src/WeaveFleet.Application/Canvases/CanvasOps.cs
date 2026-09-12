@@ -179,6 +179,81 @@ public static class CanvasOps
     }
 
     /// <summary>
+    /// Works out the agent ops that turn <paramref name="stateJson"/> into <paramref name="state"/>, for
+    /// <c>fleet_canvas_open</c> on a title that already exists. <paramref name="state"/> is validated the
+    /// same way as for <see cref="Open"/>. Boxes that stay keep the user's positions, and an edge whose
+    /// ends change is removed and added again. The list is empty when nothing changes.
+    /// </summary>
+    public static CanvasResult<IReadOnlyList<CanvasOp>> Replace(string kind, string stateJson, JsonNode? state)
+    {
+        var target = Open(kind, state);
+        if (!target.IsSuccess)
+            return CanvasResult.Fail<IReadOnlyList<CanvasOp>>(target.Error);
+
+        if (kind == CanvasKinds.Sequence)
+        {
+            var source = SequenceState.Parse(target.Value.StateJson).Source;
+            IReadOnlyList<CanvasOp> sourceOps = SequenceState.Parse(stateJson).Source == source ? [] : [new SetSourceOp(source)];
+            return CanvasResult.Ok(sourceOps);
+        }
+
+        var current = DiagramState.Parse(stateJson);
+        var next = DiagramState.Parse(target.Value.StateJson);
+        var ops = new List<CanvasOp>();
+
+        if (current.Direction != next.Direction)
+            ops.Add(new SetDirectionOp(next.Direction));
+
+        // Removals go first so an id can move between a box and an edge.
+        foreach (var edge in current.Edges)
+        {
+            var kept = next.FindEdge(edge.Id);
+            if (kept is null || kept.From != edge.From || kept.To != edge.To)
+                ops.Add(new RemoveEdgeOp(edge.Id));
+        }
+
+        foreach (var node in current.Nodes)
+        {
+            if (next.FindNode(node.Id) is null)
+                ops.Add(new RemoveNodeOp(node.Id));
+        }
+
+        foreach (var node in next.Nodes)
+        {
+            var existing = current.FindNode(node.Id);
+            if (existing is null)
+            {
+                ops.Add(new AddNodeOp(node.Id, node.Label, node.Detail));
+            }
+            else if (existing.Label != node.Label || existing.Detail != node.Detail)
+            {
+                ops.Add(new UpdateNodeOp(
+                    node.Id,
+                    existing.Label == node.Label ? null : node.Label,
+                    existing.Detail == node.Detail ? null : node.Detail ?? string.Empty));
+            }
+        }
+
+        foreach (var edge in next.Edges)
+        {
+            var existing = current.FindEdge(edge.Id);
+            if (existing is null || existing.From != edge.From || existing.To != edge.To)
+            {
+                ops.Add(new AddEdgeOp(edge.Id, edge.From, edge.To, edge.Label, edge.Style));
+            }
+            else if (existing.Label != edge.Label || existing.Style != edge.Style)
+            {
+                ops.Add(new UpdateEdgeOp(
+                    edge.Id,
+                    existing.Label == edge.Label ? null : edge.Label ?? string.Empty,
+                    existing.Style == edge.Style ? null : edge.Style));
+            }
+        }
+
+        return CanvasResult.Ok<IReadOnlyList<CanvasOp>>(ops);
+    }
+
+    /// <summary>
     /// Applies <paramref name="ops"/> to <paramref name="stateJson"/>. Nothing is applied unless every op
     /// succeeds and the resulting state is valid. Doesn't check for conflicts with the user's edits;
     /// see <see cref="CanvasConflicts"/>.

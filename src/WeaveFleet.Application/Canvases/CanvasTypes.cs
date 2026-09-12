@@ -18,6 +18,7 @@ public static class CanvasLimits
 {
     public const int MaxStateBytes = 256 * 1024;
     public const int MaxDiagramNodes = 200;
+    public const int MaxTitleLength = 120;
 }
 
 public enum CanvasActor
@@ -35,6 +36,9 @@ public static class CanvasActorExtensions
 
 public enum CanvasErrorKind
 {
+    /// <summary>The session or canvas doesn't exist, or belongs to someone else.</summary>
+    NotFound,
+
     /// <summary>The change is malformed or breaks a rule: an unknown op, an op the actor can't send, a bad value, a duplicate id.</summary>
     Invalid,
 

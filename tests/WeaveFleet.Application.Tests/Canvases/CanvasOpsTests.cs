@@ -340,6 +340,66 @@ public sealed class CanvasOpsTests
     }
 
     [Fact]
+    public void Replace_TheSameState_IsNoOps()
+    {
+        CanvasOps.Replace(CanvasKinds.Diagram, OpenDiagram(), JsonNode.Parse(TwoBoxes)).Value.ShouldBeEmpty();
+        CanvasOps.Replace(CanvasKinds.Sequence, """{"source":"sequenceDiagram"}""", JsonValue.Create("sequenceDiagram")).Value.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Replace_WorksOutTheOpsThatReachTheNewState_AndKeepsPositions()
+    {
+        var moved = ApplyOk(OpenDiagram(), """[{"op":"moveNode","id":"n2","x":7,"y":8}]""", CanvasActor.User);
+        const string next = """
+            {
+              "direction": "LR",
+              "nodes": [
+                { "id": "n2", "label": "SessionEventsHub", "detail": "Api/Hubs" },
+                { "id": "e1", "label": "Was an edge id" }
+              ],
+              "edges": [{ "id": "n1", "from": "n2", "to": "e1" }]
+            }
+            """;
+
+        var ops = CanvasOps.Replace(CanvasKinds.Diagram, moved.StateJson, JsonNode.Parse(next));
+
+        ops.IsSuccess.ShouldBeTrue(ops.Error?.Message);
+        ops.Value.Select(op => op.Name).ShouldBe(["setDirection", "removeEdge", "removeNode", "updateNode", "addNode", "addEdge"]);
+        var applied = CanvasOps.Apply(CanvasKinds.Diagram, CanvasActor.Agent, moved.StateJson, ops.Value);
+        applied.IsSuccess.ShouldBeTrue(applied.Error?.Message);
+        var state = DiagramState.Parse(applied.Value.StateJson);
+        state.Direction.ShouldBe("LR");
+        state.Nodes.Select(n => n.Id).ShouldBe(["n2", "e1"]);
+        var kept = state.FindNode("n2")!;
+        (kept.Detail, kept.X, kept.Y).ShouldBe(("Api/Hubs", 7d, 8d));
+        state.Edges.ShouldHaveSingleItem().ShouldSatisfyAllConditions(e => e.Id.ShouldBe("n1"), e => e.From.ShouldBe("n2"), e => e.To.ShouldBe("e1"));
+    }
+
+    [Fact]
+    public void Replace_AnEdgeWhoseEndsChange_IsRemovedAndAddedAgain()
+    {
+        var current = OpenDiagram("""
+            {"nodes":[{"id":"a","label":"A"},{"id":"b","label":"B"},{"id":"c","label":"C"}],
+             "edges":[{"id":"e1","from":"a","to":"b","label":"x"}]}
+            """);
+
+        var ops = CanvasOps.Replace(CanvasKinds.Diagram, current, JsonNode.Parse("""
+            {"nodes":[{"id":"a","label":"A"},{"id":"b","label":"B"},{"id":"c","label":"C"}],
+             "edges":[{"id":"e1","from":"a","to":"c","label":"x"}]}
+            """));
+
+        ops.Value.ShouldBe([new RemoveEdgeOp("e1"), new AddEdgeOp("e1", "a", "c", "x", "solid")]);
+    }
+
+    [Fact]
+    public void Replace_RejectsABadNewStateLikeOpen()
+    {
+        var ops = CanvasOps.Replace(CanvasKinds.Diagram, OpenDiagram(), JsonNode.Parse("""{"nodes":[{"id":"n1","label":"A","x":1}]}"""));
+
+        ops.Error!.Message.ShouldBe("state.nodes[0]: boxes can't carry positions. The user places them.");
+    }
+
+    [Fact]
     public void RecordedOps_RoundTrip_IncludingWhatARemovalTookWithIt()
     {
         IReadOnlyList<CanvasOp> ops =

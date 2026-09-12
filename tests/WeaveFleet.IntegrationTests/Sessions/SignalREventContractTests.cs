@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
@@ -7,6 +8,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Events;
@@ -613,6 +615,55 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
         secondFile.TryGetProperty("changeType", out var changeType2).ShouldBeTrue(
             $"Second file missing 'changeType'. Actual: {secondFile.GetRawText()}");
         changeType2.GetString().ShouldBe("created");
+    }
+
+    [Fact]
+    public async Task Hub_sends_canvas_events_with_the_exact_wire_shape()
+    {
+        var sessionId = await CreateSessionAsync();
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        await WaitForBroadcasterSubscriberAsync();
+
+        // Act: the agent opens a diagram, then the user moves a box
+        using var scope = _server.Services.CreateScope();
+        var canvases = scope.ServiceProvider.GetRequiredService<ICanvasService>();
+        var opened = await canvases.OpenAsync(
+            sessionId,
+            CanvasKinds.Diagram,
+            "Session event flow",
+            JsonNode.Parse("""
+                {
+                  "nodes": [{ "id": "n1", "label": "NuCode session", "detail": "NuCode/Sessions" }, { "id": "n2", "label": "SessionEventsHub" }],
+                  "edges": [{ "id": "e1", "from": "n1", "to": "n2", "label": "publishes" }]
+                }
+                """));
+        opened.IsSuccess.ShouldBeTrue(opened.Error?.Message);
+        var canvasId = opened.Value.Canvas.Id;
+        var moved = await canvases.ApplyAsync(sessionId, canvasId, CanvasActor.User, JsonNode.Parse("""[{"op":"moveNode","id":"n1","x":20,"y":44.5}]"""));
+        moved.IsSuccess.ShouldBeTrue(moved.Error?.Message);
+
+        // Assert: canvas.updated (open), canvas.focused, canvas.updated (move), exactly as the client receives them
+        // Read the received list rather than WaitForEventAsync, which returns the latest event and can
+        // skip one when two arrive together.
+        List<ReceivedEvent> canvasEvents = [];
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            canvasEvents = _receivedEvents.ToArray()
+                .Where(e => e.Data.GetProperty("type").GetString()?.StartsWith("canvas.", StringComparison.Ordinal) == true)
+                .ToList();
+            if (canvasEvents.Count >= 3)
+                break;
+            await _eventReceived.WaitAsync(TimeSpan.FromMilliseconds(100));
+        }
+
+        canvasEvents.Count.ShouldBe(3, $"Raw events: {string.Join("; ", _rawEvents)}");
+        canvasEvents.ShouldAllBe(e => e.Topic == $"session:{sessionId}");
+        canvasEvents[1].Data.GetRawText().ShouldBe(
+            $$$"""{"type":"canvas.focused","eventId":null,"properties":{"sessionId":"{{{sessionId}}}","canvasId":"{{{canvasId}}}"}}""");
+        canvasEvents[2].Data.GetRawText().ShouldBe(
+            $$$"""{"type":"canvas.updated","eventId":null,"properties":{"sessionId":"{{{sessionId}}}","canvasId":"{{{canvasId}}}","kind":"diagram","title":"Session event flow","version":2,"actor":"user","state":{"direction":"TB","nodes":[{"id":"n1","label":"NuCode session","detail":"NuCode/Sessions","x":20,"y":44.5,"placedByUser":true},{"id":"n2","label":"SessionEventsHub"}],"edges":[{"id":"e1","from":"n1","to":"n2","label":"publishes","style":"solid"}]},"summary":"1 box moved"}}""");
+        canvasEvents[0].Data.GetProperty("properties").GetProperty("summary").GetString().ShouldBe("+2 boxes, +1 edge");
     }
 
     [Fact]

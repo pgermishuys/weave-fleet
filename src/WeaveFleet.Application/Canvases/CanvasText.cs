@@ -130,6 +130,9 @@ public static class CanvasText
         return parts.Count == 0 ? "no changes" : string.Join(", ", parts);
     }
 
+    /// <summary><c>"Session event flow" (cv_01J…)</c></summary>
+    public static string CanvasName(Canvas canvas) => $"{Quote(canvas.Title)} ({canvas.Id})";
+
     /// <summary><c>box "use-sessions.ts" (n7)</c>, or <c>box n7</c> when the label isn't known.</summary>
     public static string BoxName(string? label, string id)
         => label is null ? $"box {id}" : $"box {Quote(OneLine(label))} ({id})";
