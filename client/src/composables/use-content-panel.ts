@@ -1,6 +1,7 @@
 /**
- * Provide/inject contract for the content panel (right panel).
- * Owns files explorer context. No tabs.
+ * Provide/inject contract for a file-oriented canvas (Changes, Files).
+ * Each canvas provides its own context, so selection and the viewer
+ * payload are scoped to that canvas rather than shared across the panel.
  */
 import {
   type InjectionKey,
@@ -11,19 +12,18 @@ import {
   shallowRef,
   watch,
 } from "vue";
+import type { VisualPayload } from "@/lib/visual-payload";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type AllChangedFilter = "all" | "changed";
 export type ContentViewMode = "file" | "diff";
 
 const FILES_TREE_WIDTH_KEY = "weave:files-tree-width";
 const DEFAULT_FILES_TREE_WIDTH = 260;
 
 export interface FilesExplorerContext {
-  allChangedFilter: AllChangedFilter;
   selectedFilePath: string | null;
   expandedDirs: Set<string>;
   searchQuery: string;
@@ -48,9 +48,24 @@ export interface ContentPanelContext {
   viewMode: Readonly<ShallowRef<ContentViewMode>>;
 
   /**
+   * The rendered content of the selected file, or null while nothing is loaded.
+   */
+  filePayload: Readonly<ShallowRef<VisualPayload | null>>;
+
+  /**
    * Select a file. Also resets viewMode to "file".
    */
   selectFile: (path: string) => void;
+
+  /**
+   * Show loaded file content in this canvas's viewer.
+   */
+  showFile: (payload: VisualPayload) => void;
+
+  /**
+   * Close the viewer: clears the selection and the loaded content.
+   */
+  clearFile: () => void;
 
   /**
    * Set the content-viewer mode explicitly.
@@ -72,7 +87,6 @@ export const ContentPanelContextKey: InjectionKey<ContentPanelContext> = Symbol(
 export function provideContentPanelContext(sessionId: Readonly<Ref<string | null>>): ContentPanelContext {
   // State
   const filesContext = shallowRef<FilesExplorerContext>({
-    allChangedFilter: "all",
     selectedFilePath: null,
     expandedDirs: new Set(),
     searchQuery: "",
@@ -81,6 +95,7 @@ export function provideContentPanelContext(sessionId: Readonly<Ref<string | null
   });
 
   const viewMode = shallowRef<ContentViewMode>("file");
+  const filePayload = shallowRef<VisualPayload | null>(null);
 
   // Persist files tree width to localStorage
   watch(
@@ -94,7 +109,6 @@ export function provideContentPanelContext(sessionId: Readonly<Ref<string | null
   watch(sessionId, (newId, oldId) => {
     if (newId !== oldId && newId !== null) {
       filesContext.value = {
-        allChangedFilter: "all",
         selectedFilePath: null,
         expandedDirs: new Set(),
         searchQuery: "",
@@ -102,6 +116,7 @@ export function provideContentPanelContext(sessionId: Readonly<Ref<string | null
         filesTreeWidth: readFilesTreeWidth(),
       };
       viewMode.value = "file";
+      filePayload.value = null;
     }
   });
 
@@ -112,6 +127,19 @@ export function provideContentPanelContext(sessionId: Readonly<Ref<string | null
       selectedFilePath: path,
     };
     // Reset to file view on every selection change.
+    viewMode.value = "file";
+  }
+
+  function showFile(payload: VisualPayload): void {
+    filePayload.value = payload;
+  }
+
+  function clearFile(): void {
+    filesContext.value = {
+      ...filesContext.value,
+      selectedFilePath: null,
+    };
+    filePayload.value = null;
     viewMode.value = "file";
   }
 
@@ -163,7 +191,10 @@ export function provideContentPanelContext(sessionId: Readonly<Ref<string | null
   const ctx: ContentPanelContext = {
     filesContext,
     viewMode,
+    filePayload,
     selectFile,
+    showFile,
+    clearFile,
     setViewMode,
     updateFilesContext,
   };

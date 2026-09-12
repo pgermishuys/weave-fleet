@@ -12,12 +12,13 @@ import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { CommandEventName } from "@/lib/command-events";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart, AccumulatedReasoningPart } from "@/lib/client-types";
-import type { VisualPayload } from "@/lib/visual-payload";
+import { parseVisualPayload, type VisualPayload } from "@/lib/visual-payload";
 import { isQuestionPart } from "@/lib/question-types";
 import { diagLog } from "@/lib/message-diagnostics";
 import { useSessionsStore } from "@/stores/sessions";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
-import { useVisualPanel } from "@/composables/use-visual-panel";
+import { useCanvasesStore } from "@/stores/canvases";
+import { useSidebarStore } from "@/stores/sidebar";
 import { mergeMessagesByTimestamp } from "@/lib/merge-messages";
 
 interface ImageAttachmentDisplay {
@@ -58,10 +59,8 @@ const props = defineProps<{
 const router = useRouter();
 const sessionsStore = useSessionsStore();
 const { sessions } = storeToRefs(sessionsStore);
-const visualPanel = computed(() => useVisualPanel(props.sessionId));
-function showVisual(payload: VisualPayload): void {
-  visualPanel.value.showVisual(payload);
-}
+const canvasesStore = useCanvasesStore();
+const sidebarStore = useSidebarStore();
 
 const selectedSession = computed(() => {
   return sessions.value.find((session) => session.session.id === props.sessionId) ?? null;
@@ -244,6 +243,41 @@ const messages = computed<ActivityMessage[]>(() => {
     } satisfies ActivityMessage;
   });
 });
+
+// --- Visual canvases ---
+// Every diagram or document the agent renders is listed in the canvas picker.
+// One that arrives while this conversation is open also opens as a canvas tab;
+// history loaded later (or on first render) never opens tabs on its own.
+const mountedAt = Date.now();
+const LIVE_TOLERANCE_MS = 5_000;
+const autoOpenedToolIds = new Set<string>();
+
+const conversationVisuals = computed(() =>
+  deliveredMessages.value.flatMap((message) =>
+    (message.tools ?? []).flatMap((tool) => {
+      const payload = tool.output ? parseVisualPayload(tool.output) : null;
+      return payload ? [{ toolId: tool.id, createdAt: message.createdAt, payload }] : [];
+    }),
+  ),
+);
+
+watch(
+  conversationVisuals,
+  (visuals) => {
+    canvasesStore.setKnownVisuals(props.sessionId, visuals.map((visual) => visual.payload));
+
+    for (const visual of visuals) {
+      if (autoOpenedToolIds.has(visual.toolId)) continue;
+      autoOpenedToolIds.add(visual.toolId);
+
+      const isLive = (visual.createdAt ?? 0) >= mountedAt - LIVE_TOLERANCE_MS;
+      if (isLive) {
+        canvasesStore.openVisual(props.sessionId, visual.payload);
+      }
+    }
+  },
+  { immediate: true },
+);
 
 const isStreaming = computed(() => sessionStatus.value === "busy" || sessionStatus.value === "delegating");
 
@@ -655,7 +689,8 @@ function getStringValue(value: unknown): string | undefined {
 }
 
 function handleExpandVisual(payload: VisualPayload): void {
-  showVisual(payload);
+  canvasesStore.openVisual(props.sessionId, payload);
+  sidebarStore.setRightPanelCollapsed(false);
 }
 </script>
 

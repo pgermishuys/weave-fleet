@@ -1,18 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
-import { Archive, GitFork, Loader2, OctagonX, Pencil, RotateCcw, Square, Trash2, FileText, ChevronDown, ChevronRight } from "lucide-vue-next";
+import { Archive, GitFork, Loader2, OctagonX, Pencil, RotateCcw, Square, Trash2, ChevronDown, ChevronRight } from "lucide-vue-next";
 import ConfirmDeleteSessionDialog from "@/components/sessions/ConfirmDeleteSessionDialog.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
 import SmartLinkItem from "@/plugins/builtin/smart-links/SmartLinkItem.vue";
 import TodoListView from "@/components/session/TodoListView.vue";
 import { useSessionTodos } from "@/composables/use-session-todos";
 import { useSessionDetailContext } from "@/composables/use-session-detail-context";
-import { useVisualPanel } from "@/composables/use-visual-panel";
-import { useContentPanelContext } from "@/composables/use-content-panel";
 import { apiFetch } from "@/lib/api-client";
 import { trackAction } from "@/lib/track-action";
-import { getVisualPayloadSyntheticPath } from "@/lib/visual-payload-path";
 import type { SessionActionCapabilities, SessionListItem } from "@/api/client";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { secondsUntilRefresh, isRefreshing, refreshNow as useSmartLinksRefresh, POLL_INTERVAL_SECONDS } from "@/plugins/builtin/smart-links/composables/use-smart-links";
@@ -46,7 +43,6 @@ const props = defineProps<{
 const router = useRouter();
 const ctx = useSessionDetailContext();
 const smartLinksStore = useSmartLinksStore();
-const contentPanel = useContentPanelContext();
 
 const { abortSession, isAborting, error: abortError } = ctx.abort;
 const { archiveSession, isArchiving, error: archiveError } = ctx.archive;
@@ -144,41 +140,6 @@ const actionErrors = computed(() => [
   resumeError.value,
   terminateError.value,
 ].filter((message): message is string => Boolean(message)));
-
-// Artifact chip — reflects the currently mirrored visual artifact for this session, if any.
-const visualPanel = computed(() => sessionId.value ? useVisualPanel(sessionId.value) : null);
-const artifactPayload = computed(() => visualPanel.value?.visualPayload.value ?? null);
-const artifactName = computed(() => {
-  const path = artifactPayload.value?.sourceFilePath;
-  if (!path) return null;
-  const segments = path.split("/");
-  return segments[segments.length - 1] || path;
-});
-
-function handleArtifactChipActivate(): void {
-  const payload = artifactPayload.value;
-  const panel = visualPanel.value;
-
-  if (payload) {
-    if (panel) {
-      panel.showVisual(payload);
-    }
-    void contentPanel.selectFile(getVisualPayloadSyntheticPath(payload));
-    return;
-  }
-
-  const name = artifactName.value;
-  if (name) {
-    void contentPanel.selectFile(`__visual__/${name}`);
-  }
-}
-
-function handleArtifactChipKeydown(event: KeyboardEvent): void {
-  if (event.key === "Enter" || event.key === " " || event.key === "Spacebar") {
-    event.preventDefault();
-    handleArtifactChipActivate();
-  }
-}
 
 function toggleTodosExpanded(): void {
   isTodosExpanded.value = !isTodosExpanded.value;
@@ -620,12 +581,12 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
       </p>
     </div>
 
-    <!-- Smart-link / todo / artifact chips row -->
+    <!-- Smart-link / todo chips row -->
     <div
-      v-if="activeSmartLinks.length > 0 || todos.length > 0 || artifactName"
+      v-if="activeSmartLinks.length > 0 || todos.length > 0"
       class="session-meta-chips"
       role="list"
-      aria-label="Session links and artifacts"
+      aria-label="Session links and todos"
     >
       <button
         v-if="todos.length > 0"
@@ -644,19 +605,6 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
         {{ todoProgressLabel }}
       </button>
 
-      <button
-        v-if="artifactName"
-        type="button"
-        class="meta-chip meta-chip--artifact"
-        role="listitem"
-        :aria-label="`Open artifact ${artifactName}`"
-        tabindex="0"
-        @click="handleArtifactChipActivate"
-        @keydown="handleArtifactChipKeydown"
-      >
-        <FileText :size="11" aria-hidden="true" />
-        {{ artifactName }}
-      </button>
 
       <button
         v-if="activeSmartLinks.length > 0"
@@ -909,13 +857,6 @@ async function handleDismissSmartLink(linkId: string): Promise<void> {
   color: #fbbf24;
   border-color: rgba(245, 158, 11, 0.28);
   background: rgba(245, 158, 11, 0.08);
-}
-
-.meta-chip--artifact {
-  color: #d8b4fe;
-  border-color: rgba(192, 132, 252, 0.3);
-  background: rgba(192, 132, 252, 0.08);
-  font-weight: 500;
 }
 
 /* Smart links refresh arc timer */

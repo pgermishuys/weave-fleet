@@ -5,8 +5,6 @@ import type { BrowseDirectoryEntry } from '@/api/client'
 import type { UseDiffsResult } from '@/composables/use-diffs'
 import { useContentPanelContext } from '@/composables/use-content-panel'
 
-const SYNTHETIC_PATH_PREFIX = '__visual__/'
-
 interface Props {
   entry: BrowseDirectoryEntry
   depth: number
@@ -47,7 +45,6 @@ const children = computed(() =>
 // Find diff info for this file
 const diffInfo = computed(() => {
   if (props.entry.isDirectory) return null
-  if (props.entry.relativePath.startsWith(SYNTHETIC_PATH_PREFIX)) return null
   return diffs.diffs.value.find(d => d.file === props.entry.relativePath)
 })
 
@@ -104,45 +101,8 @@ const isSelected = computed(() => {
   return contentPanel.filesContext.value.selectedFilePath === props.entry.relativePath
 })
 
-// Filtered children based on All/Changed mode
-const filteredChildren = computed(() => {
-  const allChangedFilter = contentPanel.filesContext.value.allChangedFilter
-  
-  if (allChangedFilter === 'all') {
-    return children.value
-  }
-
-  // In "changed" mode, filter children
-  const changedPaths = new Set(diffs.diffs.value.map(d => d.file))
-  
-  // Build set of all ancestor directories needed
-  const neededDirs = new Set<string>()
-  for (const path of changedPaths) {
-    let current = path
-    while (current.includes('/')) {
-      const parent = current.substring(0, current.lastIndexOf('/'))
-      if (parent) {
-        neededDirs.add(parent)
-        current = parent
-      } else {
-        break
-      }
-    }
-  }
-
-  return children.value.filter(entry => {
-    if (entry.isDirectory) {
-      return neededDirs.has(entry.relativePath)
-    } else {
-      return changedPaths.has(entry.relativePath)
-    }
-  })
-})
-
 async function toggleDirectory() {
   if (!fileBrowser) return
-  // Defensive: synthetic visual-artifact paths are never real directories.
-  if (props.entry.relativePath.startsWith(SYNTHETIC_PATH_PREFIX)) return
   if (isExpanded.value) {
     fileBrowser.collapseDirectory(props.entry.relativePath)
   } else {
@@ -152,10 +112,7 @@ async function toggleDirectory() {
 
 async function handleFileClick() {
   if (!fileBrowser) return
-  // Call contentPanel.selectFile which updates state and switches to the changes tab
   contentPanel.selectFile(props.entry.relativePath)
-  // Then load the file content and show visual.
-  // Synthetic paths short-circuit inside fileBrowser.selectFile (no fetch).
   await fileBrowser.selectFile(props.entry.relativePath)
 }
 </script>
@@ -208,9 +165,9 @@ async function handleFileClick() {
       <div v-if="isLoading" class="file-browser-tree-node__loading" :style="{ paddingLeft: `${(depth + 1) * 16 + 8}px` }">
         <span class="file-browser-tree-node__loading-text">Loading...</span>
       </div>
-      <template v-else-if="filteredChildren.length > 0">
+      <template v-else-if="children.length > 0">
         <FileBrowserTreeNode
-          v-for="child in filteredChildren"
+          v-for="child in children"
           :key="child.relativePath"
           :entry="child"
           :depth="depth + 1"

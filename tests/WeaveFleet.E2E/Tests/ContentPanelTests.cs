@@ -6,16 +6,13 @@ namespace WeaveFleet.E2E.Tests;
 
 /// <summary>
 /// E2E smoke tests for the content panel (right panel) in the Sessions V2 view.
-/// Verifies the two tabs (Files, Changes), reviewed-count label, panel collapse/expand,
-/// and roving keyboard focus across tabs.
+/// Verifies the default canvas tabs (Changes, Files), reviewed-count label, panel
+/// collapse/expand, and roving keyboard focus across tabs.
 ///
 /// Note: the current <c>TestScenarioBuilder</c> has no support for seeding session diffs
-/// or mirrored visual artifacts. Content-slot routing to <c>__visual__/plan.md</c> via
-/// <c>useContentPanelContext().selectFile</c> (from the artifact chip or a file-browser
-/// selection) is covered at the unit level in
-/// <c>client/src/composables/__tests__/use-file-browser.test.ts</c> (around line 93); it is
-/// not re-verified here because there is no scenario-builder hook to produce a non-empty
-/// diff set or a mirrored visual payload for a real session.
+/// or visualize tool output, so diagram canvases are covered at the unit level in
+/// <c>client/src/components/canvas/__tests__/CanvasHost.test.ts</c> and
+/// <c>client/src/stores/__tests__/canvases.test.ts</c>.
 /// </summary>
 [Trait("Category", "E2E")]
 [Trait("Lane", "Smoke")]
@@ -27,8 +24,7 @@ public sealed class ContentPanelTests : E2ETestBase,
         : base(factory, playwright) { }
 
     /// <summary>
-    /// Verify that exactly two tabs (Files, Changes) are visible in the content panel,
-    /// and that no Preview/Details tabs exist.
+    /// Verify that a new session opens with exactly two canvas tabs (Changes, Files).
     /// </summary>
     [Fact]
     public async Task ContentPanel_ShowsExactlyTwoTabs()
@@ -54,7 +50,7 @@ public sealed class ContentPanelTests : E2ETestBase,
             await Assertions.Expect(detail.GetFilesTab()).ToBeVisibleAsync();
             await Assertions.Expect(detail.GetChangesTab()).ToBeVisibleAsync();
 
-            // Exactly two tabs should exist in the tablist — no Preview, no Details.
+            // A new session starts with exactly these two canvases.
             await Assertions.Expect(detail.GetAllTabs()).ToHaveCountAsync(2);
         });
     }

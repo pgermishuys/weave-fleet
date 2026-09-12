@@ -1,18 +1,33 @@
-import { computed, ref, watch, type Ref } from 'vue'
+import { ref, watch, type Ref } from 'vue'
 import { browseSessionDirectory, readSessionFile } from '@/api/session-files'
 import type { BrowseDirectoryEntry } from '@/api/client'
 import { buildPayloadForFile } from '@/lib/file-payload'
-import { useVisualPanel } from '@/composables/use-visual-panel'
 import { useWeaveSocket } from '@/composables/use-weave-socket'
 import { useContentPanelContext } from '@/composables/use-content-panel'
 import type { DomainEvent } from '@/lib/domain-events'
 import type { VisualPayload } from '@/lib/visual-payload'
 
-const SYNTHETIC_PATH_PREFIX = '__visual__/'
+/**
+ * Reads a session file and builds the payload the file viewer renders.
+ * Binary files get a short markdown notice instead of their bytes.
+ */
+export async function readFilePayload(sessionId: string, path: string): Promise<VisualPayload> {
+  const response = await readSessionFile(sessionId, path)
+
+  if (response.isBinary) {
+    return {
+      $type: 'markdown',
+      content: `# Binary File\n\nCannot display binary file: \`${path}\`\n\nThis file is a binary file and cannot be previewed as text.`,
+      sourceFilePath: path,
+      sourceText: '',
+      viewMode: 'rendered',
+    }
+  }
+
+  return buildPayloadForFile(path, response.content || '')
+}
 
 export function useFileBrowser(sessionId: Ref<string | null>) {
-  const visualPanel = computed(() => useVisualPanel(sessionId.value ?? ''))
-  const showVisual = (payload: VisualPayload): void => visualPanel.value.showVisual(payload)
   const { subscribeV2 } = useWeaveSocket()
   const contentPanel = useContentPanelContext()
 
@@ -97,31 +112,8 @@ export function useFileBrowser(sessionId: Ref<string | null>) {
 
     error.value = null
 
-    if (path.startsWith(SYNTHETIC_PATH_PREFIX)) {
-      // Synthetic visual artifact paths are never fetched from the session
-      // filesystem; the content slot rerenders directly off visualPayload.
-      contentPanel.selectFile(path)
-      return
-    }
-
     try {
-      const response = await readSessionFile(sessionId.value, path)
-      
-      if (response.isBinary) {
-        // Show a visual payload with a binary file message
-        const binaryPayload = {
-          $type: 'markdown' as const,
-          content: `# Binary File\n\nCannot display binary file: \`${path}\`\n\nThis file is a binary file and cannot be previewed as text.`,
-          sourceFilePath: path,
-          sourceText: '',
-          viewMode: 'rendered' as const,
-        }
-        showVisual(binaryPayload)
-        return
-      }
-
-      const payload = buildPayloadForFile(path, response.content || '')
-      showVisual(payload)
+      contentPanel.showFile(await readFilePayload(sessionId.value, path))
     } catch (err) {
       error.value = err instanceof Error ? err.message : `Failed to read file: ${path}`
       console.error('[useFileBrowser] selectFile error:', err)
