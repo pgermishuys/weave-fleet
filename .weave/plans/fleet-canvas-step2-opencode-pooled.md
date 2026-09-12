@@ -3,7 +3,7 @@
 ## TL;DR
 Move canvas state to the server and let the agent open, read and change canvases, for **pooled OpenCode sessions only**. Fleet stores canvases per session (versioned, every change marked `agent` or `user`) and pushes `canvas.updated` over SignalR. Fleet ships a local OpenCode plugin, `fleet-canvas.ts` (a plugin rather than a tool file since Task 0), that gives the agent `fleet_canvas_list`, `fleet_canvas_open`, `fleet_canvas_read`, `fleet_canvas_patch` and `fleet_canvas_focus`. Each call carries OpenCode's `sessionID`; Fleet maps it to the Fleet session through the pool binding table, using a per-process token.
 
-You can drag and remove boxes in a Diagram canvas, and "Ask agent" attaches a box to your message. **Fleet never tells the agent about your edits.** Your edits are protected instead: your box positions are always kept, changes name boxes by id, and Fleet refuses an agent change that touches a box you removed. The refusal is how the agent finds out. Edits cost no tokens, and a read returns only what changed, as short text.
+**Canvases are read-only for you in this step (Decision 7).** When you ask the agent for a diagram, it opens a canvas, and you see it in the right panel and watch it change as the agent revises it. You can close the tab, but you can't edit the diagram. Editing (drag, remove, Ask agent) comes later on top of the same plumbing. The server already supports user edits and protects them (Tasks 2–3), but no endpoint or UI uses that yet.
 
 ## Context
 Ground truth from the codebase (2026-09-12). Don't re-check these:
@@ -27,20 +27,26 @@ Ground truth from the codebase (2026-09-12). Don't re-check these:
 4. **`fleet_canvas_open` with an existing title reopens that canvas** (open or closed) instead of creating a new one, the same rule as step 1's `openVisual`.
 5. **The mockup's "N edits not read yet" pill is dropped.** The agent is never told about edits, so a counter of unread edits would suggest something is pending when nothing is. The version badge stays. This is a deliberate change from the mockup.
 6. **Keep agent tokens low.** Edits cost no tokens until the agent works on the canvas. Moves are layout and never reach the agent. Reads return a short text diff by default. Writes return one line and don't echo the diagram back.
+7. **Read-only first (decided with the user after Task 3).** The user asked to scope down to "the infrastructure / plumbing that should be introduced for us to support Canvases": the agent draws and revises, and the user can see a diagram but not edit it. What changes:
+   - No user-edit endpoint, no drag, no remove, no Ask-agent chip (Task 7 is deferred). Closing a tab stays, because it's not an edit to the diagram.
+   - The user-edit support already built in Tasks 2–3 (`moveNode`/`removeNode` for the user, the refusal rule, `agent_seen_version`) stays in the server, tested but unused, ready for when editing arrives. With no user edits, the refusal rule never fires.
+   - The agent's tools get simpler: `fleet_canvas_read` always returns the whole canvas as text (no `full` argument), `fleet_canvas_list` has no "(changed by user)" flag, and the tool descriptions don't mention user edits. Both come back with editing.
+   - Decisions 1, 3 and 5 still hold, but they don't matter until the user can edit.
 
 ## Scope
 - In scope:
   - Server canvas store: tables, repository, `ICanvasService`, per-kind change ops and validation, and `canvas.updated`, `canvas.closed` and `canvas.focused` events.
-  - Client REST API for canvases (list, user changes, close).
+  - Client REST API for canvases (list and close).
   - An agent bridge for pooled OpenCode: per-process token, session resolution, bridge endpoints.
   - `fleet-canvas.ts` local OpenCode plugin, written to Fleet's app data and loaded by pooled processes through `OPENCODE_CONFIG_CONTENT`.
   - Canvas kinds `diagram` (boxes and edges with positions, the mockup's canvas) and `sequence` (Mermaid source, which only the agent edits). Together they cover what `visualize.ts` does today.
-  - Client: server-backed canvases in the store, the Diagram canvas with move and remove, canvas tool cards, the Ask agent chip, mock-mode fixtures.
+  - Client: server-backed canvases in the store, kept live by the canvas events, and read-only rendering of `diagram` and `sequence` canvases with the existing renderers. Mock-mode fixtures.
 - Out of scope:
   - Dedicated (non-pooled) OpenCode, Claude Code, NuCode and Pi. The store and tool file are harness-neutral, so adding them later only touches launch config.
   - An MCP server.
   - Terminal, repo and personal canvases, and a JSON Schema engine (steps 3–5).
-  - User edits beyond move and remove: renaming, adding boxes or edges, editing sequence source.
+  - All user edits to a canvas (Decision 7): drag, remove, the Ask-agent chip, and everything beyond them. The server-side support for move and remove stays, unused.
+  - Canvas tool-card variant, the live dot on the tab, and the version badge. Tool calls show as generic tool cards for now.
   - Removing `visualize.ts` from the catalog. The client keeps rendering its output. Retiring it is a follow-up once `fleet_canvas_open` has shipped.
   - Markdown and HTML canvas kinds.
 - Constraints:
@@ -171,50 +177,46 @@ Each tool POSTs to `{FLEET_URL}/api/bridge/opencode/canvas/{op}` with `Authoriza
     - Errors carry `CanvasErrorKind`; `NotFound` was added for a missing session or canvas. Lost write races retry up to 5 times.
     - Registered as `ICanvasService` (scoped) in `DependencyInjection.cs`. `InMemoryCanvasRepository` in `tests/WeaveFleet.Testing` mirrors the SQLite rules for application tests.
 
-- [ ] 4. Client canvas endpoints
-  - **What**: `GET /api/sessions/{id}/canvases`, `POST /api/sessions/{id}/canvases/{canvasId}/changes` (body `{ ops }`, user ops only, actor `user`), `DELETE /api/sessions/{id}/canvases/{canvasId}`. A user op on a box the agent has since removed returns 409, and the client refetches. The session-owner check matches the neighbouring session endpoints.
+- [ ] 4. Client canvas endpoints (read-only since Decision 7)
+  - **What**: `GET /api/sessions/{id}/canvases` returns the session's open canvases with their full state, and `DELETE /api/sessions/{id}/canvases/{canvasId}` closes one. There's no user-changes endpoint in this step. The session-owner check matches the neighbouring session endpoints.
   - **Files**: `src/WeaveFleet.Api/Endpoints/CanvasEndpoints.cs` (new), mapped in `Program.cs`; contracts and `JsonContext.cs`.
-  - **Tests**: integration tests for owner isolation (another user gets 404), 409 on a missing box, and 422 when an agent-only op is sent.
+  - **Tests**: integration tests for the list shape, closing (the canvas leaves the list and `canvas.closed` is sent), and owner isolation (another user gets 404).
 
 - [ ] 5. Agent bridge for pooled OpenCode
-  - **What**: A token on `PooledOpenCodeInstance`, a token → instance lookup in `PooledOpenCodeInstanceRegistry` (constant-time compare), and a directory-less `TryGetBinding(instance, openCodeSessionId)`. An application-facing `IHarnessCanvasCallerResolver` returns `(fleetSessionId, userId)` or nothing, and does the child → parent walk. Bridge endpoints `POST /api/bridge/opencode/canvas/{list|open|read|patch|focus}` are `AllowAnonymous` but require a loopback address plus the bearer token, then call `ICanvasService` as `agent`. They return the plain-text outputs from the design.
+  - **What**: A token on `PooledOpenCodeInstance`, a token → instance lookup in `PooledOpenCodeInstanceRegistry` (constant-time compare), and a directory-less `TryGetBinding(instance, openCodeSessionId)`. An application-facing `IHarnessCanvasCallerResolver` returns `(fleetSessionId, userId)` or nothing, and does the child → parent walk. Bridge endpoints `POST /api/bridge/opencode/canvas/{list|open|read|patch|focus}` are `AllowAnonymous` but require a loopback address plus the bearer token, then call `ICanvasService` as `agent`. They return the plain-text outputs from the design, adjusted for Decision 7: `read` always returns the full text, and `list` has no "(changed by user)" flag.
   - **Files**: `Pooling/PooledOpenCodeInstance.cs`, `Pooling/PooledOpenCodeInstanceRegistry.cs`, `Pooling/PoolDemuxBindingTable.cs`, `OpenCode/OpenCodeCanvasCallerResolver.cs` (new); `src/WeaveFleet.Application/Canvases/IHarnessCanvasCallerResolver.cs` (new); `src/WeaveFleet.Api/Endpoints/CanvasBridgeEndpoints.cs` (new).
   - **Acceptance**: A token from instance A with a session bound to instance B returns 404. A session that stays bound after a lease moves (`MoveBindings`) resolves through the new instance's token. A request without a token from loopback returns 404.
   - **Tests**: infrastructure tests for the resolver, including the child-session walk against a fake `OpenCodeHttpClient`; integration tests for the bridge endpoints.
 
 - [ ] 6. Ship `fleet_canvas.ts` and wire pooled processes
-  - **What** (changed by Task 0): The source lives in the repo at `opencode/fleet/fleet-canvas.ts`, embedded in Infrastructure. It's a local OpenCode **plugin** with **no imports**: it exports one plugin function that returns `{ tool: { fleet_canvas_list, fleet_canvas_open, … } }`, and every `args` entry is a plain JSON Schema object. At startup Fleet writes it to `{AppData}/opencode/fleet-canvas.ts`, only when the content hash changes. `OpenCodeProcessManager` adds `"plugin": ["<file URI of that path>"]` to the `OPENCODE_CONFIG_CONTENT` it already sets. `CreatePooledInstanceAsync` adds `FLEET_URL` and `FLEET_BRIDGE_TOKEN`. No `OPENCODE_CONFIG_DIR`, no `package.json`. The tool descriptions carry the guidance sentence from the design.
+  - **What** (changed by Task 0): The source lives in the repo at `opencode/fleet/fleet-canvas.ts`, embedded in Infrastructure. It's a local OpenCode **plugin** with **no imports**: it exports one plugin function that returns `{ tool: { fleet_canvas_list, fleet_canvas_open, … } }`, and every `args` entry is a plain JSON Schema object. At startup Fleet writes it to `{AppData}/opencode/fleet-canvas.ts`, only when the content hash changes. `OpenCodeProcessManager` adds `"plugin": ["<file URI of that path>"]` to the `OPENCODE_CONFIG_CONTENT` it already sets. `CreatePooledInstanceAsync` adds `FLEET_URL` and `FLEET_BRIDGE_TOKEN`. No `OPENCODE_CONFIG_DIR`, no `package.json`. The tool descriptions carry the guidance sentence from the design, minus its first sentence about user edits (Decision 7). `fleet_canvas_read` takes only `canvasId`.
   - **Files**: `opencode/fleet/fleet-canvas.ts` (new); `src/WeaveFleet.Infrastructure/Harnesses/OpenCode/OpenCodeFleetPlugin.cs` (new, writes the file); `OpenCodeProcessManager.cs:121`; `OpenCodeHarnessRuntime.cs:808`; `OpenCodeProcessOptions` if the env needs to be split out.
   - **Acceptance**: A live test built on `OpenCodeFixture` and FakeLlmServer: a pooled session's scripted `fleet_canvas_open` then `fleet_canvas_patch` produces a stored canvas at v2 and two `canvas.updated` events on `session:{id}`. It must use a scratch `HOME`. The user's own `plugin` entries still load.
 
-- [ ] 7. Ask-agent context
-  - **What**: On the client, an Ask-agent chip turns into `[Canvas "Session event flow" (cv_…) › box "use-sessions.ts" (n7)]` ahead of the message, next to `formatAnnotationPrompt`. That's the only way canvas context gets into a prompt, and only when you attach it.
+- [ ] 7. Ask-agent context. **Deferred** with user editing (Decision 7).
+  - **What** (when it comes back): On the client, an Ask-agent chip turns into `[Canvas "Session event flow" (cv_…) › box "use-sessions.ts" (n7)]` ahead of the message, next to `formatAnnotationPrompt`. That's the only way canvas context gets into a prompt, and only when you attach it.
   - **Files**: `client/src/lib/format-canvas-context.ts` (new).
-  - **Tests**: a client unit test for the formatter.
 
-- [ ] 8. Client: server-backed canvases and the Diagram canvas
+- [ ] 8. Client: server-backed canvases, read-only (rescoped by Decision 7)
   - **What**:
-    - Store: load `GET …/canvases` when a session opens. Apply `canvas.updated`, `canvas.closed` and `canvas.focused` from the session topic. Server canvases sit next to Changes and Files. A new kind `diagram` maps to `DiagramCanvas.vue`, and `sequence` reuses the Mermaid renderer.
-    - `DiagramCanvas.vue` builds on `VueFlowRenderer`. A drag end sends `moveNode`, and Remove sends `removeNode`. On 409, refetch and show a toast ("The agent removed that box"). It shows the version badge and a node popover with Ask agent and Remove. There's no unread pill (Decision 5).
-    - A live dot on the tab after an agent `canvas.updated`, cleared on `turn.ended` or `session.idled`.
-    - A canvas tool-card variant in `ToolCard.vue` for `fleet_canvas_*` tools, using the metadata title.
-    - An Ask-agent chip on the composer.
-    - Mock mode: seed one diagram canvas and apply user ops locally in `client/vite-plugin-mock-api.ts`.
-  - **Files**: `client/src/stores/canvases.ts`, `client/src/lib/canvas-registry.ts`, `client/src/lib/domain-events.ts`, `client/src/lib/domain-event-reducer.ts` (or a canvas-specific handler), `client/src/components/canvas/DiagramCanvas.vue` (new), `client/src/components/session/ToolCard.vue`, the composer component, `client/vite-plugin-mock-api.ts`.
-  - **Acceptance**: In mock mode (3099) you can drag, remove, see the version badge, and attach an Ask-agent chip. It matches the mockup in light and dark, apart from the dropped pill. `bunx vue-tsc --noEmit` and `bun run test` pass on Node 22 with `npm ci`, as in CI.
-  - **Tests**: store reducer tests with real event payloads; a DiagramCanvas test that checks a drag sends one `moveNode` op.
+    - Store: load `GET …/canvases` when a session opens, and apply `canvas.updated` (upsert the tab), `canvas.closed` (remove it) and `canvas.focused` (make it active) from the session topic. Server canvases sit next to Changes and Files. Closing a server canvas tab calls `DELETE`.
+    - Rendering reuses what step 1 built. A `diagram` state maps to a `visual/flow` payload for `VueFlowRenderer` (`from`/`to` become `source`/`target`; the direction carries over; `detail` and the `dashed`/`planned` styles render as well as the renderer allows). A `sequence` state goes to the Mermaid renderer. The canvas can't be edited.
+    - Mock mode: seed one diagram and one sequence canvas in `client/vite-plugin-mock-api.ts`, and a way to fire a `canvas.updated` so the live update can be seen on 3099.
+  - **Files**: `client/src/stores/canvases.ts`, `client/src/lib/canvas-registry.ts`, `client/src/lib/domain-events.ts`, `client/src/lib/domain-event-reducer.ts` (or a canvas-specific handler), a small state-to-payload mapper, `client/vite-plugin-mock-api.ts`.
+  - **Acceptance**: In mock mode (3099), the seeded canvases show in the right panel in light and dark, a `canvas.updated` for an open canvas redraws it in place, and closing a tab removes it and stays closed after a reload. `bunx vue-tsc --noEmit` and `bun run test` pass on Node 22 with `npm ci`, as in CI.
+  - **Tests**: store reducer tests with the real event payloads from the SignalR contract test; mapper tests for diagram → flow payload.
 
 - [ ] 9. End-to-end check
-  - **What**: Run Fleet with a scratch `HOME` and pooled OpenCode on a real model. Ask for a diagram. Drag two boxes and remove one. Then ask it to add a push path. Check that your removed box stays removed and your positions stay. If the agent touched the removed box, check it got the refusal, read, and carried on. Check the turn's token usage against the same turn with no edits.
+  - **What**: Run Fleet with a scratch `HOME` and pooled OpenCode on a real model. Ask for a diagram, and check it appears in the right panel. Ask for a change, and check the same tab updates in place rather than opening a new one. Reload the page, and check the canvas is still there. Close it, then ask the agent to show it again, and check it reopens.
   - **Output**: screenshots in `mockups/canvas/`, next to the step 1 ones.
 
 ## Dependencies and order
-Task 0 comes first because it decides how Task 6 installs the tool. Tasks 1 → 2 → 3 → 4 run in sequence. Task 5 needs 3. Task 6 needs 0 and 5. Task 7 is independent. Task 8 needs 3 for the event shapes, and its UI can start in mock mode in parallel with 4–6. Task 9 is last.
+Task 0 comes first because it decides how Task 6 installs the tool. Tasks 1 → 2 → 3 → 4 run in sequence. Task 5 needs 3. Task 6 needs 0 and 5. Task 7 is deferred. Task 8 needs 3 for the event shapes and 4 for the list endpoint, and it can start in mock mode in parallel with 5–6. Task 9 is last.
 
 ## Risks
 - ~~**`OPENCODE_CONFIG_DIR` replaces the user's config instead of adding to it.**~~ Task 0 found it adds to the user's config, but Task 6 uses a plugin instead (Task 0 findings).
 - **OpenCode changes how it loads plugin tools.** The import-free plugin relies on two 1.18.30 behaviors: plain JSON Schema `args` (the non-zod branch) and `file://` plugin specs. The Task 6 live test runs against the installed `opencode`, so an upgrade that breaks either fails that test.
-- **The agent describes a diagram without reading it** and mentions a box you removed. The tool description tells it to read first; Task 9 checks whether real models follow that. If they don't, the fallback is a one-line note, and only when your message mentions or attaches a canvas.
+- **The agent describes a diagram without reading it** and mentions a box you removed. The tool description tells it to read first; Task 9 checks whether real models follow that. If they don't, the fallback is a one-line note, and only when your message mentions or attaches a canvas. Not a risk while canvases are read-only (Decision 7).
 - **Warm pool instances** started before Fleet upgrades don't have the env vars. The pool recycles on restart, and the tool returns a clear "restart Fleet" error if `FLEET_BRIDGE_TOKEN` is missing.
 - **Pooled lease moves** (`LeasedInstanceHandle.ReconnectAsync`) move bindings to a new process, which has its own token and env, so resolution holds. A resolver test covers it.
 
