@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
+using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Events;
@@ -126,6 +127,7 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IBoardRepository, BoardRepository>();
         services.AddScoped<ISmartLinkRepository, SmartLinkRepository>();
+        services.AddScoped<ICanvasRepository, CanvasRepository>();
         services.AddScoped<IAutomationRepository, AutomationRepository>();
         services.AddScoped<IAutomationEventLedgerRepository, AutomationEventLedgerRepository>();
 
@@ -148,6 +150,9 @@ public static class DependencyInjection
         services.AddScoped<SessionCallbackService>();
         services.AddScoped<DelegationService>();
         services.AddScoped<SmartLinkService>();
+        services.AddScoped<ICanvasService, CanvasService>();
+        services.AddScoped<CanvasBridge>();
+        services.AddSingleton<IBackgroundUserScope, BackgroundUserScope>();
         services.AddScoped<AutomationService>();
         services.AddScoped<AutomationExecutionService>();
         services.AddScoped<EventTriggerMatcher>();
@@ -299,6 +304,9 @@ public static class DependencyInjection
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<OpenCodeHarnessRuntime>());
         services.AddSingleton<IHarnessPoolRecycler>(sp => new OpenCodeHarnessPoolRecycler(sp.GetRequiredService<OpenCodeHarnessRuntime>()));
         services.AddSingleton<IOpenCodePoolHealthCheck, PoolHealthCheck>();
+        services.AddSingleton<IHarnessCanvasCallerResolver>(sp => new OpenCodeCanvasCallerResolver(
+            sp.GetRequiredService<OpenCodeHarnessRuntime>(),
+            sp.GetRequiredService<ILogger<OpenCodeCanvasCallerResolver>>()));
 
         // Register ClaudeCodeHarness (descriptor) and ClaudeCodeHarnessRuntime (provisioning) as separate singletons.
         services.AddSingleton<ClaudeCodeHarness>();

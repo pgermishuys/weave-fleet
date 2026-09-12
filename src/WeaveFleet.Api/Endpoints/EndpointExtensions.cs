@@ -45,6 +45,7 @@ public static class EndpointExtensions
         apiScope.MapPluginEndpoints();
         apiScope.MapBoardEndpoints();
         apiScope.MapSessionEndpoints();
+        apiScope.MapCanvasEndpoints();
         apiScope.MapProjectEndpoints();
         apiScope.MapFleetSummaryEndpoints();
         apiScope.MapUpdateEndpoints();
@@ -74,6 +75,9 @@ public static class EndpointExtensions
 
         // SignalR hub
         apiScope.MapHub<WeaveFleet.Api.Hubs.SessionEventsHub>("/hubs/session-events");
+
+        // Agent bridge: authenticated by a per-process token, not a Fleet user, so it sits outside the auth group.
+        app.MapCanvasBridgeEndpoints();
 
         return app;
     }

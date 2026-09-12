@@ -84,6 +84,12 @@ internal sealed class PooledOpenCodeInstance : IAsyncDisposable
 
     public OpenCodeHttpClient? HttpClient { get; }
 
+    /// <summary>
+    /// Secret the process sends back when it calls Fleet's agent bridge, so Fleet knows which process is
+    /// calling. Minted per process; it dies with the instance.
+    /// </summary>
+    public string? BridgeToken { get; init; }
+
     public bool IsFaulted => Volatile.Read(ref _faulted) != 0;
 
     public bool IsDisposed => Volatile.Read(ref _disposed) != 0;

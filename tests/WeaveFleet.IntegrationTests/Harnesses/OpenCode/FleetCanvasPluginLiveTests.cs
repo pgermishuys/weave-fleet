@@ -1,0 +1,416 @@
+extern alias FakeLlm;
+
+using System.Collections.Concurrent;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using FakeLlm::FakeLlmServer;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using WeaveFleet.Application.Canvases;
+using WeaveFleet.Application.Data;
+using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Services;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode;
+using WeaveFleet.Infrastructure.Services;
+
+namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode;
+
+/// <summary>
+/// The canvas tools end to end with a real <c>opencode</c>: Fleet on Kestrel spawns a pooled process, which
+/// loads the Fleet plugin next to the user's own. A scripted model calls <c>fleet_canvas_open</c>, then
+/// <c>fleet_canvas_patch</c> with the id the first call returned. The pooled process runs with a scratch
+/// HOME and scratch XDG dirs, so it never reads or writes the real user's OpenCode or Fleet data.
+/// </summary>
+[Trait("Category", "Integration")]
+public sealed partial class FleetCanvasPluginLiveTests
+{
+    private const string Owner = "local-user";
+    private const string SessionId = "fleet-canvas-live";
+    private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(3);
+
+    [OpenCodeFact]
+    public async Task A_pooled_session_opens_and_patches_a_canvas_through_the_plugin()
+    {
+        using var cts = new CancellationTokenSource(Timeout);
+        var ct = cts.Token;
+        var root = Path.Combine(Path.GetTempPath(), $"fleet-canvas-live-{Guid.NewGuid():N}");
+        var workspace = Path.Combine(root, "workspace");
+        var dbPath = Path.Combine(root, "fleet", "fleet.db");
+        Directory.CreateDirectory(workspace);
+        Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+
+        await using var llm = await FakeLlmServerFixture.StartAsync();
+        var processEnvironment = WriteScratchOpenCodeHome(root, llm.BaseUrl);
+        ScriptModel(llm.Queue);
+
+        var factory = new KestrelFleetFactory(dbPath);
+        List<int> pooledProcessIds = [];
+        try
+        {
+            try { _ = factory.Services; }
+            catch (InvalidCastException) { /* expected: the base class expects a TestServer */ }
+
+            var services = factory.LiveServices;
+            SeedSession(services, workspace);
+
+            var events = new ConcurrentQueue<BroadcastEvent>();
+            var collecting = CollectAsync(services.GetRequiredService<IEventBroadcaster>(), events, ct);
+
+            var runtime = services.GetRequiredService<OpenCodeHarnessRuntime>();
+            await using var session = await runtime.SpawnAsync(
+                new HarnessSpawnOptions
+                {
+                    SessionId = SessionId,
+                    WorkingDirectory = workspace,
+                    OwnerUserId = Owner,
+                    LaunchArtifacts = new OpenCodeLaunchArtifacts(processEnvironment),
+                },
+                ct);
+
+            await session.SendPromptAsync("Draw the session event flow, then add the client.", null, ct);
+
+            List<BroadcastEvent> updated;
+            try
+            {
+                using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                wait.CancelAfter(TimeSpan.FromSeconds(60));
+                updated = await WaitForAsync(() => events.Where(e => e.Type == "canvas.updated").ToList(), list => list.Count >= 2, wait.Token);
+            }
+            catch (TimeoutException)
+            {
+                var messages = await session.GetMessagesAsync(null, CancellationToken.None);
+                throw new TimeoutException(
+                    $"Timed out waiting for canvas events. Fleet sent: {string.Join(", ", events.Select(e => e.Type))}\n" +
+                    $"OpenCode messages: {JsonSerializer.Serialize(messages)}\n" +
+                    $"LLM requests: {llm.Queue.Requests.Count}");
+            }
+
+            // Two canvas.updated events on session:{id}: the open at v1, then the patch at v2.
+            updated.Select(e => e.Payload.GetProperty("version").GetInt32()).ShouldBe([1, 2]);
+            updated.ShouldAllBe(e => e.Topic == $"session:{SessionId}" && e.Payload.GetProperty("actor").GetString() == "agent");
+            updated[1].Payload.GetProperty("summary").GetString().ShouldBe("+1 box");
+
+            // The stored canvas is at v2, owned by the session owner.
+            using (var scope = services.CreateScope())
+            using (scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(Owner))
+            {
+                var canvas = (await scope.ServiceProvider.GetRequiredService<ICanvasService>().ListAsync(SessionId, ct)).ShouldHaveSingleItem().Canvas;
+                canvas.Version.ShouldBe(2);
+                canvas.UserId.ShouldBe(Owner);
+                DiagramState.Parse(canvas.StateJson).Nodes.Select(n => n.Id).ShouldBe(["n1", "n2", "n3"]);
+            }
+
+            // The model saw Fleet's tools and the user's own plugin tool side by side.
+            var offered = OfferedToolNames(llm.Queue.Requests);
+            offered.ShouldContain("fleet_canvas_list");
+            offered.ShouldContain("fleet_canvas_open");
+            offered.ShouldContain("fleet_canvas_read");
+            offered.ShouldContain("fleet_canvas_patch");
+            offered.ShouldContain("fleet_canvas_focus");
+            offered.ShouldContain("user_probe");
+
+            // A refused call reaches the model as Fleet's own message.
+            await WaitForAsync(() => llm.Queue.Requests, requests => requests.Count(r => OfferedToolNames([r]).Count > 0) >= 4, ct);
+            llm.Queue.Requests[^1].ShouldContain("No canvas cv_missing in this session. Call fleet_canvas_list to see the open canvases.");
+
+            File.Exists(Path.Combine(Path.GetDirectoryName(dbPath)!, "opencode", OpenCodeFleetPlugin.FileName)).ShouldBeTrue();
+
+            await cts.CancelAsync();
+            await collecting;
+        }
+        finally
+        {
+            if (factory.IsStarted)
+            {
+                pooledProcessIds = factory.LiveServices.GetRequiredService<OpenCodeHarnessRuntime>()
+                    .GetPooledOpenCodePoolHealth().Instances
+                    .Select(instance => instance.ProcessId)
+                    .OfType<int>()
+                    .ToList();
+            }
+
+            await factory.DisposeAsync();
+            try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
+        }
+
+        // Stopping Fleet stops the pooled process too.
+        pooledProcessIds.ShouldNotBeEmpty();
+        foreach (var processId in pooledProcessIds)
+            (await HasExitedAsync(processId, TimeSpan.FromSeconds(5))).ShouldBeTrue($"opencode process {processId} outlived Fleet.");
+    }
+
+    private static async Task<bool> HasExitedAsync(int processId, TimeSpan within)
+    {
+        var deadline = DateTime.UtcNow + within;
+        while (true)
+        {
+            try
+            {
+                using var process = System.Diagnostics.Process.GetProcessById(processId);
+                if (process.HasExited)
+                    return true;
+            }
+            catch (ArgumentException)
+            {
+                return true;
+            }
+
+            if (DateTime.UtcNow > deadline)
+                return false;
+            await Task.Delay(100);
+        }
+    }
+
+    /// <summary>
+    /// A user config that points OpenCode at the fake model and loads one plugin of the user's own. Returns the
+    /// env that points the pooled process at it.
+    /// </summary>
+    private static Dictionary<string, string> WriteScratchOpenCodeHome(string root, Uri llmBaseUrl)
+    {
+        var dirs = new Dictionary<string, string>
+        {
+            ["HOME"] = Path.Combine(root, "home"),
+            ["XDG_CONFIG_HOME"] = Path.Combine(root, "config"),
+            ["XDG_DATA_HOME"] = Path.Combine(root, "data"),
+            ["XDG_CACHE_HOME"] = Path.Combine(root, "cache"),
+            ["XDG_STATE_HOME"] = Path.Combine(root, "state"),
+        };
+        foreach (var dir in dirs.Values)
+            Directory.CreateDirectory(dir);
+
+        // A fresh HOME makes OpenCode fetch and install things on its first request, which can take
+        // minutes. None of it matters here: the model is local and the plugins are files.
+        dirs["OPENCODE_DISABLE_AUTOUPDATE"] = "true";
+        dirs["OPENCODE_DISABLE_DEFAULT_PLUGINS"] = "true";
+        dirs["OPENCODE_DISABLE_MODELS_FETCH"] = "true";
+        dirs["OPENCODE_DISABLE_LSP_DOWNLOAD"] = "true";
+        dirs["OPENCODE_DISABLE_SHARE"] = "true";
+
+        var userPlugin = Path.Combine(root, "user-probe.ts");
+        File.WriteAllText(userPlugin, """
+            export const UserProbe = async () => ({
+              tool: {
+                user_probe: { description: "A tool from the user's own plugin.", args: {}, execute: async () => "ok" },
+              },
+            })
+            """);
+
+        var configDir = Path.Combine(dirs["XDG_CONFIG_HOME"], "opencode");
+        Directory.CreateDirectory(configDir);
+        var baseUrl = llmBaseUrl.ToString().TrimEnd('/') + "/v1";
+        File.WriteAllText(Path.Combine(configDir, "opencode.json"), $$"""
+            {
+              "provider": {
+                "fake": {
+                  "npm": "@ai-sdk/openai-compatible",
+                  "options": { "baseURL": "{{baseUrl}}", "apiKey": "fake-key" },
+                  "models": { "fake-model": { "tool_call": true } }
+                }
+              },
+              "model": "fake/fake-model",
+              "small_model": "fake/fake-model",
+              "plugin": ["{{new Uri(userPlugin).AbsoluteUri}}"]
+            }
+            """);
+
+        return dirs;
+    }
+
+    private static void ScriptModel(ScriptedResponseStore queue)
+    {
+        queue.ToolLessResponse = new ScriptedLlmResponse { Text = "Session event flow" };
+
+        queue.Enqueue(new ScriptedLlmResponse
+        {
+            StopReason = "tool_calls",
+            ToolCalls =
+            [
+                new ScriptedToolCall("call_open", "fleet_canvas_open", """
+                    {"kind":"diagram","title":"Session event flow","state":{"nodes":[{"id":"n1","label":"NuCode session"},{"id":"n2","label":"SessionEventsHub"}],"edges":[{"id":"e1","from":"n1","to":"n2","label":"publishes"}]}}
+                    """),
+            ],
+        });
+
+        // The patch needs the canvas id, which only the open's tool result knows.
+        queue.Enqueue(request => CanvasId().Match(request) is { Success: true } match
+            ? new ScriptedLlmResponse
+            {
+                StopReason = "tool_calls",
+                ToolCalls =
+                [
+                    new ScriptedToolCall("call_patch", "fleet_canvas_patch", $$"""
+                        {"canvasId":"{{match.Value}}","ops":[{"op":"addNode","id":"n3","label":"Client"}]}
+                        """),
+                ],
+            }
+            : new ScriptedLlmResponse { Text = "The open didn't return a canvas id." });
+
+        // A failing call: the plugin throws Fleet's message, and the model reads it in the next request.
+        queue.Enqueue(new ScriptedLlmResponse
+        {
+            StopReason = "tool_calls",
+            ToolCalls = [new ScriptedToolCall("call_read", "fleet_canvas_read", """{"canvasId":"cv_missing"}""")],
+        });
+
+        queue.Enqueue(new ScriptedLlmResponse { Text = "Done." });
+    }
+
+    private static void SeedSession(IServiceProvider services, string workspace)
+    {
+        using var scope = services.CreateScope();
+        using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            INSERT INTO workspaces (id, directory, display_name, created_at, user_id)
+            VALUES ('ws-live', '{workspace}', 'Live', '2026-09-12T00:00:00+00:00', '{Owner}');
+            INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
+            VALUES ('inst-live', 0, NULL, '{workspace}', '', 'running', '2026-09-12T00:00:00+00:00', '{Owner}');
+            INSERT INTO sessions (
+                id, workspace_id, instance_id, opencode_session_id, title, status, directory,
+                lifecycle_status, retention_status, created_at, user_id)
+            VALUES ('{SessionId}', 'ws-live', 'inst-live', 'pending', 'Live', 'active', '{workspace}',
+                    'running', 'active', '2026-09-12T00:00:00+00:00', '{Owner}');
+            """;
+        command.ExecuteNonQuery();
+    }
+
+    private static async Task CollectAsync(IEventBroadcaster broadcaster, ConcurrentQueue<BroadcastEvent> events, CancellationToken ct)
+    {
+        try
+        {
+            await foreach (var e in broadcaster.SubscribeAsync([$"session:{SessionId}"], Owner, ct))
+                events.Enqueue(e);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private static async Task<T> WaitForAsync<T>(Func<T> read, Func<T, bool> done, CancellationToken ct)
+    {
+        while (true)
+        {
+            var value = read();
+            if (done(value))
+                return value;
+
+            try
+            {
+                await Task.Delay(200, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TimeoutException();
+            }
+        }
+    }
+
+    private static HashSet<string> OfferedToolNames(IEnumerable<string> requests)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var request in requests)
+        {
+            using var body = JsonDocument.Parse(request);
+            if (!body.RootElement.TryGetProperty("tools", out var tools) || tools.ValueKind != JsonValueKind.Array)
+                continue;
+            foreach (var tool in tools.EnumerateArray())
+            {
+                if (tool.TryGetProperty("function", out var function) && function.TryGetProperty("name", out var name))
+                    names.Add(name.GetString()!);
+            }
+        }
+
+        return names;
+    }
+
+    [GeneratedRegex("cv_[0-9A-Z]{26}")]
+    private static partial Regex CanvasId();
+
+    /// <summary>Fleet on a real Kestrel port, so the pooled process can call the bridge.</summary>
+    private sealed class KestrelFleetFactory(string dbPath) : WebApplicationFactory<Program>
+    {
+        private IHost? _host;
+
+        public bool IsStarted => _host is not null;
+
+        public IServiceProvider LiveServices => _host?.Services ?? throw new InvalidOperationException("Not started");
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseEnvironment("Testing");
+            builder.UseSetting("Fleet:DatabasePath", dbPath);
+            builder.UseSetting("Fleet:AnalyticsDatabasePath", Path.ChangeExtension(dbPath, ".analytics.db"));
+            builder.UseSetting("Fleet:AnalyticsEnabled", "false");
+            builder.UseSetting("Fleet:Host", "127.0.0.1");
+            builder.UseSetting("Fleet:Port", "0");
+            builder.UseSetting("Fleet:Auth:Enabled", "false");
+            builder.UseSetting("Fleet:Auth:TokenAuthEnabled", "false");
+            builder.ConfigureServices(services =>
+            {
+                // Warmup would start an extra opencode process before Fleet knows its port.
+                foreach (var descriptor in services.Where(d => d.ImplementationType == typeof(OpenCodeWarmupHostedService)).ToList())
+                    services.Remove(descriptor);
+            });
+        }
+
+        protected override IHost CreateHost(IHostBuilder builder)
+        {
+            builder.ConfigureWebHost(web => web.UseKestrel());
+            _host = builder.Build();
+            _host.Start();
+            _host.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.ShouldNotBeEmpty();
+
+            // A throwaway host for the base class, so it doesn't start a second app on the same database.
+            return Microsoft.Extensions.Hosting.Host.CreateDefaultBuilder()
+                .ConfigureWebHost(web => web.UseTestServer())
+                .Build();
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            if (_host is not null)
+            {
+                await _host.StopAsync();
+                _host.Dispose();
+            }
+
+            await base.DisposeAsync();
+        }
+    }
+}
+
+/// <summary>A fact that's skipped when the <c>opencode</c> binary isn't on PATH.</summary>
+internal sealed class OpenCodeFactAttribute : FactAttribute
+{
+    public OpenCodeFactAttribute()
+    {
+        if (!IsOpenCodeOnPath())
+            Skip = "opencode isn't on PATH.";
+    }
+
+    private static bool IsOpenCodeOnPath()
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "opencode",
+                ArgumentList = { "--version" },
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            });
+            return process is not null && process.WaitForExit(5000) && process.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+}

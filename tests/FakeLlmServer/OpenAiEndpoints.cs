@@ -19,7 +19,14 @@ internal static class OpenAiEndpoints
         // POST /v1/chat/completions — dequeue next scripted response, stream SSE
         app.MapPost("/v1/chat/completions", async (HttpContext ctx, ScriptedResponseStore queue) =>
         {
-            if (!queue.TryDequeue(out var response) || response is null)
+            using var reader = new StreamReader(ctx.Request.Body);
+            var body = await reader.ReadToEndAsync();
+            queue.Record(body);
+
+            var response = queue.ToolLessResponse is { } toolLess && !OffersTools(body)
+                ? toolLess
+                : queue.TryDequeue(body, out var scripted) ? scripted : null;
+            if (response is null)
             {
                 ctx.Response.StatusCode = 500;
                 await ctx.Response.WriteAsync("No scripted response queued");
@@ -53,6 +60,21 @@ internal static class OpenAiEndpoints
             queue.Enqueue(response);
             ctx.Response.StatusCode = 204;
         });
+    }
+
+    private static bool OffersTools(string requestBody)
+    {
+        try
+        {
+            using var request = JsonDocument.Parse(requestBody);
+            return request.RootElement.TryGetProperty("tools", out var tools)
+                && tools.ValueKind == JsonValueKind.Array
+                && tools.GetArrayLength() > 0;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static async Task StreamResponseAsync(

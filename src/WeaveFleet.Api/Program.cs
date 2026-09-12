@@ -145,6 +145,7 @@ builder.AddFleetDiagnosticLogging();
 builder.Services.AddSingleton<WeaveFleet.Application.Services.ToolDetector>();
 builder.Services.AddSingleton(_ => WeaveFleet.Application.Services.KeyFileConfig.Load());
 builder.Services.AddSingleton<WeaveFleet.Application.Services.KeyFileScanner>();
+builder.Services.AddSingleton<WeaveFleet.Application.Services.ILocalFleetUrl, WeaveFleet.Api.LocalFleetUrl>();
 #pragma warning restore IL2026
 builder.Services.AddHealthChecks();
 
@@ -509,7 +510,9 @@ app.Use(async (context, next) =>
         return;
     }
 
-    var requiresAntiforgery = context.Request.Path.StartsWithSegments("/api")
+    // The agent bridge authenticates with a per-process token and never sends cookies, so CSRF doesn't apply.
+    var requiresAntiforgery = (context.Request.Path.StartsWithSegments("/api")
+                               && !context.Request.Path.StartsWithSegments(WeaveFleet.Api.Endpoints.CanvasBridgeEndpoints.PathPrefix))
                               || context.Request.Path.StartsWithSegments("/auth/logout");
 
     if (!requiresAntiforgery)

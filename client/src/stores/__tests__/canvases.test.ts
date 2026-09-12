@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
+import { toDomainEvent } from "@/composables/use-signalr-socket";
+import type { CanvasClosed, CanvasEvent, CanvasFocused, CanvasUpdated } from "@/lib/domain-events";
 import type { VisualPayload } from "@/lib/visual-payload";
-import { useCanvasesStore, visualCanvasId, visualCanvasTitle } from "@/stores/canvases";
+import { serverCanvasTabId, useCanvasesStore, visualCanvasId, visualCanvasTitle } from "@/stores/canvases";
 
 const flow: VisualPayload = {
   $type: "visual/flow",
@@ -99,5 +101,124 @@ describe("useCanvasesStore", () => {
     expect(visualCanvasTitle(flow)).toBe("Session event flow");
     expect(visualCanvasTitle({ $type: "markdown", content: "", sourceFilePath: "docs/plan.md" })).toBe("plan.md");
     expect(visualCanvasTitle({ $type: "visual/sequence", content: "sequenceDiagram" })).toBe("Diagram");
+  });
+});
+
+// The canvas events exactly as SignalREventContractTests receives them from the
+// hub (open, focus, then a user move), mapped the way the socket maps them.
+const SESSION = "ses_1";
+const CANVAS = "cv_01";
+
+function wire<T extends CanvasEvent>(json: string): T {
+  return toDomainEvent(null, JSON.parse(json)) as T;
+}
+
+const opened = wire<CanvasUpdated>(`{"type":"canvas.updated","eventId":null,"properties":{"sessionId":"${SESSION}","canvasId":"${CANVAS}","kind":"diagram","title":"Session event flow","version":1,"actor":"agent","state":{"direction":"TB","nodes":[{"id":"n1","label":"NuCode session","detail":"NuCode/Sessions"},{"id":"n2","label":"SessionEventsHub"}],"edges":[{"id":"e1","from":"n1","to":"n2","label":"publishes","style":"solid"}]},"summary":"+2 boxes, +1 edge"}}`);
+const focused = wire<CanvasFocused>(`{"type":"canvas.focused","eventId":null,"properties":{"sessionId":"${SESSION}","canvasId":"${CANVAS}"}}`);
+const moved = wire<CanvasUpdated>(`{"type":"canvas.updated","eventId":null,"properties":{"sessionId":"${SESSION}","canvasId":"${CANVAS}","kind":"diagram","title":"Session event flow","version":2,"actor":"user","state":{"direction":"TB","nodes":[{"id":"n1","label":"NuCode session","detail":"NuCode/Sessions","x":20,"y":44.5,"placedByUser":true},{"id":"n2","label":"SessionEventsHub"}],"edges":[{"id":"e1","from":"n1","to":"n2","label":"publishes","style":"solid"}]},"summary":"1 box moved"}}`);
+const closed = wire<CanvasClosed>(`{"type":"canvas.closed","eventId":null,"properties":{"sessionId":"${SESSION}","canvasId":"${CANVAS}"}}`);
+
+const TAB = serverCanvasTabId(CANVAS);
+
+function serverTab(store: ReturnType<typeof useCanvasesStore>) {
+  return store.sessionCanvases(SESSION).canvases.find((canvas) => canvas.id === TAB);
+}
+
+describe("useCanvasesStore server canvases", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    localStorage.clear();
+  });
+
+  it("adds a tab for canvas.updated and brings it forward on canvas.focused", () => {
+    const store = useCanvasesStore();
+
+    store.applyCanvasEvent(opened);
+
+    expect(store.sessionCanvases(SESSION).canvases.map((canvas) => canvas.id)).toEqual(["changes", "files", TAB]);
+    expect(store.sessionCanvases(SESSION).activeId).toBe("changes");
+    expect(serverTab(store)).toMatchObject({
+      kind: "visual",
+      server: { canvasId: CANVAS, kind: "diagram", version: 1 },
+      payload: { $type: "visual/flow", title: "Session event flow" },
+    });
+
+    store.applyCanvasEvent(focused);
+
+    expect(store.sessionCanvases(SESSION).activeId).toBe(TAB);
+  });
+
+  it("redraws the same tab in place on a later version, positions included", () => {
+    const store = useCanvasesStore();
+    store.applyCanvasEvent(opened);
+    store.activate(SESSION, "files");
+
+    store.applyCanvasEvent(moved);
+
+    const tabs = store.sessionCanvases(SESSION).canvases.filter((canvas) => canvas.server);
+    expect(tabs).toHaveLength(1);
+    expect(tabs[0]?.server?.version).toBe(2);
+    expect((tabs[0]?.payload?.content as { nodes: unknown[] }).nodes[0]).toEqual({
+      id: "n1", label: "NuCode session", detail: "NuCode/Sessions", x: 20, y: 44.5,
+    });
+    expect(store.sessionCanvases(SESSION).activeId).toBe("files");
+  });
+
+  it("ignores an update older than the tab it would replace", () => {
+    const store = useCanvasesStore();
+    store.applyCanvasEvent(moved);
+
+    store.applyCanvasEvent(opened);
+
+    expect(serverTab(store)?.server?.version).toBe(2);
+  });
+
+  it("removes the tab on canvas.closed, and a second close is a no-op", () => {
+    const store = useCanvasesStore();
+    store.applyCanvasEvent(opened);
+    store.applyCanvasEvent(focused);
+
+    store.applyCanvasEvent(closed);
+    store.applyCanvasEvent(closed);
+
+    expect(serverTab(store)).toBeUndefined();
+    expect(store.sessionCanvases(SESSION).activeId).toBe("files");
+  });
+
+  it("ignores focus for a canvas that isn't open", () => {
+    const store = useCanvasesStore();
+
+    store.applyCanvasEvent(focused);
+
+    expect(store.sessionCanvases(SESSION).activeId).toBe("changes");
+  });
+
+  it("skips a canvas kind it can't show", () => {
+    const store = useCanvasesStore();
+    const terminal = wire<CanvasUpdated>(`{"type":"canvas.updated","eventId":null,"properties":{"sessionId":"${SESSION}","canvasId":"cv_t","kind":"terminal","title":"Shell","version":1,"actor":"agent","state":{},"summary":""}}`);
+
+    store.applyCanvasEvent(terminal);
+
+    expect(store.sessionCanvases(SESSION).canvases).toHaveLength(2);
+  });
+
+  it("replaces only the server canvases when a list loads", () => {
+    const store = useCanvasesStore();
+    store.openVisual(SESSION, flow);
+    store.applyCanvasEvent(opened);
+    store.applyCanvasEvent({ ...opened, payload: { ...opened.payload, canvasId: "cv_gone", title: "Gone" } });
+    store.activate(SESSION, serverCanvasTabId("cv_gone"));
+
+    store.setServerCanvases(SESSION, [
+      { canvasId: CANVAS, kind: "diagram", title: "Session event flow", version: 2, state: moved.payload.state },
+      { canvasId: "cv_seq", kind: "sequence", title: "Calls", version: 1, state: { source: "sequenceDiagram" } },
+    ]);
+
+    const state = store.sessionCanvases(SESSION);
+    expect(state.canvases.map((canvas) => canvas.id)).toEqual([
+      "changes", "files", visualCanvasId(flow), TAB, serverCanvasTabId("cv_seq"),
+    ]);
+    expect(serverTab(store)?.server?.version).toBe(2);
+    expect(state.activeId).toBe("changes");
   });
 });

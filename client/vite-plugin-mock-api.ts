@@ -61,6 +61,101 @@ const MOCK_FILES: Record<string, string> = {
   "README.md": "# auth-service\n\nExample project for Fleet's mock mode.\n"
 };
 
+// Server canvases (Fleet Canvas step 2): what the agent has drawn in a session.
+// Every mock session starts with the same two; closes and revisions are kept
+// in memory until Vite restarts.
+interface MockCanvas {
+  canvasId: string;
+  kind: "diagram" | "sequence";
+  title: string;
+  version: number;
+  state: Record<string, unknown>;
+  closed: boolean;
+  revision: number;
+}
+
+const MOCK_DIAGRAM_NODES = [
+  { id: "n1", label: "NuCode session", detail: "NuCode/Sessions" },
+  { id: "n2", label: "EventBroadcaster", detail: "Infrastructure/Events" },
+  { id: "n3", label: "SessionEventsHub", detail: "Api/Hubs" },
+  { id: "n4", label: "useSessionStream", detail: "client/composables" },
+  { id: "n5", label: "use-sessions.ts", detail: "client/composables" },
+  { id: "n6", label: "GET /api/sessions", detail: "Api/Endpoints" },
+];
+
+const MOCK_DIAGRAM_EDGES = [
+  { id: "e1", from: "n1", to: "n2", label: "publishes", style: "solid" },
+  { id: "e2", from: "n2", to: "n3", label: "session:{id}", style: "solid" },
+  { id: "e3", from: "n3", to: "n4", label: "Event", style: "solid" },
+  { id: "e4", from: "n5", to: "n6", label: "polls every 15 s", style: "dashed" },
+];
+
+// Each revise applies the next step, the way an agent patches the same diagram.
+const MOCK_DIAGRAM_REVISIONS: Array<{ summary: string; apply: (state: { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> }) => void }> = [
+  {
+    summary: "+1 edge",
+    apply: (state) => {
+      state.edges.push({ id: "e5", from: "n3", to: "n5", label: "SessionListChanged", style: "planned" });
+    },
+  },
+  {
+    summary: "−1 box, +1 box",
+    apply: (state) => {
+      state.nodes = state.nodes.filter((node) => node.id !== "n6");
+      state.edges = state.edges.filter((edge) => edge.from !== "n6" && edge.to !== "n6");
+      state.nodes.push({ id: "n7", label: "SessionListCache", detail: "client/stores" });
+      state.edges.push({ id: "e6", from: "n5", to: "n7", label: "updates", style: "solid" });
+    },
+  },
+  {
+    summary: "1 box changed",
+    apply: (state) => {
+      const node = state.nodes.find((candidate) => candidate.id === "n5");
+      if (node) node.label = "use-sessions.ts (push)";
+    },
+  },
+];
+
+const MOCK_SEQUENCE_SOURCE = [
+  "sequenceDiagram",
+  "  participant Agent",
+  "  participant Plugin as fleet-canvas.ts",
+  "  participant Fleet",
+  "  participant Browser",
+  "  Agent->>Plugin: fleet_canvas_open",
+  "  Plugin->>Fleet: POST /api/bridge/opencode/canvas/open",
+  "  Fleet-->>Browser: canvas.updated",
+  "  Fleet-->>Browser: canvas.focused",
+  "  Fleet-->>Plugin: Opened at v1",
+].join("\n");
+
+function seedMockCanvases(): MockCanvas[] {
+  return [
+    {
+      canvasId: "cv_mock_diagram",
+      kind: "diagram",
+      title: "Session event flow",
+      version: 1,
+      state: { direction: "TB", nodes: structuredClone(MOCK_DIAGRAM_NODES), edges: structuredClone(MOCK_DIAGRAM_EDGES) },
+      closed: false,
+      revision: 0,
+    },
+    {
+      canvasId: "cv_mock_sequence",
+      kind: "sequence",
+      title: "Canvas tool call",
+      version: 1,
+      state: { source: MOCK_SEQUENCE_SOURCE },
+      closed: false,
+      revision: 0,
+    },
+  ];
+}
+
+function toCanvasResponse(canvas: MockCanvas) {
+  return { canvasId: canvas.canvasId, kind: canvas.kind, title: canvas.title, version: canvas.version, state: canvas.state };
+}
+
 export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
   const mockDir = resolve(__dirname, "src/mocks");
   
@@ -72,7 +167,109 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
     projects: JSON.parse(readFileSync(resolve(mockDir, "projects.json"), "utf-8")),
   };
 
+  let devServer: ViteDevServer | undefined;
+  const canvasesBySession = new Map<string, MockCanvas[]>();
+
+  function sessionCanvases(sessionId: string): MockCanvas[] {
+    let canvases = canvasesBySession.get(sessionId);
+    if (!canvases) {
+      canvases = seedMockCanvases();
+      canvasesBySession.set(sessionId, canvases);
+    }
+    return canvases;
+  }
+
+  // Mock mode has no SignalR hub. The client listens for these on Vite's dev
+  // socket and handles them like hub events (see use-signalr-socket.ts).
+  function pushHubEvent(sessionId: string, type: string, properties: Record<string, unknown>): void {
+    devServer?.ws.send({
+      type: "custom",
+      event: "fleet:mock-hub-event",
+      data: { topic: `session:${sessionId}`, data: { type, eventId: null, properties } },
+    });
+  }
+
+  function pushCanvasUpdated(sessionId: string, canvas: MockCanvas, summary: string): void {
+    pushHubEvent(sessionId, "canvas.updated", { sessionId, ...toCanvasResponse(canvas), actor: "agent", summary });
+  }
+
+  function json(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  }
+
   const routes: MockRoute[] = [
+    // ─── Canvases ───────────────────────────────────────────────────────────────
+    // Try on 3099, with a mock session open:
+    //   curl -X POST localhost:3099/api/mock/sessions/<id>/canvases/cv_mock_diagram/revise
+    //   curl -X POST localhost:3099/api/mock/sessions/<id>/canvases/reopen
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/canvases$/,
+      handler: (url) => {
+        const id = decodeURIComponent(url.pathname.split("/")[3]);
+        console.log(`[mock-api] GET /api/sessions/${id}/canvases`);
+        return json(sessionCanvases(id).filter((canvas) => !canvas.closed).map(toCanvasResponse));
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/canvases\/([^/]+)$/,
+      handler: (url, req) => {
+        const [, , , rawId, , rawCanvasId] = url.pathname.split("/");
+        const id = decodeURIComponent(rawId);
+        const canvasId = decodeURIComponent(rawCanvasId);
+        console.log(`[mock-api] ${req.method} /api/sessions/${id}/canvases/${canvasId}`);
+        if (req.method !== "DELETE") return json({ error: "Method not allowed" }, 405);
+
+        const canvas = sessionCanvases(id).find((candidate) => candidate.canvasId === canvasId);
+        if (!canvas) return json({ error: "Canvas not found" }, 404);
+        if (!canvas.closed) {
+          canvas.closed = true;
+          pushHubEvent(id, "canvas.closed", { sessionId: id, canvasId });
+        }
+        return new Response(null, { status: 204 });
+      },
+    },
+    {
+      pattern: /^\/api\/mock\/sessions\/([^/]+)\/canvases\/([^/]+)\/revise$/,
+      handler: (url) => {
+        const [, , , , rawId, , rawCanvasId] = url.pathname.split("/");
+        const id = decodeURIComponent(rawId);
+        const canvasId = decodeURIComponent(rawCanvasId);
+        const canvas = sessionCanvases(id).find((candidate) => candidate.canvasId === canvasId);
+        if (!canvas || canvas.closed) return json({ error: "No open canvas with that id" }, 404);
+
+        let summary: string;
+        if (canvas.kind === "diagram") {
+          const step = MOCK_DIAGRAM_REVISIONS[canvas.revision % MOCK_DIAGRAM_REVISIONS.length];
+          if (canvas.revision > 0 && canvas.revision % MOCK_DIAGRAM_REVISIONS.length === 0) {
+            canvas.state = { direction: "TB", nodes: structuredClone(MOCK_DIAGRAM_NODES), edges: structuredClone(MOCK_DIAGRAM_EDGES) };
+          }
+          step.apply(canvas.state as Parameters<typeof step.apply>[0]);
+          summary = step.summary;
+        } else {
+          canvas.state = { source: `${canvas.state.source as string}\n  Browser->>Browser: redraw in place (v${canvas.version + 1})` };
+          summary = `${(canvas.state.source as string).split("\n").length} lines`;
+        }
+        canvas.revision += 1;
+        canvas.version += 1;
+        console.log(`[mock-api] revised ${canvasId} in ${id} to v${canvas.version} (${summary})`);
+        pushCanvasUpdated(id, canvas, summary);
+        return json(toCanvasResponse(canvas));
+      },
+    },
+    {
+      pattern: /^\/api\/mock\/sessions\/([^/]+)\/canvases\/reopen$/,
+      handler: (url) => {
+        const id = decodeURIComponent(url.pathname.split("/")[4]);
+        const reopened = sessionCanvases(id).filter((canvas) => canvas.closed);
+        for (const canvas of reopened) {
+          canvas.closed = false;
+          pushCanvasUpdated(id, canvas, "reopened");
+          pushHubEvent(id, "canvas.focused", { sessionId: id, canvasId: canvas.canvasId });
+        }
+        console.log(`[mock-api] reopened ${reopened.length} canvas(es) in ${id}`);
+        return json(reopened.map(toCanvasResponse));
+      },
+    },
     {
       pattern: /^\/api\/fleet\/summary$/,
       handler: () => {
@@ -1174,6 +1371,7 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       }
 
       console.log("[mock-api] Enabled - intercepting /api/* and /healthz requests");
+      devServer = server;
       
       server.middlewares.use((req, res, next) => {
         const url = new URL(req.url || "/", `http://${req.headers.host}`);

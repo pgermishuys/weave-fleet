@@ -41,6 +41,8 @@ public sealed class MigrationRunnerTests
         tables.ShouldContain("session_source_usages");
         tables.ShouldContain("workspace_roots");
         tables.ShouldContain("legacy_imports");
+        tables.ShouldContain("canvases");
+        tables.ShouldContain("canvas_revisions");
         tables.ShouldContain(MigrationRunner.MainJournalTable);
         tables.ShouldNotContain("_migrations");
     }
@@ -304,6 +306,55 @@ public sealed class MigrationRunnerTests
 
         var journalCount = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM {MigrationRunner.MainJournalTable}");
         journalCount.ShouldBe(MigrationRunner.LoadScripts("Migrations").Count);
+    }
+
+    [Fact]
+    public async Task ApplyMigrationsAsync_AddsCanvasTablesToADatabaseAtMigration027()
+    {
+        using var conn = CreateInMemoryConnection();
+        var factory = new SingleConnectionFactory(conn);
+        var runner = CreateRunner(factory);
+
+        var scriptsThrough027 = MigrationRunner.LoadScripts("Migrations")
+            .TakeWhile(script => string.CompareOrdinal(MigrationRunner.ExtractMigrationName(script.Name), "028") < 0)
+            .ToList();
+        scriptsThrough027.Select(script => MigrationRunner.ExtractMigrationName(script.Name))
+            .ShouldContain("027_add_automation_target_type.sql");
+        foreach (var script in scriptsThrough027)
+            await conn.ExecuteAsync(script.Contents);
+        await SeedDbUpJournalAsync(conn, scriptsThrough027);
+
+        await conn.ExecuteAsync(
+            "INSERT INTO workspaces (id, directory, isolation_strategy, created_at, user_id) VALUES ('ws-1', '/tmp/proj', 'existing', '2026-01-01', 'local-user')");
+        await conn.ExecuteAsync(
+            "INSERT INTO instances (id, port, directory, url, status, created_at, user_id) VALUES ('inst-1', 0, '/tmp/proj', 'http://127.0.0.1:0', 'running', '2026-01-01', 'local-user')");
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO sessions (id, workspace_id, instance_id, opencode_session_id, title, status, directory, created_at, user_id)
+            VALUES ('sess-1', 'ws-1', 'inst-1', 'oc-1', 'Existing session', 'active', '/tmp/proj', '2026-01-01', 'local-user')
+            """);
+
+        await runner.ApplyMigrationsAsync(conn);
+
+        var journalCount = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM {MigrationRunner.MainJournalTable}");
+        journalCount.ShouldBe(MigrationRunner.LoadScripts("Migrations").Count);
+
+        await conn.ExecuteAsync(
+            """
+            INSERT INTO canvases (id, session_id, user_id, kind, title, state_json, version, agent_seen_version, created_at, updated_at)
+            VALUES ('cv_1', 'sess-1', 'local-user', 'diagram', 'Flow', '{}', 1, 1, '2026-09-12', '2026-09-12')
+            """);
+        await conn.ExecuteAsync(
+            "INSERT INTO canvas_revisions (canvas_id, version, actor, ops_json, created_at) VALUES ('cv_1', 1, 'agent', '[]', '2026-09-12')");
+        await Should.ThrowAsync<SqliteException>(() => conn.ExecuteAsync(
+            """
+            INSERT INTO canvases (id, session_id, user_id, kind, title, state_json, version, agent_seen_version, created_at, updated_at)
+            VALUES ('cv_2', 'no-such-session', 'local-user', 'diagram', 'Flow', '{}', 1, 1, '2026-09-12', '2026-09-12')
+            """));
+
+        await conn.ExecuteAsync("DELETE FROM sessions WHERE id = 'sess-1'");
+        (await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM canvases")).ShouldBe(0);
+        (await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM canvas_revisions")).ShouldBe(0);
     }
 
     [Fact]

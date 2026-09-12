@@ -141,6 +141,7 @@ internal sealed partial class HarnessEventJsonContext : JsonSerializerContext
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(OpenCodeHealthResponse))]
 [JsonSerializable(typeof(OpenCodeSessionIdentity))]
+[JsonSerializable(typeof(OpenCodeSessionParent))]
 [JsonSerializable(typeof(OpenCodeSessionInfo))]
 [JsonSerializable(typeof(List<OpenCodeSessionInfo>))]
 [JsonSerializable(typeof(OpenCodeCreateSessionRequest))]

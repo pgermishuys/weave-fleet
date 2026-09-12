@@ -24,6 +24,8 @@
     <ProjectReference Include="..\..\src\WeaveFleet.Infrastructure\WeaveFleet.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\WeaveFleet.TestHarness\WeaveFleet.TestHarness.csproj" />
     <ProjectReference Include="..\WeaveFleet.Testing\WeaveFleet.Testing.csproj" />
+    <!-- Aliased: FakeLlmServer and WeaveFleet.Api both declare a global Program class. -->
+    <ProjectReference Include="..\FakeLlmServer\FakeLlmServer.csproj" Aliases="FakeLlm" />
   </ItemGroup>
 
 </Project>

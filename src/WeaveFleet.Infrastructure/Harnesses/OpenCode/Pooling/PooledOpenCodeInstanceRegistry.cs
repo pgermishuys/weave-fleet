@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
 using System.Security.Cryptography;
 using System.Text;
@@ -429,6 +430,30 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
                 entry.Dispose();
             }
         }
+    }
+
+    /// <summary>
+    /// Finds the live instance whose <see cref="PooledOpenCodeInstance.BridgeToken"/> is <paramref name="bridgeToken"/>.
+    /// Tokens are compared in constant time.
+    /// </summary>
+    internal bool TryGetInstanceByBridgeToken(string bridgeToken, [NotNullWhen(true)] out PooledOpenCodeInstance? instance)
+    {
+        ArgumentNullException.ThrowIfNull(bridgeToken);
+
+        var presented = Encoding.UTF8.GetBytes(bridgeToken);
+        foreach (var entry in _entries.Values)
+        {
+            var candidate = entry.Instance;
+            if (candidate is { IsAvailable: true, BridgeToken: { } token }
+                && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(token), presented))
+            {
+                instance = candidate;
+                return true;
+            }
+        }
+
+        instance = null;
+        return false;
     }
 
     internal OpenCodePoolHealthStatus GetHealthStatus()

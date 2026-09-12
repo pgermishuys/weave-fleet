@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
-import { VueFlow, useVueFlow } from '@vue-flow/core'
+import { ref, computed, nextTick, watch, h, type FunctionalComponent } from 'vue'
+import { VueFlow, useVueFlow, MarkerType, Position, type EdgeMarker, type Edge as VueFlowEdge } from '@vue-flow/core'
 import dagre from '@dagrejs/dagre'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -11,13 +11,20 @@ interface SimplifiedNode {
   label: string
   type?: string
   group?: string
+  /** A second, quieter line under the label. */
+  detail?: string
+  /** Top-left position, kept when both are set; otherwise the node is laid out. */
+  x?: number
+  y?: number
 }
 
 interface VueFlowNode {
   id: string
   type: string
-  data: { label: string }
+  data: { label: string | FunctionalComponent }
   position: { x: number; y: number }
+  sourcePosition?: Position
+  targetPosition?: Position
 }
 
 interface Edge {
@@ -26,6 +33,10 @@ interface Edge {
   target: string
   label?: string
   animated?: boolean
+  /** "dashed" or "planned" draw the edge that way; any other value passes through to Vue Flow. */
+  style?: unknown
+  class?: string
+  markerEnd?: EdgeMarker | string
 }
 
 interface FlowContent {
@@ -37,6 +48,8 @@ interface FlowContent {
 interface Props {
   content: string | Record<string, unknown>
   title?: string
+  /** Pan and zoom only: boxes can't be dragged, selected or connected. */
+  readonly?: boolean
 }
 
 const props = defineProps<Props>()
@@ -45,7 +58,7 @@ const showSource = ref(false)
 const containerRef = ref<HTMLElement | null>(null)
 const isExporting = ref(false)
 
-const { fitView, getNodes } = useVueFlow()
+const { fitView, getNodes, onNodesInitialized } = useVueFlow()
 
 function toKebabCase(text: string): string {
   return text
@@ -168,8 +181,38 @@ const parsedContent = computed<FlowContent>(() => {
   return props.content as unknown as FlowContent
 })
 
+const NODE_WIDTH = 172
+const NODE_HEIGHT = 36
+const NODE_WITH_DETAIL_HEIGHT = 54
+
+const HANDLE_POSITIONS: Record<string, { source: Position; target: Position }> = {
+  TB: { source: Position.Bottom, target: Position.Top },
+  BT: { source: Position.Top, target: Position.Bottom },
+  LR: { source: Position.Right, target: Position.Left },
+  RL: { source: Position.Left, target: Position.Right },
+}
+
+const EDGE_ARROW: EdgeMarker = { type: MarkerType.ArrowClosed, color: 'var(--flow-edge)' }
+const PLANNED_EDGE_ARROW: EdgeMarker = { type: MarkerType.ArrowClosed, color: 'var(--accent)' }
+
+// Node ids with a position of their own, which the layout leaves alone.
+const fixedNodeIds = computed(() => new Set(
+  (parsedContent.value.nodes || []).flatMap((node) => {
+    const simplified = node as SimplifiedNode
+    return !('position' in node) && Number.isFinite(simplified.x) && Number.isFinite(simplified.y) ? [node.id] : []
+  }),
+))
+
+function labelWithDetail(label: string, detail: string): FunctionalComponent {
+  return () => [
+    h('span', { class: 'flow-node__label' }, label),
+    h('span', { class: 'flow-node__detail' }, detail),
+  ]
+}
+
 const normalizedNodes = computed<VueFlowNode[]>(() => {
   const nodes = parsedContent.value.nodes || []
+  const handles = HANDLE_POSITIONS[parsedContent.value.direction || 'TB'] ?? HANDLE_POSITIONS.TB
   return nodes.map((node) => {
     if ('position' in node) {
       return node as VueFlowNode
@@ -178,23 +221,39 @@ const normalizedNodes = computed<VueFlowNode[]>(() => {
     return {
       id: simplified.id,
       type: simplified.type || 'default',
-      data: { label: simplified.label },
-      position: { x: 0, y: 0 },
+      data: { label: simplified.detail ? labelWithDetail(simplified.label, simplified.detail) : simplified.label },
+      position: fixedNodeIds.value.has(simplified.id) ? { x: simplified.x!, y: simplified.y! } : { x: 0, y: 0 },
+      sourcePosition: handles.source,
+      targetPosition: handles.target,
     }
   })
 })
 
-const normalizedEdges = computed<Edge[]>(() => {
-  return parsedContent.value.edges || []
+const normalizedEdges = computed<VueFlowEdge[]>(() => {
+  return (parsedContent.value.edges || []).map((edge) => {
+    const drawn = edge.style === 'dashed' || edge.style === 'planned' ? edge.style : null
+    const { style, ...rest } = edge
+    return {
+      markerEnd: drawn === 'planned' ? PLANNED_EDGE_ARROW : EDGE_ARROW,
+      ...rest,
+      ...(drawn
+        ? { class: [edge.class, `flow-edge--${drawn}`].filter(Boolean).join(' ') }
+        : { style: style as VueFlowEdge['style'] }),
+    }
+  })
 })
 
-function layoutNodes(nodes: VueFlowNode[], edges: Edge[], direction = 'TB'): VueFlowNode[] {
+function nodeHeight(node: VueFlowNode): number {
+  return typeof node.data.label === 'string' ? NODE_HEIGHT : NODE_WITH_DETAIL_HEIGHT
+}
+
+function layoutNodes(nodes: VueFlowNode[], edges: Array<Pick<Edge, 'source' | 'target'>>, direction = 'TB'): VueFlowNode[] {
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
   g.setGraph({ rankdir: direction, nodesep: 50, ranksep: 80 })
   
   nodes.forEach(node => {
-    g.setNode(node.id, { width: 172, height: 36 })
+    g.setNode(node.id, { width: NODE_WIDTH, height: nodeHeight(node) })
   })
   edges.forEach(edge => {
     g.setEdge(edge.source, edge.target)
@@ -203,14 +262,33 @@ function layoutNodes(nodes: VueFlowNode[], edges: Edge[], direction = 'TB'): Vue
   dagre.layout(g)
   
   return nodes.map(node => {
+    if (fixedNodeIds.value.has(node.id)) return node
     const pos = g.node(node.id)
-    return { ...node, position: { x: pos.x - 86, y: pos.y - 18 } }
+    return { ...node, position: { x: pos.x - NODE_WIDTH / 2, y: pos.y - nodeHeight(node) / 2 } }
   })
 }
 
 const layoutedNodes = computed<VueFlowNode[]>(() => {
   const direction = parsedContent.value.direction || 'TB'
   return layoutNodes(normalizedNodes.value, normalizedEdges.value, direction)
+})
+
+// A diagram that changes in place (an agent revising a canvas) is fitted
+// again once its new boxes have been measured.
+let refitPending = false
+watch(layoutedNodes, async () => {
+  await nextTick()
+  const nodes = getNodes.value
+  if (nodes.length > 0 && nodes.every((node) => node.dimensions.width > 0)) {
+    void fitView({ padding: 0.1, duration: 200 })
+  } else {
+    refitPending = true
+  }
+})
+onNodesInitialized(() => {
+  if (!refitPending) return
+  refitPending = false
+  void fitView({ padding: 0.1, duration: 200 })
 })
 </script>
 
@@ -256,6 +334,10 @@ const layoutedNodes = computed<VueFlowNode[]>(() => {
       <VueFlow
         :nodes="layoutedNodes"
         :edges="normalizedEdges"
+        :class="{ 'flow-readonly': readonly }"
+        :nodes-draggable="!readonly"
+        :nodes-connectable="!readonly"
+        :elements-selectable="!readonly"
         fit-view-on-init
       />
     </div>
@@ -343,6 +425,7 @@ const layoutedNodes = computed<VueFlowNode[]>(() => {
 }
 
 .flow-container {
+  --flow-edge: color-mix(in srgb, var(--text) 38%, transparent);
   position: relative;
   width: 100%;
   flex: 1;
@@ -374,9 +457,48 @@ const layoutedNodes = computed<VueFlowNode[]>(() => {
   box-shadow: 0 0 0 1px var(--accent);
 }
 
+.flow-container :deep(.vue-flow__node-default:has(.flow-node__detail)) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.flow-container :deep(.flow-node__detail) {
+  overflow: hidden;
+  font-family: var(--font-mono-stack);
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .flow-container :deep(.vue-flow__edge-path) {
-  stroke: color-mix(in srgb, var(--text) 38%, transparent);
+  stroke: var(--flow-edge);
   stroke-width: 1.4;
+}
+
+.flow-container :deep(.flow-edge--dashed .vue-flow__edge-path) {
+  stroke-dasharray: 5 4;
+}
+
+.flow-container :deep(.flow-edge--planned .vue-flow__edge-path) {
+  stroke: var(--accent);
+  stroke-dasharray: 5 4;
+}
+
+.flow-container :deep(.flow-edge--planned .vue-flow__edge-text) {
+  fill: var(--accent);
+  font-weight: 500;
+}
+
+.flow-container :deep(.flow-readonly .vue-flow__handle) {
+  visibility: hidden;
+}
+
+.flow-container :deep(.flow-readonly .vue-flow__node) {
+  cursor: default;
 }
 
 .flow-container :deep(.vue-flow__edge-text) {

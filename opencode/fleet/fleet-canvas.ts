@@ -1,0 +1,128 @@
+/**
+ * Fleet canvas tools for pooled OpenCode sessions.
+ *
+ * Fleet embeds this file, writes it into its data folder, and loads it through the "plugin" list in
+ * OPENCODE_CONFIG_CONTENT. Edit it here, in the Fleet repo: Fleet overwrites the installed copy.
+ *
+ * No imports, on purpose. A plugin whose import fails breaks every prompt in the process. With plain
+ * objects as `args`, OpenCode builds each tool's JSON Schema from them as written, and every arg is
+ * required. OpenCode doesn't validate the args; Fleet does.
+ *
+ * Every export is treated as a plugin, so export only the plugin function.
+ */
+
+const BRIDGE_PATH = "/api/bridge/opencode/canvas/"
+
+type ToolContext = { sessionID: string }
+type ToolResult = { title: string; output: string; metadata: Record<string, unknown> }
+
+async function callFleet(tool: string, context: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+  const url = process.env.FLEET_URL
+  const token = process.env.FLEET_BRIDGE_TOKEN
+  if (!url || !token) {
+    throw new Error("Fleet canvas tools aren't connected in this OpenCode process. Restart Fleet to connect them.")
+  }
+
+  let response: Response
+  try {
+    response = await fetch(url + BRIDGE_PATH + tool, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer " + token },
+      body: JSON.stringify({ ...args, openCodeSessionId: context.sessionID }),
+    })
+  } catch (error) {
+    throw new Error("Couldn't reach Fleet at " + url + ": " + (error instanceof Error ? error.message : String(error)))
+  }
+
+  const text = await response.text()
+  let body: { title?: string; output?: string; metadata?: Record<string, unknown>; error?: string } | undefined
+  try {
+    body = JSON.parse(text)
+  } catch {
+    body = undefined
+  }
+
+  if (!response.ok || !body) {
+    throw new Error(body?.error ?? "Fleet answered " + response.status + ": " + text)
+  }
+
+  return { title: body.title ?? "", output: body.output ?? "", metadata: body.metadata ?? {} }
+}
+
+const canvasId = {
+  type: "string",
+  description: "The canvas id (cv_…) from fleet_canvas_list or fleet_canvas_open.",
+}
+
+export const FleetCanvasPlugin = async () => ({
+  tool: {
+    fleet_canvas_list: {
+      description: "List the canvases open in this session's side panel: id, kind, title and version.",
+      args: {},
+      execute: (_args: Record<string, never>, context: ToolContext) => callFleet("list", context, {}),
+    },
+
+    fleet_canvas_open: {
+      description: [
+        "Show the user a diagram in a canvas beside the chat. Use this instead of drawing diagrams in chat.",
+        "Read a canvas before you describe it or change it.",
+        "Opening a title that already exists updates that canvas to the new state, and reopens it if it was closed. To change part of a canvas, use fleet_canvas_patch.",
+      ].join(" "),
+      args: {
+        kind: {
+          type: "string",
+          enum: ["diagram", "sequence"],
+          description: "diagram: boxes and arrows (architecture, flows, dependencies). sequence: a Mermaid sequence diagram.",
+        },
+        title: {
+          type: "string",
+          description: "Short title for the canvas tab, e.g. \"Session event flow\".",
+        },
+        state: {
+          type: "object",
+          description: [
+            "For diagram: {\"direction\"?: \"TB\"|\"LR\"|\"BT\"|\"RL\", \"nodes\": [{\"id\", \"label\", \"detail\"?}], \"edges\": [{\"id\", \"from\", \"to\", \"label\"?, \"style\"?: \"solid\"|\"dashed\"|\"planned\"}]}.",
+            "Ids use letters, digits and _ . : - and are unique across boxes and edges. Don't give positions; the canvas lays boxes out.",
+            "For sequence: {\"source\": \"sequenceDiagram\\n  Agent->>Fleet: open\"}, Mermaid source without code fences.",
+          ].join(" "),
+        },
+      },
+      execute: (args: { kind: string; title: string; state: unknown }, context: ToolContext) =>
+        callFleet("open", context, { kind: args.kind, title: args.title, state: args.state }),
+    },
+
+    fleet_canvas_read: {
+      description: "Read a canvas as compact text: every box and edge by id, or the Mermaid source.",
+      args: { canvasId },
+      execute: (args: { canvasId: string }, context: ToolContext) =>
+        callFleet("read", context, { canvasId: args.canvasId }),
+    },
+
+    fleet_canvas_patch: {
+      description: [
+        "Change part of a canvas. Ops apply in order, all or nothing, and name boxes and edges by id.",
+        "Diagram ops: addNode {id, label, detail?}; updateNode {id, label?, detail?}; removeNode {id} (removes its edges too);",
+        "addEdge {id, from, to, label?, style?}; updateEdge {id, label?, style?}; removeEdge {id}; setDirection {direction}.",
+        "Sequence op: setSource {source}.",
+        "Example: [{\"op\": \"addNode\", \"id\": \"n4\", \"label\": \"Cache\"}, {\"op\": \"addEdge\", \"id\": \"e5\", \"from\": \"n2\", \"to\": \"n4\"}].",
+      ].join(" "),
+      args: {
+        canvasId,
+        ops: {
+          type: "array",
+          items: { type: "object" },
+          description: "The ops, each an object whose \"op\" field names it.",
+        },
+      },
+      execute: (args: { canvasId: string; ops: unknown }, context: ToolContext) =>
+        callFleet("patch", context, { canvasId: args.canvasId, ops: args.ops }),
+    },
+
+    fleet_canvas_focus: {
+      description: "Bring a canvas to the front of the side panel, reopening it if the user closed it.",
+      args: { canvasId },
+      execute: (args: { canvasId: string }, context: ToolContext) =>
+        callFleet("focus", context, { canvasId: args.canvasId }),
+    },
+  },
+})

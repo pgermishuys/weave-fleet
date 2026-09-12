@@ -1,5 +1,7 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Infrastructure.Harnesses;
@@ -16,6 +18,13 @@ internal sealed record OpenCodeProcessOptions
     public required string Username { get; init; }
     public IReadOnlyDictionary<string, string> EnvironmentVariables { get; init; }
         = new Dictionary<string, string>();
+
+    /// <summary>
+    /// Plugin specs (e.g. <c>file:///…/fleet-canvas.ts</c>) to load on top of the user's own. OpenCode
+    /// concatenates plugin lists, so the user's plugins still load.
+    /// </summary>
+    public IReadOnlyList<string> Plugins { get; init; } = [];
+
     public required TimeSpan StartupTimeout { get; init; }
 }
 
@@ -81,6 +90,31 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
     /// <summary>Base URL of the running server, available after <see cref="StartAsync"/> returns.</summary>
     public Uri? BaseUrl => _baseUrl;
 
+    /// <summary>The inline OpenCode config Fleet passes to every process.</summary>
+    internal static string BuildConfigContent(IReadOnlyList<string> plugins)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var json = new Utf8JsonWriter(buffer))
+        {
+            json.WriteStartObject();
+            json.WriteStartObject("permission");
+            json.WriteString("*", "allow");
+            json.WriteEndObject();
+
+            if (plugins.Count > 0)
+            {
+                json.WriteStartArray("plugin");
+                foreach (var plugin in plugins)
+                    json.WriteStringValue(plugin);
+                json.WriteEndArray();
+            }
+
+            json.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
     /// <summary>
     /// Spawns <c>opencode serve</c> and waits for the ready signal.
     /// </summary>
@@ -117,8 +151,8 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
         psi.Environment["OPENCODE_SERVER_USERNAME"] = options.Username;
 
         // Inline config: auto-allow all permissions so the agent never blocks waiting
-        // for approval in a headless Fleet context.
-        psi.Environment["OPENCODE_CONFIG_CONTENT"] = """{"permission":{"*":"allow"}}""";
+        // for approval in a headless Fleet context, plus any Fleet plugins.
+        psi.Environment["OPENCODE_CONFIG_CONTENT"] = BuildConfigContent(options.Plugins);
 
         // Additional caller-supplied env vars
         foreach (var (key, value) in options.EnvironmentVariables)
@@ -217,6 +251,10 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
         {
             // Kill the entire process group (Unix) or process tree (Windows)
             ProcessGroupHelper.KillProcessGroup(_process.Id, _logger);
+
+            // On Linux setpgid usually fails because the child has already exec'd, so there's no group to
+            // kill and the process would outlive Fleet. Kill the tree directly as well.
+            _process.Kill(entireProcessTree: true);
 
             await _process.WaitForExitAsync().WaitAsync(timeout).ConfigureAwait(false);
         }

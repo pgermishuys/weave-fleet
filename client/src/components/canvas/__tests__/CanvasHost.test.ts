@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import CanvasHostComponent from "@/components/canvas/CanvasHost.vue";
 import type { FileDiffItem } from "@/api/client";
 import type { VisualPayload } from "@/lib/visual-payload";
-import { useCanvasesStore, visualCanvasId } from "@/stores/canvases";
+import { serverCanvasTabId, useCanvasesStore, visualCanvasId } from "@/stores/canvases";
 
 // Mount through a props-only type: the named slots on CanvasHost don't fit the
 // mount() typings of @vue/test-utils 2.2.7, the version package-lock pins for CI.
@@ -28,6 +28,9 @@ function stubCanvas(name: string, prop: "sessionId" | "payload") {
 vi.mock("@/components/canvas/ChangesCanvas.vue", () => stubCanvas("ChangesCanvas", "sessionId"));
 vi.mock("@/components/canvas/FilesCanvas.vue", () => stubCanvas("FilesCanvas", "sessionId"));
 vi.mock("@/components/canvas/VisualCanvas.vue", () => stubCanvas("VisualCanvas", "payload"));
+
+const { closeServerCanvasMock } = vi.hoisted(() => ({ closeServerCanvasMock: vi.fn() }));
+vi.mock("@/composables/use-server-canvases", () => ({ closeServerCanvas: closeServerCanvasMock }));
 
 const diagram: VisualPayload = {
   $type: "visual/flow",
@@ -103,6 +106,31 @@ describe("CanvasHost", () => {
 
     expect(wrapper.findAll('[role="tab"]')).toHaveLength(2);
     expect(store.sessionCanvases("s1").canvases.some((canvas) => canvas.id === visualCanvasId(diagram))).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("shows a server canvas read-only and closes it through the server", async () => {
+    const wrapper = mountHost();
+    const store = useCanvasesStore();
+    await flushPromises();
+
+    store.setServerCanvases("s1", [{
+      canvasId: "cv_1",
+      kind: "diagram",
+      title: "Agent diagram",
+      version: 3,
+      state: { nodes: [{ id: "n1", label: "Hub" }], edges: [] },
+    }]);
+    store.activate("s1", serverCanvasTabId("cv_1"));
+    await flushPromises();
+
+    const tab = wrapper.get(`#tab-canvas-cv_1`);
+    expect(tab.find(".canvas-tab__label").text()).toBe("Agent diagram");
+    expect(wrapper.get(".stub-VisualCanvas").attributes("readonly")).toBeDefined();
+
+    await tab.get(".canvas-tab__close").trigger("click");
+
+    expect(closeServerCanvasMock).toHaveBeenCalledWith("s1", "cv_1");
     wrapper.unmount();
   });
 
