@@ -14,15 +14,10 @@ public sealed record SmartLinkDto(
     bool IsDismissed,
     bool IsTerminal,
     string CreatedAt,
-    string UpdatedAt);
+    string UpdatedAt,
+    string Relationship,
+    string EnrichmentStatus,
+    string? LastCheckedAt);
 
-public sealed record UpsertSmartLinkRequest(
-    string Url,
-    string ProviderId,
-    string ResourceType,
-    string ResourceId,
-    string Title,
-    string Status,
-    string StatusLabel,
-    string? MetadataJson,
-    bool IsTerminal);
+/// <summary>Attaches a GitHub pull request or issue to a session.</summary>
+public sealed record AddSmartLinkRequest(string Url);

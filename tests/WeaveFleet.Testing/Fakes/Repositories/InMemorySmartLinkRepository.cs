@@ -24,22 +24,6 @@ public sealed class InMemorySmartLinkRepository : ISmartLinkRepository
         return Task.FromResult(result);
     }
 
-    public Task<SmartLink?> GetBySessionIdAndUrlAsync(string sessionId, string url)
-    {
-        var result = _store.FirstOrDefault(l => l.SessionId == sessionId && l.Url == url);
-        return Task.FromResult(result);
-    }
-
-    public Task UpsertAsync(SmartLink smartLink)
-    {
-        var existing = _store.FindIndex(l => l.SessionId == smartLink.SessionId && l.Url == smartLink.Url);
-        if (existing >= 0)
-            _store[existing] = smartLink;
-        else
-            _store.Add(smartLink);
-        return Task.CompletedTask;
-    }
-
     public Task DismissAsync(string id)
     {
         var link = _store.FirstOrDefault(l => l.Id == id);
@@ -47,6 +31,68 @@ public sealed class InMemorySmartLinkRepository : ISmartLinkRepository
             link.IsDismissed = true;
         return Task.CompletedTask;
     }
+
+    public Task<bool> SetRelationshipAsync(string id, string relationship)
+    {
+        var link = _store.FirstOrDefault(l => l.Id == id);
+        if (link is null)
+            return Task.FromResult(false);
+        link.Relationship = relationship;
+        return Task.FromResult(true);
+    }
+
+    public Task MarkSessionDueAsync(string sessionId)
+    {
+        foreach (var link in _store.Where(l => l.SessionId == sessionId))
+            link.LastCheckedAt = null;
+        return Task.CompletedTask;
+    }
+
+    public Task<SmartLink?> InsertDetectedAsync(SmartLink link, bool restoreDismissed, CancellationToken ct)
+    {
+        var existing = _store.FirstOrDefault(l => l.SessionId == link.SessionId
+            && (l.Url == link.Url || string.Equals(l.ResourceId, link.ResourceId, StringComparison.OrdinalIgnoreCase)));
+        if (existing is null)
+        {
+            _store.Add(link);
+            return Task.FromResult<SmartLink?>(link);
+        }
+
+        var upgrade = SmartLinkRelationships.Rank(link.Relationship) > SmartLinkRelationships.Rank(existing.Relationship);
+        var restore = restoreDismissed && existing.IsDismissed;
+        if (!upgrade && !restore)
+            return Task.FromResult<SmartLink?>(null);
+
+        if (upgrade)
+            existing.Relationship = link.Relationship;
+        if (restore)
+            existing.IsDismissed = false;
+        return Task.FromResult<SmartLink?>(existing);
+    }
+
+    public Task<int> InsertMissingSourceLinksAsync(string? sessionId, CancellationToken ct) => Task.FromResult(0);
+
+    public Task<IReadOnlyList<SmartLink>> ListDueForEnrichmentAsync(string checkedBefore, int limit, CancellationToken ct)
+    {
+        IReadOnlyList<SmartLink> result = [.. _store
+            .Where(l => !l.IsDismissed
+                && (l.EnrichmentStatus is SmartLinkEnrichmentStatuses.Pending or SmartLinkEnrichmentStatuses.NotConnected
+                    || l.LastCheckedAt is null
+                    || (!l.IsTerminal && string.CompareOrdinal(l.LastCheckedAt, checkedBefore) < 0)))
+            .Take(limit)];
+        return Task.FromResult(result);
+    }
+
+    public Task UpdateEnrichmentAsync(SmartLink link, CancellationToken ct)
+    {
+        var index = _store.FindIndex(l => l.Id == link.Id);
+        if (index >= 0)
+            _store[index] = link;
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<SmartLinkBranchTarget>> ListBranchTargetsAsync(CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<SmartLinkBranchTarget>>([]);
 
     public Task DeleteBySessionIdAsync(string sessionId)
     {
@@ -58,19 +104,4 @@ public sealed class InMemorySmartLinkRepository : ISmartLinkRepository
         => DeleteBySessionIdAsync(sessionId);
 
     public Task DeleteOrphanedAsync(CancellationToken ct) => Task.CompletedTask;
-
-    public Task<IReadOnlyList<SmartLink>> ListNonTerminalPrLinksAsync(CancellationToken ct)
-    {
-        IReadOnlyList<SmartLink> result = [.. _store.Where(l =>
-            l.ResourceType == "pull_request" && !l.IsTerminal && !l.IsDismissed)];
-        return Task.FromResult(result);
-    }
-
-    public Task UpdateMetadataAsync(string id, string metadataJson, CancellationToken ct)
-    {
-        var link = _store.FirstOrDefault(l => l.Id == id);
-        if (link is not null)
-            link.MetadataJson = metadataJson;
-        return Task.CompletedTask;
-    }
 }

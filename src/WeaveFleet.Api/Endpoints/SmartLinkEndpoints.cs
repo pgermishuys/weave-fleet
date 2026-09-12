@@ -5,6 +5,10 @@ namespace WeaveFleet.Api.Endpoints;
 
 #pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
 
+/// <summary>
+/// Smart links are found and refreshed on the server by the smart link watcher. These endpoints read
+/// them and apply the user's choices: attach, pin, dismiss, refresh.
+/// </summary>
 public static class SmartLinkEndpoints
 {
     public static IEndpointRouteBuilder MapSmartLinkEndpoints(this IEndpointRouteBuilder app)
@@ -20,7 +24,7 @@ public static class SmartLinkEndpoints
         .Produces<IReadOnlyList<SmartLinkDto>>(200)
         .WithName("GetSmartLinks");
 
-        // GET /api/sessions/{sessionId}/smart-links/all — list all including dismissed (for dedup)
+        // GET /api/sessions/{sessionId}/smart-links/all — list all including dismissed
         group.MapGet("/all", async (string sessionId, SmartLinkService smartLinkService) =>
         {
             var links = await smartLinkService.ListAllBySessionIdAsync(sessionId);
@@ -29,26 +33,33 @@ public static class SmartLinkEndpoints
         .Produces<IReadOnlyList<SmartLinkDto>>(200)
         .WithName("GetAllSmartLinks");
 
-        // POST /api/sessions/{sessionId}/smart-links — upsert a single link
-        group.MapPost("/", async (string sessionId, UpsertSmartLinkRequest request, SmartLinkService smartLinkService) =>
+        // POST /api/sessions/{sessionId}/smart-links — attach a GitHub pull request or issue (pinned)
+        group.MapPost("/", async (string sessionId, AddSmartLinkRequest request, SmartLinkService smartLinkService, CancellationToken ct) =>
         {
-            var link = await smartLinkService.UpsertAsync(sessionId, request);
-            if (link is null)
-                return Results.NotFound();
-            return Results.Ok(link);
+            var result = await smartLinkService.AddAsync(sessionId, request.Url, ct);
+            if (result.IsInvalidUrl)
+                return Results.BadRequest("Paste a link to a GitHub pull request or issue, like https://github.com/owner/repo/pull/123.");
+            return result.Link is null ? Results.NotFound() : Results.Ok(result.Link);
         })
         .Produces<SmartLinkDto>(200)
-        .WithName("UpsertSmartLink");
+        .Produces(400)
+        .Produces(404)
+        .WithName("AddSmartLink");
 
-        // POST /api/sessions/{sessionId}/smart-links/bulk — bulk upsert
-        group.MapPost("/bulk", async (string sessionId, IReadOnlyList<UpsertSmartLinkRequest> requests, SmartLinkService smartLinkService) =>
-        {
-            var success = await smartLinkService.BulkUpsertAsync(sessionId, requests);
-            if (!success)
-                return Results.NotFound();
-            return Results.Ok();
-        })
-        .WithName("BulkUpsertSmartLinks");
+        // POST /api/sessions/{sessionId}/smart-links/refresh — re-check every link on the session now
+        group.MapPost("/refresh", async (string sessionId, SmartLinkService smartLinkService) =>
+            await smartLinkService.RefreshAsync(sessionId) ? Results.Accepted() : Results.NotFound())
+        .WithName("RefreshSmartLinks");
+
+        // PATCH /api/sessions/{sessionId}/smart-links/{linkId}/pin — show a mentioned link in the header
+        group.MapPatch("/{linkId}/pin", async (string sessionId, string linkId, SmartLinkService smartLinkService) =>
+            await smartLinkService.SetPinnedAsync(sessionId, linkId, pinned: true) ? Results.NoContent() : Results.NotFound())
+        .WithName("PinSmartLink");
+
+        // PATCH /api/sessions/{sessionId}/smart-links/{linkId}/unpin — return a pinned link to the Context tab only
+        group.MapPatch("/{linkId}/unpin", async (string sessionId, string linkId, SmartLinkService smartLinkService) =>
+            await smartLinkService.SetPinnedAsync(sessionId, linkId, pinned: false) ? Results.NoContent() : Results.NotFound())
+        .WithName("UnpinSmartLink");
 
         // PATCH /api/sessions/{sessionId}/smart-links/{linkId}/dismiss — dismiss a link
         group.MapPatch("/{linkId}/dismiss", async (string sessionId, string linkId, SmartLinkService smartLinkService) =>

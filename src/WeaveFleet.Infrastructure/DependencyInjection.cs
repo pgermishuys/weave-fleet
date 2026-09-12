@@ -199,7 +199,12 @@ public static class DependencyInjection
         services.AddScoped<GitHubService>();
         services.AddSingleton<GitHubApiProxy>();
         services.AddBuiltInPlugin<GitHubBackendPlugin>();
-        services.AddHostedService<WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.CiWatcherService>();
+
+        // Smart links: the relay feeds the detector; the watcher stores, enriches and pushes them.
+        services.AddSingleton<SmartLinkDetector>();
+        services.AddSingleton<WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.SmartLinkWatcherService>();
+        services.AddSingleton<ISmartLinkWatcher>(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.SmartLinkWatcherService>());
+        services.AddHostedService(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.SmartLinkWatcherService>());
 
         // Skill services
         services.AddSingleton<ISkillCatalogService, GitHubSkillCatalogService>();

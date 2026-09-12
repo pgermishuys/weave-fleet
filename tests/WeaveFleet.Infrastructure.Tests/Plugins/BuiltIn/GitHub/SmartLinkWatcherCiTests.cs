@@ -3,7 +3,7 @@ using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 
 namespace WeaveFleet.Infrastructure.Tests.Plugins.BuiltIn.GitHub;
 
-public sealed class CiWatcherDedupTests
+public sealed class SmartLinkWatcherCiTests
 {
     [Fact]
     public void build_ci_status_response_returns_none_when_no_check_runs()
@@ -122,7 +122,7 @@ public sealed class CiWatcherDedupTests
     public void get_ci_failures_returns_empty_when_no_failures_key()
     {
         var metadata = new JsonObject();
-        var result = CiWatcherService.GetCiFailures(metadata);
+        var result = SmartLinkWatcherService.GetCiFailures(metadata);
         result.ShouldBeEmpty();
     }
 
@@ -130,14 +130,14 @@ public sealed class CiWatcherDedupTests
     public void set_and_get_ci_failures_round_trips_correctly()
     {
         var metadata = new JsonObject();
-        var failures = new List<CiWatcherService.CiFailure>
+        var failures = new List<SmartLinkWatcherService.CiFailure>
         {
             new("abc123", "build", 42, "failure", "https://github.com/actions/run/1", "error: build failed", "2024-01-01T00:00:00Z"),
             new("abc123", "tests", 43, "timed_out", "https://github.com/actions/run/2", null, "2024-01-01T00:01:00Z"),
         };
 
-        CiWatcherService.SetCiFailures(metadata, failures);
-        var result = CiWatcherService.GetCiFailures(metadata);
+        SmartLinkWatcherService.SetCiFailures(metadata, failures);
+        var result = SmartLinkWatcherService.GetCiFailures(metadata);
 
         result.Count.ShouldBe(2);
 
@@ -157,13 +157,13 @@ public sealed class CiWatcherDedupTests
     public void dedup_filters_already_stored_failures_by_sha_and_name()
     {
         var metadata = new JsonObject();
-        var existing = new List<CiWatcherService.CiFailure>
+        var existing = new List<SmartLinkWatcherService.CiFailure>
         {
             new("sha1", "build", 10, "failure", "https://github.com", null, "2024-01-01T00:00:00Z"),
         };
-        CiWatcherService.SetCiFailures(metadata, existing);
+        SmartLinkWatcherService.SetCiFailures(metadata, existing);
 
-        var stored = CiWatcherService.GetCiFailures(metadata);
+        var stored = SmartLinkWatcherService.GetCiFailures(metadata);
 
         // Same sha + name → should be filtered out
         var candidates = new List<(string Sha, string Name)>

@@ -1,9 +1,26 @@
+using System.Collections.Concurrent;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 
 namespace WeaveFleet.Infrastructure.Services;
+
+/// <summary>Result of a conditional GitHub API request.</summary>
+/// <param name="StatusCode">The HTTP status, reported as 200 when the cached body was reused.</param>
+/// <param name="Body">The parsed body, or <c>null</c> on failure.</param>
+/// <param name="NotModified">True when GitHub answered 304 and the cached body was returned.</param>
+/// <param name="RateLimitResetAt">When the rate limit resets, if the request was refused for exceeding it.</param>
+public sealed record GitHubApiResponse(
+    HttpStatusCode StatusCode,
+    JsonNode? Body,
+    bool NotModified,
+    DateTimeOffset? RateLimitResetAt = null)
+{
+    public bool IsSuccess => Body is not null;
+}
 
 /// <summary>
 /// Proxies authenticated requests to the GitHub REST API.
@@ -12,6 +29,70 @@ public sealed class GitHubApiProxy(IHttpClientFactory httpClientFactory)
 {
     private const string BaseUrl = "https://api.github.com";
     private const int MaxLogBytes = 5 * 1024 * 1024; // 5 MB cap for log responses
+    private const int MaxCachedResponses = 2000;
+
+    // ETag and body per (token, path). GitHub doesn't count 304 responses against the rate limit.
+    private readonly ConcurrentDictionary<string, (string ETag, string Body)> _conditionalCache = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Sends a GET with <c>If-None-Match</c> when a previous response for the same token and path was cached,
+    /// and reuses the cached body on 304.
+    /// </summary>
+    public async Task<GitHubApiResponse> GetConditionalAsync(string token, string path, CancellationToken ct = default)
+    {
+        var key = ConditionalCacheKey(token, path);
+        using var client = httpClientFactory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}/{path.TrimStart('/')}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Accept.ParseAdd("application/vnd.github.v3+json");
+        request.Headers.UserAgent.ParseAdd("fleet/1.0");
+
+        var hasCached = _conditionalCache.TryGetValue(key, out var cached);
+        if (hasCached && EntityTagHeaderValue.TryParse(cached.ETag, out var etag))
+            request.Headers.IfNoneMatch.Add(etag);
+
+        using var response = await client.SendAsync(request, ct).ConfigureAwait(false);
+
+        if (response.StatusCode == HttpStatusCode.NotModified && hasCached)
+            return new GitHubApiResponse(HttpStatusCode.OK, JsonNode.Parse(cached.Body), NotModified: true);
+
+        if (!response.IsSuccessStatusCode)
+            return new GitHubApiResponse(response.StatusCode, null, NotModified: false, ReadRateLimitReset(response));
+
+        var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        var responseETag = response.Headers.ETag?.ToString();
+        if (responseETag is not null)
+        {
+            if (_conditionalCache.Count >= MaxCachedResponses)
+                _conditionalCache.Clear();
+            _conditionalCache[key] = (responseETag, json);
+        }
+
+        return new GitHubApiResponse(response.StatusCode, JsonNode.Parse(json), NotModified: false);
+    }
+
+    private static string ConditionalCacheKey(string token, string path)
+        => $"{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)))[..16]}:{path}";
+
+    private static DateTimeOffset? ReadRateLimitReset(HttpResponseMessage response)
+    {
+        if (response.StatusCode is not (HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests))
+            return null;
+
+        if (response.Headers.TryGetValues("x-ratelimit-remaining", out var remaining)
+            && remaining.FirstOrDefault() == "0"
+            && response.Headers.TryGetValues("x-ratelimit-reset", out var reset)
+            && long.TryParse(reset.FirstOrDefault(), NumberStyles.None, CultureInfo.InvariantCulture, out var epochSeconds))
+        {
+            return DateTimeOffset.FromUnixTimeSeconds(epochSeconds);
+        }
+
+        // Secondary rate limits use Retry-After instead.
+        if (response.Headers.RetryAfter?.Delta is { } delta)
+            return DateTimeOffset.UtcNow.Add(delta);
+
+        return response.StatusCode == HttpStatusCode.TooManyRequests ? DateTimeOffset.UtcNow.AddMinutes(1) : null;
+    }
 
     /// <summary>Sends an authenticated request to the GitHub API and returns the JSON response.</summary>
     public async Task<JsonNode?> FetchAsync(
