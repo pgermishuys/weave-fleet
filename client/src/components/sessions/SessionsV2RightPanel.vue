@@ -7,15 +7,6 @@ import AnnotationPopover from "@/components/annotations/AnnotationPopover.vue";
 import CanvasHost from "@/components/canvas/CanvasHost.vue";
 import CollapsedRightRail from "@/components/layout/CollapsedRightRail.vue";
 import SessionMetadataHeader from "@/components/session/SessionMetadataHeader.vue";
-import {
-  useAbortSession,
-  useArchiveSession,
-  useDeleteSession,
-  useRenameSession,
-  useResumeSession,
-  useTerminateSession,
-} from "@/composables/use-session-actions";
-import { provideSessionDetailContext } from "@/composables/use-session-detail-context";
 import { useSessionTodos } from "@/composables/use-session-todos";
 import { useAnnotation } from "@/composables/use-annotation";
 import { useSendPrompt } from "@/composables/use-send-prompt";
@@ -26,6 +17,9 @@ import { useServerCanvases } from "@/composables/use-server-canvases";
 import { useCanvasesStore } from "@/stores/canvases";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
+import { useSmartLinksStore } from "@/stores/smart-links";
+import type { CanvasTabBadge } from "@/lib/canvas-registry";
+import { needsAttention } from "@/lib/smart-links";
 import { formatAnnotationPrompt } from "@/lib/format-annotation-prompt";
 import { extractAnchorText } from "@/lib/annotation-types";
 import type { AnnotationAnchor } from "@/lib/annotation-types";
@@ -67,26 +61,43 @@ const selectedSession = computed(() =>
   sessions.value.find((s) => s.session.id === activeSessionId.value) ?? null,
 );
 
-// --- Action composables (V2) ---
-const abort = useAbortSession();
-const archive = useArchiveSession();
-const del = useDeleteSession();
-const rename = useRenameSession();
-const resume = useResumeSession();
-const terminate = useTerminateSession();
-provideSessionDetailContext({
-  apiBasePath: "/api/sessions",
-  sessionRoutePath: "/sessions/$id",
-  supportsFork: true,
-  supportsArchive: true,
-  actionsLayout: "card",
-  patchSession: (id, patch) => sessionsStore.patchSession(id, patch),
-  abort,
-  archive,
-  delete: del,
-  rename,
-  resume,
-  terminate,
+// --- Context tab: added (without focus) the first time the session has something attached ---
+const smartLinksStore = useSmartLinksStore();
+
+watch(
+  activeSessionId,
+  (sessionId) => {
+    if (sessionId) void smartLinksStore.ensureLoaded(sessionId);
+  },
+  { immediate: true },
+);
+
+const contextLinks = computed(() =>
+  activeSessionId.value ? smartLinksStore.visibleLinks(activeSessionId.value) : [],
+);
+
+const hasContext = computed(() =>
+  contextLinks.value.length > 0 || selectedSession.value?.origin?.sourceType === "automation",
+);
+
+watch(
+  [activeSessionId, hasContext],
+  ([sessionId, has]) => {
+    if (sessionId && has) canvasesStore.introduce(sessionId, "context");
+  },
+  { immediate: true },
+);
+
+const tabBadges = computed<Record<string, CanvasTabBadge>>(() => {
+  const attention = contextLinks.value.some(needsAttention);
+  const count = contextLinks.value.length;
+  return {
+    context: {
+      attention,
+      count,
+      label: attention ? "A linked pull request needs attention" : `${count} linked`,
+    },
+  };
 });
 
 // --- Collapsed rail: todos ---
@@ -166,7 +177,10 @@ provideCanvasAnnotate((anchor: AnnotationAnchor, position: { x: number; y: numbe
     :style="{ width: `${props.width}px`, minWidth: '280px' }"
     aria-label="Right panel"
   >
-    <CanvasHost :session-id="activeSessionId ?? ''">
+    <CanvasHost
+      :session-id="activeSessionId ?? ''"
+      :tab-badges="tabBadges"
+    >
       <template #header-actions>
         <Button
           variant="toolbar-icon"
@@ -182,7 +196,7 @@ provideCanvasAnnotate((anchor: AnnotationAnchor, position: { x: number; y: numbe
       <template #below-header>
         <SessionMetadataHeader
           class="right-panel__meta"
-          :session="selectedSession"
+          :session-id="activeSessionId ?? ''"
         />
       </template>
     </CanvasHost>

@@ -7,7 +7,6 @@ import MessageBubble from "@/components/session/MessageBubble.vue";
 import ReasoningBlock from "@/components/session/ReasoningBlock.vue";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { clearSentPrompts, reconcileSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
-import { useSmartLinks } from "@/plugins/builtin/smart-links"
 import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { CommandEventName } from "@/lib/command-events";
@@ -69,11 +68,6 @@ const selectedSession = computed(() => {
 const { messages: sessionMessages, delegations, sessionStatus, hasMore, isLoadingOlder, isPartial, loadOlder } = useSessionStream(
   computed(() => props.sessionId),
 );
-useSmartLinks({
-  sessionId: computed(() => props.sessionId),
-  messages: sessionMessages,
-  originUrl: computed(() => selectedSession.value?.origin?.resourceUrl ?? null),
-});
 const { sentPrompts } = useSentPrompts(props.sessionId);
 const streamRef = ref<HTMLElement | null>(null);
 const showJumpToLatest = ref(false);

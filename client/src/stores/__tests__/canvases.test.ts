@@ -89,6 +89,26 @@ describe("useCanvasesStore", () => {
     expect(state.activeId).toBe("files");
   });
 
+  it("introduces Context as the first tab once, without taking focus", () => {
+    const store = useCanvasesStore();
+
+    store.introduce("s1", "context");
+    store.introduce("s1", "context");
+
+    let state = store.sessionCanvases("s1");
+    expect(state.canvases.map((canvas) => canvas.id)).toEqual(["context", "changes", "files"]);
+    expect(state.activeId).toBe("changes");
+
+    // Closing it keeps it closed; opening it again brings it back.
+    store.close("s1", "context");
+    store.introduce("s1", "context");
+    state = store.sessionCanvases("s1");
+    expect(state.canvases.map((canvas) => canvas.id)).toEqual(["changes", "files"]);
+
+    store.open("s1", "context");
+    expect(store.sessionCanvases("s1").activeId).toBe("context");
+  });
+
   it("persists Widen across reloads", () => {
     useCanvasesStore().toggleWidened();
 

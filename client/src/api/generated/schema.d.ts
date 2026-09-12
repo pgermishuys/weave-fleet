@@ -1806,7 +1806,7 @@ export interface paths {
         };
         get: operations["GetSmartLinks"];
         put?: never;
-        post: operations["UpsertSmartLink"];
+        post: operations["AddSmartLink"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1829,7 +1829,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{sessionId}/smart-links/bulk": {
+    "/api/sessions/{sessionId}/smart-links/refresh": {
         parameters: {
             query?: never;
             header?: never;
@@ -1838,11 +1838,43 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["BulkUpsertSmartLinks"];
+        post: operations["RefreshSmartLinks"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{sessionId}/smart-links/{linkId}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["PinSmartLink"];
+        trace?: never;
+    };
+    "/api/sessions/{sessionId}/smart-links/{linkId}/unpin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["UnpinSmartLink"];
         trace?: never;
     };
     "/api/sessions/{sessionId}/smart-links/{linkId}/dismiss": {
@@ -2834,6 +2866,9 @@ export interface components {
             isTerminal: boolean;
             createdAt: string;
             updatedAt: string;
+            relationship: string;
+            enrichmentStatus: string;
+            lastCheckedAt: null | string;
         };
         StoreCredentialRequest: {
             label: string;
@@ -2999,16 +3034,8 @@ export interface components {
             updatedAt: string;
             syncResults: components["schemas"]["SkillSyncResultDto"][];
         };
-        UpsertSmartLinkRequest: {
+        AddSmartLinkRequest: {
             url: string;
-            providerId: string;
-            resourceType: string;
-            resourceId: string;
-            title: string;
-            status: string;
-            statusLabel: string;
-            metadataJson: null | string;
-            isTerminal: boolean;
         };
         UserMeResponse: {
             userId: string;
@@ -6377,7 +6404,7 @@ export interface operations {
             };
         };
     };
-    UpsertSmartLink: {
+    AddSmartLink: {
         parameters: {
             query?: never;
             header?: never;
@@ -6388,7 +6415,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UpsertSmartLinkRequest"];
+                "application/json": components["schemas"]["AddSmartLinkRequest"];
             };
         };
         responses: {
@@ -6400,6 +6427,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SmartLinkDto"];
                 };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -6425,7 +6466,7 @@ export interface operations {
             };
         };
     };
-    BulkUpsertSmartLinks: {
+    RefreshSmartLinks: {
         parameters: {
             query?: never;
             header?: never;
@@ -6434,11 +6475,49 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpsertSmartLinkRequest"][];
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
+    };
+    PinSmartLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                linkId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UnpinSmartLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                linkId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description OK */
             200: {

@@ -8,13 +8,13 @@ import type { VisualPayload } from "@/lib/visual-payload";
  * Session-scoped canvas state for the right panel.
  *
  * Each session keeps an ordered list of open canvases and the active one.
- * Changes and Files read the session's diffs and filesystem, and visual
- * canvases carry the payload they render. Server canvases mirror what the
- * server stores for the session: the agent changes them, and the user can
- * only close them.
+ * Changes and Files read the session's diffs and filesystem, Context reads
+ * the session's links, and visual canvases carry the payload they render.
+ * Server canvases mirror what the server stores for the session: the agent
+ * changes them, and the user can only close them.
  */
 
-export type CanvasKind = "changes" | "files" | "visual";
+export type CanvasKind = "changes" | "files" | "context" | "visual";
 
 /** Identifies a canvas the server stores. */
 export interface ServerCanvasRef {
@@ -37,6 +37,8 @@ export interface SessionCanvases {
   activeId: string;
   /** Visual payloads that appeared in the conversation, oldest first. */
   knownVisuals: VisualPayload[];
+  /** Built-in canvases already introduced for this session, so closing one keeps it closed. */
+  introduced?: readonly CanvasKind[];
 }
 
 const WIDENED_STORAGE_KEY = "weave:canvas-widened";
@@ -151,6 +153,24 @@ export const useCanvasesStore = defineStore("canvases", () => {
         ...current,
         canvases: exists ? current.canvases : [...current.canvases, { id: kind, kind }],
         activeId: kind,
+        introduced: current.introduced?.includes(kind) ? current.introduced : [...(current.introduced ?? []), kind],
+      };
+    });
+  }
+
+  /**
+   * Add a built-in canvas as the first tab, without taking focus, the first time the
+   * session has something to show in it. Once introduced (even if closed later), it
+   * isn't added again.
+   */
+  function introduce(sessionId: string, kind: Exclude<CanvasKind, "visual">): void {
+    update(sessionId, (current) => {
+      if (current.introduced?.includes(kind)) return current;
+      const exists = current.canvases.some((canvas) => canvas.id === kind);
+      return {
+        ...current,
+        canvases: exists ? current.canvases : [{ id: kind, kind }, ...current.canvases],
+        introduced: [...(current.introduced ?? []), kind],
       };
     });
   }
@@ -265,6 +285,7 @@ export const useCanvasesStore = defineStore("canvases", () => {
     sessionCanvases,
     activate,
     open,
+    introduce,
     openVisual,
     close,
     setServerCanvases,

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
-import SessionOriginBadge from "@/components/SessionOriginBadge.vue";
+import SessionContextChips from "@/components/session-context/SessionContextChips.vue";
 import SessionAnalyticsPopover from "@/components/session/SessionAnalyticsPopover.vue";
 import { Badge } from "@/components/ui/badge";
 import type { SessionOrigin } from "@/api/client";
 import { useHarnesses } from "@/composables/use-harnesses";
 import { useSessionsStore } from "@/stores/sessions";
-import { X, Plus } from "lucide-vue-next";
+import { GitBranch, X, Plus } from "lucide-vue-next";
 
 interface Props {
   id: string;
@@ -24,6 +24,7 @@ interface Props {
   retryMessage?: string | null;
   retryNext?: string | null;
   directory?: string | null;
+  branch?: string | null;
   tags?: readonly string[];
   sessionStateChanged?: (patch: {
     activityStatus?: string | null;
@@ -260,8 +261,25 @@ onUnmounted(() => {
           >
             {{ harnessLabel }}
           </span>
+          <template v-if="props.branch">
+            <span
+              v-if="props.projectName || harnessLabel"
+              class="session-detail-header__separator"
+            >·</span>
+            <span
+              data-testid="session-branch"
+              class="session-detail-header__branch"
+              :title="`Branch ${props.branch}`"
+            >
+              <GitBranch
+                :size="12"
+                aria-hidden="true"
+              />
+              <span class="session-detail-header__branch-name">{{ props.branch }}</span>
+            </span>
+          </template>
           <span
-            v-if="props.directory && (props.projectName || harnessLabel)"
+            v-if="props.directory && (props.projectName || harnessLabel || props.branch)"
             class="session-detail-header__separator"
           >·</span>
           <span
@@ -316,7 +334,10 @@ onUnmounted(() => {
       </div>
 
       <div class="session-detail-header__context">
-        <SessionOriginBadge :origin="props.origin" />
+        <SessionContextChips
+          :session-id="props.id"
+          :origin="props.origin"
+        />
       </div>
 
       <div class="session-detail-header__actions">
@@ -446,6 +467,30 @@ onUnmounted(() => {
 .session-detail-header__separator {
   flex-shrink: 0;
   opacity: 0.6;
+}
+
+/* The branch keeps its width (long names truncate at 18ch); the directory gives way first. */
+.session-detail-header__branch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: calc(18ch + 16px);
+  color: var(--text);
+  font-family: var(--font-mono-stack);
+  font-size: 11.5px;
+}
+
+.session-detail-header__branch-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-detail-header__branch svg {
+  flex-shrink: 0;
+  color: var(--muted);
 }
 
 .session-detail-header__directory {

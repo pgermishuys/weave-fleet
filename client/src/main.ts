@@ -7,7 +7,6 @@ import App from "./App.vue";
 import "./assets/main.css";
 import githubPluginManifest from "@/plugins/builtin/github";
 import marketplacePluginManifest from "@/plugins/builtin/marketplace";
-import "@/plugins/builtin/smart-links";
 import { usePluginRuntime } from "@/plugins/composable";
 import { useThemeStore } from "@/stores/theme";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";

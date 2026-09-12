@@ -28,6 +28,7 @@ function stubCanvas(name: string, prop: "sessionId" | "payload") {
 vi.mock("@/components/canvas/ChangesCanvas.vue", () => stubCanvas("ChangesCanvas", "sessionId"));
 vi.mock("@/components/canvas/FilesCanvas.vue", () => stubCanvas("FilesCanvas", "sessionId"));
 vi.mock("@/components/canvas/VisualCanvas.vue", () => stubCanvas("VisualCanvas", "payload"));
+vi.mock("@/components/session-context/SessionContextCanvas.vue", () => stubCanvas("SessionContextCanvas", "sessionId"));
 
 const { closeServerCanvasMock } = vi.hoisted(() => ({ closeServerCanvasMock: vi.fn() }));
 vi.mock("@/composables/use-server-canvases", () => ({ closeServerCanvas: closeServerCanvasMock }));
@@ -155,6 +156,29 @@ describe("CanvasHost", () => {
 
     await wrapper.get("#tab-changes").trigger("keydown", { key: "End" });
     expect(wrapper.get("#tab-files").attributes("aria-selected")).toBe("true");
+    wrapper.unmount();
+  });
+
+  it("shows an attention dot or a count from tab badges", async () => {
+    const HostWithBadges = CanvasHostComponent as unknown as DefineComponent<{
+      sessionId: string;
+      tabBadges?: Record<string, { count?: number; attention?: boolean; label?: string }>;
+    }>;
+
+    const wrapper = mount(HostWithBadges, {
+      props: { sessionId: "s1", tabBadges: { context: { count: 3, attention: true, label: "A linked pull request needs attention" } } },
+      global: { provide: { sharedDiffs } },
+      attachTo: document.body,
+    });
+    useCanvasesStore().introduce("s1", "context");
+    await flushPromises();
+
+    const tab = wrapper.get("#tab-context");
+    expect(tab.get(".canvas-tab__alert").attributes("aria-label")).toBe("A linked pull request needs attention");
+    expect(tab.find(".canvas-tab__count").exists()).toBe(false);
+
+    await wrapper.setProps({ tabBadges: { context: { count: 3 } } });
+    expect(wrapper.get("#tab-context").get(".canvas-tab__count").text()).toBe("3");
     wrapper.unmount();
   });
 

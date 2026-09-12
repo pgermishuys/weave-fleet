@@ -18,6 +18,7 @@ import {
   canvasIcon,
   canvasTitle,
   visualIcon,
+  type CanvasTabBadge,
 } from "@/lib/canvas-registry";
 import type { VisualPayload } from "@/lib/visual-payload";
 import {
@@ -30,6 +31,7 @@ import {
 
 const props = defineProps<{
   sessionId: string;
+  tabBadges?: Partial<Record<string, CanvasTabBadge>>;
 }>();
 
 const store = useCanvasesStore();
@@ -209,6 +211,17 @@ const activeProps = computed(() => {
             v-if="canvas.kind === 'changes' && changedCount > 0"
             class="canvas-tab__count"
           >{{ changedCount }}</span>
+          <span
+            v-else-if="props.tabBadges?.[canvas.id]?.attention"
+            class="canvas-tab__alert"
+            role="img"
+            :aria-label="props.tabBadges[canvas.id]?.label ?? 'Needs attention'"
+          />
+          <span
+            v-else-if="props.tabBadges?.[canvas.id]?.count"
+            class="canvas-tab__count"
+            :aria-label="props.tabBadges[canvas.id]?.label"
+          >{{ props.tabBadges[canvas.id]?.count }}</span>
           <span
             v-if="isCanvasClosable(canvas)"
             class="canvas-tab__close"
@@ -419,6 +432,14 @@ const activeProps = computed(() => {
   font-weight: 500;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+.canvas-tab__alert {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--error);
 }
 
 .canvas-tab__close {
