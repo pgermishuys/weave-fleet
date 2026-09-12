@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { UseDiffsResult } from "@/composables/use-diffs";
+import { closeServerCanvas } from "@/composables/use-server-canvases";
 import {
   CANVAS_TYPES,
   PICKABLE_CANVAS_KINDS,
@@ -121,6 +122,10 @@ function activate(canvas: CanvasInstance): void {
 }
 
 function close(canvas: CanvasInstance): void {
+  if (canvas.server) {
+    void closeServerCanvas(props.sessionId, canvas.server.canvasId);
+    return;
+  }
   store.close(props.sessionId, canvas.id);
 }
 
@@ -158,9 +163,8 @@ function openVisual(payload: VisualPayload): void {
 
 const activeProps = computed(() => {
   const canvas = activeCanvas.value;
-  return canvas.kind === "visual" && canvas.payload
-    ? { payload: canvas.payload }
-    : { sessionId: props.sessionId };
+  if (canvas.kind !== "visual" || !canvas.payload) return { sessionId: props.sessionId };
+  return canvas.server ? { payload: canvas.payload, readonly: true } : { payload: canvas.payload };
 });
 </script>
 

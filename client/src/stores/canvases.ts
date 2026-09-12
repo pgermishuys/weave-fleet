@@ -1,22 +1,35 @@
 import { defineStore } from "pinia";
 import { shallowRef } from "vue";
+import type { CanvasEvent } from "@/lib/domain-events";
+import { serverCanvasPayload, type ServerCanvasKind, type ServerCanvasSnapshot } from "@/lib/server-canvas";
 import type { VisualPayload } from "@/lib/visual-payload";
 
 /**
  * Session-scoped canvas state for the right panel.
  *
  * Each session keeps an ordered list of open canvases and the active one.
- * Canvases own no durable data here: Changes and Files read the session's
- * diffs and filesystem, and visual canvases carry the payload they render.
+ * Changes and Files read the session's diffs and filesystem, and visual
+ * canvases carry the payload they render. Server canvases mirror what the
+ * server stores for the session: the agent changes them, and the user can
+ * only close them.
  */
 
 export type CanvasKind = "changes" | "files" | "visual";
+
+/** Identifies a canvas the server stores. */
+export interface ServerCanvasRef {
+  canvasId: string;
+  kind: ServerCanvasKind;
+  version: number;
+}
 
 export interface CanvasInstance {
   id: string;
   kind: CanvasKind;
   /** Present on visual canvases: the diagram or document to render. */
   payload?: VisualPayload;
+  /** Present on server canvases, which are visual canvases the agent keeps up to date. */
+  server?: ServerCanvasRef;
 }
 
 export interface SessionCanvases {
@@ -53,6 +66,34 @@ export function visualCanvasTitle(payload: VisualPayload): string {
 
 export function visualCanvasId(payload: VisualPayload): string {
   return `visual:${visualCanvasTitle(payload)}`;
+}
+
+export function serverCanvasTabId(canvasId: string): string {
+  return `canvas:${canvasId}`;
+}
+
+function toServerCanvasInstance(canvas: ServerCanvasSnapshot): CanvasInstance | null {
+  const payload = serverCanvasPayload(canvas);
+  if (!payload) return null;
+
+  return {
+    id: serverCanvasTabId(canvas.canvasId),
+    kind: "visual",
+    payload,
+    server: { canvasId: canvas.canvasId, kind: canvas.kind as ServerCanvasKind, version: canvas.version },
+  };
+}
+
+function withoutCanvas(current: SessionCanvases, canvasId: string): SessionCanvases {
+  const index = current.canvases.findIndex((canvas) => canvas.id === canvasId);
+  if (index < 0) return current;
+
+  const canvases = current.canvases.filter((canvas) => canvas.id !== canvasId);
+  const activeId = current.activeId === canvasId
+    ? (canvases[index - 1] ?? canvases[index] ?? canvases[0]).id
+    : current.activeId;
+
+  return { ...current, canvases, activeId };
 }
 
 export function isCanvasClosable(canvas: CanvasInstance): boolean {
@@ -142,17 +183,67 @@ export const useCanvasesStore = defineStore("canvases", () => {
   function close(sessionId: string, canvasId: string): void {
     if (FIXED_CANVAS_IDS.has(canvasId)) return;
 
-    update(sessionId, (current) => {
-      const index = current.canvases.findIndex((canvas) => canvas.id === canvasId);
-      if (index < 0) return current;
+    update(sessionId, (current) => withoutCanvas(current, canvasId));
+  }
 
-      const canvases = current.canvases.filter((canvas) => canvas.id !== canvasId);
-      const activeId = current.activeId === canvasId
-        ? (canvases[index - 1] ?? canvases[index] ?? canvases[0]).id
-        : current.activeId;
+  /**
+   * Replace the session's server canvases with a freshly loaded list, oldest
+   * first. Other canvases keep their place; new server canvases go at the end.
+   */
+  function setServerCanvases(sessionId: string, list: ServerCanvasSnapshot[]): void {
+    const loaded = new Map<string, CanvasInstance>();
+    for (const item of list) {
+      const instance = toServerCanvasInstance(item);
+      if (instance) loaded.set(instance.id, instance);
+    }
+
+    update(sessionId, (current) => {
+      const kept = current.canvases.flatMap((canvas) => {
+        if (!canvas.server) return [canvas];
+        const next = loaded.get(canvas.id);
+        loaded.delete(canvas.id);
+        return next ? [next] : [];
+      });
+      const canvases = [...kept, ...loaded.values()];
+      const activeId = canvases.some((canvas) => canvas.id === current.activeId) ? current.activeId : canvases[0].id;
 
       return { ...current, canvases, activeId };
     });
+  }
+
+  /**
+   * Apply a canvas event from the session topic. `canvas.updated` adds or
+   * redraws the tab without taking focus, `canvas.focused` brings it forward,
+   * and `canvas.closed` removes it (a no-op when this tab closed it already).
+   */
+  function applyCanvasEvent(event: CanvasEvent): void {
+    const { sessionId } = event.payload;
+    const tabId = serverCanvasTabId(event.payload.canvasId);
+
+    switch (event.type) {
+      case "canvas.updated": {
+        const next = toServerCanvasInstance(event.payload);
+        if (!next) return;
+
+        update(sessionId, (current) => {
+          const index = current.canvases.findIndex((canvas) => canvas.id === tabId);
+          if (index < 0) return { ...current, canvases: [...current.canvases, next] };
+
+          // Events can overtake a list that was loaded earlier; never go back a version.
+          const existing = current.canvases[index].server;
+          if (existing && existing.version > event.payload.version) return current;
+
+          return { ...current, canvases: current.canvases.map((canvas, i) => (i === index ? next : canvas)) };
+        });
+        return;
+      }
+      case "canvas.focused":
+        activate(sessionId, tabId);
+        return;
+      case "canvas.closed":
+        update(sessionId, (current) => withoutCanvas(current, tabId));
+        return;
+    }
   }
 
   function setKnownVisuals(sessionId: string, payloads: VisualPayload[]): void {
@@ -176,6 +267,8 @@ export const useCanvasesStore = defineStore("canvases", () => {
     open,
     openVisual,
     close,
+    setServerCanvases,
+    applyCanvasEvent,
     setKnownVisuals,
     setWidened,
     toggleWidened,

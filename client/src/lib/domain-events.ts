@@ -248,6 +248,23 @@ export interface FilesChangedPayload {
   files: Array<{ path: string; changeType: string }>;
 }
 
+export interface CanvasUpdatedPayload {
+  sessionId: string;
+  canvasId: string;
+  kind: string;
+  title: string;
+  version: number;
+  actor: "agent" | "user";
+  /** The whole canvas state, positions included. */
+  state: JsonValue;
+  summary: string;
+}
+
+export interface CanvasRefPayload {
+  sessionId: string;
+  canvasId: string;
+}
+
 export interface SessionStarted extends EventCursorMetadata {
   type: "session.started";
   payload: SessionStartedPayload;
@@ -333,6 +350,28 @@ export interface FilesChanged extends EventCursorMetadata {
   payload: FilesChangedPayload;
 }
 
+/** A canvas was opened, reopened or changed. Not persisted: it carries no event id. */
+export interface CanvasUpdated extends EventCursorMetadata {
+  type: "canvas.updated";
+  payload: CanvasUpdatedPayload;
+}
+
+export interface CanvasClosed extends EventCursorMetadata {
+  type: "canvas.closed";
+  payload: CanvasRefPayload;
+}
+
+export interface CanvasFocused extends EventCursorMetadata {
+  type: "canvas.focused";
+  payload: CanvasRefPayload;
+}
+
+export type CanvasEvent = CanvasUpdated | CanvasClosed | CanvasFocused;
+
+export function isCanvasEvent(event: DomainEvent): event is CanvasEvent {
+  return event.type === "canvas.updated" || event.type === "canvas.closed" || event.type === "canvas.focused";
+}
+
 export type DomainEvent =
   | SessionStarted
   | SessionIdled
@@ -350,4 +389,7 @@ export type DomainEvent =
   | DelegationUpdated
   | DelegationCompleted
   | ActivityStatus
-  | FilesChanged;
+  | FilesChanged
+  | CanvasUpdated
+  | CanvasClosed
+  | CanvasFocused;

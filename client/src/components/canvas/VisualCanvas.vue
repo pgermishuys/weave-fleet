@@ -8,6 +8,8 @@ import { visualCanvasTitle } from "@/stores/canvases";
 
 const props = defineProps<{
   payload: VisualPayload;
+  /** Set on server canvases: the agent changes them, the user only looks. */
+  readonly?: boolean;
 }>();
 
 const KIND_LABELS: Record<VisualPayload["$type"], string> = {
@@ -22,6 +24,8 @@ const title = computed(() => visualCanvasTitle(props.payload));
 const kindLabel = computed(() => KIND_LABELS[props.payload.$type]);
 const renderer = computed(() => getVisualRenderer(props.payload.$type));
 const isMarkdown = computed(() => props.payload.$type === "markdown");
+// Only the flow renderer takes readonly; the others render nothing editable.
+const rendererProps = computed(() => (props.payload.$type === "visual/flow" ? { readonly: props.readonly } : {}));
 
 function handleAnnotate(anchor: AnnotationAnchor, position: { x: number; y: number }): void {
   annotate(anchor, position, props.payload.sourceFilePath ?? title.value);
@@ -46,6 +50,7 @@ function handleAnnotate(anchor: AnnotationAnchor, position: { x: number; y: numb
         v-if="renderer"
         :content="payload.content"
         :annotatable="isMarkdown"
+        v-bind="rendererProps"
         @annotate="handleAnnotate"
       />
     </div>

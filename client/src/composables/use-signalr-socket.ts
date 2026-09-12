@@ -91,6 +91,38 @@ function dispatchGlobalEvent(topic: string, event: DomainEvent): void {
   }
 }
 
+/** Maps a hub event to a DomainEvent: the wire calls the payload "properties". */
+export function toDomainEvent(eventId: number | null, data: unknown): DomainEvent {
+  const wireEvent = data as { type: string; eventId?: number | null; properties?: unknown }
+  return {
+    type: wireEvent.type,
+    payload: wireEvent.properties,
+    ...(eventId !== null ? { eventId } : {}),
+  } as DomainEvent
+}
+
+function handleHubEvent(topic: string, eventId: number | null, data: unknown): void {
+  const domainEvent = toDomainEvent(eventId, data)
+
+  // Dispatch to per-session topic listeners
+  if (topicListenersV2.has(topic)) {
+    dispatchEventV2(topic, domainEvent)
+  }
+
+  // Dispatch to global topic handlers (e.g., "sessions" topic for activity_status)
+  if (globalEventHandlers.has(topic)) {
+    dispatchGlobalEvent(topic, domainEvent)
+  }
+}
+
+// Mock mode (vite --mode mock) has no hub. Its mock API pushes hub events
+// over Vite's dev socket instead; see client/vite-plugin-mock-api.ts.
+if (import.meta.hot) {
+  import.meta.hot.on("fleet:mock-hub-event", (message: { topic: string; data: unknown }) => {
+    handleHubEvent(message.topic, null, message.data)
+  })
+}
+
 function notifyDisconnected(): void {
   for (const callback of disconnectCallbacks.values()) {
     callback()
@@ -133,25 +165,7 @@ async function connect(): Promise<void> {
   connection = hubConnection
 
   // Register event handler for incoming events
-  hubConnection.on("Event", (topic: string, eventId: number | null, data: unknown) => {
-    // Wire format uses "properties" but DomainEvent uses "payload" — map the field
-    const wireEvent = data as { type: string; eventId?: number | null; properties?: unknown }
-    const domainEvent = {
-      type: wireEvent.type,
-      payload: wireEvent.properties,
-      ...(eventId !== null ? { eventId } : {}),
-    } as DomainEvent
-
-    // Dispatch to per-session topic listeners
-    if (topicListenersV2.has(topic)) {
-      dispatchEventV2(topic, domainEvent)
-    }
-
-    // Dispatch to global topic handlers (e.g., "sessions" topic for activity_status)
-    if (globalEventHandlers.has(topic)) {
-      dispatchGlobalEvent(topic, domainEvent)
-    }
-  })
+  hubConnection.on("Event", handleHubEvent)
 
   // Handle reconnection
   hubConnection.onreconnected(async () => {
