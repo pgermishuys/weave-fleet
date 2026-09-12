@@ -32,6 +32,7 @@
   --radius-btn: 8px;
   --radius-panel: 12px;
   --transition: 150ms ease-out;
+  --transition-pulse: 2s;
   /* Status glyphs: colour only the states that need attention. Idle is the
      resting state, so it stays quiet; waiting on the user is amber. */
   --status-idle: var(--muted);

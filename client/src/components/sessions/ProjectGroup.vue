@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { ArrowDown, ArrowUp, ChevronDown, Folder, Pencil, Plus, Trash2 } from "lucide-vue-next";
+import { ArrowDown, ArrowUp, ChevronDown, Pencil, Plus, Trash2 } from "lucide-vue-next";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -19,6 +19,7 @@ import type { SessionListItem } from "@/api/client";
 import ConfirmDeleteProjectDialog from "./ConfirmDeleteProjectDialog.vue";
 import InlineEdit from "./InlineEdit.vue";
 import SessionItem from "./SessionItem.vue";
+import { heightEnter, heightLeave } from "@/lib/height-transition";
 
 interface ProjectGroupModel {
   id: string;
@@ -73,7 +74,6 @@ const {
 } = useDeleteProject();
 
 const canShowContextMenu = computed(() => !props.project.isUngrouped && props.project.projectId !== null);
-const sessionCountLabel = computed(() => `(${props.project.sessionCount})`);
 const isAnyActionPending = computed(() => isUpdating.value || isReordering.value || isDeleting.value);
 
 // Drag-and-drop drop target state
@@ -289,11 +289,11 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
               class="project-chevron"
               aria-hidden="true"
             />
-            <Folder class="project-folder-icon" aria-hidden="true" />
-
             <span class="project-copy">
-              <span class="project-title">{{ project.name }} {{ sessionCountLabel }}</span>
+              <span class="project-title">{{ project.name }}</span>
             </span>
+
+            <span class="project-count">{{ project.sessionCount }}</span>
           </button>
         </div>
       </ContextMenuTrigger>
@@ -365,13 +365,11 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           class="project-chevron"
           aria-hidden="true"
         />
-        <Folder class="project-folder-icon" aria-hidden="true" />
-
         <span class="project-copy">
-          <span class="project-title">{{ project.name }} {{ sessionCountLabel }}</span>
+          <span class="project-title">{{ project.name }}</span>
         </span>
 
-        <span class="project-spacer" />
+        <span class="project-count">{{ project.sessionCount }}</span>
       </button>
 
       <div
@@ -383,8 +381,6 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           class="project-chevron"
           aria-hidden="true"
         />
-        <Folder class="project-folder-icon" aria-hidden="true" />
-
         <span class="project-copy">
           <InlineEdit
             :initial-value="project.name"
@@ -399,10 +395,18 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
       </div>
     </div>
 
-    <Transition name="collapse">
-      <div
+    <Transition
+      :css="false"
+      @enter="heightEnter"
+      @leave="heightLeave"
+    >
+      <TransitionGroup
         v-if="expanded"
+        tag="div"
         class="project-content"
+        :css="false"
+        @enter="heightEnter"
+        @leave="heightLeave"
       >
         <SessionItem
           v-for="session in project.sessions"
@@ -414,7 +418,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           @drag-session-start="handleSessionDragStart"
           @drag-session-end="handleSessionDragEnd"
         />
-      </div>
+      </TransitionGroup>
     </Transition>
 
     <ConfirmDeleteProjectDialog
@@ -428,8 +432,8 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 </template>
 
 <style scoped>
-.project-group {
-  margin-bottom: 2px;
+.project-group + .project-group {
+  margin-top: 10px;
 }
 
 .project-shell {
@@ -438,20 +442,23 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 
 .project-header {
   width: 100%;
+  min-height: 26px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px 8px 8px;
+  gap: 6px;
+  padding: 0 10px 0 6px;
   cursor: pointer;
   border: 0;
+  border-radius: var(--radius-btn);
   background: transparent;
-  color: var(--text);
+  color: var(--muted);
   text-align: left;
-  transition: background var(--transition);
+  transition: background var(--transition), color var(--transition);
 }
 
 .project-header:hover {
-  background: var(--bg);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
 }
 
 .project-header--editing {
@@ -474,25 +481,19 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 }
 
 .project-chevron {
-  font-size: 10px;
-  color: var(--muted);
-  width: 14px;
-  text-align: center;
-  transition: transform 0.25s ease;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+  transition: transform var(--transition);
 }
 
 .project-header.collapsed .project-chevron {
   transform: rotate(-90deg);
 }
 
-.project-folder-icon {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  color: var(--muted);
-}
-
 .project-copy {
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -500,14 +501,20 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 }
 
 .project-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.3;
 }
 
 .project-count {
-  font-size: 10px;
-  color: var(--muted);
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+  font-variant-numeric: tabular-nums;
 }
 
 .project-spacer {
@@ -515,7 +522,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 }
 
 .project-content {
-  padding-bottom: 2px;
+  padding-top: 2px;
   overflow: hidden;
 }
 </style>

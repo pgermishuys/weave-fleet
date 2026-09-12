@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, shallowRef, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
-import { Check, LoaderCircle, Plus, Search } from "lucide-vue-next";
+import { Check, FolderPlus, LoaderCircle, Plus, Search } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import type { SessionListItem } from "@/api/client";
 import { useProjects } from "@/composables/use-projects";
@@ -560,14 +560,15 @@ function handleCompleteCancel(): void {
         <Button
           variant="ghost"
           size="sm"
-          class="panel-action-button panel-action-button--secondary"
+          class="panel-action-button panel-action-button--icon"
+          aria-label="New Project"
+          title="New Project"
           @click="handleNewProject"
         >
-          <Plus
+          <FolderPlus
             class="panel-action-button__icon"
             aria-hidden="true"
           />
-          <span>New Project</span>
         </Button>
       </div>
     </div>
@@ -715,7 +716,7 @@ function handleCompleteCancel(): void {
 }
 
 .panel-header-row {
-  padding-top: 4px;
+  padding-top: 8px;
 }
 
 .panel-header {
@@ -730,76 +731,92 @@ function handleCompleteCancel(): void {
 
 .panel-actions {
   display: flex;
-  gap: 8px;
-  padding: 0 8px 6px;
+  gap: 6px;
+  padding: 0 8px 8px;
 }
 
 .panel-action-button {
-  min-height: 28px;
-  padding: 0 10px;
+  flex: 1 1 auto;
+  min-height: 32px;
+  padding: 0 12px;
+  justify-content: center;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-btn);
+  background: var(--card-bg);
   color: var(--text);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
 }
 
 .panel-action-button:hover {
-  background: var(--bg);
-  border-color: var(--border);
+  background: var(--card-bg);
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
   color: var(--text);
 }
 
-.panel-action-button--secondary {
+.panel-action-button--icon {
+  flex: 0 0 32px;
+  width: 32px;
+  padding: 0;
+  border-color: transparent;
   background: transparent;
   color: var(--muted);
 }
 
-.panel-action-button--secondary:hover {
-  background: var(--bg);
-  border-color: var(--border);
+.panel-action-button--icon:hover {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--text);
 }
 
 .panel-action-button__icon {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
 }
 
 .panel-search {
-  margin: 0 8px 6px;
+  margin: 0 8px 10px;
   position: relative;
 }
 
 .panel-search__icon {
   position: absolute;
   top: 50%;
-  left: 8px;
-  width: 12px;
-  height: 12px;
+  left: 10px;
+  width: 13px;
+  height: 13px;
   color: var(--muted);
   transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .panel-search input {
   width: 100%;
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: 0;
-  padding: 5px 8px 5px 28px;
-  font-size: 12px;
+  height: 32px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn);
+  padding: 0 10px 0 30px;
+  font-size: 13px;
   color: var(--text);
   outline: none;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.panel-search input::placeholder {
+  color: var(--muted);
 }
 
 .panel-search input:focus {
-  border-color: var(--accent);
+  background: var(--panel-bg);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .sessions-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 12px 12px;
+  padding: 0 8px 12px;
   gap: 4px;
   scrollbar-width: thin;
   scrollbar-color: var(--muted) transparent;

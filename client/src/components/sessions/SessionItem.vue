@@ -35,6 +35,8 @@ import { useProjects } from "@/composables/use-projects";
 import type { SessionListItem } from "@/api/client";
 import { sessionCache } from "@/lib/session-cache";
 import { dispatchSessionRemoved } from "@/lib/session-sync";
+import { sessionRowStatus } from "@/lib/session-row-status";
+import { useRelativeTime } from "@/composables/use-relative-time";
 import { useSessionsStore } from "@/stores/sessions";
 import OpenToolContextSubmenu from "@/components/sessions/OpenToolContextSubmenu.vue";
 import ConfirmCompleteSessionDialog from "./ConfirmCompleteSessionDialog.vue";
@@ -106,6 +108,8 @@ const sessionId = computed(() => props.session.session.id);
 const instanceId = computed(() => props.session.instanceId);
 const rawTitle = computed(() => props.session.session.title ?? "");
 const displayTitle = computed(() => props.session.session.title?.trim() || "Untitled session");
+const now = useRelativeTime();
+const rowStatus = computed(() => sessionRowStatus(props.session, now.value));
 const isRunningSession = computed(() => props.session.lifecycleStatus === "running");
 const isArchivedSession = computed(() => props.session.retentionStatus === "archived");
 const fallbackCanStop = computed(() => isRunningSession.value);
@@ -413,6 +417,12 @@ function removeSessionFromStore(): void {
             <span class="session-copy">
               <span class="session-title">{{ displayTitle }}</span>
             </span>
+
+            <span
+              v-if="rowStatus.label"
+              class="session-meta"
+              :class="`session-meta--${rowStatus.tone}`"
+            >{{ rowStatus.label }}</span>
           </button>
         </template>
 
@@ -556,6 +566,7 @@ function removeSessionFromStore(): void {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 1px 0;
 }
 
 .session-item-shell--dragging {
@@ -566,18 +577,18 @@ function removeSessionFromStore(): void {
 .session-item {
   width: 100%;
   min-width: 0;
-  min-height: 40px;
+  min-height: 32px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 12px 0 24px;
+  gap: 9px;
+  padding: 0 10px;
   cursor: pointer;
   border: 0;
-  border-left: 3px solid transparent;
+  border-radius: var(--radius-btn);
   background: transparent;
-  color: var(--text);
+  color: color-mix(in srgb, var(--text) 86%, transparent);
   text-align: left;
-  transition: background var(--transition);
+  transition: background var(--transition), color var(--transition);
 }
 
 .session-item--editing {
@@ -585,7 +596,8 @@ function removeSessionFromStore(): void {
 }
 
 .session-item:hover {
-  background: var(--bg);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
 }
 
 .session-item--editing:hover {
@@ -593,8 +605,9 @@ function removeSessionFromStore(): void {
 }
 
 .session-item.active {
-  background: var(--accent-dim);
-  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text);
+  font-weight: 500;
 }
 
 .session-item:focus-visible {
@@ -603,6 +616,7 @@ function removeSessionFromStore(): void {
 }
 
 .session-copy {
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -613,8 +627,34 @@ function removeSessionFromStore(): void {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.session-meta {
+  flex-shrink: 0;
   font-size: 12px;
-  line-height: 1.2;
+  font-weight: 400;
+  line-height: 1.3;
+  color: color-mix(in srgb, var(--muted) 80%, transparent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.session-meta--working {
+  color: var(--muted);
+}
+
+.session-meta--attention {
+  padding: 1px 7px;
+  border-radius: var(--radius-btn);
+  background: color-mix(in srgb, var(--status-waiting) 14%, transparent);
+  color: var(--status-waiting);
+  font-weight: 500;
+}
+
+.session-meta--error {
+  color: var(--error);
 }
 
 .session-title--editing {
