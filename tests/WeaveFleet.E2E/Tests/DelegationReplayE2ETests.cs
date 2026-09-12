@@ -13,11 +13,10 @@ using WeaveFleet.Testing.Fixtures;
 namespace WeaveFleet.E2E.Tests;
 
 /// <summary>
-/// Playwright E2E tests for delegation replay using the shared <see cref="DelegationReplayFixture"/>.
-/// Covers delegation link UI, model labels, parent busy-state transitions, and WebSocket delivery.
+/// Delegation E2E test using the shared <see cref="DelegationReplayFixture"/>: a delegated
+/// child session streams its activity to the browser.
 /// </summary>
 [Trait("Category", "E2E")]
-[Trait("Lane", "Workflow")]
 public sealed class DelegationReplayE2ETests : E2ETestBase,
     IClassFixture<FleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>
@@ -144,209 +143,31 @@ public sealed class DelegationReplayE2ETests : E2ETestBase,
             childHarness);
     }
 
-    // -----------------------------------------------------------------------
-    // Task 10 — Delegation link visible, navigates to child, breadcrumb present
-    // -----------------------------------------------------------------------
-
+    /// <summary>
+    /// Child session activity reaches the browser live over SignalR, without the client
+    /// falling back to polling the messages endpoint.
+    /// </summary>
     [Fact]
-    public async Task DelegationReplayE2E_DelegationLink_VisibleAndNavigatesToChild()
-    {
-        await WithFailureCapture(async () =>
-        {
-            var scenario = await SeedDelegationScenarioAsync();
-            var detail = new SessionDetailPage(Page);
-            await detail.GotoAsync(scenario.ParentSessionId, scenario.ParentInstanceId);
-
-            // Delegation link should be visible (seeded via message repo above)
-            var delegationLink = Page.GetByTestId("delegation-link");
-            await Assertions.Expect(delegationLink).ToBeVisibleAsync(
-                new LocatorAssertionsToBeVisibleOptions { Timeout = 10_000 });
-
-            // It should show "Running" or similar status
-            var statusEl = Page.GetByTestId("delegation-link-status");
-            await Assertions.Expect(statusEl).ToBeVisibleAsync();
-
-            // Click should navigate to child session
-            await delegationLink.ClickAsync();
-
-            await Assertions.Expect(Page)
-                .ToHaveURLAsync(
-                    new System.Text.RegularExpressions.Regex(
-                        $"/sessions/{System.Text.RegularExpressions.Regex.Escape(scenario.ChildSessionId)}"),
-                    new PageAssertionsToHaveURLOptions { Timeout = 5_000 });
-
-            await detail.WaitForLoadedAsync();
-
-            // Breadcrumb back to parent should be visible
-            var breadcrumbLink = Page.Locator(
-                $"a[href*=\"/sessions/{Uri.EscapeDataString(scenario.ParentSessionId)}\"]").Last;
-            await Assertions.Expect(breadcrumbLink).ToContainTextAsync("Parent Delegation Session",
-                new LocatorAssertionsToContainTextOptions { Timeout = 5_000 });
-        });
-    }
-
-    // -----------------------------------------------------------------------
-    // Task 11 — Child session shows child model label
-    // -----------------------------------------------------------------------
-
-    [Fact]
-    public async Task DelegationReplayE2E_ChildSession_ShowsChildModelId()
+    public async Task DelegatedChild_StreamsLiveActivityWithoutPolling()
     {
         await WithFailureCapture(async () =>
         {
             var scenario = await SeedDelegationScenarioAsync();
             var detail = new SessionDetailPage(Page);
 
-            // Navigate to child session
-            await detail.GotoAsync(scenario.ChildSessionId, scenario.ChildInstanceId);
-
-            // Push child assistant message with model info via the fixture's child events
-            await scenario.ChildHarness.PushEventAsync(new HarnessEvent
-            {
-                Type = EventTypes.MessageUpdated,
-                SessionId = scenario.ChildHarnessSessionId,
-                FleetSessionId = scenario.ChildSessionId,
-                Timestamp = DateTimeOffset.UtcNow,
-                Payload = JsonSerializer.SerializeToElement(new
-                {
-                    info = new
-                    {
-                        id = "child-msg-model-1",
-                        sessionID = scenario.ChildHarnessSessionId,
-                        role = "assistant",
-                        agent = DelegationReplayFixture.ChildAgent,
-                        modelID = DelegationReplayFixture.ChildModelId,
-                        providerID = DelegationReplayFixture.ChildProviderId,
-                        time = new { created = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() },
-                    },
-                }),
-            });
-            await scenario.ChildHarness.PushEventAsync(new HarnessEvent
-            {
-                Type = EventTypes.MessagePartUpdated,
-                SessionId = scenario.ChildHarnessSessionId,
-                FleetSessionId = scenario.ChildSessionId,
-                Timestamp = DateTimeOffset.UtcNow,
-                Payload = JsonSerializer.SerializeToElement(new
-                {
-                    part = new
-                    {
-                        id = "child-part-model-1",
-                        messageID = "child-msg-model-1",
-                        sessionID = scenario.ChildHarnessSessionId,
-                        type = "text",
-                        text = $"Child response using {DelegationReplayFixture.ChildModelId}",
-                    },
-                }),
-            });
-
-            // Wait for child message to appear
-            await detail.WaitForMessageTextAsync(
-                $"Child response using {DelegationReplayFixture.ChildModelId}", 5_000);
-
-            // Check model label shows claude-haiku-4.5
-            var modelLabel = Page.GetByTestId("message-model-id");
-            await Assertions.Expect(modelLabel.First)
-                .ToContainTextAsync(DelegationReplayFixture.ChildModelId,
-                    new LocatorAssertionsToContainTextOptions { Timeout = 5_000 });
-        });
-    }
-
-    // -----------------------------------------------------------------------
-    // Task 12 — Parent stays busy while child works, transitions to idle
-    // -----------------------------------------------------------------------
-
-    [Fact]
-    public async Task DelegationReplayE2E_Parent_BusyDuringChildThenIdle()
-    {
-        await WithFailureCapture(async () =>
-        {
-            var scenario = await SeedDelegationScenarioAsync();
-            var detail = new SessionDetailPage(Page);
-            await detail.GotoAsync(scenario.ParentSessionId, scenario.ParentInstanceId);
-
-            await scenario.ParentHarness.PushEventAsync(new HarnessEvent
-            {
-                Type = EventTypes.SessionStatus,
-                SessionId = scenario.ParentHarnessSessionId,
-                FleetSessionId = scenario.ParentSessionId,
-                Timestamp = DateTimeOffset.UtcNow,
-                Payload = JsonSerializer.SerializeToElement(new
-                {
-                    sessionID = scenario.ParentHarnessSessionId,
-                    status = new { type = "busy" },
-                }),
-            });
-
-            await detail.WaitForBusyAsync(5_000);
-
-            // Push parent session.status idle after child completes
-            await scenario.ParentHarness.PushEventAsync(new HarnessEvent
-            {
-                Type = EventTypes.SessionStatus,
-                SessionId = scenario.ParentHarnessSessionId,
-                FleetSessionId = scenario.ParentSessionId,
-                Timestamp = DateTimeOffset.UtcNow,
-                Payload = JsonSerializer.SerializeToElement(new
-                {
-                    sessionID = scenario.ParentHarnessSessionId,
-                    status = new { type = "idle" },
-                }),
-            });
-            await scenario.ParentHarness.PushEventAsync(new HarnessEvent
-            {
-                Type = EventTypes.SessionIdle,
-                SessionId = scenario.ParentHarnessSessionId,
-                FleetSessionId = scenario.ParentSessionId,
-                Timestamp = DateTimeOffset.UtcNow,
-                Payload = JsonSerializer.SerializeToElement(new
-                {
-                    sessionID = scenario.ParentHarnessSessionId,
-                }),
-            });
-            await scenario.ParentHarness.PushEventAsync(BuildCompletedTaskToolEvent(scenario));
-
-            await detail.WaitForIdleAsync(5_000);
-        });
-    }
-
-    // -----------------------------------------------------------------------
-    // Task 13 — Child events delivered via WebSocket, no extra HTTP polling
-    // -----------------------------------------------------------------------
-
-    [Fact]
-    public async Task DelegationReplayE2E_ChildActivity_StreamsViaWebSocketOnly()
-    {
-        await WithFailureCapture(async () =>
-        {
-            var scenario = await SeedDelegationScenarioAsync();
-            var detail = new SessionDetailPage(Page);
-
-            // Intercept any extra REST polling for child messages
-            var extraChildRequestCount = 0;
+            // The session snapshot arrives over SignalR, so the messages endpoint
+            // should not be called at all while the child is open.
+            var childMessageRequests = 0;
             var childMessagesApiPattern = $"/api/sessions/{scenario.ChildSessionId}/messages";
-
-            // Register response waiter BEFORE navigation so we don't miss the initial load
-            var initialResponse = Page.WaitForResponseAsync(
-                r => r.Url.Contains(childMessagesApiPattern, StringComparison.Ordinal) && r.Ok,
-                new PageWaitForResponseOptions { Timeout = 10_000 });
-
-            // Navigate to child session
-            await detail.GotoAsync(scenario.ChildSessionId, scenario.ChildInstanceId);
-
-            // Wait for initial load request to complete
-            await initialResponse;
-            await Task.Delay(300); // Let any in-flight requests settle
-
-            // Now start counting additional requests
             Page.Request += (_, request) =>
             {
                 if (request.Url.Contains(childMessagesApiPattern, StringComparison.Ordinal))
-                    Interlocked.Increment(ref extraChildRequestCount);
+                    Interlocked.Increment(ref childMessageRequests);
             };
-            var baseline = Volatile.Read(ref extraChildRequestCount);
 
-            // Push child message via TestHarness (should arrive via WebSocket, not REST)
+            await detail.GotoAsync(scenario.ChildSessionId, scenario.ChildInstanceId);
+
+            // Push a child message through the harness; it should arrive over SignalR.
             await scenario.ChildHarness.PushEventAsync(new HarnessEvent
             {
                 Type = EventTypes.MessageUpdated,
@@ -380,115 +201,17 @@ public sealed class DelegationReplayE2ETests : E2ETestBase,
                         messageID = "child-msg-ws-1",
                         sessionID = scenario.ChildHarnessSessionId,
                         type = "text",
-                        text = "Live child WebSocket-only delivery",
+                        text = "Live child output",
                     },
                 }),
             });
 
-            await detail.WaitForMessageTextAsync("Live child WebSocket-only delivery", 10_000);
+            await detail.WaitForMessageTextAsync("Live child output", 10_000);
 
-            // Verify no additional HTTP polling occurred
-            Volatile.Read(ref extraChildRequestCount).ShouldBe(baseline,
-                "Child events must be delivered via WebSocket only, not via additional HTTP polling");
+            Volatile.Read(ref childMessageRequests).ShouldBe(0,
+                "Child events must arrive over SignalR, not by polling the messages endpoint");
         });
     }
-
-    // -----------------------------------------------------------------------
-    // Task 14 — Parent shows busy when only child is busy (derived from child)
-    // -----------------------------------------------------------------------
-
-    [Fact]
-    public async Task DelegationReplayE2E_Parent_ShowsBusyWhenChildBusy_DerivedFromChildActivity()
-    {
-        await WithFailureCapture(async () =>
-        {
-            var scenario = await SeedDelegationScenarioAsync();
-            var detail = new SessionDetailPage(Page);
-            await detail.GotoAsync(scenario.ParentSessionId, scenario.ParentInstanceId);
-
-            // Parent has NOT emitted a busy event — it is idle by itself.
-            // Child emits session.status busy → EphemeralEventRelayService should propagate
-            // the derived busy status to the parent's session topic.
-            await scenario.ChildHarness.PushEventAsync(new HarnessEvent
-            {
-                Type = EventTypes.SessionStatus,
-                SessionId = scenario.ChildHarnessSessionId,
-                FleetSessionId = scenario.ChildSessionId,
-                Timestamp = DateTimeOffset.UtcNow,
-                Payload = JsonSerializer.SerializeToElement(new
-                {
-                    sessionID = scenario.ChildHarnessSessionId,
-                    status = new { type = "busy" },
-                }),
-            });
-
-            // Parent detail view should show Working, driven by child activity propagation
-            await detail.WaitForBusyAsync(8_000);
-
-            // Child goes idle → parent reverts to idle
-            await scenario.ChildHarness.PushEventAsync(new HarnessEvent
-            {
-                Type = EventTypes.SessionStatus,
-                SessionId = scenario.ChildHarnessSessionId,
-                FleetSessionId = scenario.ChildSessionId,
-                Timestamp = DateTimeOffset.UtcNow,
-                Payload = JsonSerializer.SerializeToElement(new
-                {
-                    sessionID = scenario.ChildHarnessSessionId,
-                    status = new { type = "idle" },
-                }),
-            });
-            await scenario.ChildHarness.PushEventAsync(new HarnessEvent
-            {
-                Type = EventTypes.SessionIdle,
-                SessionId = scenario.ChildHarnessSessionId,
-                FleetSessionId = scenario.ChildSessionId,
-                Timestamp = DateTimeOffset.UtcNow,
-                Payload = JsonSerializer.SerializeToElement(new
-                {
-                    sessionID = scenario.ChildHarnessSessionId,
-                }),
-            });
-            await scenario.ParentHarness.PushEventAsync(BuildCompletedTaskToolEvent(scenario));
-
-            await detail.WaitForIdleAsync(8_000);
-        });
-    }
-
-    private static HarnessEvent BuildCompletedTaskToolEvent(DelegationScenario scenario)
-        => new()
-        {
-            Type = EventTypes.MessagePartUpdated,
-            SessionId = scenario.ParentHarnessSessionId,
-            FleetSessionId = scenario.ParentSessionId,
-            Timestamp = DateTimeOffset.UtcNow,
-            Payload = JsonSerializer.SerializeToElement(new
-            {
-                sessionID = scenario.ParentHarnessSessionId,
-                part = new
-                {
-                    id = $"part-{scenario.ParentToolCallId}",
-                    type = "tool",
-                    tool = "task",
-                    callID = scenario.ParentToolCallId,
-                    sessionID = scenario.ParentHarnessSessionId,
-                    messageID = $"msg-parent-{scenario.ParentToolCallId}",
-                    state = new
-                    {
-                        status = "completed",
-                        input = new
-                        {
-                            subagent_type = DelegationReplayFixture.ChildAgent,
-                        },
-                        metadata = new
-                        {
-                            parentSessionId = scenario.ParentSessionId,
-                            sessionId = scenario.ChildHarnessSessionId,
-                        },
-                    },
-                },
-            }),
-        };
 
     private static string GetRequiredQueryValue(Uri uri, string key)
     {

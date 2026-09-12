@@ -17,7 +17,6 @@ namespace WeaveFleet.E2E.Tests;
 /// both the question text and the chosen answer.
 /// </summary>
 [Trait("Category", "E2E")]
-[Trait("Lane", "Workflow")]
 public sealed class QuestionToolTests : E2ETestBase,
     IClassFixture<FleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>
@@ -132,10 +131,15 @@ public sealed class QuestionToolTests : E2ETestBase,
             var submitButton = Page.GetByTestId("question-submit-button");
             await submitButton.ClickAsync();
 
-            // The API-triggered AnswerQuestionAsync event doesn't reliably reach the
-            // frontend via WS in E2E (same issue as Discovery #1). Push the completion
-            // event directly from test code — proven pattern from DelegationReplayE2ETests.
-            await Task.Delay(500); // Let the API call complete
+            // The chosen answer must reach the harness through the API.
+            var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+            while (harness.LastAnswers is null && DateTimeOffset.UtcNow < deadline)
+                await Task.Delay(50);
+            harness.LastAnswers.ShouldNotBeNull("The submitted answer never reached the harness.");
+            harness.LastAnswers.ShouldHaveSingleItem().ShouldBe(["Staging"]);
+
+            // The completion event the test harness emits carries no Fleet session ID, so
+            // push one that does to drive the answered state in the browser.
             await harness.PushEventAsync(new HarnessEvent
             {
                 Type = "message.part.updated",

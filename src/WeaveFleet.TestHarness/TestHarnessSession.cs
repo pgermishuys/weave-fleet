@@ -183,6 +183,8 @@ public sealed class TestHarnessSession : IHarnessSession
     [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test infrastructure only")]
     public async Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
     {
+        LastAnswers = answers;
+
         // Emit a message.part.updated event that transitions the tool part to completed,
         // mimicking the real harness behaviour after an answer is accepted.
         var evt = new HarnessEvent
@@ -472,6 +474,9 @@ public sealed class TestHarnessSession : IHarnessSession
         _lastQuestionMessageId = messageId;
         _lastQuestionInput = input;
     }
+
+    /// <summary>The answers passed to the most recent <see cref="AnswerQuestionAsync"/> call.</summary>
+    public IReadOnlyList<IReadOnlyList<string>>? LastAnswers { get; private set; }
 
     private async ValueTask PushEventCoreAsync(HarnessEvent evt, CancellationToken ct)
     {

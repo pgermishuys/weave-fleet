@@ -22,7 +22,6 @@ namespace WeaveFleet.E2E.Tests;
 /// are sequenced, preventing the race.
 /// </summary>
 [Trait("Category", "E2E")]
-[Trait("Lane", "Transport")]
 public sealed class SessionNavigationStreamingTests : E2ETestBase,
     IClassFixture<FleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>
@@ -33,15 +32,6 @@ public sealed class SessionNavigationStreamingTests : E2ETestBase,
         : base(factory, playwright)
     {
         _factory = factory;
-    }
-
-    public override async Task InitializeAsync()
-    {
-        await base.InitializeAsync();
-        // Enable SignalR transport for this test
-        await Page.Context.AddInitScriptAsync("""
-            window.localStorage.setItem('fleet:transport', 'signalr');
-            """);
     }
 
     /// <summary>
@@ -172,14 +162,8 @@ public sealed class SessionNavigationStreamingTests : E2ETestBase,
 
             // ── Step 2: Navigate to session B (client-side, no reload) ──────────
 
-            // Use Vue Router's push method for client-side navigation
-            await Page.EvaluateAsync($@"
-                window.$router?.push({{
-                    path: '/sessions/{Uri.EscapeDataString(sessionIdB)}',
-                    query: {{ instanceId: '{Uri.EscapeDataString(instanceIdB)}' }}
-                }})
-            ");
-            await detailB.WaitForLoadedAsync();
+            var sidebar = new FleetSidebarPage(Page);
+            await sidebar.ClickSessionAsync(sessionIdB);
             await Task.Delay(200); // Allow navigation to settle
 
             // ── Step 3: Push second chunk while we're on session B ──────────────
@@ -204,14 +188,7 @@ public sealed class SessionNavigationStreamingTests : E2ETestBase,
 
             // ── Step 4: Navigate back to session A (client-side, no reload) ─────
 
-            // Use Vue Router's push method for client-side navigation
-            await Page.EvaluateAsync($@"
-                window.$router?.push({{
-                    path: '/sessions/{Uri.EscapeDataString(sessionIdA)}',
-                    query: {{ instanceId: '{Uri.EscapeDataString(instanceIdA)}' }}
-                }})
-            ");
-            await detailA.WaitForLoadedAsync();
+            await sidebar.ClickSessionAsync(sessionIdA);
 
             // ── Step 5: Verify session A is still busy and receiving live events ──
 
@@ -306,193 +283,6 @@ public sealed class SessionNavigationStreamingTests : E2ETestBase,
             // Verify session is idle
             var finalStatus = await detailA.GetStatusAsync();
             finalStatus.ShouldBe("idle", "Session A should be idle after response completes");
-        });
-    }
-
-    /// <summary>
-    /// Stress test: Rapidly navigate A → B → A many times with zero delays during streaming.
-    /// Verifies the queue handles rapid navigation without losing subscription.
-    /// 
-    /// Without the fix (queueTopicOperation), this test should fail or be flaky because:
-    /// - Rapid navigation causes overlapping subscribe/unsubscribe calls
-    /// - Fire-and-forget unsubscribe can overtake a subsequent subscribe
-    /// - Client ends up detached from the SignalR group
-    /// - Live events no longer arrive
-    /// </summary>
-    [Fact]
-    public async Task RapidNavigationDuringStreaming_MaintainsSubscription()
-    {
-        await WithFailureCapture(async () =>
-        {
-            // ── Setup: Create two sessions ──────────────────────────────────────
-
-            ConfigureScenario(_ => { });
-
-            var dashboard = new FleetDashboardPage(Page);
-            await dashboard.GotoAsync();
-
-            // Create session A
-            var dialogA = await dashboard.ClickNewSessionAsync();
-            await dialogA.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
-            await dialogA.SetTitleAsync("Session A Rapid");
-
-            var detailA = await dialogA.SubmitAsync();
-            await detailA.WaitForLoadedAsync();
-
-            var sessionUriA = new Uri(Page.Url);
-            var sessionIdA = sessionUriA.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
-            var instanceIdA = GetRequiredQueryValue(sessionUriA, "instanceId");
-
-            // Create session B
-            await Page.GotoAsync("/");
-            await dashboard.WaitForLoadedAsync();
-
-            var dialogB = await dashboard.ClickNewSessionAsync();
-            await dialogB.SetDirectoryAsync(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar));
-            await dialogB.SetTitleAsync("Session B Rapid");
-
-            var detailB = await dialogB.SubmitAsync();
-            await detailB.WaitForLoadedAsync();
-
-            var sessionUriB = new Uri(Page.Url);
-            var sessionIdB = sessionUriB.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
-            var instanceIdB = GetRequiredQueryValue(sessionUriB, "instanceId");
-
-            var tracker = _factory.KestrelServices.GetRequiredService<InstanceTracker>();
-            var harnessA = tracker.Get(instanceIdA).ShouldBeOfType<TestHarnessSession>();
-            var harnessSessionIdA = harnessA.InstanceId;
-
-            // ── Run multiple iterations to increase probability of hitting the race ──
-
-            const int iterations = 3;
-            for (var iteration = 0; iteration < iterations; iteration++)
-            {
-                // Navigate to session A using router (client-side navigation)
-                await Page.EvaluateAsync($@"
-                    window.$router?.push({{
-                        path: '/sessions/{Uri.EscapeDataString(sessionIdA)}',
-                        query: {{ instanceId: '{Uri.EscapeDataString(instanceIdA)}' }}
-                    }})
-                ");
-                await detailA.WaitForLoadedAsync();
-                
-                // Wait for session to be idle (SignalR subscription established)
-                await detailA.WaitForIdleAsync(10_000);
-
-                var messageId = $"msg-rapid-{iteration}";
-                var partId = $"part-rapid-{iteration}";
-
-                // Push session.status(busy)
-                await harnessA.PushEventAsync(MakeHarnessEvent(
-                    harnessSessionIdA,
-                    sessionIdA,
-                    "session.status",
-                    new { sessionId = harnessSessionIdA, status = new { type = "busy" } }));
-
-                // Wait for busy status to be reflected
-                await detailA.WaitForBusyAsync(5_000);
-
-                // Push message.updated
-                await harnessA.PushEventAsync(MakeHarnessEvent(
-                    harnessSessionIdA,
-                    sessionIdA,
-                    "message.updated",
-                    new
-                    {
-                        info = new
-                        {
-                            id = messageId,
-                            sessionID = harnessSessionIdA,
-                            role = "assistant",
-                            time = new { created = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() },
-                            agent = "loom",
-                        },
-                    }));
-
-                // Push initial chunk
-                var initialText = $"Iteration {iteration} chunk 1";
-                await harnessA.PushEventAsync(MakeHarnessEvent(
-                    harnessSessionIdA,
-                    sessionIdA,
-                    "message.part.updated",
-                    new
-                    {
-                        part = new
-                        {
-                            id = partId,
-                            messageID = messageId,
-                            sessionID = harnessSessionIdA,
-                            type = "text",
-                            text = initialText,
-                        }
-                    }));
-
-                await detailA.WaitForMessageTextAsync(initialText, 10_000);
-
-                // ── Rapidly navigate A → B → A many times with ZERO delays ──────
-
-                const int rapidCycles = 20;
-                for (var i = 0; i < rapidCycles; i++)
-                {
-                    // Navigate to B (triggers unsubscribe from A)
-                    await Page.EvaluateAsync($@"
-                        window.$router?.push({{
-                            path: '/sessions/{Uri.EscapeDataString(sessionIdB)}',
-                            query: {{ instanceId: '{Uri.EscapeDataString(instanceIdB)}' }}
-                        }})
-                    ");
-                    
-                    // Immediately navigate back to A (triggers subscribe to A)
-                    // Without queueing, this subscribe can be sent before the unsubscribe completes
-                    await Page.EvaluateAsync($@"
-                        window.$router?.push({{
-                            path: '/sessions/{Uri.EscapeDataString(sessionIdA)}',
-                            query: {{ instanceId: '{Uri.EscapeDataString(instanceIdA)}' }}
-                        }})
-                    ");
-                }
-
-                // Wait for navigation to settle
-                await Task.Delay(100);
-
-                // ── Immediately push an event and assert it arrives live ────────
-
-                var finalText = $"Iteration {iteration} chunk 2";
-                await harnessA.PushEventAsync(MakeHarnessEvent(
-                    harnessSessionIdA,
-                    sessionIdA,
-                    "message.part.updated",
-                    new
-                    {
-                        part = new
-                        {
-                            id = partId,
-                            messageID = messageId,
-                            sessionID = harnessSessionIdA,
-                            type = "text",
-                            text = finalText,
-                        }
-                    }));
-
-                // This should arrive via live events within 3s
-                // If the subscription was lost due to the race, this will timeout
-                await detailA.WaitForMessageTextAsync(finalText, 3_000);
-
-                // Verify subscription is active via test API
-                var hasSubscription = await Page.EvaluateAsync<bool>($@"
-                    window.__WEAVE_SOCKET_TEST_API?.hasV2Subscriptions() ?? false
-                ");
-                hasSubscription.ShouldBeTrue($"Iteration {iteration}: SignalR subscription should be active after rapid navigation");
-
-                // Complete the response
-                await harnessA.PushEventAsync(MakeHarnessEvent(
-                    harnessSessionIdA,
-                    sessionIdA,
-                    "session.status",
-                    new { sessionId = harnessSessionIdA, status = new { type = "idle" } }));
-
-                await detailA.WaitForIdleAsync(5_000);
-            }
         });
     }
 

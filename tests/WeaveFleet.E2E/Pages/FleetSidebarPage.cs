@@ -9,11 +9,10 @@ public sealed class FleetSidebarPage(IPage page)
 {
     private readonly IPage _page = page;
 
-    private ILocator SessionLeaves => _page.Locator("[data-tree-leaf]");
-
     public ILocator GetSessionLeaf(string sessionId)
         => _page.Locator($"[data-tree-leaf][data-session-id='{sessionId}']");
 
+    /// <summary>Open a session from the sidebar (client-side navigation, no reload).</summary>
     public async Task<SessionDetailPage> ClickSessionAsync(string sessionId)
     {
         await GetSessionLeaf(sessionId).ClickAsync();
@@ -24,34 +23,5 @@ public sealed class FleetSidebarPage(IPage page)
         var detail = new SessionDetailPage(_page);
         await detail.WaitForLoadedAsync();
         return detail;
-    }
-
-    public async Task OpenSessionContextMenuAsync(string sessionId)
-        => await GetSessionLeaf(sessionId).ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
-
-    public async Task ClickSessionMenuItemAsync(string sessionId, string menuItem)
-    {
-        await OpenSessionContextMenuAsync(sessionId);
-        await _page.GetByRole(AriaRole.Menuitem, new() { Name = menuItem }).ClickAsync();
-    }
-
-    public Task ExpectSessionVisibleAsync(string sessionId)
-        => Assertions.Expect(GetSessionLeaf(sessionId)).ToBeVisibleAsync();
-
-    public Task ExpectSessionHiddenAsync(string sessionId)
-        => Assertions.Expect(GetSessionLeaf(sessionId)).ToHaveCountAsync(0);
-
-    // ── Project context menu helpers ─────────────────────────────────────────
-
-    public ILocator GetProjectItem(string projectId)
-        => _page.Locator($"[data-project-id='{projectId}']");
-
-    public async Task OpenProjectContextMenuAsync(string projectId)
-        => await GetProjectItem(projectId).ClickAsync(new LocatorClickOptions { Button = MouseButton.Right });
-
-    public async Task ClickProjectMenuItemAsync(string projectId, string menuItem)
-    {
-        await OpenProjectContextMenuAsync(projectId);
-        await _page.GetByRole(AriaRole.Menuitem, new() { Name = menuItem }).ClickAsync();
     }
 }

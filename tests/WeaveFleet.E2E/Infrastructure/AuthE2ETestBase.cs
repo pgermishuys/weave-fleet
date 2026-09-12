@@ -1,7 +1,4 @@
-using Dapper;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
-using WeaveFleet.Application.Data;
 using WeaveFleet.E2E.Pages;
 
 namespace WeaveFleet.E2E.Infrastructure;
@@ -118,14 +115,6 @@ public abstract class AuthE2ETestBase : IAsyncLifetime
     /// fills credentials, submits, and waits until the browser has returned to Fleet
     /// with an authenticated session cookie set.
     /// </summary>
-    protected Task LoginAsync(string username, string password)
-        => LoginAsync(username, password, "/");
-
-    /// <summary>
-    /// Navigates to a protected URL, follows the OIDC redirect to the IdP login page,
-    /// fills credentials, submits, and waits until the browser has returned to Fleet
-    /// with an authenticated session cookie set.
-    /// </summary>
     /// <param name="username">Test user username (e.g. "testuser" or "newuser").</param>
     /// <param name="password">Test user password (e.g. "password").</param>
     /// <param name="returnUrl">The Fleet URL to start the flow from.</param>
@@ -164,51 +153,6 @@ public abstract class AuthE2ETestBase : IAsyncLifetime
     {
         var response = await Page.APIRequest.GetAsync($"{ServerUrl}/api/user/me");
         response.Status.ShouldBe(200);
-    }
-
-    /// <summary>
-    /// Reads the CSRF token from the cookie set by Fleet's antiforgery middleware
-    /// and posts to <c>/auth/logout</c> with the token header.
-    /// </summary>
-    protected async Task LogoutAsync()
-    {
-        // Fetch the request token cookie emitted on GET requests for authenticated API access.
-        var cookies = await _context!.CookiesAsync([ServerUrl]);
-        var csrfCookie = cookies.FirstOrDefault(c =>
-            c.Name.Equals(".WeaveFleet.CSRF", StringComparison.OrdinalIgnoreCase));
-
-        if (csrfCookie is null || string.IsNullOrWhiteSpace(csrfCookie.Value))
-            throw new InvalidOperationException("CSRF request token cookie '.WeaveFleet.CSRF' was not present.");
-
-        // Use the Playwright request context to POST the logout with CSRF header
-        var response = await Page.APIRequest.PostAsync(
-            $"{ServerUrl}/auth/logout",
-            new APIRequestContextOptions
-            {
-                Headers = new Dictionary<string, string>
-                {
-                    ["X-CSRF-Token"] = csrfCookie.Value
-                }
-            });
-
-        // 200 or 302 are both acceptable logout responses
-        (response.Status == 200 || response.Status == 302).ShouldBeTrue();
-    }
-
-    /// <summary>
-    /// Resets onboarding status for a user so subsequent tests see the wizard.
-    /// Must be called BEFORE <see cref="LoginAsync(string,string)"/> for tests that
-    /// expect the onboarding wizard to appear. This avoids cross-test state pollution
-    /// when multiple tests share the same <see cref="AuthFleetWebApplicationFactory"/>.
-    /// </summary>
-    protected async Task ResetUserOnboardingAsync(string email)
-    {
-        var connFactory = _factory.KestrelServices.GetRequiredService<IDbConnectionFactory>();
-        using var conn = connFactory.CreateConnection();
-        conn.Open();
-        await conn.ExecuteAsync(
-            "UPDATE users SET onboarding_completed_at = NULL WHERE email = @Email",
-            new { Email = email });
     }
 
     /// <summary>

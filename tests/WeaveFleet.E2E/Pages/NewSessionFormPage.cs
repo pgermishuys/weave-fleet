@@ -1,13 +1,12 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 
 namespace WeaveFleet.E2E.Pages;
 
 /// <summary>
 /// Page object for the inline "New Session" form, mounted at the <c>/sessions/new</c> route.
-/// Replaces the old <see cref="NewSessionDialog"/> modal flow (see commit 82af02e:
-/// "feat(client): replace new session modal with inline form").
 /// </summary>
-public sealed class NewSessionFormPage(IPage page)
+public sealed partial class NewSessionFormPage(IPage page)
 {
     private readonly IPage _page = page;
 
@@ -17,20 +16,19 @@ public sealed class NewSessionFormPage(IPage page)
     private ILocator DirectoryInput => Form.Locator("#new-session-directory");
     private ILocator TitleInput => Form.Locator("#session-title");
     private ILocator SubmitButton => _page.GetByTestId("create-session-submit");
-    private ILocator ErrorRegion => _page.GetByTestId("new-session-error");
-    private ILocator DirectoryModeButton => Form.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Directory" });
-    private ILocator RepositoryModeButton => Form.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "Repository" });
+    // Each mode button's accessible name includes its description, and Quick Chat's
+    // mentions "directory", so match on the leading label only.
+    private ILocator DirectoryModeButton => Form.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { NameRegex = DirectoryModeName() });
     private ILocator MoreOptionsTrigger => Form.GetByRole(AriaRole.Button, new LocatorGetByRoleOptions { Name = "More options" });
+
+    [GeneratedRegex("^Directory\\b")]
+    private static partial Regex DirectoryModeName();
 
     // ── Waits ────────────────────────────────────────────────────────────────
 
     /// <summary>Wait for the inline form to be visible.</summary>
     public Task WaitForVisibleAsync()
         => Form.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
-
-    /// <summary>Wait for the error region to be visible (validation/mutation error).</summary>
-    public Task WaitForErrorAsync()
-        => ErrorRegion.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
 
     // ── Actions ──────────────────────────────────────────────────────────────
 
@@ -41,18 +39,6 @@ public sealed class NewSessionFormPage(IPage page)
         if (await DirectoryModeButton.IsVisibleAsync())
             await DirectoryModeButton.ClickAsync();
         await DirectoryInput.FillAsync(directory);
-    }
-
-    public async Task SelectRepositorySourceAsync()
-    {
-        if (await RepositoryModeButton.IsVisibleAsync())
-            await RepositoryModeButton.ClickAsync();
-    }
-
-    public async Task SelectDirectorySourceAsync()
-    {
-        if (await DirectoryModeButton.IsVisibleAsync())
-            await DirectoryModeButton.ClickAsync();
     }
 
     /// <summary>Fill in the optional title field (opens the "More options" section first).</summary>
