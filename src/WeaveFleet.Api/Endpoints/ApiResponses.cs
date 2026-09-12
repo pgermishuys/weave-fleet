@@ -224,6 +224,19 @@ public sealed record GetSessionStatusResponse(
     string? RetentionStatus,
     string? ArchivedAt);
 
+// ── Canvases ─────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// An open canvas with its full state, including positions. Named like the <c>canvas.updated</c>
+/// payload so the client handles both the same way.
+/// </summary>
+public sealed record CanvasResponse(
+    string CanvasId,
+    string Kind,
+    string Title,
+    int Version,
+    JsonElement State);
+
 // ── Session Sources ──────────────────────────────────────────────────────────
 
 public sealed record SessionSourceCatalogResponse(

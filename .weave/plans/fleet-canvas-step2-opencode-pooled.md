@@ -177,10 +177,17 @@ Each tool POSTs to `{FLEET_URL}/api/bridge/opencode/canvas/{op}` with `Authoriza
     - Errors carry `CanvasErrorKind`; `NotFound` was added for a missing session or canvas. Lost write races retry up to 5 times.
     - Registered as `ICanvasService` (scoped) in `DependencyInjection.cs`. `InMemoryCanvasRepository` in `tests/WeaveFleet.Testing` mirrors the SQLite rules for application tests.
 
-- [ ] 4. Client canvas endpoints (read-only since Decision 7)
+- [x] 4. Client canvas endpoints (read-only since Decision 7) (done 2026-09-12 on branch `feat/canvas-store`)
   - **What**: `GET /api/sessions/{id}/canvases` returns the session's open canvases with their full state, and `DELETE /api/sessions/{id}/canvases/{canvasId}` closes one. There's no user-changes endpoint in this step. The session-owner check matches the neighbouring session endpoints.
   - **Files**: `src/WeaveFleet.Api/Endpoints/CanvasEndpoints.cs` (new), mapped in `Program.cs`; contracts and `JsonContext.cs`.
   - **Tests**: integration tests for the list shape, closing (the canvas leaves the list and `canvas.closed` is sent), and owner isolation (another user gets 404).
+  - **As built**:
+    - `GET` returns a bare array, oldest first: `[{canvasId, kind, title, version, state}]` (`CanvasResponse` in `ApiResponses.cs`). The fields are named like the `canvas.updated` properties, so Task 8 can upsert from both with one function. `state` is the stored state as-is, positions included. Closed canvases are left out.
+    - `DELETE` returns 204. Closing a canvas that's already closed also returns 204 and sends no second event. The call needs the `X-CSRF-Token` header like any other mutating call. The `canvas.closed` it sends reaches the tab that closed it too, so the Task 8 reducer must treat removing a tab that's already gone as a no-op.
+    - Both check the session first through `SessionService.GetSessionAsync`, the same as `/delegations` and `/origin`, so an unknown session or someone else's gets 404. Without that check, another user's session would list as `[]` (the canvas queries are user-scoped). A canvas id from another of your sessions, or one that doesn't exist, also gets 404.
+    - Mapped in `EndpointExtensions.MapFleetEndpoints` next to the session endpoints (that's where every API group is mapped, not `Program.cs`). The session error helper `ToSessionApiResult` went from `file` to `internal` so both files share it.
+    - The list uses `ICanvasService.ListAsync`, which also works out `ChangedByUser` (one revisions query per canvas). The endpoint ignores it. That's cheap at a handful of canvases per session.
+    - Tests are in `tests/WeaveFleet.Api.Tests/Endpoints/CanvasEndpointTests.cs`, not `IntegrationTests`. They boot `Program` through `ApiWebApplicationFactory` with test auth, like the session tenant-isolation tests. Run them with a scratch `HOME` (see Safety).
 
 - [ ] 5. Agent bridge for pooled OpenCode
   - **What**: A token on `PooledOpenCodeInstance`, a token → instance lookup in `PooledOpenCodeInstanceRegistry` (constant-time compare), and a directory-less `TryGetBinding(instance, openCodeSessionId)`. An application-facing `IHarnessCanvasCallerResolver` returns `(fleetSessionId, userId)` or nothing, and does the child → parent walk. Bridge endpoints `POST /api/bridge/opencode/canvas/{list|open|read|patch|focus}` are `AllowAnonymous` but require a loopback address plus the bearer token, then call `ICanvasService` as `agent`. They return the plain-text outputs from the design, adjusted for Decision 7: `read` always returns the full text, and `list` has no "(changed by user)" flag.

@@ -1129,7 +1129,7 @@ internal sealed record ReadSessionFileResponse(
 
 // ── FleetError → IResult helper ─────────────────────────────────────────────
 
-file static class SessionFleetErrorExtensions
+internal static class SessionFleetErrorExtensions
 {
     public static IResult ToSessionApiResult(this WeaveFleet.Domain.Common.FleetError error) =>
         error.Code switch
