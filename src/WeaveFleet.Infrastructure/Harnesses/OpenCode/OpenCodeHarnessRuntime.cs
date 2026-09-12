@@ -63,6 +63,14 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             "Pooled OpenCode stale resume token detected for fleet session {FleetSessionId}. " +
             "The OpenCode session was not found in the live process; a fresh session has been created and the persisted token updated.");
 
+    private static readonly Action<ILogger, Exception?> LogCanvasToolsWithoutFleetUrl =
+        LoggerMessage.Define(LogLevel.Information, new EventId(9, "CanvasToolsWithoutFleetUrl"),
+            "Starting a pooled OpenCode process without canvas tools: Fleet's port isn't known yet.");
+
+    private static readonly Action<ILogger, Exception?> LogFleetPluginInstallFailed =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(10, "FleetPluginInstallFailed"),
+            "Could not write the Fleet OpenCode plugin; pooled sessions start without canvas tools.");
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly PortAllocator _portAllocator;
     private readonly FleetOptions _options;
@@ -76,6 +84,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
     private readonly PooledOpenCodeInstanceRegistry _pooledInstanceRegistry;
     private readonly ConcurrentDictionary<string, PooledSessionMapping> _pooledSessionMappings = new(StringComparer.Ordinal);
     private long _pooledLeaseGeneration;
+    private string? _fleetPluginUri;
 
     /// <summary>Initialises the runtime with required dependencies.</summary>
     public OpenCodeHarnessRuntime(
@@ -825,6 +834,18 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             const string username = "opencode";
             var bridgeToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
 
+            // The canvas tools call back into Fleet, so the plugin loads only when the process can be told
+            // where Fleet is. The pool key was hashed from environmentVariables before this, so adding
+            // per-process values here doesn't split the pool.
+            var processEnvironment = new Dictionary<string, string>(environmentVariables, StringComparer.Ordinal);
+            List<string> plugins = [];
+            if (ResolveLocalFleetUrl() is { } fleetUrl && GetFleetPluginUri() is { } fleetPlugin)
+            {
+                processEnvironment["FLEET_URL"] = fleetUrl;
+                processEnvironment["FLEET_BRIDGE_TOKEN"] = bridgeToken;
+                plugins.Add(fleetPlugin);
+            }
+
             processManager = new OpenCodeProcessManager(
                 _loggerFactory.CreateLogger<OpenCodeProcessManager>());
 
@@ -836,7 +857,8 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                     WorkingDirectory = directory,
                     Password = password,
                     Username = username,
-                    EnvironmentVariables = environmentVariables,
+                    EnvironmentVariables = processEnvironment,
+                    Plugins = plugins,
                     StartupTimeout = startupTimeout,
                 },
                 ct).ConfigureAwait(false);
@@ -876,6 +898,38 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             }
 
             throw;
+        }
+    }
+
+    private string? ResolveLocalFleetUrl()
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var fleetUrl = scope.ServiceProvider.GetService<ILocalFleetUrl>()?.TryGet();
+        if (fleetUrl is null)
+            LogCanvasToolsWithoutFleetUrl(_logger, null);
+        return fleetUrl;
+    }
+
+    /// <summary>
+    /// Installs the Fleet plugin on first use and returns its file URI, or <c>null</c> if it couldn't be
+    /// written; pooled sessions then run without canvas tools, and the next spawn tries again.
+    /// </summary>
+    private string? GetFleetPluginUri()
+    {
+        if (Volatile.Read(ref _fleetPluginUri) is { } installed)
+            return installed;
+
+        try
+        {
+            var dataDirectory = Path.GetDirectoryName(Path.GetFullPath(_options.DatabasePath)) ?? Environment.CurrentDirectory;
+            var uri = OpenCodeFleetPlugin.Install(dataDirectory);
+            Volatile.Write(ref _fleetPluginUri, uri);
+            return uri;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogFleetPluginInstallFailed(_logger, ex);
+            return null;
         }
     }
 

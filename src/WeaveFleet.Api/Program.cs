@@ -145,6 +145,7 @@ builder.AddFleetDiagnosticLogging();
 builder.Services.AddSingleton<WeaveFleet.Application.Services.ToolDetector>();
 builder.Services.AddSingleton(_ => WeaveFleet.Application.Services.KeyFileConfig.Load());
 builder.Services.AddSingleton<WeaveFleet.Application.Services.KeyFileScanner>();
+builder.Services.AddSingleton<WeaveFleet.Application.Services.ILocalFleetUrl, WeaveFleet.Api.LocalFleetUrl>();
 #pragma warning restore IL2026
 builder.Services.AddHealthChecks();
 
