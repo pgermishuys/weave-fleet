@@ -180,24 +180,30 @@ function getDiffMarker(type: DiffLine["type"]): "+" | "-" | "" {
 </template>
 
 <style scoped>
+/* Theme-aware diff: tints are mixed into the panel colour so the sticky
+   line-number columns stay opaque when scrolling sideways. */
 .diff-view {
+  --diff-add: color-mix(in srgb, var(--running) 13%, var(--panel-bg));
+  --diff-remove: color-mix(in srgb, var(--error) 12%, var(--panel-bg));
+  --diff-gutter: color-mix(in srgb, var(--text) 3%, var(--panel-bg));
   width: 100%;
   min-width: 0;
   overflow: auto;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
-  background: rgba(13, 17, 23, 0.38);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--panel-bg);
 }
 
 .diff-line {
   display: grid;
-  grid-template-columns: 52px 52px 24px minmax(0, 1fr);
+  grid-template-columns: 42px 42px 22px minmax(0, 1fr);
   align-items: start;
   min-width: max-content;
   border-left: 2px solid transparent;
-  font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 11px;
-  line-height: 1.55;
-  color: #c9d1d9;
+  font-family: var(--font-mono-stack);
+  font-size: 12px;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--text) 88%, transparent);
   white-space: pre;
 }
 
@@ -206,11 +212,12 @@ function getDiffMarker(type: DiffLine["type"]): "+" | "-" | "" {
   z-index: 1;
   display: inline-block;
   min-height: 100%;
-  padding: 2px 10px;
-  border-right: 1px solid rgba(139, 148, 158, 0.18);
-  background: rgba(13, 17, 23, 0.9);
-  color: rgba(161, 161, 170, 0.8);
+  padding: 1px 8px;
+  border-right: 1px solid var(--border);
+  background: var(--diff-gutter);
+  color: color-mix(in srgb, var(--muted) 80%, transparent);
   text-align: right;
+  font-variant-numeric: tabular-nums;
   user-select: none;
 }
 
@@ -219,67 +226,67 @@ function getDiffMarker(type: DiffLine["type"]): "+" | "-" | "" {
 }
 
 .diff-line__number--new {
-  left: 52px;
+  left: 42px;
 }
 
 .diff-line__marker {
-  padding: 2px 8px;
-  color: rgba(201, 209, 217, 0.78);
+  padding: 1px 6px;
+  color: var(--muted);
   user-select: none;
 }
 
 .diff-line__content {
   min-width: 0;
-  padding: 2px 16px 2px 0;
+  padding: 1px 16px 1px 0;
 }
 
 .diff-line--add {
-  border-left-color: rgba(46, 160, 67, 0.9);
-  background: rgba(46, 160, 67, 0.18);
+  border-left-color: var(--running);
+  background: var(--diff-add);
 }
 
 .diff-line--add .diff-line__number {
-  background: rgba(46, 160, 67, 0.14);
+  background: var(--diff-add);
 }
 
 .diff-line--add .diff-line__marker {
-  color: #3fb950;
+  color: var(--running);
 }
 
 .diff-line--remove {
-  border-left-color: rgba(248, 81, 73, 0.9);
-  background: rgba(248, 81, 73, 0.16);
+  border-left-color: var(--error);
+  background: var(--diff-remove);
 }
 
 .diff-line--remove .diff-line__number {
-  background: rgba(248, 81, 73, 0.12);
+  background: var(--diff-remove);
 }
 
 .diff-line--remove .diff-line__marker {
-  color: #ff7b72;
+  color: var(--error);
 }
 
 .diff-line--context {
-  background: rgba(13, 17, 23, 0.1);
+  background: transparent;
 }
 
 .diff-expand {
   display: grid;
-  grid-template-columns: 104px minmax(0, 1fr);
+  grid-template-columns: 84px minmax(0, 1fr);
   min-width: max-content;
-  border-block: 1px solid rgba(56, 139, 253, 0.14);
-  background: rgba(56, 139, 253, 0.08);
-  font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 11px;
-  line-height: 1.55;
+  border-block: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel-bg));
+  font-family: var(--font-mono-stack);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .diff-expand__gutter {
   position: sticky;
   left: 0;
   z-index: 1;
-  border-right: 1px solid rgba(56, 139, 253, 0.18);
-  background: rgba(13, 17, 23, 0.92);
+  border-right: 1px solid var(--border);
+  background: var(--diff-gutter);
 }
 
 .diff-expand__button {
@@ -287,7 +294,7 @@ function getDiffMarker(type: DiffLine["type"]): "+" | "-" | "" {
   margin: 0;
   border: 0;
   background: transparent;
-  color: #79c0ff;
+  color: var(--accent);
   cursor: pointer;
   font: inherit;
   padding: 3px 12px;
@@ -296,7 +303,6 @@ function getDiffMarker(type: DiffLine["type"]): "+" | "-" | "" {
 
 .diff-expand__button:hover,
 .diff-expand__button:focus-visible {
-  color: #a5d6ff;
   text-decoration: underline;
 }
 </style>

@@ -270,9 +270,7 @@ function handleSelect(item: RailItem): void {
 .rail {
   width: 48px;
   min-width: 48px;
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-panel);
+  background: transparent;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -301,22 +299,18 @@ function handleSelect(item: RailItem): void {
   transition: background var(--transition), color var(--transition), border-color var(--transition);
   margin-bottom: 2px;
   border: 1px solid transparent;
-  border-left: 3px solid transparent;
   background: transparent;
   padding: 0;
 }
 
 .rail-item:hover {
-  background: var(--bg);
-  border-color: var(--border);
-  border-left-color: transparent;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--text);
 }
 
 .rail-item.active {
   color: var(--text);
-  border-left-color: var(--indigo);
-  background: color-mix(in srgb, var(--text) 4%, transparent);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
 }
 
 .rail-logo {

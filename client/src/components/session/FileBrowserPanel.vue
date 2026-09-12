@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, provide, ref } from 'vue'
-import { RotateCw, Loader2, Search, X } from 'lucide-vue-next'
+import { FileText, FolderTree, GitCompare, RotateCw, Loader2, Search, X } from 'lucide-vue-next'
 import { useFileBrowser } from '@/composables/use-file-browser'
 import { useFindFiles } from '@/composables/use-find-files'
 import type { UseDiffsResult } from '@/composables/use-diffs'
@@ -66,6 +66,29 @@ function setAllChangedFilter(filter: 'all' | 'changed') {
   contentPanel.updateFilesContext({ allChangedFilter: filter })
 }
 
+// Changes tab: a flat list of changed files with their line counts.
+const changedFiles = computed(() =>
+  [...diffsComposable.diffs.value]
+    .sort((a, b) => a.file.localeCompare(b.file))
+    .map((d) => {
+      const slash = d.file.lastIndexOf('/')
+      return {
+        file: d.file,
+        name: slash >= 0 ? d.file.slice(slash + 1) : d.file,
+        dir: slash >= 0 ? d.file.slice(0, slash) : '',
+        additions: d.additions,
+        deletions: d.deletions,
+        status: d.status,
+      }
+    }),
+)
+
+async function handleChangeClick(path: string) {
+  contentPanel.selectFile(path)
+  contentPanel.setViewMode('diff')
+  await selectFile(path)
+}
+
 const filteredRootEntries = computed(() => {
   if (!isDiffFilterActive.value) {
     return rootEntries.value
@@ -95,29 +118,32 @@ const filteredRootEntries = computed(() => {
 <template>
   <div class="file-browser-panel">
     <div class="file-browser-panel__header">
-      <span class="file-browser-panel__title">Files</span>
-      <div class="file-browser-panel__filter" role="radiogroup" aria-label="File filter">
-        <button
-          type="button"
-          class="file-browser-panel__filter-option"
-          :class="{ 'file-browser-panel__filter-option--active': !isDiffFilterActive }"
-          role="radio"
-          :aria-checked="!isDiffFilterActive"
-          @click="setAllChangedFilter('all')"
-        >
-          All
-        </button>
+      <div class="file-browser-panel__filter" role="tablist" aria-label="Right panel view">
         <button
           type="button"
           class="file-browser-panel__filter-option"
           :class="{ 'file-browser-panel__filter-option--active': isDiffFilterActive }"
-          role="radio"
-          :aria-checked="isDiffFilterActive"
+          role="tab"
+          :aria-selected="isDiffFilterActive"
           @click="setAllChangedFilter('changed')"
         >
-          Changed ({{ changedCount }})
+          <GitCompare :size="14" aria-hidden="true" />
+          Changes
+          <span class="file-browser-panel__count">{{ changedCount }}</span>
+        </button>
+        <button
+          type="button"
+          class="file-browser-panel__filter-option"
+          :class="{ 'file-browser-panel__filter-option--active': !isDiffFilterActive }"
+          role="tab"
+          :aria-selected="!isDiffFilterActive"
+          @click="setAllChangedFilter('all')"
+        >
+          <FolderTree :size="14" aria-hidden="true" />
+          Files
         </button>
       </div>
+      <span class="file-browser-panel__spacer" />
       <button
         class="file-browser-panel__icon-btn"
         :disabled="rootLoading"
@@ -127,7 +153,10 @@ const filteredRootEntries = computed(() => {
       >
         <RotateCw :size="14" :class="{ 'file-browser-panel__refresh-icon--spinning': rootLoading }" />
       </button>
+      <slot name="header-actions" />
     </div>
+
+    <slot name="below-header" />
 
     <!-- Search input -->
     <div class="file-browser-panel__search">
@@ -183,7 +212,34 @@ const filteredRootEntries = computed(() => {
       </div>
     </div>
 
-    <!-- Tree view (default) -->
+    <!-- Changes view: flat list of changed files -->
+    <div v-else-if="isDiffFilterActive" class="file-browser-panel__content">
+      <p v-if="changedFiles.length === 0" class="file-browser-panel__changes-empty">
+        No changes in this session yet.
+      </p>
+      <div v-else class="file-browser-panel__changes">
+        <button
+          v-for="change in changedFiles"
+          :key="change.file"
+          type="button"
+          class="file-browser-panel__change"
+          :class="{ 'file-browser-panel__change--selected': contentPanel.filesContext.value.selectedFilePath === change.file }"
+          :title="change.file"
+          :data-status="change.status"
+          @click="handleChangeClick(change.file)"
+        >
+          <FileText :size="14" class="file-browser-panel__change-icon" aria-hidden="true" />
+          <span class="file-browser-panel__change-name">{{ change.name }}</span>
+          <span class="file-browser-panel__change-dir">{{ change.dir }}</span>
+          <span class="file-browser-panel__change-stats">
+            <span v-if="change.additions > 0" class="file-browser-panel__change-adds">+{{ change.additions }}</span>
+            <span v-if="change.deletions > 0" class="file-browser-panel__change-dels">−{{ change.deletions }}</span>
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Tree view (Files tab) -->
     <div v-else class="file-browser-panel__content">
       <!-- Loading state -->
       <div v-if="rootLoading && rootEntries.length === 0" class="file-browser-panel__loading">
@@ -222,24 +278,21 @@ const filteredRootEntries = computed(() => {
 .file-browser-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   padding: 0;
 }
 
+/* Tab strip: the panel's views as tabs, actions on the right. */
 .file-browser-panel__header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 8px;
+  gap: 2px;
+  min-height: 56px;
+  padding: 0 8px 0 10px;
   border-bottom: 1px solid var(--border);
 }
 
-.file-browser-panel__title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+.file-browser-panel__spacer {
   flex: 1;
 }
 
@@ -247,10 +300,12 @@ const filteredRootEntries = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--radius-btn);
   cursor: pointer;
   color: var(--muted);
   transition: background-color var(--transition), color var(--transition), border-color var(--transition);
@@ -280,33 +335,121 @@ const filteredRootEntries = computed(() => {
 .file-browser-panel__filter {
   display: flex;
   align-items: center;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  overflow: hidden;
+  gap: 2px;
 }
 
 .file-browser-panel__filter-option {
-  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 9px;
   background: transparent;
   border: none;
+  border-radius: var(--radius-btn);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--muted);
   transition: background-color var(--transition), color var(--transition);
 }
 
-.file-browser-panel__filter-option:not(:last-child) {
-  border-right: 1px solid var(--border);
-}
-
 .file-browser-panel__filter-option--active {
-  background-color: color-mix(in srgb, var(--accent) 15%, transparent);
-  color: var(--accent);
+  background-color: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text);
+  font-weight: 500;
 }
 
 .file-browser-panel__filter-option:hover:not(.file-browser-panel__filter-option--active) {
-  background-color: color-mix(in srgb, var(--text) 6%, transparent);
+  background-color: color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--text);
+}
+
+.file-browser-panel__changes {
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px 8px;
+}
+
+.file-browser-panel__changes-empty {
+  margin: 0;
+  padding: 12px 18px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.file-browser-panel__change {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: color-mix(in srgb, var(--text) 86%, transparent);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.file-browser-panel__change:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
+}
+
+.file-browser-panel__change--selected {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text);
+}
+
+.file-browser-panel__change[data-status="deleted"] .file-browser-panel__change-name {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent);
+}
+
+.file-browser-panel__change-icon {
+  flex-shrink: 0;
+  color: color-mix(in srgb, var(--muted) 75%, transparent);
+}
+
+.file-browser-panel__change-name {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.file-browser-panel__change-dir {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--muted) 80%, transparent);
+}
+
+.file-browser-panel__change-stats {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 6px;
+  font-family: var(--font-mono-stack);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.file-browser-panel__change-adds {
+  color: var(--running);
+}
+
+.file-browser-panel__change-dels {
+  color: var(--error);
+}
+
+.file-browser-panel__count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .file-browser-panel__refresh-icon--spinning {
@@ -327,16 +470,18 @@ const filteredRootEntries = computed(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px;
-  margin: 0 8px;
-  background-color: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  transition: border-color var(--transition);
+  height: 30px;
+  padding: 0 10px;
+  margin: 0 10px;
+  background-color: color-mix(in srgb, var(--text) 5%, transparent);
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn);
+  transition: border-color var(--transition), background-color var(--transition);
 }
 
 .file-browser-panel__search:focus-within {
-  border-color: var(--primary);
+  background-color: transparent;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .file-browser-panel__search-icon {
@@ -349,7 +494,7 @@ const filteredRootEntries = computed(() => {
   background: transparent;
   border: none;
   outline: none;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text);
   padding: 0;
 }

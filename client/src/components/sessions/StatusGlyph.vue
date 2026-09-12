@@ -7,12 +7,12 @@ const props = defineProps<Props>();
 
 const COLOR_MAP: Record<string, string> = {
   completed: "var(--complete)",
-  idle: "var(--idle)",
+  idle: "var(--status-idle)",
   resuming: "var(--running)",
   stopped: "var(--muted)",
   disconnected: "var(--muted)",
   error: "var(--error)",
-  waiting_input: "var(--queued)",
+  waiting_input: "var(--status-waiting)",
 };
 
 function statusColor(status: string): string {
@@ -44,7 +44,7 @@ function statusLabel(status: string): string {
     fill="none"
     aria-hidden="false"
     :aria-label="statusLabel(props.status)"
-    class="status-glyph"
+    class="status-glyph status-glyph--live"
   >
     <circle cx="4" cy="4" r="4" :fill="statusColor(props.status)" />
   </svg>
@@ -142,6 +142,25 @@ function statusLabel(status: string): string {
 
 .status-glyph--pulsing {
   animation: glyph-pulse 1.2s ease-in-out infinite;
+}
+
+/* Working sessions breathe slowly. Stepped timing keeps it to a handful of
+   repaints per cycle instead of one per frame. */
+.status-glyph--live {
+  animation: status-live var(--transition-pulse) infinite;
+}
+
+@keyframes status-live {
+  0%, 40% { opacity: 1; animation-timing-function: steps(6); }
+  50%, 90% { opacity: 0.45; animation-timing-function: steps(6); }
+  100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-glyph--live,
+  .status-glyph--pulsing {
+    animation: none;
+  }
 }
 
 @keyframes glyph-pulse {

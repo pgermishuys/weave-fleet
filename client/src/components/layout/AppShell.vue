@@ -227,25 +227,28 @@ function onGutterPointerDown(e: PointerEvent): void {
         />
       </template>
 
-      <CenterContent>
-        <slot />
-      </CenterContent>
+      <!-- Conversation and right panel share one raised sheet. -->
+      <div class="workspace-sheet">
+        <CenterContent>
+          <slot />
+        </CenterContent>
 
-      <div
-        v-if="showRightPanel"
-        class="resize-gutter"
-        :class="{ active: isGutterDragging }"
-        @pointerdown.prevent="onGutterPointerDown"
-      />
+        <div
+          v-if="showRightPanel"
+          class="resize-gutter"
+          :class="{ active: isGutterDragging }"
+          @pointerdown.prevent="onGutterPointerDown"
+        />
 
-      <SessionsV2RightPanel
-        v-if="showSessionsV2Panel"
-        :width="rightPanelWidth"
-      />
-      <BoardRightPanel
-        v-else-if="showBoardPanel"
-        :width="rightPanelWidth"
-      />
+        <SessionsV2RightPanel
+          v-if="showSessionsV2Panel"
+          :width="rightPanelWidth"
+        />
+        <BoardRightPanel
+          v-else-if="showBoardPanel"
+          :width="rightPanelWidth"
+        />
+      </div>
     </div>
 
     <StatusBar />
@@ -269,6 +272,18 @@ function onGutterPointerDown(e: PointerEvent): void {
   gap: 8px;
   padding: 8px;
   background: var(--main-bg);
+}
+
+.workspace-sheet {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--sheet-shadow);
+  overflow: hidden;
 }
 
 .mobile-menu-btn {

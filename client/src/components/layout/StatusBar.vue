@@ -116,9 +116,8 @@ const tokenCount = computed(() => {
   justify-content: space-between;
   height: 28px;
   min-height: 28px;
-  padding: 0 12px;
-  background: var(--panel-bg);
-  border-top: 1px solid var(--border);
+  padding: 0 12px 2px;
+  background: var(--main-bg);
   font-size: 11px;
   color: var(--muted);
   user-select: none;
@@ -152,9 +151,9 @@ const tokenCount = computed(() => {
   font-weight: 500;
   line-height: 1;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
   border: 1px solid var(--border);
-  border-radius: 0;
+  border-radius: calc(var(--radius-btn) - 3px);
 }
 
 .shortcut-separator {

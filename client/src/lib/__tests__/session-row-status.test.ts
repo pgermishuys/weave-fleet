@@ -1,0 +1,57 @@
+import { describe, expect, it } from "vitest";
+import type { SessionListItem } from "@/api/client";
+import { formatCompactAge, sessionRowStatus } from "@/lib/session-row-status";
+
+const NOW = Date.UTC(2026, 8, 12, 12, 0, 0);
+const MIN = 60_000;
+
+function item(sessionStatus: string, overrides: Partial<SessionListItem> = {}, updated = NOW - 2 * 60 * MIN): SessionListItem {
+  return {
+    sessionStatus,
+    activityStatus: null,
+    session: { id: "s1", title: "Session", time: { created: updated - MIN, updated } },
+    ...overrides,
+  } as unknown as SessionListItem;
+}
+
+describe("formatCompactAge", () => {
+  it.each([
+    [NOW - 20_000, "now"],
+    [NOW - 4 * MIN, "4m"],
+    [NOW - 2 * 60 * MIN, "2h"],
+    [NOW - 3 * 24 * 60 * MIN, "3d"],
+    [NOW - 15 * 24 * 60 * MIN, "2w"],
+  ])("formats %s as %s", (ts, expected) => {
+    expect(formatCompactAge(ts, NOW)).toBe(expected);
+  });
+
+  it("accepts numeric strings and ISO dates", () => {
+    expect(formatCompactAge(String(NOW - 5 * MIN), NOW)).toBe("5m");
+    expect(formatCompactAge(new Date(NOW - 3 * 60 * MIN).toISOString(), NOW)).toBe("3h");
+  });
+
+  it("returns an empty string for unparseable input", () => {
+    expect(formatCompactAge("", NOW)).toBe("");
+  });
+});
+
+describe("sessionRowStatus", () => {
+  it("asks for attention when the session waits on the user", () => {
+    expect(sessionRowStatus(item("waiting_input"), NOW)).toEqual({ label: "Needs input", tone: "attention" });
+  });
+
+  it("says Working or Delegating for active sessions", () => {
+    expect(sessionRowStatus(item("active", { activityStatus: "busy" }), NOW)).toEqual({ label: "Working", tone: "working" });
+    expect(sessionRowStatus(item("active", { activityStatus: "delegating" }), NOW)).toEqual({ label: "Delegating", tone: "working" });
+  });
+
+  it("names lifecycle states quietly", () => {
+    expect(sessionRowStatus(item("completed"), NOW).label).toBe("Done");
+    expect(sessionRowStatus(item("stopped"), NOW).label).toBe("Paused");
+    expect(sessionRowStatus(item("error"), NOW)).toEqual({ label: "Error", tone: "error" });
+  });
+
+  it("shows last activity for idle sessions", () => {
+    expect(sessionRowStatus(item("idle"), NOW)).toEqual({ label: "2h", tone: "quiet" });
+  });
+});

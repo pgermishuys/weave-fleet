@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
+import { Check } from "lucide-vue-next";
 import DiffView from "@/components/session/DiffView.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
@@ -93,6 +94,18 @@ const STATUS_COLOR: Record<string, string> = {
 
 const statusColor = computed(() => STATUS_COLOR[props.status] ?? "var(--muted)");
 
+// Line counts shown on the right of the row for tools that changed a file.
+const diffStats = computed(() => {
+  if (props.diffLines.length === 0) return null;
+  let adds = 0;
+  let removes = 0;
+  for (const line of props.diffLines) {
+    if (line.type === "add") adds++;
+    else if (line.type === "remove") removes++;
+  }
+  return adds + removes > 0 ? { adds, removes } : null;
+});
+
 function handleToggle(event: Event): void {
   const target = event.target as HTMLDetailsElement;
   isCollapsed.value = !target.open;
@@ -128,6 +141,18 @@ function handleExpandVisual(): void {
       >
         <StatusGlyph :status="glyphStatus" />
       </span>
+      <span
+        v-else-if="diffStats"
+        class="tool-header__result"
+      >
+        <span class="tool-header__adds">+{{ diffStats.adds }}</span>
+        <span class="tool-header__removes">−{{ diffStats.removes }}</span>
+      </span>
+      <Check
+        v-else-if="status === 'Completed'"
+        class="tool-header__done"
+        aria-label="Completed"
+      />
     </summary>
 
     <p v-if="preview" class="tool-preview">{{ preview }}</p>
@@ -183,22 +208,31 @@ function handleExpandVisual(): void {
 </template>
 
 <style scoped>
+/* One quiet row per tool call; the message groups them in a single container. */
 .tool-card {
-  background: color-mix(in srgb, var(--panel-bg, #FAF9F7) 100%, transparent);
-  border: 1px solid var(--border);
-  border-radius: 0;
-  margin-top: 8px;
-  padding: 10px 12px;
+  border-radius: calc(var(--radius-btn) - 2px);
+  transition: background var(--transition);
+}
+
+.tool-card[open] {
+  background: color-mix(in srgb, var(--text) 3%, transparent);
 }
 
 .tool-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: calc(var(--radius-btn) - 2px);
   font-size: 13px;
   cursor: pointer;
   list-style: none;
-  transition: color var(--transition);
+  transition: background var(--transition), color var(--transition);
+}
+
+.tool-header:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 
 .tool-header::-webkit-details-marker {
@@ -212,12 +246,12 @@ function handleExpandVisual(): void {
 .tool-header__icon {
   width: 14px;
   height: 14px;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--muted) 75%, transparent);
   flex-shrink: 0;
 }
 
 .tool-header__label {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
   font-family: var(--font-sans-stack);
   font-size: 13px;
@@ -237,26 +271,50 @@ function handleExpandVisual(): void {
 
 .tool-header__pattern {
   display: inline-block;
-  padding: 2px 10px;
+  padding: 1px 8px;
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
-  border-radius: 0;
+  border-radius: calc(var(--radius-btn) - 2px);
   font-family: var(--font-mono-stack);
   font-size: 12px;
   font-weight: 500;
   color: var(--accent);
 }
 
-.tool-header__status {
+.tool-header__status,
+.tool-header__result {
   display: flex;
   align-items: center;
-  font-size: 10px;
+  gap: 6px;
   margin-left: auto;
   flex-shrink: 0;
 }
 
+.tool-header__result {
+  font-family: var(--font-mono-stack);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tool-header__adds {
+  color: var(--running);
+}
+
+.tool-header__removes {
+  color: var(--error);
+}
+
+.tool-header__done {
+  width: 13px;
+  height: 13px;
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--running);
+}
+
 .tool-preview {
-  margin: 6px 0 0;
+  margin: 0;
+  padding: 0 8px 6px 31px;
   font-family: var(--font-mono-stack);
   font-size: 12px;
   color: var(--muted);
@@ -264,25 +322,26 @@ function handleExpandVisual(): void {
 }
 
 .tool-body {
-  margin-top: 4px;
+  padding: 2px 8px 8px 31px;
 }
 
 .tool-summary {
   margin: 0 0 8px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
 .tool-output {
-  margin: 0 0 8px;
+  margin: 0 0 4px;
   padding: 8px 10px;
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--panel-bg) 100%, transparent);
+  border-radius: var(--radius-btn);
+  background: color-mix(in srgb, var(--main-bg) 60%, transparent);
   color: var(--muted);
   font-family: var(--font-mono-stack);
-  font-size: 10px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -291,7 +350,8 @@ function handleExpandVisual(): void {
   margin: 8px 0;
   padding: 12px;
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--panel-bg) 100%, transparent);
+  border-radius: var(--radius-card);
+  background: var(--panel-bg);
   position: relative;
 }
 
@@ -299,11 +359,11 @@ function handleExpandVisual(): void {
   margin-top: 8px;
   padding: 4px 12px;
   background: var(--accent);
-  color: white;
+  color: var(--primary-foreground);
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-btn);
   font-family: var(--font-sans-stack);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: opacity var(--transition);

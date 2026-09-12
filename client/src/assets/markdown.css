@@ -14,11 +14,12 @@
   --syntax-type: #e06c75;
   --syntax-literal: #56b6c2;
 
-  /* Markdown role tokens (theme-aware) */
-  --md-heading: var(--accent);
-  --md-strong: var(--idle);
-  --md-inline-code: var(--running);
-  --md-marker: var(--idle);
+  /* Markdown role tokens (theme-aware). Neutral by default so colour in a
+     message means something (links, diffs, status) rather than decoration. */
+  --md-heading: var(--text);
+  --md-strong: var(--text);
+  --md-inline-code: var(--text);
+  --md-marker: var(--muted);
 }
 
 :root[data-theme="light"],
@@ -33,11 +34,11 @@
   --syntax-type: #e45649;
   --syntax-literal: #0184bc;
 
-  /* WCAG AA overrides for markdown role tokens (≥4.5:1 on #FDF6E3) */
-  --md-heading: #4a5ba0;        /* Darker indigo/blue: 6.06:1 light, 5.91:1 solar */
-  --md-strong: #8a5a00;         /* Darker amber/bronze: 5.63:1 light, 5.49:1 solar */
-  --md-inline-code: #157339;    /* Darker green: 5.63:1 light, 5.49:1 solar, 5.00:1 on accent-dim */
-  --md-marker: #8a5a00;         /* Darker amber/bronze: 5.63:1 light, 5.49:1 solar */
+  /* Markdown role tokens follow the theme's text colours (≥4.5:1 by construction) */
+  --md-heading: var(--text);
+  --md-strong: var(--text);
+  --md-inline-code: var(--text);
+  --md-marker: var(--muted);
 }
 
 /* ─── Markdown Base Styles ────────────────────────────────────────────────── */
@@ -52,7 +53,7 @@
 .md-content blockquote,
 .md-content table,
 .md-content hr {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
 }
 
 .md-content *:last-child {
@@ -154,12 +155,12 @@
 
 /* ─── Inline Code ─────────────────────────────────────────────────────────── */
 .md-content code:not(pre code) {
-  padding: 0.12rem 0.35rem;
-  background: var(--accent-dim);
+  padding: 0.1em 0.38em;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
   color: var(--md-inline-code);
   font-family: var(--font-mono-stack);
-  font-size: 0.88em;
-  border-radius: 2px;
+  font-size: 0.86em;
+  border-radius: calc(var(--radius-btn) - 3px);
 }
 
 /* ─── Code Blocks ─────────────────────────────────────────────────────────── */
@@ -173,7 +174,8 @@
 .md-content pre code {
   display: block;
   padding: 10px 12px;
-  font-size: 10px;
+  font-size: 12.5px;
+  line-height: 1.55;
   font-family: var(--font-mono-stack);
   background: transparent;
   color: var(--text);

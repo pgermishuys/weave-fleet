@@ -164,15 +164,22 @@ function selectItem(itemId: string): void {
 .selector-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border: 1px solid var(--border);
-  border-radius: 0;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-btn);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.2;
+  transition: background var(--transition), color var(--transition);
+}
+
+.selector-btn:hover,
+.selector-btn[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
 .selector-btn:focus-visible {
@@ -181,14 +188,14 @@ function selectItem(itemId: string): void {
 }
 
 .selector-btn__label {
-  color: var(--text);
+  color: color-mix(in srgb, var(--text) 80%, transparent);
   white-space: nowrap;
 }
 
 .selector-btn__icon {
-  width: 14px;
-  height: 14px;
-  transition: transform 0.2s ease;
+  width: 13px;
+  height: 13px;
+  transition: transform var(--transition);
 }
 
 .selector-btn__icon--open {
@@ -223,12 +230,12 @@ function selectItem(itemId: string): void {
 
 .selector-dropdown__filter {
   width: 100%;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border: 1px solid var(--border);
-  border-radius: 0;
-  background: rgba(255, 255, 255, 0.02);
+  border-radius: var(--radius-btn);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .selector-dropdown__filter::placeholder {
@@ -246,9 +253,9 @@ function selectItem(itemId: string): void {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border: 0;
-  border-radius: 0;
+  border-radius: calc(var(--radius-btn) - 2px);
   background: transparent;
   color: inherit;
   cursor: pointer;
@@ -257,7 +264,7 @@ function selectItem(itemId: string): void {
 
 .selector-dropdown__item:hover,
 .selector-dropdown__item--selected {
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
 .selector-dropdown__item:focus-visible {
@@ -274,26 +281,26 @@ function selectItem(itemId: string): void {
 
 .selector-dropdown__item-label {
   color: var(--text);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .selector-dropdown__item-description {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
 .selector-dropdown__item-meta {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
 .selector-dropdown__empty {
   padding: 10px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   text-align: center;
 }
 </style>

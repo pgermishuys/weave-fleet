@@ -159,9 +159,7 @@ defineExpose({ panelWidth, isResizing, resizeBy });
 <style scoped>
 .context-panel {
   position: relative;
-  background: var(--panel-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-panel);
+  background: transparent;
   display: flex;
   flex-direction: column;
   overflow: hidden;

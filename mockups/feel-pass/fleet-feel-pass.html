@@ -1,0 +1,1564 @@
+<title>Fleet Feel Pass</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  /* page chrome */
+  --page: #ECEDF2;
+  --surface: #F7F7FA;
+  --ink: #15161C;
+  --ink-2: #3B3E4A;
+  --muted: #5F6374;
+  --rule: #D5D7E0;
+  --accent: #4F5FC0;
+  --on-accent: #FFFFFF;
+  --coral: #BF4A2A;
+  --on-coral: #FFFFFF;
+  --focus: #4F5FC0;
+
+  /* BEFORE — Fleet's own light theme (main.css [data-theme="light"]) */
+  --b-main: #FAF9F7;
+  --b-rail: #FFFFFF;
+  --b-panel: #FFFFFF;
+  --b-card: #FFFFFF;
+  --b-border: #E8E6E3;
+  --b-text: #1A1918;
+  --b-muted: #6E6A65;
+  --b-accent: #5B6EC7;
+  --b-accent-dim: rgba(91, 110, 199, 0.12);
+  --b-run: #16a34a;
+  --b-idle: #d97706;
+  --b-done: #2563eb;
+  --b-err: #dc2626;
+  --b-queued: #7c3aed;
+  --b-tint: rgba(0, 0, 0, 0.03);
+  --b-add-bg: rgba(22, 163, 74, 0.10);
+  --b-del-bg: rgba(220, 38, 38, 0.08);
+
+  /* AFTER — proposed light */
+  --a-chrome: #EFEFF3;
+  --a-sheet: #FFFFFF;
+  --a-raised: #FFFFFF;
+  --a-line: rgba(22, 22, 40, 0.09);
+  --a-text: #1B1B22;
+  --a-text-2: #34343E;
+  --a-muted: #6A6A77;
+  --a-faint: #9696A3;
+  --a-hover: rgba(22, 22, 40, 0.045);
+  --a-active: rgba(22, 22, 40, 0.08);
+  --a-accent: #5263C8;
+  --a-accent-soft: rgba(82, 99, 200, 0.12);
+  --a-run: #15803d;
+  --a-wait: #b45309;
+  --a-wait-soft: rgba(217, 119, 6, 0.13);
+  --a-done: #2563eb;
+  --a-err: #dc2626;
+  --a-idle: #A3A3AE;
+  --a-add: #15803d;
+  --a-del: #b91c1c;
+  --a-add-bg: rgba(21, 128, 61, 0.09);
+  --a-del-bg: rgba(185, 28, 28, 0.07);
+  --a-shadow: 0 1px 2px rgba(20, 20, 40, 0.05), 0 12px 32px -18px rgba(20, 20, 40, 0.20);
+  --a-cmp-shadow: 0 10px 28px -18px rgba(20, 20, 40, 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #101116;
+    --surface: #171820;
+    --ink: #E7E8EE;
+    --ink-2: #C4C6D2;
+    --muted: #8C90A3;
+    --rule: #272A35;
+    --accent: #8D98F2;
+    --on-accent: #0E1030;
+    --coral: #EE7753;
+    --on-coral: #1A0D08;
+    --focus: #8D98F2;
+
+    --b-main: #0a0a0b;
+    --b-rail: #0c0c0d;
+    --b-panel: #111113;
+    --b-card: #141416;
+    --b-border: #1e1e22;
+    --b-text: #e4e4e7;
+    --b-muted: #71717a;
+    --b-accent: #6366f1;
+    --b-accent-dim: rgba(99, 102, 241, 0.15);
+    --b-run: #22c55e;
+    --b-idle: #f59e0b;
+    --b-done: #3b82f6;
+    --b-err: #ef4444;
+    --b-queued: #8b5cf6;
+    --b-tint: rgba(255, 255, 255, 0.04);
+    --b-add-bg: rgba(34, 197, 94, 0.10);
+    --b-del-bg: rgba(239, 68, 68, 0.10);
+
+    --a-chrome: #0D0D10;
+    --a-sheet: #141418;
+    --a-raised: #1B1B20;
+    --a-line: rgba(255, 255, 255, 0.075);
+    --a-text: #E8E8EC;
+    --a-text-2: #C9C9D1;
+    --a-muted: #9696A2;
+    --a-faint: #65656F;
+    --a-hover: rgba(255, 255, 255, 0.045);
+    --a-active: rgba(255, 255, 255, 0.085);
+    --a-accent: #838CF5;
+    --a-accent-soft: rgba(131, 140, 245, 0.16);
+    --a-run: #4ade80;
+    --a-wait: #fbbf24;
+    --a-wait-soft: rgba(251, 191, 36, 0.13);
+    --a-done: #60a5fa;
+    --a-err: #f87171;
+    --a-idle: #5E5E68;
+    --a-add: #4ade80;
+    --a-del: #f87171;
+    --a-add-bg: rgba(74, 222, 128, 0.08);
+    --a-del-bg: rgba(248, 113, 113, 0.08);
+    --a-shadow: none;
+    --a-cmp-shadow: 0 12px 32px -16px rgba(0, 0, 0, 0.7);
+  }
+}
+
+:root[data-theme="dark"] {
+  --page: #101116;
+  --surface: #171820;
+  --ink: #E7E8EE;
+  --ink-2: #C4C6D2;
+  --muted: #8C90A3;
+  --rule: #272A35;
+  --accent: #8D98F2;
+  --on-accent: #0E1030;
+  --coral: #EE7753;
+  --on-coral: #1A0D08;
+  --focus: #8D98F2;
+
+  --b-main: #0a0a0b;
+  --b-rail: #0c0c0d;
+  --b-panel: #111113;
+  --b-card: #141416;
+  --b-border: #1e1e22;
+  --b-text: #e4e4e7;
+  --b-muted: #71717a;
+  --b-accent: #6366f1;
+  --b-accent-dim: rgba(99, 102, 241, 0.15);
+  --b-run: #22c55e;
+  --b-idle: #f59e0b;
+  --b-done: #3b82f6;
+  --b-err: #ef4444;
+  --b-queued: #8b5cf6;
+  --b-tint: rgba(255, 255, 255, 0.04);
+  --b-add-bg: rgba(34, 197, 94, 0.10);
+  --b-del-bg: rgba(239, 68, 68, 0.10);
+
+  --a-chrome: #0D0D10;
+  --a-sheet: #141418;
+  --a-raised: #1B1B20;
+  --a-line: rgba(255, 255, 255, 0.075);
+  --a-text: #E8E8EC;
+  --a-text-2: #C9C9D1;
+  --a-muted: #9696A2;
+  --a-faint: #65656F;
+  --a-hover: rgba(255, 255, 255, 0.045);
+  --a-active: rgba(255, 255, 255, 0.085);
+  --a-accent: #838CF5;
+  --a-accent-soft: rgba(131, 140, 245, 0.16);
+  --a-run: #4ade80;
+  --a-wait: #fbbf24;
+  --a-wait-soft: rgba(251, 191, 36, 0.13);
+  --a-done: #60a5fa;
+  --a-err: #f87171;
+  --a-idle: #5E5E68;
+  --a-add: #4ade80;
+  --a-del: #f87171;
+  --a-add-bg: rgba(74, 222, 128, 0.08);
+  --a-del-bg: rgba(248, 113, 113, 0.08);
+  --a-shadow: none;
+  --a-cmp-shadow: 0 12px 32px -16px rgba(0, 0, 0, 0.7);
+}
+
+/* ───────────────────────── Page chrome ───────────────────────── */
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 1340px;
+  margin: 0 auto;
+  padding-inline: 24px;
+  padding-block: 36px 64px;
+}
+
+.intro {
+  display: grid;
+  gap: 10px;
+  max-width: 76ch;
+}
+
+.eyebrow {
+  margin: 0;
+  font-family: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+h1 {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.1;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.lede {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 15.5px;
+  max-width: 68ch;
+}
+
+.toolbar {
+  margin-top: 28px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.seg button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 120ms ease-out, color 120ms ease-out;
+}
+
+.seg button:hover { color: var(--ink); }
+
+.seg button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--page);
+}
+
+.seg.small button { height: 28px; padding: 0 10px; font-size: 12.5px; }
+.seg.small .seg-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px 0 8px;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.seg.small[aria-disabled="true"] { opacity: 0.45; }
+.seg.small[aria-disabled="true"] button { cursor: not-allowed; }
+
+.btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 120ms ease-out, background 120ms ease-out;
+}
+.btn:hover { border-color: color-mix(in srgb, var(--ink) 35%, var(--rule)); }
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
+.btn[disabled] { opacity: 0.6; cursor: progress; }
+.btn svg { flex-shrink: 0; }
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 4px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.check input { width: 16px; height: 16px; accent-color: var(--coral); margin: 0; }
+
+.kbd-hint {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 6px;
+  border: 1px solid var(--rule);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  text-align: center;
+  color: var(--ink);
+}
+
+.spacer { flex: 1; }
+
+.caption {
+  margin: 14px 0 0;
+  min-height: 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--ink-2);
+  max-width: 110ch;
+}
+.caption .dot {
+  flex-shrink: 0;
+  margin-top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.caption[data-mode="after"] .dot { background: var(--accent); }
+
+.stage {
+  margin-top: 14px;
+  width: 100%;
+  max-width: 1282px;
+  aspect-ratio: 1282 / 782;
+  position: relative;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 24px 48px -32px rgba(0, 0, 0, 0.35);
+}
+
+.stage-note {
+  display: none;
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+@media (max-width: 760px) {
+  .stage-note { display: block; }
+}
+
+.notes { margin-top: 44px; }
+.notes-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 24px;
+}
+.notes h2 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.notes-head p { margin: 0; font-size: 13.5px; color: var(--muted); }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.note-grid {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 640px) { .note-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1180px) { .note-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.note {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 16px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--surface);
+  transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
+  outline: none;
+}
+.note:hover, .note:focus-visible, .note.flash {
+  border-color: color-mix(in srgb, var(--coral) 60%, var(--rule));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--coral) 14%, transparent);
+}
+.note-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.note h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.3;
+  font-weight: 600;
+  text-wrap: balance;
+}
+.note p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.spec {
+  margin-top: auto;
+  display: block;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: var(--page);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.spec .arrow { color: var(--coral); padding: 0 2px; }
+
+.num {
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--coral);
+  color: var(--on-coral);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 5px;
+  border: 1px solid var(--rule);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.note-top .tag { margin-left: auto; }
+.tag.css { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--rule)); }
+.tag.later { color: var(--coral); border-color: color-mix(in srgb, var(--coral) 40%, var(--rule)); }
+
+.foot {
+  margin-top: 36px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--muted);
+  max-width: 120ch;
+}
+
+:where(button, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .wrap { padding-inline: 16px; padding-block: 24px 48px; }
+  h1 { font-size: 28px; }
+  .spacer { display: none; }
+}
+
+/* ───────────────────────── Mock: shared structure ───────────────────────── */
+
+.frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 780px;
+  transform-origin: 0 0;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.frame button { font: inherit; color: inherit; appearance: none; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+.frame input { font: inherit; }
+.frame .ic { display: block; flex-shrink: 0; }
+
+.app { display: flex; height: 100%; }
+.rail { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+.rail-nav { display: flex; flex-direction: column; align-items: center; flex: 1; width: 100%; }
+.rail-item { display: grid; place-items: center; position: relative; }
+.rail-logo img { display: block; width: 100%; height: auto; }
+.sessions { flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; }
+.s-actions { display: flex; }
+.s-btn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.s-search { position: relative; display: block; }
+.s-search .ic { position: absolute; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.s-search input { width: 100%; outline: none; }
+.s-list { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; }
+.g-head { width: 100%; display: flex; align-items: center; }
+.g-head .chev { transform-origin: 50% 50%; }
+.group.collapsed .g-head .chev { transform: rotate(-90deg); }
+.g-body { overflow: hidden; }
+.row-shell { overflow: hidden; }
+.row { width: 100%; display: flex; align-items: center; min-width: 0; }
+.r-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.glyph { display: grid; place-items: center; flex-shrink: 0; width: 10px; height: 10px; }
+.glyph svg { display: block; }
+
+.sheet { flex: 1; display: flex; min-width: 0; min-height: 0; }
+.convo { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.c-head { display: flex; align-items: center; flex-shrink: 0; min-width: 0; }
+.c-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c-stream { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; }
+.msg-time { white-space: nowrap; }
+.tool { display: flex; align-items: center; min-width: 0; }
+.t-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.t-status { margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; }
+.composer { flex-shrink: 0; }
+.cmp-foot { display: flex; align-items: center; }
+.rp { width: 392px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; position: relative; }
+.frame code, .frame pre { margin: 0; }
+.diff { white-space: pre; overflow: hidden; }
+.diff span { display: block; }
+
+.frame.before .only-after { display: none !important; }
+.frame.after .only-before { display: none !important; }
+
+/* loading state (before) */
+.loading-state { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 16px; }
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* pins */
+.pins { position: absolute; inset: 0; pointer-events: none; z-index: 20; }
+.frame .pin {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--coral);
+  color: var(--on-coral);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--coral) 25%, transparent), 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: transform 140ms ease-out, left 160ms ease-out, top 160ms ease-out;
+}
+.frame .pin:hover, .frame .pin.on { transform: scale(1.18); }
+.frame.no-pins .pins { display: none; }
+.frame .hl { outline: 2px solid var(--coral) !important; outline-offset: -2px; }
+
+/* ───────────────────────── BEFORE: Fleet today ───────────────────────── */
+
+.frame.before {
+  font-family: "Inter", "Inter Variable", system-ui, -apple-system, sans-serif;
+  color: var(--b-text);
+  background: var(--b-main);
+  --mono: "JetBrains Mono", "JetBrains Mono Variable", ui-monospace, monospace;
+}
+.before .app { gap: 8px; padding: 8px; background: var(--b-main); }
+
+.before .rail { width: 48px; background: var(--b-panel); border: 1px solid var(--b-border); padding: 8px 0; }
+.before .rail-logo { width: 32px; margin-bottom: 8px; }
+.before .rail-item {
+  width: 40px; height: 40px; margin-bottom: 2px; color: var(--b-muted);
+  border: 1px solid transparent; border-left: 3px solid transparent;
+  transition: background 180ms ease-out, color 180ms ease-out, border-color 180ms ease-out;
+}
+.before .rail-item:hover { background: var(--b-main); border-color: var(--b-border); border-left-color: transparent; color: var(--b-text); }
+.before .rail-item.active { color: var(--b-text); border-left-color: var(--b-accent); background: color-mix(in srgb, var(--b-text) 4%, transparent); }
+.before .rail-divider { width: 24px; height: 1px; background: var(--b-border); margin: 6px 0; }
+
+.before .sessions { width: 264px; background: var(--b-panel); border: 1px solid var(--b-border); }
+.before .s-actions { gap: 8px; padding: 8px 8px 6px; }
+.before .s-btn {
+  min-height: 28px; padding: 0 10px; border: 1px solid var(--b-border);
+  background: var(--b-tint); color: var(--b-text); font-size: 11px; font-weight: 500;
+}
+.before .s-btn.secondary { background: transparent; color: var(--b-muted); }
+.before .s-btn:hover { background: var(--b-main); color: var(--b-text); }
+.before .s-search { margin: 0 8px 6px; }
+.before .s-search .ic { left: 8px; color: var(--b-muted); }
+.before .s-search input {
+  background: var(--b-card); border: 1px solid var(--b-border); border-radius: 0;
+  padding: 5px 8px 5px 28px; font-size: 12px; color: var(--b-text);
+}
+.before .s-search input::placeholder { color: var(--b-muted); }
+.before .s-search input:focus { border-color: var(--b-accent); }
+.before .s-list { padding: 0 12px 12px; }
+.before .group { margin-bottom: 2px; }
+.before .g-head { gap: 8px; padding: 8px 12px 8px 8px; color: var(--b-text); font-size: 12px; font-weight: 600; line-height: 1.2; transition: background 180ms ease-out; }
+.before .g-head:hover { background: var(--b-main); }
+.before .g-head .chev { color: var(--b-muted); transition: transform 0.25s ease; }
+.before .g-head .folder { color: var(--b-muted); }
+.before .row {
+  min-height: 40px; gap: 10px; padding: 0 12px 0 24px; color: var(--b-text);
+  border-left: 3px solid transparent; font-size: 12px; line-height: 1.2;
+  transition: background 180ms ease-out;
+}
+.before .row:hover { background: var(--b-main); }
+.before .row[aria-current="true"] { background: var(--b-accent-dim); border-left-color: var(--b-accent); }
+.before .row:focus-visible { outline: 2px solid var(--b-accent); outline-offset: -2px; }
+.before .loading-state .ic { color: var(--b-muted); }
+.before .loading-title { font-size: 12px; font-weight: 600; margin: 0; }
+.before .loading-copy { font-size: 11px; color: var(--b-muted); margin: 0; }
+
+.before .sheet { display: contents; }
+.before .convo { background: var(--b-panel); border: 1px solid var(--b-border); }
+.before .c-head { gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--b-border); }
+.before .c-title { font-size: 13px; font-weight: 600; }
+.before .c-sub { display: flex; gap: 6px; margin-left: auto; }
+.before .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border: 1px solid var(--b-border); font-size: 10px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--b-muted); white-space: nowrap; }
+.before .msg { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-bottom: 1px solid var(--b-border); border-left: 3px solid transparent; transition: background 180ms ease-out, border-left-color 180ms ease-out; }
+.before .msg:hover { border-left-color: var(--b-accent); background: rgba(91, 110, 199, 0.03); }
+.before .msg-icon { flex-shrink: 0; width: 20px; height: 20px; display: grid; place-items: center; margin-top: 2px; color: var(--b-muted); }
+.before .msg.user .msg-icon { color: var(--b-text); }
+.before .msg.assistant .msg-icon { color: var(--b-accent); }
+.before .msg-content { flex: 1; min-width: 0; }
+.before .msg-body { font-size: 14px; line-height: 1.6; }
+.before .msg-body p { margin: 0 0 6px; }
+.before .msg-body p:last-child { margin-bottom: 0; }
+.before .msg-body code { font-family: var(--mono); font-size: 12.5px; }
+.before .msg-time { color: var(--b-muted); font-size: 12px; margin-top: 3px; }
+.before .tool { margin-top: 8px; padding: 10px 12px; gap: 8px; background: var(--b-panel); border: 1px solid var(--b-border); font-size: 13px; }
+.before .tool .ic { color: var(--b-muted); }
+.before .t-label { font-weight: 600; flex-shrink: 0; }
+.before .t-detail { font-family: var(--mono); font-size: 12px; color: var(--b-muted); }
+.before .t-status { font-size: 10px; color: var(--b-run); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.before .tools { margin: 4px 0 8px; }
+.before .composer { border-top: 1px solid var(--b-border); padding: 12px 24px 16px; background: var(--b-panel); }
+.before .cmp-box { border: 1px solid var(--b-border); background: var(--b-card); }
+.before .cmp-input { min-height: 48px; padding: 12px 16px; font-size: 12px; color: var(--b-muted); }
+.before .cmp-foot { gap: 12px; padding: 8px 12px; border-top: 1px solid var(--b-border); font-size: 10px; color: var(--b-muted); }
+.before .cmp-foot .cmp-send { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; background: var(--b-accent); color: #fff; font-size: 11px; font-weight: 500; }
+.before .cmp-chip { display: inline-flex; align-items: center; gap: 4px; }
+
+.before .rp { background: var(--b-panel); border: 1px solid var(--b-border); }
+.before .rpb-toolbar { display: flex; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--b-border); }
+.before .tb-btn { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--b-border); color: var(--b-muted); }
+.before .tb-btn:hover { color: var(--b-text); background: var(--b-main); }
+.before .tb-btn.push { margin-left: auto; }
+.before .rpb-title { padding: 10px 12px 6px; font-size: 13px; font-weight: 600; }
+.before .rpb-chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 12px 10px; }
+.before .rpb-card { margin: 0 12px 10px; padding: 8px 10px; border: 1px solid var(--b-border); background: var(--b-card); display: flex; justify-content: space-between; font-size: 11px; color: var(--b-muted); }
+.before .rpb-card strong { color: var(--b-text); font-weight: 600; }
+.before .rpb-split { flex: 1; min-height: 0; display: flex; border-top: 1px solid var(--b-border); }
+.before .rpb-tree { width: 150px; flex-shrink: 0; border-right: 1px solid var(--b-border); padding: 8px 0; overflow: hidden; }
+.before .rpb-filter { display: flex; margin: 0 8px 8px; border: 1px solid var(--b-border); }
+.before .rpb-filter button { flex: 1; text-align: center; font-size: 11px; padding: 3px 0; color: var(--b-muted); }
+.before .rpb-filter button.on { background: var(--b-accent-dim); color: var(--b-text); }
+.before .rpb-file { display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 10px; font-size: 11px; white-space: nowrap; overflow: hidden; border-left: 2px solid transparent; }
+.before .rpb-file span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.before .rpb-file.on { background: var(--b-accent-dim); border-left-color: var(--b-accent); }
+.before .rpb-st { font-family: var(--mono); font-size: 10px; font-weight: 600; width: 10px; }
+.before .rpb-st.A { color: var(--b-run); }
+.before .rpb-st.M { color: var(--b-idle); }
+.before .rpb-st.D { color: var(--b-err); }
+.before .rpb-view { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.before .rpb-vhead { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--b-border); font-size: 11px; }
+.before .rpb-vhead .lbl { color: var(--b-muted); }
+.before .rpb-vhead .path { font-family: var(--mono); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.before .rpb-toggle { display: flex; border: 1px solid var(--b-border); }
+.before .rpb-toggle span { width: 22px; height: 20px; display: grid; place-items: center; color: var(--b-muted); }
+.before .rpb-toggle span.on { background: var(--b-accent-dim); color: var(--b-text); }
+.before .diff { font-family: var(--mono); font-size: 11px; line-height: 1.55; padding: 6px 0; }
+.before .diff span { padding: 0 8px; }
+.before .diff .h { color: var(--b-muted); }
+.before .diff .a { background: var(--b-add-bg); }
+.before .diff .d { background: var(--b-del-bg); }
+
+.before .glyph { --st-run: var(--b-run); --st-wait: var(--b-queued); --st-idle: var(--b-idle); --st-done: var(--b-done); --st-err: var(--b-err); }
+
+/* ───────────────────────── AFTER: the feel pass ───────────────────────── */
+
+.frame.after {
+  --a-font: "Inter", "Inter Variable", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", "JetBrains Mono Variable", ui-monospace, monospace;
+  font-family: var(--a-font);
+  color: var(--a-text);
+  background: var(--a-chrome);
+}
+.frame.after.sysfont { --a-font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+.after .app { padding: 8px 8px 8px 0; background: var(--a-chrome); }
+
+.after .rail { width: 52px; padding: 6px 0; gap: 2px; }
+.after .rail-logo { width: 26px; margin: 2px 0 12px; }
+.after .rail-nav { gap: 2px; }
+.after .rail-item { width: 34px; height: 34px; border-radius: 8px; color: var(--a-muted); transition: background 150ms ease-out, color 150ms ease-out; }
+.after .rail-item:hover { background: var(--a-hover); color: var(--a-text); }
+.after .rail-item.active { background: var(--a-active); color: var(--a-text); }
+.after .rail-divider { width: 18px; height: 1px; background: var(--a-line); margin: 8px 0; }
+
+.after .sessions { width: 256px; padding: 2px 6px 0 0; }
+.after .s-actions { gap: 6px; padding: 0 6px 8px; }
+.after .s-btn { height: 32px; border-radius: 8px; font-size: 13px; font-weight: 500; transition: background 150ms ease-out, border-color 150ms ease-out; }
+.after .s-btn.primary { flex: 1; justify-content: center; background: var(--a-raised); border: 1px solid var(--a-line); color: var(--a-text); box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04); }
+.after .s-btn.primary:hover { border-color: color-mix(in srgb, var(--a-text) 18%, transparent); }
+.after .s-btn.secondary { width: 32px; justify-content: center; color: var(--a-muted); }
+.after .s-btn.secondary:hover { background: var(--a-hover); color: var(--a-text); }
+.after .s-search { margin: 0 6px 10px; }
+.after .s-search .ic { left: 10px; color: var(--a-faint); }
+.after .s-search input {
+  height: 32px; border-radius: 8px; border: 1px solid transparent; background: var(--a-hover);
+  padding: 0 10px 0 31px; font-size: 13px; color: var(--a-text);
+  transition: border-color 150ms ease-out, background 150ms ease-out, box-shadow 150ms ease-out;
+}
+.after .s-search input::placeholder { color: var(--a-faint); }
+.after .s-search input:focus { background: var(--a-sheet); border-color: color-mix(in srgb, var(--a-accent) 55%, transparent); box-shadow: 0 0 0 3px var(--a-accent-soft); }
+.after .s-list { padding: 0 6px 12px; }
+.after .group + .group { margin-top: 10px; }
+.after .g-head { height: 26px; gap: 6px; padding: 0 8px 0 6px; border-radius: 6px; color: var(--a-muted); font-size: 12px; font-weight: 600; transition: color 150ms ease-out, background 150ms ease-out; }
+.after .g-head:hover { color: var(--a-text); background: var(--a-hover); }
+.after .g-head .chev { color: var(--a-faint); transition: transform 150ms ease-out; }
+.after .g-count { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--a-faint); font-variant-numeric: tabular-nums; }
+.after .g-body { padding-top: 2px; }
+.after .row-shell { padding: 1px 0; }
+.after .row {
+  height: 32px; gap: 9px; padding: 0 10px; border-radius: 8px;
+  color: var(--a-text-2); font-size: 13px;
+  transition: background 150ms ease-out, color 150ms ease-out;
+}
+.after .row:hover { background: var(--a-hover); color: var(--a-text); }
+.after .row[aria-current="true"] { background: var(--a-active); color: var(--a-text); font-weight: 500; }
+.after .row:focus-visible { outline: 2px solid var(--a-accent); outline-offset: -2px; }
+.after .r-meta { margin-left: auto; flex-shrink: 0; font-size: 12px; font-weight: 400; color: var(--a-faint); font-variant-numeric: tabular-nums; }
+.after .r-meta.working { color: var(--a-muted); }
+.after .r-meta.needs { padding: 1px 7px; border-radius: 6px; background: var(--a-wait-soft); color: var(--a-wait); font-weight: 500; font-size: 11.5px; }
+
+.after .sheet { background: var(--a-sheet); border: 1px solid var(--a-line); border-radius: 12px; overflow: hidden; box-shadow: var(--a-shadow); }
+.after .c-head { height: 48px; gap: 10px; padding: 0 20px; border-bottom: 1px solid var(--a-line); }
+.after .c-title { font-size: 14px; font-weight: 600; letter-spacing: -0.005em; }
+.after .c-sub { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.after .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--a-muted); white-space: nowrap; }
+.after .chip .ic { color: var(--a-faint); }
+.after .chip.soft { height: 24px; padding: 0 8px; border-radius: 7px; background: var(--a-hover); }
+.after .c-stream { padding: 24px 32px 12px; }
+.after .msg { max-width: 680px; margin: 0 auto 22px; }
+.after .msg-icon, .after .msg-time { display: none; }
+.after .msg.user { display: flex; justify-content: flex-end; }
+.after .msg.user .msg-content { max-width: 82%; }
+.after .msg.user .msg-body { background: var(--a-hover); border: 1px solid var(--a-line); border-radius: 14px 14px 4px 14px; padding: 10px 14px; font-size: 14px; line-height: 1.55; }
+.after .msg.assistant .msg-body { font-size: 14px; line-height: 1.65; color: var(--a-text); }
+.after .msg-body p { margin: 0 0 10px; }
+.after .msg-body p:last-child { margin-bottom: 0; }
+.after .msg-body code { font-family: var(--mono); font-size: 12.5px; padding: 1px 5px; border-radius: 5px; background: var(--a-hover); }
+.after .tools { margin: 4px 0 14px; padding: 4px; border: 1px solid var(--a-line); border-radius: 10px; background: color-mix(in srgb, var(--a-hover) 60%, transparent); }
+.after .tool { height: 30px; gap: 9px; padding: 0 8px; border-radius: 6px; font-size: 13px; transition: background 150ms ease-out; }
+.after .tool:hover { background: var(--a-hover); }
+.after .tool .ic { color: var(--a-faint); }
+.after .t-label { font-weight: 500; color: var(--a-text); flex-shrink: 0; }
+.after .t-detail { font-family: var(--mono); font-size: 12px; color: var(--a-muted); }
+.after .t-status { font-size: 12px; color: var(--a-faint); font-variant-numeric: tabular-nums; }
+.after .t-status .ok, .after .t-status .ok .ic { color: var(--a-run); }
+.after .t-status .plus { color: var(--a-add); }
+.after .t-status .minus { color: var(--a-del); }
+.after .composer { padding: 6px 24px 20px; }
+.after .cmp-box { max-width: 680px; margin: 0 auto; border: 1px solid var(--a-line); border-radius: 14px; background: var(--a-raised); box-shadow: var(--a-cmp-shadow); }
+.after .cmp-input { min-height: 50px; padding: 14px 16px 6px; font-size: 14px; color: var(--a-faint); }
+.after .cmp-foot { gap: 2px; padding: 4px 8px 8px 8px; font-size: 12px; color: var(--a-muted); }
+.after .cmp-chip { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border-radius: 7px; transition: background 150ms ease-out, color 150ms ease-out; cursor: default; }
+.after .cmp-chip:hover { background: var(--a-hover); color: var(--a-text); }
+.after .cmp-chip .ic { color: var(--a-faint); }
+.after .cmp-send { margin-left: auto; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--a-accent); color: #fff; }
+
+.after .rp { border-left: 1px solid var(--a-line); }
+.after .rpa-tabs { height: 48px; flex-shrink: 0; display: flex; align-items: center; gap: 2px; padding: 0 8px 0 10px; border-bottom: 1px solid var(--a-line); }
+.after .tab { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: 7px; font-size: 13px; color: var(--a-muted); transition: background 150ms ease-out, color 150ms ease-out; }
+.after .tab:hover { background: var(--a-hover); color: var(--a-text); }
+.after .tab.on { background: var(--a-active); color: var(--a-text); font-weight: 500; }
+.after .tab .count { font-size: 11.5px; color: var(--a-faint); font-variant-numeric: tabular-nums; font-weight: 500; }
+.after .tab .x { color: var(--a-faint); opacity: 0; transition: opacity 120ms ease-out; }
+.after .tab:hover .x { opacity: 1; }
+.after .tab-icon { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--a-faint); transition: background 150ms ease-out, color 150ms ease-out; }
+.after .tab-icon:hover { background: var(--a-hover); color: var(--a-text); }
+.after .tab-icon.push { margin-left: auto; }
+.after .rpa-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 12px 14px 8px; font-size: 12px; color: var(--a-muted); }
+.after .rpa-meta span { display: inline-flex; align-items: center; gap: 5px; }
+.after .rpa-meta .ic { color: var(--a-faint); }
+.after .rpa-files { padding: 2px 8px 6px; }
+.after .rpa-file { height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: 7px; font-size: 13px; color: var(--a-text-2); transition: background 150ms ease-out; }
+.after .rpa-file:hover { background: var(--a-hover); }
+.after .rpa-file.on { background: var(--a-active); color: var(--a-text); }
+.after .rpa-file .ic { color: var(--a-faint); }
+.after .f-name { flex-shrink: 0; }
+.after .f-dir { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--a-faint); font-size: 12px; }
+.after .f-num { flex-shrink: 0; font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; display: inline-flex; gap: 6px; }
+.after .f-num .add { color: var(--a-add); }
+.after .f-num .del { color: var(--a-del); }
+.after .rpa-diff { margin: 4px 12px 12px; border: 1px solid var(--a-line); border-radius: 10px; overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.after .rpa-dhead { height: 34px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--a-line); font-family: var(--mono); font-size: 11.5px; color: var(--a-muted); }
+.after .rpa-dhead .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.after .rpa-dhead .add { color: var(--a-add); }
+.after .diff { font-family: var(--mono); font-size: 11.5px; line-height: 1.65; padding: 6px 0; color: var(--a-text-2); }
+.after .diff span { padding: 0 12px; }
+.after .diff .h { color: var(--a-faint); }
+.after .diff .a { background: var(--a-add-bg); }
+.after .diff .d { background: var(--a-del-bg); }
+
+.after .glyph { --st-run: var(--a-run); --st-wait: var(--a-wait); --st-idle: var(--a-idle); --st-done: var(--a-done); --st-err: var(--a-err); }
+.after .glyph.pulse svg { animation: status-pulse 2s infinite; }
+@keyframes status-pulse {
+  0%, 40% { opacity: 1; animation-timing-function: steps(6); }
+  50%, 90% { opacity: 0.45; animation-timing-function: steps(6); }
+  100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .after .glyph.pulse svg, .spin { animation: none; }
+  .pin, .seg button, .btn { transition: none; }
+}
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <p class="eyebrow">Weave Fleet 0.17.12 · UI proposal · 12 Sep 2026</p>
+    <h1>Fleet Feel Pass</h1>
+    <p class="lede">Same Fleet: same layout, same projects, same features. The feel pass only changes design tokens, motion and the session row. The right-panel tabs and the instant reload preview the surface and push work that comes after.</p>
+  </header>
+
+  <div class="toolbar">
+    <div class="seg" role="group" aria-label="Version shown">
+      <button type="button" id="v-before" aria-pressed="true">Current</button>
+      <button type="button" id="v-after" aria-pressed="false">Feel pass</button>
+    </div>
+    <span class="kbd-hint"><kbd>B</kbd> to flip</span>
+    <span class="spacer"></span>
+    <button type="button" class="btn primary" id="play"><span data-icon="play" data-size="14"></span><span id="play-label">Play activity</span></button>
+    <button type="button" class="btn" id="reload"><span data-icon="rotate" data-size="14"></span>Reload app</button>
+    <div class="seg small" id="font-seg" role="group" aria-label="Feel pass font" aria-disabled="true">
+      <span class="seg-label">Font</span>
+      <button type="button" id="f-inter" aria-pressed="true">Inter</button>
+      <button type="button" id="f-system" aria-pressed="false">System</button>
+    </div>
+    <label class="check" for="pins-toggle"><input type="checkbox" id="pins-toggle" checked> Notes</label>
+  </div>
+
+  <p class="caption" id="caption" aria-live="polite"><span class="dot"></span><span id="caption-text"></span></p>
+
+  <div class="stage" id="stage">
+    <div class="frame before" id="frame">
+      <div class="app">
+        <aside class="rail" aria-label="Primary navigation">
+          <div class="rail-logo"><img alt="Weave" src="data:image/png;base64,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"></div>
+          <nav class="rail-nav" aria-label="App sections">
+            <button type="button" class="rail-item" aria-label="Board" data-icon="grid" data-size="18"></button>
+            <button type="button" class="rail-item active" aria-label="Sessions" data-icon="message" data-size="18"></button>
+            <div class="rail-divider"></div>
+            <button type="button" class="rail-item" aria-label="Plugins" data-icon="puzzle" data-size="18"></button>
+            <button type="button" class="rail-item" aria-label="Automations" data-icon="zap" data-size="18"></button>
+            <button type="button" class="rail-item" aria-label="Analytics" data-icon="chart" data-size="18"></button>
+            <span style="flex:1"></span>
+            <button type="button" class="rail-item" aria-label="Settings" data-icon="settings" data-size="18"></button>
+          </nav>
+        </aside>
+
+        <section class="sessions" aria-label="Sessions">
+          <div class="s-actions">
+            <button type="button" class="s-btn primary"><span data-icon="plus" data-size="14"></span>New Session</button>
+            <button type="button" class="s-btn secondary" aria-label="New Project"><span class="only-before" data-icon="plus" data-size="14"></span><span class="only-before">New Project</span><span class="only-after" data-icon="folderplus" data-size="16"></span></button>
+          </div>
+          <label class="s-search" for="mock-filter">
+            <span data-icon="search" data-size="13"></span>
+            <input id="mock-filter" type="search" placeholder="Filter sessions" autocomplete="off">
+          </label>
+          <div class="s-list" id="list"></div>
+        </section>
+
+        <div class="sheet">
+          <section class="convo" aria-label="Conversation">
+            <header class="c-head">
+              <span class="c-title" id="c-title">Right panel surface registry</span>
+              <span class="c-sub">
+                <span class="chip"><span data-icon="branch" data-size="12"></span>feat/surface-registry</span>
+                <span class="chip soft only-after">Claude Code · opus-5</span>
+                <span class="chip only-before">Claude Code</span>
+              </span>
+            </header>
+            <div class="c-stream" id="stream">
+              <div class="msg user">
+                <div class="msg-icon" data-icon="user" data-size="16"></div>
+                <div class="msg-content">
+                  <div class="msg-body"><p>The right panel is hard-coded to files and diff. Replace it with a registry so each session keeps an ordered list of surfaces, like t3code's <code>rightPanelStore</code>.</p></div>
+                </div>
+                <span class="msg-time">14m ago</span>
+              </div>
+              <div class="msg assistant">
+                <div class="msg-icon" data-icon="bot" data-size="16"></div>
+                <div class="msg-content">
+                  <div class="msg-body">
+                    <p>I'll move panel state into a store keyed by session, then register the existing file and diff views as the first two surface kinds.</p>
+                    <div class="tools" id="tools-1">
+                      <div class="tool"><span data-icon="book" data-size="14"></span><span class="t-label">Read</span><span class="t-detail">client/src/composables/use-content-panel.ts</span><span class="t-status"><span class="only-before">Done</span><span class="only-after ok" data-icon="check" data-size="13"></span></span></div>
+                      <div class="tool"><span data-icon="filetext" data-size="14"></span><span class="t-label">Write</span><span class="t-detail">client/src/stores/surfaces.ts</span><span class="t-status"><span class="only-before">Done</span><span class="only-after"><span class="plus">+84</span></span></span></div>
+                      <div class="tool"><span data-icon="pencil" data-size="14"></span><span class="t-label">Edit</span><span class="t-detail">client/src/components/sessions/SessionsV2RightPanel.vue</span><span class="t-status"><span class="only-before">Done</span><span class="only-after"><span class="plus">+12</span> <span class="minus">−188</span></span></span></div>
+                      <div class="tool"><span data-icon="terminal" data-size="14"></span><span class="t-label">Bash</span><span class="t-detail">bun run test</span><span class="t-status"><span class="only-before">Done</span><span class="only-after">391 passed</span></span></div>
+                    </div>
+                    <p>Done. <code>SessionsV2RightPanel.vue</code> now renders whichever surfaces the session has open. Changes and Files are registered, and Terminal is stubbed so the tab strip has a third kind to prove the registry works.</p>
+                  </div>
+                </div>
+                <span class="msg-time">9m ago</span>
+              </div>
+            </div>
+            <div class="composer">
+              <div class="cmp-box">
+                <div class="cmp-input">Message Weave… (@ to mention files, / for commands)</div>
+                <div class="cmp-foot">
+                  <span class="cmp-chip"><span class="only-after" data-icon="sparkle" data-size="13"></span>claude-opus-5</span>
+                  <span class="cmp-chip"><span class="only-after" data-icon="bot" data-size="13"></span>Weave</span>
+                  <span class="cmp-chip"><span class="only-after" data-icon="gauge" data-size="13"></span>High effort</span>
+                  <span class="cmp-send"><span class="only-after" data-icon="arrowup" data-size="15"></span><span class="only-before">Send</span></span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside class="rp" aria-label="Right panel">
+            <!-- BEFORE: SessionMetadataHeader + fixed files | viewer split -->
+            <div class="only-before" style="display:flex;flex-direction:column;flex:1;min-height:0">
+              <div class="rpb-toolbar">
+                <span class="tb-btn" data-icon="pause" data-size="13"></span>
+                <span class="tb-btn" data-icon="check" data-size="13"></span>
+                <span class="tb-btn" data-icon="fork" data-size="13"></span>
+                <span class="tb-btn" data-icon="pencil" data-size="13"></span>
+                <span class="tb-btn push" data-icon="panelclose" data-size="13"></span>
+              </div>
+              <div class="rpb-title" id="rp-title">Right panel surface registry</div>
+              <div class="rpb-chips">
+                <span class="chip">Claude Code</span><span class="chip">opus-5</span><span class="chip">Worktree</span><span class="chip">12m</span>
+              </div>
+              <div class="rpb-card"><span>Todos</span><strong>3 / 5</strong></div>
+              <div class="rpb-split">
+                <div class="rpb-tree">
+                  <div class="rpb-filter"><button type="button">All</button><button type="button" class="on">Changed</button></div>
+                  <div id="rpb-files"></div>
+                </div>
+                <div class="rpb-view">
+                  <div class="rpb-vhead"><span class="lbl">Diff:</span><span class="path">client/src/stores/surfaces.ts</span><span class="rpb-toggle"><span data-icon="filetext" data-size="11"></span><span class="on" data-icon="compare" data-size="11"></span></span></div>
+                  <pre class="diff" id="diff-b"></pre>
+                </div>
+              </div>
+            </div>
+            <!-- AFTER: surface tabs (step 1 preview) -->
+            <div class="only-after" style="display:flex;flex-direction:column;flex:1;min-height:0">
+              <div class="rpa-tabs" role="tablist" aria-label="Surfaces">
+                <button type="button" class="tab on" role="tab" aria-selected="true"><span data-icon="compare" data-size="14"></span>Changes <span class="count">4</span></button>
+                <button type="button" class="tab" role="tab" aria-selected="false"><span data-icon="folder" data-size="14"></span>Files</button>
+                <button type="button" class="tab" role="tab" aria-selected="false"><span data-icon="terminal" data-size="14"></span>Terminal<span class="x" data-icon="x" data-size="12"></span></button>
+                <button type="button" class="tab-icon" aria-label="Open surface" data-icon="plus" data-size="15"></button>
+                <button type="button" class="tab-icon push" aria-label="Collapse right panel" data-icon="panelclose" data-size="15"></button>
+              </div>
+              <div class="rpa-meta">
+                <span><span data-icon="clock" data-size="12"></span>12m</span>
+                <span><span data-icon="list" data-size="12"></span>3 of 5 todos</span>
+                <span><span data-icon="worktree" data-size="12"></span>Worktree</span>
+              </div>
+              <div class="rpa-files" id="rpa-files"></div>
+              <div class="rpa-diff">
+                <div class="rpa-dhead"><span class="path">client/src/stores/surfaces.ts</span><span class="add">+84</span></div>
+                <pre class="diff" id="diff-a"></pre>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+      <div class="pins" id="pins"></div>
+    </div>
+  </div>
+  <p class="stage-note">The mockup is a 1280px desktop screen scaled to fit. It reads best on a laptop or wider.</p>
+
+  <section class="notes" aria-labelledby="notes-h">
+    <div class="notes-head">
+      <h2 id="notes-h">What changes</h2>
+      <p>Numbers match the pins in the mockup. Hover a note to outline its spot.</p>
+    </div>
+    <ol class="note-grid" id="notes">
+      <li class="note" tabindex="0" data-pin="1">
+        <div class="note-top"><span class="num">1</span><h3>An inset row that says what's happening</h3><span class="tag css">Row</span></div>
+        <p>Today's rows are 40px full-width strips with a 12px title and a 3px bar when active. Proposed: a 32px rounded row inset from the edge, a 13px title, and the state in words on the right: "Needs input", "Working" or when it was last active.</p>
+        <code class="spec">40px strip · 3px bar · 12px <span class="arrow">→</span> 32px row · r8 · 13px + status</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="2">
+        <div class="note-top"><span class="num">2</span><h3>One sheet instead of four boxes</h3><span class="tag css">Tokens</span></div>
+        <p>Today every panel is a square box with a solid border and an 8px gap, in four near-identical greys. Proposed: rail and list sit on the window colour; conversation and right panel share one raised sheet with 12px corners and translucent borders.</p>
+        <code class="spec">radius 0 · #0a0a0b #0c0c0d #111113 #141416 <span class="arrow">→</span> r8 / r12 · chrome + sheet + raised</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="3">
+        <div class="note-top"><span class="num">3</span><h3>Two text sizes, not twenty-eight</h3><span class="tag css">Tokens</span></div>
+        <p>Components use 28 font sizes today, mostly 10–11px. Proposed: 13px for the UI, 14px for reading, 12px for metadata. Use the Font toggle to compare Inter with your system font on this machine.</p>
+        <code class="spec">9 · 10 · 11 · 12 · 13 · 15px… <span class="arrow">→</span> 12 / 13 / 14px</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="4">
+        <div class="note-top"><span class="num">4</span><h3>Motion that shows what changed</h3><span class="tag css">Motion</span></div>
+        <p>Press Play activity in both versions. Today rows pop in and out in one frame, and collapsing a project waits on a 1000px max-height transition. Proposed: rows open and close at their real height, and neighbours slide.</p>
+        <code class="spec">0.25s ease · max-height 1000px <span class="arrow">→</span> 150ms ease-out · measured height</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="5">
+        <div class="note-top"><span class="num">5</span><h3>No spinner when you open the app</h3><span class="tag later">Step 2 · Push</span></div>
+        <p>Press Reload app. Today the list is dropped and refetched behind "Loading sessions", then re-polled every 15 seconds. With a cached list that the server pushes changes to, it's simply there. This one needs the session-list work, not just CSS.</p>
+        <code class="spec">poll 15s + spinner <span class="arrow">→</span> cached + pushed over SignalR</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="6">
+        <div class="note-top"><span class="num">6</span><h3>A conversation, not a log</h3><span class="tag css">Tokens</span></div>
+        <p>Messages lose their divider lines and the hover bar. Your messages become bubbles, tool calls sit together in one quiet group with their results inline (+84, 391 passed), and the composer floats on the sheet.</p>
+        <code class="spec">border-bottom + 3px hover bar <span class="arrow">→</span> bubble · grouped tools · r14 composer</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="7">
+        <div class="note-top"><span class="num">7</span><h3>Surfaces as tabs</h3><span class="tag later">Step 1 · Surfaces</span></div>
+        <p>The right panel becomes a tab strip that each session owns: Changes, Files, Terminal, and whatever gets registered next. Today it's fixed to a file tree and a file/diff toggle.</p>
+        <code class="spec">viewMode: "file" | "diff" <span class="arrow">→</span> surfaces[] + activeSurfaceId</code>
+      </li>
+      <li class="note" tabindex="0" data-pin="8">
+        <div class="note-top"><span class="num">8</span><h3>Colour means "look here"</h3><span class="tag css">Tokens</span></div>
+        <p>Today idle sessions draw an amber ring, the same colour family as a warning, and waiting sessions are purple. Proposed: idle is a quiet grey ring, amber is reserved for sessions waiting on you, green for working. The glyph shapes stay.</p>
+        <code class="spec">idle amber · waiting purple <span class="arrow">→</span> idle grey · waiting amber</code>
+      </li>
+    </ol>
+  </section>
+
+  <p class="foot">Current values come from client/src/assets/main.css, transitions.css, SessionItem.vue, ProjectGroup.vue, SessionsPanel.vue, MessageBubble.vue, ToolCard.vue and StatusGlyph.vue on main (0.17.12). Proposed values are a starting point to react to, not a spec. Sessions shown are examples.</p>
+</div>
+
+<script>
+(() => {
+  const ICON = {
+    grid: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+    message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    puzzle: '<path d="M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.706 1.087.706 1.704s-.235 1.233-.706 1.704l-1.611 1.611a.98.98 0 0 1-.837.276c-.47-.07-.802-.48-.968-.925a2.501 2.501 0 1 0-3.214 3.214c.446.166.855.497.925.968a.979.979 0 0 1-.276.837l-1.61 1.61a2.404 2.404 0 0 1-1.705.707 2.402 2.402 0 0 1-1.704-.706l-1.568-1.568a1.026 1.026 0 0 0-.877-.29c-.493.074-.84.504-1.02.968a2.5 2.5 0 1 1-3.237-3.237c.464-.18.894-.527.967-1.02a1.026 1.026 0 0 0-.289-.877l-1.568-1.568A2.402 2.402 0 0 1 1.998 12c0-.617.236-1.234.706-1.704L4.23 8.77c.24-.24.581-.353.917-.303.515.077.877.528 1.073 1.01a2.5 2.5 0 1 0 3.259-3.259c-.482-.196-.933-.558-1.01-1.073-.05-.336.062-.676.303-.917l1.525-1.525A2.402 2.402 0 0 1 12 1.998c.617 0 1.234.236 1.704.706l1.568 1.568c.23.23.556.338.877.29.493-.074.84-.504 1.02-.968a2.5 2.5 0 1 1 3.237 3.237c-.464.18-.894.527-.967 1.02Z"/>',
+    zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+    chart: '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+    settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+    plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+    search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    chevron: '<path d="m6 9 6 6 6-6"/>',
+    folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+    folderplus: '<path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+    filetext: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+    compare: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/>',
+    branch: '<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+    terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>',
+    panelclose: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/>',
+    arrowup: '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+    user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    bot: '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
+    pencil: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>',
+    pause: '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    fork: '<circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/>',
+    book: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+    loader: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+    play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+    rotate: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+    sparkle: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
+    gauge: '<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    list: '<path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="m19 10-4 4"/><path d="m15 10 4 4"/>',
+    worktree: '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect width="10" height="8" x="7" y="8" rx="1"/>'
+  };
+  const icon = (name, size = 16, cls = '') =>
+    `<svg class="ic ${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[name] || ''}</svg>`;
+
+  document.querySelectorAll('[data-icon]').forEach((el) => {
+    el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon, el.dataset.size || 16));
+  });
+
+  const $ = (s, r = document) => r.querySelector(s);
+  const frame = $('#frame');
+  const stage = $('#stage');
+  const list = $('#list');
+  const stream = $('#stream');
+  const pinsLayer = $('#pins');
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  /* ── data ── */
+  const INITIAL = {
+    activeId: 's1',
+    collapsed: {},
+    projects: [
+      { id: 'wf', name: 'weave-fleet', sessions: ['s1', 's2', 's3', 's4'] },
+      { id: 'nc', name: 'nucode', sessions: ['s5', 's6', 's7'] },
+      { id: 'wb', name: 'weave-bootstrap-plugin', sessions: ['s8'] },
+      { id: 'ug', name: 'Ungrouped', sessions: ['s9'] }
+    ],
+    sessions: {
+      s1: { title: 'Right panel surface registry', status: 'active', ago: '12m' },
+      s2: { title: 'Fix SignalR reconnect after sleep', status: 'waiting_input', ago: '3m' },
+      s3: { title: 'Push session list over SignalR', status: 'idle', ago: '2h' },
+      s4: { title: 'Bump version to 0.17.12', status: 'completed', ago: '1d' },
+      s5: { title: 'LSP diagnostics for C# files', status: 'active', ago: '6m' },
+      s6: { title: 'Provider credential form', status: 'idle', ago: '5h' },
+      s7: { title: 'MCP tool timeout handling', status: 'idle', ago: '1d' },
+      s8: { title: 'Session context hook', status: 'idle', ago: '3d' },
+      s9: { title: 'Tailwind v4 token audit', status: 'idle', ago: '4d' }
+    }
+  };
+  let state = structuredClone(INITIAL);
+  let mode = 'before';
+  let scale = 1;
+
+  const FILES = [
+    { st: 'A', name: 'surfaces.ts', dir: 'client/src/stores', add: 84, del: 0, on: true },
+    { st: 'A', name: 'surface-registry.ts', dir: 'client/src/lib', add: 41, del: 0 },
+    { st: 'M', name: 'SessionsV2RightPanel.vue', dir: 'client/src/components/sessions', add: 12, del: 188 },
+    { st: 'D', name: 'use-content-panel.ts', dir: 'client/src/composables', add: 0, del: 186 }
+  ];
+  const DIFF = [
+    ['h', '@@ -0,0 +1,84 @@'],
+    ['a', '+export type SurfaceKind ='],
+    ['a', '+  "changes" | "files" | "terminal";'],
+    ['a', '+'],
+    ['a', '+export interface Surface {'],
+    ['a', '+  id: string;'],
+    ['a', '+  kind: SurfaceKind;'],
+    ['a', '+  resourceId?: string;'],
+    ['a', '+}'],
+    ['a', '+'],
+    ['a', '+interface SessionSurfaces {'],
+    ['a', '+  surfaces: Surface[];'],
+    ['a', '+  activeSurfaceId: string | null;'],
+    ['a', '+}'],
+    ['a', '+'],
+    ['a', '+export const useSurfacesStore ='],
+    ['a', '+  defineStore("surfaces", () => {'],
+    ['a', '+    const bySession ='],
+    ['a', '+      ref<Record<string, SessionSurfaces>>({});']
+  ];
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const diffHTML = DIFF.map(([k, t]) => `<span class="${k}">${esc(t) || ' '}</span>`).join('');
+  $('#diff-a').innerHTML = diffHTML;
+  $('#diff-b').innerHTML = diffHTML;
+  $('#rpb-files').innerHTML = FILES.map((f) =>
+    `<div class="rpb-file${f.on ? ' on' : ''}"><span class="rpb-st ${f.st}">${f.st}</span><span>${f.name}</span></div>`).join('');
+  $('#rpa-files').innerHTML = FILES.map((f) =>
+    `<div class="rpa-file${f.on ? ' on' : ''}">${icon('filetext', 14)}<span class="f-name">${f.name}</span><span class="f-dir">${f.dir}</span><span class="f-num">${f.add ? `<span class="add">+${f.add}</span>` : ''}${f.del ? `<span class="del">−${f.del}</span>` : ''}</span></div>`).join('');
+
+  /* ── session list rendering ── */
+  function glyph(status) {
+    switch (status) {
+      case 'active': return '<svg width="8" height="8" viewBox="0 0 8 8" aria-label="Active"><circle cx="4" cy="4" r="4" fill="var(--st-run)"/></svg>';
+      case 'idle': return '<svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-label="Idle"><circle cx="4" cy="4" r="3" stroke="var(--st-idle)" stroke-width="1.5"/></svg>';
+      case 'waiting_input': return '<svg width="8" height="8" viewBox="0 0 8 8" aria-label="Waiting for input"><polygon points="4,0.5 7.5,4 4,7.5 0.5,4" fill="var(--st-wait)"/></svg>';
+      case 'completed': return '<svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-label="Completed"><polyline points="1,4.5 3.2,6.5 7,1.5" stroke="var(--st-done)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      default: return '<svg width="8" height="8" viewBox="0 0 8 8" aria-label="Error"><polygon points="4,0.5 7.5,7.5 0.5,7.5" fill="var(--st-err)"/></svg>';
+    }
+  }
+  function metaOf(s) {
+    if (s.status === 'waiting_input') return { cls: 'needs', text: 'Needs input' };
+    if (s.status === 'active') return { cls: 'working', text: 'Working' };
+    if (s.status === 'completed') return { cls: '', text: 'Done' };
+    return { cls: '', text: s.ago };
+  }
+  function rowHTML(id) {
+    const s = state.sessions[id];
+    const m = metaOf(s);
+    return `<div class="row-shell" data-id="${id}"><button type="button" class="row" aria-current="${id === state.activeId}">` +
+      `<span class="glyph${s.status === 'active' ? ' pulse' : ''}">${glyph(s.status)}</span>` +
+      `<span class="r-title">${esc(s.title)}</span>` +
+      `<span class="r-meta only-after ${m.cls}">${m.text}</span></button></div>`;
+  }
+  function groupHTML(p) {
+    const collapsed = !!state.collapsed[p.id];
+    return `<section class="group${collapsed ? ' collapsed' : ''}" data-pid="${p.id}">` +
+      `<button type="button" class="g-head" aria-expanded="${!collapsed}">${icon('chevron', 14, 'chev')}` +
+      `<span class="only-before" style="display:contents">${icon('folder', 14, 'folder')}</span>` +
+      `<span class="g-title">${esc(p.name)}<span class="only-before"> (<span class="n">${p.sessions.length}</span>)</span></span>` +
+      `<span class="g-count only-after">${p.sessions.length}</span></button>` +
+      `<div class="g-body"${collapsed ? ' hidden' : ''}>${p.sessions.map(rowHTML).join('')}</div></section>`;
+  }
+  function renderList() {
+    list.innerHTML = state.projects.map(groupHTML).join('');
+    placePinsSoon();
+  }
+
+  const animOn = () => mode === 'after' && !reduce.matches;
+  const EASE_OUT = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+
+  function groupEl(pid) { return list.querySelector(`.group[data-pid="${pid}"]`); }
+  function rowEl(id) { return list.querySelector(`.row-shell[data-id="${id}"]`); }
+  function updateCount(pid) {
+    const p = state.projects.find((x) => x.id === pid);
+    const g = groupEl(pid);
+    if (!g) return;
+    g.querySelector('.n').textContent = p.sessions.length;
+    g.querySelector('.g-count').textContent = p.sessions.length;
+  }
+
+  function setStatus(id, status) {
+    state.sessions[id].status = status;
+    const shell = rowEl(id);
+    if (!shell) return;
+    const g = shell.querySelector('.glyph');
+    const meta = shell.querySelector('.r-meta');
+    const m = metaOf(state.sessions[id]);
+    g.innerHTML = glyph(status);
+    g.classList.toggle('pulse', status === 'active');
+    meta.className = `r-meta only-after ${m.cls}`;
+    meta.textContent = m.text;
+    if (animOn()) {
+      g.animate([{ transform: 'scale(0.3)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], { duration: 200, easing: EASE_OUT });
+      meta.animate([{ opacity: 0, transform: 'translateX(4px)' }, { opacity: 1, transform: 'none' }], { duration: 160, easing: EASE_OUT });
+    }
+  }
+
+  function insertSession(pid, id, data) {
+    state.sessions[id] = data;
+    const p = state.projects.find((x) => x.id === pid);
+    p.sessions.unshift(id);
+    const body = groupEl(pid).querySelector('.g-body');
+    body.insertAdjacentHTML('afterbegin', rowHTML(id));
+    updateCount(pid);
+    const el = rowEl(id);
+    if (animOn()) {
+      const h = el.offsetHeight;
+      el.animate([{ height: '0px', opacity: 0 }, { height: `${h}px`, opacity: 1 }], { duration: 170, easing: EASE_OUT });
+    }
+  }
+
+  function removeSession(id) {
+    const p = state.projects.find((x) => x.sessions.includes(id));
+    if (!p) return;
+    p.sessions = p.sessions.filter((x) => x !== id);
+    delete state.sessions[id];
+    updateCount(p.id);
+    const el = rowEl(id);
+    if (!el) return;
+    if (animOn()) {
+      const h = el.offsetHeight;
+      el.style.pointerEvents = 'none';
+      el.animate([{ height: `${h}px`, opacity: 1 }, { height: '0px', opacity: 0 }], { duration: 150, easing: 'cubic-bezier(0.4, 0, 1, 1)' })
+        .onfinish = () => { el.remove(); placePinsSoon(); };
+    } else {
+      el.remove();
+    }
+  }
+
+  function setCollapsed(pid, collapsed) {
+    state.collapsed[pid] = collapsed;
+    const g = groupEl(pid);
+    const head = g.querySelector('.g-head');
+    const body = g.querySelector('.g-body');
+    head.setAttribute('aria-expanded', String(!collapsed));
+    g.classList.toggle('collapsed', collapsed);
+    const token = Symbol('collapse');
+    body._token = token;
+    body.getAnimations().forEach((a) => a.cancel());
+    if (reduce.matches) { body.hidden = collapsed; placePinsSoon(); return; }
+
+    if (mode === 'after') {
+      // Measured height, 170ms ease-out: the list moves exactly as far as the content.
+      if (collapsed) {
+        const h = body.scrollHeight;
+        body.animate([{ height: `${h}px`, opacity: 1 }, { height: '0px', opacity: 0.2 }], { duration: 170, easing: EASE_OUT })
+          .onfinish = () => { if (body._token === token) { body.hidden = true; placePinsSoon(); } };
+      } else {
+        body.hidden = false;
+        const h = body.scrollHeight;
+        body.animate([{ height: '0px', opacity: 0.2 }, { height: `${h}px`, opacity: 1 }], { duration: 170, easing: EASE_OUT });
+      }
+    } else {
+      // Fleet today: <Transition name="collapse"> animating max-height 0 ↔ 1000px over 0.25s ease.
+      const open = { maxHeight: '1000px', opacity: 1, transform: 'translateY(0)' };
+      const shut = { maxHeight: '0px', opacity: 0, transform: 'translateY(-8px)' };
+      if (collapsed) {
+        body.animate([open, shut], { duration: 250, easing: 'ease' })
+          .onfinish = () => { if (body._token === token) { body.hidden = true; placePinsSoon(); } };
+      } else {
+        body.hidden = false;
+        body.animate([shut, open], { duration: 250, easing: 'ease' });
+      }
+    }
+    placePinsSoon();
+  }
+
+  function select(id) {
+    state.activeId = id;
+    list.querySelectorAll('.row').forEach((r) => {
+      r.setAttribute('aria-current', String(r.parentElement.dataset.id === id));
+    });
+    const title = state.sessions[id]?.title ?? '';
+    $('#c-title').textContent = title;
+    $('#rp-title').textContent = title;
+    placePinsSoon();
+  }
+
+  list.addEventListener('click', (e) => {
+    const head = e.target.closest('.g-head');
+    if (head) {
+      const pid = head.closest('.group').dataset.pid;
+      setCollapsed(pid, !state.collapsed[pid]);
+      return;
+    }
+    const row = e.target.closest('.row');
+    if (row) select(row.parentElement.dataset.id);
+  });
+
+  $('#mock-filter').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    list.querySelectorAll('.row-shell').forEach((el) => {
+      const s = state.sessions[el.dataset.id];
+      el.hidden = !!q && !s.title.toLowerCase().includes(q);
+    });
+    placePinsSoon();
+  });
+
+  /* ── conversation append ── */
+  let appended = null;
+  function appendMessage() {
+    const html = `<div class="msg assistant" data-appended>
+      <div class="msg-icon">${icon('bot', 16)}</div>
+      <div class="msg-content"><div class="msg-body">
+        <p>Registering a third kind so the registry is exercised by something other than files and diffs.</p>
+        <div class="tools"><div class="tool">${icon('filetext', 14)}<span class="t-label">Write</span><span class="t-detail">client/src/lib/surface-registry.ts</span><span class="t-status"><span class="only-before">Done</span><span class="only-after"><span class="plus">+41</span></span></span></div></div>
+      </div></div>
+      <span class="msg-time">just now</span></div>`;
+    stream.insertAdjacentHTML('beforeend', html);
+    appended = stream.lastElementChild;
+    if (animOn()) {
+      appended.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 180, easing: EASE_OUT });
+      stream.scrollTo({ top: stream.scrollHeight, behavior: 'smooth' });
+    } else {
+      stream.scrollTop = stream.scrollHeight;
+    }
+  }
+
+  /* ── timeline ── */
+  let timers = [];
+  const clearTimers = () => { timers.forEach(clearTimeout); timers = []; };
+  const at = (ms, fn) => timers.push(setTimeout(() => { fn(); placePinsSoon(); }, ms));
+
+  function resetMock() {
+    clearTimers();
+    state = structuredClone(INITIAL);
+    $('#mock-filter').value = '';
+    if (appended) { appended.remove(); appended = null; }
+    stream.scrollTop = 0;
+    select(state.activeId);
+    renderList();
+  }
+
+  const playBtn = $('#play');
+  const playLabel = $('#play-label');
+  playBtn.addEventListener('click', () => {
+    resetMock();
+    playBtn.disabled = true;
+    playLabel.textContent = 'Playing…';
+    setCaption(mode === 'after' ? CAP.playAfter : CAP.playBefore);
+    at(500, () => setStatus('s2', 'active'));
+    at(1400, () => insertSession('wf', 's10', { title: 'Surface kind: terminal', status: 'active', ago: 'now' }));
+    at(2400, () => removeSession('s4'));
+    at(3300, () => setCollapsed('nc', true));
+    at(4500, () => setCollapsed('nc', false));
+    at(5500, () => setStatus('s5', 'waiting_input'));
+    at(6200, () => appendMessage());
+    at(6900, () => setStatus('s3', 'active'));
+    at(7600, () => { playBtn.disabled = false; playLabel.textContent = 'Play again'; });
+  });
+
+  $('#reload').addEventListener('click', () => {
+    clearTimers();
+    playBtn.disabled = false;
+    playLabel.textContent = 'Play activity';
+    if (mode === 'before') {
+      setCaption(CAP.reloadBefore);
+      state = structuredClone(INITIAL);
+      list.innerHTML = `<div class="loading-state">${icon('loader', 16, 'spin')}<p class="loading-title">Loading sessions</p><p class="loading-copy">Fetching the latest sessions and projects.</p></div>`;
+      placePinsSoon();
+      at(1200, () => { select(state.activeId); renderList(); });
+    } else {
+      setCaption(CAP.reloadAfter);
+      resetMock();
+    }
+  });
+
+  /* ── mode, font, pins ── */
+  const CAP = {
+    before: 'Current Fleet, drawn from main.css and the component styles. Press Play activity, then flip to the feel pass and play it again.',
+    after: 'The same screen after the token, motion and row changes. The right-panel tabs preview the surface work (step 1).',
+    playBefore: 'Current: rows pop in and out in a single frame. Watch nucode collapse: the 1000px max-height transition hangs, then snaps shut.',
+    playAfter: 'Feel pass: rows open and close at their real height in about 150ms, neighbours slide, and status changes cross-fade.',
+    reloadBefore: 'Current: the list is thrown away and refetched behind "Loading sessions". It also re-polls every 15 seconds.',
+    reloadAfter: 'Feel pass: the cached list stays on screen and the server pushes changes. This part needs step 2 (push updates), not just CSS.',
+    fontSystem: 'System font: -apple-system / Segoe UI / system-ui. On Linux this is your desktop font, on macOS SF Pro.',
+    fontInter: 'Inter, the face Fleet bundles today. Only the sizes and weights changed.'
+  };
+  function setCaption(text) {
+    $('#caption-text').textContent = text;
+    $('#caption').dataset.mode = mode;
+  }
+
+  function setMode(next) {
+    if (next === mode) return;
+    mode = next;
+    frame.classList.toggle('before', mode === 'before');
+    frame.classList.toggle('after', mode === 'after');
+    $('#v-before').setAttribute('aria-pressed', String(mode === 'before'));
+    $('#v-after').setAttribute('aria-pressed', String(mode === 'after'));
+    $('#font-seg').setAttribute('aria-disabled', String(mode === 'before'));
+    $('#f-inter').disabled = mode === 'before';
+    $('#f-system').disabled = mode === 'before';
+    list.querySelectorAll('.g-body').forEach((b) => b.getAnimations().forEach((a) => a.finish()));
+    setCaption(CAP[mode]);
+    placePinsSoon();
+  }
+  $('#v-before').addEventListener('click', () => setMode('before'));
+  $('#v-after').addEventListener('click', () => setMode('after'));
+  document.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() !== 'b' || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.target.closest('input, textarea, [contenteditable]')) return;
+    setMode(mode === 'before' ? 'after' : 'before');
+  });
+
+  function setFont(sys) {
+    frame.classList.toggle('sysfont', sys);
+    $('#f-inter').setAttribute('aria-pressed', String(!sys));
+    $('#f-system').setAttribute('aria-pressed', String(sys));
+    setCaption(sys ? CAP.fontSystem : CAP.fontInter);
+    placePinsSoon();
+  }
+  $('#f-inter').addEventListener('click', () => setFont(false));
+  $('#f-system').addEventListener('click', () => setFont(true));
+
+  const PINS = [
+    { n: 1, sel: '.row[aria-current="true"]', at: 'gut' },
+    { n: 2, sel: '.convo', at: 'tl' },
+    { n: 3, sel: '.group[data-pid="nc"] .g-head', at: 'gut' },
+    { n: 4, sel: '.group[data-pid="wf"] .g-head', at: 'gut' },
+    { n: 5, sel: '.s-search', at: 'gut' },
+    { n: 6, sel: '#tools-1', at: 'tr' },
+    { n: 7, sel: '.rp', at: 'tl' },
+    { n: 8, sel: '.row-shell[data-id="s3"] .glyph', at: 'lc' }
+  ];
+  pinsLayer.innerHTML = PINS.map((p) => `<button type="button" class="pin" data-pin="${p.n}" aria-label="Note ${p.n}">${p.n}</button>`).join('');
+
+  function placePins() {
+    const fr = frame.getBoundingClientRect();
+    // Pins for the session list share one gutter on the list's right edge so they never cover row text.
+    const gutter = (frame.querySelector('.sessions').getBoundingClientRect().right - fr.left) / scale - 10;
+    PINS.forEach((p) => {
+      const pin = pinsLayer.querySelector(`[data-pin="${p.n}"]`);
+      const el = frame.querySelector(p.sel);
+      const r = el && el.getBoundingClientRect();
+      if (!r || (r.width === 0 && r.height === 0)) { pin.hidden = true; return; }
+      pin.hidden = false;
+      const L = (r.left - fr.left) / scale;
+      const T = (r.top - fr.top) / scale;
+      const W = r.width / scale;
+      const H = r.height / scale;
+      let x; let y;
+      if (p.at === 'gut') { x = gutter; y = T + H / 2 - 10; }
+      else if (p.at === 'tl') { x = L - 10; y = T - 8; }
+      else if (p.at === 'tr') { x = L + W - 12; y = T - 10; }
+      else { x = L - 22; y = T + H / 2 - 10; }
+      pin.style.left = `${x}px`;
+      pin.style.top = `${y}px`;
+    });
+  }
+  let pinRaf = 0;
+  function placePinsSoon() {
+    cancelAnimationFrame(pinRaf);
+    pinRaf = requestAnimationFrame(() => { placePins(); setTimeout(placePins, 280); });
+  }
+  stream.addEventListener('scroll', placePinsSoon, { passive: true });
+  list.addEventListener('scroll', placePinsSoon, { passive: true });
+
+  $('#pins-toggle').addEventListener('change', (e) => frame.classList.toggle('no-pins', !e.target.checked));
+
+  function highlight(n, on) {
+    const p = PINS.find((x) => x.n === Number(n));
+    const pin = pinsLayer.querySelector(`[data-pin="${n}"]`);
+    pin?.classList.toggle('on', on);
+    const el = frame.querySelector(p.sel);
+    const target = el && (el.classList.contains('glyph') ? el.closest('.row') : el);
+    target?.classList.toggle('hl', on);
+  }
+  document.querySelectorAll('.note').forEach((note) => {
+    const n = note.dataset.pin;
+    note.addEventListener('mouseenter', () => highlight(n, true));
+    note.addEventListener('mouseleave', () => highlight(n, false));
+    note.addEventListener('focus', () => highlight(n, true));
+    note.addEventListener('blur', () => highlight(n, false));
+  });
+  pinsLayer.addEventListener('click', (e) => {
+    const pin = e.target.closest('.pin');
+    if (!pin) return;
+    const note = document.querySelector(`.note[data-pin="${pin.dataset.pin}"]`);
+    note.scrollIntoView({ behavior: reduce.matches ? 'auto' : 'smooth', block: 'center' });
+    note.classList.add('flash');
+    setTimeout(() => note.classList.remove('flash'), 1400);
+  });
+
+  /* ── scale the 1280px frame to the stage ── */
+  function fit() {
+    scale = Math.min(1, stage.clientWidth / 1280);
+    frame.style.transform = `scale(${scale})`;
+    placePinsSoon();
+  }
+  new ResizeObserver(fit).observe(stage);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(placePinsSoon);
+
+  setCaption(CAP.before);
+  $('#f-inter').disabled = true;
+  $('#f-system').disabled = true;
+  renderList();
+  fit();
+  if (location.hash === '#after') setMode('after');
+})();
+</script>

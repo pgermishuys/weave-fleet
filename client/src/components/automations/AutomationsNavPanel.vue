@@ -99,7 +99,7 @@ function handleCreate(): void {
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  background: var(--panel-bg);
+  background: transparent;
 }
 
 .panel-header-row {
