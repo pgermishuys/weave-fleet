@@ -214,13 +214,13 @@ const isGutterDragging = ref(false);
 
 function onGutterPointerDown(e: PointerEvent): void {
   isGutterDragging.value = true;
-  const startX = e.clientX;
+  const startY = e.clientY;
   const startWidth = contentPanelContext.filesContext.value.filesTreeWidth;
-  document.body.style.cursor = "col-resize";
+  document.body.style.cursor = "row-resize";
   document.body.style.userSelect = "none";
 
   const onMove = (ev: PointerEvent) => {
-    const delta = ev.clientX - startX;
+    const delta = ev.clientY - startY;
     const nextWidth = Math.max(TREE_WIDTH_MIN, Math.min(TREE_WIDTH_MAX, startWidth + delta));
     contentPanelContext.updateFilesContext({ filesTreeWidth: nextWidth });
   };
@@ -240,10 +240,10 @@ function onGutterPointerDown(e: PointerEvent): void {
 function onGutterKeydown(e: KeyboardEvent): void {
   const current = contentPanelContext.filesContext.value.filesTreeWidth;
 
-  if (e.key === "ArrowLeft") {
+  if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
     e.preventDefault();
     contentPanelContext.updateFilesContext({ filesTreeWidth: Math.max(TREE_WIDTH_MIN, current - TREE_WIDTH_STEP) });
-  } else if (e.key === "ArrowRight") {
+  } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
     e.preventDefault();
     contentPanelContext.updateFilesContext({ filesTreeWidth: Math.min(TREE_WIDTH_MAX, current + TREE_WIDTH_STEP) });
   } else if (e.key === "Home") {
@@ -269,32 +269,39 @@ function onGutterKeydown(e: KeyboardEvent): void {
     :style="{ width: `${props.width}px`, minWidth: '280px' }"
     aria-label="Right panel"
   >
-    <Button
-      variant="toolbar-icon"
-      size="toolbar"
-      class="right-panel__collapse"
-      aria-label="Collapse right panel"
-      title="Collapse right panel"
-      @click="handleCollapse"
-    >
-      <PanelRightClose />
-    </Button>
-
-    <SessionMetadataHeader :session="selectedSession" />
-
     <div class="right-content">
       <div
         class="right-content__split"
         :style="{ '--files-tree-width': `${contentPanelContext.filesContext.value.filesTreeWidth}px` }"
       >
         <div class="right-content__left">
-          <FileBrowserPanel :session-id="activeSessionId ?? ''" />
+          <FileBrowserPanel :session-id="activeSessionId ?? ''">
+            <template #header-actions>
+              <Button
+                variant="toolbar-icon"
+                size="toolbar"
+                class="right-panel__collapse"
+                aria-label="Collapse right panel"
+                title="Collapse right panel"
+                @click="handleCollapse"
+              >
+                <PanelRightClose />
+              </Button>
+            </template>
+            <template #below-header>
+              <SessionMetadataHeader
+                class="right-panel__meta"
+                :session="selectedSession"
+              />
+            </template>
+          </FileBrowserPanel>
         </div>
 
+        <!-- Files list sits above the viewer; the gutter resizes the list's height. -->
         <div
           class="right-content__gutter"
           role="separator"
-          aria-orientation="vertical"
+          aria-orientation="horizontal"
           aria-label="Resize files panel"
           :aria-valuenow="contentPanelContext.filesContext.value.filesTreeWidth"
           :aria-valuemin="TREE_WIDTH_MIN"
@@ -434,11 +441,12 @@ function onGutterKeydown(e: KeyboardEvent): void {
   overflow: hidden;
 }
 
-.right-panel__collapse {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 2;
+.right-panel__meta:empty {
+  display: none;
+}
+
+.right-panel__meta {
+  padding: 0 12px;
 }
 
 .right-content {
@@ -453,21 +461,26 @@ function onGutterKeydown(e: KeyboardEvent): void {
   flex: 1;
   min-height: 0;
   display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
+/* Stacked: the files list (tabs, search, tree) on top, the viewer below.
+   The persisted files-tree size is used as the list's height. */
 .right-content__left {
-  width: var(--files-tree-width, 260px);
+  height: var(--files-tree-width, 260px);
+  max-height: 70%;
   flex: 0 0 auto;
   min-height: 0;
   overflow-y: auto;
-  border-right: 1px solid var(--border);
 }
 
 .right-content__gutter {
-  flex: 0 0 4px;
-  width: 4px;
-  cursor: col-resize;
+  flex: 0 0 5px;
+  height: 5px;
+  margin: 0 12px;
+  border-top: 1px solid var(--border);
+  cursor: row-resize;
   background: transparent;
   transition: background var(--transition);
 }
@@ -493,7 +506,7 @@ function onGutterKeydown(e: KeyboardEvent): void {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  padding: 10px;
+  padding: 4px 12px 12px;
 }
 
 .right-content__empty {
@@ -536,7 +549,7 @@ function onGutterKeydown(e: KeyboardEvent): void {
   text-align: left;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--radius-btn);
   cursor: pointer;
   font-size: 12px;
   color: var(--text);
@@ -544,7 +557,7 @@ function onGutterKeydown(e: KeyboardEvent): void {
 }
 
 .session-artifacts__item:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 
 .session-artifacts__item--selected {
@@ -555,7 +568,7 @@ function onGutterKeydown(e: KeyboardEvent): void {
 .visual-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   height: 100%;
 }
 
@@ -564,8 +577,7 @@ function onGutterKeydown(e: KeyboardEvent): void {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
+  min-height: 32px;
 }
 
 .visual-panel__file-info {
@@ -577,17 +589,14 @@ function onGutterKeydown(e: KeyboardEvent): void {
 }
 
 .visual-panel__file-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-size: 12px;
   color: var(--muted);
   flex-shrink: 0;
 }
 
 .visual-panel__file-path {
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--font-mono-stack);
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -605,11 +614,11 @@ function onGutterKeydown(e: KeyboardEvent): void {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -623,8 +632,7 @@ function onGutterKeydown(e: KeyboardEvent): void {
 }
 
 .visual-panel__close:hover {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  border-color: color-mix(in srgb, var(--text) 25%, var(--border));
+  background: color-mix(in srgb, var(--text) 6%, transparent);
   color: var(--text);
 }
 
@@ -649,9 +657,10 @@ function onGutterKeydown(e: KeyboardEvent): void {
 .visual-panel__toggle {
   display: flex;
   align-items: center;
-  border: 1px solid var(--border);
-  border-radius: 0;
-  overflow: hidden;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-btn);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 
 .visual-panel__toggle-btn {
@@ -659,17 +668,14 @@ function onGutterKeydown(e: KeyboardEvent): void {
   align-items: center;
   justify-content: center;
   width: 26px;
-  height: 24px;
+  height: 22px;
   padding: 0;
   border: none;
+  border-radius: calc(var(--radius-btn) - 2px);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
   transition: background var(--transition), color var(--transition);
-}
-
-.visual-panel__toggle-btn:not(:last-child) {
-  border-right: 1px solid var(--border);
 }
 
 .visual-panel__toggle-btn--active {

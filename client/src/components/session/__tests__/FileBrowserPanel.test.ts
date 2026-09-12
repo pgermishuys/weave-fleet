@@ -40,6 +40,7 @@ const mockContentPanel = {
   }),
   updateFilesContext: vi.fn(),
   selectFile: vi.fn(),
+  setViewMode: vi.fn(),
 };
 
 vi.mock("@/composables/use-file-browser", () => ({
@@ -78,8 +79,8 @@ describe("FileBrowserPanel", () => {
     };
   });
 
-  describe("All/Changed filter toggle", () => {
-    it("displays_all_filter_as_active_by_default", async () => {
+  describe("Changes/Files tabs", () => {
+    it("displays_files_tab_as_active_by_default", async () => {
       const wrapper = mount(FileBrowserPanel, {
         props: { sessionId: "session-1" },
         global: {
@@ -90,12 +91,12 @@ describe("FileBrowserPanel", () => {
       });
       await flushPromises();
 
-      const allButton = wrapper.find('[aria-checked="true"]');
-      expect(allButton.text()).toBe("All");
-      expect(allButton.classes()).toContain("file-browser-panel__filter-option--active");
+      const filesTab = wrapper.find('[role="tab"][aria-selected="true"]');
+      expect(filesTab.text()).toBe("Files");
+      expect(filesTab.classes()).toContain("file-browser-panel__filter-option--active");
     });
 
-    it("displays_changed_count_in_changed_filter_button", async () => {
+    it("displays_changed_count_in_changes_tab", async () => {
       mockDiffs.diffs.value = [
         { file: "src/a.ts", status: "modified", additions: 1, deletions: 0 },
         { file: "src/b.ts", status: "added", additions: 5, deletions: 0 },
@@ -111,11 +112,12 @@ describe("FileBrowserPanel", () => {
       });
       await flushPromises();
 
-      const changedButton = wrapper.findAll(".file-browser-panel__filter-option")[1];
-      expect(changedButton?.text()).toBe("Changed (2)");
+      const changesTab = wrapper.findAll(".file-browser-panel__filter-option")[0];
+      expect(changesTab?.text()).toBe("Changes 2");
+      expect(changesTab?.get(".file-browser-panel__count").text()).toBe("2");
     });
 
-    it("switches_to_changed_filter_on_click", async () => {
+    it("switches_to_changes_tab_on_click", async () => {
       const wrapper = mount(FileBrowserPanel, {
         props: { sessionId: "session-1" },
         global: {
@@ -126,15 +128,15 @@ describe("FileBrowserPanel", () => {
       });
       await flushPromises();
 
-      const changedButton = wrapper.findAll(".file-browser-panel__filter-option")[1];
-      await changedButton?.trigger("click");
+      const changesTab = wrapper.findAll(".file-browser-panel__filter-option")[0];
+      await changesTab?.trigger("click");
 
       expect(mockContentPanel.updateFilesContext).toHaveBeenCalledWith({
         allChangedFilter: "changed",
       });
     });
 
-    it("filters_tree_to_show_only_changed_files_and_ancestors", async () => {
+    it("lists_changed_files_flat_with_line_counts_in_changes_tab", async () => {
       mockFileBrowser.rootEntries.value = [
         { relativePath: "src", isDirectory: true, name: "src" },
         { relativePath: "docs", isDirectory: true, name: "docs" },
@@ -142,7 +144,8 @@ describe("FileBrowserPanel", () => {
       ] as BrowseDirectoryEntry[];
 
       mockDiffs.diffs.value = [
-        { file: "src/components/App.vue", status: "modified", additions: 1, deletions: 0 },
+        { file: "src/components/App.vue", status: "modified", additions: 3, deletions: 1 },
+        { file: "README.md", status: "added", additions: 5, deletions: 0 },
       ] as FileDiffItem[];
 
       mockContentPanel.filesContext.value.allChangedFilter = "changed";
@@ -157,10 +160,37 @@ describe("FileBrowserPanel", () => {
       });
       await flushPromises();
 
-      // Only "src" directory should be visible (ancestor of changed file)
-      const treeNodes = wrapper.findAllComponents({ name: "FileBrowserTreeNode" });
-      expect(treeNodes).toHaveLength(1);
-      expect(treeNodes[0]?.props("entry").relativePath).toBe("src");
+      // The Changes tab lists changed files (sorted by path) instead of the tree
+      expect(wrapper.findAllComponents({ name: "FileBrowserTreeNode" })).toHaveLength(0);
+      const rows = wrapper.findAll(".file-browser-panel__change");
+      expect(rows).toHaveLength(2);
+      expect(rows[0]?.get(".file-browser-panel__change-name").text()).toBe("README.md");
+      expect(rows[1]?.get(".file-browser-panel__change-name").text()).toBe("App.vue");
+      expect(rows[1]?.get(".file-browser-panel__change-dir").text()).toBe("src/components");
+      expect(rows[1]?.get(".file-browser-panel__change-stats").text()).toBe("+3−1");
+    });
+
+    it("opens_the_diff_when_a_changed_file_is_clicked", async () => {
+      mockDiffs.diffs.value = [
+        { file: "src/a.ts", status: "modified", additions: 1, deletions: 1 },
+      ] as FileDiffItem[];
+      mockContentPanel.filesContext.value.allChangedFilter = "changed";
+
+      const wrapper = mount(FileBrowserPanel, {
+        props: { sessionId: "session-1" },
+        global: {
+          provide: {
+            sharedDiffs: mockDiffs,
+          },
+        },
+      });
+      await flushPromises();
+
+      await wrapper.get(".file-browser-panel__change").trigger("click");
+
+      expect(mockContentPanel.selectFile).toHaveBeenCalledWith("src/a.ts");
+      expect(mockContentPanel.setViewMode).toHaveBeenCalledWith("diff");
+      expect(mockFileBrowser.selectFile).toHaveBeenCalledWith("src/a.ts");
     });
 
     it("shows_all_files_when_all_filter_is_active", async () => {
