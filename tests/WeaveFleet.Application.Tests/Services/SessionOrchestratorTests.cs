@@ -976,9 +976,9 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     [Fact]
     public async Task create_session_uses_default_harness_preference_when_no_type_specified()
     {
-        var runtime = _builder.RegisterHarness("nucode", "NuCode");
+        var runtime = _builder.RegisterHarness("pi", "Pi");
         runtime.DefaultSession = _defaultSession;
-        _builder.UserPreferenceRepository.Seed("defaultHarnessType", "nucode");
+        _builder.UserPreferenceRepository.Seed("defaultHarnessType", "pi");
         using var tempDirectory = new TempDirectory();
 
         var result = await _sut.CreateSessionAsync(new CreateSessionRequest
@@ -987,7 +987,7 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         });
 
         result.IsSuccess.ShouldBeTrue();
-        _builder.SessionRepository.InsertedSessions.ShouldContain(s => s.HarnessType == "nucode");
+        _builder.SessionRepository.InsertedSessions.ShouldContain(s => s.HarnessType == "pi");
     }
 
     [Fact]

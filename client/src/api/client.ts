@@ -129,11 +129,7 @@ export type UpdateProjectRequest = components["schemas"]["UpdateProjectRequest"]
 export type ReorderProjectRequest = components["schemas"]["ReorderProjectRequest"];
 export type AddWorkspaceRootRequest = components["schemas"]["AddWorkspaceRootRequest"];
 export type UpdateSessionRetentionRequest = components["schemas"]["UpdateSessionRetentionRequest"];
-export type NuCodeStoreCredentialsRequest = components["schemas"]["NuCodeStoreCredentialsRequest"];
-export type NuCodeDevicePollRequest = components["schemas"]["NuCodeDevicePollRequest"];
 export type CredentialSummary = components["schemas"]["CredentialResponse"];
-export type NuCodeCredentialField = components["schemas"]["NuCodeCredentialFieldResponse"];
-export type NuCodeProvider = components["schemas"]["NuCodeProviderResponse"];
 export type FleetSession = Omit<components["schemas"]["SessionFleetInfo"], "tags"> & {
   tags: readonly string[];
 };
@@ -456,10 +452,6 @@ export interface PollResponse {
   message?: string;
 }
 
-export interface NuCodeDeviceFlowInitiatedResponse {
-  instructions: string;
-}
-
 // ─── Type Overrides for Numeric Fields ─────────────────────────────────────
 // The OpenAPI generator produces `number | string` for numeric fields, but the
 // API actually returns numbers. These overrides ensure type safety in the frontend.
@@ -554,32 +546,12 @@ export interface FleetSummaryResponse {
   queuedTasks: number;
 }
 
-export interface NuCodeTestConnectionResponse {
-  success: boolean;
-  error?: string;
-  latencyMs: number;
-}
-
 export interface StoreCredentialRequest {
   label: string;
   namespace: string;
   kind: string;
   value: string;
   metadata: string | null;
-}
-
-export interface NuCodeDeviceCodeResponse {
-  deviceCode: string;
-  userCode: string;
-  verificationUri: string;
-  expiresIn: number;
-  interval: number;
-}
-
-export interface NuCodeDevicePollResponse {
-  status: string;
-  interval?: number | null;
-  message?: string | null;
 }
 
 export interface ProjectResponse {

@@ -339,18 +339,6 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.DTOs.SmartLinkDto>))]
 [JsonSerializable(typeof(List<WeaveFleet.Application.DTOs.SmartLinkDto>))]
 [JsonSerializable(typeof(WeaveFleet.Application.DTOs.AddSmartLinkRequest))]
-// NuCode providers
-[JsonSerializable(typeof(NuCodeTestConnectionResponse))]
-[JsonSerializable(typeof(List<NuCodeProviderResponse>))]
-[JsonSerializable(typeof(NuCodeProviderDetailResponse))]
-[JsonSerializable(typeof(NuCodeCredentialFieldResponse))]
-[JsonSerializable(typeof(NuCodeStoredFieldResponse))]
-[JsonSerializable(typeof(NuCodeStoreCredentialsRequest))]
-[JsonSerializable(typeof(NuCodeProviderConfigRequest))]
-[JsonSerializable(typeof(NuCodeDeviceFlowInitiatedResponse))]
-[JsonSerializable(typeof(NuCodeDeviceCodeResponse))]
-[JsonSerializable(typeof(NuCodeDevicePollRequest))]
-[JsonSerializable(typeof(NuCodeDevicePollResponse))]
 [JsonSerializable(typeof(Hubs.ClientEvent))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 internal sealed partial class ApiJsonContext : JsonSerializerContext

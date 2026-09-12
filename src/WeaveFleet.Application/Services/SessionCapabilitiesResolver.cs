@@ -28,9 +28,8 @@ public sealed class SessionCapabilitiesResolver(InstanceTracker instanceTracker,
         var normalizedRetentionStatus = Normalize(retentionStatus, "active");
         var effectiveLifecycleStatus = GetEffectiveLifecycleStatus(lifecycleStatus, isLive);
         var isArchived = string.Equals(normalizedRetentionStatus, "archived", StringComparison.Ordinal);
-        // Runtime mode is the source of truth for lazy activation. NuCode currently persists
-        // sessions as manual, so only the explicit automatic value suppresses Resume in favor
-        // of prompt-triggered activation.
+        // Runtime mode is the source of truth for lazy activation. Only the explicit automatic
+        // value suppresses Resume in favor of prompt-triggered activation.
         var isAutomatic = string.Equals(normalizedRuntimeMode, "automatic", StringComparison.Ordinal);
         var isRunning = string.Equals(effectiveLifecycleStatus, "running", StringComparison.Ordinal);
         var isBusy = string.Equals(activityStatus, "busy", StringComparison.Ordinal);

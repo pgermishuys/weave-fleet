@@ -12,7 +12,6 @@ type SettingsSectionId =
   | "tools"
   | "features"
   | "harnesses"
-  | "nucode"
   | "plugins"
   | "system";
 

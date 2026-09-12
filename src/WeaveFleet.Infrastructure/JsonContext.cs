@@ -6,7 +6,6 @@ using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Skills;
 using WeaveFleet.Domain.Tools;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
-using WeaveFleet.Infrastructure.Harnesses.NuCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.Tools;
@@ -189,58 +188,6 @@ internal sealed partial class OpenCodeJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(ClaudeCodeStreamMessage))]
 internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
 {
-}
-
-/// <summary>CamelCase + WhenWritingNull options for NuCode harness event payloads.</summary>
-[JsonSourceGenerationOptions(
-    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
-    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
-[JsonSerializable(typeof(NuCodeMessageCreatedPayload))]
-[JsonSerializable(typeof(NuCodeMessageUpdatedPayload))]
-[JsonSerializable(typeof(NuCodeSessionUpdatedPayload))]
-[JsonSerializable(typeof(NuCodePartUpdatedPayload))]
-[JsonSerializable(typeof(NuCodePartDeltaPayload))]
-[JsonSerializable(typeof(NuCodeStatusPayload))]
-[JsonSerializable(typeof(Dictionary<string, object?>))]
-[JsonSerializable(typeof(string))]
-internal sealed partial class NuCodeJsonContext : JsonSerializerContext
-{
-}
-
-internal sealed record NuCodeMessageCreatedPayload
-{
-    [JsonPropertyName("messageId")] public required string MessageId { get; init; }
-    [JsonPropertyName("role")] public required string Role { get; init; }
-    [JsonPropertyName("content")] public required string Content { get; init; }
-}
-
-internal sealed record NuCodeMessageUpdatedPayload
-{
-    [JsonPropertyName("messageId")] public required string MessageId { get; init; }
-}
-
-internal sealed record NuCodeSessionUpdatedPayload
-{
-    [JsonPropertyName("title")] public required string Title { get; init; }
-}
-
-internal sealed record NuCodePartUpdatedPayload
-{
-    [JsonPropertyName("messageId")] public required string MessageId { get; init; }
-    [JsonPropertyName("partId")] public required string PartId { get; init; }
-}
-
-internal sealed record NuCodePartDeltaPayload
-{
-    [JsonPropertyName("messageID")] public required string MessageId { get; init; }
-    [JsonPropertyName("partID")] public required string PartId { get; init; }
-    [JsonPropertyName("field")] public required string Field { get; init; }
-    [JsonPropertyName("delta")] public required string Delta { get; init; }
-}
-
-internal sealed record NuCodeStatusPayload
-{
-    [JsonPropertyName("activityStatus")] public required string ActivityStatus { get; init; }
 }
 
 /// <summary>CamelCase + WhenWritingNull options for Infrastructure-specific payloads.</summary>
