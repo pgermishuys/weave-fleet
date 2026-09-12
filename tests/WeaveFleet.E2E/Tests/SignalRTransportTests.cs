@@ -18,7 +18,8 @@ public sealed class SignalRTransportTests : E2ETestBase,
         : base(factory, playwright) { }
 
     /// <summary>
-    /// Verifies that SignalR transport recovers full assistant response when disconnected during streaming.
+    /// Verifies that the full assistant response arrives after the connection drops mid-stream
+    /// and reconnects, with the user prompt shown once.
     /// </summary>
     [Fact]
     public async Task SignalR_DisconnectDuringStreaming_RecoversFullResponse()
@@ -142,14 +143,13 @@ public sealed class SignalRTransportTests : E2ETestBase,
                 1,
                 new LocatorAssertionsToHaveCountOptions { Timeout = 15_000 });
 
-            // Suspend connection during streaming
+            // Drop the connection mid-stream. The UI doesn't show a dropped connection,
+            // so check the socket itself.
             await Page.EvaluateAsync("window.__WEAVE_SOCKET_TEST_API.suspend()").ConfigureAwait(false);
-
-            var disconnectedIndicator = Page.GetByTestId("session-status-indicator");
-            await Assertions.Expect(disconnectedIndicator).ToHaveAttributeAsync(
-                "data-status",
-                "disconnected",
-                new LocatorAssertionsToHaveAttributeOptions { Timeout = 10_000 });
+            await Page.WaitForFunctionAsync(
+                "() => !window.__WEAVE_SOCKET_TEST_API.hasOpenSocket()",
+                null,
+                new PageWaitForFunctionOptions { Timeout = 10_000 });
 
             // Wait for the full message to be persisted on the server
             await WaitForRetrievedMessageTextAsync(sessionId, fullResponse, TimeSpan.FromSeconds(30));

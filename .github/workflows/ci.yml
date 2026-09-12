@@ -296,7 +296,7 @@ jobs:
           name: e2e-test-results-${{ github.run_id }}
           path: |
             test-results/
-            tests/WeaveFleet.E2E/test-results/
+            tests/WeaveFleet.E2E/bin/Release/net10.0/test-results/
           retention-days: 7
           if-no-files-found: ignore
 
