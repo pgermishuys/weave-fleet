@@ -105,9 +105,17 @@ function schedulePromptConfirmationTimeout(sessionId: string, correlationId: str
   }, PROMPT_CONFIRMATION_TIMEOUT_MS));
 }
 
-function clearPromptConfirmationTimeouts(sessionId: string): void {
-  for (const prompt of sentPromptRegistry[sessionId] ?? []) {
+/**
+ * Called for prompts leaving the registry without going through confirmSentPrompt.
+ * A prompt still pending stops counting as pending here; otherwise its late
+ * confirmation finds nothing to confirm and the count never returns to zero.
+ */
+function releaseRemovedPrompts(sessionId: string, removed: readonly SentPromptMessage[]): void {
+  for (const prompt of removed) {
     clearPromptConfirmationTimeout(sessionId, prompt.correlationId);
+    if (prompt.status === "pending") {
+      decrementPendingPrompts(sessionId);
+    }
   }
 }
 
@@ -119,7 +127,7 @@ export function clearSentPrompts(sessionId: string): void {
       prompts: existing.map((p) => ({ id: p.id, bodySnippet: p.body.slice(0, 60) })),
     });
   }
-  clearPromptConfirmationTimeouts(sessionId);
+  releaseRemovedPrompts(sessionId, existing ?? []);
   delete sentPromptRegistry[sessionId];
 }
 
@@ -195,9 +203,7 @@ export function reconcileSentPrompts(sessionId: string, messages: readonly Accum
 
   const remainingAfterIdMatch = prompts.filter((prompt) => !deliveredPromptIds.has(prompt.id));
   if (remainingAfterIdMatch.length !== prompts.length) {
-    for (const prompt of prompts.filter((prompt) => deliveredPromptIds.has(prompt.id))) {
-      clearPromptConfirmationTimeout(sessionId, prompt.correlationId);
-    }
+    releaseRemovedPrompts(sessionId, prompts.filter((prompt) => deliveredPromptIds.has(prompt.id)));
 
     diagLog("prompt.reconcile", `removed ${prompts.length - remainingAfterIdMatch.length} optimistic prompt(s) by id`, {
       sessionId,
@@ -253,9 +259,7 @@ export function reconcileSentPrompts(sessionId: string, messages: readonly Accum
   });
 
   if (remainingPrompts.length < prompts.length) {
-    for (const prompt of prompts.filter((prompt) => !remainingPrompts.includes(prompt))) {
-      clearPromptConfirmationTimeout(sessionId, prompt.correlationId);
-    }
+    releaseRemovedPrompts(sessionId, prompts.filter((prompt) => !remainingPrompts.includes(prompt)));
 
     diagLog("prompt.reconcile", `removed ${prompts.length - remainingPrompts.length} of ${prompts.length} optimistic prompt(s)`, {
       sessionId,
