@@ -151,6 +151,42 @@ public sealed partial class RepositoryService(
         return normalizedPath;
     }
 
+    /// <summary>
+    /// Resolves <paramref name="worktreePath"/> to a linked worktree of the repository at
+    /// <paramref name="repositoryPath"/>, returning it with a canonical path. Fails when the path
+    /// is not one of that repository's worktrees or lies outside the allowed workspace roots.
+    /// </summary>
+    public async Task<Result<WorktreeInfo>> ResolveExistingWorktreeAsync(
+        string repositoryPath,
+        string worktreePath,
+        CancellationToken ct = default)
+    {
+        var requestedPath = WorkspaceRootService.CanonicalizePath(worktreePath.Trim());
+        var worktrees = await ListWorktreesAsync(repositoryPath, ct).ConfigureAwait(false);
+        var knownWorktree = worktrees.FirstOrDefault(w =>
+            string.Equals(
+                WorkspaceRootService.CanonicalizePath(w.Path),
+                requestedPath,
+                StringComparison.OrdinalIgnoreCase));
+
+        if (knownWorktree is null)
+        {
+            return FleetError.ValidationError(
+                "SessionSource.Input.ExistingWorktreePath",
+                "The specified path is not a known worktree of this repository.");
+        }
+
+        var rootCheck = await ValidatePathWithinRootsAsync(requestedPath, ct).ConfigureAwait(false);
+        if (rootCheck.IsFailure)
+        {
+            return FleetError.ValidationError(
+                "SessionSource.Input.ExistingWorktreePath",
+                "The worktree path is outside allowed workspace roots.");
+        }
+
+        return knownWorktree with { Path = requestedPath };
+    }
+
     /// <summary>Validates that a path is within allowed workspace roots (without requiring it to be a git repo).</summary>
     public async Task<Result<string>> ValidatePathWithinRootsAsync(string path, CancellationToken ct = default)
     {

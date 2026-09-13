@@ -12,6 +12,7 @@ namespace WeaveFleet.Infrastructure.SessionSources;
 public sealed class GitHubSessionSourceProvider(
     GitHubService gitHubService,
     GitHubApiProxy gitHubApiProxy,
+    RepositoryService repositoryService,
     IUserContext userContext) : ISessionSourceProvider
 {
     private const int MaxContextCharacters = 12000;
@@ -93,6 +94,16 @@ public sealed class GitHubSessionSourceProvider(
                 "GitHub start-session sources require a repositoryPath.");
         }
 
+        WorkspaceIntent? workspaceIntent = null;
+        if (requiresWorkspace)
+        {
+            var workspaceIntentResult = await ResolveWorkspaceIntentAsync(input, cancellationToken);
+            if (workspaceIntentResult.IsFailure)
+                return workspaceIntentResult.Error;
+
+            workspaceIntent = workspaceIntentResult.Value;
+        }
+
         var token = await gitHubService.GetTokenAsync(
             userContext.UserId,
             cancellationToken);
@@ -139,12 +150,7 @@ public sealed class GitHubSessionSourceProvider(
         return new ResolvedSessionSource(
             BuildDescriptor(selection.Key.SourceType, selection.Key.ActionId),
             new ResolvedSessionInput(
-                requiresWorkspace
-                    ? new WorkspaceIntent(
-                        input.RepositoryPath!.Trim(),
-                        NormalizeIsolationStrategy(input.IsolationStrategy),
-                        NormalizeBranch(input.Branch, input.IsolationStrategy))
-                    : null,
+                workspaceIntent,
                 new ContextEnvelope(
                     OriginLabel: $"GitHub {GetKindLabel(selection.Key.SourceType)} #{input.Number}",
                     Content: preview,
@@ -186,7 +192,8 @@ public sealed class GitHubSessionSourceProvider(
                     new SessionSourceInputField("number", "number", true, null, "Issue or pull request number."),
                     new SessionSourceInputField("repositoryPath", "string", true, null, "Canonical local repository directory path."),
                     new SessionSourceInputField("isolationStrategy", "string", false, ["existing", "worktree", "clone"], "Repository workspace isolation mode."),
-                    new SessionSourceInputField("branch", "string", false, null, "Optional branch for isolated workspaces.")
+                    new SessionSourceInputField("branch", "string", false, null, "Optional branch for isolated workspaces."),
+                    new SessionSourceInputField("existingWorktreePath", "string", false, null, "Existing worktree of the repository to run in, instead of creating one.")
                 ]
                 :
                 [
@@ -197,6 +204,27 @@ public sealed class GitHubSessionSourceProvider(
             ProducesWorkspace: isStartSession,
             ProducesContext: true,
             RequiresConfirmation: !isStartSession);
+    }
+
+    private async Task<Result<WorkspaceIntent>> ResolveWorkspaceIntentAsync(GitHubSourceInput input, CancellationToken cancellationToken)
+    {
+        var repositoryPath = input.RepositoryPath!.Trim();
+        var isolationStrategy = NormalizeIsolationStrategy(input.IsolationStrategy);
+
+        if (string.Equals(isolationStrategy, "worktree", StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(input.ExistingWorktreePath))
+        {
+            var worktreeResult = await repositoryService.ResolveExistingWorktreeAsync(
+                WorkspaceRootService.CanonicalizePath(repositoryPath),
+                input.ExistingWorktreePath,
+                cancellationToken);
+            if (worktreeResult.IsFailure)
+                return worktreeResult.Error;
+
+            return new WorkspaceIntent(worktreeResult.Value.Path, "existing", worktreeResult.Value.Branch);
+        }
+
+        return new WorkspaceIntent(repositoryPath, isolationStrategy, NormalizeBranch(input.Branch, input.IsolationStrategy));
     }
 
     private static string NormalizeIsolationStrategy(string? isolationStrategy)

@@ -72,29 +72,10 @@ public sealed class RepositorySessionSourceProvider(
         if (string.Equals(isolationStrategy.Value, "worktree", StringComparison.Ordinal)
             && !string.IsNullOrWhiteSpace(input.ExistingWorktreePath))
         {
-            var existingWorktreePath = input.ExistingWorktreePath.Trim();
-            var worktrees = await repositoryService.ListWorktreesAsync(canonicalPath, cancellationToken);
-            var knownWorktree = worktrees.FirstOrDefault(w =>
-                string.Equals(
-                    WorkspaceRootService.CanonicalizePath(w.Path),
-                    WorkspaceRootService.CanonicalizePath(existingWorktreePath),
-                    StringComparison.OrdinalIgnoreCase));
-
-            if (knownWorktree is null)
-            {
-                return FleetError.ValidationError(
-                    "SessionSource.Input.ExistingWorktreePath",
-                    "The specified path is not a known worktree of this repository.");
-            }
-
-            // Ensure the worktree path is within allowed workspace roots
-            var worktreeRootCheck = await repositoryService.ValidatePathWithinRootsAsync(existingWorktreePath, cancellationToken);
-            if (worktreeRootCheck.IsFailure)
-            {
-                return FleetError.ValidationError(
-                    "SessionSource.Input.ExistingWorktreePath",
-                    "The worktree path is outside allowed workspace roots.");
-            }
+            var worktreeResult = await repositoryService.ResolveExistingWorktreeAsync(
+                canonicalPath, input.ExistingWorktreePath, cancellationToken);
+            if (worktreeResult.IsFailure)
+                return worktreeResult.Error;
 
             var existingDescriptor = SessionSourceCatalog.RepositoryStartSession with
             {
@@ -105,9 +86,9 @@ public sealed class RepositorySessionSourceProvider(
                 existingDescriptor,
                 new ResolvedSessionInput(
                     new WorkspaceIntent(
-                        WorkspaceRootService.CanonicalizePath(existingWorktreePath),
+                        worktreeResult.Value.Path,
                         "existing",
-                        knownWorktree.Branch),
+                        worktreeResult.Value.Branch),
                     null,
                     new ProvenanceRecord(
                         ProviderId,
