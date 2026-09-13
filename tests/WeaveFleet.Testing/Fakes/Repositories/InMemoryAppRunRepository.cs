@@ -11,13 +11,17 @@ public sealed class InMemoryAppRunRepository : IAppRunRepository
 {
     private readonly object _gate = new();
     private readonly Dictionary<string, AppRun> _runs = new(StringComparer.Ordinal);
-    private readonly HashSet<string> _sessionIds = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _projectBySession = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _previewCommandByProject = new(StringComparer.Ordinal);
 
-    /// <summary>Sessions that runs can be stored for.</summary>
-    public void AddSession(string sessionId)
+    /// <summary>
+    /// A session that runs can be stored for, in <paramref name="projectDirectory"/> (for remembered preview
+    /// commands; each session is its own project unless given one).
+    /// </summary>
+    public void AddSession(string sessionId, string? projectDirectory = null)
     {
         lock (_gate)
-            _sessionIds.Add(sessionId);
+            _projectBySession[sessionId] = projectDirectory ?? sessionId;
     }
 
     public IReadOnlyList<AppRun> All
@@ -48,7 +52,7 @@ public sealed class InMemoryAppRunRepository : IAppRunRepository
     {
         lock (_gate)
         {
-            if (!_sessionIds.Contains(run.SessionId))
+            if (!_projectBySession.ContainsKey(run.SessionId))
                 return Task.FromResult(false);
 
             if (_runs.TryGetValue(run.Id, out var existing))
@@ -93,6 +97,27 @@ public sealed class InMemoryAppRunRepository : IAppRunRepository
             }
         }
         return Task.CompletedTask;
+    }
+
+    public Task RememberPreviewCommandAsync(string sessionId, string command, string updatedAt)
+    {
+        lock (_gate)
+        {
+            if (_projectBySession.TryGetValue(sessionId, out var project))
+                _previewCommandByProject[project] = command;
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task<string?> GetPreviewCommandAsync(string sessionId)
+    {
+        lock (_gate)
+        {
+            return Task.FromResult(
+                _projectBySession.TryGetValue(sessionId, out var project) && _previewCommandByProject.TryGetValue(project, out var command)
+                    ? command
+                    : null);
+        }
     }
 
     private static AppRun Copy(AppRun run) => new()

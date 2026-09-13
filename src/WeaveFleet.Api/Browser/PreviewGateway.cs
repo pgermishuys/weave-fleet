@@ -53,30 +53,17 @@ public sealed partial class PreviewGateway : IAsyncDisposable
         "Proxy-Authenticate", "Proxy-Authorization",
     };
 
-    // Reports the page to the canvas, and takes back/forward/reload from it. Cross-origin, so postMessage only.
-    private const string NavScript = """
-        (function () {
-          if (window.top === window) return;
-          function report() {
-            parent.postMessage({ type: "fleet-browser:location", href: location.href, title: document.title }, "*");
-          }
-          ["pushState", "replaceState"].forEach(function (name) {
-            var original = history[name];
-            history[name] = function () { var result = original.apply(this, arguments); report(); return result; };
-          });
-          addEventListener("popstate", report);
-          addEventListener("hashchange", report);
-          addEventListener("load", report);
-          addEventListener("message", function (event) {
-            var data = event.data;
-            if (!data || data.type !== "fleet-browser:nav") return;
-            if (data.action === "back") history.back();
-            else if (data.action === "forward") history.forward();
-            else if (data.action === "reload") location.reload();
-          });
-          report();
-        })();
-        """;
+    /// <summary>
+    /// The preview bridge (protocol v1, <c>Browser/preview-bridge.js</c>): reports the page, its hot-reload client
+    /// and its hot updates to the canvas, and takes back/forward/reload from it.
+    /// </summary>
+    internal static readonly Lazy<string> BridgeScript = new(() =>
+    {
+        using var stream = typeof(PreviewGateway).Assembly.GetManifestResourceStream("browser/preview-bridge.js")
+            ?? throw new InvalidOperationException("Embedded resource browser/preview-bridge.js is missing.");
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        return reader.ReadToEnd();
+    });
 
     private readonly ConcurrentDictionary<string, Lazy<Task<Running>>> _byOrigin = new(StringComparer.OrdinalIgnoreCase);
     private readonly HttpMessageInvoker _client;
@@ -200,7 +187,7 @@ public sealed partial class PreviewGateway : IAsyncDisposable
         {
             context.Response.ContentType = "text/javascript; charset=utf-8";
             context.Response.Headers.CacheControl = "no-store";
-            await context.Response.WriteAsync(NavScript, context.RequestAborted);
+            await context.Response.WriteAsync(BridgeScript.Value, context.RequestAborted);
             return;
         }
 

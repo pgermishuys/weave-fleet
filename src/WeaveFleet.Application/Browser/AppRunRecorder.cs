@@ -8,7 +8,8 @@ using WeaveFleet.Domain.Repositories;
 namespace WeaveFleet.Application.Browser;
 
 /// <summary>
-/// Stores each change to a run and tells the session's clients (<c>app.updated</c>), as the run's owner.
+/// Stores each change to a run and tells the session's clients (<c>app.updated</c>), as the run's owner. A run
+/// that serves a page becomes its project's remembered preview command.
 /// At startup it cleans up after the previous Fleet: processes a crash left running are killed, and every
 /// run it was running is marked stopped. Fleet never starts them again on its own.
 /// </summary>
@@ -50,6 +51,10 @@ public sealed class AppRunRecorder(
             // The session is gone (deleted while its apps stopped): nobody to tell.
             if (!stored)
                 return;
+
+            // It served a page: the + menu offers it in the project's next sessions.
+            if (change.Reason == AppChangeReason.Ready)
+                await runs.RememberPreviewCommandAsync(app.SessionId, app.Command, now);
         }
 
         var payload = new AppUpdatedPayload

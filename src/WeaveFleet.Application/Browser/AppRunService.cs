@@ -18,9 +18,10 @@ public sealed class AppRunService(
 {
     /// <summary>
     /// Runs <paramref name="command"/> in the session's folder. When the session already has a run of that
-    /// command, live or stored, it starts that one again, so the canvas showing it keeps working.
+    /// command, it's reused so the canvas showing it keeps working: a live one is restarted (or, without
+    /// <paramref name="restartLive"/>, left running), a stored one is started again.
     /// </summary>
-    public async Task<AppStartResult> StartAsync(string sessionId, string command)
+    public async Task<AppStartResult> StartAsync(string sessionId, string command, bool restartLive = true)
     {
         var session = await sessions.GetByIdAsync(sessionId);
         if (session is null)
@@ -31,7 +32,11 @@ public sealed class AppRunService(
             return AppStartResult.Fail("This session has no folder on this machine to run the command in.");
 
         if (apps.FindActive(sessionId, command) is { } active)
-            return FromOutcome(await apps.RestartAsync(active.Id), restarted: true);
+        {
+            return restartLive
+                ? FromOutcome(await apps.RestartAsync(active.Id), restarted: true)
+                : new AppStartResult(active, Restarted: false, Problem: null);
+        }
 
         var stored = (await runs.ListBySessionIdAsync(sessionId)).LastOrDefault(run => run.Command == command);
         var request = stored is null
@@ -84,6 +89,14 @@ public sealed class AppRunService(
         var stored = await runs.GetByIdAsync(sessionId, appId);
         return stored is null ? null : FromStored(stored);
     }
+
+    /// <summary>The session's apps, oldest first, each as it is now.</summary>
+    public async Task<IReadOnlyList<AppRunSnapshot>> ListAsync(string sessionId)
+        => [.. (await runs.ListBySessionIdAsync(sessionId))
+            .Select(stored => apps.Find(stored.Id) is { } live && Owns(live, sessionId) ? live : FromStored(stored))];
+
+    /// <summary>The command that last served a page in the session's project, for the + menu.</summary>
+    public Task<string?> PreviewCommandAsync(string sessionId) => runs.GetPreviewCommandAsync(sessionId);
 
     /// <summary>Output after the first <paramref name="after"/> lines. A stored run's output went with the Fleet that ran it.</summary>
     public async Task<AppOutput?> OutputAsync(string sessionId, string appId, long after)

@@ -204,7 +204,7 @@ public sealed class CanvasBridgeTests
         var read = await _bridge.ReadAsync(Token, OpenCodeSessionId, opened.Value!.Canvas.Id);
 
         read.Value!.Output.ShouldBe(
-            $"browser {opened.Value.Canvas.Id} \"Shop\" v1\nurl http://localhost:5173/\napp {app.Id}\napp {app.Id} running\ncommand bun run dev\nports 5173");
+            $"browser {opened.Value.Canvas.Id} \"Shop\" v1\nurl http://localhost:5173/\napp {app.Id}\napp {app.Id} running\ncommand bun run dev\npage http://localhost:5173/\nports 5173");
     }
 
     [Fact]

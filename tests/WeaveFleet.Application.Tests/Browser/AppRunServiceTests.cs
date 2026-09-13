@@ -120,6 +120,42 @@ public sealed class AppRunServiceTests : IDisposable
         started.Problem.ShouldBe("Fleet already runs 10 apps across sessions, its limit.");
     }
 
+    [Fact]
+    public async Task A_command_the_user_starts_again_is_left_running()
+    {
+        var app = (await _service.StartAsync(SessionId, "npm run dev")).App!;
+
+        var again = await _service.StartAsync(SessionId, "npm run dev", restartLive: false);
+
+        (again.App!.Id, again.Restarted).ShouldBe((app.Id, false));
+        _apps.Restarted.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task The_sessions_apps_are_listed_as_they_are_now()
+    {
+        await StoreAsync("app_old", port: 41000, status: "exited", exitCode: 2);
+        var live = (await _service.StartAsync(SessionId, "bun run dev")).App!;
+        await StoreAsync(live.Id, port: live.Port, status: "starting");
+
+        var apps = await _service.ListAsync(SessionId);
+
+        // Both were stored at the same time here, so only the contents count.
+        apps.Select(app => (app.Id, app.Status, app.Command)).ShouldBe(
+            [("app_old", AppRunStatus.Exited, "npm run dev"), (live.Id, AppRunStatus.Starting, "bun run dev")],
+            ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task The_preview_command_is_the_projects()
+    {
+        (await _service.PreviewCommandAsync(SessionId)).ShouldBeNull();
+
+        await _runs.RememberPreviewCommandAsync(SessionId, "bun run dev", "2026-09-13T08:00:00Z");
+
+        (await _service.PreviewCommandAsync(SessionId)).ShouldBe("bun run dev");
+    }
+
     private Task<bool> StoreAsync(string id, int port, string status, int? exitCode = null)
         => _runs.UpsertAsync(new AppRun
         {

@@ -175,6 +175,7 @@ public static class DependencyInjection
         services.AddScoped<AppRunService>();
         services.AddScoped<AppRunRecorder>();
         services.AddHostedService<AppRunRecorderService>();
+        services.AddScoped<BrowserPreviews>();
         services.AddScoped<BrowserBridge>();
         services.AddSingleton<IBackgroundUserScope, BackgroundUserScope>();
         services.AddScoped<AutomationService>();

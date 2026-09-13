@@ -29,7 +29,8 @@ public sealed class BrowserBridgeTests : IDisposable
         _sessions.Seed(new Session { Id = SessionId, Directory = _folder.FullName });
         _callers.Add(Token, OpenCodeSessionId, new HarnessCanvasCaller(SessionId, Owner));
         var canvases = new CanvasService(_canvasRepository, new FakeEventBroadcaster(), _user);
-        _bridge = new BrowserBridge(_callers, _user, canvases, new AppRunService(_apps, _runs, _sessions, _user));
+        var apps = new AppRunService(_apps, _runs, _sessions, _user);
+        _bridge = new BrowserBridge(_callers, _user, new BrowserPreviews(canvases, apps), apps);
     }
 
     public void Dispose() => _folder.Delete(recursive: true);

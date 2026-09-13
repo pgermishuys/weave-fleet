@@ -141,4 +141,33 @@ public sealed class AppRunRepositoryTests
         using var conn = factory.CreateConnection();
         (await conn.QueryAsync<string>("SELECT id FROM app_runs")).ShouldBe(["app_kept"]);
     }
+
+    [Fact]
+    public async Task PreviewCommand_IsSharedByTheWorktreesOfAProject_AndScopedToTheOwner()
+    {
+        var (keeper, factory, repo, inPlace) = await CreateAsync();
+        using var _ = keeper;
+        var (workspaceA, _, worktreeA) = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, OwnerId, directory: "/tmp/wt-a");
+        var (workspaceB, _, worktreeB) = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, OwnerId, directory: "/tmp/wt-b");
+        using (var conn = factory.CreateConnection())
+        {
+            await conn.ExecuteAsync(
+                "UPDATE workspaces SET source_directory = @Source, isolation_strategy = 'worktree' WHERE id IN (@A, @B)",
+                new { Source = inPlace.Directory, A = workspaceA.Id, B = workspaceB.Id });
+        }
+
+        (await repo.GetPreviewCommandAsync(worktreeB.Id)).ShouldBeNull();
+
+        await repo.RememberPreviewCommandAsync(worktreeA.Id, "bun run dev", "2026-09-13T08:00:00.0000000Z");
+        (await repo.GetPreviewCommandAsync(worktreeB.Id)).ShouldBe("bun run dev");
+        (await repo.GetPreviewCommandAsync(inPlace.Id)).ShouldBe("bun run dev");
+
+        await repo.RememberPreviewCommandAsync(inPlace.Id, "npm run dev", "2026-09-13T09:00:00.0000000Z");
+        (await repo.GetPreviewCommandAsync(worktreeA.Id)).ShouldBe("npm run dev");
+
+        var otherRepo = new AppRunRepository(factory, new TestUserContext("other-user"));
+        (await otherRepo.GetPreviewCommandAsync(inPlace.Id)).ShouldBeNull();
+        await otherRepo.RememberPreviewCommandAsync(inPlace.Id, "make serve", "2026-09-13T10:00:00.0000000Z");
+        (await repo.GetPreviewCommandAsync(inPlace.Id)).ShouldBe("npm run dev");
+    }
 }

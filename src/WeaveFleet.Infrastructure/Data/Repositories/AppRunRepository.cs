@@ -120,6 +120,52 @@ public sealed class AppRunRepository(
         tx.Commit();
     }
 
+    // A session's project: the folder its worktree came from, or the session's own folder.
+    private const string ProjectDirectorySql = "COALESCE(workspace_row.source_directory, session_row.directory)";
+
+    public async Task RememberPreviewCommandAsync(string sessionId, string command, string updatedAt)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            $"""
+            INSERT INTO preview_commands (user_id, project_directory, command, updated_at)
+            SELECT session_row.user_id, {ProjectDirectorySql}, @Command, @UpdatedAt
+            FROM sessions session_row
+            LEFT JOIN workspaces workspace_row ON workspace_row.id = session_row.workspace_id
+            WHERE session_row.id = @SessionId AND session_row.user_id = @UserId
+            ON CONFLICT(user_id, project_directory) DO UPDATE SET
+                command = excluded.command,
+                updated_at = excluded.updated_at
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("UserId", userContext.UserId);
+                cmd.AddParameter("Command", command);
+                cmd.AddParameter("UpdatedAt", updatedAt);
+            });
+    }
+
+    public async Task<string?> GetPreviewCommandAsync(string sessionId)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        return await conn.QueryFirstOrDefaultAsync(
+            $"""
+            SELECT preview.command
+            FROM sessions session_row
+            LEFT JOIN workspaces workspace_row ON workspace_row.id = session_row.workspace_id
+            JOIN preview_commands preview
+                ON preview.user_id = session_row.user_id AND preview.project_directory = {ProjectDirectorySql}
+            WHERE session_row.id = @SessionId AND session_row.user_id = @UserId
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("UserId", userContext.UserId);
+            },
+            r => r.GetString(0));
+    }
+
     private static AppRun ReadRun(DbDataReader r) => new()
     {
         Id = r.GetString(r.GetOrdinal("id")),

@@ -56,6 +56,28 @@ public static class CanvasEndpoints
         .Produces(404)
         .WithName("CloseSessionCanvas");
 
+        // POST /api/sessions/{id}/canvases/{canvasId}/focus — bring a canvas forward, reopening it if it was closed
+        // (a tool card's "Show")
+        group.MapPost("/{id}/canvases/{canvasId}/focus", async (
+            string id,
+            string canvasId,
+            SessionService sessionService,
+            ICanvasService canvasService,
+            CancellationToken ct) =>
+        {
+            var session = await sessionService.GetSessionAsync(id);
+            if (session.IsFailure)
+                return session.Error.ToSessionApiResult();
+
+            var focused = await canvasService.FocusAsync(id, canvasId, ct);
+            return focused.IsSuccess
+                ? Results.Ok(ToResponse(focused.Value))
+                : Results.NotFound(new ErrorResponse($"Canvas {canvasId} not found."));
+        })
+        .Produces<CanvasResponse>(200)
+        .Produces(404)
+        .WithName("FocusSessionCanvas");
+
         return app;
     }
 

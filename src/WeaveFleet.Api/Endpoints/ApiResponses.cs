@@ -297,6 +297,23 @@ public sealed record AppRunResponse(
 /// <summary>Output lines after the ones the client has, and the <c>after</c> to ask with next time.</summary>
 public sealed record AppOutputResponse(IReadOnlyList<string> Lines, long Next);
 
+/// <summary>
+/// A session's apps, oldest first (without output), and the command that last served a page in its project,
+/// which the browser canvas's + menu offers.
+/// </summary>
+public sealed record SessionAppsResponse(IReadOnlyList<AppRunResponse> Apps, string? PreviewCommand);
+
+/// <summary>Run a command in the session's folder and show it in a browser canvas, titled by the command unless given a title.</summary>
+public sealed record AppStartRequest(string? Command, string? Title);
+
+/// <summary>The app that was started (or already ran) and the canvas that shows it.</summary>
+public sealed record AppPreviewResponse(AppRunResponse App, string CanvasId);
+
+/// <summary>Show a page on this machine in a browser canvas, titled by its host and port unless given a title.</summary>
+public sealed record BrowserOpenRequest(string? Url, string? Title);
+
+public sealed record BrowserOpenResponse(string CanvasId);
+
 // ── Session Sources ──────────────────────────────────────────────────────────
 
 public sealed record SessionSourceCatalogResponse(

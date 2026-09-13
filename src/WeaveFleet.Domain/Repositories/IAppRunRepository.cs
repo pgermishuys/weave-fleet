@@ -24,4 +24,13 @@ public interface IAppRunRepository
 
     /// <summary>Marks runs stopped and forgets their process, for every user.</summary>
     Task MarkStoppedForAllUsersAsync(IReadOnlyCollection<string> appIds, string updatedAt);
+
+    /// <summary>
+    /// Remembers <paramref name="command"/> as the one that serves a page in the session's project: the folder
+    /// its worktree came from, or its own folder. Does nothing for a session of another user.
+    /// </summary>
+    Task RememberPreviewCommandAsync(string sessionId, string command, string updatedAt);
+
+    /// <summary>The command that last served a page in the session's project, in any of its sessions.</summary>
+    Task<string?> GetPreviewCommandAsync(string sessionId);
 }

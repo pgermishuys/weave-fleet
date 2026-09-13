@@ -162,7 +162,8 @@ public sealed class PreviewGatewayTests
         using var redirect = await client.GetAsync(origin + "/go");
         redirect.Headers.Location!.ToString().ShouldBe(origin + "/landed");
 
-        (await client.GetStringAsync(origin + PreviewGateway.ScriptPath)).ShouldContain("fleet-browser:location");
+        (await client.GetStringAsync(origin + PreviewGateway.ScriptPath)).ShouldBe(PreviewGateway.BridgeScript.Value);
+        PreviewGateway.BridgeScript.Value.ShouldContain("var VERSION = 1;");
 
         using var framed = new HttpRequestMessage(HttpMethod.Get, origin + "/dest");
         framed.Headers.TryAddWithoutValidation("sec-fetch-dest", "iframe");

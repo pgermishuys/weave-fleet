@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json.Nodes;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Services;
 
@@ -12,7 +11,7 @@ namespace WeaveFleet.Application.Browser;
 public sealed class BrowserBridge(
     IHarnessCanvasCallerResolver callers,
     IBackgroundUserScope userScope,
-    ICanvasService canvases,
+    BrowserPreviews previews,
     AppRunService apps)
 {
     /// <summary>Long enough for a first <c>dotnet run</c> or <c>npm install</c>-then-serve on a cold machine.</summary>
@@ -36,19 +35,17 @@ public sealed class BrowserBridge(
             if (string.IsNullOrEmpty(command))
                 return Invalid("\"command\" is required, e.g. \"npm run dev\" or \"dotnet watch\".");
 
-            var started = await apps.StartAsync(sessionId, command);
-            if (started.App is not { } app)
-                return Invalid(started.Problem ?? "The app couldn't be started.");
+            var name = BrowserPreviews.TitleOr(title, BrowserPreviews.DefaultTitle);
+            var preview = await previews.StartAppAsync(sessionId, command, name, restartLive: true, ct);
+            if (!preview.IsSuccess)
+                return CanvasResult.Fail<CanvasToolOutput>(preview.Error);
 
-            var shown = await OpenPageAsync(sessionId, title, await ShownUrlAsync(sessionId, title, app.Id, ct), app.Id, ct);
-            if (!shown.IsSuccess)
-                return CanvasResult.Fail<CanvasToolOutput>(shown.Error);
-
+            var (started, app) = (preview.Value.Started, preview.Value.Started.App!);
             var ready = await apps.WaitUntilReadyAsync(app.Id, ReadyTimeout, ct);
             if (ready.Url is null)
                 return Invalid(FailureText(app.Id, ready.Problem ?? "No page answered."));
 
-            var opened = await OpenPageAsync(sessionId, title, ready.Url, app.Id, ct);
+            var opened = await previews.OpenPageAsync(sessionId, name, ready.Url, app.Id, ct);
             if (!opened.IsSuccess)
                 return CanvasResult.Fail<CanvasToolOutput>(opened.Error);
 
@@ -77,7 +74,7 @@ public sealed class BrowserBridge(
             if (!LoopbackUrl.TryParse(url, out var page))
                 return Invalid(LoopbackUrl.Requirement);
 
-            var opened = await OpenPageAsync(sessionId, title, page.ToString(), appId: null, ct);
+            var opened = await previews.OpenPageAsync(sessionId, BrowserPreviews.TitleOr(title, BrowserPreviews.DefaultTitle), page.ToString(), appId: null, ct);
             if (!opened.IsSuccess)
                 return CanvasResult.Fail<CanvasToolOutput>(opened.Error);
 
@@ -97,36 +94,15 @@ public sealed class BrowserBridge(
         if (app.ExitCode is { } exitCode)
             text.Append(" (exit code ").Append(exitCode).Append(')');
         text.Append("\ncommand ").Append(app.Command);
+        // A tab the user started from the + menu has no url of its own: the page is the app's.
+        if (app.Status == AppRunStatus.Running && app.Url is not null)
+            text.Append("\npage ").Append(app.Url);
         if (app.Ports.Count > 0)
             text.Append("\nports ").AppendJoin(", ", app.Ports);
         if (logs.Count > 0)
             text.Append("\nlast output:\n").AppendJoin('\n', logs);
         return text.ToString();
     }
-
-    private async Task<CanvasResult<CanvasOutcome>> OpenPageAsync(string sessionId, string? title, string url, string? appId, CancellationToken ct)
-    {
-        var state = new JsonObject { ["url"] = url };
-        if (appId is not null)
-            state["appId"] = appId;
-        return await canvases.OpenAsync(sessionId, CanvasKinds.Browser, TitleOrDefault(title), state, ct);
-    }
-
-    /// <summary>The page the tab already shows for this app, so a restart doesn't blank it; empty ("starting") otherwise.</summary>
-    private async Task<string> ShownUrlAsync(string sessionId, string? title, string appId, CancellationToken ct)
-    {
-        var name = TitleOrDefault(title);
-        var tab = (await canvases.ListAsync(sessionId, ct))
-            .Select(item => item.Canvas)
-            .FirstOrDefault(canvas => canvas.Kind == CanvasKinds.Browser && canvas.Title == name);
-        if (tab is null)
-            return string.Empty;
-
-        var state = BrowserState.Parse(tab.StateJson);
-        return state.AppId == appId ? state.Url : string.Empty;
-    }
-
-    private static string TitleOrDefault(string? title) => string.IsNullOrWhiteSpace(title) ? "Browser" : title.Trim();
 
     private string FailureText(string appId, string problem)
     {

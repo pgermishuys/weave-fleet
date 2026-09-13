@@ -47,6 +47,19 @@ public sealed class AppRunRecorderTests
     }
 
     [Fact]
+    public async Task A_run_that_serves_a_page_becomes_its_projects_preview_command()
+    {
+        var started = (await _apps.StartAsync(new AppRunRequest("app_1", SessionId, Owner, "/work/shop", "bun run dev"))).App!;
+        await _recorder.RecordAsync(new AppRunChange(started, AppChangeReason.Started));
+        (await _runs.GetPreviewCommandAsync(SessionId)).ShouldBeNull();
+
+        await _apps.WaitUntilReadyAsync("app_1", TimeSpan.FromSeconds(1));
+        await _recorder.RecordAsync(new AppRunChange(_apps.Find("app_1")!, AppChangeReason.Ready));
+
+        (await _runs.GetPreviewCommandAsync(SessionId)).ShouldBe("bun run dev");
+    }
+
+    [Fact]
     public async Task A_run_keeps_its_creation_time_across_changes()
     {
         var started = (await _apps.StartAsync(new AppRunRequest("app_1", SessionId, Owner, "/work/shop", "bun run dev"))).App!;
