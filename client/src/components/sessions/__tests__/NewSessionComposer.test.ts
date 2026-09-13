@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HarnessInfo, ScannedRepository, WorktreeInfo } from "@/api/client";
 import NewSessionComposer from "@/components/sessions/NewSessionComposer.vue";
 import { NEW_SESSION_DEFAULTS_KEY } from "@/composables/use-new-session-defaults";
+import { clearSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { createGitHubSessionSourcePreset } from "@/lib/github-session-source";
+import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
 const mocks = vi.hoisted(() => ({
@@ -134,11 +136,13 @@ function lastCreateCall(): [string | undefined, Record<string, unknown>] {
 
 beforeEach(() => {
   localStorage.clear();
+  // Sent prompts are kept per session id outside Pinia, and every test creates session-1.
+  clearSentPrompts("session-1");
   mocks.navigate.mockReset().mockResolvedValue(undefined);
   mocks.createSession.mockReset().mockResolvedValue({
     instanceId: "instance-1",
     workspaceId: "workspace-1",
-    session: { id: "session-1", title: "New", time: { created: 0, updated: 0 } },
+    session: { id: "session-1", title: "New", time: { created: 0, updated: 0 }, tags: [] },
   });
   mocks.search.value = { projectId: undefined, source: undefined };
   repositories.value = [rocket, comet];
@@ -431,5 +435,131 @@ describe("NewSessionComposer", () => {
     expect(view.get("[data-testid='new-session-error']").text()).toContain("Couldn't create the worktree");
     expect(textarea(view).element.value).toBe("Fix it");
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  describe("feels instant", () => {
+    function firstMessages(view: VueWrapper) {
+      return view.findAll("[data-testid='message-item'][data-role='user']");
+    }
+
+    it("shows the message as the conversation's first right after Enter, while the session starts", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      let finishCreate: (value: unknown) => void = () => {};
+      mocks.createSession.mockImplementation(() => new Promise((resolve) => { finishCreate = resolve; }));
+      const view = await mountComposer();
+
+      await type(view, "Fix the login redirect");
+      await pressEnter(view);
+
+      expect(firstMessages(view)).toHaveLength(1);
+      expect(firstMessages(view)[0].text()).toContain("Fix the login redirect");
+      expect(textarea(view).element.value).toBe("");
+      expect(useWorkspaceUiStore().newSessionDraftRow).toMatchObject({ title: "Fix the login redirect", isStarting: true });
+
+      finishCreate({ instanceId: "instance-1", workspaceId: "workspace-1", session: { id: "session-1", title: "Fix the login redirect", time: { created: 0, updated: 0 }, tags: [] } });
+      await flushPromises();
+      expect(mocks.navigate).toHaveBeenCalled();
+    });
+
+    it("hands the session page its first message and its sidebar row before opening it", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const seen: { prompts: string[]; rowIds: string[]; rowKey?: string } = { prompts: [], rowIds: [] };
+      mocks.navigate.mockImplementation(async () => {
+        seen.prompts = useSentPrompts("session-1").sentPrompts.value.map((prompt) => prompt.body);
+        seen.rowIds = useSessionsStore().sessions.map((session) => session.session.id);
+        seen.rowKey = useWorkspaceUiStore().sessionRowKeys["session-1"];
+      });
+      const view = await mountComposer();
+      const draftRowKey = useWorkspaceUiStore().newSessionDraftRow?.key;
+
+      await type(view, "Fix the login redirect");
+      await pressEnter(view);
+
+      expect(seen.prompts).toEqual(["Fix the login redirect"]);
+      expect(seen.rowIds[0]).toBe("session-1");
+      expect(useSessionsStore().sessions[0]).toMatchObject({ projectId: "scratch", projectName: "Scratch", sessionStatus: "active" });
+      expect(seen.rowKey).toBe(draftRowKey);
+      expect(useWorkspaceUiStore().newSessionDraftRow).toBeNull();
+    });
+
+    it("titles the session after the first message", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const view = await mountComposer();
+
+      await type(view, "Fix the login redirect\nIt loops on /login");
+      await pressEnter(view);
+
+      expect(lastCreateCall()[1]).toMatchObject({ title: "Fix the login redirect" });
+    });
+
+    it("seeds no message when starting without one", async () => {
+      rememberFolder({ kind: "directory", path: "/tmp/notes" });
+      const view = await mountComposer();
+
+      await view.get("[data-testid='create-session-without-message']").trigger("click");
+      await flushPromises();
+
+      expect(useSentPrompts("session-1").sentPrompts.value).toHaveLength(0);
+      expect(useSessionsStore().sessions[0]?.sessionStatus).toBe("idle");
+    });
+
+    it("puts the message back in the box when the session can't be created", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      mocks.createSession.mockImplementation(async () => {
+        createError.value = "Couldn't create the worktree";
+        throw new Error(createError.value);
+      });
+      const view = await mountComposer();
+
+      await type(view, "Fix it");
+      await pressEnter(view);
+
+      expect(firstMessages(view)).toHaveLength(0);
+      expect(textarea(view).element.value).toBe("Fix it");
+      expect(useWorkspaceUiStore().newSessionDraftRow).toMatchObject({ title: "Fix it", isStarting: false });
+      expect(useSessionsStore().sessions).toHaveLength(0);
+    });
+
+    it("keeps the draft when you leave and come back", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path }, { [rocket.path]: "current" });
+      const first = await mountComposer();
+      await type(first, "Half a thought");
+      await first.get("[data-testid='new-session-workspace-chip']").trigger("click");
+      await flushPromises();
+      const newWorktree = inDocument().findAll("[role='menuitem']").find((item) => item.text().includes("New worktree"));
+      await newWorktree?.trigger("click");
+      await flushPromises();
+      first.unmount();
+      wrapper = null;
+
+      expect(useWorkspaceUiStore().newSessionDraftRow?.title).toBe("Half a thought");
+
+      const again = await mountComposer();
+      expect(textarea(again).element.value).toBe("Half a thought");
+      expect(again.get("[data-testid='new-session-workspace-chip']").text()).toContain("New worktree");
+    });
+
+    it("drops an empty draft when you leave", async () => {
+      const view = await mountComposer();
+      expect(useWorkspaceUiStore().newSessionDraftRow).not.toBeNull();
+
+      view.unmount();
+      wrapper = null;
+
+      expect(useWorkspaceUiStore().newSessionDraftRow).toBeNull();
+    });
+
+    it("a project's + moves a kept draft to that project", async () => {
+      const first = await mountComposer();
+      await type(first, "Half a thought");
+      first.unmount();
+      wrapper = null;
+
+      mocks.search.value = { projectId: "project-fleet", source: undefined };
+      const again = await mountComposer();
+
+      expect(textarea(again).element.value).toBe("Half a thought");
+      expect(useWorkspaceUiStore().newSessionDraftRow?.projectId).toBe("project-fleet");
+    });
   });
 });

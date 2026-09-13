@@ -327,6 +327,35 @@ export function confirmSentPrompt(sessionId: string, options: ConfirmSentPromptO
   }
 }
 
+/**
+ * Shows a message the server was given another way (a new session's first message, sent by the
+ * create request) as sent, so the session page has it before the session's history loads. It is
+ * reconciled against that history like any other sent prompt, so it never shows twice.
+ */
+export function seedSentPrompt(sessionId: string, body: string, createdAt: number = Date.now()): void {
+  const text = body.trim();
+  if (!text) {
+    return;
+  }
+
+  const correlationId = `prompt-${crypto.randomUUID().replaceAll("-", "")}`;
+  ensureSentPrompts(sessionId).push({
+    id: `user-${crypto.randomUUID().replaceAll("-", "")}`,
+    correlationId,
+    status: "pending",
+    body: text,
+    createdAt,
+    agentId: "",
+    agentName: "",
+    modelId: "",
+    modelName: "",
+    effort: "medium",
+    images: [],
+  });
+  incrementPendingPrompts(sessionId);
+  schedulePromptConfirmationTimeout(sessionId, correlationId);
+}
+
 export function useSentPrompts(sessionId: string) {
   ensureSentPrompts(sessionId);
   ensurePendingPromptCount(sessionId);

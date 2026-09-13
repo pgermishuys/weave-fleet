@@ -3,7 +3,9 @@ import { createGitHubSessionSourcePreset } from "@/lib/github-session-source";
 import {
   branchForMessage,
   buildCreateSessionRequest,
+  buildCreatedSessionRow,
   slugForBranch,
+  titleFromMessage,
   type NewSessionState,
 } from "@/lib/new-session-request";
 
@@ -87,6 +89,27 @@ describe("branchForMessage", () => {
   });
 });
 
+describe("titleFromMessage", () => {
+  it("is the first non-empty line, spaces tidied", () => {
+    expect(titleFromMessage("\n  Fix the   login redirect \nMore detail")).toBe("Fix the login redirect");
+  });
+
+  it("cuts a long line at a word boundary", () => {
+    const title = titleFromMessage("Refactor the authentication middleware so that tokens refresh before they expire");
+
+    expect(title).toBe("Refactor the authentication middleware so that tokens…");
+    expect(title.length).toBeLessThanOrEqual(60);
+  });
+
+  it("cuts one very long word", () => {
+    expect(titleFromMessage("x".repeat(80))).toBe(`${"x".repeat(59)}…`);
+  });
+
+  it("is empty for an empty message", () => {
+    expect(titleFromMessage(" \n ")).toBe("");
+  });
+});
+
 describe("buildCreateSessionRequest", () => {
   describe("repository", () => {
     it("new worktree: branch from the message, sent as the first message", () => {
@@ -100,6 +123,7 @@ describe("buildCreateSessionRequest", () => {
         },
         isolationStrategy: "worktree",
         branch: "fleet/fix-login-redirect",
+        title: "Fix the login redirect",
         initialPrompt: "Fix the login redirect",
       });
     });
@@ -273,5 +297,45 @@ describe("buildCreateSessionRequest", () => {
     it("trims the message", () => {
       expect(build({ message: "\n  Fix it  \n" }).options.initialPrompt).toBe("Fix it");
     });
+
+    it("titles the session after the message when no title is typed", () => {
+      expect(build({ message: "Fix the login redirect\nIt loops on /login" }).options.title).toBe("Fix the login redirect");
+      expect(build({ message: "Fix it", title: "Login work" }).options.title).toBe("Login work");
+      expect(build({ message: "Fix it", gitHubPreset: issue }).options.title).toBe("Login redirect loops");
+    });
+  });
+});
+
+describe("buildCreatedSessionRow", () => {
+  const response = {
+    instanceId: "instance-1",
+    workspaceId: "workspace-1",
+    session: { id: "session-1", title: "Fix the login redirect", time: { created: 5, updated: 5 }, tags: ["review"] },
+  };
+
+  it("is a running, working session in the given project", () => {
+    const row = buildCreatedSessionRow(response, build({ message: "Fix the login redirect" }), { id: "scratch", name: "Scratch" });
+
+    expect(row).toMatchObject({
+      instanceId: "instance-1",
+      workspaceId: "workspace-1",
+      session: response.session,
+      sessionStatus: "active",
+      activityStatus: "busy",
+      lifecycleStatus: "running",
+      retentionStatus: "active",
+      isolationStrategy: "worktree",
+      branch: "fleet/fix-login-redirect",
+      projectId: "scratch",
+      projectName: "Scratch",
+      tags: ["review"],
+    });
+  });
+
+  it("is idle when it started without a message", () => {
+    const row = buildCreatedSessionRow(response, build({ message: "" }), null);
+
+    expect(row.sessionStatus).toBe("idle");
+    expect(row.projectId).toBeNull();
   });
 });

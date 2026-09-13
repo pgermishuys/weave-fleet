@@ -1,4 +1,4 @@
-import type { SessionSourceSelection } from "@/api/client";
+import type { CreateSessionResponse, SessionListItem, SessionSourceSelection } from "@/api/client";
 import type { CreateSessionOptions } from "@/composables/use-session-actions";
 import {
   buildGitHubSessionSourceSelection,
@@ -41,6 +41,7 @@ export type BuildNewSessionRequestResult =
 
 export const BRANCH_PREFIX = "fleet/";
 const MAX_SLUG_LENGTH = 40;
+const MAX_TITLE_LENGTH = 60;
 
 const STOP_WORDS = new Set([
   "a", "an", "the", "and", "or", "but", "so", "to", "of", "in", "on", "at", "for", "with", "from", "by",
@@ -80,6 +81,24 @@ export function slugForBranch(text: string): string {
   }
 
   return slug;
+}
+
+/**
+ * A session title for a message: its first line, cut at a word boundary to 60 characters.
+ * Fleet keeps the title it's given (the harness's own naming never reaches it), so this is
+ * what the session is called until someone renames it.
+ */
+export function titleFromMessage(text: string): string {
+  const firstLine = (text.split(/\r?\n/).find((line) => line.trim().length > 0) ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (firstLine.length <= MAX_TITLE_LENGTH) {
+    return firstLine;
+  }
+
+  const cut = firstLine.slice(0, MAX_TITLE_LENGTH - 1);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace >= MAX_TITLE_LENGTH / 2 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
 }
 
 /** `fleet/<slug>` for a message, or undefined when the message gives no slug (the server picks a name). */
@@ -187,7 +206,7 @@ export function buildCreateSessionRequest(state: NewSessionState): BuildNewSessi
   }
 
   const tags = state.tags?.map((tag) => tag.trim()).filter((tag) => tag.length > 0) ?? [];
-  const title = state.title?.trim() || preset?.title.trim() || undefined;
+  const title = state.title?.trim() || preset?.title.trim() || titleFromMessage(message) || undefined;
 
   return {
     ok: true,
@@ -202,5 +221,41 @@ export function buildCreateSessionRequest(state: NewSessionState): BuildNewSessi
       ...(state.projectId ? { projectId: state.projectId } : {}),
       ...(tags.length > 0 ? { tags } : {}),
     },
+  };
+}
+
+/**
+ * The sidebar row for a session the page just created, before the session list or the session's
+ * details have it. It lands where the draft row was: the chosen project, or Scratch.
+ */
+export function buildCreatedSessionRow(
+  response: CreateSessionResponse,
+  request: NewSessionRequest,
+  project: { id: string; name: string } | null,
+): SessionListItem {
+  const { options } = request;
+  const isWorking = Boolean(options.initialPrompt) || options.source?.key.providerId === "builtin.github";
+  return {
+    instanceId: response.instanceId,
+    workspaceId: response.workspaceId,
+    workspaceDirectory: request.directory ?? "",
+    workspaceDisplayName: null,
+    isolationStrategy: options.isolationStrategy ?? "existing",
+    sessionStatus: isWorking ? "active" : "idle",
+    session: response.session,
+    instanceStatus: "running",
+    parentSessionId: null,
+    sourceDirectory: request.directory ?? null,
+    branch: options.branch ?? null,
+    activityStatus: isWorking ? "busy" : "idle",
+    lifecycleStatus: "running",
+    retentionStatus: "active",
+    archivedAt: null,
+    typedInstanceStatus: "running",
+    isHidden: false,
+    projectId: project?.id ?? null,
+    projectName: project?.name ?? null,
+    harnessType: options.harnessType ?? null,
+    tags: response.session.tags ?? [],
   };
 }
