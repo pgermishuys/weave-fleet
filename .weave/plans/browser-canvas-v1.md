@@ -261,7 +261,7 @@ Asked by the user after Tasks 0–1: is this a good feature with decent function
 Open items, with where they came from. Tick them here as they're done.
 
 - [ ] **Decide** the proposed changes above (user).
-- [ ] **Draft PR** for `feat/browser-canvas`: keep it a draft, since it ships agent tools that start processes, and don't merge before Tasks 2, 4 and 6 at least. Until Task 4, the proxy endpoint proxies any loopback URL for an authenticated user.
+- [ ] **Draft PR #189** (opened 2026-09-13) for `feat/browser-canvas`: keep it a draft, since it ships agent tools that start processes, and don't merge before Tasks 2, 4 and 6 at least. Until Task 4, the proxy endpoint proxies any loopback URL for an authenticated user.
 - [ ] Task 2: catch and log exceptions in `AppRunner.MonitorAsync`; compare parsed ports in `BrowserBridge` (`:80` vs `:8080`); strip `Fleet__*` from app runs (Task 0 review notes).
 - [ ] Task 2: give ASP.NET runs their port (`DOTNET_URLS` for single-project `dotnet run`/`watch`, `-- --urls` in the tool description). Check that an Aspire AppHost isn't broken by it (untested).
 - [ ] Task 2/5: hide `dotnet watch`'s refresh ports from "also listens on" and the port picker.

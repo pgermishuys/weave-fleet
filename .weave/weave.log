@@ -530,3 +530,10 @@
 {"level":30,"time":1788500911868,"pid":68456,"hostname":"aurora-desktop","name":"weave","module":"adapter-opencode/plugin","agentCount":10,"msg":"Weave agents injected into OpenCode config"}
 {"level":30,"time":1788500911868,"pid":68456,"hostname":"aurora-desktop","name":"weave","module":"adapter-opencode/plugin","msg":"Set default_agent to 'loom'"}
 {"level":30,"time":1788500911868,"pid":68456,"hostname":"aurora-desktop","name":"weave","module":"adapter-opencode/plugin","commands":["start-work","weave:start"],"msg":"Weave slash commands registered"}
+{"level":30,"time":1789283168811,"pid":700962,"hostname":"andromeda","name":"weave","module":"adapter-opencode/plugin","directory":"/home/pgermishuys/source/weave-fleet","msg":"Weave plugin starting"}
+{"level":30,"time":1789283168824,"pid":700962,"hostname":"andromeda","name":"weave:config","module":"loader","msg":"Config loaded successfully"}
+{"level":30,"time":1789283168866,"pid":700962,"hostname":"andromeda","name":"weave","module":"adapter-opencode/plugin","agentCount":8,"msg":"Agents translated for config hook injection"}
+{"level":30,"time":1789283168867,"pid":700962,"hostname":"andromeda","name":"weave","module":"adapter-opencode/plugin","msg":"Weave plugin hooks ready — returning immediately"}
+{"level":30,"time":1789283168867,"pid":700962,"hostname":"andromeda","name":"weave","module":"adapter-opencode/plugin","agentCount":8,"msg":"Weave agents injected into OpenCode config"}
+{"level":30,"time":1789283168867,"pid":700962,"hostname":"andromeda","name":"weave","module":"adapter-opencode/plugin","msg":"Set default_agent to 'loom'"}
+{"level":30,"time":1789283168867,"pid":700962,"hostname":"andromeda","name":"weave","module":"adapter-opencode/plugin","commands":["start-work","weave:start"],"msg":"Weave slash commands registered"}
