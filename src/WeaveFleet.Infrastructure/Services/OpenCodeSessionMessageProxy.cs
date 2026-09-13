@@ -247,16 +247,18 @@ public sealed class OpenCodeSessionMessageProxy(
         {
             MessageEventPart? eventPart = part switch
             {
+                // The harness's part ids come first: live updates name parts by them, so a part still
+                // streaming when the session is reopened updates in place instead of appearing twice.
                 TextPart textPart => new TextMessageEventPart
                 {
-                    Id = $"{message.Id}-text-{textIndex++}",
+                    Id = textPart.PartId ?? $"{message.Id}-text-{textIndex++}",
                     SessionId = fleetSessionId,
                     MessageId = message.Id,
                     Text = textPart.Text,
                 },
                 ReasoningPart reasoningPart => new ReasoningMessageEventPart
                 {
-                    Id = $"{message.Id}-reasoning-{reasoningIndex++}",
+                    Id = reasoningPart.PartId ?? $"{message.Id}-reasoning-{reasoningIndex++}",
                     SessionId = fleetSessionId,
                     MessageId = message.Id,
                     Text = reasoningPart.Text,
@@ -264,7 +266,7 @@ public sealed class OpenCodeSessionMessageProxy(
                 },
                 ToolUsePart toolPart => new ToolMessageEventPart
                 {
-                    Id = $"{message.Id}-tool-{toolIndex++}",
+                    Id = toolPart.PartId ?? $"{message.Id}-tool-{toolIndex++}",
                     SessionId = fleetSessionId,
                     MessageId = message.Id,
                     ToolName = toolPart.ToolName,
@@ -331,8 +333,20 @@ public sealed class OpenCodeSessionMessageProxy(
         {
             ToolUseState.Pending => new ToolPendingState { Input = input },
             ToolUseState.Running => new ToolRunningState { Input = input },
-            ToolUseState.Completed => new ToolCompletedState { Input = input, Output = null },
-            ToolUseState.Error => new ToolErrorState { Input = input, Output = null },
+            ToolUseState.Completed => new ToolCompletedState
+            {
+                Input = input,
+                Output = toolPart.Output?.Clone(),
+                Title = toolPart.Title,
+                Metadata = toolPart.Metadata?.Clone(),
+            },
+            ToolUseState.Error => new ToolErrorState
+            {
+                Input = input,
+                Output = toolPart.Output?.Clone(),
+                Error = toolPart.Error,
+                Metadata = toolPart.Metadata?.Clone(),
+            },
             _ => new ToolPendingState { Input = input },
         };
     }
@@ -345,8 +359,8 @@ public sealed class OpenCodeSessionMessageProxy(
         {
             MessagePart? part = eventPart switch
             {
-                TextMessageEventPart textPart => new TextPart(textPart.Text),
-                ReasoningMessageEventPart reasoningPart => new ReasoningPart(reasoningPart.Text, reasoningPart.Summary),
+                TextMessageEventPart textPart => new TextPart(textPart.Text) { PartId = textPart.Id },
+                ReasoningMessageEventPart reasoningPart => new ReasoningPart(reasoningPart.Text, reasoningPart.Summary) { PartId = reasoningPart.Id },
                 ToolMessageEventPart toolPart => new ToolUsePart(
                     toolPart.CallId,
                     toolPart.ToolName,
@@ -358,7 +372,24 @@ public sealed class OpenCodeSessionMessageProxy(
                         ToolCompletedState => ToolUseState.Completed,
                         ToolErrorState => ToolUseState.Error,
                         _ => ToolUseState.Pending,
-                    }),
+                    })
+                {
+                    PartId = toolPart.Id,
+                    Output = toolPart.State switch
+                    {
+                        ToolCompletedState completed => completed.Output,
+                        ToolErrorState error => error.Output,
+                        _ => null,
+                    },
+                    Error = (toolPart.State as ToolErrorState)?.Error,
+                    Title = (toolPart.State as ToolCompletedState)?.Title,
+                    Metadata = toolPart.State switch
+                    {
+                        ToolCompletedState completed => completed.Metadata,
+                        ToolErrorState error => error.Metadata,
+                        _ => null,
+                    },
+                },
                 FileMessageEventPart filePart => new FilePart(eventPart.Id, filePart.Mime, filePart.Url, filePart.Filename),
                 StepFinishedMessageEventPart stepPart => new StepFinishPart(
                     stepPart.Index,

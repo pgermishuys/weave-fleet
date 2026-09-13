@@ -27,7 +27,7 @@ export interface ToolCardItem {
 const BROWSER_TOOLS = new Set(["fleet_app_start", "fleet_browser_open"]);
 
 const tool_output_keys = ["output", "result", "content", "error", "message", "stdout", "stderr"] as const;
-const fallback_excluded_keys = new Set(["input", "status", "summary", "diff", "diffLines", "patch"]);
+const fallback_excluded_keys = new Set(["input", "status", "summary", "title", "diff", "diffLines", "patch"]);
 
 function buildPreview(output: string | undefined, summary: string | undefined): string | undefined {
   if (output) {
