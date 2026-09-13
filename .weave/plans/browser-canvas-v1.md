@@ -120,7 +120,7 @@ Ground truth from the spike and the codebase (2026-09-13). Don't re-check these:
   - **Acceptance**: The test matrix (Task 8) meets Decision 4 on every stack.
   - **Depends on**: 1, 2, 4.
 
-- [ ] 6. Client
+- [x] 6. Client (built and checked in mock mode and live 2026-09-13, see Findings)
   - **What**: Canvas driven by `app.updated` (no polling); starting / running / build failed / exited / stopped states with Start/Restart/Stop; output drawer streaming; narrow-width strip; origin from the server (no client composition); bridge v1; + menu "Browser" (URL, or command with the project's remembered preview command pre-filled); tool cards for `fleet_app_start` and `fleet_browser_open` (title, URL, "Show"); a brief "updated" pulse on the tab when the page reloads or hot-updates; mock mode seeding one running app and scripted events.
   - **Files**: `BrowserCanvas.vue`, `stores/canvases.ts`, `lib/domain-events.ts`, `CanvasHost.vue` (+ menu), tool card registry, `vite-plugin-mock-api.ts`.
   - **Acceptance**: In mock mode (3099), light and dark: each state renders; the strip fits a 360 px panel; the + menu starts a command. `vue-tsc`, lint and vitest pass on Node 22 with `npm ci`.
@@ -280,6 +280,33 @@ Built in the worktree `.claude/worktrees/browser-canvas`, after rebasing `feat/b
 
 **Not done here:** closing preview listeners when their app stops or their session ends (a listener keeps its port until Fleet stops; with `--host 0.0.0.0`, if another process later takes the target port, the old preview would show it). Worth doing with the pass.
 
+### Task 6: client (2026-09-13)
+Needed a little server work too: the + menu has to start a command and remember one, bridge v1 changes the script the gateway adds, and a tool card's Show has to reopen a closed tab.
+
+**What it does:**
+- **Status comes from `app.updated`**, not polling. A new `app-runs` store is fed by the session subscription in `use-server-canvases`; the canvas loads its app once when it opens, when its tab comes back and after a reconnect. A load that was read before a newer event doesn't overwrite it. Output isn't pushed: the canvas asks for the lines after the ones it has (`output?after=n`) every second while output is on screen and the app runs.
+- **States:** starting (a panel with the command and the current run's last 8 lines, i.e. after the runner's `── restarted by Fleet ──` line, so an earlier crash doesn't show under "Starting…"); running (the page); build failed (the page stays, the status turns red and the output opens once; the status itself comes with Task 5); exited (the code, Start, the last lines); stopped (Start).
+- **Narrow panel:** container queries. Below 440 px the strip's buttons lose their labels; below 300 px the status text goes. At the default 360 px nothing overflows.
+- **Bridge v1** lives in `src/WeaveFleet.Api/Browser/preview-bridge.js` (embedded; mock mode serves the same file): `hello {hmr, href, title}`, `location`, `update` out, `nav` in. `hello`'s `hmr` came forward from Task 5, because the rewrite needed it. The bridge finds the hot-reload client from the socket the page opens (Vite's `vite-hmr` protocol, `/_next/webpack-hmr`, `/_bun/hmr`, the `dotnet watch` route) or its scripts. It sends `update` when a message on that socket says a change was applied (Vite `update`, webpack/Next `built`, `dotnet watch` `UpdateStaticFile`/`ApplyManagedCodeUpdates`), or when a stylesheet changes within 1.5 s of a message on it (Bun's messages are binary). The canvas takes messages only from its preview's origin and its own frame.
+- **Tab pulse:** the tab flashes when the page hot-updates, reloads itself (a `hello` for the same address that the canvas didn't ask for), comes back after a restart, or on `app.updated` with reason `reloaded` (Task 5 will send it; it pulses tabs that aren't in front too). The canvas's own Reload doesn't pulse.
+- **+ menu "Browser…":** one field that takes a command or an address (`5173`, `localhost:5173/cart` and `http://…` are addresses). It starts with the project's remembered command, and the session's earlier commands are offered below it. Server: `GET` and `POST /api/sessions/{id}/apps`, `POST /api/sessions/{id}/browser`, and `BrowserPreviews`, which the agent tools now share. Starting a command the session already runs doesn't restart it; its tab comes forward. A tab started from the + menu has no URL of its own (`{url: "", appId}`): the canvas shows the app's page, and `fleet_canvas_read` prints the app's `page` while it runs.
+- **Remembered command:** table `preview_commands` (migration `031`), one per user and project, where the project is the folder a session's worktree came from, or the session's own folder. It's written when a run serves a page, so it outlives the session.
+- **Tool cards:** `fleet_app_start` ("Run app") and `fleet_browser_open` ("Open page") read "title · address". Any tool whose metadata names a canvas gets a Show button, which calls the new `POST /api/sessions/{id}/canvases/{canvasId}/focus` (reopens a closed tab).
+- **Mock mode:** every mock session has a running app shown by a "Storefront" tab. Its page is a pretend dev server on its own port (`client/mock-preview.ts`) that loads the real bridge and has a `vite-hmr` socket. Script it with `curl -X POST localhost:3099/api/mock/sessions/<id>/apps/app_mock_storefront/<step>`, where step is starting, running, build-failed, exited, stopped, hot-update, reload, reloaded or log. The mock middleware now passes request bodies to handlers.
+
+**Checks:**
+- Mock mode on 3099 (`pw/task6-mock.mjs`), light and dark: 29/29 each. Every state renders; the strip fits the 359 px panel; a hot update pulses and keeps the page; a reload by the page pulses and the canvas's Reload doesn't; the address follows navigation and Back; a failed build opens the output; exited and stopped show Start; `reloaded` pulses a tab that isn't in front; the + menu runs a command and opens an address.
+- Scratch Fleet with the real Vite fixture (`pw/task6-live.mjs`), same machine: 11/11. Framed at `http://p….localhost:{port}/`; a real CSS edit pulsed the tab and kept the page; a JS edit made Vite reload, which pulsed; the output drawer; Stop and Start driven by events; the remembered command offered. From another device (`pasta` namespace reaching only 192.168.1.13, Fleet with `Fleet__Host=0.0.0.0`): the same, with the preview at `http://192.168.1.13:34293/`.
+- Endpoints, live: 422 for an empty command and for a URL that isn't on this machine; the remembered command appeared once the page answered; the same command again didn't restart the app; after a Fleet restart the app read stopped and the + menu started it under the same id; focus reopened a closed canvas, 404 for an unknown one.
+- Tests: Application 521, Infrastructure 793 (1 skipped, not ours), Api 209 and Integration 83 (2 skipped) under a scratch `HOME` (`~/.weave/fleet.db` untouched), client lint (0 errors, no warnings on changed lines), `vue-tsc`, vitest 531/531 on Node 22 after `npm ci`.
+- Screenshots: `mockups/canvas/browser-states-*.png` (mock mode), `browser-other-device-output.png` (live, another device).
+
+**Not done, and notes:**
+- The tool cards haven't been seen with a real model yet (Tasks 7 and 9).
+- **Switching away from a Browser tab and back reloads its page** (checked: a mark set on the page's `window` is gone). `CanvasHost` keeps canvases in `KeepAlive`, which moves the iframe out of the document. It predates Task 6, and the canvas copes (it doesn't pulse for that load), but the page loses its state, such as a half-filled form.
+- A + menu open is stored as the agent's revision (`ICanvasService.OpenAsync` has no actor). Harmless for browser canvases.
+- Bun's JS hot updates don't pulse the tab (binary messages); its CSS updates do.
+
 ## Assessment (2026-09-13)
 Asked by the user after Tasks 0–1: is this a good feature with decent functionality? Written by the agent that built the spike, so read with that in mind.
 
@@ -330,6 +357,9 @@ Open items, with where they came from. Tick them here as they're done.
 - [x] Task 6 (done in Task 4): "Open in a new tab" opens the preview's address.
 - [ ] Close preview listeners when their app stops or their session is archived/deleted (Task 4 leaves them until Fleet stops).
 - [ ] After V1: the preview pass (token + cookie), the per-session port ownership check, and the cookie-sharing mitigations (Decision 12). Needed before Fleet is hosted for more than one user or used on an untrusted network.
+- [ ] Keep Browser tabs mounted while another tab is in front, so switching tabs doesn't reload the page (Task 6 finding; `KeepAlive` detaches the iframe).
+- [ ] Send `app.updated` with reason `reloaded` when Fleet reloads a page, and `build-failed` status (Task 5); the client already handles both.
+- [ ] See the `fleet_app_start` and `fleet_browser_open` tool cards (title, address, Show) with a real model (Task 7 or 9).
 - [ ] Task 5: reload the canvas as soon as a `dotnet watch` app answers again after a rude-edit restart (12.6 s now, because of Blazor's backoff).
 - [ ] Task 3: nothing has run on macOS or Windows yet.
 - [ ] After V1: an agent screenshot tool (proposal 3).
