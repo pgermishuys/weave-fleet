@@ -22,6 +22,7 @@ import {
   ScrollText,
   Settings,
   SquareDashedBottom,
+  SquareTerminal,
   ZoomIn,
   ZoomOut,
 } from "lucide-vue-next";
@@ -38,6 +39,8 @@ import { useCommandStore } from "@/stores/commands";
 import { useKeybindingsStore } from "@/stores/keybindings";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
+import { useAppShellStore } from "@/stores/app-shell";
+import { useTerminalsStore } from "@/stores/terminals";
 import { useThemeStore, type ThemeSelection } from "@/stores/theme";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
@@ -72,6 +75,8 @@ export function useCommands() {
   const sidebarStore = useSidebarStore();
   const themeStore = useThemeStore();
   const workspaceUiStore = useWorkspaceUiStore();
+  const appShellStore = useAppShellStore();
+  const terminalsStore = useTerminalsStore();
   const { toggleSidebar, isMobileNav, mobileDrawerOpen } = useSidebarMobile();
   const { abortSession } = useAbortSession();
   const { forkSession } = useForkSession();
@@ -85,6 +90,13 @@ export function useCommands() {
   const { currentTheme } = storeToRefs(themeStore);
 
   const themeCycle: ThemeSelection[] = ["system", "dark", "light"];
+
+  /** The session whose terminal Ctrl J toggles: the one open on screen, when Fleet has terminals on. */
+  const terminalSessionId = computed(() => {
+    if (!appShellStore.config.terminalEnabled || !pathname.value.startsWith("/sessions/")) return null;
+    const id = getCurrentSessionId(pathname.value, activeSessionId.value);
+    return id && id !== "new" ? id : null;
+  });
 
   function navigateToRoute(to: "/" | "/board" | "/analytics" | "/settings"): void {
     if (to === "/") {
@@ -513,6 +525,23 @@ export function useCommands() {
         action: () => sidebarStore.toggleRightPanelCollapsed(),
       },
       {
+        id: "toggle-terminal",
+        label: terminalSessionId.value && terminalsStore.isOpen(terminalSessionId.value) ? "Hide Terminal" : "Show Terminal",
+        description: terminalSessionId.value
+          ? "Show or hide the terminal under the chat."
+          : "Open a session to use its terminal.",
+        icon: SquareTerminal,
+        category: "View",
+        paletteHotkey: bindings.value["toggle-terminal"]?.paletteHotkey ?? undefined,
+        globalShortcut: bindings.value["toggle-terminal"]?.globalShortcut ?? undefined,
+        allowInEditable: true,
+        keywords: ["terminal", "shell", "console", "drawer"],
+        disabled: terminalSessionId.value === null,
+        action: () => {
+          if (terminalSessionId.value) terminalsStore.toggleOpen(terminalSessionId.value);
+        },
+      },
+      {
         id: "toggle-diff-view",
         label: workspaceUiStore.inlineToolDiffs ? "Hide Inline Tool Diffs" : "Show Inline Tool Diffs",
         description: workspaceUiStore.inlineToolDiffs
@@ -651,12 +680,14 @@ export function useCommands() {
       }
     }
 
-    if (isEditableTarget(event.target)) {
-      return;
-    }
+    const inEditable = isEditableTarget(event.target);
 
     for (const command of commandStore.commands) {
       if (!command.globalShortcut || command.disabled) {
+        continue;
+      }
+
+      if (inEditable && !command.allowInEditable) {
         continue;
       }
 

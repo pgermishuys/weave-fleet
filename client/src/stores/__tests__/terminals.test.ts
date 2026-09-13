@@ -10,6 +10,7 @@ function terminal(id: string, title = "zsh"): TerminalSummary {
 describe("useTerminalsStore", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    globalThis.localStorage?.clear();
   });
 
   it("keeps the active tab when the list is reloaded, and falls back to the first", () => {

@@ -47,8 +47,11 @@ function persist(key: string, value: string): void {
 
 export const useTerminalsStore = defineStore("terminals", () => {
   const sessions = ref<Record<string, SessionTerminals>>({});
+  const loadedSessions = ref<string[]>([]);
   const openSessions = ref<string[]>(readOpenSessions());
   const height = ref(readHeight());
+  /** True while a terminal has the keyboard, so the status bar can say so. */
+  const focused = ref(false);
 
   function entry(sessionId: string): SessionTerminals {
     let current = sessions.value[sessionId];
@@ -70,6 +73,7 @@ export const useTerminalsStore = defineStore("terminals", () => {
 
   /** Replaces the session's tabs with what the server listed, keeping the active tab when it's still there. */
   function setTerminals(sessionId: string, list: TerminalSummary[]): void {
+    if (!loadedSessions.value.includes(sessionId)) loadedSessions.value = [...loadedSessions.value, sessionId];
     const current = entry(sessionId);
     current.terminals = [...list];
     if (!list.some((terminal) => terminal.id === current.activeId)) current.activeId = list[0]?.id ?? null;
@@ -112,6 +116,15 @@ export const useTerminalsStore = defineStore("terminals", () => {
     remove(sessionId, terminalId);
   }
 
+  /** Whether the session's list has come from the server at least once. */
+  function isLoaded(sessionId: string): boolean {
+    return loadedSessions.value.includes(sessionId);
+  }
+
+  function setFocused(value: boolean): void {
+    focused.value = value;
+  }
+
   function isOpen(sessionId: string): boolean {
     return openSessions.value.includes(sessionId);
   }
@@ -135,12 +148,16 @@ export const useTerminalsStore = defineStore("terminals", () => {
 
   function forgetSession(sessionId: string): void {
     delete sessions.value[sessionId];
+    loadedSessions.value = loadedSessions.value.filter((id) => id !== sessionId);
     setOpen(sessionId, false);
   }
 
   return {
     sessions,
     height,
+    focused,
+    isLoaded,
+    setFocused,
     terminalsFor,
     activeFor,
     setTerminals,

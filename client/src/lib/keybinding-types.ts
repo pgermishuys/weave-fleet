@@ -30,6 +30,7 @@ export const DEFAULT_KEYBINDINGS: KeyBindingsConfig = {
   // View
   "toggle-sidebar":     { paletteHotkey: "b", globalShortcut: { key: "b", platformModifier: true } },
   "toggle-right-panel": { paletteHotkey: null, globalShortcut: { key: "b", platformModifier: true, shiftKey: true } },
+  "toggle-terminal":    { paletteHotkey: null, globalShortcut: { key: "j", platformModifier: true } },
   "toggle-activity-filter": { paletteHotkey: null, globalShortcut: null },
   "cycle-theme":        { paletteHotkey: null, globalShortcut: { key: "t", platformModifier: true, metaKey: true } },
   "toggle-fullscreen":  { paletteHotkey: null, globalShortcut: null },
