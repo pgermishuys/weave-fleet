@@ -95,9 +95,9 @@ public sealed class JsonSkillManifestStore : ISkillManifestStore
             var manifest = await LoadInternalAsync(userId, workspaceId, ct).ConfigureAwait(false);
             
             // Check if skill already exists
-            if (manifest.Skills.Any(s => s.Name.Equals(entry.Name, StringComparison.OrdinalIgnoreCase)))
+            if (manifest.Skills.Any(s => IsSameInstall(s, entry.Name, entry.Scope, entry.ProjectPath)))
             {
-                throw new InvalidOperationException($"Skill '{entry.Name}' already exists in the manifest.");
+                throw new InvalidOperationException($"Skill '{entry.Name}' is already installed at that target.");
             }
 
             var updatedSkills = manifest.Skills.ToList();
@@ -117,7 +117,7 @@ public sealed class JsonSkillManifestStore : ISkillManifestStore
         }
     }
 
-    public async Task RemoveEntryAsync(string userId, string? workspaceId, string skillName, CancellationToken ct = default)
+    public async Task RemoveEntryAsync(string userId, string? workspaceId, string skillName, InstallTarget target, CancellationToken ct = default)
     {
         ValidateUserId(userId);
         ValidateWorkspaceId(workspaceId);
@@ -128,7 +128,7 @@ public sealed class JsonSkillManifestStore : ISkillManifestStore
             var manifest = await LoadInternalAsync(userId, workspaceId, ct).ConfigureAwait(false);
             
             var updatedSkills = manifest.Skills
-                .Where(s => !s.Name.Equals(skillName, StringComparison.OrdinalIgnoreCase))
+                .Where(s => !IsSameInstall(s, skillName, target.Scope, target.ProjectPath))
                 .ToList();
 
             // If count didn't change, skill wasn't found
@@ -162,7 +162,7 @@ public sealed class JsonSkillManifestStore : ISkillManifestStore
             var manifest = await LoadInternalAsync(userId, workspaceId, ct).ConfigureAwait(false);
             
             var updatedSkills = manifest.Skills.ToList();
-            var index = updatedSkills.FindIndex(s => s.Name.Equals(entry.Name, StringComparison.OrdinalIgnoreCase));
+            var index = updatedSkills.FindIndex(s => IsSameInstall(s, entry.Name, entry.Scope, entry.ProjectPath));
 
             if (index == -1)
             {
@@ -225,6 +225,10 @@ public sealed class JsonSkillManifestStore : ISkillManifestStore
         await File.WriteAllTextAsync(tempPath, json, ct).ConfigureAwait(false);
         File.Move(tempPath, storePath, overwrite: true);
     }
+
+    private static bool IsSameInstall(SkillManifestEntry entry, string name, InstallScope scope, string? projectPath) =>
+        entry.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
+        InstallTarget.From(entry.Scope, entry.ProjectPath).Matches(scope, projectPath);
 
     private static void ValidateUserId(string userId)
     {

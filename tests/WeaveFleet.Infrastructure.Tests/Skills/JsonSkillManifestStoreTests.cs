@@ -253,7 +253,7 @@ public sealed class JsonSkillManifestStoreTests : IDisposable
         await _store.AddEntryAsync("test-user", null, entry);
 
         // Act
-        await _store.RemoveEntryAsync("test-user", null, "skill-to-remove");
+        await _store.RemoveEntryAsync("test-user", null, "skill-to-remove", InstallTarget.Global);
         var manifest = await _store.LoadAsync("test-user");
 
         // Assert
@@ -265,7 +265,34 @@ public sealed class JsonSkillManifestStoreTests : IDisposable
     {
         // Act & Assert
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => _store.RemoveEntryAsync("test-user", null, "non-existent-skill"));
+            () => _store.RemoveEntryAsync("test-user", null, "non-existent-skill", InstallTarget.Global));
+    }
+
+    [Fact]
+    public async Task Entries_AreKeyedByNameAndInstallTarget()
+    {
+        var global = new SkillManifestEntry
+        {
+            Name = "shared-skill",
+            Source = SkillSource.GitHub,
+            RepoUrl = "https://github.com/test/skill",
+            TargetHarnesses = ["opencode"],
+            InstalledAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+        var project = global with { Scope = InstallScope.Project, ProjectPath = "/src/repo" };
+
+        await _store.AddEntryAsync("test-user", null, global);
+        await _store.AddEntryAsync("test-user", null, project);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _store.AddEntryAsync("test-user", null, project));
+
+        await _store.UpdateEntryAsync("test-user", null, project with { InstalledPaths = ["/src/repo/.opencode/skills/shared-skill"] });
+        await _store.RemoveEntryAsync("test-user", null, "shared-skill", InstallTarget.Global);
+
+        var remaining = Assert.Single((await _store.LoadAsync("test-user")).Skills);
+        Assert.Equal(InstallScope.Project, remaining.Scope);
+        Assert.Equal("/src/repo", remaining.ProjectPath);
+        Assert.Equal(["/src/repo/.opencode/skills/shared-skill"], remaining.InstalledPaths);
     }
 
     [Fact]

@@ -26,6 +26,15 @@ public sealed record SkillManifestEntry
     /// <summary>List of harness types this skill targets (e.g., "opencode", "aider").</summary>
     public IReadOnlyList<string> TargetHarnesses { get; init; } = [];
 
+    /// <summary>Whether the skill is installed for the user or into one repository.</summary>
+    public InstallScope Scope { get; init; } = InstallScope.Global;
+
+    /// <summary>The repository root when <see cref="Scope"/> is <see cref="InstallScope.Project"/>.</summary>
+    public string? ProjectPath { get; init; }
+
+    /// <summary>The skill folders Fleet wrote, one per harness. Fleet only replaces or deletes these.</summary>
+    public IReadOnlyList<string> InstalledPaths { get; init; } = [];
+
     /// <summary>Timestamp when the skill was first installed.</summary>
     public required DateTimeOffset InstalledAt { get; init; }
 

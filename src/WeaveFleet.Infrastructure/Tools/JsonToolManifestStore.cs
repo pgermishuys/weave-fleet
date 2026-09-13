@@ -1,5 +1,6 @@
 using System.Text.Json;
 using WeaveFleet.Application.Tools;
+using WeaveFleet.Domain.Skills;
 using WeaveFleet.Domain.Tools;
 
 namespace WeaveFleet.Infrastructure.Tools;
@@ -95,9 +96,9 @@ public sealed class JsonToolManifestStore : IToolManifestStore
             var manifest = await LoadInternalAsync(userId, workspaceId, ct).ConfigureAwait(false);
             
             // Check if tool already exists
-            if (manifest.Tools.Any(t => t.Name.Equals(entry.Name, StringComparison.OrdinalIgnoreCase)))
+            if (manifest.Tools.Any(t => IsSameInstall(t, entry.Name, entry.Scope, entry.ProjectPath)))
             {
-                throw new InvalidOperationException($"Tool '{entry.Name}' already exists in the manifest.");
+                throw new InvalidOperationException($"Tool '{entry.Name}' is already installed at that target.");
             }
 
             var updatedTools = manifest.Tools.ToList();
@@ -117,7 +118,7 @@ public sealed class JsonToolManifestStore : IToolManifestStore
         }
     }
 
-    public async Task RemoveEntryAsync(string userId, string? workspaceId, string toolName, CancellationToken ct = default)
+    public async Task RemoveEntryAsync(string userId, string? workspaceId, string toolName, InstallTarget target, CancellationToken ct = default)
     {
         ValidateUserId(userId);
         ValidateWorkspaceId(workspaceId);
@@ -128,7 +129,7 @@ public sealed class JsonToolManifestStore : IToolManifestStore
             var manifest = await LoadInternalAsync(userId, workspaceId, ct).ConfigureAwait(false);
             
             var updatedTools = manifest.Tools
-                .Where(t => !t.Name.Equals(toolName, StringComparison.OrdinalIgnoreCase))
+                .Where(t => !IsSameInstall(t, toolName, target.Scope, target.ProjectPath))
                 .ToList();
 
             // If count didn't change, tool wasn't found
@@ -162,7 +163,7 @@ public sealed class JsonToolManifestStore : IToolManifestStore
             var manifest = await LoadInternalAsync(userId, workspaceId, ct).ConfigureAwait(false);
             
             var updatedTools = manifest.Tools.ToList();
-            var index = updatedTools.FindIndex(t => t.Name.Equals(entry.Name, StringComparison.OrdinalIgnoreCase));
+            var index = updatedTools.FindIndex(t => IsSameInstall(t, entry.Name, entry.Scope, entry.ProjectPath));
 
             if (index == -1)
             {
@@ -225,6 +226,10 @@ public sealed class JsonToolManifestStore : IToolManifestStore
         await File.WriteAllTextAsync(tempPath, json, ct).ConfigureAwait(false);
         File.Move(tempPath, storePath, overwrite: true);
     }
+
+    private static bool IsSameInstall(ToolManifestEntry entry, string name, InstallScope scope, string? projectPath) =>
+        entry.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
+        InstallTarget.From(entry.Scope, entry.ProjectPath).Matches(scope, projectPath);
 
     private static void ValidateUserId(string userId)
     {
