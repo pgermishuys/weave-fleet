@@ -63,6 +63,9 @@ public abstract class E2ETestBase : IAsyncLifetime
             ViewportSize = new ViewportSize { Width = 1280, Height = 720 }
         });
 
+        // Record the client's message lifecycle diagnostics so a failure can show them.
+        await _context.AddInitScriptAsync("window.localStorage.setItem('fleet:diag-enabled', '1');");
+
         // Start tracing for this test
         await _context.Tracing.StartAsync(new TracingStartOptions
         {
@@ -100,6 +103,14 @@ public abstract class E2ETestBase : IAsyncLifetime
                 {
                     var screenshotPath = Path.Combine(artifactsDir, $"{testName}-screenshot.png");
                     await Page.ScreenshotAsync(new PageScreenshotOptions { Path = screenshotPath });
+
+                    var clientState = await Page.EvaluateAsync<string>("""
+                        () => JSON.stringify({
+                          prompts: window.__WEAVE_TEST_API?.getPromptState?.() ?? null,
+                          diagnostics: JSON.parse(localStorage.getItem('fleet:message-diagnostics') ?? '[]'),
+                        }, null, 2)
+                        """);
+                    await File.WriteAllTextAsync(Path.Combine(artifactsDir, $"{testName}-client-state.json"), clientState);
                 }
             }
             catch

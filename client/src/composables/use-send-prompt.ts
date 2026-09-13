@@ -141,6 +141,22 @@ export function clearPendingPrompts(sessionId: string): void {
   delete pendingPromptRegistry[sessionId];
 }
 
+/** Read-only snapshot of prompt tracking, for E2E failure diagnostics. */
+export function getPromptTrackingState(): {
+  sent: Record<string, Array<Pick<SentPromptMessage, "id" | "correlationId" | "status" | "body">>>;
+  pending: Record<string, number>;
+} {
+  return {
+    sent: Object.fromEntries(
+      Object.entries(sentPromptRegistry).map(([sessionId, prompts]) => [
+        sessionId,
+        prompts.map(({ id, correlationId, status, body }) => ({ id, correlationId, status, body })),
+      ]),
+    ),
+    pending: { ...pendingPromptRegistry },
+  };
+}
+
 function buildDeliveredPromptCounts(messages: readonly AccumulatedMessage[]): Map<string, number> {
   const deliveredPromptCounts = new Map<string, number>();
 
