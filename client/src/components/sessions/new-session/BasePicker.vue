@@ -238,6 +238,7 @@ watch(open, (isOpen) => {
         <Switch
           :id="fetchId"
           v-model="fetchOrigin"
+          class="ns-base-fetch__switch"
           data-testid="new-session-base-fetch"
           :disabled="!isOriginBase"
         />
@@ -306,6 +307,16 @@ watch(open, (isOpen) => {
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
+}
+
+/* The switch's shadcn tokens (--input, --background) aren't Fleet's; give it a visible track and thumb. */
+.ns-base-fetch__switch[data-state="unchecked"] {
+  background: color-mix(in srgb, var(--text) 22%, transparent);
+}
+
+.ns-base-fetch :deep([data-slot="switch-thumb"]) {
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .ns-base-fetch__text {
