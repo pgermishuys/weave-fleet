@@ -307,6 +307,9 @@ Needed a little server work too: the + menu has to start a command and remember 
 - A + menu open is stored as the agent's revision (`ICanvasService.OpenAsync` has no actor). Harmless for browser canvases.
 - Bun's JS hot updates don't pulse the tab (binary messages); its CSS updates do.
 
+### AOT check (2026-09-13, part of Task 9)
+After rebasing onto `main` (#192), Fleet was published Native AOT for linux-x64 exactly as CI does (no trim or AOT warnings) and run in Production against the scratch data. The endpoints answered, the gateway served the embedded bridge script and put its tag into the page, and `pw/task6-live.mjs` passed 11/11 with the real Vite app (dark theme): the + menu's tab, hot update and reload pulses, output, Stop and Start, the remembered command. Stopping Fleet killed the app. Still open in Task 9: the test matrix against AOT, and the real-model run.
+
 ## Assessment (2026-09-13)
 Asked by the user after Tasks 0–1: is this a good feature with decent functionality? Written by the agent that built the spike, so read with that in mind.
 
