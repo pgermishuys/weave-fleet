@@ -158,7 +158,7 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
     - A `session_progress` event updates a row that isn't open
     - Vitest covers the composable and the row. The ring's colours and timing come from tokens, so it adds no `lint:design` violations; the 9 raw-button violations were already on main.
 
-- [ ] 6. End-to-end and live checks for Phase 1
+- [x] 6. End-to-end and live checks for Phase 1
   - **What**:
     - An E2E test where the TestHarness sends `todos.reported` directly. That proves a harness other than OpenCode needs only the Fleet event. It checks that the row shows the ring and count, and that the strip lists the todos.
     - A live integration test copying `FleetCanvasPluginLiveTests`: a real pooled OpenCode process and a scripted model calling `todowrite` twice. It asserts `session_progress` arrives with the right counts.
@@ -170,6 +170,7 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
   - **Acceptance**:
     - Both tests pass locally and in CI (the live test is skipped where `opencode` isn't installed, like `[OpenCodeFact]`)
     - Checked by hand in a scratch Fleet with a scratch HOME. The real `~/.weave` is never touched.
+    - Done 2026-09-13: the live test passes against OpenCode 1.18.30. It uses the shared `PooledOpenCodeLiveHost` from PR #195. The E2E test passes and was screenshotted in a real browser: the row shows the ring and "1/3", and the right panel shows "1 of 3 todos". Locally the .NET E2E tests need `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64` on Ubuntu 26.04. Not yet checked: a real model in a real pooled session in the browser.
 
 ### Phase 2: Plans from checklist files
 

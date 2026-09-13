@@ -26,6 +26,23 @@ public sealed class JsonSerializationContextTests
     }
 
     [Fact]
+    public void Session_progress_serializes_from_the_source_generated_context()
+    {
+        // The HTTP JSON options fall back to reflection, which hides a missing registration until an AOT build.
+        var progress = new WeaveFleet.Application.DTOs.SessionProgressDto(
+            "s1", "todos", 1, 2, "Drop the indexes",
+            [new WeaveFleet.Domain.Events.TodoEntry { Content = "Drop the indexes", Status = "in_progress" }],
+            "2026-09-13T12:24:00.0000000Z");
+
+        var json = JsonSerializer.Serialize(progress, ApiJsonContext.Default.SessionProgressDto);
+
+        Assert.Equal(
+            """{"sessionId":"s1","kind":"todos","done":1,"total":2,"current":"Drop the indexes","todos":[{"content":"Drop the indexes","status":"in_progress","priority":null}],"updatedAt":"2026-09-13T12:24:00.0000000Z"}""",
+            json);
+        Assert.NotNull(ApiJsonContext.Default.GetTypeInfo(typeof(WeaveFleet.Application.DTOs.SessionProgressSummaryDto)));
+    }
+
+    [Fact]
     public async Task ApiJsonContext_resolves_all_endpoint_request_body_types()
     {
         // This test validates that every type used as a JSON request body parameter
