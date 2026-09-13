@@ -1,0 +1,144 @@
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { nextTick } from "vue"
+import { useDraftState } from "@/composables/use-draft-state"
+import {
+  clearSentPrompts,
+  confirmSentPrompt,
+  reconcileSentPrompts,
+  useSendPrompt,
+  useSentPrompts,
+} from "@/composables/use-send-prompt"
+import type { AccumulatedMessage } from "@/lib/client-types"
+
+vi.mock("@/api/client", () => ({
+  api: {
+    GET: vi.fn(),
+    POST: vi.fn(),
+    PUT: vi.fn(),
+    DELETE: vi.fn(),
+    PATCH: vi.fn(),
+  },
+}))
+
+vi.mock("@/composables/use-agents", async () => {
+  const { computed, ref } = await import("vue")
+  const agents = ref([{ id: "agent-1", name: "Loom", description: "" }])
+  const agentsById = ref({ "agent-1": agents.value[0] })
+
+  return {
+    useAgents: () => ({
+      agents,
+      agentsById,
+      defaultAgentId: computed(() => "agent-1"),
+      isLoading: ref(false),
+      error: ref(undefined),
+      refresh: vi.fn(),
+    }),
+  }
+})
+
+vi.mock("@/composables/use-models", async () => {
+  const { computed, ref } = await import("vue")
+  const model = { id: "model-1", name: "Model", providerId: "provider-1", selectionKey: "model-key", provider: "Provider", description: "" }
+  const models = ref([model])
+  const modelsByKey = ref({ "model-key": model })
+
+  return {
+    useModels: () => ({
+      models,
+      modelsByKey,
+      defaultModelKey: computed(() => "model-key"),
+      isLoading: ref(false),
+      error: ref(undefined),
+      refresh: vi.fn(),
+    }),
+  }
+})
+
+import { api } from "@/api/client"
+
+const mockApi = vi.mocked(api)
+
+afterEach(() => {
+  mockApi.POST.mockReset()
+  vi.restoreAllMocks()
+})
+
+// A prompt request that never resolves, so the prompt stays unconfirmed until the test confirms it.
+function sendUnconfirmedPrompt(sessionId: string, text: string, correlationSeed: string): void {
+  mockApi.POST.mockReturnValueOnce(new Promise(() => {}))
+  vi.spyOn(crypto, "randomUUID")
+    .mockReturnValueOnce("optimistic-id" as `${string}-${string}-${string}-${string}-${string}`)
+    .mockReturnValueOnce(correlationSeed as `${string}-${string}-${string}-${string}-${string}`)
+  useDraftState(sessionId, { agentId: "", modelId: "" }).setText(text)
+  useSendPrompt(sessionId).sendPrompt()
+}
+
+function deliveredUserMessage(sessionId: string, messageId: string, text: string): AccumulatedMessage {
+  return {
+    messageId,
+    sessionId,
+    role: "user",
+    parts: [{ type: "text", text } as AccumulatedMessage["parts"][number]],
+  }
+}
+
+describe("use-send-prompt pending prompts", () => {
+  it("counts a sent prompt as pending until it is confirmed", async () => {
+    const sessionId = "session-pending-confirm"
+    const { hasPendingPrompts } = useSentPrompts(sessionId)
+
+    sendUnconfirmedPrompt(sessionId, "Hello", "corr-confirm")
+    await nextTick()
+    expect(hasPendingPrompts.value).toBe(true)
+
+    confirmSentPrompt(sessionId, { correlationId: "prompt-corrconfirm" })
+    expect(hasPendingPrompts.value).toBe(false)
+  })
+
+  it("stops counting a prompt as pending when reconciliation removes it before confirmation", async () => {
+    const sessionId = "session-pending-reconcile"
+    const { hasPendingPrompts, sentPrompts } = useSentPrompts(sessionId)
+
+    sendUnconfirmedPrompt(sessionId, "Hello", "corr-reconcile")
+    await nextTick()
+
+    // The delivered message carries the server's ID, so it matches by text.
+    reconcileSentPrompts(sessionId, [deliveredUserMessage(sessionId, "user-server-id", "Hello")])
+    expect(sentPrompts.value).toHaveLength(0)
+    expect(hasPendingPrompts.value).toBe(false)
+
+    // The late confirmation finds nothing to confirm and must not push the count below zero.
+    confirmSentPrompt(sessionId, { correlationId: "prompt-corrreconcile", serverMessageId: "user-server-id" })
+    expect(hasPendingPrompts.value).toBe(false)
+  })
+
+  it("stops counting a prompt as pending when sent prompts are cleared before confirmation", async () => {
+    const sessionId = "session-pending-clear"
+    const { hasPendingPrompts } = useSentPrompts(sessionId)
+
+    sendUnconfirmedPrompt(sessionId, "Hello", "corr-clear")
+    await nextTick()
+
+    clearSentPrompts(sessionId)
+    expect(hasPendingPrompts.value).toBe(false)
+  })
+
+  it("does not count a confirmed prompt twice when reconciliation removes it", async () => {
+    const sessionId = "session-confirmed-reconcile"
+    const { hasPendingPrompts } = useSentPrompts(sessionId)
+
+    sendUnconfirmedPrompt(sessionId, "Hello", "corr-first")
+    await nextTick()
+    sendUnconfirmedPrompt(sessionId, "Second", "corr-second")
+    await nextTick()
+
+    confirmSentPrompt(sessionId, { correlationId: "prompt-corrfirst" })
+    reconcileSentPrompts(sessionId, [deliveredUserMessage(sessionId, "user-server-id", "Hello")])
+
+    // Only the second prompt is still waiting for its confirmation.
+    expect(hasPendingPrompts.value).toBe(true)
+    confirmSentPrompt(sessionId, { correlationId: "prompt-corrsecond" })
+    expect(hasPendingPrompts.value).toBe(false)
+  })
+})

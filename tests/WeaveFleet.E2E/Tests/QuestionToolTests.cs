@@ -1,13 +1,10 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
-using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.E2E.Infrastructure;
 using WeaveFleet.E2E.Pages;
-using WeaveFleet.Infrastructure.Data.Repositories;
 using WeaveFleet.TestHarness;
-using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.E2E.Tests;
 
@@ -17,7 +14,6 @@ namespace WeaveFleet.E2E.Tests;
 /// both the question text and the chosen answer.
 /// </summary>
 [Trait("Category", "E2E")]
-[Trait("Lane", "Workflow")]
 public sealed class QuestionToolTests : E2ETestBase,
     IClassFixture<FleetWebApplicationFactory>,
     IClassFixture<PlaywrightFixture>
@@ -31,8 +27,8 @@ public sealed class QuestionToolTests : E2ETestBase,
     }
 
     /// <summary>
-    /// Verifies the full question tool lifecycle using DB-seeded messages:
-    /// 1. A persisted assistant message with a running question tool part is loaded.
+    /// Verifies the full question tool lifecycle:
+    /// 1. The harness emits an assistant message with a running question tool part.
     /// 2. The active question card renders with options.
     /// 3. The user selects an option and submits.
     /// 4. The answered card displays the question text and chosen answer.
@@ -86,33 +82,50 @@ public sealed class QuestionToolTests : E2ETestBase,
             var messageId = $"msg-question-{Guid.NewGuid():N}";
             var toolCallId = "call-q1";
 
-            // Seed an assistant message with a running question tool part
-            var connFactory = _factory.KestrelServices.GetRequiredService<IDbConnectionFactory>();
-            var userContext = new TestUserContext("local-user");
-            var messageRepo = new MessageRepository(connFactory, userContext);
-
-            await messageRepo.UpsertAsync(
-                MessagePersistenceService.ToPersistedMessage(
-                    sessionId,
-                    new HarnessMessage
+            // The agent asks the question: an assistant message with a running question tool part
+            await harness.PushEventAsync(new HarnessEvent
+            {
+                Type = "message.updated",
+                SessionId = harness.InstanceId,
+                FleetSessionId = sessionId,
+                Timestamp = DateTimeOffset.UtcNow,
+                Payload = JsonSerializer.SerializeToElement(new
+                {
+                    info = new
                     {
-                        Id = messageId,
-                        Role = "assistant",
-                        Parts =
-                        [
-                            new ToolUsePart(
-                                ToolCallId: toolCallId,
-                                ToolName: "question",
-                                Arguments: JsonSerializer.SerializeToElement(questionInput),
-                                State: ToolUseState.Running),
-                        ],
-                        Timestamp = DateTimeOffset.UtcNow,
-                    }));
+                        id = messageId,
+                        sessionID = harness.InstanceId,
+                        role = "assistant",
+                        time = new { created = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() },
+                    },
+                }),
+            });
+            await harness.PushEventAsync(new HarnessEvent
+            {
+                Type = "message.part.updated",
+                SessionId = harness.InstanceId,
+                FleetSessionId = sessionId,
+                Timestamp = DateTimeOffset.UtcNow,
+                Payload = JsonSerializer.SerializeToElement(new
+                {
+                    sessionID = harness.InstanceId,
+                    part = new
+                    {
+                        type = "tool",
+                        id = toolCallId,
+                        callID = toolCallId,
+                        tool = "question",
+                        sessionID = harness.InstanceId,
+                        messageID = messageId,
+                        state = new { status = "running", input = questionInput },
+                    },
+                }),
+            });
 
             // Set question context on the harness so AnswerQuestionAsync can emit completion
             harness.SetQuestionContext(messageId, JsonSerializer.SerializeToElement(questionInput));
 
-            // Reload the page to pick up persisted messages
+            // Reload: the question must survive a page load, not just arrive live
             await detail.GotoAsync(sessionId, instanceId);
 
             // Wait for the active question card to appear
@@ -132,10 +145,15 @@ public sealed class QuestionToolTests : E2ETestBase,
             var submitButton = Page.GetByTestId("question-submit-button");
             await submitButton.ClickAsync();
 
-            // The API-triggered AnswerQuestionAsync event doesn't reliably reach the
-            // frontend via WS in E2E (same issue as Discovery #1). Push the completion
-            // event directly from test code — proven pattern from DelegationReplayE2ETests.
-            await Task.Delay(500); // Let the API call complete
+            // The chosen answer must reach the harness through the API.
+            var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+            while (harness.LastAnswers is null && DateTimeOffset.UtcNow < deadline)
+                await Task.Delay(50);
+            harness.LastAnswers.ShouldNotBeNull("The submitted answer never reached the harness.");
+            harness.LastAnswers.ShouldHaveSingleItem().ShouldBe(["Staging"]);
+
+            // The completion event the test harness emits carries no Fleet session ID, so
+            // push one that does to drive the answered state in the browser.
             await harness.PushEventAsync(new HarnessEvent
             {
                 Type = "message.part.updated",

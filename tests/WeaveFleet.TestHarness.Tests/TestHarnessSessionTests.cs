@@ -230,6 +230,53 @@ public sealed class TestHarnessSessionTests
         page.HasMore.ShouldBeTrue();
     }
 
+    [Fact]
+    public async Task GetMessagesAsync_includes_sent_prompts_under_fleets_message_id()
+    {
+        var instance = new TestHarnessSession("sess-1", new TestScenarioBuilder().Build());
+
+        await instance.SendPromptAsync("Hello", new PromptOptions { MessageId = "msg-fleet-1" }, CancellationToken.None);
+        var page = await instance.GetMessagesAsync(null, CancellationToken.None);
+
+        var message = page.Messages.ShouldHaveSingleItem();
+        message.Id.ShouldBe("msg-fleet-1");
+        message.Role.ShouldBe("user");
+        message.TextContent.ShouldBe("Hello");
+    }
+
+    [Fact]
+    public async Task GetMessagesAsync_reflects_pushed_message_events()
+    {
+        var instance = new TestHarnessSession("sess-1", new TestScenarioBuilder().Build());
+
+        await instance.PushEventAsync(MakeEvent("message.updated",
+            new { info = new { id = "msg-a", role = "assistant", agent = "loom" } }));
+        await instance.PushEventAsync(MakeEvent("message.part.updated",
+            new { part = new { id = "part-1", messageID = "msg-a", type = "text", text = "Stream" } }));
+        await instance.PushEventAsync(MakeEvent("message.part.updated",
+            new { part = new { id = "part-1", messageID = "msg-a", type = "text", text = "Streaming" } }));
+        await instance.PushEventAsync(MakeEvent("message.part.delta",
+            new { messageID = "msg-a", partID = "part-1", field = "text", delta = " text" }));
+
+        var message = (await instance.GetMessagesAsync(null, CancellationToken.None)).Messages.ShouldHaveSingleItem();
+        message.Id.ShouldBe("msg-a");
+        message.Agent.ShouldBe("loom");
+        message.Parts.ShouldHaveSingleItem().ShouldBeOfType<TextPart>().Text.ShouldBe("Streaming text");
+    }
+
+    [Fact]
+    public async Task GetMessagesAsync_ignores_user_echoes_with_the_harness_id()
+    {
+        var instance = new TestHarnessSession("sess-1", new TestScenarioBuilder().Build());
+
+        await instance.SendPromptAsync("Hello", new PromptOptions { MessageId = "msg-fleet-1" }, CancellationToken.None);
+        await instance.PushEventAsync(MakeEvent("message.updated", new { info = new { id = "msg-echo", role = "user" } }));
+        await instance.PushEventAsync(MakeEvent("message.part.updated",
+            new { part = new { id = "part-echo", messageID = "msg-echo", type = "text", text = "Hello" } }));
+
+        (await instance.GetMessagesAsync(null, CancellationToken.None)).Messages.ShouldHaveSingleItem().Id.ShouldBe("msg-fleet-1");
+    }
+
     // ── CheckHealthAsync ─────────────────────────────────────────────────────
 
     [Fact]
@@ -298,4 +345,12 @@ public sealed class TestHarnessSessionTests
         }
         return events;
     }
+
+    private static HarnessEvent MakeEvent(string type, object payload) => new()
+    {
+        Type = type,
+        SessionId = "sess-1",
+        Timestamp = DateTimeOffset.UtcNow,
+        Payload = JsonSerializer.SerializeToElement(payload),
+    };
 }

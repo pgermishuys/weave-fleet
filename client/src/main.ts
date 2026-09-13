@@ -8,6 +8,8 @@ import "./assets/main.css";
 import githubPluginManifest from "@/plugins/builtin/github";
 import marketplacePluginManifest from "@/plugins/builtin/marketplace";
 import { usePluginRuntime } from "@/plugins/composable";
+import { getPromptTrackingState } from "@/composables/use-send-prompt";
+import { useSessionsStore } from "@/stores/sessions";
 import { useThemeStore } from "@/stores/theme";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { router } from "./router";
@@ -32,6 +34,7 @@ const browserWindow = typeof window === "undefined"
     __WEAVE_TEST_API?: {
       getInlineToolDiffs: () => boolean;
       setInlineToolDiffs: (enabled: boolean) => void;
+      getPromptState: () => unknown;
     };
   };
 
@@ -41,6 +44,15 @@ if (browserWindow) {
     setInlineToolDiffs: (enabled: boolean) => {
       useWorkspaceUiStore(pinia).setInlineToolDiffs(enabled);
     },
+    getPromptState: () => ({
+      ...getPromptTrackingState(),
+      sessions: useSessionsStore(pinia).sessions.map((session) => ({
+        id: session.session.id,
+        activityStatus: session.activityStatus,
+        sessionStatus: session.sessionStatus,
+        lifecycleStatus: session.lifecycleStatus,
+      })),
+    }),
   };
 }
 

@@ -29,6 +29,13 @@ public sealed class TestHarnessSession : IHarnessSession
     private string? _lastQuestionMessageId;
     private JsonElement? _lastQuestionInput;
 
+    // The session's messages as a real harness would report them: the scenario's
+    // pre-loaded messages, plus prompts sent and message events emitted since.
+    // Parts carry no ID of their own, so their event IDs are tracked alongside.
+    private readonly Lock _messagesGate = new();
+    private readonly List<HarnessMessage> _messages;
+    private readonly Dictionary<string, List<string?>> _partIds = new(StringComparer.Ordinal);
+
     public TestHarnessSession(string instanceId, TestScenario scenario)
         : this(instanceId, scenario, instanceId, scopeFactory: null, ownerUserId: null)
     {
@@ -48,6 +55,9 @@ public sealed class TestHarnessSession : IHarnessSession
         _scopeFactory = scopeFactory;
         _ownerUserId = ownerUserId;
         _status = scenario.InitialStatus;
+        _messages = [.. scenario.Messages];
+        foreach (var message in _messages)
+            _partIds[message.Id] = [.. message.Parts.Select(_ => (string?)null)];
 
         // Unbounded channel — tests emit a bounded number of events.
         _channel = Channel.CreateUnbounded<HarnessEvent>(
@@ -114,6 +124,8 @@ public sealed class TestHarnessSession : IHarnessSession
             _promptCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
             var promptToken = _promptCts.Token;
+
+            RecordUserPrompt(options?.MessageId ?? $"msg-user-{Guid.NewGuid():N}", text);
 
             // Dequeue the next response sequence (or use empty default)
             IReadOnlyList<ScenarioEvent> events = _scenario.PromptResponses.Count > 0
@@ -183,6 +195,8 @@ public sealed class TestHarnessSession : IHarnessSession
     [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test infrastructure only")]
     public async Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
     {
+        LastAnswers = answers;
+
         // Emit a message.part.updated event that transitions the tool part to completed,
         // mimicking the real harness behaviour after an answer is accepted.
         var evt = new HarnessEvent
@@ -221,7 +235,9 @@ public sealed class TestHarnessSession : IHarnessSession
     /// <inheritdoc/>
     public Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct)
     {
-        var messages = (IReadOnlyList<HarnessMessage>)_scenario.Messages;
+        List<HarnessMessage> messages;
+        lock (_messagesGate)
+            messages = [.. _messages];
 
         if (query?.Before is not null)
         {
@@ -298,6 +314,7 @@ public sealed class TestHarnessSession : IHarnessSession
 
                 // Track question tool context for AnswerQuestionAsync
                 TryTrackQuestionContext(scenarioEvent.Event);
+                TrackMessageEvent(scenarioEvent.Event);
 
                 await _channel.Writer.WriteAsync(scenarioEvent.Event, ct).ConfigureAwait(false);
             }
@@ -473,6 +490,9 @@ public sealed class TestHarnessSession : IHarnessSession
         _lastQuestionInput = input;
     }
 
+    /// <summary>The answers passed to the most recent <see cref="AnswerQuestionAsync"/> call.</summary>
+    public IReadOnlyList<IReadOnlyList<string>>? LastAnswers { get; private set; }
+
     private async ValueTask PushEventCoreAsync(HarnessEvent evt, CancellationToken ct)
     {
         // Persist durable events to the DB so REST queries return them. The unified
@@ -481,8 +501,152 @@ public sealed class TestHarnessSession : IHarnessSession
         // subscriber forwards it to WebSocket clients.
         await TryHandleDurableEventAsync(evt).ConfigureAwait(false);
         await TryHandleDelegationEventAsync(evt).ConfigureAwait(false);
+        TrackMessageEvent(evt);
         await _channel.Writer.WriteAsync(evt, ct).ConfigureAwait(false);
     }
+
+    private void RecordUserPrompt(string messageId, string text)
+    {
+        lock (_messagesGate)
+        {
+            if (_partIds.ContainsKey(messageId))
+                return;
+
+            _messages.Add(new HarnessMessage
+            {
+                Id = messageId,
+                Role = "user",
+                Parts = [new TextPart(text)],
+                Timestamp = DateTimeOffset.UtcNow,
+            });
+            _partIds[messageId] = [null];
+        }
+    }
+
+    /// <summary>
+    /// Applies a message event to <see cref="_messages"/>, so snapshots taken after it
+    /// (a page load or a SignalR re-subscribe) include it, as they would with OpenCode.
+    /// </summary>
+    private void TrackMessageEvent(HarnessEvent evt)
+    {
+        if (!evt.Payload.HasValue || evt.Payload.Value.ValueKind != JsonValueKind.Object)
+            return;
+
+        var payload = evt.Payload.Value;
+        lock (_messagesGate)
+        {
+            switch (evt.Type)
+            {
+                case "message.updated":
+                    TrackMessageUpdated(payload);
+                    break;
+                case "message.part.updated":
+                    if (payload.TryGetProperty("part", out var part) && part.ValueKind == JsonValueKind.Object)
+                        TrackPart(GetString(part, "messageID"), GetString(part, "id"), MapEventPartToMessagePart(part));
+                    break;
+                case "message.part.delta":
+                    TrackDelta(payload);
+                    break;
+            }
+        }
+    }
+
+    private void TrackMessageUpdated(JsonElement payload)
+    {
+        if (!payload.TryGetProperty("info", out var info) || info.ValueKind != JsonValueKind.Object)
+            return;
+
+        var messageId = GetString(info, "id");
+        if (string.IsNullOrWhiteSpace(messageId))
+            return;
+
+        var index = _messages.FindIndex(m => m.Id == messageId);
+        var role = GetString(info, "role") ?? "assistant";
+
+        // A user echo carries the harness's own ID; the prompt is already recorded under Fleet's.
+        if (index < 0 && role == "user")
+            return;
+
+        var message = index >= 0
+            ? _messages[index]
+            : new HarnessMessage { Id = messageId, Role = role, Parts = [], Timestamp = DateTimeOffset.UtcNow };
+
+        message = message with
+        {
+            Agent = GetString(info, "agent") ?? message.Agent,
+            ModelId = GetString(info, "modelID") ?? message.ModelId,
+        };
+
+        if (index >= 0)
+        {
+            _messages[index] = message;
+        }
+        else
+        {
+            _messages.Add(message);
+            _partIds[messageId] = [];
+        }
+
+        if (payload.TryGetProperty("parts", out var parts) && parts.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var part in parts.EnumerateArray())
+                TrackPart(messageId, GetString(part, "id"), MapEventPartToMessagePart(part));
+        }
+    }
+
+    private void TrackPart(string? messageId, string? partId, MessagePart? part)
+    {
+        if (string.IsNullOrWhiteSpace(messageId) || part is null)
+            return;
+
+        var index = _messages.FindIndex(m => m.Id == messageId);
+        if (index < 0)
+            return;
+
+        var message = _messages[index];
+        var partIds = _partIds[messageId];
+        var parts = message.Parts.ToList();
+        var partIndex = partId is null ? -1 : partIds.IndexOf(partId);
+
+        if (partIndex >= 0)
+        {
+            parts[partIndex] = part;
+        }
+        else
+        {
+            parts.Add(part);
+            partIds.Add(partId);
+        }
+
+        _messages[index] = message with { Parts = parts };
+    }
+
+    private void TrackDelta(JsonElement payload)
+    {
+        if (GetString(payload, "field") != "text")
+            return;
+
+        var messageId = GetString(payload, "messageID");
+        var partId = GetString(payload, "partID");
+        var delta = GetString(payload, "delta");
+        if (string.IsNullOrWhiteSpace(messageId) || delta is null)
+            return;
+
+        var index = _messages.FindIndex(m => m.Id == messageId);
+        if (index < 0)
+            return;
+
+        var partIndex = partId is null ? -1 : _partIds[messageId].IndexOf(partId);
+        var existing = partIndex >= 0 ? _messages[index].Parts[partIndex] as TextPart : null;
+        TrackPart(messageId, partId, new TextPart((existing?.Text ?? "") + delta));
+    }
+
+    private static string? GetString(JsonElement element, string property)
+        => element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty(property, out var value)
+            && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
 
     private async Task TryHandleDelegationEventAsync(HarnessEvent evt)
     {
