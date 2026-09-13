@@ -19,12 +19,14 @@ public static class BrowserEndpoints
     {
         var group = app.MapGroup("/api/sessions").WithTags("Browser");
 
-        // POST /api/sessions/{id}/browser/proxy — the proxy for a page on this machine, started on first use
+        // POST /api/sessions/{id}/browser/proxy — the preview for a page on this machine, started on first use,
+        // at the address this browser can reach it
         group.MapPost("/{id}/browser/proxy", async (
             string id,
             BrowserProxyRequest request,
+            HttpContext context,
             SessionService sessionService,
-            PreviewProxies proxies) =>
+            PreviewGateway gateway) =>
         {
             var session = await sessionService.GetSessionAsync(id);
             if (session.IsFailure)
@@ -32,11 +34,25 @@ public static class BrowserEndpoints
             if (!LoopbackUrl.TryParse(request.Url, out var target))
                 return Results.UnprocessableEntity(new ErrorResponse(LoopbackUrl.Requirement));
 
-            var proxy = await proxies.EnsureAsync(target);
-            return Results.Ok(new BrowserProxyResponse(proxy.Slug, proxy.Port, proxy.Target.ToString()));
+            PreviewListener preview;
+            try
+            {
+                preview = await gateway.EnsureAsync(target);
+            }
+            catch (IOException ex)
+            {
+                return Results.Conflict(new ErrorResponse(ex.Message));
+            }
+
+            return Results.Ok(new BrowserProxyResponse(
+                preview.Slug,
+                preview.Port,
+                preview.Target.ToString(),
+                PreviewGateway.OriginFor(context.Request.Host.Host, preview)));
         })
         .Produces<BrowserProxyResponse>(200)
         .Produces(404)
+        .Produces(409)
         .Produces(422)
         .WithName("GetBrowserProxy");
 

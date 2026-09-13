@@ -264,6 +264,12 @@ public sealed class BrowserOptions
 
     /// <summary>Apps running at once across all sessions. Default: 10.</summary>
     public int MaxApps { get; set; } = 10;
+
+    /// <summary>
+    /// Ports previews listen on, e.g. <c>"41000-41099"</c>, for a firewall that only lets a known range through.
+    /// Empty: any free port. Previews listen on the address Fleet listens on (<see cref="FleetOptions.Host"/>).
+    /// </summary>
+    public string PortRange { get; set; } = string.Empty;
 }
 
 /// <summary>Cloud-mode configuration.</summary>

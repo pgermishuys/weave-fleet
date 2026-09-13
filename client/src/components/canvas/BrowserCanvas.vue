@@ -31,6 +31,8 @@ interface ProxyInfo {
   slug: string;
   port: number;
   target: string;
+  /** Where this browser loads the preview; Fleet picks it from the host the browser used to reach it. */
+  origin: string;
 }
 
 const POLL_MS = 2000;
@@ -69,13 +71,6 @@ const waitingText = computed(() => {
 const ports = computed(() => app.value?.ports ?? []);
 const currentPort = computed(() => (target.value ? Number(target.value.port || defaultPort(target.value)) : null));
 
-/** `{slug}.localhost` keeps the app's cookies apart from Fleet's; elsewhere, the host Fleet was opened on. */
-function proxyHost(slug: string): string {
-  const host = window.location.hostname;
-  const local = host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host.endsWith(".localhost");
-  return local ? `${slug}.localhost` : host;
-}
-
 function defaultPort(url: URL): string {
   return url.protocol === "https:" ? "443" : "80";
 }
@@ -110,7 +105,7 @@ async function show(pageUrl: string): Promise<void> {
         throw new Error(body.error ?? `HTTP ${response.status}`);
       }
       const proxy = (await response.json()) as ProxyInfo;
-      proxyOrigin.value = `http://${proxyHost(proxy.slug)}:${proxy.port}`;
+      proxyOrigin.value = proxy.origin;
     } catch (e) {
       error.value = `Fleet couldn't show ${page.origin}: ${e instanceof Error ? e.message : String(e)}`;
       return;
@@ -158,8 +153,18 @@ function submitAddress(): void {
   void show(value);
 }
 
+/** Opens the page the tab shows through its preview: the app's own `localhost` address is only right on Fleet's machine. */
 function openOutside(): void {
-  window.open(address.value, "_blank", "noopener");
+  let page: URL | null = null;
+  try {
+    page = new URL(address.value);
+  } catch {
+    // Not an address (still being typed): open the preview's start.
+  }
+  const url = proxyOrigin.value
+    ? `${proxyOrigin.value}${page ? page.pathname + page.search + page.hash : "/"}`
+    : address.value;
+  window.open(url, "_blank", "noopener");
 }
 
 function pickPort(event: Event): void {
