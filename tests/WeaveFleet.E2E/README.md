@@ -101,7 +101,7 @@ Tests can also reach the live `TestHarnessSession` through `InstanceTracker` and
 | Class | Page |
 |-------|------|
 | `FleetDashboardPage` | `/`: new session button, empty state |
-| `NewSessionFormPage` | `/sessions/new`: the inline New Session form |
+| `NewSessionFormPage` | `/sessions/new`: the New Session composer (message box, Folder and "…" chips) |
 | `SessionDetailPage` | `/sessions/{id}`: messages, prompt input, status indicator |
 | `FleetSidebarPage` | Sidebar session tree, for client-side navigation |
 | `FleetLoginPage`, `IdpLoginPage` | Fleet's sign-in page and the test IdP |
