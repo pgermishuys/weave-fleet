@@ -99,7 +99,7 @@ Stages 2 and 3 are independent of each other once stage 1 has landed.
   - The first message now shows 0.1–3.6 s after the page opens: the snapshot wait, mostly OpenCode starting up in a new directory. 2.2 removes that wait, and seeding the registry is now safe because the snapshot carries the message.
   - The live check runs the Native AOT binary (`host-bin/WeaveFleet.Api`); an older `WeaveFleet.Api.dll` left in the folder had been running stale server code. `.poc-runtime/run-live.sh <theme>` does a whole fresh run.
 - **Not the composer's, noted**: a current-checkout session records no branch (`GET /api/sessions/{id}` → `branch: null`), as before. The session composer shows the global focus ring as a line under its textarea (layered `!important`); the new page drops it in-layer, so 4.2 should share that fix.
-- **Deferred to Stage 3**: the plan line says "from the default branch" and has no "That's not main" warning, because nothing returns the default branch yet (3.1 adds `defaultBranch`).
+- **Deferred to Stage 3**: the plan line says "from the default branch" and has no "That's not main" warning, because nothing returns the default branch yet (3.1 adds `defaultBranch`). Done in Stage 3.
 - **Title when none is typed**: still "Untitled" after 10 s, but the scratch Fleet has no model credentials, so OpenCode couldn't have named it. Undecided.
 
 ## Stage 2 — Feels instant
@@ -124,22 +124,30 @@ Stages 2 and 3 are independent of each other once stage 1 has landed.
 
 ## Stage 3 — Choose the base branch
 
-- [ ] 3.1 Server: base branch and fetch as inputs
+- [x] 3.1 Server: base branch and fetch as inputs — branch `feat/new-session-base-branch`
   - **What**: `RepositorySourceInput` and `GitHubSourceInput` accept optional `baseBranch` and `fetchOrigin` (default true). `WorkspaceIntent` gains an optional base; `WorkspaceService.CreateWorktreeAsync` uses it instead of the resolved default when given (still `--no-track`, still fetches `origin/<base>` first when asked). `GET /api/repositories/detail` adds `defaultBranch` (the same resolution the worktree code uses).
   - **Files**: `src/WeaveFleet.Infrastructure/JsonContext.cs`, `…/SessionSources/RepositorySessionSourceProvider.cs`, `…/GitHubSessionSourceProvider.cs`, `src/WeaveFleet.Application/SessionSources/*` (WorkspaceIntent), `src/WeaveFleet.Application/Services/WorkspaceService.cs`, `RepositoryService.cs`, `FleetEndpoints.cs`
   - **Acceptance**: `WorkspaceServiceWorktreeTests` gain cases for an explicit base, fetch off, and an unknown base (readable error).
 
-- [ ] 3.2 Base chip
+- [x] 3.2 Base chip — branch `feat/new-session-base-branch`
   - **What**: Shown for New worktree only: "from origin/main". Popover: branches (default and checked-out marked), "Fetch origin first" switch, branch name override (placeholder shows the generated name).
   - **Depends on**: 3.1, 1.3
   - **Acceptance**: component tests; live check that the worktree starts where the chip says.
 
 ## Stage 4 — Clean-up
 
-- [ ] 4.1 Delete `NewSessionDialog.vue` and the store fields only it used (`newSessionDialogOpen`, `openNewSessionDialog`, …) and the commented-out block in `SessionsPanel.vue`.
-- [ ] 4.2 Share the composer frame: extract the box/toolbar look into a presentational `ComposerFrame.vue` used by both the session composer and the new page, so they can't drift.
-- [ ] 4.3 Quick-chat folders (if agreed): delete `~/.weave-fleet/quick-chats/<id>` when its session is deleted, only when no other live workspace uses the folder.
-- [ ] 4.4 Write `.weave/learnings/new-session-composer.md` (what we learned, especially about first-message delivery).
+- [x] 4.1 Delete `NewSessionDialog.vue` and the store fields only it used (`newSessionDialogOpen`, `openNewSessionDialog`, …) and the commented-out block in `SessionsPanel.vue`.
+- [x] 4.2 Share the composer frame: extract the box/toolbar look into a presentational `ComposerFrame.vue` used by both the session composer and the new page, so they can't drift.
+- [ ] 4.3 Quick-chat folders (if agreed): delete `~/.weave-fleet/quick-chats/<id>` when its session is deleted, only when no other live workspace uses the folder. Skipped (2026-09-13, user).
+- [x] 4.4 Write `.weave/learnings/new-session-composer.md` (what we learned, especially about first-message delivery).
+
+### Stage 3 and 4 findings (2026-09-13)
+- **Built (3.1)**: `WorkspaceIntent` gains `BaseBranch` and `FetchOrigin`, and the repository and GitHub sources take `baseBranch` and `fetchOrigin` for a new worktree (`WorktreeBaseInput.Normalize`; anything else is refused: current checkout, existing worktree). A base is `origin/<name>`, fetched first unless fetch is off, or a local branch. It must exist; otherwise "Couldn't create the worktree: there's no branch X to start from", with nothing created. A chosen base always gets a new branch (`-2` on a clash), where no base still reuses an existing, unchecked-out branch as before. `WorkspaceService.IsValidBranchName` (check-ref-format rules) refuses names git would read as an option (`--upload-pack=…`) or as a refspec with a destination (`main:refs/heads/main`) before any git command runs. `WorkspaceService.ResolveDefaultBaseAsync` is the one default resolution, used by the worktree code and by `GET /api/repositories/detail`. The detail endpoint now returns `defaultBranch` / `defaultBase` and its branch list as names (`main`, `origin/release/2.0`) with hash and subject, from `for-each-ref` over `refs/heads` and `refs/remotes/origin`; before, it returned raw `git branch` lines (`* main`) and no client read it.
+- **Built (3.2)**: `BasePicker.vue`, shown only for New worktree: "from origin/main" (with "· no fetch" when off), a searchable list (default first, marked; the checked-out branch marked), "Fetch origin first" (only for origin's branches), and the new branch's name (placeholder: the generated one). Picking the default sends no base, so the server's default rules apply. The draft keeps `baseBranch` / `fetchOrigin` / `branchName`; changing folder clears them. The composer reads `/api/repositories/detail` instead of `/info`. Plan line: "…, from origin/release/2.0 as last fetched."; current checkout off the default: "Works directly in … on feature/x. That's not main." (amber).
+- **Built (4.1, 4.2)**: `NewSessionDialog.vue` (1,131 lines) and its store fields removed. The GitHub hand-off it shared with the page is `newSessionInitialSource`. `useRepositoryInfo` had no callers left and went too. `ComposerFrame.vue` holds the frame, text area, toolbar and send-button styles for both composers, and drops the global focus ring in-layer.
+- **Live check** (`run-live.sh dark|light`, 81/82 each; the failure is the known current-checkout `branch: null`): the base chip names the default; origin/release/2.0 with fetch off starts at demo's stale copy and leaves it unfetched; with fetch on, at origin's newer commit; a local branch at its own commit; each on a new `fleet/…` branch that doesn't track the base; a base deleted before Enter gives the readable error; everything from Stages 1–2 still passes. `setup-repos.sh` adds `release/2.0` (fetched once, then a newer commit on origin).
+- **Session composer unchanged after 4.2** (`pw-frame.mjs`, pixel diff in a canvas, both themes): blurred, identical. Focused and typed, only the textarea's 1 px ring differs: 1,108 px, its perimeter. The ring was the global `*:focus-visible` rule (`!important` in `@layer base`), which the old unlayered `box-shadow: none !important` never beat. The new page's box is 5 px taller: its text area is now the session composer's (inline-block, not block).
+- **Found and fixed**: reopening the Base or Folder menu after searching highlighted the first row, not the chosen one (clearing the search ran the search watcher after the open watcher). The shared `Switch` uses shadcn's `--input` / `--background`, which Fleet's themes don't define, so an off switch was invisible on a light card; the Base menu styles its own.
 
 ## Decisions
 
