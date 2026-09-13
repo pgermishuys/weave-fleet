@@ -476,18 +476,51 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task prompt_session_async_when_manual_instance_not_tracked_returns_failure()
+    public async Task prompt_session_async_when_session_was_never_prompted_spawns_a_fresh_harness_and_sends_prompt()
     {
+        // Non-pooled sessions only get a resume token on their first prompt; after a restart
+        // there is nothing to resume, so waking the session starts a fresh harness session.
+        var runtime = _builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsResume = true });
+        await using var spawnedSession = new FakeHarnessSession("inst-spawned") { ResumeToken = "token-from-spawn" };
+        runtime.DefaultSession = spawnedSession;
+        _builder.WorkspaceRepository.Seed(new Workspace
+        {
+            Id = "workspace-untouched",
+            Directory = "/tmp/untouched-session",
+            IsolationStrategy = "existing",
+            CreatedAt = "2026-01-01",
+            UserId = "user-1"
+        });
         _builder.SessionRepository.Seed(new Session
         {
-            Id = "s1", InstanceId = "inst-99", Title = "T", Status = "stopped",
-            Directory = "/tmp", CreatedAt = "2026-01-01", RuntimeMode = "manual"
+            Id = "s-untouched",
+            WorkspaceId = "workspace-untouched",
+            InstanceId = "inst-gone",
+            Title = "Never prompted",
+            Status = "stopped",
+            Directory = "/tmp/untouched-session",
+            CreatedAt = "2026-01-01",
+            RetentionStatus = "active",
+            HarnessType = "opencode",
+            RuntimeMode = "manual",
+            HarnessResumeToken = null,
+            UserId = "user-1"
         });
+        var sut = BuildSutWithTracker();
 
-        var result = await _sut.PromptSessionAsync("s1", "hello");
+        var result = await sut.PromptSessionAsync("s-untouched", "hello");
 
-        result.IsFailure.ShouldBeTrue();
-        result.Error.Description.ShouldContain("Instance");
+        result.IsSuccess.ShouldBeTrue();
+        runtime.ResumeCalls.ShouldBeEmpty();
+        runtime.SpawnCalls.Count.ShouldBe(1);
+        runtime.SpawnCalls[0].SessionId.ShouldBe("s-untouched");
+        spawnedSession.SendPromptCalls.Count.ShouldBe(1);
+        _tracker.Get("inst-spawned").ShouldBeSameAs(spawnedSession);
+        var stored = await _builder.SessionRepository.GetByIdAsync("s-untouched");
+        stored.ShouldNotBeNull();
+        stored.InstanceId.ShouldBe("inst-spawned");
+        stored.HarnessResumeToken.ShouldBe("token-from-spawn");
+        stored.LifecycleStatus.ShouldBe("running");
     }
 
     [Fact]

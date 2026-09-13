@@ -1609,9 +1609,6 @@ public sealed partial class SessionOrchestrator(
         if (instance is not null)
             return Result.Success<IHarnessSession>(instance);
 
-        if (string.IsNullOrWhiteSpace(session.HarnessResumeToken))
-            return FleetError.NotFoundFor("Instance", session.InstanceId);
-
         var activationLock = _activationLocks.GetOrAdd(session.Id, static _ => new SemaphoreSlim(1, 1));
         await activationLock.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -1619,9 +1616,6 @@ public sealed partial class SessionOrchestrator(
             var currentSession = await sessionRepository.GetByIdAsync(session.Id).ConfigureAwait(false);
             if (currentSession is null)
                 return FleetError.NotFoundFor(nameof(Session), session.Id);
-
-            if (string.IsNullOrWhiteSpace(currentSession.HarnessResumeToken))
-                return FleetError.NotFoundFor("Instance", currentSession.InstanceId);
 
             instance = instanceTracker.Get(currentSession.InstanceId);
             if (instance is not null)
@@ -1638,9 +1632,6 @@ public sealed partial class SessionOrchestrator(
 
     private async Task<Result<IHarnessSession>> ActivateSessionAsync(Session session, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(session.HarnessResumeToken))
-            return FleetError.NotFoundFor("Instance", session.InstanceId);
-
         var workspaceResult = await workspaceService.GetWorkspaceDirectoryAsync(session.WorkspaceId).ConfigureAwait(false);
         if (workspaceResult.IsFailure)
         {
@@ -1677,16 +1668,28 @@ public sealed partial class SessionOrchestrator(
         IHarnessSession harnessInstance;
         try
         {
-            harnessInstance = await harnessRuntime.ResumeAsync(new HarnessResumeOptions
-            {
-                SessionId = session.Id,
-                WorkingDirectory = workspaceResult.Value,
-                OwnerUserId = session.UserId,
-                ResumeToken = session.HarnessResumeToken,
-                ProjectId = session.ProjectId,
-                ProjectName = projectName,
-                LaunchArtifacts = launchArtifacts
-            }, ct).ConfigureAwait(false);
+            // Non-pooled sessions only get a resume token on their first prompt, so one that was
+            // never prompted has nothing to resume: start a fresh harness session instead.
+            harnessInstance = string.IsNullOrWhiteSpace(session.HarnessResumeToken)
+                ? await harnessRuntime.SpawnAsync(new HarnessSpawnOptions
+                {
+                    SessionId = session.Id,
+                    WorkingDirectory = workspaceResult.Value,
+                    OwnerUserId = session.UserId,
+                    ProjectId = session.ProjectId,
+                    ProjectName = projectName,
+                    LaunchArtifacts = launchArtifacts
+                }, ct).ConfigureAwait(false)
+                : await harnessRuntime.ResumeAsync(new HarnessResumeOptions
+                {
+                    SessionId = session.Id,
+                    WorkingDirectory = workspaceResult.Value,
+                    OwnerUserId = session.UserId,
+                    ResumeToken = session.HarnessResumeToken,
+                    ProjectId = session.ProjectId,
+                    ProjectName = projectName,
+                    LaunchArtifacts = launchArtifacts
+                }, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -1715,6 +1718,13 @@ public sealed partial class SessionOrchestrator(
         // Update the DB mapping BEFORE registering: registration starts the relay pump, which
         // resolves the Fleet session id by instance id from the DB.
         await sessionRepository.UpdateForResumeAsync(session.Id, harnessInstance.InstanceId).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(session.HarnessResumeToken) && !string.IsNullOrWhiteSpace(harnessInstance.ResumeToken))
+        {
+            // A fresh pooled spawn creates its OpenCode session up front; keep its token so the next wake resumes it.
+            await sessionRepository.UpdateResumeTokenAsync(session.Id, harnessInstance.ResumeToken).ConfigureAwait(false);
+            session.HarnessResumeToken = harnessInstance.ResumeToken;
+        }
+
         instanceTracker.Register(harnessInstance.InstanceId, harnessInstance);
         session.InstanceId = harnessInstance.InstanceId;
         session.Status = "active";
