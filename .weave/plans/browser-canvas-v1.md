@@ -164,7 +164,7 @@ Ground truth from the spike and the codebase (2026-09-13). Don't re-check these:
   - The canvas's "Open in a new tab" opens the target's `localhost` URL, which is wrong from another device (Task 6).
 
 ### Task 1: `dotnet watch` through the gateway (2026-09-13)
-Setup: SDK 10.0.112, `dotnet new webapp` (Razor Pages) and `dotnet new blazor --interactivity Server`, run by the runner in a scratch Fleet and viewed in the canvas with Playwright. "Another device" is Chromium in a `pasta` network namespace (`-T none -U none`), where `localhost` is the browser's own machine and Fleet is reached at a mapped address. Scripts are in `.poc-runtime/pw/` (`watch-edit.mjs`); the prototype is `.poc-runtime/dotnet-watch-gateway.patch` (not committed).
+Setup: SDK 10.0.112, `dotnet new webapp` (Razor Pages) and `dotnet new blazor --interactivity Server`, run by the runner in a scratch Fleet and viewed in the canvas with Playwright. "Another device" is Chromium in a `pasta` network namespace (`-T none -U none`), where `localhost` is the browser's own machine and Fleet is reached at a mapped address. Scripts are in `.poc-runtime/pw/` (`watch-edit.mjs`, local only); the prototype is `browser-canvas-v1-dotnet-watch.patch` next to this plan (applies to `PreviewProxies.cs`; a starting point for Task 4, not code to merge as is).
 
 **How the refresh works.** `dotnet watch` starts the app with `ASPNETCORE_AUTO_RELOAD_WS_ENDPOINT=wss://localhost:A,ws://localhost:B` and a hosting-startup middleware that adds `<script src="/_framework/aspnetcore-browser-refresh.js">` before `</body>`. The app serves that script with the endpoints as a literal: `const webSocketUrls = 'wss://localhost:A,ws://localhost:B'.split(',');`. Both refresh servers listen on 127.0.0.1 and belong to the `dotnet-watch` process, so they're in the run's process tree.
 
@@ -225,3 +225,51 @@ The gateway adds nothing measurable. Razor Pages markup always does a full reloa
 - **Memory:** `dotnet watch` ~220 MB, `dotnet run` ~107 MB, the app ~105 MB, plus MSBuild nodes and the compiler server (536 MB, shared). On 2026-09-13 at 01:06 the dev machine (7.1 GB) ran out of memory with two apps, a Fleet build and another session's build running. The kernel killed the installed Fleet's OpenCode process and systemd restarted `fleet.service`. Consider raising `oom_score_adj` for app runs (no privilege needed to raise it), so the kernel picks a preview before Fleet or OpenCode. Run ASP.NET fixtures in the matrix one at a time.
 - **Fixtures:** the Razor template's own `a.navbar-brand` scoped rule never applies (a tag-helper anchor gets no scope attribute); edit a rule on an element that carries it (`.border-bottom` on the `<nav>`). Measure warm edits after one warm-up edit, and rude edits separately (10–13 s, which doesn't meet Decision 4's 2 s; the bar should apply to warm, non-rude edits).
 - Seen once, not investigated: after a rude-edit restart, reverting the file logged "No C# changes to apply" and the app kept serving the edited markup until a restart.
+
+## Assessment (2026-09-13)
+Asked by the user after Tasks 0–1: is this a good feature with decent functionality? Written by the agent that built the spike, so read with that in mind.
+
+**Verdict:** worth building. The spike is a convincing demo, not yet a product; V1 closes that gap.
+
+- **Value:**
+  - It removes the chore of starting a dev server, finding its port and opening a browser.
+  - It gives the agent a proper owner for processes that never exit.
+  - Most of all, you can see an app running on Fleet's machine from another device, with hot reload (0.1–0.4 s once warm). Nothing else makes that easy, since dev servers listen on `localhost`.
+  - Agent tools for building web apps (Replit, Bolt, Lovable) all show the page beside the chat, so users expect it.
+- **Weak today:**
+  - The spike only works on the same Linux machine: the proxy listens on loopback, and `dotnet watch` didn't refresh before the Task 1 fix.
+  - Runs are lost when Fleet restarts, apps outlive their session, and there's no auth for previews reachable from the network.
+  - **The agent can't see the page**, so the person does all the checking. That's the biggest gap in value.
+  - Running apps can hurt Fleet itself: on 2026-09-13 memory ran out and the kernel killed the installed Fleet's OpenCode.
+- **Costs:**
+  - The scope is 9 tasks: three address strategies, auth, port detection on three OSes, and a 7-stack matrix.
+  - Maintenance: the `dotnet watch` fix depends on the SDK script's literal, and dev-server settings like Vite's HMR host can bypass the proxy.
+  - The cheap alternative, a link that opens `localhost:5173` in a new tab, gets most of the value on the same machine but none from another device.
+- **Deciding question for the user:** how much viewing from another device matters. If it's mostly the same machine, the payoff is smaller and a trimmed V1 is enough.
+
+**Proposed changes to V1 (not agreed yet; the user decides):**
+1. Trim the scope:
+   - Ship the `*.localhost` and port-per-preview addresses and defer the wildcard host name (Decision 9's third strategy).
+   - Start the test matrix with Vite, Bun, `dotnet watch` and plain Node; add Next, Vue and Blazor later.
+2. Make resource safety part of V1:
+   - Caps (Decision 6) and a raised `oom_score_adj` for app runs, so the kernel picks a preview before Fleet or OpenCode.
+   - A clear message when inotify instances run out.
+3. Right after V1, let the agent see the page, at least with a screenshot tool (the first step of "a headless browser for the agent", now out of scope). It completes the edit-and-check loop.
+4. Apply Decision 4's 2 s bar to warm, live-applied edits. Measure the first edit after a start (~3.8 s for `dotnet watch`) and rude edits (10–13 s) separately.
+
+## Follow-ups
+Open items, with where they came from. Tick them here as they're done.
+
+- [ ] **Decide** the proposed changes above (user).
+- [ ] **Draft PR** for `feat/browser-canvas`: keep it a draft, since it ships agent tools that start processes, and don't merge before Tasks 2, 4 and 6 at least. Until Task 4, the proxy endpoint proxies any loopback URL for an authenticated user.
+- [ ] Task 2: catch and log exceptions in `AppRunner.MonitorAsync`; compare parsed ports in `BrowserBridge` (`:80` vs `:8080`); strip `Fleet__*` from app runs (Task 0 review notes).
+- [ ] Task 2: give ASP.NET runs their port (`DOTNET_URLS` for single-project `dotnet run`/`watch`, `-- --urls` in the tool description). Check that an Aspire AppHost isn't broken by it (untested).
+- [ ] Task 2/5: hide `dotnet watch`'s refresh ports from "also listens on" and the port picker.
+- [ ] Task 2/5: recognise the inotify-limit error; check whether `DOTNET_USE_POLLING_FILE_WATCHER=1` works with `dotnet watch` 10 and how slow it is.
+- [ ] Task 2: raise `oom_score_adj` for app runs (Linux); decide what caps look like on a 7 GB machine.
+- [ ] Task 4: build approach A from `browser-canvas-v1-dotnet-watch.patch` properly: ownership check on the refresh port, exact-path rewrite, a test pinning the SDK 10.0.112 script.
+- [ ] Task 5: reload the canvas as soon as a `dotnet watch` app answers again after a rude-edit restart (12.6 s now, because of Blazor's backoff).
+- [ ] Task 6: "Open in a new tab" must open the preview's address, not the target's `localhost`, when viewed from another device.
+- [ ] Task 3: nothing has run on macOS or Windows yet.
+- [ ] After V1: an agent screenshot tool (proposal 3).
+- [ ] Investigate if it recurs: after a rude-edit restart, `dotnet watch` ignored the revert of the file ("No C# changes to apply").

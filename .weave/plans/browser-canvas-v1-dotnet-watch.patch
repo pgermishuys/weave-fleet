@@ -1,0 +1,76 @@
+diff --git a/src/WeaveFleet.Api/Browser/PreviewProxies.cs b/src/WeaveFleet.Api/Browser/PreviewProxies.cs
+index 184147a..e2bd6db 100644
+--- a/src/WeaveFleet.Api/Browser/PreviewProxies.cs
++++ b/src/WeaveFleet.Api/Browser/PreviewProxies.cs
+@@ -127,6 +127,14 @@ public sealed partial class PreviewProxies : IAsyncDisposable
+ 
+         if (context.WebSockets.IsWebSocketRequest)
+         {
++            // SPIKE (dotnet watch): the browser-refresh socket, rewritten below to come through the proxy.
++            if (context.Request.Path.StartsWithSegments(RefreshSocketPath, out var rest)
++                && int.TryParse(rest.Value?.Trim('/'), out var refreshPort))
++            {
++                await ForwardWebSocketAsync(context, target, new Uri($"ws://localhost:{refreshPort}/"));
++                return;
++            }
++
+             await ForwardWebSocketAsync(context, target);
+             return;
+         }
+@@ -152,7 +160,11 @@ public sealed partial class PreviewProxies : IAsyncDisposable
+ 
+             var rewritten = name is "Origin" or "Referer"
+                 ? values.Select(value => ReplaceOrigin(value ?? string.Empty, proxyOrigin, targetOrigin)).ToArray()
+-                : values.ToArray();
++                // SPIKE (dotnet watch): the canvas frames the page, but the app should serve it as a top-level page.
++                // ASP.NET's browser-refresh middleware doesn't inject its script into iframes.
++                : name.Equals("Sec-Fetch-Dest", StringComparison.OrdinalIgnoreCase) && values.ToString() == "iframe"
++                    ? ["document"]
++                    : values.ToArray();
+             if (!request.Headers.TryAddWithoutValidation(name, rewritten))
+                 request.Content?.Headers.TryAddWithoutValidation(name, rewritten);
+         }
+@@ -191,13 +203,41 @@ public sealed partial class PreviewProxies : IAsyncDisposable
+                 return;
+             }
+ 
++            // SPIKE (dotnet watch): point the refresh script's socket at the proxy instead of localhost:{port}.
++            if (context.Request.Path.Value?.EndsWith("/aspnetcore-browser-refresh.js", StringComparison.Ordinal) == true
++                && response.Content.Headers.ContentEncoding.Count == 0)
++            {
++                var script = await response.Content.ReadAsStringAsync(context.RequestAborted);
++                context.Response.Headers.ContentLength = null;
++                await context.Response.WriteAsync(RewriteRefreshScript(script), Encoding.UTF8, context.RequestAborted);
++                return;
++            }
++
+             await response.Content.CopyToAsync(context.Response.Body, context.RequestAborted);
+         }
+     }
+ 
+-    private static async Task ForwardWebSocketAsync(HttpContext context, Uri target)
++    private const string RefreshSocketPath = "/__fleet_browser/ws";
++
++    /// <summary>
++    /// SPIKE: <c>const webSocketUrls = 'wss://localhost:1,ws://localhost:2'.split(',');</c> becomes the proxy's own
++    /// origin and <c>/__fleet_browser/ws/2</c>, so the socket goes through the proxy (which sends the app's Origin).
++    /// </summary>
++    internal static string RewriteRefreshScript(string script)
++        => RefreshUrls().Replace(script, match =>
++        {
++            var ws = match.Groups["urls"].Value.Split(',').FirstOrDefault(url => url.StartsWith("ws://", StringComparison.Ordinal));
++            if (ws is null || !Uri.TryCreate(ws, UriKind.Absolute, out var uri))
++                return match.Value;
++            return "[(location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '" + RefreshSocketPath + "/" + uri.Port + "']";
++        });
++
++    [GeneratedRegex(@"'(?<urls>wss?://[^']+)'\.split\(','\)")]
++    private static partial Regex RefreshUrls();
++
++    private static async Task ForwardWebSocketAsync(HttpContext context, Uri target, Uri? upstreamOverride = null)
+     {
+-        var upstreamUri = new UriBuilder(target)
++        var upstreamUri = upstreamOverride ?? new UriBuilder(target)
+         {
+             Scheme = target.Scheme == Uri.UriSchemeHttps ? "wss" : "ws",
+             Path = context.Request.Path.ToUriComponent(),
