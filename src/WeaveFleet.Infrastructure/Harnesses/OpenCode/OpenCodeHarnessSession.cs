@@ -1017,7 +1017,8 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             var delegation = await delegationService.HandleDelegationDetectedAsync(
                 extraction.ParentSessionId,
                 extraction.ToolCallId,
-                extraction.Title).ConfigureAwait(false);
+                extraction.Title,
+                extraction.Description).ConfigureAwait(false);
 
             if (!string.IsNullOrWhiteSpace(extraction.ChildSessionId))
             {

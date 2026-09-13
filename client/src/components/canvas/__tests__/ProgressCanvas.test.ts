@@ -9,6 +9,8 @@ vi.mock("@/composables/use-signalr-socket", () => ({
   onGlobalEvent: () => () => {},
   onReconnect: () => () => {},
 }));
+const { navigateMock } = vi.hoisted(() => ({ navigateMock: vi.fn() }));
+vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: navigateMock }) }));
 
 import ProgressCanvas from "@/components/canvas/ProgressCanvas.vue";
 
@@ -39,6 +41,7 @@ function detail(overrides: Partial<SessionProgressDetail> = {}): SessionProgress
     ],
     updatedAt: "2026-09-13T12:24:00Z",
     plan: phasedPlan,
+    subagents: [],
     ...overrides,
   };
 }
@@ -117,6 +120,51 @@ describe("ProgressCanvas", () => {
     expect(wrapper.get(".progress-canvas__eyebrow").text()).toBe("Todos");
     expect(wrapper.findAll(".progress-todo")).toHaveLength(2);
     expect(wrapper.get(".progress-canvas__note").text()).toContain("hasn't written a markdown checklist");
+  });
+
+  it("shows a subagent under the step it was started for, linking to its session", async () => {
+    const wrapper = await mountWith(detail({
+      subagents: [{
+        delegationId: "del-1",
+        childSessionId: "child-1",
+        agent: "shuttle",
+        title: "Add the migration (@shuttle subagent)",
+        status: "running",
+        stepKey: "4",
+        done: 4,
+        total: 10,
+        current: "Drop the indexes",
+      }],
+    }));
+
+    const card = wrapper.get(".progress-step--current .progress-subagent");
+    expect(card.get(".progress-subagent__title").text()).toBe("shuttle · Add the migration");
+    expect(card.get(".progress-subagent__count").text()).toBe("4/10");
+    expect(card.get(".progress-subagent__status").text()).toBe("Now: Drop the indexes");
+    expect(card.attributes("href")).toBe("/sessions/child-1?instanceId=child-1&parentSessionId=s1");
+
+    await card.trigger("click");
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/sessions/$id",
+      params: { id: "child-1" },
+      search: { instanceId: "child-1", parentSessionId: "s1" },
+    });
+  });
+
+  it("lists subagents with no matching step on their own", async () => {
+    const wrapper = await mountWith(detail({
+      plan: null,
+      kind: "todos",
+      subagents: [{
+        delegationId: "del-1", childSessionId: null, agent: "reviewer", title: null, status: "completed",
+        stepKey: null, done: 0, total: 0, current: null,
+      }],
+    }));
+
+    const list = wrapper.get(".progress-canvas__subagents");
+    expect(list.get(".progress-subagent__title").text()).toBe("reviewer");
+    expect(list.get(".progress-subagent__status").text()).toBe("Finished");
+    expect(list.find("a").exists()).toBe(false);
   });
 
   it("explains where progress comes from when there's nothing yet", async () => {

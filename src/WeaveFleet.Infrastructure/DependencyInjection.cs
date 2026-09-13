@@ -235,6 +235,7 @@ public static class DependencyInjection
 
         // Session progress: the relay feeds the observer; the service stores progress and pushes changes.
         services.AddSingleton<WeaveFleet.Infrastructure.Progress.SessionProgressObserver>();
+        services.AddSingleton<WeaveFleet.Application.Progress.ISessionProgressObserver>(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Progress.SessionProgressObserver>());
         services.AddHostedService<WeaveFleet.Infrastructure.Progress.SessionProgressService>();
 
         // Where harnesses read skills, tools and config: ~/.config/opencode, <repo>/.opencode, …

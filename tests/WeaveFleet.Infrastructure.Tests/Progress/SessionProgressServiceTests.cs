@@ -45,7 +45,10 @@ public sealed class SessionProgressServiceTests
         using var _ = keeper;
         var (_, _, session) = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, OwnerId);
         var scopeFactory = TestServiceScopeFactory.Create(services =>
-            services.AddScoped<ISessionProgressRepository>(_ => new SessionProgressRepository(factory, new TestUserContext(OwnerId))));
+        {
+            services.AddScoped<ISessionProgressRepository>(_ => new SessionProgressRepository(factory, new TestUserContext(OwnerId)));
+            services.AddScoped<ISessionRepository>(_ => new SessionRepository(factory, new TestUserContext(OwnerId)));
+        });
         var broadcaster = new FakeEventBroadcaster();
         var service = CreateService(scopeFactory, broadcaster);
 
@@ -74,7 +77,11 @@ public sealed class SessionProgressServiceTests
     public async Task The_same_list_again_is_not_pushed()
     {
         var repository = new InMemorySessionProgressRepository();
-        var scopeFactory = TestServiceScopeFactory.Create(services => services.AddSingleton<ISessionProgressRepository>(repository));
+        var scopeFactory = TestServiceScopeFactory.Create(services =>
+        {
+            services.AddSingleton<ISessionProgressRepository>(repository);
+            services.AddSingleton<ISessionRepository>(new InMemorySessionRepository());
+        });
         var broadcaster = new FakeEventBroadcaster();
         var service = CreateService(scopeFactory, broadcaster);
 
@@ -92,7 +99,10 @@ public sealed class SessionProgressServiceTests
         using var _ = keeper;
         var (_, _, session) = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, OwnerId);
         var scopeFactory = TestServiceScopeFactory.Create(services =>
-            services.AddScoped<ISessionProgressRepository>(_ => new SessionProgressRepository(factory, new TestUserContext("other-user"))));
+        {
+            services.AddScoped<ISessionProgressRepository>(_ => new SessionProgressRepository(factory, new TestUserContext("other-user")));
+            services.AddScoped<ISessionRepository>(_ => new SessionRepository(factory, new TestUserContext("other-user")));
+        });
         var broadcaster = new FakeEventBroadcaster();
         var service = CreateService(scopeFactory, broadcaster);
 
@@ -107,7 +117,11 @@ public sealed class SessionProgressServiceTests
     public async Task The_service_applies_what_the_observer_queues()
     {
         var repository = new InMemorySessionProgressRepository();
-        var scopeFactory = TestServiceScopeFactory.Create(services => services.AddSingleton<ISessionProgressRepository>(repository));
+        var scopeFactory = TestServiceScopeFactory.Create(services =>
+        {
+            services.AddSingleton<ISessionProgressRepository>(repository);
+            services.AddSingleton<ISessionRepository>(new InMemorySessionRepository());
+        });
         var broadcaster = new FakeEventBroadcaster();
         var observer = new SessionProgressObserver();
         var service = new SessionProgressService(scopeFactory, observer, broadcaster, NullLogger<SessionProgressService>.Instance);
@@ -201,6 +215,7 @@ public sealed class SessionProgressServiceTests
 
     private sealed record PlanFixture(
         Microsoft.Data.Sqlite.SqliteConnection Keeper,
+        WeaveFleet.Application.Data.IDbConnectionFactory Factory,
         SessionProgressService Service,
         FakeEventBroadcaster Broadcaster,
         SessionProgressRepository Repository,
@@ -230,6 +245,7 @@ public sealed class SessionProgressServiceTests
         var broadcaster = new FakeEventBroadcaster();
         return new PlanFixture(
             keeper,
+            factory,
             CreateService(scopeFactory, broadcaster),
             broadcaster,
             new SessionProgressRepository(factory, new TestUserContext(OwnerId)),
@@ -301,6 +317,57 @@ public sealed class SessionProgressServiceTests
             File.Delete(outside);
         }
     }
+
+    [Fact]
+    public async Task A_subagent_shows_under_the_parents_step_with_its_own_todo_counts()
+    {
+        using var fixture = await CreatePlanFixtureAsync();
+        await File.WriteAllTextAsync(fixture.PlanPath, PlanText);
+        await fixture.Service.ApplyAsync(Written(fixture.SessionId, OwnerId, DateTimeOffset.UtcNow, fixture.PlanPath), CancellationToken.None);
+
+        // The subagent's own session, linked to the parent.
+        var (_, _, child) = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(fixture.Factory, OwnerId, directory: fixture.Directory);
+        using (var connection = fixture.Factory.CreateConnection())
+        {
+            await Dapper.SqlMapper.ExecuteAsync(connection,
+                "UPDATE sessions SET parent_session_id = @Parent, title = @Title WHERE id = @Child",
+                new { Parent = fixture.SessionId, Title = "Map the messages (@shuttle subagent)", Child = child.Id });
+        }
+
+        await fixture.Service.ApplyAsync(Delegation(fixture.SessionId, new DelegationCreated
+        {
+            Payload = new DelegationCreatedPayload
+            {
+                DelegationId = "del-1", ParentSessionId = fixture.SessionId, Title = "shuttle", Status = "pending", CreatedAt = "2026-09-13T12:00:00Z",
+            },
+        }), CancellationToken.None);
+        await fixture.Service.ApplyAsync(Delegation(fixture.SessionId, new DelegationUpdated
+        {
+            Payload = new DelegationUpdatedPayload
+            {
+                DelegationId = "del-1", ParentSessionId = fixture.SessionId, ChildSessionId = child.Id, Title = "shuttle", Status = "running", CreatedAt = "2026-09-13T12:00:00Z",
+            },
+        }), CancellationToken.None);
+
+        fixture.Broadcaster.Broadcasts.Clear();
+        await fixture.Service.ApplyAsync(Todos(child.Id, OwnerId, ("Map text parts", TodoStatuses.Completed), ("Map tool parts", TodoStatuses.InProgress)), CancellationToken.None);
+
+        // The child's own row and detail, then the parent's detail with the child's counts (the parent's row is unchanged).
+        fixture.Broadcaster.Broadcasts.Select(b => (b.Topic, b.Type)).ShouldBe(
+        [
+            ("sessions", "session_progress"),
+            ($"session:{child.Id}", "progress.updated"),
+            ($"session:{fixture.SessionId}", "progress.updated"),
+        ]);
+        var subagent = fixture.Broadcaster.Broadcasts[2].Payload.GetProperty("subagents")[0];
+        subagent.GetProperty("stepKey").GetString().ShouldBe("2");
+        subagent.GetProperty("childSessionId").GetString().ShouldBe(child.Id);
+        subagent.GetProperty("title").GetString().ShouldBe("Map the messages (@shuttle subagent)");
+        (subagent.GetProperty("done").GetInt32(), subagent.GetProperty("total").GetInt32()).ShouldBe((1, 2));
+        subagent.GetProperty("current").GetString().ShouldBe("Map tool parts");
+    }
+
+    private static ObservedProgressEvent Delegation(string sessionId, DomainEvent evt) => new(sessionId, OwnerId, evt, DateTimeOffset.UtcNow);
 
     [Fact]
     public void The_observer_skips_file_writes_with_no_markdown()

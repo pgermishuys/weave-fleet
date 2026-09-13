@@ -59,23 +59,80 @@ internal sealed partial class SessionProgressService(
             // A turn ended: read the plans again, to catch ticks made by a shell command or in an editor.
             SessionIdled when current is { Plans.Count: > 0 } => await ApplyPlanFilesAsync(
                 scope.ServiceProvider, current, observed, [.. current.Plans.Select(plan => plan.Path)], messageId: null, ct).ConfigureAwait(false),
+            DelegationCreated created => ApplyDelegation(current, observed, created.Payload.DelegationId, created.Payload.ChildSessionId, created.Payload.Title, created.Payload.Status, created.Payload.Description),
+            DelegationUpdated updated => ApplyDelegation(current, observed, updated.Payload.DelegationId, updated.Payload.ChildSessionId, updated.Payload.Title, updated.Payload.Status),
+            DelegationCompleted completed => ApplyDelegation(current, observed, completed.Payload.DelegationId, completed.Payload.ChildSessionId, completed.Payload.Title, completed.Payload.Status),
             _ => null,
         };
 
-        if (next is null || !await repository.UpsertAsync(next, ct).ConfigureAwait(false))
+        if (next is null)
             return null;
 
-        var summary = JsonSerializer.SerializeToElement(
-            SessionProgressTracker.ToSummary(next), InfrastructureJsonContext.Default.SessionProgressSummaryDto);
-        await broadcaster.BroadcastAsync("sessions", SessionProgressTracker.SummaryEventType, summary, next.UserId, ct)
-            .ConfigureAwait(false);
+        // A subagent just linked to its session may already have progress of its own.
+        if (observed.Event is DelegationCreated or DelegationUpdated or DelegationCompleted)
+            next = await CopySubagentProgressAsync(scope.ServiceProvider, repository, next, observed, ct).ConfigureAwait(false);
+
+        if (!await repository.UpsertAsync(next, ct).ConfigureAwait(false))
+            return null;
+
+        await PushAsync(next, includeSummary: true, ct).ConfigureAwait(false);
+        await RollUpToParentAsync(scope.ServiceProvider, repository, next, observed.At, ct).ConfigureAwait(false);
+        return next;
+    }
+
+    private static SessionProgress? ApplyDelegation(
+        SessionProgress? current, ObservedProgressEvent observed, string delegationId, string? childSessionId, string agent, string status,
+        string? description = null)
+        => SessionProgressTracker.ApplyDelegation(
+            current, observed.SessionId, observed.UserId, delegationId, childSessionId, agent, status, observed.At, description);
+
+    /// <summary>Copies the progress of each linked subagent session onto its entry; unchanged entries stay as they are.</summary>
+    private static async Task<SessionProgress> CopySubagentProgressAsync(
+        IServiceProvider services, ISessionProgressRepository repository, SessionProgress progress, ObservedProgressEvent observed, CancellationToken ct)
+    {
+        var sessions = services.GetRequiredService<ISessionRepository>();
+        foreach (var subagent in progress.Subagents.Where(subagent => subagent.ChildSessionId is not null))
+        {
+            var childId = subagent.ChildSessionId!;
+            var child = await repository.GetForOwnerAsync(childId, progress.UserId, ct).ConfigureAwait(false);
+            var childSession = await sessions.GetByIdAsync(childId).ConfigureAwait(false);
+            progress = SessionProgressTracker.ApplySubagentProgress(progress, childId, child, childSession?.Title, observed.At) ?? progress;
+        }
+
+        return progress;
+    }
+
+    /// <summary>When the session is a subagent, copies its progress onto its entry in the parent's progress.</summary>
+    private async Task RollUpToParentAsync(
+        IServiceProvider services, ISessionProgressRepository repository, SessionProgress child, DateTimeOffset at, CancellationToken ct)
+    {
+        var session = await services.GetRequiredService<ISessionRepository>().GetByIdAsync(child.SessionId).ConfigureAwait(false);
+        if (session?.ParentSessionId is not { Length: > 0 } parentId)
+            return;
+
+        var parent = await repository.GetForOwnerAsync(parentId, child.UserId, ct).ConfigureAwait(false);
+        var updated = parent is null ? null : SessionProgressTracker.ApplySubagentProgress(parent, child.SessionId, child, session.Title, at);
+        if (updated is null || !await repository.UpsertAsync(updated, ct).ConfigureAwait(false))
+            return;
+
+        // The parent's own counts didn't change, so its row doesn't need a push.
+        await PushAsync(updated, includeSummary: false, ct).ConfigureAwait(false);
+    }
+
+    private async Task PushAsync(SessionProgress progress, bool includeSummary, CancellationToken ct)
+    {
+        if (includeSummary)
+        {
+            var summary = JsonSerializer.SerializeToElement(
+                SessionProgressTracker.ToSummary(progress), InfrastructureJsonContext.Default.SessionProgressSummaryDto);
+            await broadcaster.BroadcastAsync("sessions", SessionProgressTracker.SummaryEventType, summary, progress.UserId, ct)
+                .ConfigureAwait(false);
+        }
 
         var detail = JsonSerializer.SerializeToElement(
-            SessionProgressTracker.ToDto(next), InfrastructureJsonContext.Default.SessionProgressDto);
-        await broadcaster.BroadcastAsync($"session:{next.SessionId}", SessionProgressTracker.DetailEventType, detail, next.UserId, ct)
+            SessionProgressTracker.ToDto(progress), InfrastructureJsonContext.Default.SessionProgressDto);
+        await broadcaster.BroadcastAsync($"session:{progress.SessionId}", SessionProgressTracker.DetailEventType, detail, progress.UserId, ct)
             .ConfigureAwait(false);
-
-        return next;
     }
 
     /// <summary>

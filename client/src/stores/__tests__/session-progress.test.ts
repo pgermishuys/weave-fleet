@@ -17,6 +17,7 @@ function detail(done: number, updatedAt: string, overrides: Partial<SessionProgr
     todos: [{ content: "Next", status: "in_progress", priority: "medium" }],
     updatedAt,
     plan: null,
+    subagents: [],
     ...overrides,
   };
 }

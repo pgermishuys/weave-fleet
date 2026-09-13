@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using WeaveFleet.Application.Progress;
 using WeaveFleet.Domain.Events;
 
 namespace WeaveFleet.Infrastructure.Progress;
@@ -12,7 +13,7 @@ public sealed record ObservedProgressEvent(string SessionId, string UserId, Doma
 /// is dropped. Each todo event carries the whole list and plans are read again when a turn ends, so later
 /// events catch up.
 /// </summary>
-public sealed class SessionProgressObserver
+public sealed class SessionProgressObserver : ISessionProgressObserver
 {
     private readonly Channel<ObservedProgressEvent> _channel = Channel.CreateBounded<ObservedProgressEvent>(
         new BoundedChannelOptions(1_000) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
@@ -30,6 +31,7 @@ public sealed class SessionProgressObserver
             TodosReported => true,
             FilesWritten written => written.Payload.Paths.Any(PlanFileReader.IsMarkdown),
             SessionIdled => true,
+            DelegationCreated or DelegationUpdated or DelegationCompleted => true,
             _ => false,
         };
         if (!relevant)

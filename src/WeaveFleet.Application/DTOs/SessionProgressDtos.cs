@@ -27,7 +27,23 @@ public sealed record SessionProgressDto(
 {
     /// <summary>The plan the counts come from, when the session is working through one.</summary>
     public SessionPlanDto? Plan { get; init; }
+
+    /// <summary>Subagents the session started, oldest first.</summary>
+    public IReadOnlyList<SessionSubagentDto> Subagents { get; init; } = [];
 }
+
+/// <summary>A subagent the session started, and how far along its own session is.</summary>
+/// <param name="StepKey">The plan step it was started for; null without a plan.</param>
+public sealed record SessionSubagentDto(
+    string DelegationId,
+    string? ChildSessionId,
+    string Agent,
+    string? Title,
+    string Status,
+    string? StepKey,
+    int Done,
+    int Total,
+    string? Current);
 
 /// <summary>A checklist plan as the Progress tab shows it.</summary>
 /// <param name="Path">Where the file is, relative to the session's directory.</param>

@@ -247,7 +247,7 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
 
 ### Phase 3: Subagents under their step
 
-- [ ] 11. Nest subagent sessions under the step they're working on
+- [x] 11. Nest subagent sessions under the step they're working on
   - **What**: When `DelegationCreated` arrives for a session with a plan, attach the child session to the parent's current step (the first unticked one). For Weave this is exact: the executor delegates the next unchecked task. The child's own progress summary (its todos) goes into the parent's detail and is pushed when the child changes. `DelegationCompleted` marks it finished. The Progress tab shows a subagent card under the step, with its count and current todo, linking to the child session.
   - **Files**:
     - `src/WeaveFleet.Application/Progress/SessionProgressTracker.cs`
@@ -257,6 +257,10 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
   - **Acceptance**:
     - Tracker tests: delegation with a plan, without a plan, two children on one step, and a child finishing after its step is ticked
     - A live integration test: a scripted model delegates to a subagent that calls `todowrite`, and the parent's detail shows the child's counts
+    - Done 2026-09-13, with two findings from the live test:
+      - OpenCode 1.18 doesn't offer `todowrite` (or `task`) to any subagent; its built-in `general` agent even has `todowrite: "deny"`. So with OpenCode a subagent card shows its task, status and a link, never a count. The roll-up of counts is harness-neutral and tested, and lights up for any harness whose subagents keep todo lists.
+      - Fleet named child sessions after the agent ("general"), so the task comes from the `task` call's `description`. The adapter reads it and `DelegationService` passes it to progress (no schema change).
+      - Separately, one delegation left three child session rows in the live test. That looks like an existing race in Fleet's child-session creation, not caused by this plan.
 
 ### Phase 4 (optional): Guess the current step
 

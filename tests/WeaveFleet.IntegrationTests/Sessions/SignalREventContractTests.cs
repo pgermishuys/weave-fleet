@@ -713,7 +713,7 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
         var updatedAt = detail.Data.GetProperty("properties").GetProperty("updatedAt").GetString();
         DateTimeOffset.TryParse(updatedAt, out _).ShouldBeTrue();
         detail.Data.GetRawText().ShouldBe(
-            $$$"""{"type":"progress.updated","eventId":null,"properties":{"sessionId":"{{{sessionId}}}","kind":"todos","done":1,"total":2,"current":"Drop the indexes","todos":[{"content":"Write the migration","status":"completed","priority":"high"},{"content":"Drop the indexes","status":"in_progress"}],"updatedAt":"{{{updatedAt}}}"}}""");
+            $$$"""{"type":"progress.updated","eventId":null,"properties":{"sessionId":"{{{sessionId}}}","kind":"todos","done":1,"total":2,"current":"Drop the indexes","todos":[{"content":"Write the migration","status":"completed","priority":"high"},{"content":"Drop the indexes","status":"in_progress"}],"updatedAt":"{{{updatedAt}}}","subagents":[]}}""");
     }
 
     [Fact]

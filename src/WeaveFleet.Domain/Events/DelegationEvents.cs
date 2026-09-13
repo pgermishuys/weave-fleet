@@ -39,6 +39,11 @@ public sealed record DelegationCompleted : DomainEvent
 public sealed record DelegationCreatedPayload
 {
     /// <summary>
+    /// Gets what the subagent was asked to do, when the harness says.
+    /// </summary>
+    public string? Description { get; init; }
+
+    /// <summary>
     /// Gets the delegation identifier.
     /// </summary>
     public required string DelegationId { get; init; }

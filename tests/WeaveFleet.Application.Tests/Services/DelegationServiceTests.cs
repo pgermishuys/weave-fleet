@@ -231,4 +231,41 @@ public sealed class DelegationServiceTests
             "Parent should revert to idle after child delegation completes");
         activityTracker.GetParentSessionId("child-1").ShouldBeNull();
     }
+
+    [Fact]
+    public async Task Every_step_of_a_delegation_reaches_progress_tracking()
+    {
+        var observer = new RecordingProgressObserver();
+        var sut = new DelegationService(
+            _delegationRepository, _eventBroadcaster, _userContext,
+            sessionActivityWriteService: null, activityTracker: null, sessionRepository: null, capabilitiesResolver: null,
+            progressObserver: observer);
+
+        var created = await sut.HandleDelegationDetectedAsync("parent-1", "tool-1", "shuttle", "Delete or update affected tests");
+        await sut.HandleChildLinkedAsync("parent-1", "tool-1", "child-1");
+        await sut.HandleDelegationFinishedAsync(created.DelegationId, "completed");
+
+        observer.Observed.Select(o => (o.SessionId, o.UserId, o.Event.GetType().Name)).ShouldBe(
+        [
+            ("parent-1", "user-1", nameof(WeaveFleet.Domain.Events.DelegationCreated)),
+            ("parent-1", "user-1", nameof(WeaveFleet.Domain.Events.DelegationUpdated)),
+            ("parent-1", "user-1", nameof(WeaveFleet.Domain.Events.DelegationCompleted)),
+        ]);
+        observer.Observed[0].Event.ShouldBeOfType<WeaveFleet.Domain.Events.DelegationCreated>().Payload.Description
+            .ShouldBe("Delete or update affected tests");
+        var linked = observer.Observed[1].Event.ShouldBeOfType<WeaveFleet.Domain.Events.DelegationUpdated>().Payload;
+        (linked.ChildSessionId, linked.Title, linked.Status).ShouldBe(("child-1", "shuttle", "running"));
+        observer.Observed[2].Event.ShouldBeOfType<WeaveFleet.Domain.Events.DelegationCompleted>().Payload.Status.ShouldBe("completed");
+    }
+
+    private sealed class RecordingProgressObserver : WeaveFleet.Application.Progress.ISessionProgressObserver
+    {
+        public List<(string SessionId, string? UserId, WeaveFleet.Domain.Events.DomainEvent Event)> Observed { get; } = [];
+
+        public void Observe(string sessionId, string? userId, WeaveFleet.Domain.Events.DomainEvent? domainEvent)
+        {
+            if (domainEvent is not null)
+                Observed.Add((sessionId, userId, domainEvent));
+        }
+    }
 }

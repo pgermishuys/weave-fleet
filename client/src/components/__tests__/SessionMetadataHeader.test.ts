@@ -22,6 +22,7 @@ function planProgress(): SessionProgressDetail {
     current: "Map `SessionSnapshot`",
     todos: [],
     updatedAt: "2026-09-13T12:00:00Z",
+    subagents: [],
     plan: {
       path: "plan.md",
       title: "Proxy",

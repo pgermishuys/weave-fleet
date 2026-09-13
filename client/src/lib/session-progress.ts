@@ -49,12 +49,29 @@ export interface SessionPlan {
   groups: SessionPlanGroup[];
 }
 
+/** A subagent the session started, and how far along its own session is. */
+export interface SessionSubagent {
+  delegationId: string;
+  childSessionId: string | null;
+  /** The kind of subagent, such as "shuttle". */
+  agent: string;
+  /** The subagent session's title, usually its task. */
+  title: string | null;
+  status: string;
+  /** The plan step it was started for; null without a plan. */
+  stepKey: string | null;
+  done: number;
+  total: number;
+  current: string | null;
+}
+
 /** Everything the open session shows. */
 export interface SessionProgressDetail extends SessionProgressSummary {
   todos: TodoItem[];
   updatedAt: string;
   /** The plan the counts come from, when the session is working through one. */
   plan: SessionPlan | null;
+  subagents: SessionSubagent[];
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -100,10 +117,36 @@ export function parseProgressDetail(value: unknown): SessionProgressDetail | nul
     ? record.todos.map(normalizeTodoItem).filter((todo): todo is TodoItem => todo !== null)
     : [];
 
-  return { ...summary, todos, updatedAt: record.updatedAt, plan: parsePlan(record.plan) };
+  const subagents = Array.isArray(record.subagents)
+    ? record.subagents.map(parseSubagent).filter((subagent): subagent is SessionSubagent => subagent !== null)
+    : [];
+
+  return { ...summary, todos, updatedAt: record.updatedAt, plan: parsePlan(record.plan), subagents };
 }
 
 const stringOrNull = (value: unknown): string | null => (typeof value === "string" ? value : null);
+
+function parseSubagent(value: unknown): SessionSubagent | null {
+  const record = asRecord(value);
+  if (!record || typeof record.delegationId !== "string" || typeof record.agent !== "string") return null;
+  return {
+    delegationId: record.delegationId,
+    childSessionId: stringOrNull(record.childSessionId),
+    agent: record.agent,
+    title: stringOrNull(record.title),
+    status: typeof record.status === "string" ? record.status : "pending",
+    stepKey: stringOrNull(record.stepKey),
+    done: isCount(record.done) ? record.done : 0,
+    total: isCount(record.total) ? record.total : 0,
+    current: stringOrNull(record.current),
+  };
+}
+
+/** The subagent's task from its session title, without a trailing "(@agent subagent)"; null when there's none. */
+export function subagentTitle(subagent: SessionSubagent): string | null {
+  const title = subagent.title?.replace(/\s*\(@[^)]*subagent\)\s*$/i, "").trim();
+  return title && title.length > 0 ? title : null;
+}
 
 function parseStep(value: unknown): SessionPlanStep | null {
   const record = asRecord(value);

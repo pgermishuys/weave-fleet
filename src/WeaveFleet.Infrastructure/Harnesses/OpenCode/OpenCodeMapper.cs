@@ -21,7 +21,8 @@ internal static class OpenCodeMapper
         string ToolCallId,
         string Title,
         string Status,
-        string? ChildSessionId);
+        string? ChildSessionId,
+        string? Description = null);
 
     /// <summary>
     /// Maps an <see cref="OpenCodeMessageWithParts"/> to a <see cref="HarnessMessage"/>.
@@ -573,7 +574,10 @@ internal static class OpenCodeMapper
                 }
             }
 
-            return new DelegationExtraction(parentSessionId, toolCallId, title, status, childSessionId);
+            _ = TryGetStringProperty(inputEl, out var description, "description");
+            return new DelegationExtraction(
+                parentSessionId, toolCallId, title, status, childSessionId,
+                string.IsNullOrWhiteSpace(description) ? null : description);
         }
         catch
         {
@@ -617,7 +621,10 @@ internal static class OpenCodeMapper
         }
 
         var status = string.IsNullOrWhiteSpace(childSessionId) ? "pending" : "running";
-        return new DelegationExtraction(parentSessionId, toolCallId, title, status, childSessionId);
+        _ = TryGetStringProperty(partEl, out var description, "description");
+        return new DelegationExtraction(
+            parentSessionId, toolCallId, title, status, childSessionId,
+            string.IsNullOrWhiteSpace(description) || description == title ? null : description);
     }
 
     internal static string? TryResolveSessionId(OpenCodeSseEvent evt)

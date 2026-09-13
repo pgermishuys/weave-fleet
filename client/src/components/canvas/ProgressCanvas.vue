@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
 import { Check, ChevronDown, ChevronRight } from "lucide-vue-next";
+import ProgressSubagentCard from "@/components/canvas/ProgressSubagentCard.vue";
 import { useSessionProgress } from "@/composables/use-session-progress";
 import {
   codeSpans,
   currentPlanStep,
   type SessionPlanGroup,
   type SessionPlanStep,
+  type SessionSubagent,
 } from "@/lib/session-progress";
 import type { TodoItem } from "@/lib/todo-utils";
 
@@ -71,6 +73,16 @@ function stepState(step: SessionPlanStep): string {
 }
 
 const todoDone = computed(() => todos.value.filter((todo) => todo.status === "completed").length);
+
+// --- Subagents: each shows under the plan step it was started for; the rest get their own list ---
+const subagents = computed<readonly SessionSubagent[]>(() => progress.value?.subagents ?? []);
+const stepKeys = computed(() => new Set(plan.value?.groups.flatMap((group) => group.steps.map((step) => step.key)) ?? []));
+const unplacedSubagents = computed(() =>
+  subagents.value.filter((subagent) => !subagent.stepKey || !stepKeys.value.has(subagent.stepKey)));
+
+function subagentsFor(step: SessionPlanStep): SessionSubagent[] {
+  return subagents.value.filter((subagent) => subagent.stepKey === step.key);
+}
 </script>
 
 <template>
@@ -232,6 +244,18 @@ const todoDone = computed(() => todos.value.filter((todo) => todo.status === "co
               </span>
 
               <div
+                v-if="subagentsFor(step).length > 0"
+                class="progress-step__detail"
+              >
+                <ProgressSubagentCard
+                  v-for="subagent in subagentsFor(step)"
+                  :key="subagent.delegationId"
+                  :subagent="subagent"
+                  :parent-session-id="sessionId"
+                />
+              </div>
+
+              <div
                 v-if="isCurrent(step) && todos.length > 0"
                 class="progress-step__detail"
               >
@@ -302,6 +326,22 @@ const todoDone = computed(() => todos.value.filter((todo) => todo.status === "co
         <code>.weave/plans/</code>.
       </p>
     </div>
+
+    <section
+      v-if="unplacedSubagents.length > 0"
+      class="progress-canvas__subagents"
+      aria-label="Subagents"
+    >
+      <p class="progress-canvas__label">
+        Subagents
+      </p>
+      <ProgressSubagentCard
+        v-for="subagent in unplacedSubagents"
+        :key="subagent.delegationId"
+        :subagent="subagent"
+        :parent-session-id="sessionId"
+      />
+    </section>
   </section>
 </template>
 
@@ -622,6 +662,12 @@ const todoDone = computed(() => todos.value.filter((todo) => todo.status === "co
 
 .progress-todo--cancelled span:last-child {
   text-decoration: line-through;
+}
+
+.progress-canvas__subagents {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .progress-canvas__note {

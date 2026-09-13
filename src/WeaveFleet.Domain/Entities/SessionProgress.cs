@@ -28,6 +28,9 @@ public sealed record SessionProgress
     /// <summary>Checklist files the session wrote, most recently written first. The counts come from the active one.</summary>
     public IReadOnlyList<TrackedPlan> Plans { get; init; } = [];
 
+    /// <summary>Subagents the session started, oldest first, each with its own progress.</summary>
+    public IReadOnlyList<TrackedSubagent> Subagents { get; init; } = [];
+
     public DateTimeOffset UpdatedAt { get; init; }
 }
 
@@ -39,6 +42,32 @@ public static class SessionProgressKinds
 
     /// <summary>A checklist plan the session is working through.</summary>
     public const string Plan = "plan";
+}
+
+/// <summary>A subagent the session started, and how far along its own session is.</summary>
+public sealed record TrackedSubagent
+{
+    public required string DelegationId { get; init; }
+
+    /// <summary>The subagent's own Fleet session, once it's known.</summary>
+    public string? ChildSessionId { get; init; }
+
+    /// <summary>The kind of subagent, such as <c>shuttle</c>.</summary>
+    public required string Agent { get; init; }
+
+    /// <summary>The subagent session's title, usually the task it was given.</summary>
+    public string? Title { get; init; }
+
+    /// <summary><c>pending</c>, <c>running</c>, <c>completed</c>, <c>error</c> or <c>cancelled</c>.</summary>
+    public required string Status { get; init; }
+
+    /// <summary>The plan step that was current when the subagent started; null without a plan.</summary>
+    public string? StepKey { get; init; }
+
+    public DateTimeOffset StartedAt { get; init; }
+    public int Done { get; init; }
+    public int Total { get; init; }
+    public string? Current { get; init; }
 }
 
 /// <summary>A markdown checklist the session wrote, as Fleet last read it.</summary>

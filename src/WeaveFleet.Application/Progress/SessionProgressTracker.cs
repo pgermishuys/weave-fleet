@@ -84,6 +84,96 @@ public static class SessionProgressTracker
         return Summarize(Base(current, sessionId, userId) with { Plans = nextPlans, UpdatedAt = now });
     }
 
+    /// <summary>How many subagents a session remembers; the oldest is dropped.</summary>
+    public const int MaxSubagents = 20;
+
+    /// <summary>
+    /// Applies a subagent's lifecycle: started, linked to its own session, finished. A new subagent is tied to the
+    /// active plan's current step (the first unticked one), which for a planner that hands each step to a
+    /// subagent is the step it's working on. Returns <see langword="null"/> when nothing changed.
+    /// </summary>
+    public static SessionProgress? ApplyDelegation(
+        SessionProgress? current,
+        string sessionId,
+        string userId,
+        string delegationId,
+        string? childSessionId,
+        string agent,
+        string status,
+        DateTimeOffset now,
+        string? description = null)
+    {
+        var subagents = current?.Subagents ?? [];
+        var existing = subagents.FirstOrDefault(subagent => subagent.DelegationId == delegationId);
+
+        TrackedSubagent next;
+        if (existing is null)
+        {
+            var plan = current is null ? null : ActivePlan(current);
+            next = new TrackedSubagent
+            {
+                DelegationId = delegationId,
+                ChildSessionId = childSessionId,
+                Agent = agent,
+                Title = string.IsNullOrWhiteSpace(description) ? null : description,
+                Status = status,
+                StepKey = plan?.Steps.FirstOrDefault(step => !step.Checked)?.Key,
+                StartedAt = now,
+            };
+        }
+        else
+        {
+            next = existing with
+            {
+                ChildSessionId = childSessionId ?? existing.ChildSessionId,
+                Agent = agent,
+                Title = string.IsNullOrWhiteSpace(description) ? existing.Title : description,
+                Status = status,
+            };
+            if (next == existing)
+                return null;
+        }
+
+        var nextSubagents = existing is null
+            ? subagents.Append(next).TakeLast(MaxSubagents).ToList()
+            : subagents.Select(subagent => subagent == existing ? next : subagent).ToList();
+
+        return Summarize(Base(current, sessionId, userId) with { Subagents = nextSubagents, UpdatedAt = now });
+    }
+
+    /// <summary>
+    /// Copies a subagent session's own progress onto its entry in the parent's progress. Returns
+    /// <see langword="null"/> when the parent has no such subagent or nothing changed.
+    /// </summary>
+    public static SessionProgress? ApplySubagentProgress(
+        SessionProgress parent,
+        string childSessionId,
+        SessionProgress? child,
+        string? childTitle,
+        DateTimeOffset now)
+    {
+        var existing = parent.Subagents.FirstOrDefault(subagent => subagent.ChildSessionId == childSessionId);
+        if (existing is null)
+            return null;
+
+        var next = existing with
+        {
+            // The task description from the delegation says more than the session title, so it wins.
+            Title = existing.Title ?? (string.IsNullOrWhiteSpace(childTitle) ? null : childTitle),
+            Done = child?.Done ?? existing.Done,
+            Total = child?.Total ?? existing.Total,
+            Current = child is null ? existing.Current : child.Current,
+        };
+        if (next == existing)
+            return null;
+
+        return parent with
+        {
+            Subagents = [.. parent.Subagents.Select(subagent => subagent == existing ? next : subagent)],
+            UpdatedAt = now,
+        };
+    }
+
     /// <summary>The plan the counts come from: the one ticked most recently, else the one written most recently.</summary>
     public static TrackedPlan? ActivePlan(SessionProgress progress)
         => progress.Plans
@@ -105,6 +195,16 @@ public static class SessionProgressTracker
             Format(progress.UpdatedAt))
         {
             Plan = ActivePlan(progress) is { } plan ? ToDto(plan) : null,
+            Subagents = [.. progress.Subagents.Select(subagent => new SessionSubagentDto(
+                subagent.DelegationId,
+                subagent.ChildSessionId,
+                subagent.Agent,
+                subagent.Title,
+                subagent.Status,
+                subagent.StepKey,
+                subagent.Done,
+                subagent.Total,
+                subagent.Current))],
         };
 
     private static SessionPlanDto ToDto(TrackedPlan plan)

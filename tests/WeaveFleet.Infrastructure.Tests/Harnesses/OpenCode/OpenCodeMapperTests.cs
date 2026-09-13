@@ -845,6 +845,21 @@ public sealed class OpenCodeMapperTests
         result.Title.ShouldBe("reviewer");
         result.Status.ShouldBe("pending");
         result.ChildSessionId.ShouldBeNull();
+        result.Description.ShouldBe("Review the patch");
+    }
+
+    [Fact]
+    public void TryExtractDelegation_TaskToolWithoutDescription_HasNoDescription()
+    {
+        var evt = new OpenCodeSseEvent
+        {
+            Type = "message.part.updated",
+            Properties = JsonDocument.Parse("""
+                { "part": { "type": "tool", "tool": "task", "callID": "tool-1", "state": { "status": "running", "input": { "subagent_type": "reviewer" } } } }
+                """).RootElement,
+        };
+
+        OpenCodeMapper.TryExtractDelegation(evt, "fleet-parent")!.Description.ShouldBeNull();
     }
 
     [Fact]

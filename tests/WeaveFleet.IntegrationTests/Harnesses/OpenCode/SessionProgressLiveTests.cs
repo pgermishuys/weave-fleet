@@ -113,6 +113,53 @@ public sealed class SessionProgressLiveTests
                 File.ReadAllText(Path.Combine(workspace, ".weave", "plans", "drop-tables.md")).ShouldContain("- [x] 1. Write the migration");
             });
 
+    [OpenCodeFact]
+    public Task A_subagent_started_for_a_step_shows_its_own_todo_counts_under_that_step()
+        => RunAsync(
+            "Plan the work, then hand the first step to a subagent.",
+            queue =>
+            {
+                queue.Enqueue(ToolCall("call_write", "write", JsonSerializer.Serialize(new
+                {
+                    filePath = ".weave/plans/drop-tables.md",
+                    content = "# Drop the dead tables\n\n- [ ] 1. Write the migration\n- [ ] 2. Drop the indexes\n- [ ] 3. Start the app\n",
+                })));
+                queue.Enqueue(ToolCall("call_task", "task", """
+                    {"description":"Write the migration","prompt":"Write the migration that drops the dead tables.","subagent_type":"general"}
+                    """));
+
+                // The subagent's turn. OpenCode 1.18 doesn't offer todowrite to subagents, so it has no counts of its own.
+                queue.Enqueue(new ScriptedLlmResponse { Text = "The migration is written." });
+            },
+            _ => true,
+            async (services, _, _, _, ct) =>
+            {
+                // The parent shows the subagent under step 1, titled with its task, linked to its session, finished.
+                using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                wait.CancelAfter(TimeSpan.FromSeconds(90));
+                SessionProgress? stored;
+                try
+                {
+                    stored = await WaitForAsync(
+                        () => StoredOrNull(services),
+                        progress => progress?.Subagents is [{ Status: "completed" }],
+                        wait.Token);
+                }
+                catch (TimeoutException)
+                {
+                    throw new TimeoutException(
+                        $"The subagent never showed as finished. Parent progress: {JsonSerializer.Serialize(StoredOrNull(services))}\n" +
+                        $"Sessions: {JsonSerializer.Serialize(AllSessions(services))}");
+                }
+
+                (stored!.Kind, stored.Done, stored.Total).ShouldBe((SessionProgressKinds.Plan, 0, 3));
+                var subagent = stored.Subagents.ShouldHaveSingleItem();
+                (subagent.Agent, subagent.Title, subagent.StepKey, subagent.Status)
+                    .ShouldBe(("general", "Write the migration", "1", "completed"));
+                subagent.ChildSessionId.ShouldNotBeNullOrWhiteSpace();
+                AllSessions(services).ShouldContain(row => row.StartsWith(subagent.ChildSessionId + " parent=progress-live", StringComparison.Ordinal));
+            });
+
     /// <summary>
     /// Starts Fleet on Kestrel with a pooled opencode on the fake model, sends <paramref name="prompt"/>, waits until
     /// a row summary satisfies <paramref name="done"/>, then hands everything to <paramref name="assert"/>.
@@ -160,8 +207,7 @@ public sealed class SessionProgressLiveTests
                 },
                 ct);
 
-            // The relay pumps registered instances, as it does for sessions the orchestrator starts.
-            services.GetRequiredService<InstanceTracker>().Register(InstanceId, session);
+            RegisterLikeTheOrchestrator(services, session);
             await session.WaitForEventSubscriptionAsync(ct);
 
             await session.SendPromptAsync(prompt, null, ct);
@@ -184,7 +230,24 @@ public sealed class SessionProgressLiveTests
                     $"LLM requests: {llm.Queue.Requests.Count}");
             }
 
-            await assert(services, session, [.. events], workspace, ct);
+            try
+            {
+                await assert(services, session, [.. events], workspace, ct);
+            }
+            catch (TimeoutException ex)
+            {
+                var requests = llm.Queue.Requests.Select((request, index) =>
+                {
+                    using var body = JsonDocument.Parse(request);
+                    var tools = body.RootElement.TryGetProperty("tools", out var t) && t.ValueKind == JsonValueKind.Array
+                        ? string.Join(",", t.EnumerateArray().Select(tool => tool.GetProperty("function").GetProperty("name").GetString()))
+                        : "-";
+                    var messages = body.RootElement.GetProperty("messages");
+                    var last = messages[messages.GetArrayLength() - 1].GetRawText();
+                    return $"#{index} tools=[{tools}] last={last[..Math.Min(last.Length, 300)]}";
+                });
+                throw new TimeoutException($"{ex.Message}\nLLM requests:\n{string.Join("\n", requests)}", ex);
+            }
 
             await cts.CancelAsync();
             await collecting;
@@ -194,6 +257,49 @@ public sealed class SessionProgressLiveTests
             await factory.DisposeAsync();
             try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
         }
+    }
+
+    /// <summary>
+    /// Points the seeded session at the spawned instance and registers it, as the orchestrator does, so the relay
+    /// pumps it and subagent sessions are created under it.
+    /// </summary>
+    private static void RegisterLikeTheOrchestrator(IServiceProvider services, IHarnessSession session)
+    {
+        using (var scope = services.CreateScope())
+        using (var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection())
+        using (var command = connection.CreateCommand())
+        {
+            var token = session.ResumeToken is null ? "NULL" : $"'{session.ResumeToken}'";
+            command.CommandText = $"""
+                INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
+                VALUES ('{session.InstanceId}', 0, NULL, '', '', 'running', '2026-09-13T00:00:00+00:00', '{Owner}');
+                UPDATE sessions SET instance_id = '{session.InstanceId}', harness_resume_token = {token} WHERE id = '{SessionId}';
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        services.GetRequiredService<InstanceTracker>().Register(session.InstanceId, session);
+    }
+
+    private static SessionProgress? StoredOrNull(IServiceProvider services)
+    {
+        using var scope = services.CreateScope();
+        using var user = scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(Owner);
+        return scope.ServiceProvider.GetRequiredService<ISessionProgressRepository>()
+            .GetAsync(SessionId, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    private static List<string> AllSessions(IServiceProvider services)
+    {
+        using var scope = services.CreateScope();
+        using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id || ' parent=' || IFNULL(parent_session_id, '-') || ' title=' || IFNULL(title, '-') || ' user=' || user_id FROM sessions";
+        using var reader = command.ExecuteReader();
+        var rows = new List<string>();
+        while (reader.Read())
+            rows.Add(reader.GetString(0));
+        return rows;
     }
 
     private static ScriptedLlmResponse ToolCall(string id, string tool, string arguments)
