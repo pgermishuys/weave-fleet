@@ -96,7 +96,7 @@ Ground truth from the spike and the codebase (2026-09-13). Don't re-check these:
   - **Output**: Findings appended to this plan; decides Task 5's `dotnet watch` approach.
   - **Depends on**: 0.
 
-- [ ] 2. Runner lifecycle (built 2026-09-13, see Findings; the live SIGKILL check is still to do)
+- [x] 2. Runner lifecycle (built and checked live 2026-09-13, see Findings)
   - **What**: Migration `030` and repository, `app.updated` events, the output endpoint, stop on session stop/archive/delete, orphan cleanup at startup, caps, ownership checks on every endpoint. `fleet_app_start` opens the canvas at once (state `{url: "", appId}`, canvas shows "starting"), then sets the page when it answers; the tool still waits for ready so it can return the URL or the failure.
   - **Files**: `src/WeaveFleet.Infrastructure/Migrations/030_add_app_runs.sql`, `AppRunRepository.cs`, `AppRunner.cs`, `BrowserBridge.cs`, `SessionOrchestrator.cs` (hooks), `Domain/Events` (`AppUpdated`), `SessionEventsHub.ResolveDomainEventType`, JSON contexts.
   - **Acceptance**: Kill Fleet with SIGKILL while an app runs; on the next start the app's processes are gone and the canvas says stopped with Start. Stopping, archiving or deleting a session stops its apps. A 4th app in one session is refused with the names of the 3 running.
@@ -242,7 +242,19 @@ Built in the worktree `.claude/worktrees/browser-canvas`, after rebasing `feat/b
 
 **Checks:** Application 556/556, Infrastructure 792 (1 skipped, not ours), including real-process tests for caps, stop vs exit, restart keeping id and port, env stripping and `oom_score_adj` = 1000, output numbering, leftover kill by start time, and started-before-exited (20 instant exits). Client: `vue-tsc`, eslint, vitest 496/496 on Node 22 after `npm ci` (the .NET build had installed with bun, which resolves a different `@vue/test-utils`). Not run locally: `WeaveFleet.Api.Tests` and `WeaveFleet.IntegrationTests` (they boot `Program`, and this worktree session can't set a scratch `HOME`), so the new `app.updated` contract test runs first in CI.
 
-**Still open for Task 2:** the live acceptance check (SIGKILL a scratch Fleet with an app running, start it again, check the processes are gone and the canvas says stopped; stop/archive/delete from the UI; a 4th app refused). `DOTNET_URLS` against a real Aspire AppHost is untested (only a fake `.csproj`). Helper-port filtering is untested against a real `dotnet watch`.
+**Live check (scratch Fleet on 5101 built from the worktree, scratch `HOME`):**
+- `fleet_app_start` with `bun run dev` through the bridge: the tab opened at v1 with no page, got its page at v2, 0.9 s in all. The stored row had the shell's pid and start time; `bun --hot` had `oom_score_adj` 1000, no `Fleet__*` variables, and its `PORT`.
+- SIGKILL of Fleet: the app tree (sh → `bun run dev` → `bun --hot`) was reparented to init and kept serving. On the next start Fleet logged "Killed process …, left running by a previous Fleet"; all three processes were gone, the row was `stopped` with no pid. The canvas showed "stopped" with Start; Start brought it back on the same id and port (34459). Same after a normal restart (SIGTERM), where shutdown itself kills the apps.
+- Caps: three `python3 -m http.server` apps in one session, a fourth refused with the three commands and ids; restarting one of the three still worked.
+- Session stop (`POST /stop`), archive (`PATCH /retention`) and delete each stopped the session's apps; delete also removed the rows.
+- Found and fixed: the canvas's Start could run an app in an archived session (now 409, "This session is archived…"); and a stopped app showed the proxy's "couldn't reach" text in the frame (the canvas now says the app is stopped or exited instead of framing it).
+- `WeaveFleet.Api.Tests` 184/184 and the SignalR contract tests (incl. the new `app.updated` one) run under a scratch `HOME` after leaving the worktree session; `~/.weave/fleet.db` and its legacy-backup guard untouched.
+- Gotcha: in Development the scratch Fleet serves the client from the build's static web assets manifest (the worktree's `src/WeaveFleet.Api/wwwroot` and `obj/…/compressed`), not `host-bin/wwwroot`. Delete `host-bin/WeaveFleet.Api.staticwebassets.*.json` after each build, or the UI is stale.
+- After a Fleet restart, bridge calls for a session started before it fail ("couldn't match this call") until the session is resumed. That's the existing canvas bridge behaviour, not Task 2's.
+
+**Decision 6 and PR #191:** PR #191 (open, `feat/remove-stop-resume`) removes session stop/pause/resume by the user's decision. Once it lands, apps stop on archive, delete and Fleet restart only, and the `StopSessionAsync` hook goes away in the rebase (it touches the same orchestrator code and tests).
+
+**Still open:** `DOTNET_URLS` against a real Aspire AppHost (only a fake `.csproj` so far); helper-port filtering against a real `dotnet watch`.
 
 ## Assessment (2026-09-13)
 Asked by the user after Tasks 0–1: is this a good feature with decent functionality? Written by the agent that built the spike, so read with that in mind.
@@ -288,7 +300,8 @@ Open items, with where they came from. Tick them here as they're done.
 - [ ] Check whether `DOTNET_USE_POLLING_FILE_WATCHER=1` works with `dotnet watch` 10 and how slow it is.
 - [x] Task 2: raise `oom_score_adj` for app runs (Linux).
 - [ ] Decide what caps look like on a 7 GB machine (defaults are 3 per session, 10 per Fleet; three `dotnet watch` apps don't fit in 7 GB with builds running).
-- [ ] Task 2: the live acceptance check (SIGKILL with an app running, then restart; stop/archive/delete; a 4th app refused).
+- [x] Task 2: the live acceptance check (SIGKILL with an app running, then restart; stop/archive/delete; a 4th app refused).
+- [ ] When PR #191 merges: rebase, drop the session-stop hook with it, and reword Decision 6 (apps stop on archive, delete and Fleet restart).
 - [ ] Task 4: build approach A from `browser-canvas-v1-dotnet-watch.patch` properly: ownership check on the refresh port, exact-path rewrite, a test pinning the SDK 10.0.112 script.
 - [ ] Task 5: reload the canvas as soon as a `dotnet watch` app answers again after a rude-edit restart (12.6 s now, because of Blazor's backoff).
 - [ ] Task 6: "Open in a new tab" must open the preview's address, not the target's `localhost`, when viewed from another device.
