@@ -199,8 +199,12 @@ components/terminal/TerminalView.vue     one xterm per terminal, kept alive whil
     - Found while checking this in the browser: xterm blends a translucent selection colour with its own background, which is transparent here, so the light theme's selection came out nearly black. The theme now uses an opaque mix of `--accent` into the panel colour (`mix`), and a text-tinted one for an unfocused selection.
     - Tests: formatter 5, draft 3, composer 3 (sent before the typed text, sent alone, removed), theme 15. The whole client suite passes on Node 22 (491). Checked in the browser in mock mode: selecting the vitest failure shows "Add lines 13–15 to message"; clicking it adds a "zsh lines 13–15" chip holding the three lines and focuses the composer.
 
-- [ ] 9. End to end, screenshots and checklist
+- [x] 9. End to end, screenshots and checklist (written 2026-09-13; the E2E test runs in CI only)
   - **What**: A Playwright test on Linux (scratch `HOME`): open the drawer, run `echo fleet-e2e`, see it; reload and see it again; close the tab and confirm the process is gone. Screenshots in `mockups/terminal/` next to the mockup. Hand the user the checklist below.
+  - **As built**:
+    - `tests/WeaveFleet.E2E/Tests/TerminalDrawerTests.cs`, Workflow lane, Linux only: Ctrl J opens the drawer with one tab; `echo fleet-e2e-$((6*7))` prints 42; after a reload the drawer is still open and the output is back; closing the tab leaves `GET …/terminals` empty. A second test checks Ctrl K and Esc typed in the terminal don't open the palette and Ctrl J hides the drawer. It builds, but it hasn't run: the E2E project boots `Program`, so it only runs in PR CI (see Safety). "The process is gone" is covered by the manager and endpoint tests rather than from the browser.
+    - Screenshots from Vite mock mode (the pretend shell), next to the mockup: `drawer-closed-light.png`, `drawer-open-light.png`, `drawer-open-dark.png`, `drawer-keyboard-light.png` (status bar while the terminal has the keyboard), `drawer-selected-light.png` (the "Add lines 13–15 to message" bubble), `drawer-attached-dark.png` (the chip in the composer).
+    - Left before merge: push the branch and open a PR so CI runs the Api, Integration and E2E tests; the macOS and Windows checklist below.
 
 ## Dependencies and order
 0 → 1 → 3 → 4. 2 can run alongside 1. Client work (5–8) starts once 4's protocol is fixed, and runs against mock mode until then. 9 comes last.
