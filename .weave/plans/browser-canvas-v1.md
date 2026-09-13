@@ -108,7 +108,7 @@ Ground truth from the spike and the codebase (2026-09-13). Don't re-check these:
   - **Acceptance**: The live runner test (python `http.server`) passes on all three CI runners.
   - **Depends on**: 2 (interface).
 
-- [ ] 4. Gateway
+- [x] 4. Gateway (built and checked live 2026-09-13, see Findings)
   - **What** (trimmed by the 2026-09-13 decisions: no wildcard host, no pass, no ownership check): `PreviewGateway` with two address strategies (`*.localhost` when the browser is on Fleet's machine, a port per preview on Fleet's host otherwise), listeners bound where Fleet binds (Decision 12), the origin chosen by the server from the host the browser used, streaming HTML injection, the `dotnet watch` refresh route (approach A), styled stopped/unreachable pages, `Fleet:Browser:PortRange`, and "Open in a new tab" opening the preview's address.
   - **Files**: `src/WeaveFleet.Api/Browser/PreviewGateway.cs` (from `PreviewProxies.cs`), `BrowserEndpoints.cs`, `FleetOptions` (Browser section), `BrowserCanvas.vue`.
   - **Acceptance**: From another device, a Vite app previews and hot-reloads through a preview port; a `dotnet watch` Razor app refreshes through it too. A streamed page's first bytes arrive before the whole response is ready. A Fleet on localhost opens no preview port on the network.
@@ -257,6 +257,29 @@ Built in the worktree `.claude/worktrees/browser-canvas`, after rebasing `feat/b
 
 **Still open:** `DOTNET_URLS` against a real Aspire AppHost (only a fake `.csproj` so far); helper-port filtering against a real `dotnet watch`.
 
+### Task 4: gateway (2026-09-13)
+`PreviewProxies` became `PreviewGateway` (`git mv`, so its history follows). Scope as trimmed by Decisions 9–12: two address strategies, no pass, no ownership check.
+
+**What it does:**
+- **Binding follows Fleet** (`BindFor(Fleet:Host)`): `127.0.0.1`/`localhost`/`::1` → `ListenLocalhost`; `0.0.0.0`/`::`/a host name → `ListenAnyIP`; a specific address → that address. Ports come from `Fleet:Browser:PortRange` (`"41000-41099"`) when set, else any free port; a few retries if a port is taken between choosing and binding; a full range is a 409 naming the setting.
+- **The server picks the address** (`OriginFor(request Host, listener)`): a browser that reached Fleet at `localhost`, `127.0.0.1`, `[::1]` or `*.localhost` gets `http://{slug}.localhost:{port}`; any other host gets that host with the preview's port (IPv6 bracketed). `POST …/browser/proxy` returns `origin`, and the client no longer composes it. "Open in a new tab" opens the preview's address for the page shown.
+- **Streaming injection** (`CopyWithNavScriptAsync`): holds bytes only until `<head…>` (or `<html…>` once `<body` or the end arrives), at most 64 KB, then streams. Works on bytes, so the page's charset and Content-Type are kept. `<header>` doesn't count as `<head`.
+- **`dotnet watch`** (approach A): `Sec-Fetch-Dest: iframe` becomes `document` (case-insensitive name); `/_framework/aspnetcore-browser-refresh.js` is rewritten only at that exact path and only when the `'…'.split(',')` literal matches (pinned by a test with the SDK 10.0.112 template, extracted from `Microsoft.AspNetCore.Watch.BrowserRefresh.dll`); `/__fleet_browser/ws/{port}` forwards **only to ports named in a refresh script this preview served**, so the route isn't a relay to any socket on the machine (this isn't the deferred ownership check, just not opening a hole).
+- **Unreachable page**: a styled page (light/dark, retries every 3 s via meta refresh) for navigations; plain text for other requests. The canvas's own stopped/exited view (Task 2) covers apps Fleet runs.
+- README: a "From another device" section says previews follow `--host 0.0.0.0` without Fleet's login, only on a trusted network, and names `Fleet__Browser__PortRange`.
+
+**Live check** (scratch Fleet started like the installed one, `Fleet__Host=0.0.0.0`; "another device" is Chromium in a `pasta` namespace **without** `--map-host-loopback`, reaching the box only at its LAN address 192.168.1.13, so a loopback-only listener would be unreachable):
+- Vite 8 (new fixture `.poc-runtime/apps/vite-app`, `npm run dev`): Vite listened on `127.0.0.1:5173` only (the other device got nothing there). The canvas framed `http://192.168.1.13:33453/`; Vite's HMR socket came through the preview. CSS edit 0.1 s, page kept; `main.js` edit 0.2 s, full reload (Vite's own behaviour for a file with no HMR boundary). Preview listeners showed as `*:33453`.
+- Razor Pages under `dotnet watch` (no `--urls` in the command): came up on Fleet's `PORT` 45945, not the profile's 5281 (`DOTNET_URLS` works). The run offered only 45945; `dotnet watch`'s own ports (43233, 33165) were hidden (`HelperPorts` works). From the other device: first edit 4.1 s; warm `.cshtml` 0.3 s (full reload, as always for Razor Pages); `site.css` 0.1 s kept; scoped CSS 0.4 s kept, all through `/__fleet_browser/ws/33165`. Same numbers as the Task 1 prototype.
+- Scratch Fleet on `127.0.0.1`: the preview bound `127.0.0.1` and `[::1]` only; the LAN address got nothing; the endpoint returned `http://{slug}.localhost:{port}`.
+- "Open in a new tab" opened `http://{slug}.localhost:{port}/` (not `localhost:5173`).
+- The first Razor start died with the inotify limit, and the Task 2 hint line showed up in its output. Cause: two `dotnet watch` processes from Task 1's `url-matrix.sh`, orphaned since 07:08 and holding ~100 of the 128 instances. Killed them (SIGKILL; SIGTERM doesn't stop `dotnet watch`); use dropped to 10. Runs Fleet started are covered by the startup cleanup; scripts that start `dotnet watch` themselves aren't, so check `pgrep -f dotnet-watch.dll` after spike work.
+- Test-script fix: from another device the login page submits the token after it loads, so `watch-edit.mjs` now waits for the URL to leave `/login` before going on.
+
+**Checks:** Api 213/213 (39 gateway tests, including binding against the machine's LAN address, the configured port range, streaming with a paused upstream, the refresh route refusing unnamed ports, and the unreachable page), Application 557/557, client `vue-tsc`/eslint/vitest 496/496 after `npm ci` on Node 22.
+
+**Not done here:** closing preview listeners when their app stops or their session ends (a listener keeps its port until Fleet stops; with `--host 0.0.0.0`, if another process later takes the target port, the old preview would show it). Worth doing with the pass.
+
 ## Assessment (2026-09-13)
 Asked by the user after Tasks 0–1: is this a good feature with decent functionality? Written by the agent that built the spike, so read with that in mind.
 
@@ -295,7 +318,7 @@ Open items, with where they came from. Tick them here as they're done.
 - [ ] **Draft PR #189** (opened 2026-09-13) for `feat/browser-canvas`: keep it a draft, since it ships agent tools that start processes, and don't merge before Tasks 2, 4 and 6 at least. Until Task 4, the proxy endpoint proxies any loopback URL for an authenticated user.
 - [x] Task 2: catch and log exceptions in `AppRunner.MonitorAsync`; compare parsed ports in `BrowserBridge` (`:80` vs `:8080`); strip `Fleet__*` from app runs (Task 0 review notes).
 - [x] Task 2: give ASP.NET runs their port (`DOTNET_URLS` for single-project `dotnet run`/`watch`, `-- --urls` in the tool description). Aspire AppHosts are skipped by reading the project file.
-- [ ] Check `DOTNET_URLS` against a real Aspire AppHost, and the helper-port filter against a real `dotnet watch` (Task 2 left both to a live run).
+- [ ] Check `DOTNET_URLS` against a real Aspire AppHost. (The helper-port filter and `DOTNET_URLS` for a single project were checked against a real `dotnet watch` in Task 4.)
 - [x] Task 2/5: hide `dotnet watch`'s refresh ports from "also listens on" and the port picker (`HelperPorts`).
 - [x] Task 2/5: recognise the inotify-limit error (a Fleet hint line).
 - [ ] Check whether `DOTNET_USE_POLLING_FILE_WATCHER=1` works with `dotnet watch` 10 and how slow it is.
@@ -303,10 +326,11 @@ Open items, with where they came from. Tick them here as they're done.
 - [ ] Decide what caps look like on a 7 GB machine (defaults are 3 per session, 10 per Fleet; three `dotnet watch` apps don't fit in 7 GB with builds running).
 - [x] Task 2: the live acceptance check (SIGKILL with an app running, then restart; stop/archive/delete; a 4th app refused).
 - [ ] When PR #191 merges: rebase, drop the session-stop hook with it, and reword Decision 6 (apps stop on archive, delete and Fleet restart).
-- [ ] Task 4: build approach A from `browser-canvas-v1-dotnet-watch.patch` properly: exact-path rewrite, a test pinning the SDK 10.0.112 script. (The refresh port's ownership check is deferred with the pass, Decision 12.)
+- [x] Task 4: build approach A from `browser-canvas-v1-dotnet-watch.patch` properly: exact-path rewrite, a test pinning the SDK 10.0.112 script. The refresh route only forwards to ports named in a served refresh script.
+- [x] Task 6 (done in Task 4): "Open in a new tab" opens the preview's address.
+- [ ] Close preview listeners when their app stops or their session is archived/deleted (Task 4 leaves them until Fleet stops).
 - [ ] After V1: the preview pass (token + cookie), the per-session port ownership check, and the cookie-sharing mitigations (Decision 12). Needed before Fleet is hosted for more than one user or used on an untrusted network.
 - [ ] Task 5: reload the canvas as soon as a `dotnet watch` app answers again after a rude-edit restart (12.6 s now, because of Blazor's backoff).
-- [ ] Task 6: "Open in a new tab" must open the preview's address, not the target's `localhost`, when viewed from another device.
 - [ ] Task 3: nothing has run on macOS or Windows yet.
 - [ ] After V1: an agent screenshot tool (proposal 3).
 - [ ] Investigate if it recurs: after a rude-edit restart, `dotnet watch` ignored the revert of the file ("No C# changes to apply").
