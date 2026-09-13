@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Terminals;
 
 namespace WeaveFleet.Infrastructure.Harnesses.Pi;
 
@@ -144,6 +145,9 @@ internal sealed class PiProcessManager : IPiProcessManager
         psi.ArgumentList.Add(options.Provider);
         psi.ArgumentList.Add("--model");
         psi.ArgumentList.Add(options.Model);
+
+        // Fleet's variables stay with Fleet: the agent's shell tool would pass them on to every command it runs.
+        TerminalEnvironment.RemoveFleetOwned(psi.Environment);
 
         foreach (var (key, value) in options.EnvironmentVariables)
         {

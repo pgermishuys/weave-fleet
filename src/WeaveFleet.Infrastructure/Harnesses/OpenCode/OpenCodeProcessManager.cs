@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Terminals;
 using WeaveFleet.Infrastructure.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
@@ -116,19 +117,12 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
     }
 
     /// <summary>
-    /// Spawns <c>opencode serve</c> and waits for the ready signal.
+    /// The start info for <c>opencode serve</c>. Its environment is Fleet's minus Fleet's own variables: the
+    /// agent's shell tool passes it on, and a <c>dotnet run</c> that inherited Fleet's <c>URLS</c> would try
+    /// to take Fleet's port.
     /// </summary>
-    public async Task<OpenCodeProcessInfo> StartAsync(OpenCodeProcessOptions options, CancellationToken ct)
+    internal static ProcessStartInfo BuildStartInfo(OpenCodeProcessOptions options)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_started)
-        {
-            throw new InvalidOperationException("Process manager has already started a process.");
-        }
-
-        var tcs = new TaskCompletionSource<OpenCodeProcessInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var stderrLines = new StringBuilder();
-
         var psi = new ProcessStartInfo
         {
             FileName = ExecutableResolver.Resolve("opencode"),
@@ -146,6 +140,8 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
         psi.ArgumentList.Add("--port");
         psi.ArgumentList.Add(options.Port.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
+        TerminalEnvironment.RemoveFleetOwned(psi.Environment);
+
         // Auth env vars
         psi.Environment["OPENCODE_SERVER_PASSWORD"] = options.Password;
         psi.Environment["OPENCODE_SERVER_USERNAME"] = options.Username;
@@ -160,7 +156,24 @@ internal sealed class OpenCodeProcessManager : IAsyncDisposable
             psi.Environment[key] = value;
         }
 
-        _process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        return psi;
+    }
+
+    /// <summary>
+    /// Spawns <c>opencode serve</c> and waits for the ready signal.
+    /// </summary>
+    public async Task<OpenCodeProcessInfo> StartAsync(OpenCodeProcessOptions options, CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_started)
+        {
+            throw new InvalidOperationException("Process manager has already started a process.");
+        }
+
+        var tcs = new TaskCompletionSource<OpenCodeProcessInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stderrLines = new StringBuilder();
+
+        _process = new Process { StartInfo = BuildStartInfo(options), EnableRaisingEvents = true };
 
         _process.OutputDataReceived += (_, e) =>
         {

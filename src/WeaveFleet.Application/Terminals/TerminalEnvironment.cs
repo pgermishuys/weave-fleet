@@ -4,9 +4,10 @@ namespace WeaveFleet.Application.Terminals;
 
 /// <summary>
 /// The environment a terminal's shell gets: Fleet's own, minus what belongs to Fleet. Fleet's settings
-/// (secrets included) arrive as <c>Fleet__*</c>, the service sets <c>ASPNETCORE_*</c> (a shell that kept
-/// <c>ASPNETCORE_URLS</c> would move the user's own <c>dotnet run</c> onto Fleet's port), the launcher sets
-/// <c>WEAVE_FLEET_*</c>, and OpenCode's server credentials never belong in a shell.
+/// (secrets included) arrive as <c>Fleet__*</c>, the launchers set <c>ASPNETCORE_*</c> and a bare
+/// <c>URLS</c> (a shell that kept either would move the user's own <c>dotnet run</c> onto Fleet's port, and
+/// <c>URLS</c> outranks the launch profile), the launcher sets <c>WEAVE_FLEET_*</c>, and OpenCode's server
+/// credentials never belong in a shell.
 /// </summary>
 public static class TerminalEnvironment
 {
@@ -14,6 +15,7 @@ public static class TerminalEnvironment
 
     private static readonly string[] RemovedNames =
     [
+        "URLS",
         "DOTNET_ENVIRONMENT",
         "DOTNET_URLS",
         "OPENCODE_SERVER_PASSWORD",
@@ -48,7 +50,22 @@ public static class TerminalEnvironment
         return env;
     }
 
-    /// <summary>Whether a variable belongs to Fleet and must not reach a process Fleet starts for the user (app runs too).</summary>
+    /// <summary>
+    /// Removes Fleet's variables from a child's environment, such as a <see cref="System.Diagnostics.ProcessStartInfo"/>'s,
+    /// which starts as a copy of Fleet's own. Call it before setting the child's own variables.
+    /// </summary>
+    public static void RemoveFleetOwned(IDictionary<string, string?> environment)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+
+        foreach (var key in environment.Keys.Where(IsFleetOwned).ToList())
+            environment.Remove(key);
+    }
+
+    /// <summary>
+    /// Whether a variable belongs to Fleet and must not reach a process Fleet starts for the user: terminals, app
+    /// runs, and agent harnesses, whose shell tools pass it on to every command the agent runs.
+    /// </summary>
     public static bool IsFleetOwned(string key)
     {
         foreach (var prefix in RemovedPrefixes)

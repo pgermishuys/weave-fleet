@@ -47,6 +47,7 @@ public sealed class TerminalManagerTests : IAsyncDisposable
         (spawn.Cols, spawn.Rows).ShouldBe((100, 30));
         spawn.Environment.Keys.ShouldNotContain("Fleet__Auth__ClientSecret");
         spawn.Environment.Keys.ShouldNotContain("ASPNETCORE_URLS");
+        spawn.Environment.Keys.ShouldNotContain("URLS");
         spawn.Environment["PATH"].ShouldBe("/usr/bin");
         spawn.Environment["TERM"].ShouldBe("xterm-256color");
         (await _store.ListAsync("s1")).Single().Id.ShouldBe(created.Value.Id);
@@ -327,6 +328,7 @@ public sealed class TerminalManagerTests : IAsyncDisposable
                 ["LANG"] = "en_US.UTF-8",
                 ["Fleet__Auth__ClientSecret"] = "secret",
                 ["ASPNETCORE_URLS"] = "http://127.0.0.1:3000",
+                ["URLS"] = "http://127.0.0.1:3000",
             },
         };
         _managers.Add(manager);

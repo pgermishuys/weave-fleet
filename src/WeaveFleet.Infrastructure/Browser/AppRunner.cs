@@ -230,9 +230,8 @@ public sealed partial class AppRunner(FleetOptions options, ILogger<AppRunner> l
         shell.RedirectStandardError = true;
 
         // Fleet's own settings (secrets included) and its ASP.NET variables stay with Fleet: an app that kept
-        // ASPNETCORE_URLS would try to take Fleet's port.
-        foreach (var key in shell.Environment.Keys.Where(TerminalEnvironment.IsFleetOwned).ToList())
-            shell.Environment.Remove(key);
+        // ASPNETCORE_URLS or URLS would try to take Fleet's port.
+        TerminalEnvironment.RemoveFleetOwned(shell.Environment);
 
         // A free port for servers that read PORT (Bun, Express, Next), the same one on every restart so the
         // page keeps its address. The rest pick their own; Fleet finds them.

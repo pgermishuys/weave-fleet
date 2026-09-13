@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Terminals;
 
 namespace WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 
@@ -135,6 +136,9 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
             psi.ArgumentList.Add("--max-budget-usd");
             psi.ArgumentList.Add(options.MaxBudgetUsd.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
+
+        // Fleet's variables stay with Fleet: the agent's shell tool would pass them on to every command it runs.
+        TerminalEnvironment.RemoveFleetOwned(psi.Environment);
 
         // Apply caller-supplied environment variables
         foreach (var (key, value) in options.EnvironmentVariables)
