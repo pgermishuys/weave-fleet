@@ -22,6 +22,9 @@ public sealed partial class PreviewProxies : IAsyncDisposable
 {
     public const string ScriptPath = "/__fleet_browser/nav.js";
 
+    /// <summary>How long a websocket's other side gets to answer a close before the proxy drops both.</summary>
+    private static readonly TimeSpan CloseGrace = TimeSpan.FromSeconds(5);
+
     private static readonly HashSet<string> HopByHopHeaders = new(StringComparer.OrdinalIgnoreCase)
     {
         "Connection", "Keep-Alive", "Proxy-Connection", "Transfer-Encoding", "Upgrade", "TE", "Trailer",
@@ -226,9 +229,24 @@ public sealed partial class PreviewProxies : IAsyncDisposable
 
         using var downstream = await context.WebSockets.AcceptWebSocketAsync(upstream.SubProtocol);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
-        var first = await Task.WhenAny(PumpAsync(downstream, upstream, cts.Token), PumpAsync(upstream, downstream, cts.Token));
+        var toUpstream = PumpAsync(downstream, upstream, cts.Token);
+        var toDownstream = PumpAsync(upstream, downstream, cts.Token);
+        await Task.WhenAny(toUpstream, toDownstream);
+
+        // One side closed and the close was passed on. Give the other side a moment to answer it: cancelling
+        // a pending receive aborts that socket, which can reset the connection before the last messages and
+        // the close handshake get through.
+        try
+        {
+            await Task.WhenAll(toUpstream, toDownstream).WaitAsync(CloseGrace);
+        }
+        catch (TimeoutException)
+        {
+            // The other side never answered the close; tear both down.
+        }
+
         await cts.CancelAsync();
-        await first;
+        await Task.WhenAll(toUpstream, toDownstream);
     }
 
     private static async Task PumpAsync(WebSocket from, WebSocket to, CancellationToken ct)

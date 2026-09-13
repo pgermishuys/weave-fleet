@@ -62,6 +62,12 @@ public sealed class PreviewProxiesTests
         var buffer = new byte[64];
         var received = await socket.ReceiveAsync(buffer, CancellationToken.None);
         Encoding.UTF8.GetString(buffer, 0, received.Count).ShouldBe("echo:ping");
+
+        // The app closes right after its reply; the close reaches the browser as a close, not a reset.
+        var closing = await socket.ReceiveAsync(buffer, CancellationToken.None);
+        closing.MessageType.ShouldBe(WebSocketMessageType.Close);
+        socket.CloseStatus.ShouldBe(WebSocketCloseStatus.NormalClosure);
+        await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
     }
 
     /// <summary>A dev server that forbids framing, redirects to itself, and echoes on a websocket.</summary>
