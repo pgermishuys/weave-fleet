@@ -2,7 +2,10 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { ChevronDown, Eraser, Plus, SquareTerminal, X } from "lucide-vue-next";
 import TerminalView from "@/components/terminal/TerminalView.vue";
+import type { SelectedLines } from "@/components/terminal/TerminalView.vue";
+import { addDraftTerminalContext } from "@/composables/use-draft-terminal-context";
 import { closeTerminalTab, openNewTerminal } from "@/composables/use-session-terminals";
+import { dispatchCommandEvent } from "@/lib/command-events";
 import type { TerminalSummary } from "@/lib/terminal-api";
 import { DEFAULT_DRAWER_HEIGHT, MIN_DRAWER_HEIGHT, useTerminalsStore } from "@/stores/terminals";
 
@@ -98,6 +101,12 @@ function close(terminal: TerminalSummary): void {
 function onEnded(terminal: TerminalSummary): void {
   store.remove(props.sessionId, terminal.id);
   if (terminals.value.length === 0) store.setOpen(props.sessionId, false);
+}
+
+/** Selected lines go into this session's draft as a chip, and the composer takes focus. */
+function onAttach(terminal: TerminalSummary, lines: SelectedLines): void {
+  addDraftTerminalContext(props.sessionId, { terminalId: terminal.id, label: terminal.title, ...lines });
+  dispatchCommandEvent("weave:command-focus-prompt", { sessionId: props.sessionId });
 }
 
 function hide(): void {
@@ -331,6 +340,7 @@ function resetHeight(): void {
         @size="(cols, rows) => onSize(terminal, cols, rows)"
         @focus="onViewFocus"
         @ended="onEnded(terminal)"
+        @attach="(lines: SelectedLines) => onAttach(terminal, lines)"
       />
 
       <div

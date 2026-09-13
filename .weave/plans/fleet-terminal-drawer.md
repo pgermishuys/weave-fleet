@@ -188,10 +188,16 @@ components/terminal/TerminalView.vue     one xterm per terminal, kept alive whil
     - The status bar shows "Terminal has the keyboard · Esc Ctrl K Ctrl B go to the shell · Ctrl J Hide terminal · Ctrl Shift C Copy" (⌘ on a Mac) while a terminal has focus, from `terminals.focused`; the drawer clears it when it's hidden or unmounted. The usual hints gain "Ctrl J Terminal" when terminals are on.
     - Checked in the browser in mock mode: Ctrl J from the composer opens the drawer with focus in the terminal; Esc and Ctrl K in the terminal don't open the palette; Ctrl J in the terminal hides it and the status bar returns; Ctrl K elsewhere still opens the palette. There's no `useCommands` test harness to extend, so the global handler's `allowInEditable` is covered by that browser check.
 
-- [ ] 8. Select lines → message
+- [x] 8. Select lines → message (done 2026-09-13)
   - **Files**: a selection popover in `TerminalView.vue`; terminal lines in the draft (next to `useDraftAttachments`); chips in `Composer.vue`; `client/src/lib/format-terminal-context.ts`.
   - **Acceptance**: Selecting output shows "Add lines 9–11 to message". The chip shows the tab name and line range, can be removed, and survives a session switch like the rest of the draft. On send, each attachment becomes a fenced block with its label before the message text.
   - **Tests**: vitest for the formatter and the draft round trip.
+  - **As built**:
+    - Selecting output in `TerminalView` shows a bubble above the selection (below it when the selection is at the top): **Add lines 13–15 to message** and **Copy**. The lines are whole rows, numbered from the top of the scrollback; a row that continues a wrapped line is joined back onto it, and a selection ending at the very start of a row leaves that row out.
+    - The drawer adds them to the session's draft (`composables/use-draft-terminal-context.ts`, in memory per session like image attachments; the same lines of the same terminal are only added once) and focuses the composer through `weave:command-focus-prompt`.
+    - `Composer.vue` shows a chip per attachment (terminal, line range, remove; the tooltip holds the text) and counts them as content, so they can be sent with nothing typed. On send they go in front of the typed text as fenced blocks (`lib/format-terminal-context.ts`: "Terminal zsh, lines 9–11:" then a `text` fence longer than any run of backticks inside). A refused send puts the draft back without them in the text; a message queued while the agent is busy carries them too. Slash commands ignore them.
+    - Found while checking this in the browser: xterm blends a translucent selection colour with its own background, which is transparent here, so the light theme's selection came out nearly black. The theme now uses an opaque mix of `--accent` into the panel colour (`mix`), and a text-tinted one for an unfocused selection.
+    - Tests: formatter 5, draft 3, composer 3 (sent before the typed text, sent alone, removed), theme 15. The whole client suite passes on Node 22 (491). Checked in the browser in mock mode: selecting the vitest failure shows "Add lines 13–15 to message"; clicking it adds a "zsh lines 13–15" chip holding the three lines and focuses the composer.
 
 - [ ] 9. End to end, screenshots and checklist
   - **What**: A Playwright test on Linux (scratch `HOME`): open the drawer, run `echo fleet-e2e`, see it; reload and see it again; close the tab and confirm the process is gone. Screenshots in `mockups/terminal/` next to the mockup. Hand the user the checklist below.

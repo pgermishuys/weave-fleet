@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isLight, terminalTheme, withAlpha } from "@/lib/terminal-theme";
+import { isLight, mix, terminalTheme, withAlpha } from "@/lib/terminal-theme";
 
 function reader(values: Record<string, string>) {
   return (name: string) => values[name] ?? "";
@@ -21,7 +21,9 @@ describe("terminalTheme", () => {
     expect(theme.foreground).toBe("#e8e8ec");
     expect(theme.cursor).toBe("#e8e8ec");
     expect(theme.cursorAccent).toBe("#141418");
-    expect(theme.selectionBackground).toBe("rgba(99, 102, 241, 0.15)");
+    // 28% of the accent over the panel, opaque (xterm would blend a translucent one with black).
+    expect(theme.selectionBackground).toBe(mix("#141418", "#6366f1", 0.28));
+    expect(theme.selectionBackground).toMatch(/^#[0-9a-f]{6}$/);
     expect([theme.red, theme.green, theme.yellow, theme.blue, theme.magenta])
       .toEqual(["#ef4444", "#22c55e", "#f59e0b", "#3b82f6", "#8b5cf6"]);
     expect(theme.background).toBe("rgba(0, 0, 0, 0)");
@@ -56,6 +58,17 @@ describe("isLight", () => {
     ["not a colour", false],
   ])("%s → %s", (color, expected) => {
     expect(isLight(color)).toBe(expected);
+  });
+});
+
+describe("mix", () => {
+  it("paints one colour over another, opaque", () => {
+    expect(mix("#000000", "#ffffff", 0.5)).toBe("#808080");
+    expect(mix("#ffffff", "#5b6ec7", 0.28)).toBe("#d1d6ef");
+  });
+
+  it("gives up on a colour it can't read", () => {
+    expect(mix("var(--x)", "#fff", 0.5)).toBeNull();
   });
 });
 

@@ -81,7 +81,10 @@ export function terminalTheme(read: ReadVariable): ITheme {
     foreground: text,
     cursor: text,
     cursorAccent: panel,
-    selectionBackground: get("--accent-dim", "rgba(99, 102, 241, 0.25)"),
+    // Opaque on purpose: xterm blends a translucent selection over its own background, which is
+    // transparent here, so a translucent colour would come out nearly black.
+    selectionBackground: mix(panel, get("--accent", "#6366f1"), 0.28) ?? get("--accent-dim", "rgba(99, 102, 241, 0.25)"),
+    selectionInactiveBackground: mix(panel, text, 0.14) ?? get("--accent-dim", "rgba(99, 102, 241, 0.15)"),
     red: get("--error", palette.red),
     green: get("--running", palette.green),
     yellow: get("--idle", palette.yellow),
@@ -91,6 +94,15 @@ export function terminalTheme(read: ReadVariable): ITheme {
     scrollbarSliderHoverBackground: withAlpha(text, 0.28),
     scrollbarSliderActiveBackground: withAlpha(text, 0.36),
   };
+}
+
+/** `amount` of `over` painted on `base`, as an opaque #rrggbb; null when either colour can't be read. */
+export function mix(base: string, over: string, amount: number): string | null {
+  const a = parseColor(base);
+  const b = parseColor(over);
+  if (!a || !b) return null;
+  const channel = (i: number) => Math.round(a[i] + (b[i] - a[i]) * amount).toString(16).padStart(2, "0");
+  return `#${channel(0)}${channel(1)}${channel(2)}`;
 }
 
 /** The colour at the given opacity, as rgba(); a colour it can't read comes back unchanged. */
