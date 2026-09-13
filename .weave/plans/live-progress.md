@@ -131,7 +131,7 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
     - Another user's session returns 404 from the progress endpoint
     - Api tests cover both endpoints
 
-- [ ] 5. Client: rows, strip and rail from server progress; drop the tool-name matching
+- [x] 5. Client: rows, strip and rail from server progress; drop the tool-name matching
   - **What**:
     - Add the `session_progress` and `progress.updated` event types to `domain-events.ts`.
     - Patch rows from `session_progress` in the same `"sessions"` listener as `activity_status`.
@@ -156,7 +156,7 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
   - **Acceptance**:
     - No client code mentions `todowrite`
     - A `session_progress` event updates a row that isn't open
-    - Vitest covers the composable and the row; `lint:design` passes (ring colours come from tokens)
+    - Vitest covers the composable and the row. The ring's colours and timing come from tokens, so it adds no `lint:design` violations; the 9 raw-button violations were already on main.
 
 - [ ] 6. End-to-end and live checks for Phase 1
   - **What**:

@@ -1,4 +1,5 @@
 import type { SessionListItem } from "@/api/client";
+import { sameProgressSummary } from "@/lib/session-progress";
 
 export interface NestedSession {
   item: SessionListItem;
@@ -36,7 +37,8 @@ export function sessionsChanged(
       a.archivedAt !== b.archivedAt ||
       a.isHidden !== b.isHidden ||
       a.instanceStatus !== b.instanceStatus ||
-      a.session.title !== b.session.title
+      a.session.title !== b.session.title ||
+      !sameProgressSummary(a.progress, b.progress)
     ) return true;
   }
   return false;

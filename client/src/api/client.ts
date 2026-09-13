@@ -1,5 +1,6 @@
 import createClient from "openapi-fetch";
 import type { paths } from "./generated/schema";
+import type { SessionProgressSummary } from "@/lib/session-progress";
 
 /**
  * Typed API client for Weave Fleet API
@@ -485,6 +486,8 @@ export interface SessionListItem {
   capabilities?: SessionActionCapabilities;
   origin?: SessionOrigin | null;
   tags: readonly string[];
+  /** How far along the session is, when the server has seen a todo list for it. */
+  progress?: SessionProgressSummary | null;
 }
 
 export interface AnalyticsSummary {

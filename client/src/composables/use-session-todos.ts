@@ -1,13 +1,12 @@
-import { computed, type ComputedRef, type MaybeRefOrGetter } from "vue";
-import { useSessionStream } from "@/composables/use-session-stream";
-import { extractLatestTodos, type TodoItem } from "@/lib/todo-utils";
+import type { ComputedRef, MaybeRefOrGetter } from "vue";
+import { useSessionProgress } from "@/composables/use-session-progress";
+import type { TodoItem } from "@/lib/todo-utils";
 
+/** The agent's todo list for a session, as the server last reported it. */
 export function useSessionTodos(
   sessionId: MaybeRefOrGetter<string>,
 ): { todos: ComputedRef<readonly TodoItem[]> } {
-  const { messages } = useSessionStream(sessionId);
-
-  const todos = computed<readonly TodoItem[]>(() => extractLatestTodos(messages.value));
+  const { todos } = useSessionProgress(sessionId);
 
   return {
     todos,

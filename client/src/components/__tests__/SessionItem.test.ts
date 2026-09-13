@@ -112,6 +112,40 @@ function mountSessionItem(session: SessionListItem, active = false) {
 }
 
 describe("SessionItem", () => {
+  it("shows a progress ring and count instead of the status word while working", () => {
+    const wrapper = mountSessionItem(createSession({
+      progress: { sessionId: "session-1", kind: "todos", done: 3, total: 7, current: "Drop the indexes" },
+    }));
+
+    expect(wrapper.find(".progress-ring").exists()).toBe(true);
+    expect(wrapper.get(".session-progress__count").text()).toBe("3/7");
+    expect(wrapper.find(".session-meta").exists()).toBe(false);
+    expect(wrapper.get(".session-progress").attributes("title")).toBe("3 of 7 done. Now: Drop the indexes");
+  });
+
+  it("keeps words the user has to act on next to the ring", () => {
+    const wrapper = mountSessionItem(createSession({
+      sessionStatus: "waiting_input",
+      progress: { sessionId: "session-1", kind: "todos", done: 5, total: 8, current: null },
+    }));
+
+    expect(wrapper.find(".progress-ring").exists()).toBe(true);
+    expect(wrapper.find(".session-progress__count").exists()).toBe(false);
+    expect(wrapper.get(".session-meta").text()).toBe("Needs input");
+  });
+
+  it("shows no ring for a session without progress or with an empty list", () => {
+    const withoutProgress = mountSessionItem(createSession());
+    const emptyList = mountSessionItem(createSession({
+      progress: { sessionId: "session-1", kind: "todos", done: 0, total: 0, current: null },
+    }));
+
+    for (const wrapper of [withoutProgress, emptyList]) {
+      expect(wrapper.find(".progress-ring").exists()).toBe(false);
+      expect(wrapper.get(".session-meta").text()).toBe("Working");
+    }
+  });
+
   it("renders the session title and current status", () => {
     const wrapper = mountSessionItem(createSession(), true);
 

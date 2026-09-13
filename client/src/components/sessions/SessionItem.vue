@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, shallowRef, useTemplateRef } from "vue";
 import StatusGlyph from "./StatusGlyph.vue";
+import ProgressRing from "./ProgressRing.vue";
 import { useRouter } from "@tanstack/vue-router";
 import {
   Copy,
@@ -100,6 +101,19 @@ const rowStatus = computed(() => sessionRowStatus(props.session, now.value));
 const isLive = computed(() => isSessionLive(props.session));
 // The open session never dims.
 const rowDim = computed(() => (props.active ? 0 : sessionRowDim(props.session, now.value)));
+const progress = computed(() => {
+  const summary = props.session.progress;
+  return summary && summary.total > 0 ? summary : null;
+});
+// The count replaces "Working" and the age; words the user has to act on stay.
+const showProgressCount = computed(() => progress.value !== null
+  && (rowStatus.value.tone === "working" || rowStatus.value.tone === "quiet"));
+const progressDescription = computed(() => {
+  const summary = progress.value;
+  if (!summary) return "";
+  const counts = `${summary.done} of ${summary.total} done`;
+  return summary.current ? `${counts}. Now: ${summary.current}` : counts;
+});
 const isArchivedSession = computed(() => props.session.retentionStatus === "archived");
 const fallbackCanArchive = computed(() => !isArchivedSession.value);
 const canArchive = computed(() => props.session.capabilities?.canArchive ?? fallbackCanArchive.value);
@@ -379,7 +393,24 @@ function removeSessionFromStore(): void {
             </span>
 
             <span
-              v-if="rowStatus.label"
+              v-if="progress"
+              class="session-progress"
+              :title="progressDescription"
+            >
+              <ProgressRing
+                :done="progress.done"
+                :total="progress.total"
+              />
+              <span
+                v-if="showProgressCount"
+                class="session-progress__count"
+                aria-hidden="true"
+              >{{ progress.done }}/{{ progress.total }}</span>
+              <span class="sr-only">{{ progressDescription }}</span>
+            </span>
+
+            <span
+              v-if="rowStatus.label && !showProgressCount"
               class="session-meta"
               :class="`session-meta--${rowStatus.tone}`"
             >{{ rowStatus.label }}</span>
@@ -624,6 +655,21 @@ function removeSessionFromStore(): void {
 
 .session-meta--retry {
   color: var(--status-waiting);
+}
+
+.session-progress {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.session-progress__count {
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .session-meta--attention {
