@@ -108,10 +108,16 @@ components/terminal/TerminalView.vue     one xterm per terminal, kept alive whil
     - `Exited` completes once with `PtyExit(code, Killed: false)` for a normal exit, or `PtyExit(null, Killed: true)` after `Kill` or `DisposeAsync`. `ReadAsync` returns 0 instead of throwing once the terminal closes (Linux reports EIO). Write, resize and kill after exit do nothing.
     - 11 tests, all Linux-only by an early return, like `ProcessGroupHelperTests`. They use `bash --norc --noprofile -i` so the machine's rc files don't matter.
 
-- [ ] 2. Scrollback: history, cleaning and files
+- [x] 2. Scrollback: history, cleaning and files (done 2026-09-13)
   - **Files**: `src/WeaveFleet.Application/Terminals/TerminalHistory.cs`, `TerminalReplaySanitizer.cs`; `src/WeaveFleet.Infrastructure/Terminals/TerminalHistoryStore.cs` (new).
   - **Acceptance**: History keeps the last 5,000 lines or 2 MB, whichever is smaller, without splitting a UTF-8 sequence or an escape sequence. The sanitizer strips query sequences even when one arrives split across two chunks, and keeps colours, cursor moves and titles. Writes to disk are debounced (about 250 ms) and flushed on close and on shutdown.
   - **Tests**: unit tests with byte-level fixtures, including sequences split across chunks, following t3code's `Manager.test.ts` cases.
+  - **As built**:
+    - `TerminalReplaySanitizer.Process(bytes)` returns what to keep and holds back an unfinished sequence; `Flush()` returns what's held. It recognises only 7-bit forms (`ESC [`, `ESC ]`, `ESC P`, `ESC ^`, `ESC _`), because a lone 0x9B byte in UTF-8 belongs to an ordinary character. Terminators are BEL, `ESC \` and the UTF-8 ST (C2 9C). An unfinished sequence over 4 KB is let through as text. Strip rules are t3code's: CSI `n`; `R` and `c` replies; `$p`/`$y`; `>q`; `?u`; DCS `$q`, `+q`, `[01]$r`, `[01]+r`; OSC 10/11/12 with `?` or `rgb:`.
+    - `TerminalHistory(maxLines, maxBytes)` holds 16 KB chunks and trims from the front just after a line break; with no line break to cut at, it cuts on a UTF-8 character boundary. It isn't thread-safe; the terminal that owns it locks.
+    - `ITerminalHistoryStore` (Application) and `TerminalHistoryStore` (Infrastructure): `{root}/{sessionId}/index.json` plus `{terminalId}.log`, atomic writes through a temp file and `File.Move`, a per-session lock for the index, and ids checked against `^[A-Za-z0-9_.-]{1,128}$` (not `.` or `..`). A damaged index reads as empty.
+    - `FleetOptions.Terminal` (`TerminalOptions`: `Enabled`, `HistoryDirectory`, `MaxHistoryLines`, `MaxHistoryBytes`, `MaxTerminalsPerSession`, `MaxLiveTerminals`), `ResolvedTerminalHistoryDirectory` ("terminals" next to the database, like the analytics DB) and `TerminalEnabled` (Decision 8).
+    - **Moved to Task 3:** the debounced writes and the flush on close and shutdown. The terminal that owns the history owns the timer.
 
 - [ ] 3. Terminal service
   - **Files**: `src/WeaveFleet.Application/Terminals/ITerminalService.cs`, `TerminalService.cs`, `TerminalEnvironment.cs`, `TerminalShell.cs`; `src/WeaveFleet.Domain/Events/TerminalEvents.cs` plus `[JsonDerivedType]` entries; `FleetOptions.Terminal`; calls from `SessionOrchestrator.ArchiveSessionAsync` and `DeleteSessionAsync`; a hosted service that ends every shell and flushes history on shutdown.
