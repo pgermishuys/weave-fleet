@@ -99,6 +99,17 @@ public sealed class AppRunServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task An_archived_session_runs_no_apps()
+    {
+        await StoreAsync("app_old", port: 41234, status: "stopped");
+        _sessions.Seed(new Session { Id = SessionId, Directory = _folder.FullName, RetentionStatus = "archived" });
+
+        (await _service.StartAsync(SessionId, "npm run dev")).Problem.ShouldBe("This session is archived, so Fleet doesn't run apps for it.");
+        (await _service.RestartAsync(SessionId, "app_old")).Problem.ShouldBe("This session is archived, so Fleet doesn't run apps for it.");
+        _apps.Started.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task A_refused_start_says_why()
     {
         _apps.NextRefusal = "Fleet already runs 10 apps across sessions, its limit.";

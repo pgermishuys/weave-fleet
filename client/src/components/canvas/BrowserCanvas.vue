@@ -57,11 +57,13 @@ const statusLabel = computed(() => {
   return run.status;
 });
 const isLive = computed(() => app.value?.status === "starting" || app.value?.status === "running");
+/** The app Fleet runs for this tab isn't running, so there's no page to frame. */
+const appDown = computed(() => app.value !== null && !isLive.value);
 /** Shown instead of the page while there's none: the app hasn't served one yet, or isn't running. */
 const waitingText = computed(() => {
-  const status = app.value?.status;
-  if (status === "exited") return "The app exited before it served a page. Its output is below.";
-  if (status === "stopped") return "The app is stopped.";
+  const run = app.value;
+  if (run?.status === "exited") return `The app exited${run.exitCode === null ? "" : ` with code ${run.exitCode}`}. Output has what it printed.`;
+  if (run?.status === "stopped") return "The app is stopped. Start it to see the page.";
   return "Waiting for the app to serve a page…";
 });
 const ports = computed(() => app.value?.ports ?? []);
@@ -318,7 +320,7 @@ onBeforeUnmount(() => {
         {{ error }}
       </p>
       <p
-        v-else-if="!target"
+        v-else-if="!target || appDown"
         class="browser-canvas__waiting"
       >
         {{ waitingText }}

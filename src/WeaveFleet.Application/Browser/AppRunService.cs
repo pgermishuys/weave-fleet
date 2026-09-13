@@ -25,6 +25,8 @@ public sealed class AppRunService(
         var session = await sessions.GetByIdAsync(sessionId);
         if (session is null)
             return AppStartResult.Fail($"Session {sessionId} not found.");
+        if (IsArchived(session))
+            return AppStartResult.Fail(ArchivedProblem);
         if (string.IsNullOrWhiteSpace(session.Directory) || !Directory.Exists(session.Directory))
             return AppStartResult.Fail("This session has no folder on this machine to run the command in.");
 
@@ -41,6 +43,12 @@ public sealed class AppRunService(
     /// <summary>Starts the app again: restarts it when it's live, or starts a stopped or exited one.</summary>
     public async Task<AppStartResult> RestartAsync(string sessionId, string appId)
     {
+        var session = await sessions.GetByIdAsync(sessionId);
+        if (session is null)
+            return AppStartResult.NotFound(appId);
+        if (IsArchived(session))
+            return AppStartResult.Fail(ArchivedProblem);
+
         if (apps.Find(appId) is { } live)
         {
             return Owns(live, sessionId)
@@ -90,6 +98,10 @@ public sealed class AppRunService(
 
     public Task<AppReadiness> WaitUntilReadyAsync(string appId, TimeSpan timeout, CancellationToken ct = default)
         => apps.WaitUntilReadyAsync(appId, timeout, ct);
+
+    private const string ArchivedProblem = "This session is archived, so Fleet doesn't run apps for it.";
+
+    private static bool IsArchived(Session session) => string.Equals(session.RetentionStatus, "archived", StringComparison.Ordinal);
 
     private bool Owns(AppRunSnapshot app, string sessionId)
         => app.SessionId == sessionId && app.UserId == userContext.UserId;
