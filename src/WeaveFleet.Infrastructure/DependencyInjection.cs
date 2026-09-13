@@ -152,6 +152,10 @@ public static class DependencyInjection
         services.AddScoped<CanvasBridge>();
         services.AddSingleton<IPtyFactory, PortaPtyFactory>();
         services.AddSingleton<ITerminalHistoryStore>(_ => new TerminalHistoryStore(options.ResolvedTerminalHistoryDirectory));
+        services.AddSingleton<TerminalManager>();
+        services.AddSingleton<ISessionTerminalCleanup>(sp => sp.GetRequiredService<TerminalManager>());
+        services.AddScoped<TerminalService>();
+        services.AddHostedService<TerminalShutdownService>();
         services.AddSingleton<IBackgroundUserScope, BackgroundUserScope>();
         services.AddScoped<AutomationService>();
         services.AddScoped<AutomationExecutionService>();

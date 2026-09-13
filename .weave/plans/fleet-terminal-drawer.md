@@ -32,6 +32,7 @@ Ground truth from the codebase (2026-09-13). Don't re-check these:
 8. **Off when Fleet is hosted** (`Auth.Enabled`): a shell there runs as the service user on a shared machine. Local mode keeps it on, including remote access with a token, because the agents there already run shell commands with the same rights. `FleetOptions.Terminal.Enabled` overrides the default either way.
 9. **Keys.** `Ctrl J` (`⌘ J` on a Mac) shows and hides the drawer. While the terminal has focus, Esc, Ctrl K, Ctrl B and Ctrl [ ] go to the shell. Fleet keeps Ctrl J and Ctrl Shift B. Copy is Ctrl Shift C on Linux and Windows, ⌘ C on a Mac. The status bar says when the terminal has the keyboard.
 10. **Tab names are the shell name** (`zsh`, `zsh 2`). Naming tabs after the running command, and asking before closing a busy tab, come later (the mockup marked them Later).
+11. **A shell that ends on its own closes its tab** (decided while building Task 3), the way closing a terminal window does: typing `exit` removes the tab and its scrollback. So there's no "exited" state and no `terminal.exited` event; `terminal.closed` carries the exit code when the shell ended itself. A shell Fleet ends (tab closed, session archived or deleted, Fleet stopping) reports no exit code.
 
 ## Scope
 - In scope:
@@ -78,7 +79,7 @@ Api/Endpoints/TerminalEndpoints   REST + WebSocket
 - Client → server: binary = input bytes (at most 64 KB a frame). Text = `{"type":"resize","cols":120,"rows":30}`, `{"type":"clear"}`.
 - Several sockets can attach to one terminal, and output fans out to all of them. The last resize wins. Each socket has a bounded send queue (1 MB). A socket that falls behind is closed, and the client reconnects and gets the scrollback again.
 
-**Events** on `session:{id}`: `terminal.opened`, `terminal.exited` (with `exitCode`) and `terminal.closed`, each carrying `{ sessionId, terminalId, title }`. They aren't persisted.
+**Events** on `session:{id}`: `terminal.opened` and `terminal.closed`, each carrying `{ sessionId, terminalId, title, exitCode }` (`exitCode` only when the shell ended itself, Decision 11). They aren't persisted.
 
 ### Client
 ```
@@ -119,10 +120,22 @@ components/terminal/TerminalView.vue     one xterm per terminal, kept alive whil
     - `FleetOptions.Terminal` (`TerminalOptions`: `Enabled`, `HistoryDirectory`, `MaxHistoryLines`, `MaxHistoryBytes`, `MaxTerminalsPerSession`, `MaxLiveTerminals`), `ResolvedTerminalHistoryDirectory` ("terminals" next to the database, like the analytics DB) and `TerminalEnabled` (Decision 8).
     - **Moved to Task 3:** the debounced writes and the flush on close and shutdown. The terminal that owns the history owns the timer.
 
-- [ ] 3. Terminal service
+- [x] 3. Terminal service (done 2026-09-13)
   - **Files**: `src/WeaveFleet.Application/Terminals/ITerminalService.cs`, `TerminalService.cs`, `TerminalEnvironment.cs`, `TerminalShell.cs`; `src/WeaveFleet.Domain/Events/TerminalEvents.cs` plus `[JsonDerivedType]` entries; `FleetOptions.Terminal`; calls from `SessionOrchestrator.ArchiveSessionAsync` and `DeleteSessionAsync`; a hosted service that ends every shell and flushes history on shutdown.
   - **Acceptance**: Create → attach → write → output → resize → close works for the session owner only. A missing session folder fails with a clear message instead of starting in Fleet's own folder. Archive and delete end the session's shells and delete their scrollback. Limits return errors, not exceptions. The environment has no `Fleet__`, `FLEET_` or `ASPNETCORE_` keys. After a simulated restart, the saved terminal is listed as `exited`, and attaching starts a new shell under its scrollback.
   - **Tests**: application tests with a fake `IPtyFactory`, plus one test against the real PTY on Linux.
+  - **As built**:
+    - Two layers. `TerminalManager` (singleton, also `ISessionTerminalCleanup`) holds every live shell keyed by `(sessionId, terminalId)` and trusts its `TerminalContext(SessionId, UserId, Directory)`. `TerminalService` (scoped) is what endpoints call: it returns `NotFound` when terminals are off or the session isn't the caller's (the session repository is user-scoped), refuses a new shell for an archived session (`Unavailable`), and builds the context from `Session.Directory` (the worktree or clone folder).
+    - `LiveTerminal` (internal) owns one shell: a read loop that appends cleaned output to the history and hands raw output to every client under one lock, so `Attach()` gets the scrollback and then live frames with no gap or repeat. Each client has a bounded queue of 64 frames; a client that falls behind gets the queued frames and then `TerminalClientTooSlowException`, which the socket (Task 4) turns into a close so the browser reconnects and replays.
+    - `TerminalAttachment`: `Replay` (bytes), `Frames` (`ChannelReader<TerminalFrame>`: `Output`, `Cleared`, `Exited`), `WriteAsync`, `Resize`, `Clear`, `Dispose` to detach.
+    - Scrollback saves 250 ms after output stops arriving. Killing a terminal stops the timer and waits for a save already running, so a closed terminal's `.log` can't reappear. `ShutdownAsync` (from `TerminalShutdownService`, an `IHostedService` in Infrastructure) saves, then ends each shell; after a restart the terminal lists as `Stopped`, and attaching starts a new shell under the old scrollback plus `RestartDivider`.
+    - Shells: `TerminalShell.Candidates` tries `$SHELL`, zsh, bash, sh on Unix (zsh and bash with `-l`, because Fleet often runs as a service with a bare `PATH`), and pwsh, Windows PowerShell (`-NoLogo`), cmd on Windows; a shell that fails to start moves on to the next. Tab titles are the shell name, then `zsh 2`, `zsh 3`.
+    - Environment: `TerminalEnvironment.Build` drops `Fleet__*`, `FLEET_*`, `WEAVE_FLEET_*`, `ASPNETCORE_*`, `DOTNET_ENVIRONMENT`, `DOTNET_URLS` and the OpenCode server variables, sets `TERM=xterm-256color`, `COLORTERM=truecolor`, `TERM_PROGRAM=WeaveFleet`, and `LANG=C.UTF-8` on Unix only when no locale is set.
+    - Limits come from `FleetOptions.Terminal` and fail with `LimitReached` and a message saying what to close. A missing folder fails with `Unavailable` rather than starting in Fleet's own folder. Ids are `t_` plus a version-7 GUID.
+    - `SessionOrchestrator` takes an optional `ISessionTerminalCleanup` (last constructor parameter, so the test builders didn't change). Delete ends the terminals before the workspace is cleaned up (a shell inside a worktree holds it open on Windows); archive ends them after the archive is written. Failures are logged, never thrown.
+    - Events `TerminalOpened` and `TerminalClosed` (`TerminalPayload`) are registered in `DomainEvent`, `ApplicationJsonContext` and `SessionEventsHub.ResolveDomainEventType` already, ahead of Task 4.
+    - Application exposes internals to `WeaveFleet.Infrastructure.Tests` too, so the real-shell test can swap the process environment.
+    - Tests: 22 in `TerminalManagerTests`/`TerminalServiceTests` with a fake PTY and an in-memory store; one real-shell test in `TerminalManagerRealShellTests` (folder, no `Fleet__` leak, output survives a restart). Full Application (521), Infrastructure (796), Api (180) and Integration (76) suites pass.
 
 - [ ] 4. Endpoints and socket
   - **Files**: `src/WeaveFleet.Api/Endpoints/TerminalEndpoints.cs` (new); `EndpointExtensions.cs`; `Program.cs` (`UseWebSockets`); `SessionEventsHub.ResolveDomainEventType`; JSON context entries; `terminalEnabled` in the client config endpoint.

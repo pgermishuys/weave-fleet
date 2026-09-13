@@ -5,7 +5,7 @@ namespace WeaveFleet.Application.Tests.Terminals;
 
 public sealed class TerminalReplaySanitizerTests
 {
-    private const string Esc = "";
+    private const string Esc = "\u001b";
 
     [Theory]
     [InlineData("plain text\r\n")]
@@ -15,7 +15,7 @@ public sealed class TerminalReplaySanitizerTests
     [InlineData(Esc + "[2 q")]                      // DECSCUSR, cursor shape
     [InlineData(Esc + "[u")]                        // restore cursor
     [InlineData(Esc + "[?2004h")]                   // bracketed paste on
-    [InlineData(Esc + "]0;zsh: ~/src")]       // window title
+    [InlineData(Esc + "]0;zsh: ~/src\u0007")]       // window title
     [InlineData(Esc + "]8;;https://example.com" + Esc + "\\link" + Esc + "]8;;" + Esc + "\\")]
     [InlineData(Esc + "Pq#0;2;0;0;0" + Esc + "\\")] // sixel DCS
     [InlineData(Esc + "7" + Esc + "8")]             // save and restore cursor
@@ -36,7 +36,7 @@ public sealed class TerminalReplaySanitizerTests
     [InlineData(Esc + "[?2026;2$y")]       // DECRPM
     [InlineData(Esc + "[>q")]              // XTVERSION
     [InlineData(Esc + "[?u")]              // kitty keyboard query
-    [InlineData(Esc + "]11;?")]      // background colour query, BEL
+    [InlineData(Esc + "]11;?\u0007")]      // background colour query, BEL
     [InlineData(Esc + "]10;?" + Esc + "\\")] // foreground colour query, ST
     [InlineData(Esc + "]11;rgb:1e1e/1e1e/1e1e" + Esc + "\\")]
     [InlineData(Esc + "P$qm" + Esc + "\\")]  // DECRQSS

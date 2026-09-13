@@ -24,4 +24,6 @@ namespace WeaveFleet.Domain.Events;
 [JsonDerivedType(typeof(CanvasUpdated), "canvas.updated")]
 [JsonDerivedType(typeof(CanvasClosed), "canvas.closed")]
 [JsonDerivedType(typeof(CanvasFocused), "canvas.focused")]
+[JsonDerivedType(typeof(TerminalOpened), "terminal.opened")]
+[JsonDerivedType(typeof(TerminalClosed), "terminal.closed")]
 public abstract record DomainEvent;
