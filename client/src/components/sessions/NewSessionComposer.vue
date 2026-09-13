@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import "@/components/sessions/new-session/new-session.css";
-import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, shallowRef, toRefs, useTemplateRef, watch } from "vue";
 import { useNavigate, useSearch } from "@tanstack/vue-router";
 import { ArrowUp, CircleDot, GitPullRequest, LoaderCircle, X } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
+import MessageBubble from "@/components/session/MessageBubble.vue";
 import FolderPicker from "@/components/sessions/new-session/FolderPicker.vue";
 import HarnessPicker from "@/components/sessions/new-session/HarnessPicker.vue";
 import MoreOptions from "@/components/sessions/new-session/MoreOptions.vue";
@@ -15,17 +16,19 @@ import { useNewSessionDefaults } from "@/composables/use-new-session-defaults";
 import { useProjects } from "@/composables/use-projects";
 import { useRepositories } from "@/composables/use-repositories";
 import { useRepositoryInfo } from "@/composables/use-repository-info";
+import { seedSentPrompt } from "@/composables/use-send-prompt";
 import { useCreateSession } from "@/composables/use-session-actions";
 import { useWorktrees } from "@/composables/use-worktrees";
-import { findRepositoryForGitHubPreset, type GitHubSessionSourcePreset } from "@/lib/github-session-source";
+import { findRepositoryForGitHubPreset } from "@/lib/github-session-source";
 import { describeNewSession } from "@/lib/new-session-plan";
 import {
   buildCreateSessionRequest,
+  buildCreatedSessionRow,
   resolveNewWorktreeBranch,
   type NewSessionFolder,
-  type NewSessionWorkspace,
 } from "@/lib/new-session-request";
 import { useAppShellStore } from "@/stores/app-shell";
+import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
 const MAX_TEXTAREA_HEIGHT = 180;
@@ -42,19 +45,42 @@ const isMobile = useIsMobile();
 const { repositories, scannedAt, error: repositoriesError } = useRepositories();
 const { projects } = useProjects();
 const { createSession, isLoading: isCreating, error: createError } = useCreateSession();
+const sessionsStore = useSessionsStore();
 
-const message = shallowRef("");
-const folder = shallowRef<NewSessionFolder | null>(null);
-const workspace = shallowRef<NewSessionWorkspace>({ kind: "new" });
-const title = shallowRef("");
-const tags = shallowRef("");
-const projectId = shallowRef<string | null>(search.value.projectId ?? null);
-const harnessType = shallowRef(defaultHarnessType.value);
-const gitHubPreset = shallowRef<GitHubSessionSourcePreset | null>(newSessionDialogInitialSource.value);
+// The page edits a draft kept in the store: it survives leaving the page, and its sidebar row
+// follows the message as it's typed.
+const { draft, restored } = workspaceUiStore.openNewSessionDraft({
+  message: "",
+  folder: null,
+  hasChosenFolder: false,
+  workspace: { kind: "new" },
+  title: "",
+  tags: "",
+  projectId: null,
+  harnessType: defaultHarnessType.value,
+  gitHubPreset: null,
+});
+const { message, folder, workspace, title, tags, projectId, harnessType, gitHubPreset, hasChosenFolder } = toRefs(draft);
+// A project in the address wins (a project's "+"); otherwise a restored draft keeps its own.
+if (search.value.projectId || !restored) {
+  projectId.value = search.value.projectId ?? null;
+}
+// A restored draft's folder was already settled, by the person or by the defaults.
+if (restored && folder.value) {
+  hasChosenFolder.value = true;
+}
+// A GitHub "start session" hands its issue over through the store; the draft keeps it from here.
+if (newSessionDialogInitialSource.value) {
+  gitHubPreset.value = newSessionDialogInitialSource.value;
+  hasChosenFolder.value = false;
+  workspaceUiStore.setNewSessionInitialSource(null);
+}
+
 const validationError = shallowRef<string | null>(null);
-/** Set once the folder comes from the person, so defaults arriving later don't replace it. */
-const hasChosenFolder = shallowRef(false);
 const isFolderMenuOpen = shallowRef(false);
+/** The message being sent, shown as the conversation's first message while the session starts. */
+const sentMessage = computed(() => (draft.isStarting && message.value.trim()) || null);
+const sentAt = shallowRef<number | undefined>(undefined);
 
 const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
 
@@ -66,7 +92,8 @@ const isCloudMode = computed(() => config.value.cloudMode);
 const areRepositoriesReady = computed(() => scannedAt.value !== null || repositoriesError.value !== null);
 const showHarnessPicker = computed(() => enabledHarnesses.value.length > 1);
 const hasMessage = computed(() => message.value.trim().length > 0);
-const canSend = computed(() => !isCreating.value && (hasMessage.value || gitHubPreset.value !== null));
+const isStarting = computed(() => isCreating.value || draft.isStarting);
+const canSend = computed(() => !isStarting.value && (hasMessage.value || gitHubPreset.value !== null));
 const currentBranch = computed(() => repositoryInfo.value?.branch ?? null);
 
 const recentFolders = computed(() => defaults.recentFolders(repositories.value));
@@ -167,12 +194,19 @@ function applyInitialFolder(): void {
 
 function removeGitHubPreset(): void {
   gitHubPreset.value = null;
-  workspaceUiStore.setNewSessionInitialSource(null);
   focusMessage();
 }
 
+/** Where the new session's row goes in the sidebar: the chosen project, or Scratch. */
+function projectForRow(): { id: string; name: string } | null {
+  const chosen = projectId.value
+    ? projects.value.find((project) => project.id === projectId.value)
+    : projects.value.find((project) => project.type === "scratch");
+  return chosen ? { id: chosen.id, name: chosen.name } : null;
+}
+
 async function submit(withoutMessage: boolean): Promise<void> {
-  if (isCreating.value) {
+  if (isStarting.value) {
     return;
   }
 
@@ -204,22 +238,48 @@ async function submit(withoutMessage: boolean): Promise<void> {
   validationError.value = null;
   const chosenFolder = folder.value;
   const chosenWorkspace = workspace.value;
+  const firstMessage = request.options.initialPrompt ?? null;
+  sentAt.value = Date.now();
+
+  // The message moves into the conversation at once; the session catches up.
+  draft.isStarting = true;
 
   try {
     const response = await createSession(request.directory, request.options);
+    const sessionId = response.session.id;
     defaults.remember(chosenFolder, chosenWorkspace);
-    workspaceUiStore.setNewSessionInitialSource(null);
+
+    // All in one tick: the session page has the message before its history loads, and the
+    // session's row replaces the draft row where it stands.
+    if (firstMessage) {
+      seedSentPrompt(sessionId, firstMessage, sentAt.value);
+    }
+    sessionsStore.upsertSession(buildCreatedSessionRow(response, request, projectForRow()));
+    workspaceUiStore.handOffNewSessionDraft(sessionId);
+
+    // Someone who left while it started stays where they went; the row is there for them.
+    if (!workspaceUiStore.isNewSessionPageOpen) {
+      return;
+    }
     await navigate({
       to: "/sessions/$id",
-      params: { id: response.session.id },
+      params: { id: sessionId },
       search: {
         instanceId: response.instanceId,
         parentSessionId: undefined,
       },
     });
   } catch {
-    // useCreateSession keeps the server's message in createError.
-    void nextTick(focusMessage);
+    // useCreateSession keeps the server's message in createError; the message goes back in the box.
+    draft.isStarting = false;
+    if (!workspaceUiStore.isNewSessionPageOpen) {
+      workspaceUiStore.leaveNewSessionDraft();
+      return;
+    }
+    void nextTick(() => {
+      resizeTextarea();
+      focusMessage();
+    });
   }
 }
 
@@ -248,6 +308,7 @@ watch(newSessionDialogInitialSource, (preset) => {
   if (preset) {
     gitHubPreset.value = preset;
     hasChosenFolder.value = false;
+    workspaceUiStore.setNewSessionInitialSource(null);
     applyInitialFolder();
   }
 });
@@ -284,7 +345,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  workspaceUiStore.setNewSessionInitialSource(null);
+  workspaceUiStore.leaveNewSessionDraft();
 });
 </script>
 
@@ -300,7 +361,27 @@ onUnmounted(() => {
       <span class="new-session__pill">Not started</span>
     </header>
 
-    <div class="new-session__stage">
+    <!-- Once sent, the message sits where the session page will show it. -->
+    <div
+      v-if="sentMessage"
+      class="new-session__conversation"
+      aria-label="Activity stream"
+    >
+      <div class="new-session__message">
+        <MessageBubble
+          author="You"
+          role="user"
+          :body="sentMessage"
+          :created-at="sentAt"
+          :show-identity="true"
+          cluster-position="single"
+        />
+      </div>
+    </div>
+    <div
+      v-else
+      class="new-session__stage"
+    >
       <div class="new-session__empty">
         <strong>What should we work on?</strong>
         Type below. The chips under the box say where it runs.
@@ -346,7 +427,7 @@ onUnmounted(() => {
               type="button"
               class="new-session__attachment-remove"
               :aria-label="`Remove ${gitHubPreset.sourceType === 'github-pull-request' ? 'pull request' : 'issue'} #${gitHubPreset.number}`"
-              :disabled="isCreating"
+              :disabled="isStarting"
               @click="removeGitHubPreset"
             >
               <X
@@ -363,9 +444,9 @@ onUnmounted(() => {
           data-testid="new-session-message"
           aria-label="First message"
           rows="2"
-          :value="message"
+          :value="sentMessage ? '' : message"
           :placeholder="placeholder"
-          :readonly="isCreating"
+          :readonly="isStarting"
           @input="handleInput"
           @keydown="handleKeydown"
         />
@@ -375,7 +456,7 @@ onUnmounted(() => {
             v-if="showHarnessPicker"
             v-model="harnessType"
             :harnesses="enabledHarnesses"
-            :disabled="isCreating"
+            :disabled="isStarting"
             @close-auto-focus="returnFocusToMessage"
           />
           <Button
@@ -389,7 +470,7 @@ onUnmounted(() => {
             @click="submit(false)"
           >
             <LoaderCircle
-              v-if="isCreating"
+              v-if="isStarting"
               class="size-4 animate-spin"
             />
             <ArrowUp
@@ -408,7 +489,7 @@ onUnmounted(() => {
           :recent-folders="recentFolders"
           :allow-browse="!isCloudMode && !gitHubPreset"
           :allow-none="!gitHubPreset"
-          :disabled="isCreating"
+          :disabled="isStarting"
           @update:folder="setFolder($event, true)"
           @close-auto-focus="returnFocusToMessage"
         />
@@ -424,7 +505,7 @@ onUnmounted(() => {
             :worktrees="worktrees"
             :is-loading-worktrees="isLoadingWorktrees"
             :last-worktree-path="defaults.lastWorktreeFor(folder.path)"
-            :disabled="isCreating"
+            :disabled="isStarting"
             @update:workspace="workspace = $event"
             @close-auto-focus="returnFocusToMessage"
           />
@@ -435,7 +516,7 @@ onUnmounted(() => {
             v-model:title="title"
             v-model:tags="tags"
             :projects="projects"
-            :disabled="isCreating"
+            :disabled="isStarting"
             @close-auto-focus="returnFocusToMessage"
           />
         </div>
@@ -463,7 +544,7 @@ onUnmounted(() => {
           type="button"
           class="new-session__no-message"
           data-testid="create-session-without-message"
-          :disabled="isCreating"
+          :disabled="isStarting"
           @click="submit(true)"
         >
           Start without a message
@@ -533,6 +614,26 @@ onUnmounted(() => {
   font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+/* The sent message sits where the session page's first message will (ActivityStream's layout). */
+.new-session__conversation {
+  --activity-bubble-width: 100%;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 24px 32px 12px;
+}
+
+.new-session__message {
+  display: flex;
+  width: 100%;
+  max-width: 760px;
+  flex-direction: column;
+  align-items: flex-end;
+  margin: 0 auto 20px;
 }
 
 /* The composer sits where the session composer does. */

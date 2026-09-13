@@ -9,6 +9,7 @@ import { useSessions } from "@/composables/use-sessions";
 import { useArchiveSession, useMoveSession } from "@/composables/use-session-actions";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
+import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
 import { Button } from "@/components/ui/button";
 import ConfirmCompleteSessionDialog from "./ConfirmCompleteSessionDialog.vue";
@@ -42,6 +43,7 @@ interface ActiveSessionDrag {
 
 const sessionsStore = useSessionsStore();
 const sidebarStore = useSidebarStore();
+const { newSessionDraftRow, sessionRowKeys } = storeToRefs(useWorkspaceUiStore());
 const router = useRouter();
 
 let releaseSessionList: (() => void) | null = null;
@@ -116,6 +118,22 @@ const projectsById = computed(() => {
   return new Map(projects.value.map((project) => [project.id, project]));
 });
 const isLoading = computed(() => isSessionsLoading.value || areProjectsLoading.value);
+const isNewSessionOpen = computed(() => pathname.value === "/sessions/new");
+
+/**
+ * The group the draft's session will land in: its project, or Scratch (where the server puts a
+ * session without one), keyed the way the grouping below keys it.
+ */
+const draftGroupKey = computed<string | null>(() => {
+  const draft = newSessionDraftRow.value;
+  if (!draft) {
+    return null;
+  }
+  if (draft.projectId && projectsById.value.has(draft.projectId)) {
+    return draft.projectId;
+  }
+  return projects.value.find((project) => project.type === "scratch")?.id ?? "Ungrouped";
+});
 const errorMessage = computed(() => sessionsError.value ?? projectsError.value);
 const hasSessions = computed(() => sessions.value.length > 0);
 
@@ -204,6 +222,20 @@ const projectGroups = computed<ProjectTreeGroup[]>(() => {
     });
   }
 
+  // The draft's group shows even before it has a session (Scratch, the first time).
+  const draftKey = draftGroupKey.value;
+  if (draftKey && !groupedSessions.has(draftKey)) {
+    const project = projectsById.value.get(draftKey);
+    groupedSessions.set(draftKey, {
+      id: project?.id ?? "ungrouped",
+      projectId: project?.id ?? null,
+      name: project?.name ?? "Ungrouped",
+      sortPosition: project?.position ?? Number.MAX_SAFE_INTEGER,
+      isUngrouped: !project,
+      sessions: [],
+    });
+  }
+
   const sortedGroups = [...groupedSessions.values()]
     .sort((left, right) => {
       if (left.isUngrouped) {
@@ -278,6 +310,30 @@ const filteredProjectGroups = computed<ProjectTreeGroup[]>(() => {
     })
     .filter((project) => project.sessions.length > 0 || project.name.toLowerCase().includes(normalizedQuery.value));
 });
+
+/** The id of the group the draft row shows in (groups are keyed by project id, or "ungrouped"). */
+const draftGroupId = computed<string | null>(() => {
+  const key = draftGroupKey.value;
+  return key === null ? null : projectsById.value.has(key) ? key : "ungrouped";
+});
+
+// A draft shows in its group, so that group opens when a draft lands in it.
+watch(draftGroupId, (groupId) => {
+  if (groupId) {
+    expandedProjects[groupId] = true;
+  }
+});
+
+function handleOpenDraft(): void {
+  sidebarStore.setActiveRail("sessions");
+  void router.navigate({
+    to: "/sessions/new",
+    search: {
+      projectId: newSessionDraftRow.value?.projectId ?? undefined,
+      source: undefined,
+    },
+  });
+}
 
 function handleToggleProject(projectId: string): void {
   expandedProjects[projectId] = !(expandedProjects[projectId] ?? true);
@@ -658,7 +714,11 @@ function handleCompleteCancel(): void {
         :active-session-id="activeSessionId"
         :active-drag-session-id="activeSessionDrag?.sessionId ?? null"
         :active-drag-project-id="activeSessionDrag?.projectId ?? null"
+        :draft="project.id === draftGroupId ? newSessionDraftRow : null"
+        :draft-active="isNewSessionOpen"
+        :row-keys="sessionRowKeys"
         @new-session="handleProjectSessionCreate"
+        @open-draft="handleOpenDraft"
         @project-changed="handleProjectChanged"
         @session-changed="handleRetry"
         @toggle="handleToggleProject"

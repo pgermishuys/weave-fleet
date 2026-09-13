@@ -16,7 +16,9 @@ import {
   type DeleteProjectMode,
 } from "@/composables/use-session-actions";
 import type { SessionListItem } from "@/api/client";
+import type { NewSessionDraftRow } from "@/stores/workspace-ui";
 import ConfirmDeleteProjectDialog from "./ConfirmDeleteProjectDialog.vue";
+import DraftSessionRow from "./DraftSessionRow.vue";
 import InlineEdit from "./InlineEdit.vue";
 import SessionItem from "./SessionItem.vue";
 import { heightEnter, heightLeave } from "@/lib/height-transition";
@@ -40,6 +42,11 @@ interface Props {
   activeSessionId: string | null;
   activeDragSessionId: string | null;
   activeDragProjectId: string | null;
+  /** The New Session page's draft, when it will land in this group. */
+  draft?: NewSessionDraftRow | null;
+  draftActive?: boolean;
+  /** Session id → row key, for sessions that took over the draft row. */
+  rowKeys?: Readonly<Record<string, string>>;
 }
 
 interface Emits {
@@ -51,6 +58,7 @@ interface Emits {
   moveSession: [sessionId: string, targetProjectId: string | null];
   dragSessionStart: [sessionId: string, projectId: string | null];
   dragSessionEnd: [];
+  openDraft: [];
 }
 
 const props = defineProps<Props>();
@@ -139,6 +147,11 @@ function handleDrop(event: DragEvent): void {
   if (!props.expanded) {
     emit("toggle", props.project.id);
   }
+}
+
+/** A session that started from the draft keeps the draft row's key, so it replaces it in place. */
+function rowKey(session: SessionListItem): string {
+  return props.rowKeys?.[session.session.id] ?? session.session.id;
 }
 
 function handleToggle(): void {
@@ -408,11 +421,22 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
         @enter="heightEnter"
         @leave="heightLeave"
       >
+        <div
+          v-if="draft"
+          :key="draft.key"
+          class="project-row"
+        >
+          <DraftSessionRow
+            :draft="draft"
+            :active="draftActive ?? false"
+            @open="emit('openDraft')"
+          />
+        </div>
         <!-- SessionItem renders several root nodes (row + dialogs), so each row
              gets a single element wrapper the transition can animate. -->
         <div
           v-for="session in project.sessions"
-          :key="session.session.id"
+          :key="rowKey(session)"
           class="project-row"
         >
           <SessionItem

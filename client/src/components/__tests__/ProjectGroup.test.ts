@@ -1,4 +1,4 @@
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import ProjectGroup from "@/components/sessions/ProjectGroup.vue";
 
@@ -39,7 +39,7 @@ describe("ProjectGroup", () => {
           ContextMenuTrigger: { template: "<div><slot /></div>" },
           ConfirmDeleteProjectDialog: { template: "<div />" },
           InlineEdit: { template: "<div />" },
-          SessionItem: { template: "<div />" },
+          SessionItem: { props: ["session"], template: "<div class='session-stub'>{{ session.session.title }}</div>" },
         },
       },
     });
@@ -86,5 +86,64 @@ describe("ProjectGroup", () => {
     });
 
     expect(wrapper.emitted("moveSession")).toBeUndefined();
+  });
+
+  describe("draft row", () => {
+    const draft = { key: "new-session-draft-1", title: "Fix the login redirect", projectId: "project-2", isStarting: false };
+    const session = {
+      instanceId: "instance-1",
+      workspaceId: "workspace-1",
+      workspaceDirectory: "/repo",
+      workspaceDisplayName: null,
+      isolationStrategy: "worktree",
+      sessionStatus: "active",
+      session: { id: "session-1", title: "Fix the login redirect", time: { created: 1, updated: 1 }, tags: [] },
+      instanceStatus: "running",
+      lifecycleStatus: "running",
+      retentionStatus: "active",
+      typedInstanceStatus: "running",
+      isHidden: false,
+      tags: [],
+    };
+
+    it("sits above the group's sessions and opens the draft", async () => {
+      const wrapper = mountProjectGroup({
+        draft,
+        draftActive: true,
+        project: { ...createProjectGroup(), sessions: [{ ...session, session: { ...session.session, id: "older", title: "Older" } }] },
+      });
+
+      const rows = wrapper.findAll(".project-row");
+      expect(rows[0].get("[data-testid='new-session-draft-row']").text()).toContain("Fix the login redirect");
+      expect(rows[0].text()).toContain("Draft");
+      expect(rows[0].get("button").attributes("aria-current")).toBe("true");
+      expect(rows[1].text()).toContain("Older");
+
+      await rows[0].get("button").trigger("click");
+      expect(wrapper.emitted("openDraft")).toHaveLength(1);
+    });
+
+    it("says New session until something is typed, and Starting… once sent", () => {
+      expect(mountProjectGroup({ draft: { ...draft, title: "" } }).text()).toContain("New session");
+      expect(mountProjectGroup({ draft: { ...draft, isStarting: true } }).text()).toContain("Starting…");
+    });
+
+    it("becomes the session's row in place: the same row, not one leaving and one arriving", async () => {
+      const wrapper = mountProjectGroup({ draft });
+      const draftRow = wrapper.get(".project-row").element;
+
+      await wrapper.setProps({
+        draft: null,
+        project: { ...createProjectGroup(), sessionCount: 1, sessions: [session] },
+        rowKeys: { "session-1": draft.key },
+      });
+      await flushPromises();
+
+      const rows = wrapper.findAll(".project-row");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].element).toBe(draftRow);
+      expect(rows[0].text()).toContain("Fix the login redirect");
+      expect(rows[0].find("[data-testid='new-session-draft-row']").exists()).toBe(false);
+    });
   });
 });

@@ -5,6 +5,7 @@ import {
   clearSentPrompts,
   confirmSentPrompt,
   reconcileSentPrompts,
+  seedSentPrompt,
   useSendPrompt,
   useSentPrompts,
 } from "@/composables/use-send-prompt"
@@ -139,6 +140,62 @@ describe("use-send-prompt pending prompts", () => {
     // Only the second prompt is still waiting for its confirmation.
     expect(hasPendingPrompts.value).toBe(true)
     confirmSentPrompt(sessionId, { correlationId: "prompt-corrsecond" })
+    expect(hasPendingPrompts.value).toBe(false)
+  })
+})
+
+describe("seedSentPrompt (a new session's first message)", () => {
+  it("shows the message as sent before the session's history has it", () => {
+    const sessionId = "session-seeded-shown"
+    const { sentPrompts, hasPendingPrompts } = useSentPrompts(sessionId)
+
+    seedSentPrompt(sessionId, "  Fix the login redirect \n", 1_000)
+
+    expect(sentPrompts.value).toHaveLength(1)
+    expect(sentPrompts.value[0]).toMatchObject({ body: "Fix the login redirect", createdAt: 1_000, status: "pending" })
+    expect(hasPendingPrompts.value).toBe(true)
+  })
+
+  it("gives way to the history's copy, so it never shows twice", () => {
+    const sessionId = "session-seeded-reconciled"
+    const { sentPrompts, hasPendingPrompts } = useSentPrompts(sessionId)
+    seedSentPrompt(sessionId, "Fix the login redirect")
+
+    reconcileSentPrompts(sessionId, [deliveredUserMessage(sessionId, "msg_server", "Fix the login redirect")])
+
+    expect(sentPrompts.value).toHaveLength(0)
+    expect(hasPendingPrompts.value).toBe(false)
+  })
+
+  it("waits while the history's copy has no text yet", () => {
+    const sessionId = "session-seeded-textless"
+    const { sentPrompts } = useSentPrompts(sessionId)
+    seedSentPrompt(sessionId, "Fix the login redirect")
+
+    reconcileSentPrompts(sessionId, [{ messageId: "msg_server", sessionId, role: "user", parts: [] }])
+
+    expect(sentPrompts.value).toHaveLength(1)
+  })
+
+  it("gives way to a GitHub start's message, which the server wraps in the issue's context", () => {
+    const sessionId = "session-seeded-github"
+    const { sentPrompts } = useSentPrompts(sessionId)
+    seedSentPrompt(sessionId, "Start with the tests")
+
+    reconcileSentPrompts(sessionId, [
+      deliveredUserMessage(sessionId, "msg_server", "[Source: acme/rocket#42]\n\nLogin loops\n\nStart with the tests"),
+    ])
+
+    expect(sentPrompts.value).toHaveLength(0)
+  })
+
+  it("seeds nothing for an empty message", () => {
+    const sessionId = "session-seeded-empty"
+    const { sentPrompts, hasPendingPrompts } = useSentPrompts(sessionId)
+
+    seedSentPrompt(sessionId, "   ")
+
+    expect(sentPrompts.value).toHaveLength(0)
     expect(hasPendingPrompts.value).toBe(false)
   })
 })
