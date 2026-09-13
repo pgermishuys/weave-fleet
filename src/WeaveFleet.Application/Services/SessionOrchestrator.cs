@@ -255,7 +255,9 @@ public sealed partial class SessionOrchestrator(
             workspaceIntent.Directory,
             workspaceIntent.IsolationStrategy,
             workspaceIntent.Branch,
-            sourceResolutionResult.Value.Input.Provenance);
+            sourceResolutionResult.Value.Input.Provenance,
+            workspaceIntent.BaseBranch,
+            workspaceIntent.FetchOrigin);
         if (workspaceResult.IsFailure)
             return workspaceResult.Error;
 

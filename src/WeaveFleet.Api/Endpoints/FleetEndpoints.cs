@@ -126,14 +126,14 @@ public static class FleetEndpoints
                     null,
                     null,
                     detail.Branches.Select(branch => new RepositoryBranchItem(
-                        branch,
+                        branch.Name,
+                        branch.ShortHash,
+                        branch.Subject,
                         string.Empty,
                         string.Empty,
-                        string.Empty,
-                        string.Empty,
-                        string.Empty,
-                        string.Equals(branch.TrimStart('*', ' '), detail.Info.CurrentBranch, StringComparison.Ordinal),
-                        branch.Contains("remotes/", StringComparison.Ordinal))).ToList(),
+                        branch.Date,
+                        !branch.IsRemote && string.Equals(branch.Name, detail.Info.CurrentBranch, StringComparison.Ordinal),
+                        branch.IsRemote)).ToList(),
                     Array.Empty<string>(),
                     detail.RecentCommits.Select(commit => new RepositoryCommitItem(
                         string.Empty,
@@ -147,7 +147,9 @@ public static class FleetEndpoints
                         ParseRemoteUrl(remote),
                         null)).ToList(),
                     null,
-                    null)));
+                    null,
+                    detail.DefaultBase.Branch,
+                    detail.DefaultBase.Ref)));
         })
         .WithName("GetRepositoryDetail");
 

@@ -50,16 +50,38 @@ public sealed class RealGitRepository : IDisposable
         Run(ParentPath, "clone", "--bare", Path, remotePath);
         Git("remote", "add", "origin", remotePath);
         Git("fetch", "origin");
+        Git("remote", "set-head", "origin", "main");
 
-        return message =>
+        return message => PushToOrigin(message);
+    }
+
+    /// <summary>
+    /// Pushes a new commit to <paramref name="branch"/> on origin (created from origin's main when it's new)
+    /// without fetching it here, and returns the commit. Needs <see cref="AddOrigin"/> first.
+    /// </summary>
+    public string PushToOrigin(string message, string branch = "main")
+    {
+        var remotePath = System.IO.Path.Combine(ParentPath, "origin.git");
+        var otherPath = System.IO.Path.Combine(ParentPath, $"other-{Guid.NewGuid():N}");
+        Run(ParentPath, "clone", remotePath, otherPath);
+        ConfigureIdentity(otherPath);
+        Run(otherPath, "checkout", "-B", branch, $"origin/{(RemoteBranchExists(otherPath, branch) ? branch : "main")}");
+        Run(otherPath, "commit", "--allow-empty", "-m", message);
+        Run(otherPath, "push", "origin", branch);
+        return Run(otherPath, "rev-parse", "HEAD").Trim();
+    }
+
+    private static bool RemoteBranchExists(string clonePath, string branch)
+    {
+        try
         {
-            var otherPath = System.IO.Path.Combine(ParentPath, $"other-{Guid.NewGuid():N}");
-            Run(ParentPath, "clone", remotePath, otherPath);
-            ConfigureIdentity(otherPath);
-            Run(otherPath, "commit", "--allow-empty", "-m", message);
-            Run(otherPath, "push", "origin", "main");
-            return Run(otherPath, "rev-parse", "HEAD").Trim();
-        };
+            Run(clonePath, "show-ref", "--verify", "--quiet", $"refs/remotes/origin/{branch}");
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     public void Dispose()

@@ -120,6 +120,172 @@ public sealed class WorkspaceServiceWorktreeTests
         result.Error.Description.ShouldBe("Couldn't create the worktree: 'bad..name' is not a valid branch name");
     }
 
+    [Fact]
+    public async Task ChosenOriginBase_StartsFromThatBranchFreshlyFetched()
+    {
+        using var repository = new RealGitRepository();
+        repository.AddOrigin();
+        repository.PushToOrigin("release branch exists", "release/2.0");
+        repository.Git("fetch", "origin");
+        var newerReleaseCommit = repository.PushToOrigin("landed on release after our last fetch", "release/2.0");
+
+        var result = await _service.CreateWorkspaceAsync(
+            repository.Path, "worktree", "fleet/hotfix", provenance: null, baseBranch: "origin/release/2.0");
+
+        result.IsSuccess.ShouldBeTrue(ErrorOf(result));
+        CommitIn(repository, result.Value.Directory).ShouldBe(newerReleaseCommit);
+        result.Value.Branch.ShouldBe("fleet/hotfix");
+        Should.Throw<InvalidOperationException>(() => repository.Git("config", "branch.fleet/hotfix.merge"));
+    }
+
+    [Fact]
+    public async Task ChosenOriginBase_OnlyOnOrigin_IsFetchedFirst()
+    {
+        using var repository = new RealGitRepository();
+        repository.AddOrigin();
+        var releaseCommit = repository.PushToOrigin("never fetched here", "release/3.0");
+
+        var result = await _service.CreateWorkspaceAsync(
+            repository.Path, "worktree", "fleet/from-new-release", provenance: null, baseBranch: "origin/release/3.0");
+
+        result.IsSuccess.ShouldBeTrue(ErrorOf(result));
+        CommitIn(repository, result.Value.Directory).ShouldBe(releaseCommit);
+    }
+
+    [Fact]
+    public async Task FetchOff_StartsFromTheLastFetchedCopy()
+    {
+        using var repository = new RealGitRepository();
+        var pushToOrigin = repository.AddOrigin();
+        var lastFetched = repository.CommitOf("origin/main");
+        pushToOrigin("landed on origin after our last fetch");
+
+        var result = await _service.CreateWorkspaceAsync(
+            repository.Path, "worktree", "fleet/offline", provenance: null, baseBranch: null, fetchOrigin: false);
+
+        result.IsSuccess.ShouldBeTrue(ErrorOf(result));
+        CommitIn(repository, result.Value.Directory).ShouldBe(lastFetched);
+    }
+
+    [Fact]
+    public async Task FetchOff_WithAChosenOriginBase_StartsFromItsLastFetchedCopy()
+    {
+        using var repository = new RealGitRepository();
+        repository.AddOrigin();
+        repository.PushToOrigin("release branch exists", "release/2.0");
+        repository.Git("fetch", "origin");
+        var lastFetched = repository.CommitOf("origin/release/2.0");
+        repository.PushToOrigin("landed on release after our last fetch", "release/2.0");
+
+        var result = await _service.CreateWorkspaceAsync(
+            repository.Path, "worktree", "fleet/offline", provenance: null, baseBranch: "origin/release/2.0", fetchOrigin: false);
+
+        result.IsSuccess.ShouldBeTrue(ErrorOf(result));
+        CommitIn(repository, result.Value.Directory).ShouldBe(lastFetched);
+    }
+
+    [Fact]
+    public async Task ChosenLocalBase_StartsFromThatBranch_EvenWhenTheCheckoutIsElsewhere()
+    {
+        using var repository = new RealGitRepository();
+        repository.Git("checkout", "-b", "feature/half-done");
+        repository.Git("commit", "--allow-empty", "-m", "unfinished work");
+        var featureCommit = repository.CommitOf("HEAD");
+        repository.Git("checkout", "main");
+
+        var result = await _service.CreateWorkspaceAsync(
+            repository.Path, "worktree", "fleet/continue", provenance: null, baseBranch: "feature/half-done");
+
+        result.IsSuccess.ShouldBeTrue(ErrorOf(result));
+        CommitIn(repository, result.Value.Directory).ShouldBe(featureCommit);
+        BranchIn(repository, result.Value.Directory).ShouldBe("fleet/continue");
+    }
+
+    [Fact]
+    public async Task ChosenBase_NeverReusesAnExistingBranch()
+    {
+        using var repository = new RealGitRepository();
+        repository.Git("branch", "fleet/earlier-work");
+        repository.Git("checkout", "-b", "develop");
+        repository.Git("commit", "--allow-empty", "-m", "develop work");
+        var developCommit = repository.CommitOf("HEAD");
+        repository.Git("checkout", "main");
+
+        var result = await _service.CreateWorkspaceAsync(
+            repository.Path, "worktree", "fleet/earlier-work", provenance: null, baseBranch: "develop");
+
+        result.IsSuccess.ShouldBeTrue(ErrorOf(result));
+        result.Value.Branch.ShouldBe("fleet/earlier-work-2");
+        CommitIn(repository, result.Value.Directory).ShouldBe(developCommit);
+    }
+
+    [Theory]
+    [InlineData("origin/no-such-branch")]
+    [InlineData("no-such-branch")]
+    public async Task UnknownBase_IsAReadableValidationError_AndCreatesNothing(string baseBranch)
+    {
+        using var repository = new RealGitRepository();
+        repository.AddOrigin();
+
+        var result = await _service.CreateWorkspaceAsync(
+            repository.Path, "worktree", "fleet/nowhere", provenance: null, baseBranch: baseBranch);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldStartWith("Validation.");
+        result.Error.Description.ShouldBe($"Couldn't create the worktree: there's no branch {baseBranch} to start from");
+        Directory.Exists(Path.Combine(repository.ParentPath, "repo-worktrees")).ShouldBeFalse();
+        Should.Throw<InvalidOperationException>(() => repository.Git("show-ref", "--verify", "refs/heads/fleet/nowhere"));
+    }
+
+    [Theory]
+    [InlineData("--upload-pack=touch /tmp/x")]
+    [InlineData("main:refs/heads/main")]
+    [InlineData("bad..name")]
+    [InlineData("has space")]
+    public async Task InvalidBaseName_IsRejectedBeforeGitSeesIt(string baseBranch)
+    {
+        using var repository = new RealGitRepository();
+
+        var result = await _service.CreateWorkspaceAsync(
+            repository.Path, "worktree", "fleet/x", provenance: null, baseBranch: baseBranch);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldBe($"'{baseBranch}' is not a valid branch name.");
+    }
+
+    [Fact]
+    public async Task DefaultBase_IsOriginsDefault_WhenThereIsAnOrigin()
+    {
+        using var repository = new RealGitRepository();
+        repository.AddOrigin();
+        repository.Git("checkout", "-b", "feature/elsewhere");
+
+        var defaults = await WorkspaceService.ResolveDefaultBaseAsync(repository.Path);
+
+        defaults.ShouldBe(new DefaultWorktreeBase("main", "origin/main"));
+    }
+
+    [Fact]
+    public async Task DefaultBase_IsLocalMain_WithoutAnOrigin()
+    {
+        using var repository = new RealGitRepository();
+
+        var defaults = await WorkspaceService.ResolveDefaultBaseAsync(repository.Path);
+
+        defaults.ShouldBe(new DefaultWorktreeBase("main", "main"));
+    }
+
+    [Fact]
+    public async Task DefaultBase_IsNothing_WithoutOriginMainOrMaster()
+    {
+        using var repository = new RealGitRepository();
+        repository.Git("branch", "-m", "main", "trunk");
+
+        var defaults = await WorkspaceService.ResolveDefaultBaseAsync(repository.Path);
+
+        defaults.ShouldBe(new DefaultWorktreeBase(null, null));
+    }
+
     private static string CommitIn(RealGitRepository repository, string worktreeDirectory) =>
         repository.Git("-C", worktreeDirectory, "rev-parse", "HEAD").Trim();
 

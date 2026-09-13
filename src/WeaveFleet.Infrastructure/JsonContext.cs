@@ -101,6 +101,8 @@ internal sealed record RepositorySourceInput
     [JsonPropertyName("isolationStrategy")] public string? IsolationStrategy { get; init; }
     [JsonPropertyName("branch")] public string? Branch { get; init; }
     [JsonPropertyName("existingWorktreePath")] public string? ExistingWorktreePath { get; init; }
+    [JsonPropertyName("baseBranch")] public string? BaseBranch { get; init; }
+    [JsonPropertyName("fetchOrigin")] public bool? FetchOrigin { get; init; }
 }
 
 /// <summary>Input payload for the GitHub session source provider.</summary>
@@ -114,6 +116,8 @@ internal sealed record GitHubSourceInput
     [JsonPropertyName("isolationStrategy")] public string? IsolationStrategy { get; init; }
     [JsonPropertyName("branch")] public string? Branch { get; init; }
     [JsonPropertyName("existingWorktreePath")] public string? ExistingWorktreePath { get; init; }
+    [JsonPropertyName("baseBranch")] public string? BaseBranch { get; init; }
+    [JsonPropertyName("fetchOrigin")] public bool? FetchOrigin { get; init; }
 }
 
 /// <summary>Input payload for the automation session source provider.</summary>

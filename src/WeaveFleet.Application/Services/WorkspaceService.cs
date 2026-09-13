@@ -29,12 +29,22 @@ public sealed partial class WorkspaceService(
         string? branch = null)
         => await CreateWorkspaceAsync(sourceDirectory, strategy, branch, provenance: null);
 
+    /// <param name="baseBranch">
+    /// Where a new worktree branch starts: <c>origin/&lt;name&gt;</c> or a local branch. Null means the
+    /// repository's default (<see cref="ResolveDefaultBaseAsync"/>).
+    /// </param>
+    /// <param name="fetchOrigin">Fetch an <c>origin/…</c> base before starting from it.</param>
     public async Task<Result<Workspace>> CreateWorkspaceAsync(
         string sourceDirectory,
         string strategy,
         string? branch,
-        ProvenanceRecord? provenance)
+        ProvenanceRecord? provenance,
+        string? baseBranch = null,
+        bool fetchOrigin = true)
     {
+        if (baseBranch is not null && !IsValidBranchName(baseBranch))
+            return FleetError.ValidationError("Workspace.BaseBranch", $"'{baseBranch}' is not a valid branch name.");
+
         string workingDirectory;
 
         // Cloud mode: override strategy to "managed" and derive path under WorkspaceRoot
@@ -64,7 +74,7 @@ public sealed partial class WorkspaceService(
                 switch (strategy)
                 {
                     case "worktree":
-                        (workingDirectory, branch) = await CreateWorktreeAsync(sourceDirectory, branch);
+                        (workingDirectory, branch) = await CreateWorktreeAsync(sourceDirectory, branch, baseBranch, fetchOrigin);
                         break;
                     case "clone":
                         workingDirectory = await CreateCloneAsync(sourceDirectory, branch);
@@ -239,12 +249,17 @@ public sealed partial class WorkspaceService(
 
     /// <summary>
     /// Creates a worktree next to the repository and returns its directory and branch.
-    /// A requested branch that exists and isn't checked out anywhere is checked out as is.
-    /// Otherwise a new branch starts from the repository's default branch, never from
-    /// whatever the main checkout happens to have checked out. When the branch is checked
-    /// out elsewhere, or the folder is taken, a numeric suffix is added.
+    /// With no <paramref name="baseBranch"/>, a requested branch that exists and isn't checked out
+    /// anywhere is checked out as is; otherwise a new branch starts from the repository's default
+    /// branch, never from whatever the main checkout happens to have checked out. A chosen base
+    /// always gets a new branch that starts there. When the branch is checked out elsewhere or
+    /// already exists, or the folder is taken, a numeric suffix is added.
     /// </summary>
-    private async Task<(string Directory, string Branch)> CreateWorktreeAsync(string sourceDir, string? branch)
+    private async Task<(string Directory, string Branch)> CreateWorktreeAsync(
+        string sourceDir,
+        string? branch,
+        string? baseBranch,
+        bool fetchOrigin)
     {
         var requestedBranch = branch ?? $"weave-session-{Guid.NewGuid().ToString("N")[..8]}";
 
@@ -263,7 +278,8 @@ public sealed partial class WorkspaceService(
         await TryRunGitAsync(sourceDir, "worktree", "prune");
 
         var checkedOutBranches = await GetCheckedOutBranchesAsync(sourceDir);
-        var reuseExistingBranch = !checkedOutBranches.Contains(requestedBranch)
+        var reuseExistingBranch = baseBranch is null
+            && !checkedOutBranches.Contains(requestedBranch)
             && await RefExistsAsync(sourceDir, $"refs/heads/{requestedBranch}");
 
         var branchName = requestedBranch;
@@ -272,6 +288,9 @@ public sealed partial class WorkspaceService(
             for (var n = 2; checkedOutBranches.Contains(branchName) || await RefExistsAsync(sourceDir, $"refs/heads/{branchName}"); n++)
                 branchName = $"{requestedBranch}-{n}";
         }
+
+        // Resolved (and fetched) before anything is created, so an unknown base leaves nothing behind.
+        var baseRef = reuseExistingBranch ? null : await ResolveBaseRefAsync(sourceDir, baseBranch, fetchOrigin);
 
         var worktreeDir = ResolveFreeWorktreeDirectory(worktreesRoot, branchName);
         Directory.CreateDirectory(worktreesRoot);
@@ -282,7 +301,6 @@ public sealed partial class WorkspaceService(
         }
         else
         {
-            var baseRef = await ResolveBaseRefAsync(sourceDir);
             // --no-track: origin/main is where the branch starts, not where it gets pushed.
             string[] args = baseRef is null
                 ? ["worktree", "add", "-b", branchName, worktreeDir]
@@ -308,26 +326,73 @@ public sealed partial class WorkspaceService(
     }
 
     /// <summary>
-    /// The ref new worktree branches start from: <c>origin/&lt;default&gt;</c>, fetched first
-    /// (best effort), when the repository has an origin; otherwise a local <c>main</c> or
-    /// <c>master</c>; otherwise null, meaning the current HEAD.
+    /// The ref a new worktree branch starts from. A chosen base is <c>origin/&lt;name&gt;</c>, fetched
+    /// first when asked (best effort), or a local branch; it must exist. With no choice it's the
+    /// default from <see cref="ResolveDefaultBaseAsync"/>, fetched first when it's on origin; when
+    /// that isn't there after all, a local <c>main</c> or <c>master</c>; otherwise null, meaning the
+    /// current HEAD.
     /// </summary>
-    private async Task<string?> ResolveBaseRefAsync(string sourceDir)
+    private async Task<string?> ResolveBaseRefAsync(string sourceDir, string? baseBranch, bool fetchOrigin)
+    {
+        if (baseBranch is not null)
+        {
+            if (baseBranch.StartsWith(OriginPrefix, StringComparison.Ordinal))
+            {
+                if (fetchOrigin)
+                    await FetchOriginBranchAsync(sourceDir, baseBranch[OriginPrefix.Length..]);
+
+                if (await RefExistsAsync(sourceDir, $"refs/remotes/{baseBranch}"))
+                    return baseBranch;
+            }
+            else if (await RefExistsAsync(sourceDir, $"refs/heads/{baseBranch}"))
+            {
+                return baseBranch;
+            }
+
+            throw new GitCommandException("worktree add", $"there's no branch {baseBranch} to start from");
+        }
+
+        var defaults = await ResolveDefaultBaseAsync(sourceDir);
+        if (defaults.Ref is null || !defaults.Ref.StartsWith(OriginPrefix, StringComparison.Ordinal))
+            return defaults.Ref;
+
+        if (fetchOrigin)
+            await FetchOriginBranchAsync(sourceDir, defaults.Branch!);
+
+        if (await RefExistsAsync(sourceDir, $"refs/remotes/{defaults.Ref}"))
+            return defaults.Ref;
+
+        return await FirstLocalDefaultCandidateAsync(sourceDir);
+    }
+
+    private async Task FetchOriginBranchAsync(string sourceDir, string branch)
+    {
+        if (await TryRunGitAsync(sourceDir, _baseFetchTimeout, "fetch", "--quiet", "--no-tags", "origin", branch) is null)
+            LogBaseFetchFailed(sourceDir, branch);
+    }
+
+    /// <summary>
+    /// The repository's default branch and the ref a new worktree starts from when none is chosen,
+    /// without fetching: <c>origin/&lt;default&gt;</c> when the repository has an origin that knows
+    /// its default; otherwise a local <c>main</c> or <c>master</c>; otherwise nothing (the worktree
+    /// starts from HEAD).
+    /// </summary>
+    public static async Task<DefaultWorktreeBase> ResolveDefaultBaseAsync(string sourceDir)
     {
         var remotes = await TryRunGitAsync(sourceDir, "remote");
         if (remotes is not null && ParseLines(remotes).Contains("origin"))
         {
-            var defaultBranch = await ResolveOriginDefaultBranchAsync(sourceDir);
-            if (defaultBranch is not null)
-            {
-                if (await TryRunGitAsync(sourceDir, _baseFetchTimeout, "fetch", "--quiet", "--no-tags", "origin", defaultBranch) is null)
-                    LogBaseFetchFailed(sourceDir, defaultBranch);
-
-                if (await RefExistsAsync(sourceDir, $"refs/remotes/origin/{defaultBranch}"))
-                    return $"origin/{defaultBranch}";
-            }
+            var originDefault = await ResolveOriginDefaultBranchAsync(sourceDir);
+            if (originDefault is not null)
+                return new DefaultWorktreeBase(originDefault, $"{OriginPrefix}{originDefault}");
         }
 
+        var local = await FirstLocalDefaultCandidateAsync(sourceDir);
+        return new DefaultWorktreeBase(local, local);
+    }
+
+    private static async Task<string?> FirstLocalDefaultCandidateAsync(string sourceDir)
+    {
         foreach (var candidate in _defaultBranchCandidates)
         {
             if (await RefExistsAsync(sourceDir, $"refs/heads/{candidate}"))
@@ -337,6 +402,35 @@ public sealed partial class WorkspaceService(
         return null;
     }
 
+    /// <summary>
+    /// Whether <paramref name="name"/> can be a branch (the rules of <c>git check-ref-format --branch</c>),
+    /// so a base can never be read by git as an option or a refspec with a destination.
+    /// </summary>
+    public static bool IsValidBranchName(string name)
+    {
+        if (name.Length is 0 or > 255
+            || name[0] is '-' or '/' or '.' or '+'
+            || name[^1] is '/' or '.'
+            || name.EndsWith(".lock", StringComparison.Ordinal)
+            || name.Contains("..", StringComparison.Ordinal)
+            || name.Contains("//", StringComparison.Ordinal)
+            || name.Contains("/.", StringComparison.Ordinal)
+            || name.Contains("@{", StringComparison.Ordinal)
+            || name == "@")
+        {
+            return false;
+        }
+
+        foreach (var c in name)
+        {
+            if (char.IsControl(c) || c is ' ' or '~' or '^' or ':' or '?' or '*' or '[' or '\\')
+                return false;
+        }
+
+        return true;
+    }
+
+    private const string OriginPrefix = "origin/";
     private static readonly string[] _defaultBranchCandidates = ["main", "master"];
 
     private static async Task<string?> ResolveOriginDefaultBranchAsync(string sourceDir)
@@ -474,3 +568,10 @@ public sealed partial class WorkspaceService(
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't fetch origin/{Branch} in {Dir}; starting the worktree from the last fetched copy")]
     private partial void LogBaseFetchFailed(string dir, string branch);
 }
+
+/// <summary>
+/// A repository's default branch (e.g. <c>main</c>) and the ref a new worktree starts from when no
+/// base is chosen (e.g. <c>origin/main</c>); both null when there's neither an origin default nor a
+/// local main or master.
+/// </summary>
+public sealed record DefaultWorktreeBase(string? Branch, string? Ref);

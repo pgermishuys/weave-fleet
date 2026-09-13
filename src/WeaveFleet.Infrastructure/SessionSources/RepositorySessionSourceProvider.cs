@@ -67,6 +67,13 @@ public sealed class RepositorySessionSourceProvider(
         if (isolationStrategy.IsFailure)
             return isolationStrategy.Error;
 
+        var baseBranch = WorktreeBaseInput.Normalize(
+            input.BaseBranch,
+            isolationStrategy.Value,
+            usesExistingWorktree: !string.IsNullOrWhiteSpace(input.ExistingWorktreePath));
+        if (baseBranch.IsFailure)
+            return baseBranch.Error;
+
         // When an existing worktree path is supplied with the "worktree" strategy,
         // validate that path and use it directly (no new worktree is created).
         if (string.Equals(isolationStrategy.Value, "worktree", StringComparison.Ordinal)
@@ -120,7 +127,7 @@ public sealed class RepositorySessionSourceProvider(
         return new ResolvedSessionSource(
             descriptor,
             new ResolvedSessionInput(
-                new WorkspaceIntent(canonicalPath, isolationStrategy.Value, branch),
+                new WorkspaceIntent(canonicalPath, isolationStrategy.Value, branch, baseBranch.Value, input.FetchOrigin ?? true),
                 null,
                 new ProvenanceRecord(
                     ProviderId,

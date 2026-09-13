@@ -64,7 +64,10 @@ public sealed record RepositoryDetailDto(
     IReadOnlyList<RepositoryCommitItem> RecentCommits,
     IReadOnlyList<RepositoryRemoteItem> Remotes,
     string? ReadmeContent,
-    string? ReadmeFilename);
+    string? ReadmeFilename,
+    // The default branch (e.g. main) and the ref a new worktree starts from when none is chosen (e.g. origin/main).
+    string? DefaultBranch,
+    string? DefaultBase);
 
 public sealed record RepositoryBranchItem(
     string Name,

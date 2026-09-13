@@ -68,10 +68,14 @@ public sealed record SessionSourceSelection
     public required JsonElement Input { get; init; }
 }
 
+/// <param name="BaseBranch">Where a new worktree starts (<c>origin/&lt;name&gt;</c> or a local branch); null for the repository's default.</param>
+/// <param name="FetchOrigin">Fetch an <c>origin/…</c> base before starting from it.</param>
 public sealed record WorkspaceIntent(
     string Directory,
     string IsolationStrategy,
-    string? Branch);
+    string? Branch,
+    string? BaseBranch = null,
+    bool FetchOrigin = true);
 
 public sealed record ContextEnvelope(
     string OriginLabel,
@@ -132,7 +136,10 @@ public static class SessionSourceCatalog
         [
             new SessionSourceInputField("repositoryPath", "string", true, null, "Canonical repository directory path."),
             new SessionSourceInputField("isolationStrategy", "string", false, ["existing", "worktree"], "Repository workspace isolation mode."),
-            new SessionSourceInputField("branch", "string", false, null, "Optional branch for isolated workspaces.")
+            new SessionSourceInputField("branch", "string", false, null, "Optional branch for isolated workspaces."),
+            new SessionSourceInputField("existingWorktreePath", "string", false, null, "Existing worktree of the repository to run in, instead of creating one."),
+            new SessionSourceInputField("baseBranch", "string", false, null, "Where a new worktree starts: origin/<name> or a local branch. Defaults to the repository's default branch."),
+            new SessionSourceInputField("fetchOrigin", "boolean", false, null, "Fetch an origin/… base before starting from it. Defaults to true.")
         ],
         ProducesWorkspace: true,
         ProducesContext: false,

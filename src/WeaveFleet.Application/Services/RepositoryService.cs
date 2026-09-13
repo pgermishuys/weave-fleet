@@ -101,7 +101,10 @@ public sealed partial class RepositoryService(
         return results;
     }
 
-    /// <summary>Returns enriched detail for a single repository (includes branch list, remotes, etc.).</summary>
+    /// <summary>
+    /// Returns enriched detail for a single repository: local and origin branches (most recent
+    /// commit first), remotes, recent commits, and where a new worktree starts by default.
+    /// </summary>
     public async Task<RepositoryDetail?> GetRepositoryDetailAsync(string path, CancellationToken ct = default)
     {
         var normalizedPath = WorkspaceRootService.CanonicalizePath(path);
@@ -109,15 +112,62 @@ public sealed partial class RepositoryService(
         if (info is null)
             return null;
 
-        var branches = await RunGitAsync(normalizedPath, ["branch", "--list", "--sort=-committerdate"], ct).ConfigureAwait(false);
+        var branches = await RunGitAsync(
+            normalizedPath,
+            ["for-each-ref", "--sort=-committerdate", "--format=%(refname)%00%(objectname:short)%00%(committerdate:iso-strict)%00%(subject)", "refs/heads", "refs/remotes/origin"],
+            ct).ConfigureAwait(false);
         var remotes = await RunGitAsync(normalizedPath, ["remote", "-v"], ct).ConfigureAwait(false);
         var log = await RunGitAsync(normalizedPath, ["log", "--oneline", "-10"], ct).ConfigureAwait(false);
+        var defaultBase = await WorkspaceService.ResolveDefaultBaseAsync(normalizedPath).ConfigureAwait(false);
 
         return new RepositoryDetail(
             Info: info,
-            Branches: ParseLines(branches),
+            Branches: ParseBranchRefs(branches),
             Remotes: ParseLines(remotes),
-            RecentCommits: ParseLines(log));
+            RecentCommits: ParseLines(log),
+            DefaultBase: defaultBase);
+    }
+
+    /// <summary>
+    /// Parses <c>for-each-ref</c> lines (refname, short hash, date, subject, NUL-separated) into
+    /// branches named as git shows them: <c>main</c>, <c>origin/main</c>. Skips <c>origin/HEAD</c>.
+    /// </summary>
+    internal static IReadOnlyList<BranchRef> ParseBranchRefs(string output)
+    {
+        const string localPrefix = "refs/heads/";
+        const string remotePrefix = "refs/remotes/";
+        var results = new List<BranchRef>();
+
+        foreach (var line in ParseLines(output))
+        {
+            var fields = line.Split('\0');
+            if (fields.Length < 4)
+                continue;
+
+            var refName = fields[0];
+            string name;
+            bool isRemote;
+            if (refName.StartsWith(localPrefix, StringComparison.Ordinal))
+            {
+                name = refName[localPrefix.Length..];
+                isRemote = false;
+            }
+            else if (refName.StartsWith(remotePrefix, StringComparison.Ordinal))
+            {
+                name = refName[remotePrefix.Length..];
+                isRemote = true;
+                if (name.EndsWith("/HEAD", StringComparison.Ordinal))
+                    continue;
+            }
+            else
+            {
+                continue;
+            }
+
+            results.Add(new BranchRef(name, isRemote, fields[1], fields[3], fields[2]));
+        }
+
+        return results;
     }
 
     public async Task<Result<string>> ResolveRepositoryPathAsync(string path, CancellationToken ct = default)
@@ -353,6 +403,15 @@ public sealed record WorktreeInfo(
 /// <summary>Enriched repository detail.</summary>
 public sealed record RepositoryDetail(
     RepositoryInfo Info,
-    IReadOnlyList<string> Branches,
+    IReadOnlyList<BranchRef> Branches,
     IReadOnlyList<string> Remotes,
-    IReadOnlyList<string> RecentCommits);
+    IReadOnlyList<string> RecentCommits,
+    DefaultWorktreeBase DefaultBase);
+
+/// <summary>A local branch (<c>main</c>) or one of origin's (<c>origin/main</c>) with its latest commit.</summary>
+public sealed record BranchRef(
+    string Name,
+    bool IsRemote,
+    string ShortHash,
+    string Subject,
+    string Date);
