@@ -23,4 +23,30 @@ public sealed record SessionProgressDto(
     int Total,
     string? Current,
     IReadOnlyList<TodoEntry> Todos,
-    string UpdatedAt);
+    string UpdatedAt)
+{
+    /// <summary>The plan the counts come from, when the session is working through one.</summary>
+    public SessionPlanDto? Plan { get; init; }
+}
+
+/// <summary>A checklist plan as the Progress tab shows it.</summary>
+/// <param name="Path">Where the file is, relative to the session's directory.</param>
+/// <param name="TrackedSince">When Fleet first read the file; boxes ticked before then have no tick time.</param>
+public sealed record SessionPlanDto(
+    string Path,
+    string? Title,
+    string TrackedSince,
+    IReadOnlyList<SessionPlanGroupDto> Groups);
+
+public sealed record SessionPlanGroupDto(string? Title, IReadOnlyList<SessionPlanStepDto> Steps);
+
+/// <param name="TickedAt">When Fleet saw the box get ticked; null if before it was watching, or not ticked.</param>
+public sealed record SessionPlanStepDto(
+    string Key,
+    string? Number,
+    string Title,
+    bool Checked,
+    int SubDone,
+    int SubTotal,
+    string? TickedAt,
+    string? TickedInMessageId);

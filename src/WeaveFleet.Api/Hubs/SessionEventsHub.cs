@@ -381,6 +381,7 @@ public class SessionEventsHub : Hub
         DelegationCompleted     => "delegation.completed",
         FilesChanged            => "files.changed",
         TodosReported           => "todos.reported",
+        FilesWritten            => "files.written",
         CanvasUpdated           => "canvas.updated",
         CanvasClosed            => "canvas.closed",
         CanvasFocused           => "canvas.focused",

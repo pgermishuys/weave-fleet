@@ -50,6 +50,45 @@ public sealed class SessionProgressRepositoryTests
     }
 
     [Fact]
+    public async Task UpsertAsync_RoundTripsPlansWithTheirTicks()
+    {
+        var (keeper, _, repo, session) = await CreateAsync();
+        using var _ = keeper;
+        var plan = new TrackedPlan
+        {
+            Path = ".weave/plans/thin-proxy.md",
+            Title = "Thin Proxy Simplification",
+            TrackedSince = Now,
+            LastWrittenAt = Now.AddMinutes(9),
+            LastTickedAt = Now.AddMinutes(9),
+            Groups =
+            [
+                new TrackedPlanGroup
+                {
+                    Title = "Phase 4: Delete dead code and tables",
+                    Steps =
+                    [
+                        new TrackedPlanStep { Key = "10", Number = "10", Title = "Remove repository classes", Checked = true },
+                        new TrackedPlanStep
+                        {
+                            Key = "11", Number = "11", Title = "Add migration to drop dead tables", Checked = true,
+                            SubDone = 1, SubTotal = 2, TickedAt = Now.AddMinutes(9), TickedInMessageId = "msg-9",
+                        },
+                        new TrackedPlanStep { Key = "12", Number = "12", Title = "Remove `ApplyStreamingDeltas`" },
+                    ],
+                },
+            ],
+        };
+
+        await repo.UpsertAsync(Progress(session.Id) with { Kind = SessionProgressKinds.Plan, Plans = [plan] }, CancellationToken.None);
+
+        var stored = (await repo.GetAsync(session.Id, CancellationToken.None)).ShouldNotBeNull();
+        var storedPlan = stored.Plans.ShouldHaveSingleItem();
+        (storedPlan.Path, storedPlan.Title, storedPlan.TrackedSince, storedPlan.LastTickedAt).ShouldBe((plan.Path, plan.Title, Now, Now.AddMinutes(9)));
+        storedPlan.Groups.ShouldHaveSingleItem().Steps.ShouldBe(plan.Groups[0].Steps);
+    }
+
+    [Fact]
     public async Task UpsertAsync_ReplacesExistingProgress()
     {
         var (keeper, _, repo, session) = await CreateAsync();

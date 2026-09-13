@@ -21,6 +21,7 @@ namespace WeaveFleet.Domain.Events;
 [JsonDerivedType(typeof(DelegationCompleted), "delegation.completed")]
 [JsonDerivedType(typeof(FilesChanged), "files.changed")]
 [JsonDerivedType(typeof(TodosReported), "todos.reported")]
+[JsonDerivedType(typeof(FilesWritten), "files.written")]
 [JsonDerivedType(typeof(CanvasUpdated), "canvas.updated")]
 [JsonDerivedType(typeof(CanvasClosed), "canvas.closed")]
 [JsonDerivedType(typeof(CanvasFocused), "canvas.focused")]

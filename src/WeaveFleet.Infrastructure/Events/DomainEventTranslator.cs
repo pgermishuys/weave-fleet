@@ -65,6 +65,7 @@ internal sealed class DomainEventTranslator
             DelegationCompletedEventType => TranslateDelegationCompleted(evt),
             EventTypes.FileWatcherUpdated => TranslateFileWatcherUpdated(evt),
             EventTypes.TodosReported => TranslateTodosReported(evt),
+            EventTypes.FilesWritten => TranslateFilesWritten(evt),
 
             // message.removed and message.part.removed are durable persistence signals only.
             EventTypes.MessageRemoved or EventTypes.MessagePartRemoved => null,
@@ -360,6 +361,26 @@ internal sealed class DomainEventTranslator
             {
                 SessionId = ResolveSessionId(evt),
                 Items = items,
+            }
+        };
+    }
+
+    private static FilesWritten? TranslateFilesWritten(HarnessEvent evt)
+    {
+        var payload = DeserializePayload(evt, InfrastructureJsonContext.Default.FilesWrittenPayload);
+        var paths = payload?.Paths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (payload is null || paths is not { Count: > 0 })
+            return null;
+
+        return new FilesWritten
+        {
+            Payload = payload with
+            {
+                SessionId = ResolveSessionId(evt),
+                Paths = paths,
             }
         };
     }

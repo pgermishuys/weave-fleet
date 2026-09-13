@@ -29,6 +29,9 @@ public sealed record HarnessCapabilities
 
     /// <summary>The harness sends the agent's todo list as <see cref="EventTypes.TodosReported"/> events.</summary>
     public bool ReportsTodos { get; init; }
+
+    /// <summary>The harness sends the files the agent writes as <see cref="EventTypes.FilesWritten"/> events.</summary>
+    public bool ReportsFileWrites { get; init; }
 }
 
 /// <summary>Whether a harness binary/service is available on this machine.</summary>

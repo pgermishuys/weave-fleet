@@ -49,6 +49,38 @@ public sealed record TodoEntry
 }
 
 /// <summary>
+/// Raised when the agent finished writing files with a tool: an edit, a new file, a patch.
+/// </summary>
+public sealed record FilesWritten : DomainEvent
+{
+    /// <summary>
+    /// Gets the strongly typed payload for the files-written event.
+    /// </summary>
+    public required FilesWrittenPayload Payload { get; init; }
+}
+
+/// <summary>
+/// Payload naming the files one tool call wrote.
+/// </summary>
+public sealed record FilesWrittenPayload
+{
+    /// <summary>
+    /// Gets the Fleet session identifier.
+    /// </summary>
+    public string SessionId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Gets the message the tool call belongs to, when the harness says.
+    /// </summary>
+    public string? MessageId { get; init; }
+
+    /// <summary>
+    /// Gets the absolute paths the call wrote.
+    /// </summary>
+    public IReadOnlyList<string> Paths { get; init; } = [];
+}
+
+/// <summary>
 /// The statuses a todo item can have.
 /// </summary>
 public static class TodoStatuses

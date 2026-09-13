@@ -54,6 +54,11 @@ internal sealed partial class SessionProgressService(
         {
             TodosReported todos => SessionProgressTracker.ApplyTodos(
                 current, observed.SessionId, observed.UserId, todos.Payload.Items, observed.At),
+            FilesWritten written => await ApplyPlanFilesAsync(
+                scope.ServiceProvider, current, observed, written.Payload.Paths, written.Payload.MessageId, ct).ConfigureAwait(false),
+            // A turn ended: read the plans again, to catch ticks made by a shell command or in an editor.
+            SessionIdled when current is { Plans.Count: > 0 } => await ApplyPlanFilesAsync(
+                scope.ServiceProvider, current, observed, [.. current.Plans.Select(plan => plan.Path)], messageId: null, ct).ConfigureAwait(false),
             _ => null,
         };
 
@@ -71,6 +76,47 @@ internal sealed partial class SessionProgressService(
             .ConfigureAwait(false);
 
         return next;
+    }
+
+    /// <summary>
+    /// Reads each markdown file from the session's folder and applies what it says. Paths are absolute or relative
+    /// to the session's folder. Returns <see langword="null"/> when no plan changed.
+    /// </summary>
+    private static async Task<SessionProgress?> ApplyPlanFilesAsync(
+        IServiceProvider services,
+        SessionProgress? current,
+        ObservedProgressEvent observed,
+        IReadOnlyList<string> paths,
+        string? messageId,
+        CancellationToken ct)
+    {
+        var candidates = paths.Where(PlanFileReader.IsMarkdown).ToList();
+        if (candidates.Count == 0)
+            return null;
+
+        var session = await services.GetRequiredService<ISessionRepository>().GetByIdAsync(observed.SessionId).ConfigureAwait(false);
+        if (session is null || string.IsNullOrWhiteSpace(session.Directory))
+            return null;
+
+        var progress = current;
+        var changed = false;
+        foreach (var path in candidates)
+        {
+            var read = await PlanFileReader.ReadAsync(session.Directory, path, ct).ConfigureAwait(false);
+            if (read.Status == PlanFileStatus.Refused)
+                continue;
+
+            var document = read.Status == PlanFileStatus.Read ? ChecklistPlanParser.Parse(read.Content!) : null;
+            var next = SessionProgressTracker.ApplyPlanFile(
+                progress, observed.SessionId, observed.UserId, read.RelativePath!, document, messageId, observed.At);
+            if (next is null)
+                continue;
+
+            progress = next;
+            changed = true;
+        }
+
+        return changed ? progress : null;
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't update progress for session {SessionId}.")]

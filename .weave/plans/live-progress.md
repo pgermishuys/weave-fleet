@@ -174,7 +174,7 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
 
 ### Phase 2: Plans from checklist files
 
-- [ ] 7. Add the `files.written` Fleet event and map OpenCode's file tools
+- [x] 7. Add the `files.written` Fleet event and map OpenCode's file tools
   - **What**: Add `EventTypes.FilesWritten = "files.written"` and a `FilesWritten` domain event with `{ SessionId, MessageId, Paths }` (absolute paths). The OpenCode adapter sends it for completed `edit` and `write` tool parts (`state.input.filePath`) and `apply_patch` parts (paths from `*** Add File:`, `*** Update File:` and `*** Move to:` lines in `state.input.patchText`). Each tool call is reported once, when it completes. Add a `ReportsFileWrites` capability. This isn't `FilesChanged`, which comes from the file watcher and has no message.
   - **Files**:
     - `src/WeaveFleet.Domain/Harnesses/EventTypes.cs`, `src/WeaveFleet.Domain/Events/ProgressEvents.cs`, `src/WeaveFleet.Domain/Harnesses/HarnessTypes.cs`
@@ -183,9 +183,9 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
   - **Depends on**: Task 1
   - **Acceptance**:
     - Mapper tests cover all three tools, relative and absolute paths, a multi-file patch, and running parts (no event until the part completes)
-    - A conformance test asserts the `edit` part shape from real OpenCode
+    - The `write` and `edit` part shapes are pinned against real OpenCode by `SessionProgressLiveTests`, for the same reason as Task 2
 
-- [ ] 8. Add a checklist plan parser
+- [x] 8. Add a checklist plan parser
   - **What**: A pure `ChecklistPlanParser` in the Application layer that turns markdown into `PlanDocument { Title, Groups[{ Title?, Steps[{ Number?, Title, Checked, SubDone, SubTotal, Mentions }] }] }`.
     - The title is the first `#` heading.
     - A group is the nearest heading above its steps; a flat list has one group with no title.
@@ -203,15 +203,13 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
     - `thin-proxy-simplification.md` parses to 6 groups and 17 steps; `session-tags.md` parses to 1 untitled group and 13 steps
     - Code fences, nested boxes, `[X]`, CRLF line endings and a file with no checkboxes all pass tests
 
-- [ ] 9. Track plans and ticks
+- [x] 9. Track plans and ticks
   - **What**: In the tracker and service:
     - When `FilesWritten` names a `.md` file inside the session's directory (256 KB or less, symlinks resolved), read and parse it.
     - Compare with the last version seen for that session and file. Each box that has flipped to checked becomes a tick with its time and message id. Boxes already checked when Fleet first sees a file get no time; the UI says "tracked since".
-    - A file becomes the session's plan when:
-      - (a) the session ticks a box in it, or
-      - (b) the session creates it with 3 or more boxes, as the planning session does.
-
-      That keeps an edit to a PR template or README from turning it into the plan.
+    - A `.md` file the session writes becomes a plan when it has 3 or more unindented checkboxes, whether the session created it (the planning session) or ticked it (the executor).
+      - Changed from the first draft ("when the session ticks a box in it"): the first time Fleet reads a file it has no earlier version, so it can't tell a fresh tick from an old one. Boxes already ticked at that first read count as done without a tick time. The UI says "tracked since".
+      - PR templates and READMEs rarely have 3 or more unindented checkboxes, and agents rarely write them as files.
     - When a session touches more than one plan, the one ticked most recently wins.
     - On `SessionIdle`, re-read the session's plan files. That catches ticks made by shell commands or by the user in an editor.
     - The current step is the first unticked one. The live todo list belongs to it.

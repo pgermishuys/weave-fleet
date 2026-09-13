@@ -33,6 +33,12 @@ public static class EventTypes
     /// </summary>
     public const string TodosReported = "todos.reported";
 
+    /// <summary>
+    /// The agent finished writing files. Fleet's own event: each harness adapter reports its file-writing tool
+    /// calls with a <c>FilesWrittenPayload</c>, once per call.
+    /// </summary>
+    public const string FilesWritten = "files.written";
+
     /// <summary>Returns <c>true</c> if the event type is a permission event (i.e. starts with "permission.").</summary>
     public static bool IsPermissionEvent(string type) =>
         type.StartsWith("permission.", StringComparison.Ordinal);

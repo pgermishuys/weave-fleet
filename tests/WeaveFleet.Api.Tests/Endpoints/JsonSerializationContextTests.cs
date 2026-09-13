@@ -37,7 +37,7 @@ public sealed class JsonSerializationContextTests
         var json = JsonSerializer.Serialize(progress, ApiJsonContext.Default.SessionProgressDto);
 
         Assert.Equal(
-            """{"sessionId":"s1","kind":"todos","done":1,"total":2,"current":"Drop the indexes","todos":[{"content":"Drop the indexes","status":"in_progress","priority":null}],"updatedAt":"2026-09-13T12:24:00.0000000Z"}""",
+            """{"sessionId":"s1","kind":"todos","done":1,"total":2,"current":"Drop the indexes","todos":[{"content":"Drop the indexes","status":"in_progress","priority":null}],"updatedAt":"2026-09-13T12:24:00.0000000Z","plan":null}""",
             json);
         Assert.NotNull(ApiJsonContext.Default.GetTypeInfo(typeof(WeaveFleet.Application.DTOs.SessionProgressSummaryDto)));
     }

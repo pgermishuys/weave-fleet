@@ -1226,4 +1226,116 @@ public sealed class OpenCodeMapperTests
 
     private static OpenCodeSseEvent TodoUpdatedEvent(string properties)
         => new() { Type = "todo.updated", Properties = JsonDocument.Parse(properties).RootElement };
+
+    // ---------------------------------------------------------------------------
+    // TryMapFilesWritten — edit, write and apply_patch tool parts
+    // ---------------------------------------------------------------------------
+
+    private static OpenCodeSseEvent ToolPart(string tool, string status, string input, string callId = "call-1")
+        => new()
+        {
+            Type = "message.part.updated",
+            Properties = JsonDocument.Parse($$"""
+                {
+                  "part": {
+                    "id": "prt_1",
+                    "sessionID": "oc-1",
+                    "messageID": "msg-1",
+                    "type": "tool",
+                    "tool": "{{tool}}",
+                    "callID": "{{callId}}",
+                    "state": { "status": "{{status}}", "input": {{input}} }
+                  }
+                }
+                """).RootElement,
+        };
+
+    private static readonly string WorkDir = Path.Combine(Path.GetTempPath(), "fleet-work");
+
+    [Theory]
+    [InlineData("edit")]
+    [InlineData("write")]
+    public void TryMapFilesWritten_CompletedEditOrWrite_ReportsItsFile(string tool)
+    {
+        var planPath = Path.Combine(WorkDir, ".weave", "plans", "thin-proxy.md");
+        var evt = ToolPart(tool, "completed", JsonSerializer.Serialize(new { filePath = planPath, oldString = "- [ ] 11.", newString = "- [x] 11." }));
+
+        var result = OpenCodeMapper.TryMapFilesWritten(evt, "oc-1", "fleet-1", WorkDir);
+
+        result.ShouldNotBeNull();
+        result.Value.CallId.ShouldBe("call-1");
+        result.Value.Event.Type.ShouldBe(EventTypes.FilesWritten);
+        result.Value.Event.FleetSessionId.ShouldBe("fleet-1");
+        var payload = result.Value.Event.Payload!.Value;
+        payload.GetProperty("messageId").GetString().ShouldBe("msg-1");
+        payload.GetProperty("paths").EnumerateArray().Select(p => p.GetString()).ShouldBe([planPath]);
+    }
+
+    [Fact]
+    public void TryMapFilesWritten_RelativePath_ResolvesAgainstTheWorkingDirectory()
+    {
+        var evt = ToolPart("write", "completed", """{ "filePath": "docs/plan.md", "content": "- [ ] One" }""");
+
+        var result = OpenCodeMapper.TryMapFilesWritten(evt, "oc-1", null, WorkDir);
+
+        result!.Value.Event.Payload!.Value.GetProperty("paths")[0].GetString()
+            .ShouldBe(Path.GetFullPath(Path.Combine(WorkDir, "docs", "plan.md")));
+    }
+
+    [Fact]
+    public void TryMapFilesWritten_ApplyPatch_ReportsEveryFileItWrites()
+    {
+        var patch = string.Join("\n",
+            "*** Begin Patch",
+            "*** Update File: .weave/plans/thin-proxy.md",
+            "@@",
+            "-- [ ] 11. Add migration",
+            "+- [x] 11. Add migration",
+            "*** Add File: src/New.cs",
+            "+class New {}",
+            "*** Update File: src/Old.cs",
+            "*** Move to: src/Renamed.cs",
+            "*** Delete File: src/Gone.cs",
+            "*** End Patch");
+        var evt = ToolPart("apply_patch", "completed", JsonSerializer.Serialize(new { patchText = patch }));
+
+        var result = OpenCodeMapper.TryMapFilesWritten(evt, "oc-1", null, WorkDir);
+
+        result!.Value.Event.Payload!.Value.GetProperty("paths").EnumerateArray().Select(p => p.GetString()).ShouldBe(
+        [
+            Path.GetFullPath(Path.Combine(WorkDir, ".weave/plans/thin-proxy.md")),
+            Path.GetFullPath(Path.Combine(WorkDir, "src/New.cs")),
+            Path.GetFullPath(Path.Combine(WorkDir, "src/Old.cs")),
+            Path.GetFullPath(Path.Combine(WorkDir, "src/Renamed.cs")),
+        ]);
+    }
+
+    [Theory]
+    [InlineData("edit", "running")]
+    [InlineData("edit", "pending")]
+    [InlineData("edit", "error")]
+    [InlineData("bash", "completed")]
+    [InlineData("read", "completed")]
+    public void TryMapFilesWritten_CallsThatWroteNothing_ReturnNull(string tool, string status)
+    {
+        var evt = ToolPart(tool, status, """{ "filePath": "/work/a.md", "command": "ls" }""");
+
+        OpenCodeMapper.TryMapFilesWritten(evt, "oc-1", null, WorkDir).ShouldBeNull();
+    }
+
+    [Fact]
+    public void TryMapFilesWritten_OtherEvents_ReturnNull()
+    {
+        var evt = new OpenCodeSseEvent { Type = "todo.updated", Properties = JsonDocument.Parse("""{ "todos": [] }""").RootElement };
+
+        OpenCodeMapper.TryMapFilesWritten(evt, "oc-1", null, WorkDir).ShouldBeNull();
+    }
+
+    [Fact]
+    public void TryMapFilesWritten_RelativePathWithoutAWorkingDirectory_IsSkipped()
+    {
+        var evt = ToolPart("write", "completed", """{ "filePath": "docs/plan.md" }""");
+
+        OpenCodeMapper.TryMapFilesWritten(evt, "oc-1", null, workingDirectory: "").ShouldBeNull();
+    }
 }

@@ -29,5 +29,6 @@ public sealed class OpenCodeHarness : IHarness
         SupportsStreaming = true,
         SupportsDelegation = true,
         ReportsTodos = true,
+        ReportsFileWrites = true,
     };
 }

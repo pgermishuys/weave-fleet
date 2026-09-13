@@ -215,6 +215,96 @@ internal static class OpenCodeMapper
         };
     }
 
+    /// <summary>
+    /// Maps a completed <c>edit</c>, <c>write</c> or <c>apply_patch</c> tool part to Fleet's
+    /// <see cref="EventTypes.FilesWritten"/> event, with the call id so the caller reports each call once.
+    /// <c>edit</c> and <c>write</c> name their file in <c>input.filePath</c>; <c>apply_patch</c> names its files in
+    /// <c>input.patchText</c>. Relative paths resolve against <paramref name="workingDirectory"/>. Returns
+    /// <see langword="null"/> for any other event, and for calls still running or failed.
+    /// </summary>
+    internal static (HarnessEvent Event, string CallId)? TryMapFilesWritten(
+        OpenCodeSseEvent evt,
+        string sessionId,
+        string? fleetSessionId,
+        string workingDirectory)
+    {
+        if (evt.Type != EventTypes.MessagePartUpdated
+            || evt.Properties.ValueKind != JsonValueKind.Object
+            || !evt.Properties.TryGetProperty("part", out var part)
+            || part.ValueKind != JsonValueKind.Object
+            || !HasStringProperty(part, "type", out var partType) || partType != "tool"
+            || !HasStringProperty(part, "tool", out var tool)
+            || !part.TryGetProperty("state", out var state) || state.ValueKind != JsonValueKind.Object
+            || !HasStringProperty(state, "status", out var status) || status != "completed"
+            || !state.TryGetProperty("input", out var input) || input.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        IReadOnlyList<string> written = tool switch
+        {
+            "edit" or "write" when HasStringProperty(input, "filePath", out var filePath) => [filePath],
+            "apply_patch" when HasStringProperty(input, "patchText", out var patchText) => PatchPaths(patchText),
+            _ => [],
+        };
+
+        var paths = written
+            .Where(path => !string.IsNullOrWhiteSpace(path) && (Path.IsPathRooted(path) || !string.IsNullOrWhiteSpace(workingDirectory)))
+            .Select(path => Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(workingDirectory, path)))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (paths.Count == 0)
+            return null;
+
+        if ((!TryGetStringProperty(part, out var callId, "callID", "callId") || string.IsNullOrWhiteSpace(callId))
+            && (!TryGetStringProperty(part, out callId, "id") || string.IsNullOrWhiteSpace(callId)))
+        {
+            return null;
+        }
+
+        _ = TryGetStringProperty(part, out var messageId, "messageID", "messageId");
+        var payload = new FilesWrittenPayload
+        {
+            SessionId = fleetSessionId ?? string.Empty,
+            MessageId = string.IsNullOrWhiteSpace(messageId) ? null : messageId,
+            Paths = paths,
+        };
+
+        var harnessEvent = new HarnessEvent
+        {
+            Type = EventTypes.FilesWritten,
+            SessionId = sessionId,
+            FleetSessionId = fleetSessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(payload, InfrastructureJsonContext.Default.FilesWrittenPayload),
+        };
+        return (harnessEvent, callId!);
+    }
+
+    /// <summary>The files an <c>apply_patch</c> patch adds, updates or moves to.</summary>
+    internal static IReadOnlyList<string> PatchPaths(string patchText)
+    {
+        var paths = new List<string>();
+        foreach (var rawLine in patchText.Split('\n'))
+        {
+            var line = rawLine.TrimEnd('\r');
+            foreach (var marker in PatchWriteMarkers)
+            {
+                if (!line.StartsWith(marker, StringComparison.Ordinal))
+                    continue;
+
+                var path = line[marker.Length..].Trim();
+                if (path.Length > 0)
+                    paths.Add(path);
+                break;
+            }
+        }
+
+        return paths;
+    }
+
+    private static readonly string[] PatchWriteMarkers = ["*** Add File:", "*** Update File:", "*** Move to:"];
+
     /// <summary>Maps OpenCode todo items to Fleet's, dropping items with no text.</summary>
     internal static IReadOnlyList<TodoEntry> ToTodoEntries(IEnumerable<OpenCodeTodo?> todos)
         => todos

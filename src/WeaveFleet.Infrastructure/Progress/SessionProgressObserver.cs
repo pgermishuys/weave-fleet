@@ -9,7 +9,8 @@ public sealed record ObservedProgressEvent(string SessionId, string UserId, Doma
 /// <summary>
 /// Picks out the Fleet events that change session progress as they pass through the relay and queues them
 /// for <see cref="SessionProgressService"/>. Never blocks the relay: when the queue is full the oldest event
-/// is dropped, and since each todo event carries the whole list, the next one catches up.
+/// is dropped. Each todo event carries the whole list and plans are read again when a turn ends, so later
+/// events catch up.
 /// </summary>
 public sealed class SessionProgressObserver
 {
@@ -20,9 +21,20 @@ public sealed class SessionProgressObserver
 
     public void Observe(string sessionId, string? userId, DomainEvent? domainEvent)
     {
-        if (domainEvent is not TodosReported || string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(sessionId))
+        if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(sessionId))
             return;
 
-        _channel.Writer.TryWrite(new ObservedProgressEvent(sessionId, userId, domainEvent, DateTimeOffset.UtcNow));
+        // Todo lists; files the agent wrote that might be plans; and turn ends, when plans are read again.
+        var relevant = domainEvent switch
+        {
+            TodosReported => true,
+            FilesWritten written => written.Payload.Paths.Any(PlanFileReader.IsMarkdown),
+            SessionIdled => true,
+            _ => false,
+        };
+        if (!relevant)
+            return;
+
+        _channel.Writer.TryWrite(new ObservedProgressEvent(sessionId, userId, domainEvent!, DateTimeOffset.UtcNow));
     }
 }

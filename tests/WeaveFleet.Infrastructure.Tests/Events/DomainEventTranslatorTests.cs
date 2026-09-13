@@ -578,6 +578,45 @@ public sealed class DomainEventTranslatorTests
         classification.IsEphemeralRelay.ShouldBeFalse();
     }
 
+    private static readonly string[] WrittenPaths = ["/work/a.md", "/work/a.md", " ", "/work/b.cs"];
+
+    [Fact]
+    public void Should_translate_files_written_for_the_routed_fleet_session()
+    {
+        var translator = CreateTranslator();
+
+        var result = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.FilesWritten,
+            SessionId = "harness-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { messageId = "msg-1", paths = WrittenPaths }),
+        });
+
+        var written = result.ShouldBeOfType<FilesWritten>();
+        written.Payload.SessionId.ShouldBe("fleet-1");
+        written.Payload.MessageId.ShouldBe("msg-1");
+        written.Payload.Paths.ShouldBe(["/work/a.md", "/work/b.cs"]);
+    }
+
+    [Fact]
+    public void Should_return_null_for_files_written_without_paths()
+    {
+        var translator = CreateTranslator();
+
+        var result = translator.Translate(new HarnessEvent
+        {
+            Type = EventTypes.FilesWritten,
+            SessionId = "harness-1",
+            FleetSessionId = "fleet-1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { paths = Array.Empty<string>() }),
+        });
+
+        result.ShouldBeNull();
+    }
+
     private static DomainEventTranslator CreateTranslator()
         => new(NullLogger<DomainEventTranslator>.Instance);
 

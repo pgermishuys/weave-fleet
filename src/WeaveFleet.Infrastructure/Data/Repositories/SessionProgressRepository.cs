@@ -58,7 +58,7 @@ public sealed class SessionProgressRepository(
 
     public async Task<bool> UpsertAsync(SessionProgress progress, CancellationToken ct)
     {
-        var detail = new SessionProgressDetailJson { Todos = progress.Todos };
+        var detail = new SessionProgressDetailJson { Todos = progress.Todos, Plans = progress.Plans };
 
         using var conn = connectionFactory.CreateConnection();
         var affected = await conn.ExecuteNonQueryAsync(
@@ -113,6 +113,7 @@ public sealed class SessionProgressRepository(
             Total = r.GetInt32(r.GetOrdinal("total")),
             Current = r.GetNullableString(r.GetOrdinal("current")),
             Todos = detail?.Todos ?? [],
+            Plans = detail?.Plans ?? [],
             UpdatedAt = DateTimeOffset.Parse(r.GetString(r.GetOrdinal("updated_at")), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
         };
     }
@@ -122,4 +123,5 @@ public sealed class SessionProgressRepository(
 internal sealed record SessionProgressDetailJson
 {
     public IReadOnlyList<TodoEntry> Todos { get; init; } = [];
+    public IReadOnlyList<TrackedPlan> Plans { get; init; } = [];
 }

@@ -88,6 +88,10 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// </summary>
     private readonly ConcurrentDictionary<string, string> _toolCallToQuestionId = new();
 
+    // Tool calls already reported as files.written, so a re-sent completed part isn't reported twice.
+    private const int MaxRememberedFileWrites = 10_000;
+    private readonly ConcurrentDictionary<string, byte> _reportedFileWrites = new(StringComparer.Ordinal);
+
     private sealed record OpenCodeAgentModelInfo(string? ProviderId, string? ModelId);
 
     /// <summary>Initialises the instance with all required dependencies.</summary>
@@ -376,6 +380,15 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 _ = TryAutoApprovePermissionAsync(harnessEvent);
 
             yield return harnessEvent;
+
+            // Files the agent wrote become Fleet's own event, once per tool call (a completed part can be sent again).
+            if (OpenCodeMapper.TryMapFilesWritten(sseEvt, harnessEvent.SessionId, harnessEvent.FleetSessionId, _workingDirectory) is { } written)
+            {
+                if (_reportedFileWrites.Count >= MaxRememberedFileWrites)
+                    _reportedFileWrites.Clear();
+                if (_reportedFileWrites.TryAdd(written.CallId, 0))
+                    yield return written.Event;
+            }
 
             // Emit synthetic tool-result event if this is a completed tool part with output
             var toolResultEvent = TryBuildToolResultEvent(sseEvt, harnessEvent);

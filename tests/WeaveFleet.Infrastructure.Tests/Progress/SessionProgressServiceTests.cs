@@ -134,7 +134,7 @@ public sealed class SessionProgressServiceTests
         var observer = new SessionProgressObserver();
         var todos = Todos("fleet-1", OwnerId, ("One", TodoStatuses.Pending)).Event;
 
-        observer.Observe("fleet-1", OwnerId, new SessionIdled { Payload = new SessionIdledPayload { SessionId = "fleet-1" } });
+        observer.Observe("fleet-1", OwnerId, new FilesChanged { Payload = new FilesChangedPayload { SessionId = "fleet-1" } });
         observer.Observe("fleet-1", OwnerId, null);
         observer.Observe("fleet-1", null, todos);
         observer.Observe("", OwnerId, todos);
@@ -180,5 +180,138 @@ public sealed class SessionProgressServiceTests
         instance.Complete();
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);
+    }
+
+    // ── Plans ────────────────────────────────────────────────────────────────
+
+    private const string PlanText = """
+        # Thin Proxy Simplification
+        ### Phase 1: Proxy
+        - [x] 1. Create the proxy
+        - [ ] 2. Map the messages
+        ### Phase 2: Switch
+        - [ ] 3. Replace the snapshot
+        """;
+
+    private static ObservedProgressEvent Written(string sessionId, string userId, DateTimeOffset at, params string[] paths)
+        => new(sessionId, userId, new FilesWritten { Payload = new FilesWrittenPayload { SessionId = sessionId, MessageId = "msg-1", Paths = paths } }, at);
+
+    private static ObservedProgressEvent Idled(string sessionId, string userId, DateTimeOffset at)
+        => new(sessionId, userId, new SessionIdled { Payload = new SessionIdledPayload { SessionId = sessionId } }, at);
+
+    private sealed record PlanFixture(
+        Microsoft.Data.Sqlite.SqliteConnection Keeper,
+        SessionProgressService Service,
+        FakeEventBroadcaster Broadcaster,
+        SessionProgressRepository Repository,
+        string SessionId,
+        string Directory) : IDisposable
+    {
+        public string PlanPath => Path.Combine(Directory, ".weave", "plans", "thin-proxy.md");
+
+        public void Dispose()
+        {
+            Keeper.Dispose();
+            try { System.IO.Directory.Delete(Directory, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private static async Task<PlanFixture> CreatePlanFixtureAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"progress-plans-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(directory, ".weave", "plans"));
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        var (_, _, session) = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, OwnerId, directory: directory);
+        var scopeFactory = TestServiceScopeFactory.Create(services =>
+        {
+            services.AddScoped<ISessionProgressRepository>(_ => new SessionProgressRepository(factory, new TestUserContext(OwnerId)));
+            services.AddScoped<ISessionRepository>(_ => new SessionRepository(factory, new TestUserContext(OwnerId)));
+        });
+        var broadcaster = new FakeEventBroadcaster();
+        return new PlanFixture(
+            keeper,
+            CreateService(scopeFactory, broadcaster),
+            broadcaster,
+            new SessionProgressRepository(factory, new TestUserContext(OwnerId)),
+            session.Id,
+            directory);
+    }
+
+    [Fact]
+    public async Task A_written_plan_file_becomes_the_sessions_progress()
+    {
+        using var fixture = await CreatePlanFixtureAsync();
+        await File.WriteAllTextAsync(fixture.PlanPath, PlanText);
+
+        var progress = await fixture.Service.ApplyAsync(
+            Written(fixture.SessionId, OwnerId, DateTimeOffset.UtcNow, fixture.PlanPath, Path.Combine(fixture.Directory, "src", "Code.cs")),
+            CancellationToken.None);
+
+        progress.ShouldNotBeNull();
+        (progress.Kind, progress.Done, progress.Total, progress.Current).ShouldBe(("plan", 1, 3, "Map the messages"));
+        progress.Plans.ShouldHaveSingleItem().Path.ShouldBe(".weave/plans/thin-proxy.md");
+        (await fixture.Repository.GetAsync(fixture.SessionId, CancellationToken.None)).ShouldNotBeNull().Plans.ShouldHaveSingleItem();
+
+        JsonSerializer.Serialize(fixture.Broadcaster.Broadcasts[0].Payload).ShouldBe(
+            $$"""{"sessionId":"{{fixture.SessionId}}","kind":"plan","done":1,"total":3,"current":"Map the messages"}""");
+        var plan = fixture.Broadcaster.Broadcasts[1].Payload.GetProperty("plan");
+        plan.GetProperty("path").GetString().ShouldBe(".weave/plans/thin-proxy.md");
+        plan.GetProperty("groups").GetArrayLength().ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task A_tick_made_outside_a_tool_call_is_picked_up_when_the_turn_ends()
+    {
+        using var fixture = await CreatePlanFixtureAsync();
+        await File.WriteAllTextAsync(fixture.PlanPath, PlanText);
+        await fixture.Service.ApplyAsync(Written(fixture.SessionId, OwnerId, DateTimeOffset.UtcNow, fixture.PlanPath), CancellationToken.None);
+
+        // Ticked by a shell command, or in the user's editor: no files.written event.
+        await File.WriteAllTextAsync(fixture.PlanPath, PlanText.Replace("- [ ] 2.", "- [x] 2.", StringComparison.Ordinal));
+        var idledAt = DateTimeOffset.UtcNow;
+        var progress = await fixture.Service.ApplyAsync(Idled(fixture.SessionId, OwnerId, idledAt), CancellationToken.None);
+
+        progress.ShouldNotBeNull();
+        progress.Done.ShouldBe(2);
+        var step = progress.Plans[0].Steps.Single(s => s.Key == "2");
+        (step.TickedAt, step.TickedInMessageId).ShouldBe((idledAt, (string?)null));
+        fixture.Broadcaster.Broadcasts.Count.ShouldBe(4);
+
+        // A second turn end with nothing new pushes nothing.
+        (await fixture.Service.ApplyAsync(Idled(fixture.SessionId, OwnerId, DateTimeOffset.UtcNow), CancellationToken.None)).ShouldBeNull();
+        fixture.Broadcaster.Broadcasts.Count.ShouldBe(4);
+    }
+
+    [Fact]
+    public async Task Files_outside_the_session_folder_are_ignored()
+    {
+        using var fixture = await CreatePlanFixtureAsync();
+        var outside = Path.Combine(Path.GetTempPath(), $"outside-{Guid.NewGuid():N}.md");
+        await File.WriteAllTextAsync(outside, PlanText);
+
+        try
+        {
+            var progress = await fixture.Service.ApplyAsync(Written(fixture.SessionId, OwnerId, DateTimeOffset.UtcNow, outside), CancellationToken.None);
+
+            progress.ShouldBeNull();
+            fixture.Broadcaster.Broadcasts.ShouldBeEmpty();
+        }
+        finally
+        {
+            File.Delete(outside);
+        }
+    }
+
+    [Fact]
+    public void The_observer_skips_file_writes_with_no_markdown()
+    {
+        var observer = new SessionProgressObserver();
+
+        observer.Observe("fleet-1", OwnerId, Written("fleet-1", OwnerId, DateTimeOffset.UtcNow, "/work/a.cs", "/work/b.json").Event);
+        observer.Reader.TryRead(out _).ShouldBeFalse();
+
+        observer.Observe("fleet-1", OwnerId, Written("fleet-1", OwnerId, DateTimeOffset.UtcNow, "/work/a.cs", "/work/PLAN.md").Event);
+        observer.Reader.TryRead(out var queued).ShouldBeTrue();
+        queued!.Event.ShouldBeOfType<FilesWritten>();
     }
 }

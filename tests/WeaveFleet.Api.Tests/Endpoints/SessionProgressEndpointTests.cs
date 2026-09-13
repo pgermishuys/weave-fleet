@@ -75,7 +75,7 @@ public sealed class SessionProgressEndpointTests : IAsyncLifetime, IDisposable
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var progress = await response.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
         progress.GetRawText().ShouldBe(
-            """{"sessionId":"session-with-progress","kind":"todos","done":1,"total":2,"current":"Drop the indexes","todos":[{"content":"Write the migration","status":"completed","priority":"high"},{"content":"Drop the indexes","status":"in_progress","priority":null}],"updatedAt":"2026-09-13T12:24:00.0000000Z"}""");
+            """{"sessionId":"session-with-progress","kind":"todos","done":1,"total":2,"current":"Drop the indexes","todos":[{"content":"Write the migration","status":"completed","priority":"high"},{"content":"Drop the indexes","status":"in_progress","priority":null}],"updatedAt":"2026-09-13T12:24:00.0000000Z","plan":null}""");
     }
 
     [Fact]
