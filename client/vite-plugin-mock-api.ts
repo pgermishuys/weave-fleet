@@ -18,6 +18,13 @@ interface MockRoute {
   handler: (url: URL, req: Request) => Response | Promise<Response>;
 }
 
+interface MockTerminal {
+  id: string;
+  title: string;
+  status: "running" | "stopped";
+  createdAt: string;
+}
+
 interface MockApiOptions {
   mode?: string;
 }
@@ -232,6 +239,16 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
 
   let devServer: ViteDevServer | undefined;
   const canvasesBySession = new Map<string, MockCanvas[]>();
+  const terminalsBySession = new Map<string, { list: MockTerminal[]; next: number }>();
+
+  function sessionTerminals(sessionId: string): { list: MockTerminal[]; next: number } {
+    let terminals = terminalsBySession.get(sessionId);
+    if (!terminals) {
+      terminals = { list: [], next: 0 };
+      terminalsBySession.set(sessionId, terminals);
+    }
+    return terminals;
+  }
 
   function sessionCanvases(sessionId: string): MockCanvas[] {
     let canvases = canvasesBySession.get(sessionId);
@@ -261,6 +278,47 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
   }
 
   const routes: MockRoute[] = [
+    // ─── Terminals ──────────────────────────────────────────────────────────────
+    // The shell itself is pretend and runs in the browser (terminal-mock-shell.ts);
+    // these routes only keep each session's list of tabs.
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/terminals$/,
+      handler: (url, req) => {
+        const id = decodeURIComponent(url.pathname.split("/")[3]);
+        const terminals = sessionTerminals(id);
+        console.log(`[mock-api] ${req.method} /api/sessions/${id}/terminals`);
+        if (req.method === "GET") return json(terminals.list);
+        if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+
+        if (terminals.list.length >= 8) return json({ error: "This session already has 8 terminals. Close one to open another." }, 409);
+        terminals.next += 1;
+        const taken = new Set(terminals.list.map((terminal) => terminal.title));
+        let title = "zsh";
+        for (let n = 2; taken.has(title); n++) title = `zsh ${n}`;
+        const terminal: MockTerminal = { id: `${id}-term-${terminals.next}`, title, status: "running", createdAt: new Date().toISOString() };
+        terminals.list.push(terminal);
+        pushHubEvent(id, "terminal.opened", { sessionId: id, terminalId: terminal.id, title });
+        return json(terminal, 201);
+      },
+    },
+    {
+      pattern: /^\/api\/sessions\/([^/]+)\/terminals\/([^/]+)$/,
+      handler: (url, req) => {
+        const [, , , rawId, , rawTerminalId] = url.pathname.split("/");
+        const id = decodeURIComponent(rawId);
+        const terminalId = decodeURIComponent(rawTerminalId);
+        console.log(`[mock-api] ${req.method} /api/sessions/${id}/terminals/${terminalId}`);
+        if (req.method !== "DELETE") return json({ error: "Method not allowed" }, 405);
+
+        const terminals = sessionTerminals(id);
+        const index = terminals.list.findIndex((terminal) => terminal.id === terminalId);
+        if (index < 0) return json({ error: `Terminal ${terminalId} not found.` }, 404);
+        const [closed] = terminals.list.splice(index, 1);
+        pushHubEvent(id, "terminal.closed", { sessionId: id, terminalId, title: closed.title });
+        return new Response(null, { status: 204 });
+      },
+    },
+
     // ─── Canvases ───────────────────────────────────────────────────────────────
     // Try on 3099, with a mock session open:
     //   curl -X POST localhost:3099/api/mock/sessions/<id>/canvases/cv_mock_diagram/revise
@@ -362,6 +420,7 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
           authEnabled: false,
           tokenAuthEnabled: false,
           availableHarnesses: ["opencode"],
+          terminalEnabled: true,
         }), {
           status: 200,
           headers: { "Content-Type": "application/json" },

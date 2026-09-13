@@ -2221,6 +2221,7 @@ export interface components {
             authEnabled: boolean;
             tokenAuthEnabled: boolean;
             availableHarnesses: string[];
+            terminalEnabled: boolean;
         };
         CreateAutomationRequest: {
             name: string;

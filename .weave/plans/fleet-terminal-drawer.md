@@ -150,10 +150,19 @@ components/terminal/TerminalView.vue     one xterm per terminal, kept alive whil
     - The history store now takes its folder from the `FleetOptions` in DI, so a host that swaps the options (the integration test server) writes where it expects.
     - Tests: 6 in `TerminalEndpointTests` on the existing `SignalRTestServer` (open, echo, resize, close with a clean 1000; a second connection gets the scrollback; foreign origin 403; unknown session 404 for REST and socket; `terminalEnabled`; `terminal.opened` and `terminal.closed` over the hub).
 
-- [ ] 5. Client API, socket and store
+- [x] 5. Client API, socket and store (done 2026-09-13)
   - **Files**: `client/src/lib/terminal-api.ts`, `terminal-socket.ts`, `client/src/stores/terminals.ts`; mock REST in `vite-plugin-mock-api.ts`; the mock transport (the mockup's pretend shell); reducer cases for the three events; `bun add @xterm/xterm @xterm/addon-fit @xterm/addon-web-links`.
   - **Acceptance**: The socket reconnects with backoff and replays. Events keep the tab list in step across windows. Mock mode opens a working pretend shell with no server.
   - **Tests**: vitest for the store, the reducer cases and reconnect.
+  - **As built**:
+    - `lib/terminal-api.ts`: `listTerminals`, `createTerminal`, `closeTerminal` (404 counts as closed), `terminalSocketUrl`; failures throw `TerminalApiError` with the server's `error` text.
+    - `lib/terminal-socket.ts`: `connectTerminal({ sessionId, terminalId, cols, rows, handlers })`. Every (re)connect calls `onReset`, then the scrollback arrives through `onOutput`, then `onReady`. It reconnects after any close but 1000 (250 ms, doubling to 8 s), keeps up to 4 KB typed while reconnecting and sends it after `ready`, and gives up with status `failed` after 5 attempts in a row that never got the scrollback (the terminal is gone, or the server refuses). `onExit(null)` means Fleet ended the shell.
+    - `lib/terminal-mock-shell.ts` and `lib/terminal-connection.ts`: in mock mode, `openTerminalConnection` returns the mockup's pretend shell instead of a socket. It keeps each terminal's output in the page so reopening replays it, like the server does; control characters are built with `String.fromCharCode`, never written as escapes (see the control-character note in memory).
+    - `stores/terminals.ts`: tabs and the active tab per session, drawer open per session (localStorage `weave:terminal-open`), one drawer height for the window (`weave:terminal-height`, default 272, minimum 140; the drawer clamps the maximum). A tab another window opens is added without taking focus.
+    - `composables/use-session-terminals.ts`: `useSessionTerminals(sessionId)` loads the list on session open and reconnect and applies `terminal.opened`/`terminal.closed`, only when `terminalEnabled`; `openNewTerminal` (returns the error text to show) and `closeTerminalTab` (removes the tab at once, reloads if the server refuses). The drawer closes when its last tab goes.
+    - `terminalEnabled` was added by hand to `ClientConfigResponse` in `api/generated/schema.d.ts` (earlier commits edit that file by hand too), and to the mock config. The mock plugin keeps each session's tabs and pushes the two events. Vite's `/api` proxy now forwards WebSockets.
+    - `@xterm/xterm` 6.0.0, `@xterm/addon-fit` 0.11.0, `@xterm/addon-web-links` 0.12.0 in `package.json`, `bun.lock` and `package-lock.json` (`bunx npm install --package-lock-only`; the lockfile diff is xterm only).
+    - Tests: 28 (store 7, socket 9, pretend shell 5, composable 7). Typecheck and lint clean.
 
 - [ ] 6. The drawer
   - **Files**: `client/src/components/terminal/TerminalDrawer.vue`, `TerminalView.vue`, `client/src/lib/terminal-theme.ts`; mount in `routes/sessions.$id.tsx`; the header button with its running dot; the `toggle-terminal` command (Ctrl/Cmd J) in `keybinding-types.ts`.

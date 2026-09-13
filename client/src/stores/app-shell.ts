@@ -20,6 +20,7 @@ function createDefaultConfig(): AppShellConfig {
     authEnabled: false,
     tokenAuthEnabled: false,
     availableHarnesses: [],
+    terminalEnabled: false,
   };
 }
 
