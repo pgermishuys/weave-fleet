@@ -104,15 +104,22 @@ Stages 2 and 3 are independent of each other once stage 1 has landed.
 
 ## Stage 2 — Feels instant
 
-- [ ] 2.1 Draft row in the sidebar
+- [x] 2.1 Draft row in the sidebar — branch `feat/new-session-instant`
   - **What**: While `/sessions/new` is open, a "draft" row sits at the top of the group it will land in (Scratch or the chosen project), titled from the first line of the message as you type. Draft state (message, chips) lives in `useWorkspaceUiStore` so it survives navigating away and back; the row disappears when the draft is empty and you leave.
   - **Files**: `client/src/stores/workspace-ui.ts`, `client/src/components/sessions/SessionsPanel.vue`, `NewSessionComposer.vue`
   - **Acceptance**: typing updates the row; leaving with text keeps the draft and the row; sending turns it into the real session row in the same place (no jump).
 
-- [ ] 2.2 First message visible at once
+- [x] 2.2 First message visible at once — branch `feat/new-session-instant`
   - **What**: After create, seed the sent-prompt registry for the new session id before navigating, so the message shows immediately and reconciles when the server's copy arrives. If `initialPrompt` delivery can't be reconciled (no correlation id), switch to create-then-send through `useSendPrompt` for non-GitHub sources (see Decisions).
   - **Files**: `client/src/composables/use-send-prompt.ts` (export a seeding helper), `NewSessionComposer.vue`
   - **Acceptance**: no empty-conversation moment after Enter; no duplicated first message; works for GitHub sources (context + message).
+
+### Stage 2 findings (2026-09-13)
+- **Built (2.2)**: Enter moves the message into the page's conversation at once (same layout as the session page's first message) while create runs; the box empties and the row says "Starting…". When create returns, `seedSentPrompt()` (`use-send-prompt.ts`) puts the message in the new session's sent-prompt list before navigating, so the session page has it from its first frame; the history's copy reconciles it by text (the create response carries no message id, and none is needed: the snapshot always has the saved prompt). If create fails the message goes back in the box. Only what was typed is seeded: a GitHub start shows the typed part until the snapshot brings the message with the issue context (unit-tested; not live, no GitHub token in the scratch Fleet).
+- **Built (2.1)**: the draft (message, chips, project, GitHub issue) lives in `useWorkspaceUiStore().newSessionDraft`; the page binds to it with `toRefs`. `DraftSessionRow.vue` sits first in the group the session will land in (the chosen project, or Scratch, shown even before Scratch has a session), titled from the first line ("New session" while empty), "Draft" / "Starting…". Leaving with text keeps draft and row; clicking the row reopens it; an empty draft goes when you leave. A project's "+" moves a kept draft to that project. On success the page adds the session's row itself (`buildCreatedSessionRow`) and the session takes over the draft row's key (`sessionRowKeys`), so `ProjectGroup`'s TransitionGroup patches the row in place instead of animating one out and one in. A session that finishes starting after you left doesn't pull you back; its row appears.
+- **Title decision made**: Fleet never takes the harness's own title (no code path; only the rename endpoint writes titles), so a session started without a typed title stayed "Untitled" for good. Per this plan's recommendation the first line (≤ 60 chars, word boundary) is now sent as the title (`titleFromMessage`), which is also what keeps the row's text when the draft becomes the session.
+- **Live check** (`run-live.sh dark|light`, 64/65 each; the failure is the known current-checkout `branch: null`): first message 16–56 ms after Enter in every run, on the session page 0 ms after it opens, never two copies and never gone (watched every frame, ~200 frames per run); the draft row becomes the session's row with the row not moving or resizing on any frame; draft kept and restored; empty draft removed; project group; phone. Before/after (`run-moment.sh`, `pw-moment.mjs`): Stage 1 showed the message 1.3–1.7 s after Enter (0.9–1.4 s of empty session page); Stage 2 23 ms.
+- **Noticed, not changed**: the message shifts ~235 px left when the session page opens, because the right panel appears (1.5 hides it on the new page). The header says "Working" at once, but the row and status bar say idle until the harness reports busy (the known status lag). In the phone menu the sessions panel is wider than the drawer, so counts and row labels spill over the backdrop (pre-existing).
 
 ## Stage 3 — Choose the base branch
 
@@ -142,7 +149,7 @@ Made (2026-09-13):
 - The ways into the page stay as they are.
 
 Open, with a recommendation:
-- **Session title when none is typed**: check in 1.7 whether OpenCode names the session from the first message. If it does, send no title; if not, send the first line (≤ 60 chars).
+- **Session title when none is typed**: decided in Stage 2 by this recommendation's own test: Fleet never takes the harness's title, so the first line (≤ 60 chars) is sent.
 - **First message delivery**: started with `initialPrompt`; the live check found the message isn't shown until a reload (see Stage 1 findings). **Approved by the user 2026-09-13** and done in Stage 1 (server + client fix).
 - **Esc on the page**: closes menus only, never leaves (the draft is kept in stage 2 anyway).
 - **Quick-chat folders**: delete with their session (4.3). Needs a yes.
