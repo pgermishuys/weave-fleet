@@ -400,6 +400,11 @@ public sealed record ToolCompletedState : ToolInvocationState
     /// Gets the optional tool metadata payload.
     /// </summary>
     public JsonElement? Metadata { get; init; }
+
+    /// <summary>
+    /// Gets the harness's short heading for the call.
+    /// </summary>
+    public string? Title { get; init; }
 }
 
 /// <summary>
@@ -416,6 +421,16 @@ public sealed record ToolErrorState : ToolInvocationState
     /// Gets the typed output payload for the tool invocation.
     /// </summary>
     public JsonElement? Output { get; init; }
+
+    /// <summary>
+    /// Gets the error text the tool failed with.
+    /// </summary>
+    public string? Error { get; init; }
+
+    /// <summary>
+    /// Gets the optional tool metadata payload.
+    /// </summary>
+    public JsonElement? Metadata { get; init; }
 }
 
 /// <summary>

@@ -8,7 +8,7 @@ internal sealed record RawToolPart
     [JsonPropertyName("id")] public string Id { get; init; } = string.Empty;
     [JsonPropertyName("sessionId")] public string SessionId { get; init; } = string.Empty;
     [JsonPropertyName("messageId")] public string MessageId { get; init; } = string.Empty;
-    [JsonPropertyName("callId")] public string? CallId { get; init; }
+    [JsonPropertyName("callID")] public string? CallId { get; init; }
     [JsonPropertyName("tool")] public string? Tool { get; init; }
     [JsonPropertyName("state")] public JsonElement? State { get; init; }
     [JsonPropertyName("metadata")] public JsonElement? Metadata { get; init; }

@@ -192,7 +192,7 @@ public sealed class SessionSnapshotBuilder(
                 case TextPart textPart:
                     parts.Add(new TextMessageEventPart
                     {
-                        Id = $"{message.Id}-text-{index}",
+                        Id = textPart.PartId ?? $"{message.Id}-text-{index}",
                         SessionId = message.SessionId,
                         MessageId = message.Id,
                         Text = textPart.Text,
@@ -202,7 +202,7 @@ public sealed class SessionSnapshotBuilder(
                 case ReasoningPart reasoningPart:
                     parts.Add(new ReasoningMessageEventPart
                     {
-                        Id = $"{message.Id}-reasoning-{index}",
+                        Id = reasoningPart.PartId ?? $"{message.Id}-reasoning-{index}",
                         SessionId = message.SessionId,
                         MessageId = message.Id,
                         Text = reasoningPart.Text,
@@ -213,7 +213,7 @@ public sealed class SessionSnapshotBuilder(
                 case ToolUsePart toolPart:
                     parts.Add(new ToolMessageEventPart
                     {
-                        Id = $"{message.Id}-tool-{index}",
+                        Id = toolPart.PartId ?? $"{message.Id}-tool-{index}",
                         SessionId = message.SessionId,
                         MessageId = message.Id,
                         ToolName = toolPart.ToolName,
@@ -295,18 +295,18 @@ public sealed class SessionSnapshotBuilder(
             ? (JsonElement?)null
             : toolPart.Arguments.Clone();
 
-        JsonElement? output = null;
-        if (toolResults.TryGetValue(toolPart.ToolCallId, out var resultPart))
-        {
-            output = ParseToolResultContent(resultPart.Content);
-        }
+        // Some harnesses send the result as a separate part, others keep it on the call.
+        var output = toolResults.TryGetValue(toolPart.ToolCallId, out var resultPart)
+            ? ParseToolResultContent(resultPart.Content)
+            : toolPart.Output?.Clone();
+        var metadata = toolPart.Metadata?.Clone();
 
         return toolPart.State switch
         {
             ToolUseState.Pending => new ToolPendingState { Input = input },
             ToolUseState.Running => new ToolRunningState { Input = input },
-            ToolUseState.Completed => new ToolCompletedState { Input = input, Output = output },
-            ToolUseState.Error => new ToolErrorState { Input = input, Output = output },
+            ToolUseState.Completed => new ToolCompletedState { Input = input, Output = output, Title = toolPart.Title, Metadata = metadata },
+            ToolUseState.Error => new ToolErrorState { Input = input, Output = output, Error = toolPart.Error, Metadata = metadata },
             _ => new ToolPendingState { Input = input },
         };
     }

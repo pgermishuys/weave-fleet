@@ -323,7 +323,7 @@ internal sealed record OpenCodeTextPart : OpenCodeMessagePart
 /// <summary>Tool invocation part.</summary>
 internal sealed record OpenCodeToolPart : OpenCodeMessagePart
 {
-    [JsonPropertyName("callId")] public string? CallId { get; init; }
+    [JsonPropertyName("callID")] public string? CallId { get; init; }
     [JsonPropertyName("tool")] public string? Tool { get; init; }
     [JsonPropertyName("state")] public OpenCodeToolState? State { get; init; }
     [JsonPropertyName("metadata")] public JsonElement? Metadata { get; init; }
@@ -444,13 +444,16 @@ internal sealed record OpenCodeToolCompleted : OpenCodeToolState
     [JsonPropertyName("input")] public JsonElement? Input { get; init; }
     [JsonPropertyName("output")] public JsonElement? Output { get; init; }
     [JsonPropertyName("metadata")] public JsonElement? Metadata { get; init; }
+    [JsonPropertyName("title")] public string? Title { get; init; }
 }
 
-/// <summary>Tool call failed.</summary>
+/// <summary>Tool call failed. OpenCode puts the failure text in <c>error</c>.</summary>
 internal sealed record OpenCodeToolError : OpenCodeToolState
 {
     [JsonPropertyName("input")] public JsonElement? Input { get; init; }
     [JsonPropertyName("output")] public string? Output { get; init; }
+    [JsonPropertyName("error")] public string? Error { get; init; }
+    [JsonPropertyName("metadata")] public JsonElement? Metadata { get; init; }
 }
 
 // ---------------------------------------------------------------------------

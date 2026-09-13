@@ -56,32 +56,13 @@ internal static class OpenCodeMapper
         switch (part)
         {
             case OpenCodeTextPart textPart when textPart.Text is not null:
-                return new TextPart(textPart.Text);
+                return new TextPart(textPart.Text) { PartId = NullIfEmpty(textPart.Id) };
 
             case OpenCodeToolPart toolPart:
-                var toolState = toolPart.State switch
-                {
-                    OpenCodeToolPending => ToolUseState.Pending,
-                    OpenCodeToolRunning => ToolUseState.Running,
-                    OpenCodeToolCompleted => ToolUseState.Completed,
-                    OpenCodeToolError => ToolUseState.Error,
-                    _ => ToolUseState.Pending,
-                };
-                return new ToolUsePart(
-                    ToolCallId: toolPart.CallId ?? toolPart.Id,
-                    ToolName: toolPart.Tool ?? string.Empty,
-                    Arguments: toolPart.State switch
-                    {
-                        OpenCodeToolPending p => p.Input ?? default,
-                        OpenCodeToolRunning r => r.Input ?? default,
-                        OpenCodeToolCompleted c => c.Input ?? default,
-                        OpenCodeToolError e => e.Input ?? default,
-                        _ => default,
-                    },
-                    State: toolState);
+                return MapToolPart(toolPart);
 
             case OpenCodeReasoningPart reasoning when !string.IsNullOrWhiteSpace(reasoning.Text):
-                return new ReasoningPart(reasoning.Text, reasoning.Summary);
+                return new ReasoningPart(reasoning.Text, reasoning.Summary) { PartId = NullIfEmpty(reasoning.Id) };
 
             case OpenCodeFilePart filePart when !string.IsNullOrWhiteSpace(filePart.Url):
                 return new FilePart(
@@ -119,6 +100,54 @@ internal static class OpenCodeMapper
                 return null;
         }
     }
+
+    /// <summary>
+    /// Maps a tool call with everything OpenCode keeps on it (result, error, title, metadata), so a session
+    /// rebuilt from history shows the same cards as the live stream did.
+    /// </summary>
+    private static ToolUsePart MapToolPart(OpenCodeToolPart toolPart)
+    {
+        var part = new ToolUsePart(
+            ToolCallId: toolPart.CallId ?? toolPart.Id,
+            ToolName: toolPart.Tool ?? string.Empty,
+            Arguments: toolPart.State switch
+            {
+                OpenCodeToolPending p => p.Input ?? default,
+                OpenCodeToolRunning r => r.Input ?? default,
+                OpenCodeToolCompleted c => c.Input ?? default,
+                OpenCodeToolError e => e.Input ?? default,
+                _ => default,
+            },
+            State: toolPart.State switch
+            {
+                OpenCodeToolPending => ToolUseState.Pending,
+                OpenCodeToolRunning => ToolUseState.Running,
+                OpenCodeToolCompleted => ToolUseState.Completed,
+                OpenCodeToolError => ToolUseState.Error,
+                _ => ToolUseState.Pending,
+            })
+        {
+            PartId = NullIfEmpty(toolPart.Id),
+        };
+
+        return toolPart.State switch
+        {
+            OpenCodeToolCompleted completed => part with
+            {
+                Output = completed.Output,
+                Title = completed.Title,
+                Metadata = completed.Metadata,
+            },
+            OpenCodeToolError error => part with
+            {
+                Error = error.Error ?? error.Output,
+                Metadata = error.Metadata,
+            },
+            _ => part,
+        };
+    }
+
+    private static string? NullIfEmpty(string value) => string.IsNullOrEmpty(value) ? null : value;
 
     /// <summary>
     /// Maps a list of <see cref="OpenCodeMessageWithParts"/> to <see cref="HarnessMessage"/> instances.

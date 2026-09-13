@@ -55,7 +55,7 @@
             "id": "part-tool-1",
             "sessionId": "opencode-sess-1",
             "messageId": "msg-asst-1",
-            "callId": "call-1",
+            "callID": "call-1",
             "tool": "bash",
             "state": { "status": "completed", "input": { "command": "ls" }, "output": { "result": "file.txt" } }
           }
@@ -87,7 +87,7 @@
             "id": "part-tool-2",
             "sessionId": "opencode-sess-1",
             "messageId": "msg-asst-2",
-            "callId": "call-2",
+            "callID": "call-2",
             "tool": "read_file",
             "state": { "status": "pending", "input": { "path": "/tmp/data.txt" } }
           }

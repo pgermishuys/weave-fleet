@@ -113,12 +113,15 @@ export interface ToolCompletedState {
   input: JsonValue | null;
   output: JsonValue | null;
   metadata: JsonValue | null;
+  title?: string | null;
 }
 
 export interface ToolErrorState {
   status: "error";
   input: JsonValue | null;
   output: JsonValue | null;
+  error?: string | null;
+  metadata?: JsonValue | null;
 }
 
 export interface ToolCancelledState {

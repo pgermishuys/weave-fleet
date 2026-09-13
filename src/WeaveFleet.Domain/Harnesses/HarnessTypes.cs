@@ -69,10 +69,18 @@ public enum MessagePartKind
 public abstract record MessagePart(MessagePartKind Kind);
 
 /// <summary>Plain text content.</summary>
-public sealed record TextPart(string Text) : MessagePart(MessagePartKind.Text);
+public sealed record TextPart(string Text) : MessagePart(MessagePartKind.Text)
+{
+    /// <summary>The harness's own id for this part, so history and live updates name the same part.</summary>
+    public string? PartId { get; init; }
+}
 
 /// <summary>Structured reasoning content that is stored but not shown in the main activity stream.</summary>
-public sealed record ReasoningPart(string Text, string? Summary = null) : MessagePart(MessagePartKind.Reasoning);
+public sealed record ReasoningPart(string Text, string? Summary = null) : MessagePart(MessagePartKind.Reasoning)
+{
+    /// <summary>The harness's own id for this part, so history and live updates name the same part.</summary>
+    public string? PartId { get; init; }
+}
 
 /// <summary>A file or image attachment associated with a message.</summary>
 public sealed record FilePart(string PartId, string Mime, string Url, string? Filename) : MessagePart(MessagePartKind.File);
@@ -92,7 +100,23 @@ public sealed record ToolUsePart(
     string ToolCallId,
     string ToolName,
     JsonElement Arguments,
-    ToolUseState State) : MessagePart(MessagePartKind.ToolUse);
+    ToolUseState State) : MessagePart(MessagePartKind.ToolUse)
+{
+    /// <summary>The harness's own id for this part, so history and live updates name the same part.</summary>
+    public string? PartId { get; init; }
+
+    /// <summary>What the tool returned, for harnesses that keep the result on the call itself.</summary>
+    public JsonElement? Output { get; init; }
+
+    /// <summary>The error text when the tool failed.</summary>
+    public string? Error { get; init; }
+
+    /// <summary>The harness's short heading for the call.</summary>
+    public string? Title { get; init; }
+
+    /// <summary>Extra facts the tool reported, such as the child session a sub-agent ran in.</summary>
+    public JsonElement? Metadata { get; init; }
+}
 
 /// <summary>Output returned by a tool invocation.</summary>
 public sealed record ToolResultPart(

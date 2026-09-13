@@ -172,7 +172,7 @@ public sealed class OpenCodeModelsSerializationTests
           "id":"part-2",
           "sessionId":"sess-1",
           "messageId":"msg-2",
-          "callId":"call-1",
+          "callID":"call-1",
           "tool":"bash",
           "state":{"status":"completed","input":{"command":"ls"},"output":{"result":"file.txt"}}
         }
@@ -198,7 +198,7 @@ public sealed class OpenCodeModelsSerializationTests
               "id":"part-2",
               "sessionId":"sess-1",
               "messageId":"msg-2",
-              "callId":"call-1",
+              "callID":"call-1",
               "tool":"bash",
               "state":{"input":{"command":"ls"},"metadata":{"durationMs":1},"status":"completed","output":{"result":"file.txt"}}
             }
@@ -225,7 +225,7 @@ public sealed class OpenCodeModelsSerializationTests
                 "id":"part-2",
                 "sessionId":"sess-1",
                 "messageId":"msg-2",
-                "callId":"call-1",
+                "callID":"call-1",
                 "tool":"bash",
                 "state":{"input":{"command":"ls"},"status":"completed","output":{"result":"file.txt"}}
               }
