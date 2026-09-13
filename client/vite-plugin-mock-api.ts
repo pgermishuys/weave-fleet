@@ -977,6 +977,7 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
           totalCost: sessionItem.totalCost,
           harnessType: sessionItem.harnessType,
           projectId: sessionItem.projectId,
+          projectName: sessionItem.projectName ?? null,
           origin: sessionItem.origin || null,
           capabilities: {
             canPrompt: true,

@@ -28,6 +28,7 @@ export function buildGitHubSessionSourceSelection(
   repositoryPath: string,
   isolationStrategy: GitHubRepositoryIsolationStrategy,
   branch?: string,
+  existingWorktreePath?: string,
 ): SessionSourceSelection {
   return {
     key: {
@@ -42,7 +43,7 @@ export function buildGitHubSessionSourceSelection(
       number: preset.number,
       repositoryPath,
       isolationStrategy,
-      ...(branch ? { branch } : {}),
+      ...(existingWorktreePath ? { existingWorktreePath } : branch ? { branch } : {}),
     },
   };
 }

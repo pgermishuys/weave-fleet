@@ -2,6 +2,8 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
@@ -12,6 +14,7 @@ using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.SessionSources;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
+using WeaveFleet.Testing.Fixtures;
 
 namespace WeaveFleet.Infrastructure.Tests.SessionSources;
 
@@ -178,7 +181,64 @@ public sealed class GitHubSessionSourceProviderTests
         result.Value.Input.ContextEnvelope.Content.ShouldNotContain("dsakeymaterial");
     }
 
-    private static (GitHubSessionSourceProvider Provider, FakePluginStateStore Store) CreateProvider()
+    [Fact]
+    public async Task ResolveAsync_ForStartSession_UsesExistingWorktree_WhenGiven()
+    {
+        using var repository = new RealGitRepository();
+        var worktreePath = repository.CreateWorktree("feature-pr-42");
+        var (provider, _) = CreateProvider(workspaceRoot: repository.ParentPath);
+
+        var result = await provider.ResolveAsync(StartSessionFromPullRequest42(new
+        {
+            owner = "acme",
+            repo = "rocket",
+            number = 42,
+            repositoryPath = repository.Path,
+            isolationStrategy = "worktree",
+            existingWorktreePath = worktreePath
+        }), CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue($"Expected success but got: {(result.IsFailure ? result.Error.Description : "")}");
+        result.Value.Input.WorkspaceIntent.ShouldNotBeNull();
+        result.Value.Input.WorkspaceIntent.Directory.ShouldBe(WorkspaceRootService.CanonicalizePath(worktreePath));
+        result.Value.Input.WorkspaceIntent.IsolationStrategy.ShouldBe("existing");
+        result.Value.Input.WorkspaceIntent.Branch.ShouldBe("feature-pr-42");
+        result.Value.Input.ContextEnvelope.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task ResolveAsync_ForStartSession_RejectsUnknownExistingWorktree()
+    {
+        using var repository = new RealGitRepository();
+        var (provider, _) = CreateProvider(workspaceRoot: repository.ParentPath);
+
+        var result = await provider.ResolveAsync(StartSessionFromPullRequest42(new
+        {
+            owner = "acme",
+            repo = "rocket",
+            number = 42,
+            repositoryPath = repository.Path,
+            isolationStrategy = "worktree",
+            existingWorktreePath = Path.Combine(repository.ParentPath, "not-a-worktree")
+        }), CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldContain("not a known worktree");
+    }
+
+    private static SessionSourceSelection StartSessionFromPullRequest42(object input) => new()
+    {
+        Key = new SessionSourceKey
+        {
+            ProviderId = SessionSourceProviderIds.GitHub,
+            SourceType = SessionSourceTypeNames.GitHubPullRequest,
+            ActionId = SessionSourceActions.StartSession,
+            ContractVersion = 1
+        },
+        Input = JsonSerializer.SerializeToElement(input)
+    };
+
+    private static (GitHubSessionSourceProvider Provider, FakePluginStateStore Store) CreateProvider(string? workspaceRoot = null)
     {
         var pluginStateStore = new FakePluginStateStore();
         pluginStateStore.SetStateAsync("github", TestUserId, new JsonObject
@@ -209,7 +269,23 @@ public sealed class GitHubSessionSourceProviderTests
 
         var userContext = new TestUserContext(TestUserId);
 
-        var provider = new GitHubSessionSourceProvider(gitHubService, gitHubApiProxy, userContext);
+        var workspaceRootRepository = new InMemoryWorkspaceRootRepository();
+        if (workspaceRoot is not null)
+        {
+            workspaceRootRepository.Seed(new WorkspaceRoot
+            {
+                Id = "root-1",
+                Path = workspaceRoot,
+                CreatedAt = DateTime.UtcNow.ToString("O")
+            });
+        }
+        var services = new ServiceCollection();
+        services.AddScoped(_ => new WorkspaceRootService(workspaceRootRepository, userContext));
+        var repositoryService = new RepositoryService(
+            services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<RepositoryService>.Instance);
+
+        var provider = new GitHubSessionSourceProvider(gitHubService, gitHubApiProxy, repositoryService, userContext);
         return (provider, pluginStateStore);
     }
 

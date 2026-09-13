@@ -42,7 +42,8 @@ export const useSessionsStore = defineStore("sessions", () => {
       return;
     }
 
-    sessions.value = [...sessions.value, nextSession];
+    // The list is newest first, and a session it hasn't seen yet has just been created or forked.
+    sessions.value = [nextSession, ...sessions.value];
   }
 
   function removeSession(sessionId: string): void {

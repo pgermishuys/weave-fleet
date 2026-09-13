@@ -42,6 +42,37 @@ public sealed class EndpointGuardTests
         capabilities.TryGetProperty("canStop", out _).ShouldBeFalse();
     }
 
+    [Fact]
+    public async Task get_session_returns_its_project_name()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient();
+        const string sessionId = "session-in-project";
+        using (var scope = factory.Services.CreateScope())
+        {
+            using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+            await connection.ExecuteAsync(
+                "INSERT INTO projects (id, name, description, type, position, created_at, updated_at, user_id) VALUES ('project-scratch', 'Scratch', NULL, 'scratch', 0, @Now, @Now, @UserId)",
+                new { Now = DateTime.UtcNow.ToString("O"), UserId = _userId });
+        }
+        await InsertSessionAsync(
+            factory,
+            sessionId: sessionId,
+            instanceId: "instance-in-project",
+            lifecycleStatus: "stopped",
+            status: "stopped",
+            runtimeMode: "manual",
+            harnessType: "pi",
+            projectId: "project-scratch");
+
+        var response = await client.GetAsync($"/api/sessions/{sessionId}");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
+        json.GetProperty("projectId").GetString().ShouldBe("project-scratch");
+        json.GetProperty("projectName").GetString().ShouldBe("Scratch");
+    }
+
     private static async Task InsertSessionAsync(
         ApiWebApplicationFactory factory,
         string sessionId,
@@ -49,7 +80,8 @@ public sealed class EndpointGuardTests
         string lifecycleStatus,
         string status,
         string runtimeMode,
-        string harnessType)
+        string harnessType,
+        string? projectId = null)
     {
         using var scope = factory.Services.CreateScope();
         var connectionFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
@@ -68,7 +100,7 @@ public sealed class EndpointGuardTests
                 Id = sessionId,
                 WorkspaceId = workspaceId,
                 InstanceId = instanceId,
-                ProjectId = (string?)null,
+                ProjectId = projectId,
                 OpencodeSessionId = $"opencode-{sessionId}",
                 Title = sessionId,
                 Status = status,

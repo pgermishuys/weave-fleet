@@ -81,6 +81,7 @@ public static class SessionEndpoints
             string id,
             SessionService sessionService,
             IWorkspaceRepository workspaceRepository,
+            IProjectRepository projectRepository,
             ISessionSourceUsageRepository sessionSourceUsageRepository,
             SessionActivityTracker activityTracker,
             SessionCapabilitiesResolver capabilitiesResolver) =>
@@ -90,6 +91,7 @@ public static class SessionEndpoints
                 async session =>
                 {
                     var workspace = await workspaceRepository.GetByIdAsync(session.WorkspaceId);
+                    var project = session.ProjectId is not null ? await projectRepository.GetByIdAsync(session.ProjectId) : null;
                     var primaryOrigin = await sessionSourceUsageRepository.GetPrimaryBySessionIdAsync(session.Id);
                     var activityStatus = activityTracker.GetEffectiveActivityStatus(session.Id) ?? "idle";
 
@@ -114,6 +116,7 @@ public static class SessionEndpoints
                         TotalCost: session.TotalCost > 0 ? session.TotalCost : null,
                         HarnessType: session.HarnessType,
                         ProjectId: session.ProjectId,
+                        ProjectName: project?.Name,
                         Origin: primaryOrigin is not null ? ToOriginDto(primaryOrigin) : null,
                         Capabilities: capabilitiesResolver.Resolve(session)));
                 },

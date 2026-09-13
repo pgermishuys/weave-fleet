@@ -273,7 +273,7 @@ public sealed partial class SessionOrchestrator(
                 WorkingDirectory = canonicalWorkspaceDirectory,
                 OwnerUserId = userContext.UserId,
                 InitialPrompt = initialPrompt,
-                Branch = workspaceIntent.Branch,
+                Branch = workspace.Branch,
                 ProjectId = projectId,
                 ProjectName = projectName,
                 ScenarioId = request.ScenarioId,

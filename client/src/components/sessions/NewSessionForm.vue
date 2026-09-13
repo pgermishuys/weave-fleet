@@ -211,6 +211,7 @@ const sessionSource = computed<SessionSourceSelection | undefined>(() => {
         selectedRepository.value.path,
         isolationStrategy.value,
         isolationStrategy.value === "existing" ? undefined : effectiveBranch.value || undefined,
+        worktreeMode.value === "existing" ? selectedWorktreePath.value ?? undefined : undefined,
       );
     }
 

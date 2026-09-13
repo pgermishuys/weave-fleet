@@ -56,4 +56,29 @@ describe("useSessionsStore", () => {
     expect(store.sessions[0]?.session.title).toBe("Migration");
     expect(store.activeSessionId).toBe("session-1");
   });
+
+  it("puts a session it hasn't seen at the top, where the newest-first list will have it", () => {
+    const store = useSessionsStore();
+    const existing = createSessionListItem();
+    store.setSessions([existing]);
+
+    const created = createSessionListItem();
+    created.session = { ...created.session, id: "session-2", title: "Just created" };
+    store.upsertSession(created);
+
+    expect(store.sessions.map((item) => item.session.id)).toEqual(["session-2", "session-1"]);
+  });
+
+  it("updates a known session in place", () => {
+    const store = useSessionsStore();
+    const first = createSessionListItem();
+    const second = createSessionListItem();
+    second.session = { ...second.session, id: "session-2" };
+    store.setSessions([first, second]);
+
+    store.upsertSession({ ...second, session: { ...second.session, title: "Renamed" } });
+
+    expect(store.sessions.map((item) => item.session.id)).toEqual(["session-1", "session-2"]);
+    expect(store.sessions[1]?.session.title).toBe("Renamed");
+  });
 });

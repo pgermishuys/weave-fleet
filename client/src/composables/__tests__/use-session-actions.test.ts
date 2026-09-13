@@ -156,6 +156,24 @@ describe("useSessionActions", () => {
     expect(result.isDeleting.value).toBe(false);
   });
 
+  it("shows the server's message when session creation fails", async () => {
+    const serverError = { error: "Couldn't create the worktree: 'bad..name' is not a valid branch name" };
+    // openapi-fetch reads the body into `error`, so the response body is already used.
+    const response = createJsonResponse(serverError, 400);
+    await response.text();
+    apiFetchMock.mockResolvedValue({
+      data: undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      error: serverError as any,
+      response,
+    });
+
+    const { result } = await mountComposable(() => useCreateSession());
+
+    await expect(result.createSession("/tmp/project")).rejects.toThrow(serverError.error);
+    expect(result.error.value).toBe(serverError.error);
+  });
+
   it("tracks the active fork while the request is pending", async () => {
     const sessionsStore = useSessionsStore();
     sessionsStore.setSessions([createSessionListItem()]);
@@ -192,7 +210,7 @@ describe("useSessionActions", () => {
     expect(result.forkingSessionId.value).toBeNull();
     expect(sessionsStore.activeSessionId).toBe("session-2");
     expect(sessionsStore.sessions).toHaveLength(2);
-    expect(sessionsStore.sessions[1]).toMatchObject({
+    expect(sessionsStore.sessions[0]).toMatchObject({
       instanceId: "instance-2",
       workspaceId: "workspace-2",
       session: {

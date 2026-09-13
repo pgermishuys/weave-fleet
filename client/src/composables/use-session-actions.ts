@@ -99,25 +99,41 @@ export interface UseReorderProjectResult {
   error: Readonly<ShallowRef<string | undefined>>;
 }
 
-async function readErrorMessage(response: Response): Promise<string> {
-  const bodyText = await response.text().catch(() => "");
+function readErrorField(body: unknown): string | null {
+  if (typeof body !== "object" || body === null) {
+    return null;
+  }
+
+  const record = body as Record<string, unknown>;
+  for (const key of ["error", "detail", "title"]) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * The server's own error text. openapi-fetch has usually read the body already and handed it
+ * over as `parsedError`; the response body is only read when it hasn't.
+ */
+async function readErrorMessage(response: Response, parsedError?: unknown): Promise<string> {
+  const parsedMessage = readErrorField(parsedError);
+  if (parsedMessage) {
+    return parsedMessage;
+  }
+
+  const bodyText = response.bodyUsed ? "" : await response.text().catch(() => "");
   if (!bodyText) {
     return `HTTP ${response.status}`;
   }
 
   try {
-    const body = JSON.parse(bodyText) as Record<string, unknown>;
-
-    if (typeof body.error === "string" && body.error.trim().length > 0) {
-      return body.error;
-    }
-
-    if (typeof body.detail === "string" && body.detail.trim().length > 0) {
-      return body.detail;
-    }
-
-    if (typeof body.title === "string" && body.title.trim().length > 0) {
-      return body.title;
+    const bodyMessage = readErrorField(JSON.parse(bodyText));
+    if (bodyMessage) {
+      return bodyMessage;
     }
   } catch {
     if (bodyText.trim().length > 0) {
@@ -212,7 +228,7 @@ export function useCreateSession(): UseCreateSessionResult {
       });
 
       if (error || !response.ok) {
-        throw new Error(await readErrorMessage(response));
+        throw new Error(await readErrorMessage(response, error));
       }
 
       const result = data as unknown as CreateSessionResponse;
@@ -238,7 +254,7 @@ export function useCreateProject(): UseCreateProjectResult {
       });
 
       if (error || !response.ok) {
-        throw new Error(await readErrorMessage(response));
+        throw new Error(await readErrorMessage(response, error));
       }
 
       // Response body is not typed in schema, use data from openapi-fetch
@@ -267,7 +283,7 @@ export function useDeleteSession(): UseDeleteSessionResult {
       });
 
       if (error || !response.ok) {
-        throw new Error(await readErrorMessage(response));
+        throw new Error(await readErrorMessage(response, error));
       }
 
       trackAction("session.delete", sessionId);
@@ -294,7 +310,7 @@ export function useDeleteProject(): UseDeleteProjectResult {
       });
 
       if (error || !response.ok) {
-        throw new Error(await readErrorMessage(response));
+        throw new Error(await readErrorMessage(response, error));
       }
     }, "Failed to delete project");
   }
@@ -340,7 +356,7 @@ export function useRenameSession(): UseRenameSessionResult {
         });
 
         if (error || !response.ok) {
-          throw new Error(await readErrorMessage(response));
+          throw new Error(await readErrorMessage(response, error));
         }
 
         if (existingSession) {
@@ -386,7 +402,7 @@ export function useMoveSession(): UseMoveSessionResult {
       });
 
       if (error || !response.ok) {
-        throw new Error(await readErrorMessage(response));
+        throw new Error(await readErrorMessage(response, error));
       }
     }, "Failed to move session");
   }
@@ -411,7 +427,7 @@ function createRetentionMutation(targetStatus: "archived" | "active", actionName
       });
 
       if (error || !response.ok) {
-        throw new Error(await readErrorMessage(response));
+        throw new Error(await readErrorMessage(response, error));
       }
 
       trackAction(actionName, sessionId);
@@ -455,7 +471,7 @@ export function useForkSession(): UseForkSessionResult {
       });
 
       if (apiError || !response.ok) {
-        throw new Error(await readErrorMessage(response));
+        throw new Error(await readErrorMessage(response, apiError));
       }
 
       // Response body is not typed in schema, use data from openapi-fetch
@@ -500,7 +516,7 @@ export function useAbortSession(): UseAbortSessionResult {
       });
 
       if (error || !response.ok) {
-        throw new Error(await readErrorMessage(response));
+        throw new Error(await readErrorMessage(response, error));
       }
 
       trackAction("session.abort", sessionId);
@@ -527,7 +543,7 @@ export function useUpdateProject(): UseUpdateProjectResult {
       });
 
       if (error || !response.ok) {
-        throw new Error(await readErrorMessage(response));
+        throw new Error(await readErrorMessage(response, error));
       }
 
       // Response body is not typed in schema, use data from openapi-fetch
@@ -555,7 +571,7 @@ export function useReorderProject(): UseReorderProjectResult {
       });
 
       if (error || !response.ok) {
-        throw new Error(await readErrorMessage(response));
+        throw new Error(await readErrorMessage(response, error));
       }
     }, "Failed to reorder project");
   }
