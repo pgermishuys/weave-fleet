@@ -6,6 +6,7 @@ import { storeToRefs } from "pinia";
 import MessageBubble from "@/components/session/MessageBubble.vue";
 import ReasoningBlock from "@/components/session/ReasoningBlock.vue";
 import { useSessionStream } from "@/composables/use-session-stream";
+import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { clearSentPrompts, reconcileSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
 import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
@@ -18,7 +19,6 @@ import { useSessionsStore } from "@/stores/sessions";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useCanvasesStore } from "@/stores/canvases";
 import { focusServerCanvas } from "@/composables/use-server-canvases";
-import { useSidebarStore } from "@/stores/sidebar";
 import { mergeMessagesByTimestamp } from "@/lib/merge-messages";
 
 interface ImageAttachmentDisplay {
@@ -60,7 +60,7 @@ const router = useRouter();
 const sessionsStore = useSessionsStore();
 const { sessions } = storeToRefs(sessionsStore);
 const canvasesStore = useCanvasesStore();
-const sidebarStore = useSidebarStore();
+const { showRightPanel } = useSidebarMobile();
 
 const selectedSession = computed(() => {
   return sessions.value.find((session) => session.session.id === props.sessionId) ?? null;
@@ -685,12 +685,12 @@ function getStringValue(value: unknown): string | undefined {
 
 function handleExpandVisual(payload: VisualPayload): void {
   canvasesStore.openVisual(props.sessionId, payload);
-  sidebarStore.setRightPanelCollapsed(false);
+  showRightPanel();
 }
 
 function handleShowCanvas(canvasId: string): void {
   void focusServerCanvas(props.sessionId, canvasId);
-  sidebarStore.setRightPanelCollapsed(false);
+  showRightPanel();
 }
 </script>
 

@@ -614,6 +614,13 @@ onUnmounted(() => {
   display: none;
 }
 
+/* Clear the fixed menu button that replaces the sidebar on narrow screens. */
+@media (max-width: 716px) {
+  .session-detail-header {
+    padding-left: 44px;
+  }
+}
+
 @container session-detail-header (min-width: 48rem) {
   .session-detail-header {
     padding-inline: 1.25rem;

@@ -195,6 +195,18 @@ describe("CanvasHost", () => {
     wrapper.unmount();
   });
 
+  it("has no Widen where the panel already fills the screen", async () => {
+    const wrapper = mount(CanvasHost, {
+      props: { sessionId: "s1", widenable: false } as { sessionId: string },
+      global: { provide: { sharedDiffs } },
+      attachTo: document.body,
+    });
+    await flushPromises();
+
+    expect(wrapper.find('[aria-label="Widen canvas"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it("pulses a tab whose page updated itself", async () => {
     const wrapper = mountHost();
     const store = useCanvasesStore();

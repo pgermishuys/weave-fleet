@@ -12,6 +12,7 @@ import SessionActionToolbar from "@/components/session/SessionActionToolbar.vue"
 import SessionDetailHeader from "@/components/session/SessionDetailHeader.vue";
 import TerminalDrawer from "@/components/terminal/TerminalDrawer.vue";
 import TerminalToggleButton from "@/components/terminal/TerminalToggleButton.vue";
+import RightPanelSheetButton from "@/components/layout/RightPanelSheetButton.vue";
 import { useDiffs } from "@/composables/use-diffs";
 import {
   useAbortSession,
@@ -712,6 +713,7 @@ const SessionDetailPage = defineComponent({
               actions: () => (
                 <>
                 <TerminalToggleButton sessionId={params.value.id} />
+                <RightPanelSheetButton />
                 <SessionActionToolbar
                   canAbort={canAbort.value}
                   canArchive={canArchive.value}

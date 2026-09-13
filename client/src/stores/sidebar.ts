@@ -42,6 +42,10 @@ export const useSidebarStore = defineStore("sidebar", () => {
   const panelCollapsed = shallowRef(readStoredBoolean(LEFT_PANEL_STORAGE_KEY));
   const rightPanelCollapsed = shallowRef(readStoredBoolean(RIGHT_PANEL_STORAGE_KEY));
   const mobileDrawerOpen = shallowRef(false);
+  // Where the conversation would be too narrow beside it (phones, narrow windows), the right
+  // panel is a sheet over the conversation, closed until asked for. AppShell decides which.
+  const rightPanelAsSheet = shallowRef(false);
+  const rightPanelSheetOpen = shallowRef(false);
   // Session rows are the only place a session's status shows. Each mounted
   // sessions list registers here so the header can show the status when no
   // list is on screen (panel collapsed, another rail open, mobile drawer shut).
@@ -84,17 +88,30 @@ export const useSidebarStore = defineStore("sidebar", () => {
     mobileDrawerOpen.value = open;
   }
 
+  function setRightPanelAsSheet(asSheet: boolean): void {
+    rightPanelAsSheet.value = asSheet;
+    if (!asSheet) rightPanelSheetOpen.value = false;
+  }
+
+  function setRightPanelSheetOpen(open: boolean): void {
+    rightPanelSheetOpen.value = open;
+  }
+
   return {
     activeRail,
     panelCollapsed,
     rightPanelCollapsed,
     mobileDrawerOpen,
+    rightPanelAsSheet,
+    rightPanelSheetOpen,
     sessionListShown,
     registerSessionList,
     setActiveRail,
     setPanelCollapsed,
     setRightPanelCollapsed,
     setMobileDrawerOpen,
+    setRightPanelAsSheet,
+    setRightPanelSheetOpen,
     togglePanelCollapsed,
     toggleRightPanelCollapsed,
   };
