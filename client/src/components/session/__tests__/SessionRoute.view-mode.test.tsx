@@ -52,6 +52,12 @@ vi.mock("@/composables/use-diffs", () => ({
   }),
 }));
 
+vi.mock("@/composables/use-session-terminals", () => ({
+  useSessionTerminals: vi.fn(),
+  openNewTerminal: vi.fn(),
+  closeTerminalTab: vi.fn(),
+}));
+
 vi.mock("@/components/session/ActivityStream.vue", () => ({
   default: {
     name: "ActivityStreamStub",
