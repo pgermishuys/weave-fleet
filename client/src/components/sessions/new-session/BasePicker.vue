@@ -99,8 +99,12 @@ watch(query, () => {
 watch(open, (isOpen) => {
   if (isOpen) {
     query.value = "";
-    const selected = options.value.findIndex((option) => option.name === effectiveBase.value);
-    highlightedIndex.value = selected >= 0 ? selected : 0;
+    // After the query watcher, which would put the highlight back on the first row.
+    void nextTick(() => {
+      const selected = options.value.findIndex((option) => option.name === effectiveBase.value);
+      highlightedIndex.value = selected >= 0 ? selected : 0;
+      scrollHighlightedIntoView();
+    });
   }
 });
 </script>

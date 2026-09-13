@@ -334,6 +334,20 @@ describe("NewSessionComposer", () => {
       });
     });
 
+    it("reopens with the chosen branch highlighted, even after searching for it", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const view = await mountComposer();
+
+      await openBaseMenu(view);
+      await inDocument().get("input[aria-label='Search branches']").setValue("release");
+      await branchOption("origin/release/2.0").trigger("click");
+      await flushPromises();
+      await openBaseMenu(view);
+
+      const highlighted = inDocument().get("[role='option'][data-highlighted]");
+      expect(highlighted.find(".ns-option__title").text()).toBe("origin/release/2.0");
+    });
+
     it("sends no base for the default, so the server's rules apply", async () => {
       rememberFolder({ kind: "repository", path: rocket.path });
       const view = await mountComposer();
