@@ -3,6 +3,7 @@ import type { CreateSessionOptions } from "@/composables/use-session-actions";
 import {
   buildGitHubSessionSourceSelection,
   type GitHubSessionSourcePreset,
+  type WorktreeBaseInput,
 } from "@/lib/github-session-source";
 
 /** Where the session runs: a scanned repository, any folder, or nowhere (a quick chat). */
@@ -28,6 +29,10 @@ export interface NewSessionState {
   gitHubPreset?: GitHubSessionSourcePreset | null;
   /** Branch for a new worktree, instead of the one generated from the message. */
   branch?: string;
+  /** Where a new worktree starts (`origin/<name>` or a local branch); null or absent for the default. */
+  baseBranch?: string | null;
+  /** Fetch an `origin/…` base first (default true). */
+  fetchOrigin?: boolean;
 }
 
 export interface NewSessionRequest {
@@ -124,15 +129,28 @@ const QUICK_CHAT_SOURCE: SessionSourceSelection = {
   input: {},
 };
 
-function repositorySource(path: string, workspace: NewSessionWorkspace, branch: string | undefined): SessionSourceSelection {
+/** The base fields for a new worktree: only what differs from the server's defaults. */
+function worktreeBase(state: NewSessionState): WorktreeBaseInput {
+  return {
+    ...(state.baseBranch ? { baseBranch: state.baseBranch } : {}),
+    ...(state.fetchOrigin === false ? { fetchOrigin: false as const } : {}),
+  };
+}
+
+function repositorySource(
+  path: string,
+  workspace: NewSessionWorkspace,
+  branch: string | undefined,
+  base: WorktreeBaseInput,
+): SessionSourceSelection {
   const input: Record<string, unknown> = {
     repositoryPath: path,
     isolationStrategy: workspace.kind === "current" ? "existing" : "worktree",
   };
   if (workspace.kind === "existing") {
     input.existingWorktreePath = workspace.path;
-  } else if (workspace.kind === "new" && branch) {
-    input.branch = branch;
+  } else if (workspace.kind === "new") {
+    Object.assign(input, branch ? { branch } : {}, base);
   }
 
   return {
@@ -176,9 +194,9 @@ export function buildCreateSessionRequest(state: NewSessionState): BuildNewSessi
   }
 
   const isWorktree = folder.kind === "repository" && workspace.kind !== "current";
-  const branch = folder.kind === "repository" && workspace.kind === "new"
-    ? resolveNewWorktreeBranch(state)
-    : undefined;
+  const isNewWorktree = folder.kind === "repository" && workspace.kind === "new";
+  const branch = isNewWorktree ? resolveNewWorktreeBranch(state) : undefined;
+  const base = isNewWorktree ? worktreeBase(state) : {};
 
   let directory: string | undefined;
   let source: SessionSourceSelection;
@@ -200,8 +218,9 @@ export function buildCreateSessionRequest(state: NewSessionState): BuildNewSessi
           isWorktree ? "worktree" : "existing",
           branch,
           workspace.kind === "existing" ? workspace.path : undefined,
+          base,
         )
-        : repositorySource(folder.path, workspace, branch);
+        : repositorySource(folder.path, workspace, branch, base);
       break;
   }
 

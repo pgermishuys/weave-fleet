@@ -12,6 +12,12 @@ export interface NewSessionDraft {
   /** The folder came from the person (or a restored draft), so defaults arriving later don't replace it. */
   hasChosenFolder: boolean;
   workspace: NewSessionWorkspace;
+  /** Where a new worktree starts; null for the repository's default. */
+  baseBranch: string | null;
+  /** Fetch an `origin/…` base first. */
+  fetchOrigin: boolean;
+  /** Branch for a new worktree instead of the one named from the message; empty for that one. */
+  branchName: string;
   title: string;
   tags: string;
   projectId: string | null;

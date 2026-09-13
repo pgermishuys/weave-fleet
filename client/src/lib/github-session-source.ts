@@ -23,12 +23,21 @@ export function createGitHubSessionSourcePreset(input: Omit<GitHubSessionSourceP
   };
 }
 
+/** Where a new worktree starts, as the repository and GitHub sources take it; empty for the defaults. */
+export interface WorktreeBaseInput {
+  /** `origin/<name>` or a local branch. */
+  baseBranch?: string;
+  /** Only sent when off. */
+  fetchOrigin?: false;
+}
+
 export function buildGitHubSessionSourceSelection(
   preset: GitHubSessionSourcePreset,
   repositoryPath: string,
   isolationStrategy: GitHubRepositoryIsolationStrategy,
   branch?: string,
   existingWorktreePath?: string,
+  base?: WorktreeBaseInput,
 ): SessionSourceSelection {
   return {
     key: {
@@ -44,6 +53,7 @@ export function buildGitHubSessionSourceSelection(
       repositoryPath,
       isolationStrategy,
       ...(existingWorktreePath ? { existingWorktreePath } : branch ? { branch } : {}),
+      ...(existingWorktreePath ? {} : base),
     },
   };
 }

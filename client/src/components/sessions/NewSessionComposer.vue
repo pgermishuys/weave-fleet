@@ -6,6 +6,7 @@ import { ArrowUp, CircleDot, GitPullRequest, LoaderCircle, X } from "lucide-vue-
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
 import MessageBubble from "@/components/session/MessageBubble.vue";
+import BasePicker from "@/components/sessions/new-session/BasePicker.vue";
 import FolderPicker from "@/components/sessions/new-session/FolderPicker.vue";
 import HarnessPicker from "@/components/sessions/new-session/HarnessPicker.vue";
 import MoreOptions from "@/components/sessions/new-session/MoreOptions.vue";
@@ -15,7 +16,7 @@ import { useIsMobile } from "@/composables/use-media-query";
 import { useNewSessionDefaults } from "@/composables/use-new-session-defaults";
 import { useProjects } from "@/composables/use-projects";
 import { useRepositories } from "@/composables/use-repositories";
-import { useRepositoryInfo } from "@/composables/use-repository-info";
+import { useRepositoryDetail } from "@/composables/use-repository-detail";
 import { seedSentPrompt } from "@/composables/use-send-prompt";
 import { useCreateSession } from "@/composables/use-session-actions";
 import { useWorktrees } from "@/composables/use-worktrees";
@@ -54,13 +55,29 @@ const { draft, restored } = workspaceUiStore.openNewSessionDraft({
   folder: null,
   hasChosenFolder: false,
   workspace: { kind: "new" },
+  baseBranch: null,
+  fetchOrigin: true,
+  branchName: "",
   title: "",
   tags: "",
   projectId: null,
   harnessType: defaultHarnessType.value,
   gitHubPreset: null,
 });
-const { message, folder, workspace, title, tags, projectId, harnessType, gitHubPreset, hasChosenFolder } = toRefs(draft);
+const {
+  message,
+  folder,
+  workspace,
+  baseBranch,
+  fetchOrigin,
+  branchName,
+  title,
+  tags,
+  projectId,
+  harnessType,
+  gitHubPreset,
+  hasChosenFolder,
+} = toRefs(draft);
 // A project in the address wins (a project's "+"); otherwise a restored draft keeps its own.
 if (search.value.projectId || !restored) {
   projectId.value = search.value.projectId ?? null;
@@ -86,7 +103,7 @@ const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
 
 const repositoryPath = computed(() => (folder.value?.kind === "repository" ? folder.value.path : null));
 const { worktrees, isLoading: isLoadingWorktrees } = useWorktrees({ repositoryPath });
-const { info: repositoryInfo } = useRepositoryInfo(repositoryPath);
+const { detail: repositoryDetail, isLoading: isLoadingRepositoryDetail } = useRepositoryDetail(repositoryPath);
 
 const isCloudMode = computed(() => config.value.cloudMode);
 const areRepositoriesReady = computed(() => scannedAt.value !== null || repositoriesError.value !== null);
@@ -94,7 +111,15 @@ const showHarnessPicker = computed(() => enabledHarnesses.value.length > 1);
 const hasMessage = computed(() => message.value.trim().length > 0);
 const isStarting = computed(() => isCreating.value || draft.isStarting);
 const canSend = computed(() => !isStarting.value && (hasMessage.value || gitHubPreset.value !== null));
-const currentBranch = computed(() => repositoryInfo.value?.branch ?? null);
+const currentBranch = computed(() => repositoryDetail.value?.branch ?? null);
+const defaultBase = computed(() => repositoryDetail.value?.defaultBase ?? null);
+
+/** Where a new worktree starts: the chosen base, else the default once the repository's detail is in. */
+const newWorktreeBase = computed(() => {
+  if (baseBranch.value) return baseBranch.value;
+  if (!repositoryDetail.value) return null;
+  return defaultBase.value ?? currentBranch.value;
+});
 
 const recentFolders = computed(() => defaults.recentFolders(repositories.value));
 
@@ -102,8 +127,11 @@ const newBranch = computed(() => {
   if (folder.value?.kind !== "repository" || workspace.value.kind !== "new") {
     return undefined;
   }
-  return resolveNewWorktreeBranch({ message: message.value, gitHubPreset: gitHubPreset.value });
+  return resolveNewWorktreeBranch({ branch: branchName.value, message: message.value, gitHubPreset: gitHubPreset.value });
 });
+
+/** The name the message (or the GitHub issue) gives the new branch, for the name field's placeholder. */
+const generatedBranch = computed(() => resolveNewWorktreeBranch({ message: message.value, gitHubPreset: gitHubPreset.value }));
 
 const planParts = computed(() => {
   const selected = workspace.value;
@@ -115,6 +143,9 @@ const planParts = computed(() => {
     existingBranch: selected.kind === "existing"
       ? worktrees.value.find((worktree) => worktree.path === selected.path)?.branch ?? null
       : null,
+    defaultBranch: repositoryDetail.value?.defaultBranch ?? null,
+    base: newWorktreeBase.value,
+    fetchOrigin: fetchOrigin.value,
   });
 });
 
@@ -165,6 +196,12 @@ function resizeTextarea(): void {
 }
 
 function setFolder(next: NewSessionFolder, chosen: boolean): void {
+  // A base or branch name belongs to the repository it was picked in.
+  if (next.kind !== folder.value?.kind || (next.kind !== "none" && folder.value?.kind !== "none" && next.path !== folder.value?.path)) {
+    baseBranch.value = null;
+    fetchOrigin.value = true;
+    branchName.value = "";
+  }
   folder.value = next;
   hasChosenFolder.value ||= chosen;
   validationError.value = null;
@@ -228,6 +265,9 @@ async function submit(withoutMessage: boolean): Promise<void> {
     tags: tags.value.split(","),
     harnessType: resolvedHarnessType.value || undefined,
     gitHubPreset: gitHubPreset.value,
+    branch: branchName.value,
+    baseBranch: baseBranch.value,
+    fetchOrigin: fetchOrigin.value,
   });
 
   if (!request.ok) {
@@ -509,6 +549,19 @@ onUnmounted(() => {
             @update:workspace="workspace = $event"
             @close-auto-focus="returnFocusToMessage"
           />
+          <BasePicker
+            v-if="workspace.kind === 'new'"
+            v-model:base-branch="baseBranch"
+            v-model:fetch-origin="fetchOrigin"
+            v-model:branch-name="branchName"
+            :branches="repositoryDetail?.branches ?? []"
+            :default-base="defaultBase"
+            :current-branch="currentBranch"
+            :is-loading="isLoadingRepositoryDetail || !repositoryDetail"
+            :generated-branch="generatedBranch"
+            :disabled="isStarting"
+            @close-auto-focus="returnFocusToMessage"
+          />
         </template>
         <div class="new-session__strip-end">
           <MoreOptions
@@ -535,6 +588,10 @@ onUnmounted(() => {
             v-if="part.code"
             class="new-session__plan-code"
           >{{ part.text }}</code>
+          <span
+            v-else-if="part.warn"
+            class="new-session__plan-warn"
+          >{{ part.text }}</span>
           <template v-else>
             {{ part.text }}
           </template>
@@ -806,6 +863,10 @@ onUnmounted(() => {
   color: var(--text);
   font-family: var(--font-mono-stack);
   font-size: 11.5px;
+}
+
+.new-session__plan-warn {
+  color: var(--status-waiting);
 }
 
 .new-session__no-message {

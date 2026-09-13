@@ -143,6 +143,29 @@ describe("buildCreateSessionRequest", () => {
       expect(request.options.source?.input).toMatchObject({ branch: "feature/login" });
     });
 
+    it("new worktree: sends a chosen base, and fetch only when it's off", () => {
+      const request = build({ message: "Fix the login redirect", baseBranch: "origin/release/2.0", fetchOrigin: false });
+
+      expect(request.options.source?.input).toEqual({
+        repositoryPath: REPO,
+        isolationStrategy: "worktree",
+        branch: "fleet/fix-login-redirect",
+        baseBranch: "origin/release/2.0",
+        fetchOrigin: false,
+      });
+      expect(build({ message: "x", baseBranch: null, fetchOrigin: true }).options.source?.input)
+        .toEqual({ repositoryPath: REPO, isolationStrategy: "worktree", branch: "fleet/x" });
+    });
+
+    it("sends no base for the current checkout or an existing worktree", () => {
+      const base = { baseBranch: "origin/release/2.0", fetchOrigin: false };
+
+      expect(build({ workspace: { kind: "current" }, ...base }).options.source?.input)
+        .toEqual({ repositoryPath: REPO, isolationStrategy: "existing" });
+      expect(build({ workspace: { kind: "existing", path: WORKTREE }, ...base }).options.source?.input)
+        .toEqual({ repositoryPath: REPO, isolationStrategy: "worktree", existingWorktreePath: WORKTREE });
+    });
+
     it("current checkout: works in the repository, no branch", () => {
       const request = build({ workspace: { kind: "current" }, message: "Fix the login redirect" });
 
@@ -245,6 +268,18 @@ describe("buildCreateSessionRequest", () => {
         isolationStrategy: "worktree",
         existingWorktreePath: WORKTREE,
       });
+    });
+
+    it("new worktree from a chosen base", () => {
+      const request = build({ gitHubPreset: issue, baseBranch: "origin/release/2.0", fetchOrigin: false });
+
+      expect(request.options.source?.input).toMatchObject({
+        branch: "fix/issue-42",
+        baseBranch: "origin/release/2.0",
+        fetchOrigin: false,
+      });
+      expect(build({ gitHubPreset: issue, workspace: { kind: "existing", path: WORKTREE }, baseBranch: "main" })
+        .options.source?.input).not.toHaveProperty("baseBranch");
     });
 
     it("current checkout", () => {

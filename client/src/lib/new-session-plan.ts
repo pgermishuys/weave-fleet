@@ -1,9 +1,10 @@
 import type { NewSessionFolder, NewSessionWorkspace } from "@/lib/new-session-request";
 
-/** A run of plan-line text; `code` runs are paths and branch names. */
+/** A run of plan-line text; `code` runs are paths and branch names, `warn` runs a caution. */
 export interface PlanPart {
   text: string;
   code?: boolean;
+  warn?: boolean;
 }
 
 export interface NewSessionPlanInput {
@@ -15,6 +16,12 @@ export interface NewSessionPlanInput {
   newBranch: string | undefined;
   /** Branch of the chosen existing worktree, when known. */
   existingBranch: string | null;
+  /** The repository's default branch (`main`), when known. */
+  defaultBranch?: string | null;
+  /** Where a new worktree starts (`origin/main`), when known. */
+  base?: string | null;
+  /** Whether an `origin/…` base is fetched first (default true). */
+  fetchOrigin?: boolean;
 }
 
 /** `/home/me/src/x` → `~/src/x` (also macOS and Windows home folders). */
@@ -49,11 +56,15 @@ export function describeNewSession(input: NewSessionPlanInput): PlanPart[] {
   }
 
   if (workspace.kind === "current") {
+    const { currentBranch, defaultBranch } = input;
+    const offDefault = Boolean(currentBranch && defaultBranch && currentBranch !== defaultBranch);
     return [
       { text: "Works directly in " },
       { text: tildePath(folder.path), code: true },
-      ...(input.currentBranch ? [{ text: " on " }, { text: input.currentBranch, code: true }] : []),
-      { text: ". Edits land in your checkout." },
+      ...(currentBranch ? [{ text: " on " }, { text: currentBranch, code: true }] : []),
+      offDefault
+        ? { text: `. That's not ${defaultBranch}.`, warn: true }
+        : { text: ". Edits land in your checkout." },
     ];
   }
 
@@ -66,8 +77,15 @@ export function describeNewSession(input: NewSessionPlanInput): PlanPart[] {
     ];
   }
 
+  const base: PlanPart[] = input.base
+    ? [
+      { text: input.base, code: true },
+      ...(input.fetchOrigin === false && input.base.startsWith("origin/") ? [{ text: " as last fetched" }] : []),
+    ]
+    : [{ text: "the default branch" }];
+
   if (!input.newBranch) {
-    return [{ text: "New worktree from the default branch. The branch is named from your message." }];
+    return [{ text: "New worktree from " }, ...base, { text: ". The branch is named from your message." }];
   }
 
   return [
@@ -75,6 +93,8 @@ export function describeNewSession(input: NewSessionPlanInput): PlanPart[] {
     { text: worktreeFolderLabel(folder.path, input.newBranch), code: true },
     { text: " on " },
     { text: input.newBranch, code: true },
-    { text: ", from the default branch." },
+    { text: ", from " },
+    ...base,
+    { text: "." },
   ];
 }

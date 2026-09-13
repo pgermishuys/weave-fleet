@@ -951,6 +951,48 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
         });
       },
     },
+    {
+      pattern: /^\/api\/repositories\/detail$/,
+      handler: (url) => {
+        const path = url.searchParams.get("path") ?? "";
+        console.log(`[mock-api] GET /api/repositories/detail?path=${path}`);
+        const current = path.endsWith("/weave-fleet") ? "feat/browser-canvas" : "main";
+        const branch = (name: string, shortHash: string, message: string) => ({
+          name,
+          shortHash,
+          message,
+          author: "",
+          authorEmail: "",
+          date: "",
+          isCurrent: name === current,
+          isRemote: name.startsWith("origin/"),
+        });
+        return json({
+          repository: {
+            name: path.split("/").pop() ?? path,
+            path,
+            branch: current,
+            uncommittedCount: 0,
+            totalCommitCount: 0,
+            firstCommitDate: null,
+            lastCommitDate: null,
+            branches: [
+              branch(current, "a1b2c3d", "Work in progress"),
+              branch("origin/main", "e4f5a6b", "Merge pull request #199"),
+              ...(current === "main" ? [] : [branch("main", "c7d8e9f", "Merge pull request #197")]),
+              branch("origin/release/2.0", "0a1b2c3", "Cut 2.0"),
+            ],
+            tags: [],
+            recentCommits: [],
+            remotes: [],
+            readmeContent: null,
+            readmeFilename: null,
+            defaultBranch: "main",
+            defaultBase: "origin/main",
+          },
+        });
+      },
+    },
     // ─── Skills & tools (read-only: mock requests carry no body) ───────────────
     {
       pattern: /^\/api\/skills$/,

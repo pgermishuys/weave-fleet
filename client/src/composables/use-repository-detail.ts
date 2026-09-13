@@ -1,4 +1,4 @@
-import { shallowRef, watch, type ShallowRef } from "vue";
+import { shallowRef, toValue, watch, type MaybeRefOrGetter, type ShallowRef } from "vue";
 import { api } from "@/api/client";
 import type { RepositoryDetail, RepositoryDetailResponse } from "@/api/client";
 
@@ -8,7 +8,7 @@ export interface UseRepositoryDetailResult {
   error: ShallowRef<string | null>;
 }
 
-export function useRepositoryDetail(path: string | null): UseRepositoryDetailResult {
+export function useRepositoryDetail(path: MaybeRefOrGetter<string | null>): UseRepositoryDetailResult {
   const detail = shallowRef<RepositoryDetail | null>(null);
   const isLoading = shallowRef(false);
   const error = shallowRef<string | null>(null);
@@ -16,7 +16,7 @@ export function useRepositoryDetail(path: string | null): UseRepositoryDetailRes
   let controller: AbortController | undefined;
 
   watch(
-    () => path,
+    () => toValue(path),
     async (nextPath) => {
       controller?.abort();
 

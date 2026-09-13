@@ -61,6 +61,33 @@ describe("describeNewSession", () => {
       .toBe("New worktree from the default branch. The branch is named from your message.");
   });
 
+  it("names the base a new worktree starts from, and says when it won't be fetched", () => {
+    expect(sentence({ newBranch: "fleet/fix-login", base: "origin/release/2.0" }))
+      .toBe("New worktree rocket-worktrees/fleet-fix-login on fleet/fix-login, from origin/release/2.0.");
+    expect(sentence({ newBranch: "fleet/fix-login", base: "origin/main", fetchOrigin: false }))
+      .toBe("New worktree rocket-worktrees/fleet-fix-login on fleet/fix-login, from origin/main as last fetched.");
+    expect(sentence({ newBranch: "fleet/fix-login", base: "main", fetchOrigin: false }))
+      .toBe("New worktree rocket-worktrees/fleet-fix-login on fleet/fix-login, from main.");
+    expect(sentence({ base: "origin/main" }))
+      .toBe("New worktree from origin/main. The branch is named from your message.");
+  });
+
+  it("warns when the current checkout isn't on the default branch", () => {
+    const parts = describeNewSession({
+      folder: { kind: "repository", path: "/home/me/src/rocket" },
+      workspace: { kind: "current" },
+      currentBranch: "feature/x",
+      newBranch: undefined,
+      existingBranch: null,
+      defaultBranch: "main",
+    });
+
+    expect(parts.map((part) => part.text).join("")).toBe("Works directly in ~/src/rocket on feature/x. That's not main.");
+    expect(parts.filter((part) => part.warn).map((part) => part.text)).toEqual([". That's not main."]);
+    expect(sentence({ workspace: { kind: "current" }, currentBranch: "main", defaultBranch: "main" }))
+      .toBe("Works directly in ~/src/rocket on main. Edits land in your checkout.");
+  });
+
   it("an existing worktree", () => {
     expect(sentence({
       workspace: { kind: "existing", path: "/home/me/src/rocket-worktrees/fix-login" },

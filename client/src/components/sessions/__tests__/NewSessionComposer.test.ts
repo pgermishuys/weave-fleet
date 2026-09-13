@@ -1,7 +1,7 @@
 import { DOMWrapper, flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { computed, ref, shallowRef } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { HarnessInfo, ScannedRepository, WorktreeInfo } from "@/api/client";
+import type { BranchInfo, HarnessInfo, RepositoryDetail, ScannedRepository, WorktreeInfo } from "@/api/client";
 import NewSessionComposer from "@/components/sessions/NewSessionComposer.vue";
 import { NEW_SESSION_DEFAULTS_KEY } from "@/composables/use-new-session-defaults";
 import { clearSentPrompts, useSentPrompts } from "@/composables/use-send-prompt";
@@ -53,9 +53,25 @@ vi.mock("@/composables/use-worktrees", () => ({
   useWorktrees: () => ({ worktrees, isLoading: shallowRef(false), error: shallowRef(null) }),
 }));
 
-vi.mock("@/composables/use-repository-info", () => ({
-  useRepositoryInfo: () => ({
-    info: shallowRef({ name: "rocket", path: "/home/me/src/rocket", branch: "feature/x", lastCommit: null, remoteUrl: null }),
+function branch(name: string, extra: Partial<BranchInfo> = {}): BranchInfo {
+  return {
+    name,
+    shortHash: "abc1234",
+    message: `tip of ${name}`,
+    author: "",
+    authorEmail: "",
+    date: "",
+    isCurrent: false,
+    isRemote: name.startsWith("origin/"),
+    ...extra,
+  };
+}
+
+const repositoryDetail = shallowRef<RepositoryDetail | null>(null);
+
+vi.mock("@/composables/use-repository-detail", () => ({
+  useRepositoryDetail: () => ({
+    detail: repositoryDetail,
     isLoading: shallowRef(false),
     error: shallowRef(null),
   }),
@@ -150,6 +166,28 @@ beforeEach(() => {
   harnesses.value = [opencode];
   createError.value = undefined;
   isCreating.value = false;
+  repositoryDetail.value = {
+    name: "rocket",
+    path: "/home/me/src/rocket",
+    branch: "feature/x",
+    uncommittedCount: 0,
+    totalCommitCount: 0,
+    firstCommitDate: null,
+    lastCommitDate: null,
+    branches: [
+      branch("feature/x", { isCurrent: true }),
+      branch("main"),
+      branch("origin/main"),
+      branch("origin/release/2.0"),
+    ],
+    tags: [],
+    recentCommits: [],
+    remotes: [],
+    readmeContent: null,
+    readmeFilename: null,
+    defaultBranch: "main",
+    defaultBase: "origin/main",
+  };
 });
 
 afterEach(() => {
@@ -219,6 +257,129 @@ describe("NewSessionComposer", () => {
 
       expect(view.get("[data-testid='new-session-plan']").text())
         .toContain("New worktree rocket-worktrees/fleet-fix-login-redirect on fleet/fix-login-redirect");
+    });
+  });
+
+  describe("base chip", () => {
+    async function openBaseMenu(view: VueWrapper): Promise<void> {
+      await view.get("[data-testid='new-session-base-chip']").trigger("click");
+      await flushPromises();
+    }
+
+    function branchOption(name: string) {
+      const option = inDocument().findAll("[role='option']")
+        .find((candidate) => candidate.find(".ns-option__title").text().replace(/ · .*$/, "") === name);
+      if (!option) {
+        throw new Error(`No branch option "${name}"`);
+      }
+      return option;
+    }
+
+    it("says where a new worktree starts", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const view = await mountComposer();
+
+      expect(view.get("[data-testid='new-session-base-chip']").text()).toBe("from origin/main");
+      await type(view, "Fix the login redirect");
+      expect(view.get("[data-testid='new-session-plan']").text())
+        .toContain("on fleet/fix-login-redirect, from origin/main.");
+    });
+
+    it("isn't there for the current checkout", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path }, { [rocket.path]: "current" });
+      const view = await mountComposer();
+
+      expect(view.find("[data-testid='new-session-base-chip']").exists()).toBe(false);
+    });
+
+    it("lists the default first, marked, and the checked-out branch", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const view = await mountComposer();
+
+      await openBaseMenu(view);
+
+      const titles = inDocument().findAll("[role='option'] .ns-option__title").map((title) => title.text());
+      expect(titles[0]).toBe("origin/main · default");
+      expect(titles).toContain("feature/x · checked out");
+      expect(branchOption("origin/main").attributes("aria-selected")).toBe("true");
+    });
+
+    it("starts from a chosen branch, unfetched and under a typed name when asked", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const view = await mountComposer();
+
+      await openBaseMenu(view);
+      await branchOption("origin/release/2.0").trigger("click");
+      await flushPromises();
+      expect(view.get("[data-testid='new-session-base-chip']").text()).toBe("from origin/release/2.0");
+
+      await openBaseMenu(view);
+      await inDocument().get("[data-testid='new-session-base-fetch']").trigger("click");
+      await inDocument().get("#new-session-branch-name").setValue("hotfix/login");
+      await flushPromises();
+
+      expect(view.get("[data-testid='new-session-base-chip']").text()).toBe("from origin/release/2.0 · no fetch");
+      await type(view, "Fix the login redirect");
+      expect(view.get("[data-testid='new-session-plan']").text())
+        .toContain("on hotfix/login, from origin/release/2.0 as last fetched.");
+
+      await pressEnter(view);
+
+      const [, options] = lastCreateCall();
+      expect(options).toMatchObject({ branch: "hotfix/login" });
+      expect((options.source as { input: Record<string, unknown> }).input).toMatchObject({
+        branch: "hotfix/login",
+        baseBranch: "origin/release/2.0",
+        fetchOrigin: false,
+      });
+    });
+
+    it("sends no base for the default, so the server's rules apply", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const view = await mountComposer();
+
+      await openBaseMenu(view);
+      await branchOption("main").trigger("click");
+      await openBaseMenu(view);
+      await branchOption("origin/main").trigger("click");
+      await type(view, "Fix the login redirect");
+      await pressEnter(view);
+
+      const input = (lastCreateCall()[1].source as { input: Record<string, unknown> }).input;
+      expect(input).not.toHaveProperty("baseBranch");
+      expect(input).not.toHaveProperty("fetchOrigin");
+    });
+
+    it("can't turn fetching off for a local branch", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const view = await mountComposer();
+
+      await openBaseMenu(view);
+      await branchOption("main").trigger("click");
+      await openBaseMenu(view);
+
+      expect(inDocument().get("[data-testid='new-session-base-fetch']").attributes("disabled")).toBeDefined();
+    });
+
+    it("forgets the base when the folder changes", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const view = await mountComposer();
+
+      await openBaseMenu(view);
+      await branchOption("origin/release/2.0").trigger("click");
+      await openFolderMenu(view);
+      await folderOption("comet").trigger("click");
+
+      expect(view.get("[data-testid='new-session-base-chip']").text()).toBe("from origin/main");
+    });
+
+    it("warns when the current checkout isn't on the default branch", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path }, { [rocket.path]: "current" });
+      const view = await mountComposer();
+
+      expect(view.get("[data-testid='new-session-plan']").text())
+        .toContain("Works directly in ~/src/rocket on feature/x. That's not main.");
+      expect(view.get(".new-session__plan-warn").text()).toBe(". That's not main.");
     });
   });
 
