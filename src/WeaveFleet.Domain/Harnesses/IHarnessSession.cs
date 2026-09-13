@@ -70,6 +70,13 @@ public interface IHarnessSession : IAsyncDisposable
     /// </summary>
     Task<string?> GetActivityStatusAsync(CancellationToken ct);
 
+    /// <summary>
+    /// Returns the agent's current todo list, or <see langword="null"/> when the harness can't report one
+    /// or the query fails. Used to rebuild progress without waiting for the next todo update.
+    /// </summary>
+    Task<IReadOnlyList<Events.TodoEntry>?> GetTodosAsync(CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<Events.TodoEntry>?>(null);
+
     /// <summary>List available agents for this instance.</summary>
     Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct);
 

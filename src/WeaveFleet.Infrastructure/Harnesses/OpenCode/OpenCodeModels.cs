@@ -613,6 +613,18 @@ internal sealed record OpenCodeCommandInfo
 }
 
 // ---------------------------------------------------------------------------
+// Todos
+// ---------------------------------------------------------------------------
+
+/// <summary>A todo item, as returned by GET /session/{id}/todo and carried by the <c>todo.updated</c> event.</summary>
+internal sealed record OpenCodeTodo
+{
+    [JsonPropertyName("content")] public string? Content { get; init; }
+    [JsonPropertyName("status")] public string? Status { get; init; }
+    [JsonPropertyName("priority")] public string? Priority { get; init; }
+}
+
+// ---------------------------------------------------------------------------
 // SSE Events
 // ---------------------------------------------------------------------------
 

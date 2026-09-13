@@ -59,7 +59,7 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
 
 ### Phase 1: Todos, end to end
 
-- [ ] 1. Add the `todos.reported` Fleet event and the capability flag
+- [x] 1. Add the `todos.reported` Fleet event and the capability flag
   - **What**: Add `EventTypes.TodosReported = "todos.reported"` and classify it in `EventTypeMetadata`: known, not durable, and handled like the other session-state events there. Add a `TodosReported` domain event with a `TodosReportedPayload { SessionId, Items }`. Each item is `TodoEntry { Content, Status, Priority? }`, with status one of `pending`, `in_progress`, `completed` or `cancelled`. Map it in `DomainEventTranslator` and give it the wire name `todos.reported` in `SessionEventsHub`. Add `ReportsTodos` to `HarnessCapabilities` (default false). Register the new types in the source-generated JSON contexts; the AOT build fails without them.
   - **Files**:
     - `src/WeaveFleet.Domain/Harnesses/EventTypes.cs`
@@ -75,7 +75,7 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
     - An unknown status becomes `pending` (as the client does today); an item without content is dropped
     - Translator unit tests cover a normal list, an empty list and bad items
 
-- [ ] 2. Map OpenCode's `todo.updated` in the adapter
+- [x] 2. Map OpenCode's `todo.updated` in the adapter
   - **What**: In `OpenCodeHarnessSession.SubscribeAsync`, turn `todo.updated` into a `todos.reported` event. The mapping itself lives in `OpenCodeMapper`. Subagent events keep their routed `FleetSessionId`, so a child's todos land on the child session. Send the Fleet event instead of the raw one, so nothing downstream sees `todo.updated`. Set `ReportsTodos = true` on `OpenCodeHarness`. Add optional `IHarnessSession.GetTodosAsync` (default: returns null). Implement it for OpenCode with `GET /session/{id}/todo?directory=` in `OpenCodeHttpClient`; it's used to rebuild progress after a restart.
   - **Files**:
     - `src/WeaveFleet.Infrastructure/Harnesses/OpenCode/OpenCodeMapper.cs`
@@ -88,10 +88,10 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
   - **Depends on**: Task 1
   - **Acceptance**:
     - Mapper tests use the real 1.18.30 payload shape, including a child session's event
-    - A conformance test runs real OpenCode against `FakeLlmServer` with a scripted `todowrite` call and asserts the `todo.updated` shape. An OpenCode upgrade that changes the shape then fails in CI, not in production.
+    - The `todo.updated` shape is pinned against real OpenCode by Task 6's live test, not the conformance suite: `OpenCodeFixture` starts OpenCode with the real HOME, so it would load the user's own OpenCode config and plugins. An OpenCode upgrade that changes the shape then fails in CI, not in production.
     - Harnesses without `GetTodosAsync` return null
 
-- [ ] 3. Add the progress tracker, storage and push
+- [x] 3. Add the progress tracker, storage and push
   - **What**: Application layer:
     - A `SessionProgress` model: kind (`todos` or `plan`), done, total, a current-item label, full detail, and the update time.
     - A pure `SessionProgressTracker` that applies Fleet events to it.
@@ -118,7 +118,7 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
     - A SignalR contract test in `SignalREventContractTests` asserts the exact JSON of `session_progress` on `"sessions"` and `progress.updated` on the session topic
     - A slow database or broadcaster never blocks the relay (the channel drops the oldest item, like `SmartLinkDetector`)
 
-- [ ] 4. Serve progress through the API
+- [x] 4. Serve progress through the API
   - **What**: Add an optional `Progress` summary to `SessionListResponse` as an init property, like `Origin`, so the positional record doesn't change. Load it with one query for the whole page, not one per session. Add `GET /api/sessions/{id}/progress` for the open session's full detail, owner-scoped like the other session endpoints. Regenerate or extend the client API types.
   - **Files**:
     - `src/WeaveFleet.Application/DTOs/SessionDtos.cs`
@@ -127,7 +127,7 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
     - `client/src/api/client.ts`
   - **Depends on**: Task 3
   - **Acceptance**:
-    - The list includes progress for sessions that have it and omits the field for the rest
+    - The list includes progress for sessions that have it and `null` for the rest, like `origin`. The API writes null fields and the SignalR push omits them, as each already does.
     - Another user's session returns 404 from the progress endpoint
     - Api tests cover both endpoints
 

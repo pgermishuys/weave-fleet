@@ -26,6 +26,9 @@ public sealed record HarnessCapabilities
     public bool SupportsImageAttachments { get; init; }
     public bool SupportsStreaming { get; init; }
     public bool SupportsDelegation { get; init; }
+
+    /// <summary>The harness sends the agent's todo list as <see cref="EventTypes.TodosReported"/> events.</summary>
+    public bool ReportsTodos { get; init; }
 }
 
 /// <summary>Whether a harness binary/service is available on this machine.</summary>

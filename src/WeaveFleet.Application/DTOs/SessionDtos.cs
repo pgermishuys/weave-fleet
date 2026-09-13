@@ -32,6 +32,9 @@ public sealed record SessionListResponse(
     List<string> Tags)
 {
     public SessionOriginDto? Origin { get; init; }
+
+    /// <summary>How far along the session is, when Fleet has seen a todo list or plan for it.</summary>
+    public SessionProgressSummaryDto? Progress { get; init; }
 }
 
 /// <summary>

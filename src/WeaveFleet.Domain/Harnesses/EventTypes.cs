@@ -27,6 +27,12 @@ public static class EventTypes
 
     public const string FileWatcherUpdated = "file.watcher.updated";
 
+    /// <summary>
+    /// The agent's todo list changed. Fleet's own event: each harness adapter maps its harness's todo updates
+    /// onto it, with a <c>TodosReportedPayload</c> as the payload.
+    /// </summary>
+    public const string TodosReported = "todos.reported";
+
     /// <summary>Returns <c>true</c> if the event type is a permission event (i.e. starts with "permission.").</summary>
     public static bool IsPermissionEvent(string type) =>
         type.StartsWith("permission.", StringComparison.Ordinal);

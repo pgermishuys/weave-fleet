@@ -28,5 +28,6 @@ public sealed class OpenCodeHarness : IHarness
         SupportsImageAttachments = true,
         SupportsStreaming = true,
         SupportsDelegation = true,
+        ReportsTodos = true,
     };
 }

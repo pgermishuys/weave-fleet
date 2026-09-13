@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
@@ -338,6 +339,15 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 FleetSessionId = !isParentEvent ? routedFleetSessionId : null
             };
 
+            // The todo list becomes Fleet's own event, so nothing past the adapter sees "todo.updated".
+            if (sseEvt.Type == OpenCodeMapper.TodoUpdatedEventType)
+            {
+                var todosEvent = OpenCodeMapper.TryMapTodosReported(sseEvt, harnessEvent.SessionId, harnessEvent.FleetSessionId);
+                if (todosEvent is not null)
+                    yield return todosEvent;
+                continue;
+            }
+
             if (harnessEvent.Type is EventTypes.MessageCreated or EventTypes.MessageUpdated)
                 harnessEvent = await EnrichWithModelInfoWhenMissingAsync(harnessEvent, ct).ConfigureAwait(false);
 
@@ -668,6 +678,25 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
             // No status found, default to idle
             return "idle";
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            // Best-effort query — return null on failure
+            return null;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<TodoEntry>?> GetTodosAsync(CancellationToken ct)
+    {
+        var openCodeSessionId = _openCodeSessionId;
+        if (!_instanceHandle.IsRunning || string.IsNullOrWhiteSpace(openCodeSessionId))
+            return null;
+
+        try
+        {
+            var todos = await _instanceHandle.HttpClient.GetTodosAsync(openCodeSessionId, _workingDirectory, ct).ConfigureAwait(false);
+            return OpenCodeMapper.ToTodoEntries(todos);
         }
         catch (Exception) when (!ct.IsCancellationRequested)
         {

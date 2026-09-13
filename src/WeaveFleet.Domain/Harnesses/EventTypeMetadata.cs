@@ -184,6 +184,15 @@ public static class EventTypeMetadata
             IsAdvisory = false,
             IsActivitySignal = false,
         },
+        // Read by the progress tracker in the relay, which pushes its own progress events, so it isn't broadcast.
+        EventTypes.TodosReported => new EventClassification
+        {
+            IsKnown = true,
+            IsDurable = false,
+            IsEphemeralRelay = false,
+            IsAdvisory = false,
+            IsActivitySignal = false,
+        },
         _ when EventTypes.IsPermissionEvent(eventType) => new EventClassification
         {
             IsKnown = true,

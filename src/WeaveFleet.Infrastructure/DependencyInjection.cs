@@ -137,6 +137,7 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IBoardRepository, BoardRepository>();
         services.AddScoped<ISmartLinkRepository, SmartLinkRepository>();
+        services.AddScoped<ISessionProgressRepository, SessionProgressRepository>();
         services.AddScoped<ICanvasRepository, CanvasRepository>();
         services.AddScoped<IAppRunRepository, AppRunRepository>();
         services.AddScoped<IAutomationRepository, AutomationRepository>();
@@ -151,6 +152,7 @@ public static class DependencyInjection
         // Application services (scoped)
         services.AddScoped<ProjectService>();
         services.AddScoped<SessionService>();
+        services.AddScoped<WeaveFleet.Application.Progress.SessionProgressReader>();
         services.AddScoped<WorkspaceService>();
         services.AddScoped<WorkspaceRootService>();
         services.AddScoped<InstanceService>();
@@ -230,6 +232,10 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.SmartLinkWatcherService>();
         services.AddSingleton<ISmartLinkWatcher>(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.SmartLinkWatcherService>());
         services.AddHostedService(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.SmartLinkWatcherService>());
+
+        // Session progress: the relay feeds the observer; the service stores progress and pushes changes.
+        services.AddSingleton<WeaveFleet.Infrastructure.Progress.SessionProgressObserver>();
+        services.AddHostedService<WeaveFleet.Infrastructure.Progress.SessionProgressService>();
 
         // Where harnesses read skills, tools and config: ~/.config/opencode, <repo>/.opencode, …
         services.AddSingleton(_ => HarnessInstallPaths.FromEnvironment());

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
@@ -169,6 +170,62 @@ internal static class OpenCodeMapper
         }
         return result;
     }
+
+    /// <summary>The OpenCode event sent whenever the agent's todo list changes.</summary>
+    internal const string TodoUpdatedEventType = "todo.updated";
+
+    /// <summary>
+    /// Maps OpenCode's <c>todo.updated</c> event (<c>{sessionID, todos: [{content, status, priority}]}</c>) to
+    /// Fleet's <see cref="EventTypes.TodosReported"/> event. Returns <see langword="null"/> for any other event
+    /// or a payload without a todo list.
+    /// </summary>
+    internal static HarnessEvent? TryMapTodosReported(OpenCodeSseEvent evt, string sessionId, string? fleetSessionId)
+    {
+        if (evt.Type != TodoUpdatedEventType
+            || evt.Properties.ValueKind != JsonValueKind.Object
+            || !evt.Properties.TryGetProperty("todos", out var todosEl)
+            || todosEl.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        List<OpenCodeTodo>? todos;
+        try
+        {
+            todos = todosEl.Deserialize(OpenCodeJsonContext.Default.ListOpenCodeTodo);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        var payload = new TodosReportedPayload
+        {
+            SessionId = fleetSessionId ?? string.Empty,
+            Items = ToTodoEntries(todos ?? []),
+        };
+
+        return new HarnessEvent
+        {
+            Type = EventTypes.TodosReported,
+            SessionId = sessionId,
+            FleetSessionId = fleetSessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(payload, InfrastructureJsonContext.Default.TodosReportedPayload),
+        };
+    }
+
+    /// <summary>Maps OpenCode todo items to Fleet's, dropping items with no text.</summary>
+    internal static IReadOnlyList<TodoEntry> ToTodoEntries(IEnumerable<OpenCodeTodo?> todos)
+        => todos
+            .Where(todo => todo is not null && !string.IsNullOrWhiteSpace(todo.Content))
+            .Select(todo => new TodoEntry
+            {
+                Content = todo!.Content!,
+                Status = TodoStatuses.Normalize(todo.Status),
+                Priority = string.IsNullOrWhiteSpace(todo.Priority) ? null : todo.Priority,
+            })
+            .ToList();
 
     /// <summary>
     /// Maps an <see cref="OpenCodeSseEvent"/> to a <see cref="HarnessEvent"/>.

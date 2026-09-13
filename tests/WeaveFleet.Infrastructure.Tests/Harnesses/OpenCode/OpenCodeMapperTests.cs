@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Shouldly;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
@@ -1111,4 +1112,118 @@ public sealed class OpenCodeMapperTests
 
         result.ShouldBeNull();
     }
+
+    // ---------------------------------------------------------------------------
+    // TryMapTodosReported — todo.updated (shape checked against OpenCode 1.18.30)
+    // ---------------------------------------------------------------------------
+
+    [Fact]
+    public void TryMapTodosReported_TodoUpdated_MapsToFleetEvent()
+    {
+        var evt = TodoUpdatedEvent(
+            """
+            {
+              "sessionID": "oc-1",
+              "todos": [
+                { "content": "Write DROP TABLE statements", "status": "completed", "priority": "high" },
+                { "content": "Drop the associated indexes", "status": "in_progress", "priority": "medium" },
+                { "content": "Start the app on a fresh database", "status": "pending", "priority": "low" }
+              ]
+            }
+            """);
+
+        var result = OpenCodeMapper.TryMapTodosReported(evt, "oc-1", fleetSessionId: null);
+
+        result.ShouldNotBeNull();
+        result.Type.ShouldBe(EventTypes.TodosReported);
+        result.SessionId.ShouldBe("oc-1");
+        result.FleetSessionId.ShouldBeNull();
+        var payload = result.Payload!.Value;
+        payload.GetProperty("items").GetArrayLength().ShouldBe(3);
+        var second = payload.GetProperty("items")[1];
+        second.GetProperty("content").GetString().ShouldBe("Drop the associated indexes");
+        second.GetProperty("status").GetString().ShouldBe(TodoStatuses.InProgress);
+        second.GetProperty("priority").GetString().ShouldBe("medium");
+        payload.GetRawText().ShouldNotContain("todos");
+    }
+
+    [Fact]
+    public void TryMapTodosReported_ChildSession_KeepsTheRoutedFleetSession()
+    {
+        var evt = TodoUpdatedEvent("""{ "sessionID": "oc-child", "todos": [ { "content": "Delete SnapshotMergeTests.cs", "status": "pending", "priority": "medium" } ] }""");
+
+        var result = OpenCodeMapper.TryMapTodosReported(evt, "oc-child", fleetSessionId: "fleet-child");
+
+        result.ShouldNotBeNull();
+        result.FleetSessionId.ShouldBe("fleet-child");
+        result.Payload!.Value.GetProperty("sessionId").GetString().ShouldBe("fleet-child");
+    }
+
+    [Fact]
+    public void TryMapTodosReported_EmptyList_MapsToEmptyItems()
+    {
+        var evt = TodoUpdatedEvent("""{ "sessionID": "oc-1", "todos": [] }""");
+
+        var result = OpenCodeMapper.TryMapTodosReported(evt, "oc-1", fleetSessionId: null);
+
+        result.ShouldNotBeNull();
+        result.Payload!.Value.GetProperty("items").GetArrayLength().ShouldBe(0);
+    }
+
+    [Fact]
+    public void TryMapTodosReported_DropsItemsWithoutContent_AndNormalizesStatus()
+    {
+        var evt = TodoUpdatedEvent(
+            """
+            {
+              "sessionID": "oc-1",
+              "todos": [
+                { "content": "", "status": "completed", "priority": "high" },
+                { "status": "completed" },
+                { "content": "Ship it", "status": "blocked", "priority": "" }
+              ]
+            }
+            """);
+
+        var result = OpenCodeMapper.TryMapTodosReported(evt, "oc-1", fleetSessionId: null);
+
+        var items = result!.Payload!.Value.GetProperty("items");
+        items.GetArrayLength().ShouldBe(1);
+        items[0].GetProperty("content").GetString().ShouldBe("Ship it");
+        items[0].GetProperty("status").GetString().ShouldBe(TodoStatuses.Pending);
+        items[0].TryGetProperty("priority", out _).ShouldBeFalse();
+    }
+
+    [Theory]
+    [InlineData("message.part.updated", """{ "sessionID": "oc-1", "todos": [] }""")]
+    [InlineData("todo.updated", """{ "sessionID": "oc-1" }""")]
+    [InlineData("todo.updated", """{ "sessionID": "oc-1", "todos": "nope" }""")]
+    [InlineData("todo.updated", """{ "sessionID": "oc-1", "todos": [ 42 ] }""")]
+    public void TryMapTodosReported_OtherEventsAndBadPayloads_ReturnNull(string type, string properties)
+    {
+        var evt = new OpenCodeSseEvent { Type = type, Properties = JsonDocument.Parse(properties).RootElement };
+
+        OpenCodeMapper.TryMapTodosReported(evt, "oc-1", fleetSessionId: null).ShouldBeNull();
+    }
+
+    [Fact]
+    public void ToTodoEntries_MapsGetTodoResponseItems()
+    {
+        var entries = OpenCodeMapper.ToTodoEntries(
+        [
+            new OpenCodeTodo { Content = "Add the endpoint", Status = "completed", Priority = "high" },
+            new OpenCodeTodo { Content = " ", Status = "pending" },
+            null,
+            new OpenCodeTodo { Content = "Write tests", Status = "cancelled" },
+        ]);
+
+        entries.Select(entry => (entry.Content, entry.Status, entry.Priority)).ShouldBe(
+        [
+            ("Add the endpoint", TodoStatuses.Completed, "high"),
+            ("Write tests", TodoStatuses.Cancelled, null),
+        ]);
+    }
+
+    private static OpenCodeSseEvent TodoUpdatedEvent(string properties)
+        => new() { Type = "todo.updated", Properties = JsonDocument.Parse(properties).RootElement };
 }
