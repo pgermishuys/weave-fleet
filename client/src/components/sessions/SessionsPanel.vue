@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, shallowRef, watch } from "vue";
+import { computed, onMounted, onUnmounted, reactive, shallowRef, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
 import { Check, FolderPlus, LoaderCircle, Plus, Search } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
@@ -43,6 +43,14 @@ interface ActiveSessionDrag {
 const sessionsStore = useSessionsStore();
 const sidebarStore = useSidebarStore();
 const router = useRouter();
+
+let releaseSessionList: (() => void) | null = null;
+onMounted(() => {
+  releaseSessionList = sidebarStore.registerSessionList();
+});
+onUnmounted(() => {
+  releaseSessionList?.();
+});
 const pathname = useLocation({
   select: (location) => location.pathname,
 });

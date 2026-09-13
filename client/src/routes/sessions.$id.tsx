@@ -517,6 +517,12 @@ const SessionDetailPage = defineComponent({
       ) ?? "idle";
     });
 
+    // normalizeActivityStatus has no "retry", so a retrying session reads as idle
+    // above. The header names the retry, so it gets the raw value.
+    const headerActivityStatus = computed(() =>
+      selectedSession.value?.activityStatus === "retry" ? "retry" : effectiveActivityStatus.value,
+    );
+
     watch(
       [effectiveActivityStatus, effectiveLifecycleStatus],
       ([nextActivityStatus, nextLifecycleStatus], [previousActivityStatus, previousLifecycleStatus]) => {
@@ -693,8 +699,9 @@ const SessionDetailPage = defineComponent({
             harnessType={selectedSession.value?.harnessType ?? remoteSession.value?.harnessType ?? null}
             directory={selectedSession.value?.workspaceDirectory ?? remoteSession.value?.workspaceDirectory ?? null}
             branch={selectedSession.value?.branch ?? remoteSession.value?.branch ?? null}
-            activityStatus={effectiveActivityStatus.value}
+            activityStatus={headerActivityStatus.value}
             lifecycleStatus={effectiveLifecycleStatus.value}
+            retryAttempt={selectedSession.value?.retryAttempt ?? null}
             retentionStatus={optimisticSessionState.value?.retentionStatus ?? sessionStateOverride.value?.retentionStatus ?? selectedSession.value?.retentionStatus ?? remoteSession.value?.retentionStatus}
             totalTokens={selectedSession.value?.totalTokens ?? remoteSession.value?.totalTokens ?? null}
             totalCost={selectedSession.value?.totalCost ?? remoteSession.value?.totalCost ?? null}

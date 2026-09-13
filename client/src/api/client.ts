@@ -470,6 +470,8 @@ export interface SessionListItem {
   sourceDirectory?: string | null;
   branch?: string | null;
   activityStatus?: string | null;
+  /** Client-only: set from the activity_status push while the harness retries. */
+  retryAttempt?: number | null;
   lifecycleStatus: string;
   retentionStatus: string;
   archivedAt?: string | null;

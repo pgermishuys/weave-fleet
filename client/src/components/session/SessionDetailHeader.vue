@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
+import { storeToRefs } from "pinia";
 import SessionContextChips from "@/components/session-context/SessionContextChips.vue";
 import SessionAnalyticsPopover from "@/components/session/SessionAnalyticsPopover.vue";
+import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { Badge } from "@/components/ui/badge";
 import type { SessionOrigin } from "@/api/client";
 import { useHarnesses } from "@/composables/use-harnesses";
 import { useSessionsStore } from "@/stores/sessions";
+import { useSidebarStore } from "@/stores/sidebar";
 import { GitBranch, X, Plus } from "lucide-vue-next";
 
 interface Props {
@@ -37,6 +40,7 @@ interface Props {
 const props = defineProps<Props>();
 const { harnesses } = useHarnesses();
 const sessionsStore = useSessionsStore();
+const { sessionListShown } = storeToRefs(useSidebarStore());
 let composerDisabledSyncTimer: ReturnType<typeof setInterval> | null = null;
 
 const isAddingTag = ref(false);
@@ -70,6 +74,27 @@ const sessionStatusLabel = computed(() => {
     default:
       return "Idle";
   }
+});
+// The session row owns the visible status. The header repeats the row's glyph
+// only when no sessions list is on screen, and names a retry because the row
+// has no room for why the session is stalled.
+const glyphStatus = computed(() => {
+  if (sessionStatusIndicator.value === "working" || sessionStatusIndicator.value === "retry") {
+    return "active";
+  }
+  switch (effectiveLifecycleStatus.value) {
+    case "disconnected":
+    case "completed":
+    case "stopped":
+    case "error":
+      return effectiveLifecycleStatus.value;
+    default:
+      return "idle";
+  }
+});
+const retryNote = computed(() => {
+  if (sessionStatusIndicator.value !== "retry") return null;
+  return props.retryAttempt ? `Retrying · attempt ${props.retryAttempt}` : "Retrying";
 });
 const isArchived = computed(() => props.retentionStatus === "archived");
 const harnessLabel = computed(() => {
@@ -219,13 +244,28 @@ onUnmounted(() => {
     <header class="session-detail-header">
       <div class="session-detail-header__main">
         <div class="session-detail-header__title-row">
+          <StatusGlyph
+            v-if="!sessionListShown"
+            data-testid="session-header-glyph"
+            :status="glyphStatus"
+            :activity="effectiveActivityStatus"
+            :label="sessionStatusLabel"
+          />
           <h2 class="session-detail-header__title">
             {{ sessionTitle }}
           </h2>
           <span
+            v-if="retryNote"
+            data-testid="session-retry-note"
+            class="session-detail-header__retry"
+          >
+            {{ retryNote }}
+          </span>
+          <span
             :data-status="sessionStatusIndicator"
             data-testid="session-status-indicator"
-            class="session-detail-header__status"
+            role="status"
+            class="sr-only"
           >
             {{ sessionStatusLabel }}
           </span>
@@ -554,17 +594,13 @@ onUnmounted(() => {
   border-color: var(--ring, var(--accent));
 }
 
-.session-detail-header__status {
-  display: inline-flex;
+.session-detail-header__retry {
   flex-shrink: 0;
-  align-items: center;
-  border-radius: calc(var(--radius-btn) - 2px);
-  padding: 1px 8px;
-  background: color-mix(in srgb, var(--text) 6%, transparent);
   font-size: 12px;
   font-weight: 500;
   line-height: 1.4;
-  color: var(--muted);
+  color: var(--status-waiting);
+  white-space: nowrap;
 }
 
 .session-detail-banners {

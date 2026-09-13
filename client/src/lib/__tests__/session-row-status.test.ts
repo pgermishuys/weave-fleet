@@ -37,24 +37,31 @@ describe("formatCompactAge", () => {
 
 describe("sessionRowStatus", () => {
   it("asks for attention when the session waits on the user", () => {
-    expect(sessionRowStatus(item("waiting_input"), NOW)).toEqual({ label: "Needs input", tone: "attention" });
+    expect(sessionRowStatus(item("waiting_input"), NOW)).toEqual({ label: "Needs input", tone: "attention", description: "Needs input" });
   });
 
-  it("says Working or Delegating for active sessions", () => {
-    expect(sessionRowStatus(item("active", { activityStatus: "busy" }), NOW)).toEqual({ label: "Working", tone: "working" });
-    expect(sessionRowStatus(item("active", { activityStatus: "delegating" }), NOW)).toEqual({ label: "Delegating", tone: "working" });
+  it("shows no word for working sessions, because the glyph animates", () => {
+    expect(sessionRowStatus(item("active", { activityStatus: "busy" }), NOW)).toEqual({ label: "", tone: "working", description: "Working" });
+    expect(sessionRowStatus(item("active", { activityStatus: "delegating" }), NOW)).toEqual({ label: "", tone: "working", description: "Delegating" });
+  });
+
+  it("names a retry, with the attempt when the harness reported one", () => {
+    expect(sessionRowStatus(item("active", { activityStatus: "retry", retryAttempt: 2 }), NOW))
+      .toEqual({ label: "Retry 2", tone: "retry", description: "Retrying (attempt 2)" });
+    expect(sessionRowStatus(item("active", { activityStatus: "retry" }), NOW))
+      .toEqual({ label: "Retrying", tone: "retry", description: "Retrying" });
   });
 
   it("names lifecycle states quietly", () => {
     expect(sessionRowStatus(item("completed"), NOW).label).toBe("Done");
-    expect(sessionRowStatus(item("error"), NOW)).toEqual({ label: "Error", tone: "error" });
+    expect(sessionRowStatus(item("error"), NOW)).toEqual({ label: "Error", tone: "error", description: "Error" });
   });
 
   it("shows last activity for idle sessions", () => {
-    expect(sessionRowStatus(item("idle"), NOW)).toEqual({ label: "2h", tone: "quiet" });
+    expect(sessionRowStatus(item("idle"), NOW)).toEqual({ label: "2h", tone: "quiet", description: "Idle" });
   });
 
   it("shows last activity for stopped sessions, which wake on the next prompt", () => {
-    expect(sessionRowStatus(item("stopped"), NOW)).toEqual({ label: "2h", tone: "quiet" });
+    expect(sessionRowStatus(item("stopped"), NOW)).toEqual({ label: "2h", tone: "quiet", description: "Idle" });
   });
 });

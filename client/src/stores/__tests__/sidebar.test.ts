@@ -46,4 +46,18 @@ describe("useSidebarStore", () => {
     expect(rehydratedStore.panelCollapsed).toBe(true);
     expect(rehydratedStore.rightPanelCollapsed).toBe(true);
   });
+
+  it("knows whether any sessions list is mounted", () => {
+    const store = useSidebarStore();
+    expect(store.sessionListShown).toBe(false);
+
+    const releaseDesktop = store.registerSessionList();
+    const releaseDrawer = store.registerSessionList();
+    releaseDesktop();
+    releaseDesktop();
+    expect(store.sessionListShown).toBe(true);
+
+    releaseDrawer();
+    expect(store.sessionListShown).toBe(false);
+  });
 });

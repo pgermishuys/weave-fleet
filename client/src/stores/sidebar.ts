@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { shallowRef } from "vue";
+import { computed, shallowRef } from "vue";
 
 export type SidebarRail =
   | "board"
@@ -42,6 +42,21 @@ export const useSidebarStore = defineStore("sidebar", () => {
   const panelCollapsed = shallowRef(readStoredBoolean(LEFT_PANEL_STORAGE_KEY));
   const rightPanelCollapsed = shallowRef(readStoredBoolean(RIGHT_PANEL_STORAGE_KEY));
   const mobileDrawerOpen = shallowRef(false);
+  // Session rows are the only place a session's status shows. Each mounted
+  // sessions list registers here so the header can show the status when no
+  // list is on screen (panel collapsed, another rail open, mobile drawer shut).
+  const mountedSessionLists = shallowRef(0);
+  const sessionListShown = computed(() => mountedSessionLists.value > 0);
+
+  function registerSessionList(): () => void {
+    mountedSessionLists.value += 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      mountedSessionLists.value -= 1;
+    };
+  }
 
   function setActiveRail(rail: SidebarRail): void {
     activeRail.value = rail;
@@ -74,6 +89,8 @@ export const useSidebarStore = defineStore("sidebar", () => {
     panelCollapsed,
     rightPanelCollapsed,
     mobileDrawerOpen,
+    sessionListShown,
+    registerSessionList,
     setActiveRail,
     setPanelCollapsed,
     setRightPanelCollapsed,
