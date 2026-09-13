@@ -31,7 +31,7 @@ import { useProjects } from "@/composables/use-projects";
 import type { SessionListItem } from "@/api/client";
 import { sessionCache } from "@/lib/session-cache";
 import { dispatchSessionRemoved } from "@/lib/session-sync";
-import { sessionRowStatus } from "@/lib/session-row-status";
+import { isSessionLive, sessionRowDim, sessionRowStatus } from "@/lib/session-row-status";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { useSessionsStore } from "@/stores/sessions";
 import OpenToolContextSubmenu from "@/components/sessions/OpenToolContextSubmenu.vue";
@@ -97,6 +97,9 @@ const rawTitle = computed(() => props.session.session.title ?? "");
 const displayTitle = computed(() => props.session.session.title?.trim() || "Untitled session");
 const now = useRelativeTime();
 const rowStatus = computed(() => sessionRowStatus(props.session, now.value));
+const isLive = computed(() => isSessionLive(props.session));
+// The open session never dims.
+const rowDim = computed(() => (props.active ? 0 : sessionRowDim(props.session, now.value)));
 const isArchivedSession = computed(() => props.session.retentionStatus === "archived");
 const fallbackCanArchive = computed(() => !isArchivedSession.value);
 const canArchive = computed(() => props.session.capabilities?.canArchive ?? fallbackCanArchive.value);
@@ -355,11 +358,21 @@ function removeSessionFromStore(): void {
           <button
             type="button"
             class="session-item"
-            :class="{ active }"
+            :class="{ active, [`session-item--dim-${rowDim}`]: rowDim > 0 }"
             :aria-current="active ? 'true' : undefined"
             @click="handleSelect"
           >
-            <StatusGlyph :status="session.sessionStatus" />
+            <StatusGlyph
+              v-if="isLive"
+              :status="session.sessionStatus"
+              :activity="session.activityStatus"
+              :label="rowStatus.description"
+            />
+            <span
+              v-else
+              class="session-glyph-slot"
+              aria-hidden="true"
+            />
 
             <span class="session-copy">
               <span class="session-title">{{ displayTitle }}</span>
@@ -378,7 +391,17 @@ function removeSessionFromStore(): void {
           class="session-item session-item--editing"
           :class="{ active }"
         >
-          <StatusGlyph :status="session.sessionStatus" />
+          <StatusGlyph
+            v-if="isLive"
+            :status="session.sessionStatus"
+            :activity="session.activityStatus"
+            :label="rowStatus.description"
+          />
+          <span
+            v-else
+            class="session-glyph-slot"
+            aria-hidden="true"
+          />
 
           <span class="session-copy">
             <input
@@ -544,6 +567,35 @@ function removeSessionFromStore(): void {
   outline-offset: -2px;
 }
 
+/* Quiet sessions fade back: after a day without activity, and further after
+   three. Hover and the open session restore full contrast. */
+.session-item--dim-1 {
+  color: color-mix(in srgb, var(--text) 55%, transparent);
+}
+
+.session-item--dim-2 {
+  color: color-mix(in srgb, var(--text) 40%, transparent);
+}
+
+.session-item--dim-1 .session-meta {
+  opacity: 0.75;
+}
+
+.session-item--dim-2 .session-meta {
+  opacity: 0.6;
+}
+
+.session-item:hover .session-meta {
+  opacity: 1;
+}
+
+/* Idle rows show no glyph; the slot keeps titles on one left edge. */
+.session-glyph-slot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+}
+
 .session-copy {
   flex: 1 1 auto;
   min-width: 0;
@@ -570,8 +622,8 @@ function removeSessionFromStore(): void {
   white-space: nowrap;
 }
 
-.session-meta--working {
-  color: var(--muted);
+.session-meta--retry {
+  color: var(--status-waiting);
 }
 
 .session-meta--attention {

@@ -580,6 +580,7 @@ describe("activity_status sessionStatus mapping", () => {
         sessionId: "test-session",
         activityStatus: "retry",
         capabilities: createCapabilities(),
+        attempt: 3,
       },
     }
 
@@ -589,6 +590,20 @@ describe("activity_status sessionStatus mapping", () => {
     const session = sessionsStore.sessions.find((s) => s.session.id === "test-session")
     expect(session?.activityStatus).toBe("retry")
     expect(session?.sessionStatus).toBe("active")
+    expect(session?.retryAttempt).toBe(3)
+
+    eventHandler?.("sessions", 5, {
+      type: "activity_status",
+      properties: {
+        sessionId: "test-session",
+        activityStatus: "busy",
+        capabilities: createCapabilities(),
+      },
+    })
+    await flushAll()
+
+    const recovered = sessionsStore.sessions.find((s) => s.session.id === "test-session")
+    expect(recovered?.retryAttempt).toBeNull()
   })
 
   it("preserves lifecycle state 'stopped' when receiving idle activity event", async () => {

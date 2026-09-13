@@ -17,45 +17,6 @@ const activeSession = computed(() =>
   sessions.value.find((session) => session.session.id === activeSessionId.value) ?? null,
 );
 
-const statusLabel = computed(() => {
-  const status = activeSession.value?.sessionStatus;
-  switch (status) {
-    case "idle":
-      return "IDLE";
-    case "active":
-      return "ACTIVE";
-    case "completed":
-      return "COMPLETED";
-    case "stopped":
-    case "disconnected":
-      return "STOPPED";
-    case "error":
-      return "ERROR";
-    case "waiting_input":
-      return "WAITING";
-    default:
-      return "IDLE";
-  }
-});
-
-const statusColor = computed(() => {
-  const status = activeSession.value?.sessionStatus;
-  switch (status) {
-    case "idle":
-      return "rgb(34, 197, 94)"; // green
-    case "active":
-      return "rgb(245, 158, 11)"; // amber
-    case "completed":
-      return "rgb(56, 189, 248)"; // sky
-    case "error":
-      return "rgb(239, 68, 68)"; // red
-    case "waiting_input":
-      return "rgb(168, 85, 247)"; // purple
-    default:
-      return "rgb(34, 197, 94)"; // green
-  }
-});
-
 const modelBadge = computed(() => {
   const harnessType = activeSession.value?.harnessType;
   // Mock model badge - in real implementation this would come from session metadata
@@ -119,21 +80,12 @@ const tokenCount = computed(() => {
       </template>
     </div>
 
+    <!-- Session status lives on the session's row in the sidebar, not here. -->
     <div
       v-if="activeSession"
       class="status-bar__right"
       data-testid="status-bar-session"
     >
-      <div class="status-indicator">
-        <span
-          class="status-dot"
-          :style="{ backgroundColor: statusColor }"
-        />
-        <span class="status-label">{{ statusLabel }}</span>
-      </div>
-
-      <span class="status-separator">|</span>
-
       <span class="model-badge">{{ modelBadge }}</span>
 
       <span class="status-separator">|</span>
@@ -197,24 +149,6 @@ const tokenCount = computed(() => {
 .terminal-owner {
   color: var(--accent);
   font-weight: 500;
-}
-
-.status-indicator {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
-
-.status-label {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text);
 }
 
 .status-separator {

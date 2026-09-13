@@ -53,6 +53,7 @@ export function useSessionActivityUpdates(): void {
           sessionId?: string
           activityStatus?: string
           capabilities?: unknown
+          attempt?: number | null
         }
 
         if (payload.sessionId && payload.activityStatus) {
@@ -71,6 +72,7 @@ export function useSessionActivityUpdates(): void {
           sessionsStore.patchSession(payload.sessionId, {
             activityStatus: payload.activityStatus,
             sessionStatus: newSessionStatus,
+            retryAttempt: payload.activityStatus === "retry" ? payload.attempt ?? null : null,
           })
 
           // Clear any optimistic busy state override

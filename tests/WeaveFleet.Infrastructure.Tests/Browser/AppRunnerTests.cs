@@ -104,7 +104,8 @@ public sealed class AppRunnerTests
 
         ready.Url.ShouldBeNull();
         ready.Problem.ShouldBe("`echo 'missing module'; exit 3` exited with code 3 before serving a page.");
-        runner.Logs(app.Id, 10).ShouldContain("missing module");
+        // Process.Exited can fire before the last output line is read, so wait for the line.
+        await WaitForAsync(() => runner.Logs(app.Id, 10).Contains("missing module"));
         await WaitForAsync(() => ReasonsFor(changes, app.Id).Contains(AppChangeReason.Exited));
         changes.Last(change => change.App.Id == app.Id).App.ExitCode.ShouldBe(3);
     }
@@ -168,6 +169,8 @@ public sealed class AppRunnerTests
 
             await runner.WaitUntilReadyAsync(app.Id, TimeSpan.FromSeconds(10));
 
+            // Process.Exited can fire before the last output line is read, so wait for a line first.
+            await WaitForAsync(() => runner.Logs(app.Id, 10).Count > 0);
             runner.Logs(app.Id, 10).ShouldContain($"secret=none aspnet=none port={app.Port} oom=1000");
         }
         finally
