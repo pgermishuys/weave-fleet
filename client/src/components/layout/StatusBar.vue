@@ -119,7 +119,11 @@ const tokenCount = computed(() => {
       </template>
     </div>
 
-    <div class="status-bar__right">
+    <div
+      v-if="activeSession"
+      class="status-bar__right"
+      data-testid="status-bar-session"
+    >
       <div class="status-indicator">
         <span
           class="status-dot"
