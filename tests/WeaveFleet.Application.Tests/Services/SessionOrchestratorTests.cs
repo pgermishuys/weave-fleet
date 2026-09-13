@@ -360,9 +360,9 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         });
 
         result.IsSuccess.ShouldBeTrue();
-        var runtime = _builder.HarnessRegistry.GetRuntimeByType("opencode").ShouldBeOfType<FakeHarnessRuntime>();
-        runtime.SpawnCalls.Any(call => call.InitialPrompt is not null && call.InitialPrompt.Contains("[Source: GitHub issue #42]", StringComparison.Ordinal)).ShouldBeTrue();
-        runtime.SpawnCalls.Any(call => call.InitialPrompt is not null && call.InitialPrompt.Contains("Issue context body", StringComparison.Ordinal)).ShouldBeTrue();
+        var prompt = _defaultSession.SendPromptCalls.ShouldHaveSingleItem().Text;
+        prompt.ShouldContain("[Source: GitHub issue #42]");
+        prompt.ShouldContain("Issue context body");
         _builder.SessionSourceUsageRepository.All.ShouldContain(usage =>
             usage.ProviderId == SessionSourceProviderIds.GitHub
             && usage.ActionId == SessionSourceActions.StartSession);
@@ -462,6 +462,143 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         result.IsFailure.ShouldBeTrue();
         result.Error.Code.ShouldBe("Validation.Session.RetentionStatus");
         _builder.SessionSourceUsageRepository.All.ShouldBeEmpty();
+    }
+
+    // ── CreateSessionAsync: first message ─────────────────────────────────────
+
+    [Fact]
+    public async Task CreateSessionAsync_WithInitialPrompt_SendsItAsAPromptAfterSpawn()
+    {
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            InitialPrompt = "  Fix the login redirect  "
+        });
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        var runtime = _builder.HarnessRegistry.GetRuntimeByType("opencode").ShouldBeOfType<FakeHarnessRuntime>();
+        runtime.SpawnCalls.ShouldHaveSingleItem().InitialPrompt.ShouldBeNull();
+        var (text, options) = _defaultSession.SendPromptCalls.ShouldHaveSingleItem();
+        text.ShouldBe("Fix the login redirect");
+        options.ShouldNotBeNull().MessageId.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task CreateSessionAsync_WithInitialPrompt_SavesTheMessageUnderTheIdTheHarnessWasGiven()
+    {
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            InitialPrompt = "Fix the login redirect"
+        });
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        var messageId = _defaultSession.SendPromptCalls.ShouldHaveSingleItem().Options!.MessageId;
+        var saved = _builder.MessageRepository.All.ShouldHaveSingleItem();
+        saved.Id.ShouldBe(messageId);
+        saved.SessionId.ShouldBe(result.Value.Session.Id);
+        saved.Role.ShouldBe("user");
+        MessagePersistenceService.ToHarnessMessage(saved).Parts
+            .ShouldHaveSingleItem().ShouldBeOfType<TextPart>().Text.ShouldBe("Fix the login redirect");
+    }
+
+    [Fact]
+    public async Task CreateSessionAsync_WithInitialPrompt_BroadcastsTheMessageUnderTheSameId()
+    {
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            InitialPrompt = "Fix the login redirect"
+        });
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        var messageId = _defaultSession.SendPromptCalls.ShouldHaveSingleItem().Options!.MessageId;
+        var broadcast = _builder.EventBroadcaster.Broadcasts
+            .Where(b => b.Topic == $"session:{result.Value.Session.Id}" && b.Type == EventTypes.MessageUpdated)
+            .ShouldHaveSingleItem();
+        broadcast.Payload.GetProperty("info").GetProperty("id").GetString().ShouldBe(messageId);
+        broadcast.Payload.GetProperty("correlationId").GetString().ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task CreateSessionAsync_WithInitialPrompt_WhenHarnessNeedsItAtSpawn_PassesItToSpawn()
+    {
+        var runtime = _builder.RegisterHarness("opencode", "Needs prompt", new HarnessCapabilities { RequiresInitialPrompt = true });
+        runtime.DefaultSession = _defaultSession;
+        _builder.ProjectRepository.Seed(new Project
+        {
+            Id = "scratch-1", Name = "Scratch", Type = "scratch", Position = 0,
+            CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01"
+        });
+        using var tempDirectory = new TempDirectory();
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            InitialPrompt = "Fix the login redirect"
+        });
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        runtime.SpawnCalls.ShouldHaveSingleItem().InitialPrompt.ShouldBe("Fix the login redirect");
+        _defaultSession.SendPromptCalls.ShouldBeEmpty();
+        _builder.MessageRepository.All.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateSessionAsync_WhenTheFirstMessageCannotBeSent_StillCreatesTheSessionAndSavesNothing()
+    {
+        ConfigureHarnessAndScratchProject();
+        _defaultSession.SendPromptBehavior = (_, _, _) => throw new InvalidOperationException("harness is gone");
+        using var tempDirectory = new TempDirectory();
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            InitialPrompt = "Fix the login redirect"
+        });
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        _builder.SessionRepository.InsertedSessions.ShouldHaveSingleItem();
+        _builder.MessageRepository.All.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateSessionAsync_WithoutInitialPrompt_SendsAndSavesNothing()
+    {
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
+
+        var result = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path,
+            InitialPrompt = "   "
+        });
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        _defaultSession.SendPromptCalls.ShouldBeEmpty();
+        _builder.MessageRepository.All.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task PromptSessionAsync_DoesNotSaveTheMessage()
+    {
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
+        var created = await _sut.CreateSessionAsync(new CreateSessionRequest { Directory = tempDirectory.Path });
+
+        var result = await _sut.PromptSessionAsync(created.Value.Session.Id, "A later message");
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
+        _builder.MessageRepository.All.ShouldBeEmpty();
     }
 
     // ── PromptSessionAsync ────────────────────────────────────────────────────

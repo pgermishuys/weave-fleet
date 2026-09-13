@@ -136,6 +136,7 @@ public sealed class SessionOrchestratorBuilder
             NullLogger<SessionOrchestrator>.Instance,
             sessionActivityWriteService: null,
             gitDiffService: _gitDiffService,
-            sessionApps: _sessionApps);
+            sessionApps: _sessionApps,
+            messageRepository: MessageRepository);
     }
 }

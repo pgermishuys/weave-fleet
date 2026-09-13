@@ -58,8 +58,13 @@ const { panelCollapsed, activeRail } = storeToRefs(sidebarStore);
 
 const isSettingsRoute = computed(() => pathname.value.startsWith("/settings"));
 
+// The new-session page has no session yet, so there's nothing for the panel to show.
+const isNewSessionRoute = computed(() => pathname.value === "/sessions/new");
+
 const showSessionsV2Panel = computed(() =>
-  !isSettingsRoute.value && (activeRail.value === "sessions" || activeRail.value === "analytics"),
+  !isSettingsRoute.value
+  && !isNewSessionRoute.value
+  && (activeRail.value === "sessions" || activeRail.value === "analytics"),
 );
 
 const showBoardPanel = computed(() =>

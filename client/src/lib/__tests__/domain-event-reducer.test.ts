@@ -544,6 +544,37 @@ describe("domain-event-reducer", () => {
     expect(new Set(reconnectedState.messages.map((message) => message.messageId)).size).toBe(reconnectedState.messages.length)
   })
 
+  it("keeps_the_snapshot_when_a_pending_message_update_has_no_parts", () => {
+    const userPrompt = createMessageLifecyclePayload({
+      id: "user-message-1",
+      role: "user",
+      createdAt: 1000,
+      text: "Carry on in the worktree",
+      partId: "user-text-1",
+    })
+    const assistant = createMessageLifecyclePayload({
+      id: "assistant-message-1",
+      role: "assistant",
+      createdAt: 1100,
+      text: "On it.",
+      partId: "assistant-text-1",
+    })
+    // The harness's own message.updated shape: info only, no parts. It can arrive before the
+    // snapshot, and is then replayed on top of it.
+    const assistantUpdatedWithoutParts = {
+      type: "message.updated",
+      payload: { info: { ...assistant.info, time: { created: 1100, completed: 1500 } } },
+    } as unknown as DomainEvent
+
+    const state = applyEvents(createSessionStreamState(createSnapshot({
+      messages: [userPrompt, assistant],
+    })), [assistantUpdatedWithoutParts])
+
+    expect(state.messages.map((message) => message.role)).toEqual(["user", "assistant"])
+    expect(state.messages[1].parts).toEqual(createSessionStreamState(createSnapshot({ messages: [userPrompt, assistant] })).messages[1].parts)
+    expect(state.messages[1].completedAt).toBe(1500)
+  })
+
   it("reconciles_optimistic_prompt_when_committed_event_has_matching_correlation_id", async () => {
     const sessionId = "session-prompt-reconcile"
     const { sentPrompts, hasPendingPrompts } = useSentPrompts(sessionId)

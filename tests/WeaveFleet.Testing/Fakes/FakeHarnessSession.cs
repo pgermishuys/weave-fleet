@@ -43,6 +43,12 @@ public sealed class FakeHarnessSession : IHarnessSession
     public Func<MessageQuery?, CancellationToken, Task<MessagePage>>? GetMessagesBehavior { get; set; }
 
     /// <summary>
+    /// Optional override for <see cref="IHarnessSession.SendPromptAsync"/>, called after the call is
+    /// recorded. Allows tests to make prompt delivery fail.
+    /// </summary>
+    public Func<string, PromptOptions?, CancellationToken, Task>? SendPromptBehavior { get; set; }
+
+    /// <summary>
     /// Optional override for <see cref="IHarnessSession.DeleteAsync"/>. Allows tests to assert that
     /// best-effort delete is called during rollback scenarios.
     /// </summary>
@@ -64,7 +70,7 @@ public sealed class FakeHarnessSession : IHarnessSession
     public Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct)
     {
         _sendPromptCalls.Add((text, options));
-        return Task.CompletedTask;
+        return SendPromptBehavior?.Invoke(text, options, ct) ?? Task.CompletedTask;
     }
 
     public Task SendCommandAsync(CommandOptions options, CancellationToken ct)

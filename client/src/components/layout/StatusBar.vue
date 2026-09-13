@@ -81,7 +81,11 @@ const tokenCount = computed(() => {
     </div>
 
     <!-- Session status lives on the session's row in the sidebar, not here. -->
-    <div class="status-bar__right">
+    <div
+      v-if="activeSession"
+      class="status-bar__right"
+      data-testid="status-bar-session"
+    >
       <span class="model-badge">{{ modelBadge }}</span>
 
       <span class="status-separator">|</span>

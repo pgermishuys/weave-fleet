@@ -123,7 +123,11 @@ function applyMessageLifecycle(messages: AccumulatedMessage[], payload: MessageL
     },
     cost: payload.info.cost ?? undefined,
     tokens: payload.info.tokens ?? undefined,
-    parts: payload.parts.map((part) => ({ ...part } as Record<string, unknown>)),
+    // Live message.updated events can carry the harness's payload, which has no parts; the parts
+    // the message already has are kept.
+    parts: Array.isArray(payload.parts)
+      ? payload.parts.map((part) => ({ ...part } as Record<string, unknown>))
+      : undefined,
   })
 }
 
