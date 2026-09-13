@@ -7,7 +7,7 @@ import AnnotationPopover from "@/components/annotations/AnnotationPopover.vue";
 import CanvasHost from "@/components/canvas/CanvasHost.vue";
 import CollapsedRightRail from "@/components/layout/CollapsedRightRail.vue";
 import SessionMetadataHeader from "@/components/session/SessionMetadataHeader.vue";
-import { useSessionTodos } from "@/composables/use-session-todos";
+import { useSessionProgress } from "@/composables/use-session-progress";
 import { useAnnotation } from "@/composables/use-annotation";
 import { useSendPrompt } from "@/composables/use-send-prompt";
 import { useDraftState } from "@/composables/use-draft-state";
@@ -88,22 +88,36 @@ watch(
   { immediate: true },
 );
 
+// --- Progress tab: added (without focus) the first time the session has a todo list or a plan ---
+const { progress } = useSessionProgress(computed(() => activeSessionId.value ?? ""));
+const hasProgress = computed(() => (progress.value?.total ?? 0) > 0);
+
+watch(
+  [activeSessionId, hasProgress],
+  ([sessionId, has]) => {
+    if (sessionId && has) canvasesStore.introduce(sessionId, "progress");
+  },
+  { immediate: true },
+);
+
 const tabBadges = computed<Record<string, CanvasTabBadge>>(() => {
   const attention = contextLinks.value.some(needsAttention);
   const count = contextLinks.value.length;
+  const done = progress.value?.done ?? 0;
+  const total = progress.value?.total ?? 0;
   return {
     context: {
       attention,
       count,
       label: attention ? "A linked pull request needs attention" : `${count} linked`,
     },
+    progress: {
+      count: total > 0 ? `${done}/${total}` : undefined,
+      label: `${done} of ${total} done`,
+    },
   };
 });
 
-// --- Collapsed rail: todos ---
-const { todos } = useSessionTodos(
-  computed(() => activeSessionId.value ?? ""),
-);
 
 function handleExpand(): void {
   sidebarStore.setRightPanelCollapsed(false);
@@ -166,7 +180,8 @@ provideCanvasAnnotate((anchor: AnnotationAnchor, position: { x: number; y: numbe
 <template>
   <CollapsedRightRail
     v-if="rightPanelCollapsed"
-    :todos="todos"
+    :done="progress?.done ?? 0"
+    :total="progress?.total ?? 0"
     @expand="handleExpand"
   />
 

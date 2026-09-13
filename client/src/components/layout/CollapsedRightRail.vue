@@ -2,19 +2,20 @@
 import { computed } from "vue";
 import { ChevronLeft, ListTodo } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
-import type { TodoItem } from "@/lib/todo-utils";
 
+/** The session's progress counts: plan steps, or todos when there's no plan. */
 const props = defineProps<{
-  todos: readonly TodoItem[];
+  done: number;
+  total: number;
 }>();
 
 const emit = defineEmits<{
   expand: [];
 }>();
 
-const totalCount = computed(() => props.todos.length);
-const completedCount = computed(() => props.todos.filter((todo) => todo.status === "completed").length);
-const pendingCount = computed(() => props.todos.filter((todo) => todo.status !== "completed" && todo.status !== "cancelled").length);
+const totalCount = computed(() => props.total);
+const completedCount = computed(() => Math.min(props.done, props.total));
+const pendingCount = computed(() => Math.max(0, props.total - props.done));
 const progressOffset = computed(() => {
   if (totalCount.value === 0) {
     return 75.4;

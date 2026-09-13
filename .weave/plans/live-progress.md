@@ -224,7 +224,7 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
     - Path-guard tests: `..`, a symlink out of the directory, a non-`.md` file and an oversized file are all refused
     - The row switches from the todo count to the plan count once there's a plan
 
-- [ ] 10. Add the Progress tab and the strip
+- [x] 10. Add the Progress tab and the strip
   - **What**: Add a built-in, client-only canvas kind, `progress` (label "Progress", `ListChecks` icon), next to `changes`, `files` and `context` in `canvas-registry.ts`, and pickable. `ProgressCanvas.vue` shows:
     - the plan title and file, and the count
     - the flow bar: one segment per group, or one per step for a flat plan
@@ -243,6 +243,7 @@ Mockup (Today vs Proposed, driven by the real event sequence): https://claude.ai
     - Vitest covers a phased plan, a flat plan, todos only and empty
     - Works in the dark and light themes and at the narrowest right-panel width (280px)
     - An E2E test: the TestHarness sends `files.written` for a fixture plan in the workspace, then ticks it; the tab and the row update
+    - Done 2026-09-13, checked in a real browser from the E2E run. Open point: at the default 360px panel width the tab strip already scrolls sideways once Context is added, and with Progress added the Files tab is scrolled out of view.
 
 ### Phase 3: Subagents under their step
 
