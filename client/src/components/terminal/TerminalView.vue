@@ -6,9 +6,12 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import { useResizeObserver } from "@vueuse/core";
 import { storeToRefs } from "pinia";
+import type { GlobalShortcut } from "@/lib/command-registry";
 import { openTerminalConnection } from "@/lib/terminal-connection";
+import { terminalKeyOwner } from "@/lib/terminal-keys";
 import type { TerminalConnection, TerminalConnectionStatus } from "@/lib/terminal-socket";
 import { currentTerminalFont, currentTerminalTheme } from "@/lib/terminal-theme";
+import { useKeybindingsStore } from "@/stores/keybindings";
 import { useThemeStore } from "@/stores/theme";
 
 /**
@@ -34,6 +37,25 @@ const emit = defineEmits<{
 const host = ref<HTMLElement | null>(null);
 const status = ref<TerminalConnectionStatus>("connecting");
 const { resolvedThemeId } = storeToRefs(useThemeStore());
+const { bindings } = storeToRefs(useKeybindingsStore());
+
+const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
+
+/** Fleet shortcuts that still work while the terminal has focus: show/hide the terminal and the right panel. */
+function passThrough(): GlobalShortcut[] {
+  return ["toggle-terminal", "toggle-right-panel"]
+    .map((id) => bindings.value[id]?.globalShortcut)
+    .filter((shortcut): shortcut is GlobalShortcut => Boolean(shortcut));
+}
+
+/**
+ * Keys typed into the terminal stop at its box, so Fleet's own shortcuts
+ * (Esc to interrupt, Ctrl K for the palette, …) never fire from inside it.
+ * Only the pass-through shortcuts carry on to Fleet.
+ */
+function onHostKeydown(event: KeyboardEvent): void {
+  if (terminalKeyOwner(event, isMac, passThrough()) !== "fleet") event.stopPropagation();
+}
 
 let term: Terminal | null = null;
 let fit: FitAddon | null = null;
@@ -88,6 +110,23 @@ onMounted(async () => {
   }
   if (!host.value) return;
   term.open(host.value);
+  term.attachCustomKeyEventHandler((event) => {
+    if (event.type !== "keydown") return true;
+    switch (terminalKeyOwner(event, isMac, passThrough())) {
+      case "fleet":
+      case "paste":
+        return false;
+      case "copy": {
+        const selection = term?.getSelection();
+        if (selection) void navigator.clipboard?.writeText(selection).catch(() => {});
+        event.preventDefault();
+        return false;
+      }
+      default:
+        return true;
+    }
+  });
+  host.value.addEventListener("keydown", onHostKeydown);
   fitNow();
 
   connection = openTerminalConnection({
@@ -141,6 +180,7 @@ watch(resolvedThemeId, () => {
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(fitFrame);
+  host.value?.removeEventListener("keydown", onHostKeydown);
   term?.textarea?.removeEventListener("focus", onFocus);
   term?.textarea?.removeEventListener("blur", onBlur);
   connection?.dispose();

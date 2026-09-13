@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { ChevronDown, Eraser, Plus, SquareTerminal, X } from "lucide-vue-next";
 import TerminalView from "@/components/terminal/TerminalView.vue";
 import { closeTerminalTab, openNewTerminal } from "@/composables/use-session-terminals";
@@ -70,6 +70,11 @@ watch(open, (isOpen) => {
     error.value = null;
     if (focused.value) onViewFocus(false);
   }
+});
+
+// Leaving the session while typing in its terminal mustn't leave the status bar saying it has the keyboard.
+onBeforeUnmount(() => {
+  if (focused.value) store.setFocused(false);
 });
 
 async function newTerminal(): Promise<void> {

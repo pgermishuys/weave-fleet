@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
+import { useAppShellStore } from "@/stores/app-shell";
 import { useSessionsStore } from "@/stores/sessions";
+import { useTerminalsStore } from "@/stores/terminals";
 
 const sessionsStore = useSessionsStore();
 const { sessions, activeSessionId } = storeToRefs(sessionsStore);
+const appShell = useAppShellStore();
+const { focused: terminalFocused } = storeToRefs(useTerminalsStore());
 
 const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 const mod = isMac ? "⌘" : "Ctrl";
@@ -71,7 +75,29 @@ const tokenCount = computed(() => {
 
 <template>
   <footer class="status-bar">
-    <div class="status-bar__left">
+    <div
+      v-if="terminalFocused"
+      class="status-bar__left"
+      data-testid="terminal-keyboard-hint"
+    >
+      <span class="terminal-owner">Terminal has the keyboard</span>
+      <span class="shortcut-separator">·</span>
+      <span class="shortcut-hint">
+        <kbd>Esc</kbd> <kbd>{{ mod }} K</kbd> <kbd>{{ mod }} B</kbd> go to the shell
+      </span>
+      <span class="shortcut-separator">·</span>
+      <span class="shortcut-hint">
+        <kbd>{{ mod }} J</kbd> Hide terminal
+      </span>
+      <span class="shortcut-separator">·</span>
+      <span class="shortcut-hint">
+        <kbd>{{ isMac ? "⌘ C" : "Ctrl Shift C" }}</kbd> Copy
+      </span>
+    </div>
+    <div
+      v-else
+      class="status-bar__left"
+    >
       <span class="shortcut-hint">
         <kbd>{{ mod }} K</kbd> Command Palette
       </span>
@@ -87,6 +113,12 @@ const tokenCount = computed(() => {
       <span class="shortcut-hint">
         <kbd>Esc</kbd> Cancel
       </span>
+      <template v-if="appShell.config.terminalEnabled">
+        <span class="shortcut-separator">·</span>
+        <span class="shortcut-hint">
+          <kbd>{{ mod }} J</kbd> Terminal
+        </span>
+      </template>
     </div>
 
     <div class="status-bar__right">
@@ -158,6 +190,11 @@ const tokenCount = computed(() => {
 
 .shortcut-separator {
   color: var(--border);
+}
+
+.terminal-owner {
+  color: var(--accent);
+  font-weight: 500;
 }
 
 .status-indicator {

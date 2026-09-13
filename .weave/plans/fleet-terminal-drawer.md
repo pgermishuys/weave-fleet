@@ -178,10 +178,15 @@ components/terminal/TerminalView.vue     one xterm per terminal, kept alive whil
     - Test setup gives every test a fresh Pinia and installs it into mounted components, so component tests must not call `setActivePinia(createPinia())` themselves. jsdom's localStorage (Node 22) outlives a test, so the terminal tests clear it; Node 26 has none (`globalThis.localStorage?.clear()`).
     - Tests: drawer 9, toggle 3, theme 12 (and the store tests). The whole client suite passes on Node 22 (467); on Node 26, 46 tests in untouched files fail on `localStorage.clear()`, the known local-only issue. Typecheck clean; no lint warnings in the changed files; the design linter's 9 findings are all in untouched files.
 
-- [ ] 7. Keyboard hand-off
+- [x] 7. Keyboard hand-off (done 2026-09-13)
   - **Files**: `TerminalView.vue` (`attachCustomKeyEventHandler`), `use-commands.ts`, `use-keyboard-shortcut.ts`, `StatusBar.vue`.
   - **Acceptance**: With the terminal focused, Esc, Ctrl K, Ctrl B and Ctrl [ ] reach the shell and don't trigger Fleet. Ctrl J and Ctrl Shift B still reach Fleet. Copy and paste follow Decision 9. The status bar shows "Terminal has the keyboard" while it has focus.
   - **Tests**: vitest for the global handlers ignoring events from inside the terminal.
+  - **As built**:
+    - `lib/terminal-keys.ts` `terminalKeyOwner(event, isMac, passThrough)` decides: `fleet` for the user's `toggle-terminal` and `toggle-right-panel` bindings (rebinding them is followed), `copy`/`paste` for Ctrl Shift C/V off a Mac, `shell` for everything else, Ctrl C included.
+    - `TerminalView` uses it twice: xterm's `attachCustomKeyEventHandler` ignores `fleet` and `paste` keys (the browser pastes and xterm's paste handler sends it) and copies the selection for `copy`; and a keydown listener on the terminal's box stops propagation for everything but `fleet`, so Fleet's document-level shortcuts (Esc to interrupt, Ctrl K for the palette, …) never see a key typed into the terminal. That doesn't depend on what xterm does with the event.
+    - The status bar shows "Terminal has the keyboard · Esc Ctrl K Ctrl B go to the shell · Ctrl J Hide terminal · Ctrl Shift C Copy" (⌘ on a Mac) while a terminal has focus, from `terminals.focused`; the drawer clears it when it's hidden or unmounted. The usual hints gain "Ctrl J Terminal" when terminals are on.
+    - Checked in the browser in mock mode: Ctrl J from the composer opens the drawer with focus in the terminal; Esc and Ctrl K in the terminal don't open the palette; Ctrl J in the terminal hides it and the status bar returns; Ctrl K elsewhere still opens the palette. There's no `useCommands` test harness to extend, so the global handler's `allowInEditable` is covered by that browser check.
 
 - [ ] 8. Select lines → message
   - **Files**: a selection popover in `TerminalView.vue`; terminal lines in the draft (next to `useDraftAttachments`); chips in `Composer.vue`; `client/src/lib/format-terminal-context.ts`.
