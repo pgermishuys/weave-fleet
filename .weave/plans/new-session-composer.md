@@ -57,7 +57,7 @@ Stages 2 and 3 are independent of each other once stage 1 has landed.
   - **Files**: `client/src/composables/use-new-session-defaults.ts` + test
   - **Acceptance**: tests for defaults, per-repo memory, and stale entries.
 
-- [ ] 1.3 The page
+- [x] 1.3 The page
   - **What**: `NewSessionComposer.vue` replaces `NewSessionForm.vue` in `routes/sessions.new.tsx`. Layout: sheet header "New session", empty state ("What should we work on?"), composer at the bottom where the session composer sits. Composer: autosizing textarea focused on open (`preventScroll`), harness picker only when more than one harness is enabled, send button. Enter creates, Shift+Enter is a new line. Under the box:
     - **Folder chip**: popover with search, "Recent" (from 1.2), all scanned repositories, "Browse for a folder…" (reuses `DirectoryPickerPopover`), "No folder, just chat".
     - **Workspace chip** (git repositories only): Current checkout (with its branch), New worktree, existing worktrees (last used first) from `useWorktrees`.
@@ -70,24 +70,33 @@ Stages 2 and 3 are independent of each other once stage 1 has landed.
   - **Depends on**: 1.1, 1.2
   - **Acceptance**: component tests for chip visibility rules (workspace only for git repos, harness only with >1), Enter vs Shift+Enter, Esc, GitHub preset. Test ids kept: `new-session-form` on the page root, `create-session-submit` on the send button; `#new-session-directory` on the browse input and `#session-title` in the "…" menu, so the E2E page object keeps working with small changes.
 
-- [ ] 1.4 Quick chat without the surprise
+- [x] 1.4 Quick chat without the surprise
   - **What**: "No folder" selects the quick-chat source; nothing is created until Enter. Placeholder becomes "Ask anything…".
   - **Depends on**: 1.3
   - **Acceptance**: selecting "No folder" creates nothing; Enter creates a quick chat with the message.
 
-- [ ] 1.5 No leftovers from the previous session
+- [x] 1.5 No leftovers from the previous session
   - **What**: On `/sessions/new`, hide the sessions right panel (`AppShell.vue`, `showSessionsV2Panel`) and the status bar's session section (`StatusBar.vue` when there's no active session for the route; `sessions.new.tsx` clears `activeSessionId`).
   - **Files**: `client/src/components/layout/AppShell.vue`, `client/src/components/layout/StatusBar.vue`, `client/src/routes/sessions.new.tsx`
   - **Acceptance**: opening New Session from a busy session shows no right panel, no "IDLE · model · tokens".
 
-- [ ] 1.6 End-to-end page object
+- [x] 1.6 End-to-end page object
   - **What**: Keep `NewSessionFormPage`'s public methods (`SetDirectoryAsync`, `SetTitleAsync`, `SubmitAsync`); change internals to: Folder chip → Browse → type path; "…" → title; `create-session-submit` (or "Start without a message" when no message is set). Update `tests/WeaveFleet.E2E/README.md` if it describes the form.
   - **Files**: `tests/WeaveFleet.E2E/Pages/NewSessionFormPage.cs`
   - **Acceptance**: the seven E2E test files pass unchanged (CI, or locally under the scratch-HOME recipe).
 
-- [ ] 1.7 Live check
+- [ ] 1.7 Live check — run 2026-09-13, one blocker open (see Findings)
   - **What**: Scratch Fleet from the branch; Playwright through every way in (sidebar, project +, palette, GitHub preset via the store) and every folder × workspace choice; confirm the worktree/branch in the session terminal like the before/after page. Screenshots in both themes and at 400 px wide. Check what title a session gets when none is sent (see Decisions).
   - **Acceptance**: screenshots published with the PR; nothing the old form could do is missing.
+
+### Stage 1 findings (2026-09-13)
+- **Built**: `NewSessionComposer.vue` + `new-session/` (FolderPicker, WorkspacePicker, MoreOptions, HarnessPicker, `new-session.css`), `lib/new-session-plan.ts` (plan line), `useRepositoryInfo` takes a reactive path, mock API has worktree/info routes. First use (no remembered folder) shows "Choose a folder" and Enter opens the folder menu instead of guessing a repository.
+- **Live check** (scratch Fleet :5131, `.poc-runtime/pw-composer.mjs`, `pw-composer2.mjs`): 27 of 28 checks passed. New worktree starts from freshly fetched `origin/main` on `fleet/<slug>`, the same message again gets `-2`, current checkout, existing worktree, plain folder via Browse, project from `?projectId`, title from "…", Start without a message, quick chat, palette (Ctrl+K, N), no leftover panel/status, Esc stays, GitHub preset + readable error, 400 px.
+- **Blocker, first message not shown**: after Enter the session opens without the message; it appears only after a reload. The agent gets it (`prompt_async` 204, stored in OpenCode). Cause: `CreateSessionAsync` hands `InitialPrompt` to `SpawnAsync`, and the orchestrator broadcasts the user message (`BroadcastUserMessageAsync`, live only, not persisted) during the create request, before the page subscribes. The page's snapshot (DB) is taken before OpenCode's echo is stored, and the relay suppresses that echo from broadcast (`HarnessEventRelay.ShouldSuppressUserEcho`). Pre-existing for GitHub starts and automations. Seeding the client registry (2.2 as written) isn't enough: `ActivityStream` clears optimistic prompts when assistant content arrives, so the message would vanish again once the agent replies.
+  - Recommended fix (server, harness-neutral): when `harness.Capabilities.RequiresInitialPrompt` is false, spawn without the prompt, then send it through `PromptSessionCoreAsync` (generated message id, subscription ready first) **and persist the user message row before returning**, so the page's snapshot has it. Keep today's path for harnesses that need the prompt at spawn.
+- **Not the composer's, noted**: a current-checkout session records no branch (`GET /api/sessions/{id}` → `branch: null`), as before. The session composer shows the global focus ring as a line under its textarea (layered `!important`); the new page drops it in-layer, so 4.2 should share that fix.
+- **Deferred to Stage 3**: the plan line says "from the default branch" and has no "That's not main" warning, because nothing returns the default branch yet (3.1 adds `defaultBranch`).
+- **Title when none is typed**: still "Untitled" after 10 s, but the scratch Fleet has no model credentials, so OpenCode couldn't have named it. Undecided.
 
 ## Stage 2 — Feels instant
 
@@ -130,7 +139,7 @@ Made (2026-09-13):
 
 Open, with a recommendation:
 - **Session title when none is typed**: check in 1.7 whether OpenCode names the session from the first message. If it does, send no title; if not, send the first line (≤ 60 chars).
-- **First message delivery**: start with `initialPrompt` (already used by GitHub and automations). Switch to create-then-send in 2.2 only if the first message can't be shown without a gap or a duplicate.
+- **First message delivery**: started with `initialPrompt`; the live check found the message isn't shown until a reload (see Stage 1 findings). Recommendation: the server fix above, in Stage 1, before this ships.
 - **Esc on the page**: closes menus only, never leaves (the draft is kept in stage 2 anyway).
 - **Quick-chat folders**: delete with their session (4.3). Needs a yes.
 
