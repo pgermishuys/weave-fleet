@@ -96,7 +96,7 @@ Ground truth from the spike and the codebase (2026-09-13). Don't re-check these:
   - **Output**: Findings appended to this plan; decides Task 5's `dotnet watch` approach.
   - **Depends on**: 0.
 
-- [ ] 2. Runner lifecycle
+- [ ] 2. Runner lifecycle (built 2026-09-13, see Findings; the live SIGKILL check is still to do)
   - **What**: Migration `030` and repository, `app.updated` events, the output endpoint, stop on session stop/archive/delete, orphan cleanup at startup, caps, ownership checks on every endpoint. `fleet_app_start` opens the canvas at once (state `{url: "", appId}`, canvas shows "starting"), then sets the page when it answers; the tool still waits for ready so it can return the URL or the failure.
   - **Files**: `src/WeaveFleet.Infrastructure/Migrations/030_add_app_runs.sql`, `AppRunRepository.cs`, `AppRunner.cs`, `BrowserBridge.cs`, `SessionOrchestrator.cs` (hooks), `Domain/Events` (`AppUpdated`), `SessionEventsHub.ResolveDomainEventType`, JSON contexts.
   - **Acceptance**: Kill Fleet with SIGKILL while an app runs; on the next start the app's processes are gone and the canvas says stopped with Start. Stopping, archiving or deleting a session stops its apps. A 4th app in one session is refused with the names of the 3 running.
@@ -230,6 +230,20 @@ The gateway adds nothing measurable. Razor Pages markup always does a full reloa
 - **Fixtures:** the Razor template's own `a.navbar-brand` scoped rule never applies (a tag-helper anchor gets no scope attribute); edit a rule on an element that carries it (`.border-bottom` on the `<nav>`). Measure warm edits after one warm-up edit, and rude edits separately (10–13 s, which doesn't meet Decision 4's 2 s; the bar should apply to warm, non-rude edits).
 - Seen once, not investigated: after a rude-edit restart, reverting the file logged "No C# changes to apply" and the app kept serving the edited markup until a restart.
 
+### Task 2: runner lifecycle (2026-09-13)
+Built in the worktree `.claude/worktrees/browser-canvas`, after rebasing `feat/browser-canvas` onto `origin/main` `884dda0` (the terminal drawer, PR #190; two registration conflicts, both kept).
+
+**Shape.** Three pieces, so the runner stays about processes:
+- `AppRunner` (Infrastructure, singleton): processes, in memory. A run has a fixed id and `PORT`; `StartAsync` with a known id restarts it, so a stored run starts again under its id and port (a new free port if the old one is taken). Starts, restarts and stops take turns behind one gate, which is what makes the caps hold. Status is `starting | running | exited | stopped`: `stopped` means Fleet stopped it (user, session lifecycle, Fleet restart), `exited` means it ended on its own with a code. It raises `Changed` with a reason; a restart's kill is not reported, and an instant exit waits until the start has been reported, so clients always see started before exited.
+- `AppRunService` (Application, scoped): what the endpoints and agent tools use. Merges live runs with stored ones (a stored run Fleet isn't running reads as stopped, or exited if it had), checks the session and the owner on every call, and reuses a session's stored run of the same command.
+- `AppRunRecorder` + `AppRunRecorderService`: one channel, one reader, so changes are stored in order; each change stores and sends the run *as it is now* (reasons can arrive out of order across threads). Before listening, it kills leftovers (pid and start time must both match, 2 s tolerance) and marks every unfinished run stopped.
+
+**Other changes:** `app_runs` (migration 030) with `ON DELETE CASCADE`; `app.updated` on `session:{id}`; `GET …/apps/{appId}/output?after=n`; `restart` also starts a stopped run (409 with the reason when a cap refuses); `ISessionAppCleanup` hooked into stop (before the "already stopped" early return), archive and delete (before the worktree is removed); caps in `Fleet:Browser:MaxAppsPerSession`/`MaxApps` (3/10); `TerminalEnvironment.IsFleetOwned` now also strips `Fleet__*`, `ASPNETCORE_*`, `DOTNET_URLS` and OpenCode's credentials from app runs; `DOTNET_URLS=http://localhost:$PORT` for `dotnet run|watch` of one project that isn't an Aspire AppHost and doesn't pass `--urls`; on Linux the command runs behind `{ echo 1000 > /proc/self/oom_score_adj; } 2>/dev/null;`; inotify-instance and ENOSPC-watcher lines get a Fleet hint line once per start; `dotnet-watch` processes' ports are `HelperPorts`, not `Ports` (kept for Task 4's ownership check). `fleet_canvas_read` reads through the service, so stored runs show as stopped. The browser canvas state accepts `url: ""` only with an `appId`. Client: minimal (an empty page shows a waiting line; stopped/exited show Start); Task 6 does the rest.
+
+**Checks:** Application 556/556, Infrastructure 792 (1 skipped, not ours), including real-process tests for caps, stop vs exit, restart keeping id and port, env stripping and `oom_score_adj` = 1000, output numbering, leftover kill by start time, and started-before-exited (20 instant exits). Client: `vue-tsc`, eslint, vitest 496/496 on Node 22 after `npm ci` (the .NET build had installed with bun, which resolves a different `@vue/test-utils`). Not run locally: `WeaveFleet.Api.Tests` and `WeaveFleet.IntegrationTests` (they boot `Program`, and this worktree session can't set a scratch `HOME`), so the new `app.updated` contract test runs first in CI.
+
+**Still open for Task 2:** the live acceptance check (SIGKILL a scratch Fleet with an app running, start it again, check the processes are gone and the canvas says stopped; stop/archive/delete from the UI; a 4th app refused). `DOTNET_URLS` against a real Aspire AppHost is untested (only a fake `.csproj`). Helper-port filtering is untested against a real `dotnet watch`.
+
 ## Assessment (2026-09-13)
 Asked by the user after Tasks 0–1: is this a good feature with decent functionality? Written by the agent that built the spike, so read with that in mind.
 
@@ -264,13 +278,17 @@ Asked by the user after Tasks 0–1: is this a good feature with decent function
 ## Follow-ups
 Open items, with where they came from. Tick them here as they're done.
 
-- [ ] **Decide** the proposed changes above (user). Still open: whether the wildcard host name is in V1 or later (proposal 1), and proposals 2–4. Settled: viewing from another device is core; the proxy, not the app, listens on the network (Decisions 10–11).
+- [x] **Decide** the proposed changes above (user). **Agreed 2026-09-13: all four.** The wildcard host name moves after V1 (Task 4 ships `*.localhost` and port-per-preview); the matrix starts with Vite, Bun, `dotnet watch` and plain Node; caps, `oom_score_adj` and the inotify message are V1 (Task 2); a screenshot tool comes right after V1; Decision 4's 2 s bar applies to warm, live-applied edits, with first-edit and rude-edit times measured separately. Estimate given at the time: ~9–10 working days for the rest of V1, ~5.5 for Tasks 2, 4 and 6.
 - [ ] **Draft PR #189** (opened 2026-09-13) for `feat/browser-canvas`: keep it a draft, since it ships agent tools that start processes, and don't merge before Tasks 2, 4 and 6 at least. Until Task 4, the proxy endpoint proxies any loopback URL for an authenticated user.
-- [ ] Task 2: catch and log exceptions in `AppRunner.MonitorAsync`; compare parsed ports in `BrowserBridge` (`:80` vs `:8080`); strip `Fleet__*` from app runs (Task 0 review notes).
-- [ ] Task 2: give ASP.NET runs their port (`DOTNET_URLS` for single-project `dotnet run`/`watch`, `-- --urls` in the tool description). Check that an Aspire AppHost isn't broken by it (untested).
-- [ ] Task 2/5: hide `dotnet watch`'s refresh ports from "also listens on" and the port picker.
-- [ ] Task 2/5: recognise the inotify-limit error; check whether `DOTNET_USE_POLLING_FILE_WATCHER=1` works with `dotnet watch` 10 and how slow it is.
-- [ ] Task 2: raise `oom_score_adj` for app runs (Linux); decide what caps look like on a 7 GB machine.
+- [x] Task 2: catch and log exceptions in `AppRunner.MonitorAsync`; compare parsed ports in `BrowserBridge` (`:80` vs `:8080`); strip `Fleet__*` from app runs (Task 0 review notes).
+- [x] Task 2: give ASP.NET runs their port (`DOTNET_URLS` for single-project `dotnet run`/`watch`, `-- --urls` in the tool description). Aspire AppHosts are skipped by reading the project file.
+- [ ] Check `DOTNET_URLS` against a real Aspire AppHost, and the helper-port filter against a real `dotnet watch` (Task 2 left both to a live run).
+- [x] Task 2/5: hide `dotnet watch`'s refresh ports from "also listens on" and the port picker (`HelperPorts`).
+- [x] Task 2/5: recognise the inotify-limit error (a Fleet hint line).
+- [ ] Check whether `DOTNET_USE_POLLING_FILE_WATCHER=1` works with `dotnet watch` 10 and how slow it is.
+- [x] Task 2: raise `oom_score_adj` for app runs (Linux).
+- [ ] Decide what caps look like on a 7 GB machine (defaults are 3 per session, 10 per Fleet; three `dotnet watch` apps don't fit in 7 GB with builds running).
+- [ ] Task 2: the live acceptance check (SIGKILL with an app running, then restart; stop/archive/delete; a 4th app refused).
 - [ ] Task 4: build approach A from `browser-canvas-v1-dotnet-watch.patch` properly: ownership check on the refresh port, exact-path rewrite, a test pinning the SDK 10.0.112 script.
 - [ ] Task 5: reload the canvas as soon as a `dotnet watch` app answers again after a rude-edit restart (12.6 s now, because of Blazor's backoff).
 - [ ] Task 6: "Open in a new tab" must open the preview's address, not the target's `localhost`, when viewed from another device.
