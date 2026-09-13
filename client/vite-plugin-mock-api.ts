@@ -921,6 +921,36 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
         });
       },
     },
+    {
+      pattern: /^\/api\/repositories\/worktrees$/,
+      handler: (url) => {
+        const path = url.searchParams.get("path") ?? "";
+        console.log(`[mock-api] GET /api/repositories/worktrees?path=${path}`);
+        const worktrees = path.endsWith("/weave-fleet")
+          ? [
+            { path: `${path}-worktrees/fleet-terminal-drawer`, branch: "fleet/terminal-drawer", commitHash: "a1b2c3d" },
+            { path: `${path}-worktrees/fleet-session-status`, branch: "fleet/session-status", commitHash: "d4e5f6a" },
+          ]
+          : [];
+        return json({ worktrees });
+      },
+    },
+    {
+      pattern: /^\/api\/repositories\/info$/,
+      handler: (url) => {
+        const path = url.searchParams.get("path") ?? "";
+        console.log(`[mock-api] GET /api/repositories/info?path=${path}`);
+        return json({
+          repository: {
+            name: path.split("/").pop() ?? path,
+            path,
+            branch: path.endsWith("/weave-fleet") ? "feat/browser-canvas" : "main",
+            lastCommit: null,
+            remoteUrl: null,
+          },
+        });
+      },
+    },
     // ─── Skills & tools (read-only: mock requests carry no body) ───────────────
     {
       pattern: /^\/api\/skills$/,

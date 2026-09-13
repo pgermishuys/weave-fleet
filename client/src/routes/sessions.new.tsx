@@ -1,10 +1,14 @@
 import { createFileRoute } from "@tanstack/vue-router";
 import { defineComponent } from "vue";
-import NewSessionForm from "@/components/sessions/NewSessionForm.vue";
+import NewSessionComposer from "@/components/sessions/NewSessionComposer.vue";
+import { useSessionsStore } from "@/stores/sessions";
 
 const NewSessionPage = defineComponent({
   name: "NewSessionPage",
   setup() {
+    // Nothing is open yet, so the sidebar and status bar shouldn't show the last session.
+    useSessionsStore().setActiveSessionId(null);
+
     return () => (
       <div
         style={{
@@ -15,7 +19,7 @@ const NewSessionPage = defineComponent({
           overflow: "hidden",
         }}
       >
-        <NewSessionForm />
+        <NewSessionComposer />
       </div>
     );
   },
