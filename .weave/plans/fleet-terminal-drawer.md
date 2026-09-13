@@ -93,7 +93,7 @@ components/terminal/TerminalView.vue     one xterm per terminal, kept alive whil
 
 ## Tasks
 
-- [ ] 0. Spike: a PTY in .NET that survives AOT
+- [x] 0. Spike: a PTY in .NET that survives AOT (done 2026-09-13: use Porta.Pty 2.2.2, see "Task 0 findings")
   - **What**: In a scratch project outside the solution, try `Porta.Pty` 2.2.2 and a small interop of our own (Unix `posix_openpt`, `grantpt`, `unlockpt`, `ptsname`, then spawn the shell as a session leader on the slave; Windows `CreatePseudoConsole`). On Linux check: (a) `$SHELL` starts in a given folder with a given size; (b) write `echo hi\r` and read `hi` back; (c) resize, then `stty size` prints the new size; (d) `exit 3` reports exit code 3; (e) killing the shell also kills a child `sleep 1000`; (f) `dotnet publish -c Release -r linux-x64 -p:PublishAot=true` builds with no new warnings, and the published binary does (a)–(e). Also build the macOS and Windows paths for `osx-arm64` and `win-x64` to catch compile and trim warnings there. Check licences.
   - **Output**: "Task 0 findings" at the end of this plan, with the choice for Task 1. Spawning a managed process with `fork` in a multi-threaded runtime is the main risk to look at.
   - **Depends on**: None.
@@ -158,3 +158,15 @@ components/terminal/TerminalView.vue     one xterm per terminal, kept alive whil
 4. Start `bun run dev` (or any long command). Hide the drawer; the header dot stays on. Close the tab; the process is gone from Activity Monitor or Task Manager.
 5. Reload the page; the scrollback is still there. Quit and restart Fleet; reopening the terminal shows the old output, then `— Fleet restarted —`, then a new prompt.
 6. Select two lines, add them to your message, and send. The message shows them in a fenced block.
+
+## Task 0 findings (2026-09-13)
+**Use `Porta.Pty` 2.2.2** (MIT, github.com/tomlm/Porta.Pty, targets `net10.0`). No interop of our own.
+
+- **Why it's safe on Unix.** It forks and execs inside a small native shim (`libporta_pty.so`, `libporta_pty.dylib`), not in managed code, so the multi-threaded `fork` risk is gone. The shell is a session leader with the PTY as its controlling terminal (`tty` prints `/dev/pts/N`, and a child's session id equals the shell's pid).
+- **Windows.** It depends on `Microsoft.Windows.Console.ConPTY` 1.24.260710001 and copies the out-of-band `conpty.dll` plus `x64/OpenConsole.exe` and `arm64/OpenConsole.exe` into a RID-specific publish, falling back to the in-box console host when they're missing. Fleet publishes per RID, so it gets the out-of-band host.
+- **Linux results**, under the JIT and again as a Release `PublishAot` binary for `linux-x64` (no warnings): starts in the given folder; `echo` round trip; `stty size` shows the initial 30×100 and then 40×132 after `Resize(132, 40)`; `exit 3` reports 3; UTF-8 (`café ✓`) comes through; `Kill()` fires `ProcessExited` and ends the shell, a foreground `sleep` and a background `sleep &`.
+- **macOS and Windows** were published trimmed from Linux (a real AOT build needs each OS, which the release workflow already uses). No trim warnings, and the native pieces land in the output: `libporta_pty.dylib` for `osx-arm64`; `conpty.dll` and both `OpenConsole.exe` for `win-x64`. They still need the checklist on real machines.
+- **Packaging.** `scripts/package.sh` and `package.ps1` copy the whole publish folder into `app/`, so the native files ship without changes.
+- **API** (for Task 1): `PtyProvider.SpawnAsync(PtyOptions { Name, Cols, Rows, Cwd, App, CommandLine, Environment })` returns `IPtyConnection` with `ReaderStream`, `WriterStream`, `Pid`, `ExitCode`, `ProcessExited`, `Resize(cols, rows)`, `Kill()`. `PtyOptions.Environment` adds to the parent's environment, and an empty value removes a key; that's how Task 3 strips `Fleet__*` and `ASPNETCORE_*`.
+- **Things to handle in Task 1.** After `Kill()`, `ProcessExited` reports exit code 0, so the wrapper must remember that Fleet killed it rather than trust the code. A child started with `nohup` or `setsid` survives, the same as closing a terminal window; that's expected.
+- **Scratch spikes fill `/tmp`.** A self-contained publish per RID is about 150 MB and hit the tmpfs quota. Delete `bin/`, `obj/` and outputs between runs.
