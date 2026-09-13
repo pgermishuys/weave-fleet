@@ -271,6 +271,24 @@ public sealed record CanvasToolResponse(string Title, string Output, CanvasToolM
 
 public sealed record CanvasToolMetadata(string? CanvasId, int? Version);
 
+/// <summary>Ask for the preview proxy in front of a page on this machine.</summary>
+public sealed record BrowserProxyRequest(string? Url);
+
+/// <summary>The browser loads <c>http://{Slug}.localhost:{Port}</c> (or the page's host name when Fleet isn't on localhost).</summary>
+public sealed record BrowserProxyResponse(string Slug, int Port, string Target);
+
+/// <summary>A command Fleet runs for a session, with its recent output.</summary>
+public sealed record AppRunResponse(
+    string Id,
+    string Command,
+    string Status,
+    int? ExitCode,
+    string? Url,
+    IReadOnlyList<int> Ports,
+    IReadOnlyList<string> PrintedUrls,
+    DateTimeOffset StartedAt,
+    IReadOnlyList<string> Logs);
+
 // ── Session Sources ──────────────────────────────────────────────────────────
 
 public sealed record SessionSourceCatalogResponse(

@@ -162,6 +162,9 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(List<CanvasResponse>))]
 [JsonSerializable(typeof(CanvasBridgeRequest))]
 [JsonSerializable(typeof(CanvasToolResponse))]
+[JsonSerializable(typeof(BrowserProxyRequest))]
+[JsonSerializable(typeof(BrowserProxyResponse))]
+[JsonSerializable(typeof(AppRunResponse))]
 // Session Sources
 [JsonSerializable(typeof(SessionSourceCatalogResponse))]
 [JsonSerializable(typeof(SessionSourceItem))]

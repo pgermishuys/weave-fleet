@@ -47,6 +47,7 @@ public static class EndpointExtensions
         apiScope.MapSessionEndpoints();
         apiScope.MapCanvasEndpoints();
         apiScope.MapTerminalEndpoints();
+        apiScope.MapBrowserEndpoints();
         apiScope.MapProjectEndpoints();
         apiScope.MapFleetSummaryEndpoints();
         apiScope.MapUpdateEndpoints();
